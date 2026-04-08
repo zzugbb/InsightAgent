@@ -42,8 +42,8 @@ python -m uvicorn app.main:app --reload
 下一步继续补最小接口收口：
 
 - 保持现有 SSE 与 trace 接口稳定
-- 让前端消费 `trace/delta`，验证断线补包场景
-- 后续再考虑是否迁移到主计划里的 `/api/tasks` + `/stream` 形态
+- 已完成前端 `trace/delta` 消费，当前进入 task 形态收口前的准备阶段
+- 后续优先考虑迁移到主计划里的 `/api/tasks` + `/stream` 形态
 
 ## 当前 chat 能力
 
@@ -60,6 +60,7 @@ python -m uvicorn app.main:app --reload
 - 当前已支持按 `session_id`、`task_id` 读取最小详情、全量 trace 与 delta trace
 - 当前 trace 落库时会补最小 `seq` 字段，供 replay / delta 共用
 - prompt 中包含 `[mock-error]` 时，可主动触发一次 mock SSE error 分支，便于联调
+- 当前前端已可手动消费 `trace/delta`，验证 HTTP 补包契约
 
 ## 当前限制
 

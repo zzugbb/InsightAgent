@@ -69,10 +69,12 @@ export function Workbench() {
   const ssePhase = useChatStreamStore((s: ChatStreamStore) => s.ssePhase);
   const sseTaskId = useChatStreamStore((s: ChatStreamStore) => s.sseTaskId);
   const sseMessage = useChatStreamStore((s: ChatStreamStore) => s.sseMessage);
+  const traceCursor = useChatStreamStore((s: ChatStreamStore) => s.traceCursor);
   const runChatStream = useChatStreamStore((s: ChatStreamStore) => s.runChatStream);
   const loadPersistedTrace = useChatStreamStore(
     (s: ChatStreamStore) => s.loadPersistedTrace,
   );
+  const loadTraceDelta = useChatStreamStore((s: ChatStreamStore) => s.loadTraceDelta);
 
   useEffect(() => {
     void loadSettings();
@@ -197,6 +199,11 @@ export function Workbench() {
   function handleLoadPersistedTrace() {
     const taskId = sseTaskId ?? chatResult?.task_id ?? "";
     void loadPersistedTrace(API_BASE_URL, taskId);
+  }
+
+  function handleLoadTraceDelta() {
+    const taskId = sseTaskId ?? chatResult?.task_id ?? "";
+    void loadTraceDelta(API_BASE_URL, taskId);
   }
 
   return (
@@ -340,6 +347,14 @@ export function Workbench() {
             >
               Load Persisted Trace
             </button>
+            <button
+              className="action-button"
+              disabled={isStreaming || isChatting || (!sseTaskId && !chatResult?.task_id)}
+              type="button"
+              onClick={handleLoadTraceDelta}
+            >
+              Load Trace Delta
+            </button>
           </div>
 
           <div className="meta-block">
@@ -353,6 +368,7 @@ export function Workbench() {
               <p style={{ margin: "0 0 8px", color: "var(--muted)", wordBreak: "break-word" }}>
                 task_id: {sseTaskId}
                 {ssePhase ? ` · phase: ${ssePhase}` : ""}
+                {traceCursor > 0 ? ` · cursor: ${traceCursor}` : ""}
               </p>
             ) : null}
             {sseTokens ? (
@@ -373,6 +389,9 @@ export function Workbench() {
                       <span style={{ color: "var(--muted)", fontSize: "0.85em" }}>
                         ({step.id.slice(0, 8)}…)
                       </span>
+                      {typeof step.seq === "number" ? (
+                        <span style={{ color: "var(--muted)" }}> · seq {step.seq}</span>
+                      ) : null}
                       {step.meta?.step_type != null ? (
                         <span style={{ color: "var(--muted)" }}>
                           {" "}
