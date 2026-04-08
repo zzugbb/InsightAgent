@@ -17,6 +17,32 @@ type SettingsSummary = {
   sqlite_path: string;
 };
 
+type SessionSummary = {
+  id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SessionMessage = {
+  id: string;
+  session_id: string;
+  task_id: string | null;
+  role: string;
+  content: string;
+  created_at: string;
+};
+
+type TaskSummary = {
+  id: string;
+  session_id: string;
+  prompt: string;
+  status: string;
+  trace_json: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type ChatResponse = {
   content: string;
   provider: string;
@@ -54,10 +80,18 @@ export function Workbench() {
   const [settingsMessage, setSettingsMessage] = useState<string>(
     "Loading settings...",
   );
+  const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([]);
+  const [sessionsMessage, setSessionsMessage] = useState("Loading recent sessions...");
+  const [recentTasks, setRecentTasks] = useState<TaskSummary[]>([]);
+  const [tasksMessage, setTasksMessage] = useState("Loading recent tasks...");
+  const [sessionMessages, setSessionMessages] = useState<SessionMessage[]>([]);
+  const [messagesMessage, setMessagesMessage] = useState(
+    "Select a session to inspect persisted messages.",
+  );
   const [chatPrompt, setChatPrompt] = useState("");
   const [chatResult, setChatResult] = useState<ChatResponse | null>(null);
   const [chatMessage, setChatMessage] = useState(
-    "Send a prompt to verify the JSON chat API.",
+    "JSON chat is kept only as a minimal non-stream debug entry.",
   );
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -70,7 +104,7 @@ export function Workbench() {
   const sseTaskId = useChatStreamStore((s: ChatStreamStore) => s.sseTaskId);
   const sseMessage = useChatStreamStore((s: ChatStreamStore) => s.sseMessage);
   const traceCursor = useChatStreamStore((s: ChatStreamStore) => s.traceCursor);
-  const runChatStream = useChatStreamStore((s: ChatStreamStore) => s.runChatStream);
+  const runTaskStream = useChatStreamStore((s: ChatStreamStore) => s.runTaskStream);
   const loadPersistedTrace = useChatStreamStore(
     (s: ChatStreamStore) => s.loadPersistedTrace,
   );
@@ -78,7 +112,23 @@ export function Workbench() {
 
   useEffect(() => {
     void loadSettings();
+    void loadSessions();
+    void loadTasks();
   }, []);
+
+  useEffect(() => {
+    void loadSessions();
+    void loadTasks();
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      setSessionMessages([]);
+      setMessagesMessage("Select a session to inspect persisted messages.");
+      return;
+    }
+    void loadSessionMessages(activeSessionId);
+  }, [activeSessionId]);
 
   async function loadSettings() {
     try {
@@ -101,6 +151,80 @@ export function Workbench() {
     } catch (error) {
       setSettingsMessage(
         error instanceof Error ? error.message : "Failed to load settings.",
+      );
+    }
+  }
+
+  async function loadSessions() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sessions?limit=8`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load sessions (${response.status})`);
+      }
+      const data = (await response.json()) as { items: SessionSummary[] };
+      setRecentSessions(Array.isArray(data.items) ? data.items : []);
+      setSessionsMessage(
+        Array.isArray(data.items) && data.items.length > 0
+          ? "Recent sessions loaded."
+          : "No persisted sessions yet.",
+      );
+    } catch (error) {
+      setSessionsMessage(
+        error instanceof Error ? error.message : "Failed to load sessions.",
+      );
+    }
+  }
+
+  async function loadSessionMessages(sessionId: string) {
+    try {
+      setMessagesMessage("Loading session messages...");
+      const response = await fetch(
+        `${API_BASE_URL}/api/sessions/${sessionId}/messages`,
+        {
+          cache: "no-store",
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to load messages (${response.status})`);
+      }
+      const data = (await response.json()) as {
+        messages?: SessionMessage[];
+      };
+      const messages = Array.isArray(data.messages) ? data.messages : [];
+      setSessionMessages(messages);
+      setMessagesMessage(
+        messages.length > 0
+          ? "Persisted session messages loaded."
+          : "No persisted messages in this session yet.",
+      );
+    } catch (error) {
+      setSessionMessages([]);
+      setMessagesMessage(
+        error instanceof Error ? error.message : "Failed to load session messages.",
+      );
+    }
+  }
+
+  async function loadTasks() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/tasks?limit=8`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load tasks (${response.status})`);
+      }
+      const data = (await response.json()) as { items: TaskSummary[] };
+      setRecentTasks(Array.isArray(data.items) ? data.items : []);
+      setTasksMessage(
+        Array.isArray(data.items) && data.items.length > 0
+          ? "Recent tasks loaded."
+          : "No persisted tasks yet.",
+      );
+    } catch (error) {
+      setTasksMessage(
+        error instanceof Error ? error.message : "Failed to load tasks.",
       );
     }
   }
@@ -177,7 +301,7 @@ export function Workbench() {
       const data = (await response.json()) as ChatResponse;
       setChatResult(data);
       setActiveSessionId(data.session_id);
-      setChatMessage("JSON chat request completed.");
+      setChatMessage("JSON debug request completed.");
     } catch (error) {
       setChatMessage(
         error instanceof Error ? error.message : "Failed to send prompt.",
@@ -187,8 +311,8 @@ export function Workbench() {
     }
   }
 
-  function handleSendStreamChat() {
-    void runChatStream({
+  function handleSendTaskStream() {
+    void runTaskStream({
       apiBaseUrl: API_BASE_URL,
       prompt: chatPrompt,
       sessionId: activeSessionId,
@@ -212,7 +336,8 @@ export function Workbench() {
         <p className="eyebrow">InsightAgent</p>
         <h1>Frontend W1 Workbench</h1>
         <p className="lead">
-          最小联调：settings、JSON chat；SSE（token / trace）当前经由
+          当前以 Task Stream 为主链路；JSON chat 仅保留为最小非流式调试入口。Task
+          Stream（token / trace）当前经由
           <code>POST /api/tasks</code> + <code>GET /api/tasks/{"{id}"}/stream</code>
           进入 Zustand（<code>useChatStreamStore</code>）。尚未接入 React Flow。
         </p>
@@ -314,7 +439,7 @@ export function Workbench() {
 
         <form className="panel-card" onSubmit={handleSendChat}>
           <div className="panel-head">
-            <h2>Chat</h2>
+            <h2>Debug & Stream</h2>
             <p>{chatMessage}</p>
           </div>
 
@@ -330,15 +455,15 @@ export function Workbench() {
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
             <button className="action-button" disabled={isChatting} type="submit">
-              {isChatting ? "Sending..." : "Send JSON Chat"}
+              {isChatting ? "Sending..." : "Send JSON Debug"}
             </button>
             <button
               className="action-button"
               disabled={isStreaming || isChatting}
               type="button"
-              onClick={handleSendStreamChat}
+              onClick={handleSendTaskStream}
             >
-              {isStreaming ? "Streaming..." : "Send SSE Stream"}
+              {isStreaming ? "Streaming..." : "Send Task Stream"}
             </button>
             <button
               className="action-button"
@@ -360,7 +485,7 @@ export function Workbench() {
 
           <div className="meta-block">
             <p className="result-label" style={{ marginBottom: "8px" }}>
-              SSE
+              Task Stream
             </p>
             <p style={{ margin: "0 0 8px", color: "var(--muted)", lineHeight: 1.6 }}>
               {sseMessage}
@@ -413,7 +538,7 @@ export function Workbench() {
 
           {chatResult ? (
             <div className="result-card">
-              <p className="result-label">Assistant Response</p>
+              <p className="result-label">JSON Debug Response</p>
               <p className="result-content">{chatResult.content}</p>
               <div className="meta-block">
                 <p>session_id: {chatResult.session_id}</p>
@@ -424,6 +549,126 @@ export function Workbench() {
             </div>
           ) : null}
         </form>
+
+        <section className="panel-card">
+          <div className="panel-head">
+            <h2>Recent Sessions</h2>
+            <p>{sessionsMessage}</p>
+          </div>
+
+          {recentSessions.length > 0 ? (
+            <div className="meta-block" style={{ marginTop: 0, paddingTop: 0, borderTop: 0 }}>
+              {recentSessions.map((session) => {
+                const isActive = session.id === activeSessionId;
+                return (
+                  <button
+                    key={session.id}
+                    className="result-card"
+                    type="button"
+                    onClick={() => setActiveSessionId(session.id)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      border: isActive ? "1px solid var(--accent)" : undefined,
+                      marginTop: 0,
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <p className="result-label" style={{ marginBottom: "8px" }}>
+                      {isActive ? "Active Session" : "Session"}
+                    </p>
+                    <p className="result-content" style={{ marginBottom: "10px" }}>
+                      {session.title || "Untitled Session"}
+                    </p>
+                    <div className="meta-block" style={{ marginTop: 0, paddingTop: 0, borderTop: 0 }}>
+                      <p>session_id: {session.id}</p>
+                      <p>updated_at: {session.updated_at}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="panel-card">
+          <div className="panel-head">
+            <h2>Session Messages</h2>
+            <p>{messagesMessage}</p>
+          </div>
+
+          {sessionMessages.length > 0 ? (
+            <div className="meta-block" style={{ marginTop: 0, paddingTop: 0, borderTop: 0 }}>
+              {sessionMessages.map((message) => (
+                <div
+                  key={message.id}
+                  className="result-card"
+                  style={{ marginTop: 0, marginBottom: "12px" }}
+                >
+                  <p className="result-label" style={{ marginBottom: "8px" }}>
+                    {message.role}
+                  </p>
+                  <p className="result-content" style={{ whiteSpace: "pre-wrap" }}>
+                    {message.content}
+                  </p>
+                  <div className="meta-block" style={{ marginTop: "12px" }}>
+                    <p>message_id: {message.id}</p>
+                    {message.task_id ? <p>task_id: {message.task_id}</p> : null}
+                    <p>created_at: {message.created_at}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="panel-card">
+          <div className="panel-head">
+            <h2>Recent Tasks</h2>
+            <p>{tasksMessage}</p>
+          </div>
+
+          {recentTasks.length > 0 ? (
+            <div className="meta-block" style={{ marginTop: 0, paddingTop: 0, borderTop: 0 }}>
+              {recentTasks.map((task) => {
+                const isActive = task.id === sseTaskId || task.id === chatResult?.task_id;
+                return (
+                  <button
+                    key={task.id}
+                    className="result-card"
+                    type="button"
+                    onClick={() => {
+                      void loadPersistedTrace(API_BASE_URL, task.id);
+                      setActiveSessionId(task.session_id);
+                    }}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      border: isActive ? "1px solid var(--accent)" : undefined,
+                      marginTop: 0,
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <p className="result-label" style={{ marginBottom: "8px" }}>
+                      {isActive ? "Active Task" : "Task"}
+                    </p>
+                    <p className="result-content" style={{ marginBottom: "10px" }}>
+                      {task.prompt}
+                    </p>
+                    <div className="meta-block" style={{ marginTop: 0, paddingTop: 0, borderTop: 0 }}>
+                      <p>task_id: {task.id}</p>
+                      <p>session_id: {task.session_id}</p>
+                      <p>status: {task.status}</p>
+                      <p>updated_at: {task.updated_at}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
       </section>
     </main>
   );

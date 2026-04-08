@@ -9,6 +9,7 @@ from app.services.chat_persistence_service import (
     get_task,
     get_task_trace,
     get_task_trace_delta,
+    list_tasks,
 )
 from app.services.chat_execution_service import stream_task_execution
 
@@ -50,6 +51,10 @@ class TaskTraceDeltaResponse(BaseModel):
     has_more: bool
 
 
+class TaskListResponse(BaseModel):
+    items: list[TaskResponse]
+
+
 @router.post("", response_model=TaskCreateResponse)
 def create_task_entry(payload: TaskCreateRequest) -> TaskCreateResponse:
     resolved_session_id = ensure_session(
@@ -71,6 +76,14 @@ def create_task_entry(payload: TaskCreateRequest) -> TaskCreateResponse:
         task_id=task_id,
         session_id=resolved_session_id,
         status="pending",
+    )
+
+
+@router.get("", response_model=TaskListResponse)
+def get_tasks(limit: int = Query(default=20, ge=1, le=100)) -> TaskListResponse:
+    tasks = list_tasks(limit=limit)
+    return TaskListResponse(
+        items=[TaskResponse(**task) for task in tasks],
     )
 
 

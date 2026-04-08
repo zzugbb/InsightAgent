@@ -169,6 +169,21 @@ def get_session(session_id: str) -> dict | None:
     return dict(row)
 
 
+def list_sessions(limit: int = 20) -> list[dict]:
+    with get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, title, created_at, updated_at
+            FROM sessions
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
 def get_session_messages(session_id: str) -> list[dict]:
     with get_db_connection() as connection:
         rows = connection.execute(
@@ -199,6 +214,21 @@ def get_task(task_id: str) -> dict | None:
         return None
 
     return dict(row)
+
+
+def list_tasks(limit: int = 20) -> list[dict]:
+    with get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, session_id, prompt, status, trace_json, created_at, updated_at
+            FROM tasks
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
 
 
 def get_task_trace(task_id: str) -> list[dict]:

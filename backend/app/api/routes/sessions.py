@@ -1,7 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from app.services.chat_persistence_service import get_session, get_session_messages
+from app.services.chat_persistence_service import (
+    get_session,
+    get_session_messages,
+    list_sessions,
+)
 
 
 router = APIRouter()
@@ -26,6 +30,18 @@ class MessageResponse(BaseModel):
 class SessionMessagesResponse(BaseModel):
     session: SessionResponse
     messages: list[MessageResponse]
+
+
+class SessionListResponse(BaseModel):
+    items: list[SessionResponse]
+
+
+@router.get("", response_model=SessionListResponse)
+def get_sessions(limit: int = Query(default=20, ge=1, le=100)) -> SessionListResponse:
+    sessions = list_sessions(limit=limit)
+    return SessionListResponse(
+        items=[SessionResponse(**session) for session in sessions],
+    )
 
 
 @router.get("/{session_id}", response_model=SessionResponse)

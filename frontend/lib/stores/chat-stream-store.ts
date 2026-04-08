@@ -32,7 +32,7 @@ function upsertTraceStep(
   return [...steps, step];
 }
 
-export type RunChatStreamOptions = {
+export type RunTaskStreamOptions = {
   apiBaseUrl: string;
   prompt: string;
   sessionId: string | null;
@@ -64,11 +64,11 @@ export type ChatStreamStore = {
   setSseMessage: (message: string) => void;
   loadPersistedTrace: (apiBaseUrl: string, taskId: string) => Promise<void>;
   loadTraceDelta: (apiBaseUrl: string, taskId: string) => Promise<void>;
-  runChatStream: (options: RunChatStreamOptions) => Promise<void>;
+  runTaskStream: (options: RunTaskStreamOptions) => Promise<void>;
 };
 
 const initialSseMessage =
-  "使用下方按钮通过 POST /api/tasks + GET /api/tasks/{id}/stream 拉取 SSE，展示 token 与 trace。";
+  "使用下方按钮通过 POST /api/tasks + GET /api/tasks/{id}/stream 拉取 Task Stream，展示 token 与 trace。";
 
 async function consumeSseStream(
   response: Response,
@@ -256,7 +256,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (typeof p.session_id === "string") {
         onSessionResolved?.(p.session_id);
       }
-      set({ sseMessage: "Stream started." });
+      set({ sseMessage: "Task stream started." });
       return;
     }
     if (event === "state" && payload && typeof payload === "object") {
@@ -328,7 +328,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       return;
     }
     if (event === "done") {
-      set({ sseMessage: "Stream completed (done)." });
+      set({ sseMessage: "Task stream completed (done)." });
       return;
     }
     if (event === "error" && payload && typeof payload === "object") {
@@ -337,21 +337,21 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         ssePhase: "error",
         sseMessage:
           typeof p.message === "string"
-            ? `Stream error: ${p.message}`
-            : "Stream error received.",
+            ? `Task stream error: ${p.message}`
+            : "Task stream error received.",
       });
       return;
     }
     if (event === "heartbeat") {
       set((state) => ({
-        sseMessage: state.sseMessage.startsWith("Stream started")
+        sseMessage: state.sseMessage.startsWith("Task stream started")
           ? state.sseMessage
-          : "Receiving stream (heartbeat ok).",
+          : "Receiving task stream (heartbeat ok).",
       }));
     }
   },
 
-  runChatStream: async (options) => {
+  runTaskStream: async (options) => {
     const prompt = options.prompt.trim();
     if (!prompt) {
       set({ sseMessage: "Prompt cannot be empty." });
@@ -361,7 +361,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     const { onSessionResolved } = options;
     set({
       isStreaming: true,
-      sseMessage: "Creating task and opening SSE stream...",
+      sseMessage: "Creating task and opening task stream...",
       sseTokens: "",
       sseTraceSteps: [],
       ssePhase: null,
@@ -423,12 +423,12 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       set((state) => ({
         sseMessage: state.sseMessage.includes("completed")
           ? state.sseMessage
-          : "Stream closed.",
+          : "Task stream closed.",
       }));
     } catch (error) {
       set({
         sseMessage:
-          error instanceof Error ? error.message : "Failed to read SSE stream.",
+          error instanceof Error ? error.message : "Failed to read task stream.",
       });
     } finally {
       set({ isStreaming: false });

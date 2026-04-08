@@ -7,19 +7,22 @@
 - `package.json`、`tsconfig.json`、`next.config.ts`
 - `app/layout.tsx`、`app/page.tsx`
 - `app/globals.css`
-- `app/components/workbench.tsx`：最小 settings/chat/SSE 联调页面
-- `lib/stores/chat-stream-store.ts`：最小 Zustand SSE / trace store
+- `app/components/workbench.tsx`：最小 settings/debug chat/Task Stream 联调页面
+- `lib/stores/chat-stream-store.ts`：最小 Zustand Task Stream / trace store
 - `lib/sse/parse.ts`：最小 SSE block 解析
 
 ## 当前边界
 
-- Workbench 通过 `useChatStreamStore`（Zustand）消费 `POST /api/chat/stream`，展示 token 与 trace
-- Workbench 的 SSE 入口当前已切到 `POST /api/tasks` + `GET /api/tasks/{task_id}/stream`
+- Workbench 当前通过 `useChatStreamStore`（Zustand）消费 `POST /api/tasks` + `GET /api/tasks/{task_id}/stream`
+- `POST /api/chat` 当前只作为最小非流式调试入口保留
+- 当前已显示最近会话列表，并允许切换 active session
+- 当前已支持按 active session 加载并展示已落库消息历史
+- 当前已显示最近任务列表，并可直接回放选中 task 的 trace
 - 当前已支持加载 `GET /api/tasks/{task_id}/trace` 做已落库 trace 回放
-- 当前已支持消费 SSE `error` 事件并显示错误信息
+- 当前已支持消费流式 `error` 事件并显示错误信息
 - 当前已支持加载 `GET /api/tasks/{task_id}/trace/delta?after_seq=` 做最小增量补包
 - 尚未接入 React Flow（计划 W2）
 
 ## 下一步
 
-与根目录 README 保持一致：下一步收口 task 形态为主的调用路径，减少前端对旧 `chat/stream` 的依赖。
+与根目录 README 保持一致：下一步评估是否进入 W2 的 trace 可视化准备。

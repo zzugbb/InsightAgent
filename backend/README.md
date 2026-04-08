@@ -18,13 +18,14 @@
 - `app/services/settings_service.py`：最小 settings 读写服务
 - `app/services/provider_service.py`：按 settings 解析当前 provider
 - `GET /health`：返回当前运行模式和基础配置
-- `POST /api/chat`：最小 JSON 聊天接口，已串起 mock provider
-- `POST /api/chat/stream`：最小 SSE 聊天接口，当前支持 `start/state/trace/heartbeat/token/done/error`
+- `POST /api/chat`：最小非流式调试接口，已串起 mock provider
+- `GET /api/sessions`：读取最近会话列表，供前端显示已落库 session
 - `GET /api/sessions/{session_id}`：读取单个会话
 - `GET /api/sessions/{session_id}/messages`：读取会话消息
 - `GET /api/settings`：返回非敏感设置摘要，供设置页先联调
 - `PUT /api/settings`：写入 SQLite 配置表的最小骨架，并包含 `mock/remote` 基础校验
 - `POST /api/tasks`：最小任务创建接口，请求含 `session_id`、`user_input`，返回 `task_id/session_id/status`
+- `GET /api/tasks`：读取最近任务列表，供前端显示已落库 task
 - `GET /api/tasks/{task_id}/stream`：最小任务流式接口，仅允许 `pending` 任务打开 SSE
 - `GET /api/tasks/{task_id}`：读取单个任务
 - `GET /api/tasks/{task_id}/trace`：读取任务 trace 回放数据
@@ -49,10 +50,10 @@ python -m uvicorn app.main:app --reload
 
 ## 当前 chat 能力
 
-- 当前同时支持普通 JSON 和最小 SSE 两种响应方式
+- 当前同时支持最小非流式调试接口与 task 形态流式接口
 - 当前已支持最小 `POST /api/tasks`，可先创建 pending 任务并记录用户消息
-- 当前已支持最小 `GET /api/tasks/{task_id}/stream`，并与原有 `POST /api/chat/stream` 复用同一条执行链路
-- 当前已支持最小 SSE，请求体与 JSON chat 相同
+- 当前已支持最小 `GET /api/tasks/{task_id}/stream`
+- 当前流式入口已统一到 task 形态，`POST /api/chat` 仅保留为最小非流式调试入口
 - 当前会在请求结束后最小落库 `sessions/tasks/messages`
 - 当前只调用 mock provider，不做真实远端调用
 - 当前 SSE 事件带最小 `task_id`
@@ -62,6 +63,9 @@ python -m uvicorn app.main:app --reload
 - 当前 `done` 已包含最小 `usage` 占位，`completion_tokens` 为 mock 估算值
 - JSON chat 响应当前会返回 `session_id` 和 `task_id`
 - 当前已支持按 `session_id`、`task_id` 读取最小详情、全量 trace 与 delta trace
+- 当前已支持读取最近会话列表
+- 当前已支持按 session 读取消息历史
+- 当前已支持读取最近任务列表
 - 当前 trace 落库时会补最小 `seq` 字段，供 replay / delta 共用
 - prompt 中包含 `[mock-error]` 时，可主动触发一次 mock SSE error 分支，便于联调
 - 当前前端已可手动消费 `trace/delta`，验证 HTTP 补包契约
@@ -72,7 +76,7 @@ python -m uvicorn app.main:app --reload
 - 当前只做最小字段校验：`remote` 模式要求 `api_key`，其余仍未做细粒度 provider 校验
 - 暂未做远端连通性检测
 - 当前 `trace/delta` 还是基于已落库全量 trace 的读取骨架，尚未实现流式过程中实时增量持久化
-- 当前前端已开始接入 task 形态流式入口，旧 `POST /api/chat/stream` 仍保留用于兼容与过渡
+- 当前前端已接入 task 形态流式入口
 - 当前仍未实现 `tool_start/tool_end`、真实 usage、列表/分页查询接口
 
 ## 当前数据库结构
