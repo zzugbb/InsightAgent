@@ -46,6 +46,7 @@ export type ChatStreamStore = {
   ) => void;
   setIsStreaming: (value: boolean) => void;
   setSseMessage: (message: string) => void;
+  loadPersistedTrace: (apiBaseUrl: string, taskId: string) => Promise<void>;
   runChatStream: (options: RunChatStreamOptions) => Promise<void>;
 };
 
@@ -71,6 +72,56 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
   setIsStreaming: (value) => set({ isStreaming: value }),
 
   setSseMessage: (message) => set({ sseMessage: message }),
+
+  loadPersistedTrace: async (apiBaseUrl, taskId) => {
+    const normalizedTaskId = taskId.trim();
+    if (!normalizedTaskId) {
+      set({ sseMessage: "Task ID is required to load trace." });
+      return;
+    }
+
+    set({
+      sseMessage: "Loading persisted trace...",
+      sseTaskId: normalizedTaskId,
+      sseTokens: "",
+      sseTraceSteps: [],
+      ssePhase: "replay",
+    });
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/tasks/${normalizedTaskId}/trace`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Failed to load trace (${response.status})`);
+      }
+
+      const data = (await response.json()) as {
+        task_id: string;
+        steps?: TraceStepPayload[];
+      };
+      const steps = Array.isArray(data.steps) ? data.steps : [];
+
+      set({
+        sseTaskId: data.task_id || normalizedTaskId,
+        sseTraceSteps: steps,
+        sseMessage:
+          steps.length > 0
+            ? "Persisted trace loaded."
+            : "Persisted trace is empty for this task.",
+      });
+    } catch (error) {
+      set({
+        sseMessage:
+          error instanceof Error ? error.message : "Failed to load persisted trace.",
+      });
+    }
+  },
 
   dispatchSseEvent: (event, payload, onSessionResolved) => {
     if (event === "start" && payload && typeof payload === "object") {
@@ -139,6 +190,17 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     }
     if (event === "done") {
       set({ sseMessage: "Stream completed (done)." });
+      return;
+    }
+    if (event === "error" && payload && typeof payload === "object") {
+      const p = payload as Record<string, unknown>;
+      set({
+        ssePhase: "error",
+        sseMessage:
+          typeof p.message === "string"
+            ? `Stream error: ${p.message}`
+            : "Stream error received.",
+      });
       return;
     }
     if (event === "heartbeat") {

@@ -10,6 +10,8 @@ class MockLLMProvider:
 
     def generate(self, prompt: str) -> ProviderResponse:
         normalized_prompt = prompt.strip() or "empty prompt"
+        if "[mock-error]" in normalized_prompt:
+            raise RuntimeError("Mock provider forced error for SSE contract testing.")
         content = (
             "This is a mock response from InsightAgent. "
             f"Prompt received: {normalized_prompt}"

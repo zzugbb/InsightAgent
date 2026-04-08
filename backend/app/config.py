@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     model_name: str = Field(default="mock-gpt", alias="INSIGHT_AGENT_MODEL")
     base_url: str | None = Field(default=None, alias="INSIGHT_AGENT_BASE_URL")
     api_key: str | None = Field(default=None, alias="INSIGHT_AGENT_API_KEY")
+    cors_origins: list[str] = Field(
+        default=[
+            "http://127.0.0.1:3000",
+            "http://localhost:3000",
+        ],
+        alias="INSIGHT_AGENT_CORS_ORIGINS",
+    )
     sqlite_path: Path = Field(
         default=DEFAULT_SQLITE_PATH,
         alias="SQLITE_PATH",

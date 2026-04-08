@@ -14,6 +14,19 @@ def _build_session_title(prompt: str) -> str:
     return normalized[:60] or "New Session"
 
 
+def _normalize_trace_steps(trace_steps: list[dict]) -> list[dict]:
+    normalized_steps: list[dict] = []
+    for index, step in enumerate(trace_steps, start=1):
+        normalized_step = dict(step)
+        normalized_step["seq"] = (
+            normalized_step["seq"]
+            if isinstance(normalized_step.get("seq"), int)
+            else index
+        )
+        normalized_steps.append(normalized_step)
+    return normalized_steps
+
+
 def ensure_session(prompt: str, session_id: str | None = None) -> str:
     current_time = _now_iso()
     resolved_session_id = session_id or str(uuid4())
@@ -100,6 +113,7 @@ def complete_task(
     status: str = "completed",
 ) -> None:
     current_time = _now_iso()
+    normalized_trace_steps = _normalize_trace_steps(trace_steps)
 
     with get_db_connection() as connection:
         connection.execute(
@@ -108,7 +122,12 @@ def complete_task(
             SET status = ?, trace_json = ?, updated_at = ?
             WHERE id = ?
             """,
-            (status, json.dumps(trace_steps, ensure_ascii=False), current_time, task_id),
+            (
+                status,
+                json.dumps(normalized_trace_steps, ensure_ascii=False),
+                current_time,
+                task_id,
+            ),
         )
         connection.commit()
 
@@ -166,4 +185,14 @@ def get_task_trace(task_id: str) -> list[dict]:
     task = get_task(task_id)
     if task is None or not task["trace_json"]:
         return []
-    return json.loads(task["trace_json"])
+    return _normalize_trace_steps(json.loads(task["trace_json"]))
+
+
+def get_task_trace_delta(task_id: str, after_seq: int = 0) -> tuple[list[dict], int, bool]:
+    trace_steps = get_task_trace(task_id)
+    delta_steps = [
+        step for step in trace_steps if int(step.get("seq", 0)) > after_seq
+    ]
+    next_cursor = after_seq if not delta_steps else int(delta_steps[-1]["seq"])
+    has_more = False
+    return delta_steps, next_cursor, has_more

@@ -70,6 +70,9 @@ export function Workbench() {
   const sseTaskId = useChatStreamStore((s: ChatStreamStore) => s.sseTaskId);
   const sseMessage = useChatStreamStore((s: ChatStreamStore) => s.sseMessage);
   const runChatStream = useChatStreamStore((s: ChatStreamStore) => s.runChatStream);
+  const loadPersistedTrace = useChatStreamStore(
+    (s: ChatStreamStore) => s.loadPersistedTrace,
+  );
 
   useEffect(() => {
     void loadSettings();
@@ -189,6 +192,11 @@ export function Workbench() {
       sessionId: activeSessionId,
       onSessionResolved: setActiveSessionId,
     });
+  }
+
+  function handleLoadPersistedTrace() {
+    const taskId = sseTaskId ?? chatResult?.task_id ?? "";
+    void loadPersistedTrace(API_BASE_URL, taskId);
   }
 
   return (
@@ -323,6 +331,14 @@ export function Workbench() {
               onClick={handleSendStreamChat}
             >
               {isStreaming ? "Streaming..." : "Send SSE Stream"}
+            </button>
+            <button
+              className="action-button"
+              disabled={isStreaming || isChatting || (!sseTaskId && !chatResult?.task_id)}
+              type="button"
+              onClick={handleLoadPersistedTrace}
+            >
+              Load Persisted Trace
             </button>
           </div>
 
