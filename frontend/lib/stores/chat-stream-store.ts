@@ -39,6 +39,12 @@ export type RunChatStreamOptions = {
   onSessionResolved?: (sessionId: string) => void;
 };
 
+type TaskCreateResponse = {
+  task_id: string;
+  session_id: string;
+  status: string;
+};
+
 export type ChatStreamStore = {
   isStreaming: boolean;
   sseMessage: string;
@@ -62,7 +68,46 @@ export type ChatStreamStore = {
 };
 
 const initialSseMessage =
-  "使用下方按钮通过 POST /api/chat/stream 拉取 SSE，展示 token 与 trace。";
+  "使用下方按钮通过 POST /api/tasks + GET /api/tasks/{id}/stream 拉取 SSE，展示 token 与 trace。";
+
+async function consumeSseStream(
+  response: Response,
+  dispatchSseEvent: ChatStreamStore["dispatchSseEvent"],
+  onSessionResolved?: (sessionId: string) => void,
+): Promise<void> {
+  const body = response.body;
+  if (!body) {
+    throw new Error("Response has no body.");
+  }
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let carry = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    carry += decoder.decode(value, { stream: true });
+    const { remainder, blocks } = parseSseBlocks(carry);
+    carry = remainder;
+
+    for (const block of blocks) {
+      const parsed = parseSseBlock(block);
+      if (!parsed) {
+        continue;
+      }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(parsed.data) as unknown;
+      } catch {
+        continue;
+      }
+      dispatchSseEvent(parsed.event, payload, onSessionResolved);
+    }
+  }
+}
 
 export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
   isStreaming: false,
@@ -316,7 +361,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     const { onSessionResolved } = options;
     set({
       isStreaming: true,
-      sseMessage: "Opening SSE stream...",
+      sseMessage: "Creating task and opening SSE stream...",
       sseTokens: "",
       sseTraceSteps: [],
       ssePhase: null,
@@ -325,55 +370,55 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     });
 
     try {
-      const response = await fetch(`${options.apiBaseUrl}/api/chat/stream`, {
+      const taskResponse = await fetch(`${options.apiBaseUrl}/api/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Accept: "text/event-stream",
         },
         body: JSON.stringify({
-          prompt,
+          user_input: prompt,
           session_id: options.sessionId,
         }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Stream failed (${response.status})`);
+      if (!taskResponse.ok) {
+        const errorText = await taskResponse.text();
+        throw new Error(
+          errorText || `Task creation failed (${taskResponse.status})`,
+        );
       }
 
-      const body = response.body;
-      if (!body) {
-        throw new Error("Response has no body.");
+      const createdTask = (await taskResponse.json()) as TaskCreateResponse;
+      set({
+        sseTaskId: createdTask.task_id,
+        ssePhase: createdTask.status,
+      });
+      if (createdTask.session_id) {
+        onSessionResolved?.(createdTask.session_id);
       }
 
-      const reader = body.getReader();
-      const decoder = new TextDecoder();
-      let carry = "";
+      const streamResponse = await fetch(
+        `${options.apiBaseUrl}/api/tasks/${createdTask.task_id}/stream`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "text/event-stream",
+          },
+        },
+      );
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        carry += decoder.decode(value, { stream: true });
-        const { remainder, blocks } = parseSseBlocks(carry);
-        carry = remainder;
-
-        for (const block of blocks) {
-          const parsed = parseSseBlock(block);
-          if (!parsed) {
-            continue;
-          }
-          let payload: unknown;
-          try {
-            payload = JSON.parse(parsed.data) as unknown;
-          } catch {
-            continue;
-          }
-          get().dispatchSseEvent(parsed.event, payload, onSessionResolved);
-        }
+      if (!streamResponse.ok) {
+        const errorText = await streamResponse.text();
+        throw new Error(
+          errorText || `Task stream failed (${streamResponse.status})`,
+        );
       }
+
+      await consumeSseStream(
+        streamResponse,
+        get().dispatchSseEvent,
+        onSessionResolved,
+      );
 
       set((state) => ({
         sseMessage: state.sseMessage.includes("completed")

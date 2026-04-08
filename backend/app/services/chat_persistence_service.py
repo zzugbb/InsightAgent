@@ -112,6 +112,21 @@ def create_message(
     return message_id
 
 
+def update_task_status(task_id: str, status: str) -> None:
+    current_time = _now_iso()
+
+    with get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE tasks
+            SET status = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (status, current_time, task_id),
+        )
+        connection.commit()
+
+
 def complete_task(
     task_id: str,
     trace_steps: list[dict],

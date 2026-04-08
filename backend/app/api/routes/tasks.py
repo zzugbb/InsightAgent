@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 from app.services.chat_persistence_service import (
     create_message,
@@ -9,6 +10,7 @@ from app.services.chat_persistence_service import (
     get_task_trace,
     get_task_trace_delta,
 )
+from app.services.chat_execution_service import stream_task_execution
 
 
 router = APIRouter()
@@ -110,4 +112,30 @@ def get_task_trace_delta_detail(
         steps=steps,
         next_cursor=next_cursor,
         has_more=has_more,
+    )
+
+
+@router.get("/{task_id}/stream")
+def stream_task_detail(task_id: str) -> StreamingResponse:
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task["status"] != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail="Task stream can only be opened for pending tasks",
+        )
+
+    return StreamingResponse(
+        stream_task_execution(
+            task_id=task_id,
+            session_id=task["session_id"],
+            prompt=task["prompt"],
+            persist_user_message=False,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
     )

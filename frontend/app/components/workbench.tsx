@@ -212,8 +212,9 @@ export function Workbench() {
         <p className="eyebrow">InsightAgent</p>
         <h1>Frontend W1 Workbench</h1>
         <p className="lead">
-          最小联调：settings、JSON chat；SSE（token / trace）状态由 Zustand（
-          <code>useChatStreamStore</code>）承载。尚未接入 React Flow。
+          最小联调：settings、JSON chat；SSE（token / trace）当前经由
+          <code>POST /api/tasks</code> + <code>GET /api/tasks/{"{id}"}/stream</code>
+          进入 Zustand（<code>useChatStreamStore</code>）。尚未接入 React Flow。
         </p>
       </section>
 

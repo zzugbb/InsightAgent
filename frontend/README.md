@@ -14,6 +14,7 @@
 ## 当前边界
 
 - Workbench 通过 `useChatStreamStore`（Zustand）消费 `POST /api/chat/stream`，展示 token 与 trace
+- Workbench 的 SSE 入口当前已切到 `POST /api/tasks` + `GET /api/tasks/{task_id}/stream`
 - 当前已支持加载 `GET /api/tasks/{task_id}/trace` 做已落库 trace 回放
 - 当前已支持消费 SSE `error` 事件并显示错误信息
 - 当前已支持加载 `GET /api/tasks/{task_id}/trace/delta?after_seq=` 做最小增量补包
@@ -21,4 +22,4 @@
 
 ## 下一步
 
-与根目录 README 保持一致：下一步不再扩前端范围，等待后端补最小 `GET /api/tasks/{task_id}/stream`，再接 task 形态流式入口。
+与根目录 README 保持一致：下一步收口 task 形态为主的调用路径，减少前端对旧 `chat/stream` 的依赖。
