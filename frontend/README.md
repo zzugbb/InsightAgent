@@ -21,4 +21,4 @@
 
 ## 下一步
 
-与根目录 README 保持一致：下一步不再扩前端范围，转回后端补最小 `POST /api/tasks` 骨架，逐步靠近主计划接口形态。
+与根目录 README 保持一致：下一步不再扩前端范围，等待后端补最小 `GET /api/tasks/{task_id}/stream`，再接 task 形态流式入口。

@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services.chat_persistence_service import (
+    create_message,
+    create_task,
+    ensure_session,
     get_task,
     get_task_trace,
     get_task_trace_delta,
@@ -9,6 +12,17 @@ from app.services.chat_persistence_service import (
 
 
 router = APIRouter()
+
+
+class TaskCreateRequest(BaseModel):
+    user_input: str = Field(min_length=1)
+    session_id: str | None = None
+
+
+class TaskCreateResponse(BaseModel):
+    task_id: str
+    session_id: str
+    status: str
 
 
 class TaskResponse(BaseModel):
@@ -32,6 +46,30 @@ class TaskTraceDeltaResponse(BaseModel):
     steps: list[dict]
     next_cursor: int
     has_more: bool
+
+
+@router.post("", response_model=TaskCreateResponse)
+def create_task_entry(payload: TaskCreateRequest) -> TaskCreateResponse:
+    resolved_session_id = ensure_session(
+        prompt=payload.user_input,
+        session_id=payload.session_id,
+    )
+    task_id = create_task(
+        session_id=resolved_session_id,
+        prompt=payload.user_input,
+        status="pending",
+    )
+    create_message(
+        session_id=resolved_session_id,
+        task_id=task_id,
+        role="user",
+        content=payload.user_input,
+    )
+    return TaskCreateResponse(
+        task_id=task_id,
+        session_id=resolved_session_id,
+        status="pending",
+    )
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

@@ -24,6 +24,7 @@
 - `GET /api/sessions/{session_id}/messages`：读取会话消息
 - `GET /api/settings`：返回非敏感设置摘要，供设置页先联调
 - `PUT /api/settings`：写入 SQLite 配置表的最小骨架，并包含 `mock/remote` 基础校验
+- `POST /api/tasks`：最小任务创建接口，请求含 `session_id`、`user_input`，返回 `task_id/session_id/status`
 - `GET /api/tasks/{task_id}`：读取单个任务
 - `GET /api/tasks/{task_id}/trace`：读取任务 trace 回放数据
 - `GET /api/tasks/{task_id}/trace/delta?after_seq=`：读取 trace 增量数据骨架
@@ -43,11 +44,12 @@ python -m uvicorn app.main:app --reload
 
 - 保持现有 SSE 与 trace 接口稳定
 - 已完成前端 `trace/delta` 消费，当前进入 task 形态收口前的准备阶段
-- 后续优先考虑迁移到主计划里的 `/api/tasks` + `/stream` 形态
+- 后续优先补 `GET /api/tasks/{task_id}/stream`，逐步迁移到主计划里的 `/api/tasks` + `/stream` 形态
 
 ## 当前 chat 能力
 
 - 当前同时支持普通 JSON 和最小 SSE 两种响应方式
+- 当前已支持最小 `POST /api/tasks`，可先创建 pending 任务并记录用户消息
 - 当前已支持最小 SSE，请求体与 JSON chat 相同
 - 当前会在请求结束后最小落库 `sessions/tasks/messages`
 - 当前只调用 mock provider，不做真实远端调用
@@ -68,6 +70,7 @@ python -m uvicorn app.main:app --reload
 - 当前只做最小字段校验：`remote` 模式要求 `api_key`，其余仍未做细粒度 provider 校验
 - 暂未做远端连通性检测
 - 当前 `trace/delta` 还是基于已落库全量 trace 的读取骨架，尚未实现流式过程中实时增量持久化
+- 当前 `POST /api/tasks` 还只是任务创建骨架，尚未与独立 stream 入口连通
 - 当前仍未实现 `tool_start/tool_end`、真实 usage、列表/分页查询接口
 
 ## 当前数据库结构

@@ -60,7 +60,12 @@ def ensure_session(prompt: str, session_id: str | None = None) -> str:
     return resolved_session_id
 
 
-def create_task(session_id: str, prompt: str, task_id: str | None = None) -> str:
+def create_task(
+    session_id: str,
+    prompt: str,
+    task_id: str | None = None,
+    status: str = "running",
+) -> str:
     current_time = _now_iso()
     resolved_task_id = task_id or str(uuid4())
 
@@ -70,7 +75,7 @@ def create_task(session_id: str, prompt: str, task_id: str | None = None) -> str
             INSERT INTO tasks(id, session_id, prompt, status, trace_json, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (resolved_task_id, session_id, prompt, "running", None, current_time, current_time),
+            (resolved_task_id, session_id, prompt, status, None, current_time, current_time),
         )
         connection.commit()
 
