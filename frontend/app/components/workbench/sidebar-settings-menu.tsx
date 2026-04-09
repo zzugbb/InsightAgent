@@ -3,7 +3,7 @@
 import { ColorPicker } from "antd";
 import {
   Check,
-  ChevronLeft,
+  ChevronDown,
   ChevronRight,
   Globe,
   Monitor,
@@ -29,7 +29,7 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
 import { ModelSettingsModal } from "./model-settings-modal";
 
-type Subview = "main" | "theme" | "accent" | "language";
+type SectionId = "theme" | "accent" | "language";
 
 type PopoverPos = { left: number; bottom: number; width: number };
 
@@ -38,7 +38,7 @@ export function SidebarSettingsMenu() {
   const { theme, setTheme, primaryColor, setPrimaryColor, locale, setLocale } =
     usePreferences();
   const [open, setOpen] = useState(false);
-  const [subview, setSubview] = useState<Subview>("main");
+  const [expanded, setExpanded] = useState<SectionId | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [popoverPos, setPopoverPos] = useState<PopoverPos | null>(null);
@@ -70,7 +70,7 @@ export function SidebarSettingsMenu() {
       window.removeEventListener("resize", layoutPopover);
       window.removeEventListener("scroll", layoutPopover, true);
     };
-  }, [open, subview, layoutPopover]);
+  }, [open, expanded, layoutPopover]);
 
   useEffect(() => {
     if (!open) {
@@ -81,12 +81,12 @@ export function SidebarSettingsMenu() {
       if (triggerRef.current?.contains(target)) return;
       if (popoverRef.current?.contains(target)) return;
       setOpen(false);
-      setSubview("main");
+      setExpanded(null);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setOpen(false);
-        setSubview("main");
+        setExpanded(null);
       }
     }
     document.addEventListener("mousedown", onDocMouseDown);
@@ -99,13 +99,17 @@ export function SidebarSettingsMenu() {
 
   useEffect(() => {
     if (open) {
-      setSubview("main");
+      setExpanded(null);
     }
   }, [open]);
 
+  function toggleSection(id: SectionId) {
+    setExpanded((prev) => (prev === id ? null : id));
+  }
+
   function openModel() {
     setOpen(false);
-    setSubview("main");
+    setExpanded(null);
     setModelOpen(true);
   }
 
@@ -116,223 +120,214 @@ export function SidebarSettingsMenu() {
 
   const primarySummary = primaryColor.toUpperCase();
 
+  const popoverWidth = Math.max(popoverPos?.width ?? 0, 300);
+
   const popoverContent =
     open && mounted && popoverPos ? (
       <div
         ref={popoverRef}
-        className="settings-menu-popover"
+        className="settings-menu-popover settings-menu-popover--accordion"
         style={{
           position: "fixed",
           left: popoverPos.left,
           bottom: popoverPos.bottom,
-          width: Math.max(popoverPos.width, subview === "accent" ? 300 : 220),
+          width: popoverWidth,
           zIndex: 450,
         }}
-        role="menu"
-        aria-label={t.sidebar.settingsMenuLabel}
+        role="presentation"
       >
-        {subview === "main" ? (
-          <>
+        <div className="settings-accordion" role="list" aria-label={t.sidebar.settingsMenuLabel}>
+          <div className="settings-accordion-item" role="listitem">
             <button
               type="button"
-              role="menuitem"
-              className="settings-menu-row"
-              onClick={() => setSubview("theme")}
+              className="settings-accordion-trigger"
+              aria-expanded={expanded === "theme"}
+              aria-controls="settings-section-theme"
+              id="settings-heading-theme"
+              onClick={() => toggleSection("theme")}
             >
               {theme === "dark" ? (
                 <Moon size={18} strokeWidth={1.75} aria-hidden />
               ) : (
                 <Sun size={18} strokeWidth={1.75} aria-hidden />
               )}
-              <span className="settings-menu-row-label">{t.sidebar.menuTheme}</span>
+              <span className="settings-accordion-trigger-label">
+                {t.sidebar.menuTheme}
+              </span>
               <span className="settings-menu-row-value">{themeLabel}</span>
-              <ChevronRight
+              <ChevronDown
                 size={18}
                 strokeWidth={1.75}
                 aria-hidden
-                className="settings-menu-chevron"
+                className={`settings-accordion-chevron${expanded === "theme" ? " is-expanded" : ""}`}
               />
             </button>
+            {expanded === "theme" ? (
+              <div
+                className="settings-accordion-panel"
+                id="settings-section-theme"
+                role="region"
+                aria-labelledby="settings-heading-theme"
+              >
+                <div className="settings-menu-options">
+                  <button
+                    type="button"
+                    className={`settings-menu-option${theme === "dark" ? " is-active" : ""}`}
+                    onClick={() => setTheme("dark")}
+                  >
+                    {t.settings.themeDark}
+                  </button>
+                  <button
+                    type="button"
+                    className={`settings-menu-option${theme === "light" ? " is-active" : ""}`}
+                    onClick={() => setTheme("light")}
+                  >
+                    {t.settings.themeLight}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="settings-accordion-item" role="listitem">
             <button
               type="button"
-              role="menuitem"
-              className="settings-menu-row"
-              onClick={() => setSubview("accent")}
+              className="settings-accordion-trigger"
+              aria-expanded={expanded === "accent"}
+              aria-controls="settings-section-accent"
+              id="settings-heading-accent"
+              onClick={() => toggleSection("accent")}
             >
               <Palette size={18} strokeWidth={1.75} aria-hidden />
-              <span className="settings-menu-row-label">{t.sidebar.menuAccent}</span>
+              <span className="settings-accordion-trigger-label">
+                {t.sidebar.menuAccent}
+              </span>
               <span className="settings-menu-row-value settings-menu-row-value--mono">
                 {primarySummary}
               </span>
-              <ChevronRight
+              <ChevronDown
                 size={18}
                 strokeWidth={1.75}
                 aria-hidden
-                className="settings-menu-chevron"
+                className={`settings-accordion-chevron${expanded === "accent" ? " is-expanded" : ""}`}
               />
             </button>
+            {expanded === "accent" ? (
+              <div
+                className="settings-accordion-panel settings-accordion-panel--accent"
+                id="settings-section-accent"
+                role="region"
+                aria-labelledby="settings-heading-accent"
+              >
+                <div className="settings-accent-swatches" role="list">
+                  {PRESET_SWATCHES.map((hex) => {
+                    const active =
+                      hexKeyForCompare(primaryColor) === hexKeyForCompare(hex);
+                    return (
+                      <button
+                        key={hex}
+                        type="button"
+                        role="listitem"
+                        className={`settings-accent-swatch${active ? " is-active" : ""}`}
+                        style={{ backgroundColor: hex }}
+                        onClick={() => setPrimaryColor(hex)}
+                        aria-label={hex}
+                        aria-pressed={active}
+                      >
+                        {active ? (
+                          <Check
+                            size={14}
+                            strokeWidth={3}
+                            className="settings-accent-swatch-check"
+                            aria-hidden
+                          />
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="settings-accent-custom-label">
+                  {t.sidebar.accentCustomColor}
+                </p>
+                <div className="settings-accent-picker-row">
+                  <ColorPicker
+                    value={primaryColor}
+                    onChangeComplete={(c) => setPrimaryColor(c.toHexString())}
+                    format="hex"
+                    showText
+                    disabledAlpha={false}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="settings-accordion-item" role="listitem">
             <button
               type="button"
-              role="menuitem"
-              className="settings-menu-row"
-              onClick={() => setSubview("language")}
+              className="settings-accordion-trigger"
+              aria-expanded={expanded === "language"}
+              aria-controls="settings-section-language"
+              id="settings-heading-language"
+              onClick={() => toggleSection("language")}
             >
               <Globe size={18} strokeWidth={1.75} aria-hidden />
-              <span className="settings-menu-row-label">
+              <span className="settings-accordion-trigger-label">
                 {t.sidebar.menuLanguage}
               </span>
               <span className="settings-menu-row-value">{langLabel}</span>
-              <ChevronRight
+              <ChevronDown
                 size={18}
                 strokeWidth={1.75}
                 aria-hidden
-                className="settings-menu-chevron"
+                className={`settings-accordion-chevron${expanded === "language" ? " is-expanded" : ""}`}
               />
             </button>
-            <div className="settings-menu-divider" role="separator" />
-            <button
-              type="button"
-              role="menuitem"
-              className="settings-menu-row"
-              onClick={openModel}
-            >
-              <Monitor size={18} strokeWidth={1.75} aria-hidden />
-              <span className="settings-menu-row-label">{t.sidebar.menuModel}</span>
-              <ChevronRight
-                size={18}
-                strokeWidth={1.75}
-                aria-hidden
-                className="settings-menu-chevron"
-              />
-            </button>
-          </>
-        ) : null}
-
-        {subview === "theme" ? (
-          <div className="settings-menu-subview">
-            <button
-              type="button"
-              className="settings-menu-back"
-              onClick={() => setSubview("main")}
-            >
-              <ChevronLeft size={18} strokeWidth={1.75} aria-hidden />
-              {t.sidebar.subviewBack}
-            </button>
-            <p className="settings-menu-subtitle">{t.sidebar.menuTheme}</p>
-            <div className="settings-menu-options">
-              <button
-                type="button"
-                className={`settings-menu-option${theme === "dark" ? " is-active" : ""}`}
-                onClick={() => {
-                  setTheme("dark");
-                  setSubview("main");
-                  setOpen(false);
-                }}
+            {expanded === "language" ? (
+              <div
+                className="settings-accordion-panel"
+                id="settings-section-language"
+                role="region"
+                aria-labelledby="settings-heading-language"
               >
-                {t.settings.themeDark}
-              </button>
-              <button
-                type="button"
-                className={`settings-menu-option${theme === "light" ? " is-active" : ""}`}
-                onClick={() => {
-                  setTheme("light");
-                  setSubview("main");
-                  setOpen(false);
-                }}
-              >
-                {t.settings.themeLight}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {subview === "accent" ? (
-          <div className="settings-menu-subview settings-menu-subview--accent">
-            <button
-              type="button"
-              className="settings-menu-back"
-              onClick={() => setSubview("main")}
-            >
-              <ChevronLeft size={18} strokeWidth={1.75} aria-hidden />
-              {t.sidebar.subviewBack}
-            </button>
-            <p className="settings-menu-subtitle">{t.sidebar.menuAccent}</p>
-            <div className="settings-accent-swatches" role="list">
-              {PRESET_SWATCHES.map((hex) => {
-                const active = hexKeyForCompare(primaryColor) === hexKeyForCompare(hex);
-                return (
+                <div className="settings-menu-options">
                   <button
-                    key={hex}
                     type="button"
-                    role="listitem"
-                    className={`settings-accent-swatch${active ? " is-active" : ""}`}
-                    style={{ backgroundColor: hex }}
-                    onClick={() => setPrimaryColor(hex)}
-                    aria-label={hex}
-                    aria-pressed={active}
+                    className={`settings-menu-option${locale === "zh" ? " is-active" : ""}`}
+                    onClick={() => setLocale("zh")}
                   >
-                    {active ? (
-                      <Check
-                        size={14}
-                        strokeWidth={3}
-                        className="settings-accent-swatch-check"
-                        aria-hidden
-                      />
-                    ) : null}
+                    {t.settings.languageZh}
                   </button>
-                );
-              })}
-            </div>
-            <p className="settings-accent-custom-label">{t.sidebar.accentCustomColor}</p>
-            <div className="settings-accent-picker-row">
-              <ColorPicker
-                value={primaryColor}
-                onChangeComplete={(c) => setPrimaryColor(c.toHexString())}
-                format="hex"
-                showText
-                disabledAlpha={false}
-              />
-            </div>
+                  <button
+                    type="button"
+                    className={`settings-menu-option${locale === "en" ? " is-active" : ""}`}
+                    onClick={() => setLocale("en")}
+                  >
+                    {t.settings.languageEn}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
 
-        {subview === "language" ? (
-          <div className="settings-menu-subview">
-            <button
-              type="button"
-              className="settings-menu-back"
-              onClick={() => setSubview("main")}
-            >
-              <ChevronLeft size={18} strokeWidth={1.75} aria-hidden />
-              {t.sidebar.subviewBack}
-            </button>
-            <p className="settings-menu-subtitle">{t.sidebar.menuLanguage}</p>
-            <div className="settings-menu-options">
-              <button
-                type="button"
-                className={`settings-menu-option${locale === "zh" ? " is-active" : ""}`}
-                onClick={() => {
-                  setLocale("zh");
-                  setSubview("main");
-                  setOpen(false);
-                }}
-              >
-                {t.settings.languageZh}
-              </button>
-              <button
-                type="button"
-                className={`settings-menu-option${locale === "en" ? " is-active" : ""}`}
-                onClick={() => {
-                  setLocale("en");
-                  setSubview("main");
-                  setOpen(false);
-                }}
-              >
-                {t.settings.languageEn}
-              </button>
-            </div>
-          </div>
-        ) : null}
+        <div className="settings-menu-divider" role="separator" />
+
+        <button
+          type="button"
+          role="menuitem"
+          className="settings-menu-row settings-menu-row--footer"
+          onClick={openModel}
+        >
+          <Monitor size={18} strokeWidth={1.75} aria-hidden />
+          <span className="settings-menu-row-label">{t.sidebar.menuModel}</span>
+          <ChevronRight
+            size={18}
+            strokeWidth={1.75}
+            aria-hidden
+            className="settings-menu-chevron"
+          />
+        </button>
       </div>
     ) : null;
 

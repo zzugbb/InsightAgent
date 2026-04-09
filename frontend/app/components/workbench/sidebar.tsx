@@ -50,7 +50,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
   const virtualizer = useVirtualizer({
     count: recentSessions.length,
     getScrollElement: () => listParentRef.current,
-    estimateSize: () => 84,
+    estimateSize: () => 76,
     overscan: 6,
     enabled: useVirtual,
   });
