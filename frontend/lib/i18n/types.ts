@@ -133,6 +133,8 @@ export type Messages = {
     recentTasks: string;
     backendUrl: string;
     seqLabel: string;
+    collapseInspectorAria: string;
+    expandInspectorAria: string;
   };
   settings: {
     title: string;

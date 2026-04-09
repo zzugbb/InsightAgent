@@ -1,7 +1,8 @@
 "use client";
 
 import { Button, Space, Tabs } from "antd";
-import { forwardRef, useMemo, useState } from "react";
+import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { forwardRef, useMemo, useState, type MouseEvent } from "react";
 
 import type { TraceStepPayload } from "../../../lib/stores/chat-stream-store";
 import {
@@ -17,6 +18,10 @@ const TRACE_PREVIEW = 6;
 type InspectorProps = {
   tab: InspectorTab;
   setTab: (tab: InspectorTab) => void;
+  desktopInspectorChrome: boolean;
+  inspectorCollapsed: boolean;
+  onToggleInspectorCollapsed: () => void;
+  onInspectorResizeStart: (event: MouseEvent) => void;
   isStreaming: boolean;
   sseTraceSteps: TraceStepPayload[];
   sseMessage: string;
@@ -38,6 +43,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   {
     tab,
     setTab,
+    desktopInspectorChrome,
+    inspectorCollapsed,
+    onToggleInspectorCollapsed,
+    onInspectorResizeStart,
     isStreaming,
     sseTraceSteps,
     sseMessage,
@@ -60,6 +69,11 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const { localeTag } = usePreferences();
   const hasTaskContext = Boolean(sseTaskId?.trim());
   const [expandAllTrace, setExpandAllTrace] = useState(false);
+
+  const collapsedRail =
+    desktopInspectorChrome && inspectorCollapsed;
+  const showDesktopChrome =
+    desktopInspectorChrome && !inspectorCollapsed;
 
   const { visibleSteps, hiddenCount } = useMemo(() => {
     const steps = sseTraceSteps;
@@ -233,27 +247,68 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   return (
     <aside
       ref={ref}
-      className="inspector-shell"
+      className={`inspector-shell${collapsedRail ? " inspector-shell--collapsed" : ""}`}
       aria-label={t.inspector.ariaShell}
     >
-      <Tabs
-        className="inspector-ant-tabs"
-        activeKey={tab}
-        onChange={(k) => setTab(k as InspectorTab)}
-        aria-label={t.inspector.ariaTablist}
-        items={[
-          {
-            key: "trace",
-            label: t.inspector.tabTrace,
-            children: tracePanel,
-          },
-          {
-            key: "context",
-            label: t.inspector.tabContext,
-            children: contextPanel,
-          },
-        ]}
-      />
+      {showDesktopChrome ? (
+        <div
+          className="inspector-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-hidden
+          onMouseDown={onInspectorResizeStart}
+        />
+      ) : null}
+
+      {collapsedRail ? (
+        <div className="inspector-collapsed-inner">
+          <button
+            type="button"
+            className="inspector-expand-strip"
+            aria-label={t.inspector.expandInspectorAria}
+            title={t.inspector.expandInspectorAria}
+            onClick={onToggleInspectorCollapsed}
+          >
+            <PanelRightOpen size={20} strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <div className="inspector-main">
+          <Tabs
+            className="inspector-ant-tabs"
+            activeKey={tab}
+            onChange={(k) => setTab(k as InspectorTab)}
+            aria-label={t.inspector.ariaTablist}
+            tabBarExtraContent={
+              desktopInspectorChrome ? (
+                <Button
+                  type="text"
+                  size="small"
+                  className="inspector-collapse-btn"
+                  aria-label={t.inspector.collapseInspectorAria}
+                  title={t.inspector.collapseInspectorAria}
+                  icon={
+                    <PanelRightClose size={18} strokeWidth={2} aria-hidden />
+                  }
+                  onClick={onToggleInspectorCollapsed}
+                />
+              ) : null
+            }
+            items={[
+              {
+                key: "trace",
+                label: t.inspector.tabTrace,
+                children: tracePanel,
+              },
+              {
+                key: "context",
+                label: t.inspector.tabContext,
+                children: contextPanel,
+              },
+            ]}
+          />
+        </div>
+      )}
     </aside>
   );
 });

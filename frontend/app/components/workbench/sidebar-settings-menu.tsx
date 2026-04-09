@@ -77,9 +77,19 @@ export function SidebarSettingsMenu() {
       return;
     }
     function onDocMouseDown(e: MouseEvent) {
-      const target = e.target as Node;
+      const raw = e.target;
+      const target: Element | null =
+        raw instanceof Element
+          ? raw
+          : raw instanceof Node
+            ? raw.parentElement
+            : null;
+      if (!target) return;
       if (triggerRef.current?.contains(target)) return;
       if (popoverRef.current?.contains(target)) return;
+      /* ColorPicker 面板默认挂到 body，点击色盘/输入框时不在 popoverRef 内，需排除 */
+      if (target.closest("[class*='ant-color-picker']")) return;
+      if (target.closest("[class*='rc-color-picker']")) return;
       setOpen(false);
       setExpanded(null);
     }
@@ -256,6 +266,9 @@ export function SidebarSettingsMenu() {
                     format="hex"
                     showText
                     disabledAlpha={false}
+                    getPopupContainer={() =>
+                      popoverRef.current ?? document.body
+                    }
                   />
                 </div>
               </div>

@@ -132,6 +132,8 @@ export const zh: Messages = {
     recentTasks: "最近任务",
     backendUrl: "后端地址：",
     seqLabel: "seq",
+    collapseInspectorAria: "收起右侧面板",
+    expandInspectorAria: "展开轨迹与上下文",
   },
   settings: {
     title: "运行设置",

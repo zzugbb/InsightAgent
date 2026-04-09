@@ -6,3 +6,5 @@ export const ACCENT_STORAGE_KEY = "insightagent.accent";
 export const PRIMARY_COLOR_STORAGE_KEY = "insightagent.primaryColor";
 export const SIDEBAR_WIDTH_STORAGE_KEY = "insightagent.sidebarWidth";
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = "insightagent.sidebarCollapsed";
+export const INSPECTOR_WIDTH_STORAGE_KEY = "insightagent.inspectorWidth";
+export const INSPECTOR_COLLAPSED_STORAGE_KEY = "insightagent.inspectorCollapsed";

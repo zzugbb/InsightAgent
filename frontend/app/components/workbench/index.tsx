@@ -30,6 +30,8 @@ import type {
   TaskSummary,
 } from "./types";
 import {
+  INSPECTOR_COLLAPSED_STORAGE_KEY,
+  INSPECTOR_WIDTH_STORAGE_KEY,
   SIDEBAR_COLLAPSED_STORAGE_KEY,
   SIDEBAR_WIDTH_STORAGE_KEY,
 } from "../../../lib/storage-keys";
@@ -40,6 +42,10 @@ const NARROW_QUERY = "(max-width: 980px)";
 const SIDEBAR_W_MIN = 200;
 const SIDEBAR_W_MAX = 480;
 const SIDEBAR_W_DEFAULT = 280;
+
+const INSPECTOR_W_MIN = 260;
+const INSPECTOR_W_MAX = 560;
+const INSPECTOR_W_DEFAULT = 340;
 
 export function Workbench() {
   const t = useMessages();
@@ -55,11 +61,15 @@ export function Workbench() {
   const [liveRegionText, setLiveRegionText] = useState("");
   const [sidebarWidthPx, setSidebarWidthPx] = useState(SIDEBAR_W_DEFAULT);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [inspectorWidthPx, setInspectorWidthPx] = useState(INSPECTOR_W_DEFAULT);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
 
   const prevStreamingRef = useRef(false);
   const isNarrow = useMediaQuery(NARROW_QUERY);
   const sidebarWidthRef = useRef(SIDEBAR_W_DEFAULT);
   sidebarWidthRef.current = sidebarWidthPx;
+  const inspectorWidthRef = useRef(INSPECTOR_W_DEFAULT);
+  inspectorWidthRef.current = inspectorWidthPx;
 
   const composerRef = useRef<TextAreaRef | null>(null);
   /** 发送成功后输入框会清空，流式失败重试时用于恢复同一条文案 */
@@ -128,6 +138,18 @@ export function Workbench() {
       if (localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1") {
         setSidebarCollapsed(true);
       }
+      const iw = localStorage.getItem(INSPECTOR_WIDTH_STORAGE_KEY);
+      if (iw) {
+        const n = Number.parseInt(iw, 10);
+        if (!Number.isNaN(n)) {
+          setInspectorWidthPx(
+            Math.min(INSPECTOR_W_MAX, Math.max(INSPECTOR_W_MIN, n)),
+          );
+        }
+      }
+      if (localStorage.getItem(INSPECTOR_COLLAPSED_STORAGE_KEY) === "1") {
+        setInspectorCollapsed(true);
+      }
     } catch {
       /* ignore */
     }
@@ -151,6 +173,28 @@ export function Workbench() {
       /* ignore */
     }
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        INSPECTOR_WIDTH_STORAGE_KEY,
+        String(inspectorWidthPx),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [inspectorWidthPx]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        INSPECTOR_COLLAPSED_STORAGE_KEY,
+        inspectorCollapsed ? "1" : "0",
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [inspectorCollapsed]);
 
   const deleteSessionMutation = useMutation({
     mutationFn: (sessionId: string) =>
@@ -515,9 +559,38 @@ export function Workbench() {
     [isNarrow, sidebarCollapsed],
   );
 
+  const onInspectorResizeStart = useCallback(
+    (event: React.MouseEvent) => {
+      if (inspectorCollapsed || isNarrow) return;
+      event.preventDefault();
+      const startX = event.clientX;
+      const startW = inspectorWidthRef.current;
+      function onMove(ev: MouseEvent) {
+        const delta = startX - ev.clientX;
+        const next = Math.min(
+          INSPECTOR_W_MAX,
+          Math.max(INSPECTOR_W_MIN, startW + delta),
+        );
+        setInspectorWidthPx(next);
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [isNarrow, inspectorCollapsed],
+  );
+
   const shellClass = [
     "app-shell",
     !isNarrow && sidebarCollapsed ? "app-shell--sidebar-collapsed" : "",
+    !isNarrow && inspectorCollapsed ? "app-shell--inspector-collapsed" : "",
     isNarrow && inspectorDrawerOpen ? "inspector-drawer-open" : "",
     isNarrow && sessionDrawerOpen ? "session-drawer-open" : "",
   ]
@@ -527,6 +600,7 @@ export function Workbench() {
   const shellStyle: CSSProperties | undefined = !isNarrow
     ? ({
         ["--sidebar-width" as string]: `${sidebarCollapsed ? 48 : sidebarWidthPx}px`,
+        ["--inspector-width" as string]: `${inspectorCollapsed ? 48 : inspectorWidthPx}px`,
       } as CSSProperties)
     : undefined;
 
@@ -624,6 +698,12 @@ export function Workbench() {
         ref={inspectorShellRef}
         tab={inspectorTab}
         setTab={setInspectorTab}
+        desktopInspectorChrome={!isNarrow}
+        inspectorCollapsed={inspectorCollapsed}
+        onToggleInspectorCollapsed={() =>
+          setInspectorCollapsed((c) => !c)
+        }
+        onInspectorResizeStart={onInspectorResizeStart}
         isStreaming={isStreaming}
         sseTraceSteps={sseTraceSteps}
         sseMessage={sseMessage}

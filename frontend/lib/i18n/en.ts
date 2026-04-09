@@ -133,6 +133,8 @@ export const en: Messages = {
     recentTasks: "Recent tasks",
     backendUrl: "API base: ",
     seqLabel: "seq",
+    collapseInspectorAria: "Collapse right panel",
+    expandInspectorAria: "Expand trace and context",
   },
   settings: {
     title: "Runtime settings",

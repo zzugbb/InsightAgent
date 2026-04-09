@@ -2,7 +2,7 @@
 
 import { Button, Dropdown, Input, Modal, type MenuProps } from "antd";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { MoreHorizontal, PanelLeft, PanelLeftClose } from "lucide-react";
+import { MoreHorizontal, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { forwardRef, useCallback, useRef, useState } from "react";
 
 import { useMessages } from "../../../lib/preferences-context";
@@ -179,7 +179,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
             className="sidebar-expand-btn"
             aria-label={t.sidebar.expandSidebarAria}
             title={t.sidebar.expandSidebarAria}
-            icon={<PanelLeft size={22} strokeWidth={2} aria-hidden />}
+            icon={<PanelLeftOpen size={20} strokeWidth={2} aria-hidden />}
             onClick={onToggleSidebarCollapsed}
           />
         </div>
