@@ -11,6 +11,10 @@ import {
 
 import { useMessages } from "../../../lib/preferences-context";
 
+import { useMediaQuery } from "./use-media-query";
+
+const COMPACT_COMPOSER_QUERY = "(max-width: 720px)";
+
 type ComposerProps = {
   value: string;
   onChange: (value: string) => void;
@@ -40,6 +44,10 @@ export const Composer = forwardRef(function Composer(
   ref: Ref<TextAreaRef | null>,
 ) {
   const t = useMessages();
+  const compactComposer = useMediaQuery(COMPACT_COMPOSER_QUERY);
+  /** 与 ChatGPT 类似：空状态约一行，随内容增高（勿用 CSS 固定 min-height 压死高度） */
+  const minRows = 1;
+  const maxRows = compactComposer ? 12 : 18;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,8 +74,8 @@ export const Composer = forwardRef(function Composer(
         onKeyDown={handleKeyDown}
         placeholder={t.composer.placeholder}
         title={t.workbench.cmdKHint}
-        rows={4}
-        autoSize={{ minRows: 4, maxRows: 18 }}
+        rows={minRows}
+        autoSize={{ minRows, maxRows }}
         aria-label={t.composer.inputAria}
         className="composer-textarea"
       />

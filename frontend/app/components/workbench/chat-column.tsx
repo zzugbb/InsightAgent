@@ -131,7 +131,7 @@ export function ChatColumn({
   const msgVirtualizer = useVirtualizer({
     count: useMsgVirtual ? flatRows.length : 0,
     getScrollElement: () => stageRef.current,
-    estimateSize: () => 120,
+    estimateSize: () => 96,
     overscan: 4,
   });
 
@@ -172,11 +172,18 @@ export function ChatColumn({
     !showSessionLoading && (hasHistory || Boolean(sseTokens));
   const showScrollFab = hasScrollableFeed && !pinnedToBottom;
 
-  function renderMessageRow(message: SessionMessage) {
+  function renderMessageRow(message: SessionMessage, index: number) {
+    const prev = index > 0 ? sessionMessages[index - 1] : undefined;
+    const showTaskRef =
+      Boolean(message.task_id) && message.task_id !== prev?.task_id;
+    const roleLabel = getRoleLabel(message.role, t.roles);
+    const timeLabel = formatTimestamp(message.created_at, localeTag);
+
     return (
       <article
         key={message.id}
         className={`message-row ${message.role === "user" ? "user" : "assistant"}`}
+        aria-label={`${roleLabel} · ${timeLabel}`}
       >
         <div className="avatar" aria-hidden>
           {message.role === "user"
@@ -184,20 +191,21 @@ export function ChatColumn({
             : t.roles.assistantShort}
         </div>
         <div className="message-card">
-          <div className="message-meta">
-            <strong>{getRoleLabel(message.role, t.roles)}</strong>
-            <span>{formatTimestamp(message.created_at, localeTag)}</span>
+          <div className="message-card-body">
+            {message.role === "user" ? (
+              <p className="message-plain">{message.content}</p>
+            ) : (
+              <MessageBody text={message.content} />
+            )}
           </div>
-          {message.role === "user" ? (
-            <p className="message-plain">{message.content}</p>
-          ) : (
-            <MessageBody text={message.content} />
-          )}
-          {message.task_id ? (
-            <div className="message-tag">
-              {t.chat.relatedTask(shortenId(message.task_id))}
-            </div>
-          ) : null}
+          <footer className="message-card-foot">
+            <time dateTime={message.created_at}>{timeLabel}</time>
+            {showTaskRef && message.task_id ? (
+              <span className="message-task-ref" title={message.task_id}>
+                {t.chat.relatedTask(shortenId(message.task_id))}
+              </span>
+            ) : null}
+          </footer>
         </div>
       </article>
     );
@@ -226,20 +234,31 @@ export function ChatColumn({
       ) : null}
 
       <header className="chat-header">
-        <div>
-          <p className="chat-kicker">{t.chat.kicker}</p>
-          <h2 id="chat-main-title">
-            {activeSession
-              ? getSessionLabel(activeSession, t.workbench)
-              : t.chat.newChatTitle}
+        <div className="chat-header-lead">
+          <h2 id="chat-main-title" className="chat-main-heading">
+            <span className="chat-title-row">
+              <span className="chat-title-text">
+                {activeSession
+                  ? getSessionLabel(activeSession, t.workbench)
+                  : t.chat.newChatTitle}
+              </span>
+              {activeSession ? (
+                <>
+                  <span className="chat-title-divider" aria-hidden />
+                  <span className="chat-title-time-wrap">
+                    <span className="chat-title-time">
+                      {t.chat.updatedAt(
+                        formatTimestamp(activeSession.updated_at, localeTag),
+                      )}
+                    </span>
+                  </span>
+                </>
+              ) : null}
+            </span>
           </h2>
-          <p className="chat-subtitle">
-            {activeSession
-              ? t.chat.updatedAt(
-                  formatTimestamp(activeSession.updated_at, localeTag),
-                )
-              : t.chat.autoCreateHint}
-          </p>
+          {!activeSession ? (
+            <p className="chat-subtitle">{t.chat.autoCreateHint}</p>
+          ) : null}
         </div>
         <Flex wrap="wrap" gap="small" align="center" justify="flex-end" className="chat-header-actions">
           <Space wrap size="small">
@@ -264,22 +283,25 @@ export function ChatColumn({
               </Button>
             ) : null}
           </Space>
-          <Space wrap size={[6, 6]} className="header-badges">
-            <Tag variant="filled" className="header-badge-tag">
-              {t.chat.modeLabel} {settingsSummary?.mode ?? "—"}
+          <div className="chat-runtime-badges" aria-label="runtime">
+            <Tag variant="filled" className="header-badge-tag header-badge-tag--mode">
+              <span className="header-badge-label">{t.chat.modeLabel}</span>
+              <span className="header-badge-value">
+                {settingsSummary?.mode ?? "—"}
+              </span>
             </Tag>
-            <Tag variant="filled" className="header-badge-tag">
-              {settingsSummary?.provider ?? "—"} / {settingsSummary?.model ?? "—"}
+            <Tag variant="filled" className="header-badge-tag header-badge-tag--stack">
+              <span className="header-badge-value header-badge-value--mono">
+                {settingsSummary?.provider ?? "—"}
+              </span>
+              <span className="header-badge-sep" aria-hidden>
+                /
+              </span>
+              <span className="header-badge-value header-badge-value--mono header-badge-value--model">
+                {settingsSummary?.model ?? "—"}
+              </span>
             </Tag>
-            {isStreaming ? (
-              <Tag
-                variant="filled"
-                className="header-badge-tag header-badge-tag--live"
-              >
-                {t.chat.generating}
-              </Tag>
-            ) : null}
-          </Space>
+          </div>
         </Flex>
       </header>
 
@@ -323,13 +345,13 @@ export function ChatColumn({
                         transform: `translateY(${vi.start}px)`,
                       }}
                     >
-                      {renderMessageRow(row.message)}
+                      {renderMessageRow(row.message, vi.index)}
                     </div>
                   );
                 })}
               </div>
             ) : (
-              sessionMessages.map((m) => renderMessageRow(m))
+              sessionMessages.map((m, i) => renderMessageRow(m, i))
             )}
 
             {sseTokens ? (
@@ -339,23 +361,24 @@ export function ChatColumn({
                 <div className="avatar" aria-hidden>
                   {t.roles.assistantShort}
                 </div>
-                <div className="message-card">
-                  <div className="message-meta">
-                    <strong>{t.roles.assistantName}</strong>
-                    <span>
+                <div className="message-card message-card--streaming">
+                  {streamFailed ? (
+                    <p className="stream-failed-badge" role="status">
+                      {t.workbench.streamFailedBadge}
+                    </p>
+                  ) : null}
+                  <div className="message-card-body">
+                    <MessageBody text={sseTokens} />
+                  </div>
+                  <footer className="message-card-foot message-card-foot--live">
+                    <span className="message-live-status">
                       {isStreaming
                         ? t.chat.streamOutputting
                         : streamFailed
                           ? t.chat.streamInterrupted
                           : t.chat.streamLatest}
                     </span>
-                  </div>
-                  {streamFailed ? (
-                    <p className="stream-failed-badge" role="status">
-                      {t.workbench.streamFailedBadge}
-                    </p>
-                  ) : null}
-                  <MessageBody text={sseTokens} />
+                  </footer>
                 </div>
               </article>
             ) : null}
