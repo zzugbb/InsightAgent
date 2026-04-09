@@ -65,6 +65,7 @@ export const Composer = forwardRef(function Composer(
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={t.composer.placeholder}
+        title={t.workbench.cmdKHint}
         rows={4}
         autoSize={{ minRows: 4, maxRows: 18 }}
         aria-label={t.composer.inputAria}

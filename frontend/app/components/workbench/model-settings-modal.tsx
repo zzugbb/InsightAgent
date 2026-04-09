@@ -99,7 +99,7 @@ export function ModelSettingsModal({
       onCancel={onClose}
       footer={null}
       width={640}
-      destroyOnClose
+      destroyOnHidden
       className="model-settings-ant-modal"
       styles={{ body: { paddingTop: 8 } }}
     >

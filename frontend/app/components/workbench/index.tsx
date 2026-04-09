@@ -1,6 +1,7 @@
 "use client";
 
 import type { TextAreaRef } from "antd/es/input/TextArea";
+import { App } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -29,6 +30,7 @@ const NARROW_QUERY = "(max-width: 980px)";
 
 export function Workbench() {
   const t = useMessages();
+  const { modal } = App.useApp();
   const queryClient = useQueryClient();
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("trace");
@@ -43,6 +45,8 @@ export function Workbench() {
   const isNarrow = useMediaQuery(NARROW_QUERY);
 
   const composerRef = useRef<TextAreaRef | null>(null);
+  /** 发送成功后输入框会清空，流式失败重试时用于恢复同一条文案 */
+  const lastSentPromptRef = useRef("");
   const inspectorShellRef = useRef<HTMLElement>(null);
   const sidebarShellRef = useRef<HTMLElement>(null);
   const activeSessionIdRef = useRef<string | null>(null);
@@ -129,15 +133,9 @@ export function Workbench() {
   const sessionsLoading = sessionsQuery.isLoading;
   const sessionsMessage = sessionsQuery.isError
     ? t.errors.requestFailed
-    : recentSessions.length > 0
-      ? t.workbench.loadedSessions
-      : t.workbench.noSessions;
-
-  const tasksMessage = tasksQuery.isError
-    ? t.errors.requestFailed
-    : recentTasks.length > 0
-      ? t.workbench.loadedTasks
-      : t.workbench.noTasks;
+    : recentSessions.length === 0
+      ? t.workbench.noSessions
+      : "";
 
   const messagesLoading = Boolean(activeSessionId) && messagesQuery.isLoading;
   let messagesMessage: string = t.workbench.selectSessionForHistory;
@@ -299,8 +297,14 @@ export function Workbench() {
   }
 
   async function handleSend() {
+    const text = prompt.trim();
+    if (!text) {
+      return;
+    }
     try {
       const sessionId = await ensureSessionForSend();
+      lastSentPromptRef.current = text;
+      setPrompt("");
       setInspectorTab("trace");
       if (isNarrow) {
         setInspectorDrawerOpen(true);
@@ -308,7 +312,7 @@ export function Workbench() {
       }
       void runTaskStream({
         apiBaseUrl: API_BASE_URL,
-        prompt,
+        prompt: text,
         sessionId,
         onSessionResolved: setActiveSessionId,
       });
@@ -320,6 +324,9 @@ export function Workbench() {
 
   function handleRetryStream() {
     resetStreamUi();
+    if (!prompt.trim() && lastSentPromptRef.current) {
+      setPrompt(lastSentPromptRef.current);
+    }
     void handleSend();
   }
 
@@ -361,10 +368,17 @@ export function Workbench() {
   }
 
   function handleDeleteSession(sessionId: string) {
-    if (!window.confirm(t.sidebar.deleteSessionConfirm)) {
-      return;
-    }
-    deleteSessionMutation.mutate(sessionId);
+    modal.confirm({
+      title: t.sidebar.deleteSessionTitle,
+      content: t.sidebar.deleteSessionConfirm,
+      okText: t.sidebar.deleteSessionOk,
+      cancelText: t.sidebar.deleteSessionCancel,
+      okType: "danger",
+      centered: true,
+      onOk: () => {
+        deleteSessionMutation.mutate(sessionId);
+      },
+    });
   }
 
   const activeTaskId = sseTaskId;
@@ -387,7 +401,7 @@ export function Workbench() {
               ? t.workbench.phaseRunning
               : t.workbench.phaseIdle;
 
-  let composerHint = t.workbench.composerIdleHint;
+  let composerHint = t.workbench.composerEnterSend;
   let composerHintVariant: "default" | "error" = "default";
   if (isStreaming) {
     composerHint = t.workbench.composerGenerating;
@@ -458,6 +472,7 @@ export function Workbench() {
           openInspectorDrawer();
         }}
         inspectorDrawerTriggerRef={inspectorOpenButtonRef}
+        showNarrowLayoutHint={isNarrow}
         showStreamRetry={ssePhase === "error" && !isStreaming}
         onRetryStream={handleRetryStream}
         composerRef={composerRef}
@@ -496,7 +511,6 @@ export function Workbench() {
         activeTask={activeTask}
         latestTaskForSession={latestTaskForSession}
         recentTasks={recentTasks}
-        tasksMessage={tasksMessage}
         onReplayTrace={handleLoadPersistedTrace}
         onLoadDelta={handleLoadTraceDelta}
         onSelectTask={handleSelectTask}

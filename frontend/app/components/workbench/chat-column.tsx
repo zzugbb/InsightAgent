@@ -60,6 +60,8 @@ type ChatColumnProps = {
   showInspectorTrigger: boolean;
   onOpenInspector: () => void;
   inspectorDrawerTriggerRef?: RefObject<HTMLButtonElement | null>;
+  /** 仅窄屏：在标题下展示侧栏入口说明 */
+  showNarrowLayoutHint: boolean;
   showStreamRetry: boolean;
   onRetryStream: () => void;
   composerRef: RefObject<TextAreaRef | null>;
@@ -92,6 +94,7 @@ export function ChatColumn({
   showInspectorTrigger,
   onOpenInspector,
   inspectorDrawerTriggerRef,
+  showNarrowLayoutHint,
   showStreamRetry,
   onRetryStream,
   composerRef,
@@ -262,25 +265,27 @@ export function ChatColumn({
             ) : null}
           </Space>
           <Space wrap size={[6, 6]} className="header-badges">
-            <Tag bordered={false} className="header-badge-tag">
+            <Tag variant="filled" className="header-badge-tag">
               {t.chat.modeLabel} {settingsSummary?.mode ?? "—"}
             </Tag>
-            <Tag bordered={false} className="header-badge-tag">
+            <Tag variant="filled" className="header-badge-tag">
               {settingsSummary?.provider ?? "—"} / {settingsSummary?.model ?? "—"}
             </Tag>
-            <Tag
-              bordered={false}
-              className={`header-badge-tag${isStreaming ? " header-badge-tag--live" : ""}`}
-            >
-              {isStreaming ? t.chat.generating : t.chat.ready}
-            </Tag>
+            {isStreaming ? (
+              <Tag
+                variant="filled"
+                className="header-badge-tag header-badge-tag--live"
+              >
+                {t.chat.generating}
+              </Tag>
+            ) : null}
           </Space>
         </Flex>
       </header>
 
-      <p className="chat-hint-row">
-        {t.workbench.cmdKHint}。{t.workbench.hintRowNarrow}
-      </p>
+      {showNarrowLayoutHint ? (
+        <p className="chat-hint-row">{t.workbench.hintRowNarrow}</p>
+      ) : null}
 
       <section
         ref={stageRef}

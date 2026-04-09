@@ -17,16 +17,12 @@ export type Messages = {
     loadedHistory: string;
     loadingMessages: string;
     noSessions: string;
-    loadedSessions: string;
-    noTasks: string;
-    loadedTasks: string;
     streamFailedBadge: string;
     liveRegionDone: string;
     liveRegionError: string;
     composerEnterSend: string;
-    /** 非流式、非错误时输入区下方完整提示（含快捷键） */
-    composerIdleHint: string;
     composerGenerating: string;
+    /** 悬停在输入框上提示 ⌘K / Ctrl+K */
     cmdKHint: string;
     traceExpandAll: string;
     traceCollapse: string;
@@ -96,7 +92,10 @@ export type Messages = {
     themeCurrentLight: string;
     langCurrentZh: string;
     langCurrentEn: string;
+    deleteSessionTitle: string;
     deleteSessionConfirm: string;
+    deleteSessionOk: string;
+    deleteSessionCancel: string;
     deleteSessionAria: string;
     /** 主题色下方色盘 / 自定义 */
     accentCustomColor: string;
@@ -120,7 +119,6 @@ export type Messages = {
     currentTask: string;
     traceCursor: string;
     session: string;
-    taskList: string;
     currentTaskCard: string;
     statusPrefix: string;
     latestTaskSession: string;

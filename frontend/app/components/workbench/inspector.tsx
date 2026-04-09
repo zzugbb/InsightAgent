@@ -28,7 +28,6 @@ type InspectorProps = {
   activeTask: TaskSummary | undefined;
   latestTaskForSession: TaskSummary | undefined;
   recentTasks: TaskSummary[];
-  tasksMessage: string;
   onReplayTrace: () => void;
   onLoadDelta: () => void;
   onSelectTask: (task: TaskSummary) => void;
@@ -50,7 +49,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     activeTask,
     latestTaskForSession,
     recentTasks,
-    tasksMessage,
     onReplayTrace,
     onLoadDelta,
     onSelectTask,
@@ -178,11 +176,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         <strong>{traceCursor}</strong>
         <span>{t.inspector.session}</span>
         <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
-      </div>
-
-      <div className="summary-card">
-        <p className="summary-label">{t.inspector.taskList}</p>
-        <span className="summary-card-hint">{tasksMessage}</span>
       </div>
 
       {activeTask ? (

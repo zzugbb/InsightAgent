@@ -74,7 +74,6 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
             <Button
               type="primary"
               ghost
-              size="small"
               className="sidebar-new-session"
               onClick={onNewSession}
               disabled={sessionsLoading}
@@ -83,9 +82,11 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
               {newSessionBusy ? t.sidebar.creating : t.sidebar.newSession}
             </Button>
           </div>
-          <span className={sessionsLoading ? "text-muted-loading" : ""}>
-            {sessionsLoading ? t.sidebar.loading : sessionsMessage}
-          </span>
+          {sessionsLoading || sessionsMessage ? (
+            <span className={sessionsLoading ? "text-muted-loading" : ""}>
+              {sessionsLoading ? t.sidebar.loading : sessionsMessage}
+            </span>
+          ) : null}
         </div>
         <div
           ref={listParentRef}
