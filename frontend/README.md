@@ -1,36 +1,32 @@
 # Frontend
 
-当前已经建立最小 Next.js App Router 骨架。
+Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 W1 聊天工作台。
 
 ## 当前已有内容
 
-- `package.json`、`tsconfig.json`、`next.config.ts`
-- `app/layout.tsx`、`app/page.tsx`
-- `app/globals.css`
-- `app/components/workbench/`：聊天型 Agent 主界面（侧栏、对话区、检查器拆分）
-- `lib/stores/chat-stream-store.ts`：最小 Zustand Task Stream / trace store
-- `lib/sse/parse.ts`：最小 SSE block 解析
+- 工程：`package.json`、`tsconfig.json`、`next.config.ts`、`app/layout.tsx`（含 `metadata` 与站点图标路径）
+- 样式与资源：`app/globals.css`、`app/icon.svg`、`public/favicon.ico`（ICO 可由 `scripts/generate-favicon-ico.py` 再生）
+- `app/components/workbench/`：侧栏、对话区、右侧检查器（Inspector）、品牌 Logo 组件、运行设置菜单与模型弹窗
+- `lib/stores/chat-stream-store.ts`：Task Stream / trace 状态
+- `lib/sse/parse.ts`：SSE 分块解析
+- `lib/api-client.ts`：含 `apiPatchJson` 等与后端对接
+- `lib/storage-keys.ts`：侧栏 / 右栏宽度与折叠状态等 localStorage 键
+- `lib/i18n/`：中英文文案集中管理
 
-## 当前边界
+## 当前边界（功能）
 
-- 聊天型 Agent 主界面通过 `useChatStreamStore`（Zustand）消费 `POST /api/tasks` + `GET /api/tasks/{task_id}/stream`
-- 当前页面为左侧最近会话、中间消息流与单一发送入口、右侧「轨迹 / 上下文」与侧栏「运行设置」
-- 当前已显示最近会话列表，并允许切换 active session
-- 当前已支持按 active session 加载并展示已落库消息历史，作为主消息流的基础形态
-- 当前任务信息已下沉到右侧上下文面板，并可直接回放选中 task 的 trace
-- 当前已支持加载 `GET /api/tasks/{task_id}/trace` 做已落库 trace 回放
-- 当前已支持消费流式 `error` 事件并显示错误信息
-- 当前已支持加载 `GET /api/tasks/{task_id}/trace/delta?after_seq=` 做最小增量补包
-- 运行设置：左下角「设置」菜单（主题 / 语言 / 模型与运行弹窗）；`/settings` 会重定向首页；右栏仅「轨迹 / 上下文」
-- 数据请求使用 **TanStack Query**（去重、聚焦刷新、流式结束后 invalidate）
-- 侧栏支持「新会话」；无选中会话时发送会先 **POST /api/sessions** 再跑任务流
-- 助手消息使用 **react-markdown + remark-gfm + rehype-sanitize**（GFM 表格/列表等，外链新标签打开）
-- 窄屏：左侧 **会话抽屉** + 右侧 **轨迹抽屉**，独立遮罩，**焦点陷阱** 与 Esc 关闭
-- 消息列表超过约 24 条时 **虚拟列表**；会话超过 14 条时侧栏虚拟化
-- 轨迹默认仅展示最近 6 步，可「展开全部」；流式失败展示「未落库」提示与 **aria-live** 摘要
-- **⌘K / Ctrl+K** 聚焦输入框；文案集中在 `lib/i18n/zh.ts`，错误映射在 `lib/errors.ts`
+- 主流程通过 `useChatStreamStore` 使用 `POST /api/tasks` + `GET /api/tasks/{task_id}/stream`
+- **布局**：左侧最近会话、中间消息流、右侧「轨迹 / 上下文」；左下角「设置」（主题 / **主题色（含自定义色）** / 语言 / 模型与运行）
+- **桌面宽屏**：左栏、右栏均支持 **拖拽调宽**、**折叠为窄条**（宽度与折叠状态持久化）；折叠/展开图标与 Lucide **Panel*Open / Panel*Close** 系一致
+- **会话**：列表、切换、`POST /api/sessions` 创建；**重命名**（`PATCH`）、**删除**；无选中会话时发送会先创建会话再跑任务流
+- **轨迹**：`GET .../trace` 回放、`.../trace/delta` 增量；默认仅展示最近若干步，可展开全部；流式失败提示与 **aria-live** 摘要
+- **数据请求**：TanStack Query；流式结束后按需 invalidate
+- **Markdown**：`react-markdown` + GFM + sanitize；数学/高亮等按组件配置
+- **窄屏**：左侧会话抽屉 + 右侧轨迹抽屉，遮罩与 **焦点陷阱**、Esc 关闭
+- **列表性能**：消息约 24+ 条虚拟列表；侧栏会话约 14+ 条虚拟化
+- **无障碍**：⌘K / Ctrl+K 聚焦输入框；错误映射 `lib/errors.ts`
 - 尚未接入 React Flow（计划 W2）
 
 ## 下一步
 
-与根目录 README 保持一致：下一步先整理 trace 区块的数据结构与展示层，为 W2 的可视化视图做准备。
+与仓库根目录 `README.md` 一致：在稳定承载 session / message / task / trace 的前提下，整理 **trace 区块数据结构与会话侧展示**，为 W2 可视化做准备。

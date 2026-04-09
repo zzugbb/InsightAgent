@@ -1,86 +1,67 @@
 # Backend
 
-当前先提供 W1 最小 FastAPI 入口，后续逐步补齐：
-
-- 配置管理
-- 设置页 API
-- SSE 流式接口
-- SQLite 持久化
-- Mock Provider
+基于 FastAPI 的 W1 最小后端：配置、SQLite、会话/任务/消息持久化、SSE Task Stream、Mock Provider。
 
 ## 当前已有内容
 
 - `app/config.py`：统一读取环境变量与默认配置
-- `app/api/routes/`：已拆出最小路由层
+- `app/api/routes/`：健康检查、会话、设置、任务路由
 - `app/db.py`：SQLite 初始化、配置表与最小业务表结构
-- `app/providers/`：Provider 抽象与 mock 实现骨架
-- `app/services/chat_persistence_service.py`：最小会话/任务/消息持久化服务
-- `app/services/settings_service.py`：最小 settings 读写服务
+- `app/providers/`：Provider 抽象与 mock 实现
+- `app/services/chat_persistence_service.py`：会话 / 任务 / 消息持久化
+- `app/services/settings_service.py`：settings 读写
 - `app/services/provider_service.py`：按 settings 解析当前 provider
-- `GET /health`：返回当前运行模式和基础配置
-- `POST /api/sessions`：创建空会话（可选 `title`），返回新 `session_id`
-- `GET /api/sessions`：读取最近会话列表，供前端显示已落库 session
-- `GET /api/sessions/{session_id}`：读取单个会话
-- `GET /api/sessions/{session_id}/messages`：读取会话消息
-- `GET /api/settings`：返回非敏感设置摘要，供设置页先联调
-- `PUT /api/settings`：写入 SQLite 配置表的最小骨架，并包含 `mock/remote` 基础校验
-- `POST /api/tasks`：最小任务创建接口，请求含 `session_id`、`user_input`，返回 `task_id/session_id/status`
-- `GET /api/tasks`：读取最近任务列表，供前端显示已落库 task
-- `GET /api/tasks/{task_id}/stream`：最小任务流式接口，仅允许 `pending` 任务打开 SSE
-- `GET /api/tasks/{task_id}`：读取单个任务
-- `GET /api/tasks/{task_id}/trace`：读取任务 trace 回放数据
-- `GET /api/tasks/{task_id}/trace/delta?after_seq=`：读取 trace 增量数据骨架
+
+### HTTP 接口（摘要）
+
+- `GET /health`：健康检查与运行模式摘要
+- `POST /api/sessions`：创建会话（可选 `title`）
+- `GET /api/sessions`：最近会话列表（`limit`）
+- `GET /api/sessions/{session_id}`：单个会话
+- `PATCH /api/sessions/{session_id}`：更新会话标题（`{ "title": "..." }`）
+- `DELETE /api/sessions/{session_id}`：删除会话（204）
+- `GET /api/sessions/{session_id}/messages`：会话及消息列表
+- `GET /api/settings` / `PUT /api/settings`：非敏感设置摘要与写入骨架
+- `POST /api/tasks`：创建任务（`session_id`、`user_input` 等）
+- `GET /api/tasks`：最近任务列表
+- `GET /api/tasks/{task_id}`：单个任务
+- `GET /api/tasks/{task_id}/stream`：任务 SSE（仅 `pending` 等允许的状态）
+- `GET /api/tasks/{task_id}/trace`：trace 全量回放
+- `GET /api/tasks/{task_id}/trace/delta?after_seq=`：trace 增量
 
 ## 本地启动
 
 ```bash
 cd backend
-python -m uvicorn app.main:app --reload
+python -m venv .venv && source .venv/bin/activate   # 可选
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 如需自定义配置，可复制 `.env.example` 为 `.env` 后修改。
 
-## 下一步
+## 流式与持久化（现状）
 
-下一步继续补最小接口收口：
-
-- 保持现有 SSE 与 trace 接口稳定
-- 已完成前端 `trace/delta` 消费，当前进入 task 形态收口前的准备阶段
-- 当前已补 `GET /api/tasks/{task_id}/stream`，后续进入前端接入阶段
-
-## 当前对话与任务能力
-
-- 流式入口统一为 task 形态：`POST /api/tasks` + `GET /api/tasks/{task_id}/stream`
-- 当前已支持最小 `POST /api/tasks`，可先创建 pending 任务并记录用户消息
-- 当前已支持最小 `GET /api/tasks/{task_id}/stream`
-- 当前会在任务流结束后最小落库 `sessions/tasks/messages`
-- 当前只调用 mock provider，不做真实远端调用
-- 当前 SSE 事件带最小 `task_id`
-- 当前 SSE 已带最小 `step_id`
-- 当前 SSE 事件包含 `start`、`state`、`trace`、`heartbeat`、`token`、`done`、`error`
-- 当前 `trace` 仅内置 2 个 mock step：1 个 `thought`，1 个 `final_answer` 占位
-- 当前 `done` 已包含最小 `usage` 占位，`completion_tokens` 为 mock 估算值
-- 当前已支持按 `session_id`、`task_id` 读取最小详情、全量 trace 与 delta trace
-- 当前已支持读取最近会话列表
-- 当前已支持按 session 读取消息历史
-- 当前已支持读取最近任务列表
-- 当前 trace 落库时会补最小 `seq` 字段，供 replay / delta 共用
-- prompt 中包含 `[mock-error]` 时，可主动触发一次 mock SSE error 分支，便于联调
-- 当前前端已可手动消费 `trace/delta`，验证 HTTP 补包契约
+- 流式入口：`POST /api/tasks` + `GET /api/tasks/{task_id}/stream`；仅 Mock Provider，不做真实远端调用
+- SSE 事件类型包含 `start`、`state`、`trace`、`heartbeat`、`token`、`done`、`error`（及任务关联字段）
+- 任务结束后最小落库 `sessions` / `tasks` / `messages`；支持按 `session_id`、`task_id` 查询及 trace / delta 读取
+- `prompt` 中含 `[mock-error]` 时可触发一次 mock SSE error，便于联调
 
 ## 当前限制
 
-- `api_key` 当前仅做最小存储骨架，尚未加密
-- 当前只做最小字段校验：`remote` 模式要求 `api_key`，其余仍未做细粒度 provider 校验
-- 暂未做远端连通性检测
-- 当前 `trace/delta` 还是基于已落库全量 trace 的读取骨架，尚未实现流式过程中实时增量持久化
-- 当前前端已接入 task 形态流式入口
-- 当前仍未实现 `tool_start/tool_end`、真实 usage、列表/分页查询接口
+- `api_key` 仅最小存储骨架，未加密
+- `remote` 模式等对 provider 的校验仍较粗
+- 未做远端连通性检测
+- `trace/delta` 以落库读取为主，流式过程中实时增量持久化仍有限
+- 未实现 `tool_start/tool_end`、真实 usage、完整分页列表等
 
-## 当前数据库结构
+## 当前数据库结构（摘要）
 
-- `sessions`：会话主表，先保留 `id/title/created_at/updated_at`
-- `tasks`：任务主表，当前包含 `prompt/status/trace_json`
-- `messages`：消息表，按 `session_id` 归属，可选关联 `task_id`
-- 当前任务流与持久化逻辑会写入这些表，并支持最小按 ID 查询
-- `trace_json` 当前保存标准化后的 step 数组，包含最小 `seq`
+- `sessions`：`id` / `title` / 时间戳等
+- `tasks`：`prompt` / `status` / `trace_json` 等
+- `messages`：按 `session_id` 归属，可选 `task_id`
+- `trace_json` 中为标准化 step 数组，含 `seq` 等字段
+
+## 下一步
+
+保持 SSE 与 trace 相关接口稳定；与前端对齐会话 **PATCH/DELETE** 契约；继续为 trace 数据结构演进与 W2 可视化预留空间。
