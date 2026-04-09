@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
+from app.schemas.trace import TraceStep, parse_trace_steps
 from app.services.chat_persistence_service import (
     create_message,
     create_task,
@@ -40,13 +41,13 @@ class TaskResponse(BaseModel):
 
 class TaskTraceResponse(BaseModel):
     task_id: str
-    steps: list[dict]
+    steps: list[TraceStep]
     status: str
 
 
 class TaskTraceDeltaResponse(BaseModel):
     task_id: str
-    steps: list[dict]
+    steps: list[TraceStep]
     next_cursor: int
     has_more: bool
 
@@ -100,9 +101,10 @@ def get_task_trace_detail(task_id: str) -> TaskTraceResponse:
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    raw_steps = get_task_trace(task_id)
     return TaskTraceResponse(
         task_id=task_id,
-        steps=get_task_trace(task_id),
+        steps=parse_trace_steps(raw_steps),
         status=task["status"],
     )
 
@@ -122,7 +124,7 @@ def get_task_trace_delta_detail(
     )
     return TaskTraceDeltaResponse(
         task_id=task_id,
-        steps=steps,
+        steps=parse_trace_steps(steps),
         next_cursor=next_cursor,
         has_more=has_more,
     )

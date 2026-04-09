@@ -150,6 +150,13 @@ export const en: Messages = {
       contentDetails: "Content",
       contentEmpty: "(empty)",
     },
+    memory: {
+      kicker: "Session memory",
+      title: "Memory (Chroma, planned)",
+      lead:
+        "Chroma will hold embeddings for this session’s summary and recent context, isolated from long-term RAG collections. The vector service is not connected yet—this block is a naming and contract placeholder.",
+      collectionLabel: "Target collection name (preview)",
+    },
   },
   settings: {
     title: "Runtime settings",

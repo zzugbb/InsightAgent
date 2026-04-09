@@ -222,6 +222,24 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
       </div>
 
+      <div className="summary-card memory-placeholder-card">
+        <p className="summary-label">{t.inspector.memory.kicker}</p>
+        <strong className="memory-placeholder-title">{t.inspector.memory.title}</strong>
+        <p className="panel-note panel-note--muted memory-placeholder-lead">
+          {t.inspector.memory.lead}
+        </p>
+        <div className="memory-collection-row">
+          <span className="memory-collection-label">
+            {t.inspector.memory.collectionLabel}
+          </span>
+          <code className="memory-collection-code">
+            {activeSessionId
+              ? `memory_${activeSessionId}`
+              : "—"}
+          </code>
+        </div>
+      </div>
+
       {activeTask ? (
         <div className="summary-card">
           <p className="summary-label">{t.inspector.currentTaskCard}</p>

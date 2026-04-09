@@ -149,6 +149,13 @@ export const zh: Messages = {
       contentDetails: "内容",
       contentEmpty: "（无文本）",
     },
+    memory: {
+      kicker: "会话记忆",
+      title: "Memory（Chroma，规划中）",
+      lead:
+        "计划使用 Chroma 存储本会话的向量记忆（摘要与近期上下文）；与长期知识库 RAG 使用不同 collection，按会话隔离。当前未接入向量服务，本区仅为契约与命名占位。",
+      collectionLabel: "目标 collection 名（示意）",
+    },
   },
   settings: {
     title: "运行设置",

@@ -1762,6 +1762,43 @@ code {
   line-height: 1.6;
 }
 
+.memory-placeholder-card {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, var(--msg-card-bg));
+}
+
+.memory-placeholder-title {
+  font-size: 0.98rem;
+}
+
+.memory-placeholder-lead {
+  margin: 6px 0 0;
+  line-height: 1.65;
+}
+
+.memory-collection-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.memory-collection-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.memory-collection-code {
+  display: block;
+  font-size: 0.75rem;
+  word-break: break-all;
+  line-height: 1.45;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
 .task-summary-list {
   display: flex;
   flex-direction: column;

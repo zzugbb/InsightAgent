@@ -153,6 +153,13 @@ export type Messages = {
       contentDetails: string;
       contentEmpty: string;
     };
+    /** 上下文：Memory / Chroma 占位（W2） */
+    memory: {
+      kicker: string;
+      title: string;
+      lead: string;
+      collectionLabel: string;
+    };
   };
   settings: {
     title: string;

@@ -36,6 +36,27 @@ class Settings(BaseSettings):
         default=DEFAULT_SQLITE_PATH,
         alias="SQLITE_PATH",
     )
+    chroma_host: str = Field(
+        default="127.0.0.1",
+        alias="CHROMA_HOST",
+        description="Chroma HTTP 服务主机；与 backend 同 Compose 网络时可填服务名 chroma",
+    )
+    chroma_port: int = Field(
+        default=8001,
+        ge=1,
+        le=65535,
+        alias="CHROMA_PORT",
+        description="Chroma 映射端口；docker-compose 默认 8001:8000",
+    )
+    chroma_probe: bool = Field(
+        default=True,
+        alias="CHROMA_PROBE",
+        description="是否在 /health 中对 Chroma 发起心跳探测（可关以避免阻塞）",
+    )
+
+    @property
+    def chroma_http_url(self) -> str:
+        return f"http://{self.chroma_host}:{self.chroma_port}"
 
 
 @lru_cache
