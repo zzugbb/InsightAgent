@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.services.chroma_memory_service import (
     add_session_memory_text,
@@ -63,6 +63,24 @@ class SessionMemoryStatusResponse(BaseModel):
 
 class MemoryAddRequest(BaseModel):
     text: str = Field(min_length=1, max_length=32_000)
+    metadata: dict[str, str] | None = Field(
+        default=None,
+        description="可选；Chroma document metadata（字符串键值）",
+    )
+
+    @field_validator("metadata")
+    @classmethod
+    def _validate_metadata(cls, v: dict[str, str] | None) -> dict[str, str] | None:
+        if v is None or len(v) == 0:
+            return None
+        if len(v) > 32:
+            raise ValueError("metadata may have at most 32 keys")
+        for key, val in v.items():
+            if len(key) > 128:
+                raise ValueError("metadata key too long (max 128)")
+            if len(val) > 8192:
+                raise ValueError("metadata value too long (max 8192 per value)")
+        return v
 
 
 class MemoryAddResponse(BaseModel):
@@ -127,7 +145,11 @@ def post_session_memory_add(
     if get_session(session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
     try:
-        raw = add_session_memory_text(session_id, payload.text)
+        raw = add_session_memory_text(
+            session_id,
+            payload.text,
+            metadatas=payload.metadata,
+        )
         return MemoryAddResponse(**raw)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

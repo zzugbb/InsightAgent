@@ -1931,6 +1931,10 @@ code {
   line-height: 1.5;
 }
 
+.memory-debug-textarea--meta {
+  margin-top: 4px;
+}
+
 .memory-debug-textarea--query {
   margin-top: 4px;
 }

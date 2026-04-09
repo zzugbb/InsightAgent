@@ -168,3 +168,44 @@ export function formatTraceStepMetaSubtitle(
   }
   return parts.length > 0 ? parts.join(" · ") : null;
 }
+
+/**
+ * Inspector Memory 调试区：解析可选 metadata JSON。
+ * 仅接受对象为根、且键值均为字符串（与后端 `POST .../memory/add` 对齐）。
+ */
+export function parseMemoryMetadataJson(
+  raw: string,
+):
+  | { ok: true; metadata: Record<string, string> | null }
+  | { ok: false } {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { ok: true, metadata: null };
+  }
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      return { ok: false };
+    }
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof k !== "string" || k.length === 0) {
+        continue;
+      }
+      if (typeof v !== "string") {
+        return { ok: false };
+      }
+      out[k] = v;
+    }
+    return {
+      ok: true,
+      metadata: Object.keys(out).length > 0 ? out : null,
+    };
+  } catch {
+    return { ok: false };
+  }
+}

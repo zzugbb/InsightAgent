@@ -27,7 +27,7 @@
 - `DELETE /api/sessions/{session_id}`：删除会话（204）
 - `GET /api/sessions/{session_id}/messages`：会话及消息列表
 - `GET /api/sessions/{session_id}/memory/status`：Chroma 中 `memory_{session_id}` 是否已建 collection、**document_count**（依赖 `chromadb` 客户端与可连通的 Chroma 服务）
-- `POST /api/sessions/{session_id}/memory/add`：正文 `{ "text": "..." }`，写入一条向量文档并返回 **added_id**、**document_count**（503 表示 Chroma 不可达等）
+- `POST /api/sessions/{session_id}/memory/add`：正文 `{ "text": "...", "metadata": { ... } }`（**metadata** 可选，字符串键值，与 Chroma document metadata 对齐），写入一条向量文档并返回 **added_id**、**document_count**（503 表示 Chroma 不可达等）
 - `POST /api/sessions/{session_id}/memory/query`：正文 `{ "text": "...", "n_results": 4 }`，语义检索，返回 **ids** / **documents** / **distances**（collection 不存在或为空时返回空列表）
 - `GET /api/settings` / `PUT /api/settings`：非敏感设置摘要与写入骨架
 - `POST /api/tasks`：创建任务（`session_id`、`user_input` 等）

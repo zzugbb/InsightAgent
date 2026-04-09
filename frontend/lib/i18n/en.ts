@@ -182,6 +182,10 @@ export const en: Messages = {
       queryEmpty: "No hits.",
       queryHits: (n: number) => `${n} hit(s)`,
       distanceLabel: "Distance",
+      metadataPlaceholder:
+        'Optional JSON object with string keys and values, e.g. {"source":"manual","kind":"note"}',
+      metadataInvalid:
+        "metadata must be a JSON object whose values are strings.",
     },
   },
   settings: {

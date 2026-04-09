@@ -33,6 +33,7 @@ import {
   getStepTitle,
   getTaskLabel,
   normalizeTraceStepKind,
+  parseMemoryMetadataJson,
   shortenId,
 } from "./utils";
 
@@ -104,16 +105,26 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [memoryAddDraft, setMemoryAddDraft] = useState("");
+  const [memoryMetaDraft, setMemoryMetaDraft] = useState("");
   const [memoryQueryDraft, setMemoryQueryDraft] = useState("");
 
   const memoryAddMutation = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async (payload: {
+      text: string;
+      metadata: Record<string, string> | null;
+    }) => {
       if (!activeSessionId?.trim()) {
         throw new Error("NO_SESSION");
       }
+      const body: { text: string; metadata?: Record<string, string> } = {
+        text: payload.text,
+      };
+      if (payload.metadata && Object.keys(payload.metadata).length > 0) {
+        body.metadata = payload.metadata;
+      }
       return apiPostJson<MemoryAddResponse>(
         `${apiBaseUrl}/api/sessions/${encodeURIComponent(activeSessionId)}/memory/add`,
-        { text },
+        body,
       );
     },
     onSuccess: (data) => {
@@ -140,6 +151,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
 
   useEffect(() => {
     setMemoryAddDraft("");
+    setMemoryMetaDraft("");
     setMemoryQueryDraft("");
     memoryAddMutation.reset();
     memoryQueryMutation.reset();
@@ -376,6 +388,14 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               rows={2}
               disabled={memoryAddMutation.isPending}
             />
+            <TextArea
+              className="memory-debug-textarea memory-debug-textarea--meta"
+              value={memoryMetaDraft}
+              onChange={(e) => setMemoryMetaDraft(e.target.value)}
+              placeholder={t.inspector.memory.metadataPlaceholder}
+              rows={2}
+              disabled={memoryAddMutation.isPending}
+            />
             <div className="memory-debug-actions">
               <Button
                 type="primary"
@@ -387,7 +407,15 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                     message.warning(t.inspector.memory.addEmpty);
                     return;
                   }
-                  memoryAddMutation.mutate(text);
+                  const parsed = parseMemoryMetadataJson(memoryMetaDraft);
+                  if (!parsed.ok) {
+                    message.warning(t.inspector.memory.metadataInvalid);
+                    return;
+                  }
+                  memoryAddMutation.mutate({
+                    text,
+                    metadata: parsed.metadata,
+                  });
                 }}
               >
                 {t.inspector.memory.addButton}

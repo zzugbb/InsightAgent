@@ -40,4 +40,4 @@ docker compose up -d chroma
 
 ## 下一步
 
-**Memory** 已具备 **`/memory/add`**、**`/memory/query`** 与任务结束 **自动写入摘要**；轨迹 **时间线 / 流程图** 均已按 **tool / RAG / thought / action / observation** 区分样式。后续可接：Memory **metadata** 与独立 embedding、SSE 与 OpenAPI 的更细 schema 说明、真实工具/RAG 接入。工作台交互类需求以不阻塞主链路为前提迭代。
+**Memory** 已具备 **`/memory/add`**（可选 **metadata** 键值）、**`/memory/query`** 与任务结束 **自动写入摘要**；轨迹 **时间线 / 流程图** 均已按 **tool / RAG / thought / action / observation** 区分样式。后续可接：独立 embedding、SSE 与 OpenAPI 的更细 schema 说明、真实工具/RAG 接入。工作台交互类需求以不阻塞主链路为前提迭代。

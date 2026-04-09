@@ -181,6 +181,9 @@ export const zh: Messages = {
       queryEmpty: "没有命中片段。",
       queryHits: (n: number) => `命中 ${n} 条`,
       distanceLabel: "距离",
+      metadataPlaceholder:
+        '可选：JSON 对象，键与值均为字符串，例如 {"source":"manual","kind":"note"}',
+      metadataInvalid: "metadata 须为 JSON 对象，且键与值均为字符串。",
     },
   },
   settings: {

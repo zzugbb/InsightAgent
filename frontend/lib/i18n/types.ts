@@ -181,6 +181,8 @@ export type Messages = {
       queryEmpty: string;
       queryHits: (n: number) => string;
       distanceLabel: string;
+      metadataPlaceholder: string;
+      metadataInvalid: string;
     };
   };
   settings: {
