@@ -7,6 +7,7 @@ from app.services.chat_persistence_service import (
     get_session,
     get_session_messages,
     list_sessions,
+    update_session_title,
 )
 
 
@@ -42,6 +43,10 @@ class CreateSessionRequest(BaseModel):
     title: str | None = None
 
 
+class UpdateSessionRequest(BaseModel):
+    title: str
+
+
 @router.post("", response_model=SessionResponse)
 def post_session(payload: CreateSessionRequest = CreateSessionRequest()) -> SessionResponse:
     row = create_session_record(title=payload.title)
@@ -54,6 +59,14 @@ def get_sessions(limit: int = Query(default=20, ge=1, le=100)) -> SessionListRes
     return SessionListResponse(
         items=[SessionResponse(**session) for session in sessions],
     )
+
+
+@router.patch("/{session_id}", response_model=SessionResponse)
+def patch_session(session_id: str, payload: UpdateSessionRequest) -> SessionResponse:
+    row = update_session_title(session_id, payload.title)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return SessionResponse(**row)
 
 
 @router.get("/{session_id}", response_model=SessionResponse)

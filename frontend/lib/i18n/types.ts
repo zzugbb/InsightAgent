@@ -45,7 +45,6 @@ export type Messages = {
     kicker: string;
     newChatTitle: string;
     updatedAt: (ts: string) => string;
-    autoCreateHint: string;
     sessionList: string;
     traceAndContext: string;
     modeLabel: string;
@@ -73,6 +72,7 @@ export type Messages = {
   sidebar: {
     ariaLabel: string;
     brandTitle: string;
+    /** 侧栏品牌区说明文案 */
     brandLead: string;
     sessionsHeading: string;
     newSession: string;
@@ -99,6 +99,14 @@ export type Messages = {
     deleteSessionAria: string;
     /** 主题色下方色盘 / 自定义 */
     accentCustomColor: string;
+    renameSessionMenu: string;
+    deleteSessionMenu: string;
+    renameSessionModalTitle: string;
+    renameSessionPlaceholder: string;
+    renameSessionSave: string;
+    sessionMoreAria: string;
+    collapseSidebarAria: string;
+    expandSidebarAria: string;
   };
   inspector: {
     ariaShell: string;

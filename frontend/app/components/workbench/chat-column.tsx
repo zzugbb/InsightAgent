@@ -256,9 +256,6 @@ export function ChatColumn({
               ) : null}
             </span>
           </h2>
-          {!activeSession ? (
-            <p className="chat-subtitle">{t.chat.autoCreateHint}</p>
-          ) : null}
         </div>
         <Flex wrap="wrap" gap="small" align="center" justify="flex-end" className="chat-header-actions">
           <Space wrap size="small">

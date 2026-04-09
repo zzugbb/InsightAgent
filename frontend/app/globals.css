@@ -199,7 +199,7 @@ code {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 340px;
+  grid-template-columns: var(--sidebar-width, 280px) minmax(0, 1fr) 340px;
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
   height: 100dvh;
@@ -216,6 +216,7 @@ code {
 }
 
 .app-sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -224,6 +225,60 @@ code {
   padding: 20px 14px 16px;
   border-right: 1px solid var(--line);
   background: var(--sidebar-bg);
+}
+
+.app-sidebar--collapsed {
+  padding: 12px 6px;
+  align-items: center;
+}
+
+.sidebar-collapsed-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding-top: 2px;
+  gap: 10px;
+}
+
+.sidebar-collapsed-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-strong);
+}
+
+.sidebar-expand-btn.ant-btn {
+  width: 40px !important;
+  min-width: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  border-radius: 10px;
+  color: var(--muted-strong);
+}
+
+.sidebar-expand-btn.ant-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 6;
+  cursor: col-resize;
+  user-select: none;
+  margin-right: -3px;
+  border-radius: 2px;
+}
+
+.sidebar-resizer:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .sidebar-section-grow {
@@ -249,7 +304,92 @@ code {
 }
 
 .brand-block {
-  padding: 10px 10px 24px;
+  padding: 2px 0 14px;
+  margin-bottom: 2px;
+}
+
+.brand-block-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.brand-block-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.brand-logo-mark {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--accent-strong);
+}
+
+.brand-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.brand-wordmark {
+  margin: 0;
+  padding: 0;
+}
+
+.brand-product {
+  display: inline-block;
+  font-size: 1.22rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .brand-product {
+    background: linear-gradient(
+      118deg,
+      var(--text) 0%,
+      var(--text) 44%,
+      var(--accent-strong) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+/* 副标题：与主名同一纵轴，不用胶囊以免宽度不齐 */
+.brand-tagline {
+  margin: 5px 0 0;
+  padding: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.45;
+  color: var(--accent-strong);
+}
+
+/* 说明：与侧栏平铺衔接，关键词用主色强调，无额外框体 */
+.brand-lead {
+  margin: 12px 0 0;
+  padding: 0;
+  font-size: 0.74rem;
+  line-height: 1.68;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--muted) 48%, var(--muted-strong));
+  text-wrap: pretty;
+}
+
+.brand-collapse-btn.ant-btn {
+  margin-top: 0;
 }
 
 .brand-kicker,
@@ -260,18 +400,6 @@ code {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--accent-strong);
-}
-
-.brand-block h1 {
-  margin: 10px 0 8px;
-  font-size: 2rem;
-  font-weight: 600;
-}
-
-.brand-block p:last-child {
-  margin: 0;
-  line-height: 1.7;
-  color: var(--muted);
 }
 
 .sidebar-section {
@@ -302,11 +430,34 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .sidebar-section-title-row h2 {
   margin: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sidebar-collapse-btn.ant-btn {
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  color: var(--muted);
+  border-radius: 8px;
+}
+
+.sidebar-collapse-btn.ant-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
 }
 
 .sidebar-new-session {
@@ -365,11 +516,6 @@ code {
   background: transparent;
 }
 
-.sidebar-item strong {
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
 .sidebar-item span,
 .sidebar-empty {
   font-size: 0.8rem;
@@ -378,12 +524,13 @@ code {
 
 .sidebar-session-row {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   width: 100%;
+  min-height: 40px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface-muted);
-  overflow: hidden;
+  overflow: visible;
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -406,41 +553,52 @@ code {
   min-width: 0;
 }
 
-.sidebar-session-delete {
-  flex-shrink: 0;
-  align-self: stretch;
-  display: inline-flex;
+.sidebar-item.sidebar-item--single {
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  width: 36px;
-  min-height: 100%;
-  margin: 0;
-  padding: 0;
-  border-radius: 0;
-  border: none;
-  border-left: 1px solid var(--line);
-  background: color-mix(in srgb, var(--text) 3%, transparent);
-  color: var(--muted);
-  cursor: pointer;
+  padding: 6px 4px 6px 10px;
+  gap: 0;
+}
+
+.sidebar-item-title {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.sidebar-session-more.ant-btn {
+  flex-shrink: 0;
+  align-self: center;
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  margin: 0 6px 0 0;
+  border-radius: 8px;
+  opacity: 0;
   transition:
-    background 150ms ease,
-    color 150ms ease,
-    opacity 150ms ease;
+    opacity 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+  color: var(--muted);
 }
 
-.sidebar-session-delete:hover:not(:disabled) {
-  color: var(--danger);
-  background: var(--danger-soft);
+.sidebar-session-row:hover .sidebar-session-more,
+.sidebar-session-row:focus-within .sidebar-session-more,
+.sidebar-session-more.ant-btn:focus-visible {
+  opacity: 1;
 }
 
-.sidebar-session-delete:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.sidebar-session-delete.ant-btn {
-  box-shadow: none;
-  height: auto !important;
+.sidebar-session-more.ant-btn:hover {
+  color: var(--text) !important;
+  background: var(--surface-hover) !important;
 }
 
 .sidebar-new-session.ant-btn.ant-btn-primary.ant-btn-background-ghost {
@@ -1428,7 +1586,7 @@ code {
 
 @media (max-width: 1220px) {
   .app-shell {
-    grid-template-columns: 240px minmax(0, 1fr) 300px;
+    grid-template-columns: var(--sidebar-width, 240px) minmax(0, 1fr) 300px;
   }
 }
 

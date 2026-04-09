@@ -76,6 +76,32 @@ export async function apiPostJson<T>(url: string, body: unknown): Promise<T> {
   }
 }
 
+export async function apiPatchJson<T>(url: string, body: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+  } catch (cause) {
+    throw new ApiError(
+      0,
+      cause instanceof TypeError ? "NETWORK" : "UNKNOWN",
+      url,
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
+
+  const text = await readResponse(response, url);
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError(response.status, "INVALID_JSON", url, text.slice(0, 120));
+  }
+}
+
 export async function apiPutJson<T>(url: string, body: unknown): Promise<T> {
   let response: Response;
   try {

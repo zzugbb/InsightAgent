@@ -3,9 +3,15 @@
 import type { TextAreaRef } from "antd/es/input/TextArea";
 import { App } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
-import { apiDelete, apiJson, apiPostJson } from "../../../lib/api-client";
+import {
+  apiDelete,
+  apiJson,
+  apiPatchJson,
+  apiPostJson,
+} from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
 import { useFocusTrap } from "../../../lib/hooks/use-focus-trap";
 import { useMessages } from "../../../lib/preferences-context";
@@ -23,10 +29,17 @@ import type {
   SettingsSummary,
   TaskSummary,
 } from "./types";
+import {
+  SIDEBAR_COLLAPSED_STORAGE_KEY,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+} from "../../../lib/storage-keys";
 import { API_BASE_URL } from "./utils";
 import { useMediaQuery } from "./use-media-query";
 
 const NARROW_QUERY = "(max-width: 980px)";
+const SIDEBAR_W_MIN = 200;
+const SIDEBAR_W_MAX = 480;
+const SIDEBAR_W_DEFAULT = 280;
 
 export function Workbench() {
   const t = useMessages();
@@ -40,9 +53,13 @@ export function Workbench() {
   const [newSessionBusy, setNewSessionBusy] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [liveRegionText, setLiveRegionText] = useState("");
+  const [sidebarWidthPx, setSidebarWidthPx] = useState(SIDEBAR_W_DEFAULT);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const prevStreamingRef = useRef(false);
   const isNarrow = useMediaQuery(NARROW_QUERY);
+  const sidebarWidthRef = useRef(SIDEBAR_W_DEFAULT);
+  sidebarWidthRef.current = sidebarWidthPx;
 
   const composerRef = useRef<TextAreaRef | null>(null);
   /** 发送成功后输入框会清空，流式失败重试时用于恢复同一条文案 */
@@ -97,6 +114,44 @@ export function Workbench() {
       ),
   });
 
+  useEffect(() => {
+    try {
+      const w = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+      if (w) {
+        const n = Number.parseInt(w, 10);
+        if (!Number.isNaN(n)) {
+          setSidebarWidthPx(
+            Math.min(SIDEBAR_W_MAX, Math.max(SIDEBAR_W_MIN, n)),
+          );
+        }
+      }
+      if (localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1") {
+        setSidebarCollapsed(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidthPx));
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarWidthPx]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        SIDEBAR_COLLAPSED_STORAGE_KEY,
+        sidebarCollapsed ? "1" : "0",
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarCollapsed]);
+
   const deleteSessionMutation = useMutation({
     mutationFn: (sessionId: string) =>
       apiDelete(`${API_BASE_URL}/api/sessions/${sessionId}`),
@@ -109,6 +164,27 @@ export function Workbench() {
         setPrompt("");
         resetStreamUi();
       }
+    },
+    onError: (err) => {
+      const u = toUserFacingError(err, t.errors);
+      setBannerError(`${u.banner}${u.hint ? ` ${u.hint}` : ""}`);
+    },
+  });
+
+  const renameSessionMutation = useMutation({
+    mutationFn: ({
+      sessionId,
+      title,
+    }: {
+      sessionId: string;
+      title: string;
+    }) =>
+      apiPatchJson<SessionSummary>(
+        `${API_BASE_URL}/api/sessions/${sessionId}`,
+        { title },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
     onError: (err) => {
       const u = toUserFacingError(err, t.errors);
@@ -411,16 +487,51 @@ export function Workbench() {
     composerHintVariant = "error";
   }
 
+  const onSidebarResizeStart = useCallback(
+    (event: React.MouseEvent) => {
+      if (sidebarCollapsed || isNarrow) return;
+      event.preventDefault();
+      const startX = event.clientX;
+      const startW = sidebarWidthRef.current;
+      function onMove(ev: MouseEvent) {
+        const delta = ev.clientX - startX;
+        const next = Math.min(
+          SIDEBAR_W_MAX,
+          Math.max(SIDEBAR_W_MIN, startW + delta),
+        );
+        setSidebarWidthPx(next);
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [isNarrow, sidebarCollapsed],
+  );
+
   const shellClass = [
     "app-shell",
+    !isNarrow && sidebarCollapsed ? "app-shell--sidebar-collapsed" : "",
     isNarrow && inspectorDrawerOpen ? "inspector-drawer-open" : "",
     isNarrow && sessionDrawerOpen ? "session-drawer-open" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
+  const shellStyle: CSSProperties | undefined = !isNarrow
+    ? ({
+        ["--sidebar-width" as string]: `${sidebarCollapsed ? 48 : sidebarWidthPx}px`,
+      } as CSSProperties)
+    : undefined;
+
   return (
-    <main className={shellClass}>
+    <main className={shellClass} style={shellStyle}>
       <Sidebar
         ref={sidebarShellRef}
         recentSessions={recentSessions}
@@ -438,11 +549,24 @@ export function Workbench() {
             ? deleteSessionMutation.variables
             : null
         }
+        renamingSessionId={
+          renameSessionMutation.isPending &&
+          renameSessionMutation.variables !== undefined
+            ? renameSessionMutation.variables.sessionId
+            : null
+        }
+        onRenameSession={(sessionId, title) =>
+          renameSessionMutation.mutateAsync({ sessionId, title })
+        }
         sessionsLoading={sessionsLoading}
         sessionsMessage={sessionsMessage}
         onNewSession={handleNewSession}
         newSessionBusy={newSessionBusy}
         drawerMode={isNarrow}
+        desktopSidebarChrome={!isNarrow}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebarCollapsed={() => setSidebarCollapsed((c) => !c)}
+        onSidebarResizeStart={onSidebarResizeStart}
       />
 
       <ChatColumn

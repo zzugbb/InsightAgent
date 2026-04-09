@@ -192,6 +192,26 @@ def get_session(session_id: str) -> dict | None:
     return dict(row)
 
 
+def update_session_title(session_id: str, title: str) -> dict | None:
+    """更新会话标题；title 为空则保持「未命名」式占位。"""
+    raw = title.strip()
+    resolved = raw[:120] if raw else "新会话"
+    current_time = _now_iso()
+    with get_db_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE sessions
+            SET title = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (resolved, current_time, session_id),
+        )
+        connection.commit()
+        if cursor.rowcount == 0:
+            return None
+    return get_session(session_id)
+
+
 def delete_session(session_id: str) -> bool:
     """删除会话；关联 tasks / messages 由外键 ON DELETE CASCADE 清理。"""
     with get_db_connection() as connection:

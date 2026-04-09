@@ -13,7 +13,12 @@ import { AppProviders } from "./providers";
 
 export const metadata: Metadata = {
   title: "InsightAgent",
-  description: "Observable AI Agent frontend shell",
+  description: "可观测智能体工作台：对话为主，执行过程在右侧轨迹中展开。",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32", type: "image/x-icon" },
+    ],
+  },
 };
 
 const themeInitScript = `

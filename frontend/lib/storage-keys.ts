@@ -4,3 +4,5 @@ export const LOCALE_STORAGE_KEY = "insightagent.locale";
 /** @deprecated 仅用于从旧版「预设 accent id」迁移 */
 export const ACCENT_STORAGE_KEY = "insightagent.accent";
 export const PRIMARY_COLOR_STORAGE_KEY = "insightagent.primaryColor";
+export const SIDEBAR_WIDTH_STORAGE_KEY = "insightagent.sidebarWidth";
+export const SIDEBAR_COLLAPSED_STORAGE_KEY = "insightagent.sidebarCollapsed";
