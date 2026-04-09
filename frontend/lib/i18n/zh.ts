@@ -138,6 +138,12 @@ export const zh: Messages = {
       model: "模型",
       stepKind: "子类",
       tokens: "Token",
+      toolLine: (name: string, status: string) =>
+        `工具 ${name} · ${status}`,
+      ragLine: (chunkCount: number, knowledgeBaseId?: string) =>
+        knowledgeBaseId
+          ? `RAG · ${chunkCount} 条片段 · ${knowledgeBaseId}`
+          : `RAG · ${chunkCount} 条片段`,
     },
     traceViewList: "时间线",
     traceViewFlow: "流程图",
@@ -145,16 +151,18 @@ export const zh: Messages = {
       kindThought: "思考",
       kindAction: "行动",
       kindObservation: "观察",
+      kindTool: "工具",
+      kindRag: "RAG",
       kindOther: "步骤",
       contentDetails: "内容",
       contentEmpty: "（无文本）",
     },
     memory: {
       kicker: "会话记忆",
-      title: "Memory（Chroma，规划中）",
+      title: "Memory（Chroma）",
       lead:
-        "计划使用 Chroma 存储本会话的向量记忆（摘要与近期上下文）；与长期知识库 RAG 使用不同 collection，按会话隔离。当前未接入向量服务，本区仅为契约与命名占位。",
-      collectionLabel: "目标 collection 名（示意）",
+        "本会话向量写入独立 collection（见上方命名）；任务成功结束后会自动追加摘要。下方可手动写入与语义检索（需 Chroma 可达）。",
+      collectionLabel: "Collection 名",
       chromaConnected: "已连接",
       chromaDisconnected: "未连接",
       docCount: (n: number) => `向量条数：${n}`,
@@ -162,6 +170,17 @@ export const zh: Messages = {
       collectionMissing: "尚无 collection（未写入）",
       statusLoading: "正在查询 Memory 状态…",
       pickSession: "选择会话后将显示 Chroma 连接与条数。",
+      debugKicker: "调试",
+      addPlaceholder: "写入一段文本到本会话 Memory…",
+      addButton: "写入",
+      addEmpty: "请先输入要写入的内容。",
+      queryInputEmpty: "请先输入检索内容。",
+      addSuccess: (n: number) => `已写入，当前 ${n} 条`,
+      queryPlaceholder: "输入检索问题或关键词…",
+      queryButton: "检索",
+      queryEmpty: "没有命中片段。",
+      queryHits: (n: number) => `命中 ${n} 条`,
+      distanceLabel: "距离",
     },
   },
   settings: {

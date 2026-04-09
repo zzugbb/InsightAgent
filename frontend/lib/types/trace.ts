@@ -2,7 +2,13 @@
  * 与 `.cursor/plans` 中 TraceStep 契约及后端 SSE `trace` 事件对齐。
  * `type` 三大类便于 Flow；细分子类走 `meta.step_type`。
  */
-export type TraceStepKind = "thought" | "action" | "observation";
+export type TraceStepKind =
+  | "thought"
+  | "action"
+  | "observation"
+  /** 显式类型或与 meta.tool / meta.rag 联用 */
+  | "tool"
+  | "rag";
 
 export type TraceStepMeta = {
   model?: string;

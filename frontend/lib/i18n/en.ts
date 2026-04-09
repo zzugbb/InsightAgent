@@ -139,6 +139,12 @@ export const en: Messages = {
       model: "Model",
       stepKind: "Kind",
       tokens: "Tokens",
+      toolLine: (name: string, status: string) =>
+        `Tool ${name} · ${status}`,
+      ragLine: (chunkCount: number, knowledgeBaseId?: string) =>
+        knowledgeBaseId
+          ? `RAG · ${chunkCount} chunks · ${knowledgeBaseId}`
+          : `RAG · ${chunkCount} chunks`,
     },
     traceViewList: "Timeline",
     traceViewFlow: "Flow",
@@ -146,16 +152,18 @@ export const en: Messages = {
       kindThought: "Thought",
       kindAction: "Action",
       kindObservation: "Observation",
+      kindTool: "Tool",
+      kindRag: "RAG",
       kindOther: "Step",
       contentDetails: "Content",
       contentEmpty: "(empty)",
     },
     memory: {
       kicker: "Session memory",
-      title: "Memory (Chroma, planned)",
+      title: "Memory (Chroma)",
       lead:
-        "Chroma will hold embeddings for this session’s summary and recent context, isolated from long-term RAG collections. The vector service is not connected yet—this block is a naming and contract placeholder.",
-      collectionLabel: "Target collection name (preview)",
+        "Vectors are stored in `memory_{session_id}`; a summary is appended after each successful task. Use the controls below to add text and run a semantic query (requires a reachable Chroma server).",
+      collectionLabel: "Collection name",
       chromaConnected: "Connected",
       chromaDisconnected: "Unreachable",
       docCount: (n: number) => `Embeddings: ${n}`,
@@ -163,6 +171,17 @@ export const en: Messages = {
       collectionMissing: "No collection yet",
       statusLoading: "Loading memory status…",
       pickSession: "Select a session to show Chroma status and counts.",
+      debugKicker: "Debug",
+      addPlaceholder: "Paste text to store in this session’s memory…",
+      addButton: "Add",
+      addEmpty: "Enter some text before adding.",
+      queryInputEmpty: "Enter a query before searching.",
+      addSuccess: (n: number) => `Saved. Total: ${n}.`,
+      queryPlaceholder: "Ask a question or enter keywords…",
+      queryButton: "Query",
+      queryEmpty: "No hits.",
+      queryHits: (n: number) => `${n} hit(s)`,
+      distanceLabel: "Distance",
     },
   },
   settings: {

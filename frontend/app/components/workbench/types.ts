@@ -52,3 +52,16 @@ export type SessionMemoryStatus = {
   document_count: number;
   error: string | null;
 };
+
+/** POST /api/sessions/{id}/memory/add */
+export type MemoryAddResponse = {
+  added_id: string;
+  document_count: number;
+};
+
+/** POST /api/sessions/{id}/memory/query */
+export type MemoryQueryResponse = {
+  ids: string[][];
+  documents: string[][];
+  distances: number[][] | null;
+};

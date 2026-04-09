@@ -30,7 +30,13 @@ const Y_STEP = 108;
 
 type TraceFlowNodeData = {
   title: string;
-  kind: "thought" | "action" | "observation" | "other";
+  kind:
+    | "thought"
+    | "action"
+    | "observation"
+    | "tool"
+    | "rag"
+    | "other";
   kindLabel: string;
   metaLine: string | null;
   content: string;

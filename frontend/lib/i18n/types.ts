@@ -140,6 +140,8 @@ export type Messages = {
       model: string;
       stepKind: string;
       tokens: string;
+      toolLine: (name: string, status: string) => string;
+      ragLine: (chunkCount: number, knowledgeBaseId?: string) => string;
     };
     /** 轨迹：列表时间线 vs 流程图 */
     traceViewList: string;
@@ -149,11 +151,13 @@ export type Messages = {
       kindThought: string;
       kindAction: string;
       kindObservation: string;
+      kindTool: string;
+      kindRag: string;
       kindOther: string;
       contentDetails: string;
       contentEmpty: string;
     };
-    /** 上下文：Memory / Chroma 占位（W2） */
+    /** 上下文：Memory / Chroma */
     memory: {
       kicker: string;
       title: string;
@@ -166,6 +170,17 @@ export type Messages = {
       collectionMissing: string;
       statusLoading: string;
       pickSession: string;
+      debugKicker: string;
+      addPlaceholder: string;
+      addButton: string;
+      addEmpty: string;
+      queryInputEmpty: string;
+      addSuccess: (n: number) => string;
+      queryPlaceholder: string;
+      queryButton: string;
+      queryEmpty: string;
+      queryHits: (n: number) => string;
+      distanceLabel: string;
     };
   };
   settings: {

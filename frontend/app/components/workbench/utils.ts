@@ -57,10 +57,25 @@ export function getRoleLabel(role: string, roles: Messages["roles"]): string {
   return role;
 }
 
-/** 与主计划 TraceStep.type 三大类对齐；未知类型归为 other */
+/**
+ * 流程图节点视觉分类：优先 `meta.tool` / `meta.rag`，其次 `type`；
+ * 与主计划 TraceStep 契约一致。
+ */
 export function normalizeTraceStepKind(
   step: TraceStepPayload,
-): "thought" | "action" | "observation" | "other" {
+):
+  | "thought"
+  | "action"
+  | "observation"
+  | "tool"
+  | "rag"
+  | "other" {
+  if (step.meta?.tool) {
+    return "tool";
+  }
+  if (step.meta?.rag) {
+    return "rag";
+  }
   const t = String(step.type ?? "").toLowerCase();
   if (t === "thought") {
     return "thought";
@@ -70,6 +85,12 @@ export function normalizeTraceStepKind(
   }
   if (t === "observation") {
     return "observation";
+  }
+  if (t === "tool") {
+    return "tool";
+  }
+  if (t === "rag") {
+    return "rag";
   }
   return "other";
 }
@@ -85,6 +106,10 @@ export function getTraceFlowKindLabel(
       return labels.kindAction;
     case "observation":
       return labels.kindObservation;
+    case "tool":
+      return labels.kindTool;
+    case "rag":
+      return labels.kindRag;
     default:
       return labels.kindOther;
   }
@@ -118,6 +143,20 @@ export function formatTraceStepMetaSubtitle(
       t === null || t === undefined ? "—" : String(t);
   }
   const parts: string[] = [];
+  if (meta.tool?.name) {
+    const name = String(meta.tool.name).trim();
+    if (name) {
+      parts.push(labels.toolLine(name, String(meta.tool.status ?? "")));
+    }
+  }
+  if (meta.rag?.chunks?.length) {
+    const n = meta.rag.chunks.length;
+    const kb =
+      typeof meta.rag.knowledge_base_id === "string"
+        ? meta.rag.knowledge_base_id.trim()
+        : undefined;
+    parts.push(labels.ragLine(n, kb));
+  }
   if (model) {
     parts.push(`${labels.model} ${model}`);
   }

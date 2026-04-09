@@ -1646,6 +1646,24 @@ code {
   color: #15803d;
 }
 
+.trace-flow-node--tool {
+  border-left: 3px solid #8b5cf6;
+}
+
+.trace-flow-node--tool .trace-flow-node__badge {
+  background: color-mix(in srgb, #8b5cf6 24%, transparent);
+  color: #6d28d9;
+}
+
+.trace-flow-node--rag {
+  border-left: 3px solid #06b6d4;
+}
+
+.trace-flow-node--rag .trace-flow-node__badge {
+  background: color-mix(in srgb, #06b6d4 22%, transparent);
+  color: #0e7490;
+}
+
 .trace-flow-node--other {
   border-left: 3px solid color-mix(in srgb, var(--muted) 55%, transparent);
 }
@@ -1665,6 +1683,14 @@ code {
 
 [data-theme="dark"] .trace-flow-node--observation .trace-flow-node__badge {
   color: #86efac;
+}
+
+[data-theme="dark"] .trace-flow-node--tool .trace-flow-node__badge {
+  color: #c4b5fd;
+}
+
+[data-theme="dark"] .trace-flow-node--rag .trace-flow-node__badge {
+  color: #67e8f9;
 }
 
 .trace-feed {
@@ -1695,6 +1721,31 @@ code {
 
 .trace-card--enter {
   animation: trace-card-in 0.38s ease-out both;
+}
+
+/* 时间线卡片：与流程图节点配色一致（含 tool / rag） */
+.trace-card--kind-thought {
+  border-left: 3px solid #3b82f6;
+}
+
+.trace-card--kind-action {
+  border-left: 3px solid #f59e0b;
+}
+
+.trace-card--kind-observation {
+  border-left: 3px solid #22c55e;
+}
+
+.trace-card--kind-tool {
+  border-left: 3px solid #8b5cf6;
+}
+
+.trace-card--kind-rag {
+  border-left: 3px solid #06b6d4;
+}
+
+.trace-card--kind-other {
+  border-left: 3px solid color-mix(in srgb, var(--muted) 55%, transparent);
 }
 
 .trace-top {
@@ -1856,6 +1907,90 @@ code {
 .memory-chroma-err {
   margin: 6px 0 0;
   font-size: 0.8rem;
+}
+
+.memory-debug-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-debug-kicker {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.memory-debug-textarea.ant-input {
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.memory-debug-textarea--query {
+  margin-top: 4px;
+}
+
+.memory-debug-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.memory-debug-err {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #dc2626;
+  line-height: 1.45;
+}
+
+.memory-query-results {
+  margin-top: 4px;
+}
+
+.memory-query-hits-label {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.memory-query-hit-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.memory-query-hit-item {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.memory-query-hit-doc {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.memory-query-hit-dist {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
 .task-summary-list {

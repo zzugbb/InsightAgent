@@ -24,6 +24,8 @@ def stream_task_execution(
     persist_user_message: bool = False,
 ) -> Iterator[str]:
     thought_step_id = str(uuid4())
+    tool_step_id = str(uuid4())
+    rag_step_id = str(uuid4())
     final_step_id = str(uuid4())
     trace_steps: list[dict[str, object]] = []
 
@@ -41,6 +43,7 @@ def stream_task_execution(
         provider = get_llm_provider()
         result = provider.generate(prompt)
         completion_chunks = list(provider.stream_generate(prompt))
+        preview = prompt.strip()[:120]
         trace_steps = [
             {
                 "id": thought_step_id,
@@ -49,6 +52,37 @@ def stream_task_execution(
                 "meta": {
                     "model": result.model,
                     "step_type": "planning",
+                },
+            },
+            {
+                "id": tool_step_id,
+                "type": "action",
+                "content": "Mock tool call (no external I/O in mock mode).",
+                "meta": {
+                    "model": result.model,
+                    "step_type": "tool_call",
+                    "tool": {
+                        "name": "mock_plan",
+                        "input": {"prompt_preview": preview},
+                        "output": {"echo": True},
+                        "status": "done",
+                    },
+                },
+            },
+            {
+                "id": rag_step_id,
+                "type": "thought",
+                "content": "Retrieved snippets from mock knowledge base.",
+                "meta": {
+                    "model": result.model,
+                    "step_type": "rag_retrieval",
+                    "rag": {
+                        "chunks": [
+                            "(mock) Context line 1 for this session.",
+                            "(mock) Context line 2.",
+                        ],
+                        "knowledge_base_id": "mock_kb",
+                    },
                 },
             },
             {
@@ -92,9 +126,25 @@ def stream_task_execution(
             "trace",
             {
                 "task_id": task_id,
+                "step_id": tool_step_id,
+                "step": trace_steps[1],
+            },
+        )
+        yield sse_event(
+            "trace",
+            {
+                "task_id": task_id,
+                "step_id": rag_step_id,
+                "step": trace_steps[2],
+            },
+        )
+        yield sse_event(
+            "trace",
+            {
+                "task_id": task_id,
                 "step_id": final_step_id,
                 "step": {
-                    **trace_steps[1],
+                    **trace_steps[3],
                     "content": "",
                 },
             },

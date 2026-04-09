@@ -10,6 +10,7 @@
 - `app/db.py`：SQLite 初始化、配置表与最小业务表结构
 - `app/providers/`：Provider 抽象与 mock 实现
 - `app/services/chat_persistence_service.py`：会话 / 任务 / 消息持久化
+- `app/services/chat_execution_service.py`：SSE Task Stream；Mock 下持久化 trace 含 **planning → tool_call（`meta.tool`）→ rag_retrieval（`meta.rag`）→ final_answer** 四步，供前端流程图展示 **工具 / RAG** 节点
 - `app/services/settings_service.py`：settings 读写
 - `app/services/provider_service.py`：按 settings 解析当前 provider
 - `app/services/chroma_status.py`：对 Chroma HTTP 做心跳探测（供 `/health` 使用）

@@ -1,26 +1,44 @@
 "use client";
 
-import { Button, Segmented, Space, Tabs } from "antd";
+import { App, Button, Input, Segmented, Space, Tabs } from "antd";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
-import { forwardRef, useMemo, useState, type MouseEvent } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+} from "react";
 
+import { apiPostJson } from "../../../lib/api-client";
+import { toUserFacingError } from "../../../lib/errors";
 import type { TraceStepPayload } from "../../../lib/types/trace";
 import {
   useMessages,
   usePreferences,
 } from "../../../lib/preferences-context";
 
-import type { InspectorTab, SessionMemoryStatus, TaskSummary } from "./types";
+import type {
+  InspectorTab,
+  MemoryAddResponse,
+  MemoryQueryResponse,
+  SessionMemoryStatus,
+  TaskSummary,
+} from "./types";
 import { TraceFlowView } from "./trace-flow-view";
 import {
   formatTimestamp,
   formatTraceStepMetaSubtitle,
   getStepTitle,
   getTaskLabel,
+  normalizeTraceStepKind,
   shortenId,
 } from "./utils";
 
 const TRACE_PREVIEW = 6;
+
+const { TextArea } = Input;
 
 type InspectorProps = {
   tab: InspectorTab;
@@ -83,6 +101,51 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const hasTaskContext = Boolean(sseTaskId?.trim());
   const [expandAllTrace, setExpandAllTrace] = useState(false);
   const [traceView, setTraceView] = useState<"list" | "flow">("list");
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
+  const [memoryAddDraft, setMemoryAddDraft] = useState("");
+  const [memoryQueryDraft, setMemoryQueryDraft] = useState("");
+
+  const memoryAddMutation = useMutation({
+    mutationFn: async (text: string) => {
+      if (!activeSessionId?.trim()) {
+        throw new Error("NO_SESSION");
+      }
+      return apiPostJson<MemoryAddResponse>(
+        `${apiBaseUrl}/api/sessions/${encodeURIComponent(activeSessionId)}/memory/add`,
+        { text },
+      );
+    },
+    onSuccess: (data) => {
+      if (activeSessionId) {
+        void queryClient.invalidateQueries({
+          queryKey: ["session-memory-status", activeSessionId],
+        });
+      }
+      message.success(t.inspector.memory.addSuccess(data.document_count));
+    },
+  });
+
+  const memoryQueryMutation = useMutation({
+    mutationFn: async (text: string) => {
+      if (!activeSessionId?.trim()) {
+        throw new Error("NO_SESSION");
+      }
+      return apiPostJson<MemoryQueryResponse>(
+        `${apiBaseUrl}/api/sessions/${encodeURIComponent(activeSessionId)}/memory/query`,
+        { text, n_results: 8 },
+      );
+    },
+  });
+
+  useEffect(() => {
+    setMemoryAddDraft("");
+    setMemoryQueryDraft("");
+    memoryAddMutation.reset();
+    memoryQueryMutation.reset();
+    // 仅在切换会话时清空调试区
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]);
 
   const collapsedRail =
     desktopInspectorChrome && inspectorCollapsed;
@@ -175,12 +238,17 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       ) : traceView === "list" && visibleSteps.length > 0 ? (
         <div className="trace-feed">
           {visibleSteps.map((step) => {
+            const traceKind = normalizeTraceStepKind(step);
             const metaLine = formatTraceStepMetaSubtitle(
               step,
               t.inspector.traceMeta,
             );
             return (
-            <article key={step.id} className="trace-card trace-card--enter">
+            <article
+              key={step.id}
+              className={`trace-card trace-card--enter trace-card--kind-${traceKind}`}
+              data-trace-kind={traceKind}
+            >
               <div className="trace-top">
                 <strong>{getStepTitle(step)}</strong>
                 <span>
@@ -297,6 +365,107 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             </>
           ) : null}
         </div>
+        {activeSessionId ? (
+          <div className="memory-debug-block">
+            <p className="memory-debug-kicker">{t.inspector.memory.debugKicker}</p>
+            <TextArea
+              className="memory-debug-textarea"
+              value={memoryAddDraft}
+              onChange={(e) => setMemoryAddDraft(e.target.value)}
+              placeholder={t.inspector.memory.addPlaceholder}
+              rows={2}
+              disabled={memoryAddMutation.isPending}
+            />
+            <div className="memory-debug-actions">
+              <Button
+                type="primary"
+                size="small"
+                loading={memoryAddMutation.isPending}
+                onClick={() => {
+                  const text = memoryAddDraft.trim();
+                  if (!text) {
+                    message.warning(t.inspector.memory.addEmpty);
+                    return;
+                  }
+                  memoryAddMutation.mutate(text);
+                }}
+              >
+                {t.inspector.memory.addButton}
+              </Button>
+            </div>
+            {memoryAddMutation.isError && memoryAddMutation.error ? (
+              <p className="memory-debug-err">
+                {(() => {
+                  const u = toUserFacingError(memoryAddMutation.error, t.errors);
+                  return u.hint ? `${u.banner} ${u.hint}` : u.banner;
+                })()}
+              </p>
+            ) : null}
+            <TextArea
+              className="memory-debug-textarea memory-debug-textarea--query"
+              value={memoryQueryDraft}
+              onChange={(e) => setMemoryQueryDraft(e.target.value)}
+              placeholder={t.inspector.memory.queryPlaceholder}
+              rows={2}
+              disabled={memoryQueryMutation.isPending}
+            />
+            <div className="memory-debug-actions">
+              <Button
+                size="small"
+                loading={memoryQueryMutation.isPending}
+                onClick={() => {
+                  const text = memoryQueryDraft.trim();
+                  if (!text) {
+                    message.warning(t.inspector.memory.queryInputEmpty);
+                    return;
+                  }
+                  memoryQueryMutation.mutate(text);
+                }}
+              >
+                {t.inspector.memory.queryButton}
+              </Button>
+            </div>
+            {memoryQueryMutation.isError && memoryQueryMutation.error ? (
+              <p className="memory-debug-err">
+                {(() => {
+                  const u = toUserFacingError(memoryQueryMutation.error, t.errors);
+                  return u.hint ? `${u.banner} ${u.hint}` : u.banner;
+                })()}
+              </p>
+            ) : null}
+            {memoryQueryMutation.isSuccess && memoryQueryMutation.data ? (
+              <div className="memory-query-results" aria-live="polite">
+                <p className="memory-query-hits-label">
+                  {t.inspector.memory.queryHits(
+                    memoryQueryMutation.data.documents[0]?.length ?? 0,
+                  )}
+                </p>
+                {(memoryQueryMutation.data.documents[0]?.length ?? 0) === 0 ? (
+                  <p className="panel-note panel-note--muted">{t.inspector.memory.queryEmpty}</p>
+                ) : (
+                  <ul className="memory-query-hit-list">
+                    {memoryQueryMutation.data.documents[0]?.map((doc, i) => {
+                      const id =
+                        memoryQueryMutation.data?.ids[0]?.[i] ?? String(i);
+                      const dist = memoryQueryMutation.data?.distances?.[0]?.[i];
+                      return (
+                        <li key={id} className="memory-query-hit-item">
+                          <pre className="memory-query-hit-doc">{doc}</pre>
+                          {typeof dist === "number" && Number.isFinite(dist) ? (
+                            <span className="memory-query-hit-dist">
+                              {t.inspector.memory.distanceLabel}:{" "}
+                              {dist.toFixed(4)}
+                            </span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {activeTask ? (
