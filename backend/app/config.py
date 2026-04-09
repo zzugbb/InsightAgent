@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     api_key: str | None = Field(default=None, alias="INSIGHT_AGENT_API_KEY")
     cors_origins: list[str] = Field(
         default=[
-            "http://127.0.0.1:3000",
-            "http://localhost:3000",
+            "http://127.0.0.1:3001",
+            "http://localhost:3001",
         ],
         alias="INSIGHT_AGENT_CORS_ORIGINS",
     )
