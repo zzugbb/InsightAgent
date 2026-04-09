@@ -1,11 +1,14 @@
 "use client";
 
+import { ColorPicker } from "antd";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   Globe,
   Monitor,
   Moon,
+  Palette,
   Settings2,
   Sun,
 } from "lucide-react";
@@ -18,17 +21,22 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import {
+  hexKeyForCompare,
+  PRESET_SWATCHES,
+} from "../../../lib/theme-primary";
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
 import { ModelSettingsModal } from "./model-settings-modal";
 
-type Subview = "main" | "theme" | "language";
+type Subview = "main" | "theme" | "accent" | "language";
 
 type PopoverPos = { left: number; bottom: number; width: number };
 
 export function SidebarSettingsMenu() {
   const t = useMessages();
-  const { theme, setTheme, locale, setLocale } = usePreferences();
+  const { theme, setTheme, primaryColor, setPrimaryColor, locale, setLocale } =
+    usePreferences();
   const [open, setOpen] = useState(false);
   const [subview, setSubview] = useState<Subview>("main");
   const [modelOpen, setModelOpen] = useState(false);
@@ -106,6 +114,8 @@ export function SidebarSettingsMenu() {
   const langLabel =
     locale === "zh" ? t.sidebar.langCurrentZh : t.sidebar.langCurrentEn;
 
+  const primarySummary = primaryColor.toUpperCase();
+
   const popoverContent =
     open && mounted && popoverPos ? (
       <div
@@ -115,7 +125,7 @@ export function SidebarSettingsMenu() {
           position: "fixed",
           left: popoverPos.left,
           bottom: popoverPos.bottom,
-          width: Math.max(popoverPos.width, 220),
+          width: Math.max(popoverPos.width, subview === "accent" ? 300 : 220),
           zIndex: 450,
         }}
         role="menu"
@@ -136,6 +146,24 @@ export function SidebarSettingsMenu() {
               )}
               <span className="settings-menu-row-label">{t.sidebar.menuTheme}</span>
               <span className="settings-menu-row-value">{themeLabel}</span>
+              <ChevronRight
+                size={18}
+                strokeWidth={1.75}
+                aria-hidden
+                className="settings-menu-chevron"
+              />
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="settings-menu-row"
+              onClick={() => setSubview("accent")}
+            >
+              <Palette size={18} strokeWidth={1.75} aria-hidden />
+              <span className="settings-menu-row-label">{t.sidebar.menuAccent}</span>
+              <span className="settings-menu-row-value settings-menu-row-value--mono">
+                {primarySummary}
+              </span>
               <ChevronRight
                 size={18}
                 strokeWidth={1.75}
@@ -214,6 +242,56 @@ export function SidebarSettingsMenu() {
               >
                 {t.settings.themeLight}
               </button>
+            </div>
+          </div>
+        ) : null}
+
+        {subview === "accent" ? (
+          <div className="settings-menu-subview settings-menu-subview--accent">
+            <button
+              type="button"
+              className="settings-menu-back"
+              onClick={() => setSubview("main")}
+            >
+              <ChevronLeft size={18} strokeWidth={1.75} aria-hidden />
+              {t.sidebar.subviewBack}
+            </button>
+            <p className="settings-menu-subtitle">{t.sidebar.menuAccent}</p>
+            <div className="settings-accent-swatches" role="list">
+              {PRESET_SWATCHES.map((hex) => {
+                const active = hexKeyForCompare(primaryColor) === hexKeyForCompare(hex);
+                return (
+                  <button
+                    key={hex}
+                    type="button"
+                    role="listitem"
+                    className={`settings-accent-swatch${active ? " is-active" : ""}`}
+                    style={{ backgroundColor: hex }}
+                    onClick={() => setPrimaryColor(hex)}
+                    aria-label={hex}
+                    aria-pressed={active}
+                  >
+                    {active ? (
+                      <Check
+                        size={14}
+                        strokeWidth={3}
+                        className="settings-accent-swatch-check"
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="settings-accent-custom-label">{t.sidebar.accentCustomColor}</p>
+            <div className="settings-accent-picker-row">
+              <ColorPicker
+                value={primaryColor}
+                onChangeComplete={(c) => setPrimaryColor(c.toHexString())}
+                format="hex"
+                showText
+                disabledAlpha={false}
+              />
             </div>
           </div>
         ) : null}

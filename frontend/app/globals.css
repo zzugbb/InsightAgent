@@ -11,9 +11,10 @@
   --text: #eef2f6;
   --muted: #95a1b2;
   --muted-strong: #cfd8e3;
+  /** --accent 由脚本写入 html style，此处为无脚本时的回退 */
   --accent: #22c55e;
-  --accent-soft: rgba(34, 197, 94, 0.14);
-  --accent-strong: #4ade80;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-strong: color-mix(in srgb, var(--accent) 48%, #ffffff);
   --warning: #f59e0b;
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
   --danger: #f87171;
@@ -23,7 +24,7 @@
   --code-bg: rgba(0, 0, 0, 0.35);
   --blockquote-bg: rgba(255, 255, 255, 0.04);
   --kbd-bg: rgba(255, 255, 255, 0.06);
-  --body-gradient-mid: rgba(34, 197, 94, 0.1);
+  --body-gradient-mid: color-mix(in srgb, var(--accent) 10%, transparent);
   --body-gradient-end-a: #0f1318;
   --body-gradient-end-b: #101418;
   --hljs-bg: transparent;
@@ -47,7 +48,7 @@
   --popover-bg: rgba(26, 32, 42, 0.98);
   --chat-top-shine: rgba(255, 255, 255, 0.012);
   --badge-bg: rgba(255, 255, 255, 0.05);
-  --accent-on-badge: #d7ffe5;
+  --accent-on-badge: color-mix(in srgb, var(--accent) 72%, #f8fafc);
   --skeleton-a: rgba(255, 255, 255, 0.05);
   --skeleton-b: rgba(255, 255, 255, 0.1);
   --banner-fg: #fecaca;
@@ -60,11 +61,11 @@
   --input-surface: rgba(255, 255, 255, 0.04);
   --fab-surface: rgba(22, 28, 36, 0.96);
   --fab-surface-hover: rgba(30, 38, 48, 0.98);
-  --avatar-assistant-fg: #dbffe8;
+  --avatar-assistant-fg: color-mix(in srgb, var(--accent) 58%, #ecfdf5);
   --msg-card-bg: rgba(255, 255, 255, 0.03);
   --msg-card-user-bg: rgba(255, 255, 255, 0.045);
-  --msg-live-border: rgba(34, 197, 94, 0.22);
-  --msg-live-bg: rgba(34, 197, 94, 0.08);
+  --msg-live-border: color-mix(in srgb, var(--accent) 22%, transparent);
+  --msg-live-bg: color-mix(in srgb, var(--accent) 8%, transparent);
   --tab-pill-active: rgba(255, 255, 255, 0.08);
   --nested-panel-bg: rgba(255, 255, 255, 0.025);
   --table-header-bg: rgba(255, 255, 255, 0.05);
@@ -82,9 +83,9 @@
   --text: #0f172a;
   --muted: #64748b;
   --muted-strong: #334155;
-  --accent: #16a34a;
-  --accent-soft: rgba(22, 163, 74, 0.12);
-  --accent-strong: #15803d;
+  /** 浅色下 --accent 仍用全局同一主色（由 html 注入），不覆盖 */
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-strong: color-mix(in srgb, var(--accent) 82%, #0f172a);
   --warning: #d97706;
   --shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
   --danger: #dc2626;
@@ -94,7 +95,7 @@
   --code-bg: rgba(15, 23, 42, 0.06);
   --blockquote-bg: rgba(15, 23, 42, 0.04);
   --kbd-bg: rgba(15, 23, 42, 0.06);
-  --body-gradient-mid: rgba(22, 163, 74, 0.08);
+  --body-gradient-mid: color-mix(in srgb, var(--accent) 8%, transparent);
   --body-gradient-end-a: #f8fafc;
   --body-gradient-end-b: #f1f5f9;
   --hljs-bg: transparent;
@@ -118,7 +119,7 @@
   --popover-bg: #ffffff;
   --chat-top-shine: rgba(15, 23, 42, 0.04);
   --badge-bg: rgba(15, 23, 42, 0.06);
-  --accent-on-badge: #166534;
+  --accent-on-badge: color-mix(in srgb, var(--accent) 88%, #052e16);
   --skeleton-a: rgba(15, 23, 42, 0.06);
   --skeleton-b: rgba(15, 23, 42, 0.12);
   --banner-fg: #b91c1c;
@@ -131,11 +132,11 @@
   --input-surface: rgba(15, 23, 42, 0.06);
   --fab-surface: #ffffff;
   --fab-surface-hover: #f1f5f9;
-  --avatar-assistant-fg: #166534;
+  --avatar-assistant-fg: color-mix(in srgb, var(--accent) 38%, #14532d);
   --msg-card-bg: rgba(15, 23, 42, 0.04);
   --msg-card-user-bg: rgba(15, 23, 42, 0.07);
-  --msg-live-border: rgba(22, 163, 74, 0.35);
-  --msg-live-bg: rgba(22, 163, 74, 0.1);
+  --msg-live-border: color-mix(in srgb, var(--accent) 32%, transparent);
+  --msg-live-bg: color-mix(in srgb, var(--accent) 10%, transparent);
   --tab-pill-active: rgba(15, 23, 42, 0.08);
   --nested-panel-bg: rgba(15, 23, 42, 0.04);
   --table-header-bg: rgba(15, 23, 42, 0.06);
@@ -409,6 +410,14 @@ code {
   cursor: not-allowed;
 }
 
+.sidebar-session-delete.ant-btn {
+  box-shadow: none;
+}
+
+.sidebar-new-session.ant-btn.ant-btn-primary.ant-btn-background-ghost {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 .sidebar-empty {
   padding: 12px 14px;
   border-radius: 16px;
@@ -474,7 +483,7 @@ code {
 }
 
 .header-badge.accent {
-  border-color: rgba(34, 197, 94, 0.28);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   background: var(--accent-soft);
   color: var(--accent-on-badge);
 }
@@ -484,6 +493,37 @@ code {
   font-size: 0.88rem;
   line-height: 1.55;
   color: var(--muted);
+}
+
+.chat-api-alert {
+  margin: 0 32px 12px;
+  border-radius: 16px;
+}
+
+.chat-api-alert.ant-alert-error {
+  background: var(--banner-bg);
+  border-color: var(--banner-border);
+}
+
+.chat-api-alert .ant-alert-message {
+  color: var(--banner-fg);
+}
+
+.header-badge-tag.ant-tag {
+  margin-inline-end: 0;
+  padding: 4px 11px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  border-radius: 999px;
+  background: var(--badge-bg) !important;
+  color: var(--muted-strong) !important;
+  border: 1px solid var(--line) !important;
+}
+
+.header-badge-tag.header-badge-tag--live.ant-tag {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent) !important;
+  background: var(--accent-soft) !important;
+  color: var(--accent-on-badge) !important;
 }
 
 .api-banner {
@@ -727,19 +767,20 @@ code {
   right: 28px;
   bottom: 20px;
   z-index: 4;
-  border-radius: 999px;
-  padding: 10px 16px;
-  border: 1px solid var(--line-strong);
-  background: var(--fab-surface);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 0.84rem;
-  font-weight: 600;
+  border-radius: 999px !important;
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  padding: 0 !important;
   box-shadow: var(--shadow);
 }
 
+.scroll-bottom-fab.ant-btn.ant-btn-primary {
+  border: none;
+}
+
 .scroll-bottom-fab:hover {
-  background: var(--fab-surface-hover);
+  filter: brightness(1.06);
 }
 
 .message-tag {
@@ -778,6 +819,7 @@ code {
 }
 
 .composer-shell textarea,
+.composer-shell .composer-textarea.ant-input,
 .field input,
 .field select {
   width: 100%;
@@ -799,11 +841,19 @@ code {
   line-height: 1.7;
 }
 
+.composer-shell .composer-textarea.ant-input {
+  min-height: 124px;
+  line-height: 1.7;
+  font-size: 0.95rem;
+}
+
 .composer-shell textarea:focus,
+.composer-shell .composer-textarea.ant-input:focus,
+.composer-shell .composer-textarea.ant-input-focused,
 .field input:focus,
 .field select:focus {
-  border-color: rgba(34, 197, 94, 0.34);
-  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.1);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .composer-footer {
@@ -890,6 +940,29 @@ code {
   padding: 20px;
   border-left: 1px solid var(--line);
   background: var(--inspector-bg);
+}
+
+.inspector-ant-tabs.ant-tabs-top > .ant-tabs-nav {
+  margin-bottom: 10px;
+}
+
+.inspector-ant-tabs.ant-tabs .ant-tabs-nav::before {
+  border-color: var(--line);
+}
+
+.inspector-ant-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.inspector-ant-tabs .ant-tabs-ink-bar {
+  background: var(--accent);
+}
+
+.model-settings-sqlite-path {
+  display: block;
+  word-break: break-all;
+  font-size: 0.82rem;
 }
 
 .inspector-tab-row {
@@ -1298,6 +1371,7 @@ code {
   }
 
   .api-banner,
+  .chat-api-alert,
   .chat-hint-row {
     margin-left: 16px;
     margin-right: 16px;
@@ -1803,6 +1877,72 @@ code {
 .settings-menu-option.is-active {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.settings-menu-row-value--mono {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  max-width: 11em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-menu-subview--accent {
+  min-width: 280px;
+}
+
+.settings-accent-swatches {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.settings-accent-swatch {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.settings-accent-swatch:hover {
+  transform: scale(1.04);
+}
+
+.settings-accent-swatch.is-active {
+  border-color: var(--text);
+}
+
+.settings-accent-swatch-check {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: #fff;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+
+.settings-accent-custom-label {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.settings-accent-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-accent-picker-row .ant-color-picker-trigger {
+  flex: 1;
+  min-width: 0;
 }
 
 .model-settings-modal-root {

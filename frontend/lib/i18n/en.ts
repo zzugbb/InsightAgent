@@ -89,6 +89,7 @@ export const en: Messages = {
     settingsButton: "Settings",
     settingsMenuLabel: "Menu",
     menuTheme: "Theme",
+    menuAccent: "Accent color",
     menuLanguage: "Language",
     menuModel: "Model & runtime",
     subviewBack: "Back",
@@ -99,6 +100,7 @@ export const en: Messages = {
     deleteSessionConfirm:
       "Delete this session? Associated messages and tasks will be removed.",
     deleteSessionAria: "Delete session",
+    accentCustomColor: "Custom color",
   },
   inspector: {
     ariaShell: "Execution and context",

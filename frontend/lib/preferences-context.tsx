@@ -12,15 +12,28 @@ import {
 
 import { getMessages } from "./i18n";
 import type { Locale } from "./i18n/types";
-import { LOCALE_STORAGE_KEY, THEME_STORAGE_KEY } from "./storage-keys";
+import {
+  applyPrimaryColorToDocument,
+  DEFAULT_PRIMARY_HEX,
+  normalizePrimaryHex,
+  readStoredPrimaryColor,
+} from "./theme-primary";
+import {
+  LOCALE_STORAGE_KEY,
+  PRIMARY_COLOR_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+} from "./storage-keys";
 
 export type Theme = "light" | "dark";
 
-export { LOCALE_STORAGE_KEY, THEME_STORAGE_KEY };
+export { LOCALE_STORAGE_KEY, PRIMARY_COLOR_STORAGE_KEY, THEME_STORAGE_KEY };
 
 type PreferencesContextValue = {
   theme: Theme;
   setTheme: (t: Theme) => void;
+  /** 主题主色，如 #22c55e 或带透明 #RRGGBBAA */
+  primaryColor: string;
+  setPrimaryColor: (hex: string) => void;
   locale: Locale;
   setLocale: (l: Locale) => void;
   localeTag: "zh-CN" | "en-US";
@@ -52,6 +65,7 @@ function readThemeFromDom(): Theme | null {
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("dark");
+  const [primaryColor, setPrimaryColorState] = useState(DEFAULT_PRIMARY_HEX);
   const [locale, setLocaleState] = useState<Locale>("zh");
 
   useLayoutEffect(() => {
@@ -63,6 +77,10 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         : "dark");
     setThemeState(t);
     document.documentElement.setAttribute("data-theme", t);
+
+    const p = readStoredPrimaryColor();
+    setPrimaryColorState(p);
+    applyPrimaryColorToDocument(p);
 
     const l =
       readStoredLocale() ??
@@ -83,16 +101,25 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = next === "zh" ? "zh-CN" : "en-US";
   }, []);
 
+  const setPrimaryColor = useCallback((hex: string) => {
+    const next = normalizePrimaryHex(hex) ?? DEFAULT_PRIMARY_HEX;
+    setPrimaryColorState(next);
+    localStorage.setItem(PRIMARY_COLOR_STORAGE_KEY, next);
+    applyPrimaryColorToDocument(next);
+  }, []);
+
   const value = useMemo<PreferencesContextValue>(
     () => ({
       theme,
       setTheme,
+      primaryColor,
+      setPrimaryColor,
       locale,
       setLocale,
       localeTag: locale === "zh" ? "zh-CN" : "en-US",
       messages: getMessages(locale),
     }),
-    [theme, setTheme, locale, setLocale],
+    [theme, setTheme, primaryColor, setPrimaryColor, locale, setLocale],
   );
 
   return (

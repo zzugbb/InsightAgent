@@ -1,5 +1,8 @@
 "use client";
 
+import { Alert, Button, Flex, Space, Tag } from "antd";
+import type { TextAreaRef } from "antd/es/input/TextArea";
+import { ArrowDown } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   useCallback,
@@ -59,7 +62,7 @@ type ChatColumnProps = {
   inspectorDrawerTriggerRef?: RefObject<HTMLButtonElement | null>;
   showStreamRetry: boolean;
   onRetryStream: () => void;
-  composerRef: RefObject<HTMLTextAreaElement | null>;
+  composerRef: RefObject<TextAreaRef | null>;
   liveRegionText: string;
 };
 
@@ -208,16 +211,15 @@ export function ChatColumn({
       </div>
 
       {apiBanner ? (
-        <div className="api-banner" role="alert">
-          <p>{apiBanner}</p>
-          <button
-            type="button"
-            className="api-banner-dismiss"
-            onClick={onDismissBanner}
-          >
-            {t.chat.closeBanner}
-          </button>
-        </div>
+        <Alert
+          className="chat-api-alert"
+          type="error"
+          showIcon
+          closable
+          onClose={onDismissBanner}
+          message={apiBanner}
+          role="alert"
+        />
       ) : null}
 
       <header className="chat-header">
@@ -236,40 +238,44 @@ export function ChatColumn({
               : t.chat.autoCreateHint}
           </p>
         </div>
-        <div className="chat-header-actions">
-          {showSessionDrawerTrigger ? (
-            <button
-              ref={sessionDrawerTriggerRef}
-              type="button"
-              className="secondary-button mobile-inspector-trigger"
-              onClick={onOpenSessionDrawer}
-            >
-              {t.chat.sessionList}
-            </button>
-          ) : null}
-          {showInspectorTrigger ? (
-            <button
-              ref={inspectorDrawerTriggerRef}
-              type="button"
-              className="secondary-button mobile-inspector-trigger"
-              onClick={onOpenInspector}
-            >
-              {t.chat.traceAndContext}
-            </button>
-          ) : null}
-          <div className="header-badges">
-            <span className="header-badge">
+        <Flex wrap="wrap" gap="small" align="center" justify="flex-end" className="chat-header-actions">
+          <Space wrap size="small">
+            {showSessionDrawerTrigger ? (
+              <Button
+                ref={sessionDrawerTriggerRef}
+                type="default"
+                className="mobile-inspector-trigger"
+                onClick={onOpenSessionDrawer}
+              >
+                {t.chat.sessionList}
+              </Button>
+            ) : null}
+            {showInspectorTrigger ? (
+              <Button
+                ref={inspectorDrawerTriggerRef}
+                type="default"
+                className="mobile-inspector-trigger"
+                onClick={onOpenInspector}
+              >
+                {t.chat.traceAndContext}
+              </Button>
+            ) : null}
+          </Space>
+          <Space wrap size={[6, 6]} className="header-badges">
+            <Tag bordered={false} className="header-badge-tag">
               {t.chat.modeLabel} {settingsSummary?.mode ?? "—"}
-            </span>
-            <span className="header-badge">
-              {settingsSummary?.provider ?? "—"} /{" "}
-              {settingsSummary?.model ?? "—"}
-            </span>
-            <span className={`header-badge ${isStreaming ? "accent" : ""}`}>
+            </Tag>
+            <Tag bordered={false} className="header-badge-tag">
+              {settingsSummary?.provider ?? "—"} / {settingsSummary?.model ?? "—"}
+            </Tag>
+            <Tag
+              bordered={false}
+              className={`header-badge-tag${isStreaming ? " header-badge-tag--live" : ""}`}
+            >
               {isStreaming ? t.chat.generating : t.chat.ready}
-            </span>
-          </div>
-        </div>
+            </Tag>
+          </Space>
+        </Flex>
       </header>
 
       <p className="chat-hint-row">
@@ -352,14 +358,16 @@ export function ChatColumn({
         ) : null}
 
         {showScrollFab ? (
-          <button
-            type="button"
+          <Button
+            type="primary"
+            shape="circle"
+            size="large"
+            icon={<ArrowDown size={20} aria-hidden />}
             className="scroll-bottom-fab"
             onClick={scrollToBottom}
             aria-label={t.chat.scrollToBottomAria}
-          >
-            {t.chat.scrollToBottom}
-          </button>
+            title={t.chat.scrollToBottom}
+          />
         ) : null}
 
         {showSessionEmpty ? (
@@ -388,7 +396,8 @@ export function ChatColumn({
         onSend={() => {
           void onSend();
         }}
-        disabled={sendDisabled}
+        sendDisabled={sendDisabled}
+        sending={isStreaming}
         hint={composerHint}
         hintVariant={composerHintVariant}
         showRetry={showStreamRetry}

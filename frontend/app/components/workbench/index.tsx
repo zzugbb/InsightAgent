@@ -1,5 +1,6 @@
 "use client";
 
+import type { TextAreaRef } from "antd/es/input/TextArea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -41,7 +42,7 @@ export function Workbench() {
   const prevStreamingRef = useRef(false);
   const isNarrow = useMediaQuery(NARROW_QUERY);
 
-  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<TextAreaRef | null>(null);
   const inspectorShellRef = useRef<HTMLElement>(null);
   const sidebarShellRef = useRef<HTMLElement>(null);
   const activeSessionIdRef = useRef<string | null>(null);

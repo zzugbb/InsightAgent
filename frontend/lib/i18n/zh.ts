@@ -89,6 +89,7 @@ export const zh: Messages = {
     settingsButton: "设置",
     settingsMenuLabel: "菜单",
     menuTheme: "主题",
+    menuAccent: "主题色",
     menuLanguage: "语言",
     menuModel: "模型与运行",
     subviewBack: "返回",
@@ -98,6 +99,7 @@ export const zh: Messages = {
     langCurrentEn: "English",
     deleteSessionConfirm: "确定删除该会话？关联消息与任务将一并删除。",
     deleteSessionAria: "删除会话",
+    accentCustomColor: "自定义颜色",
   },
   inspector: {
     ariaShell: "执行与上下文",

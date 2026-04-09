@@ -87,6 +87,8 @@ export type Messages = {
     settingsButton: string;
     settingsMenuLabel: string;
     menuTheme: string;
+    /** 强调色 / 主色 */
+    menuAccent: string;
     menuLanguage: string;
     menuModel: string;
     subviewBack: string;
@@ -96,6 +98,8 @@ export type Messages = {
     langCurrentEn: string;
     deleteSessionConfirm: string;
     deleteSessionAria: string;
+    /** 主题色下方色盘 / 自定义 */
+    accentCustomColor: string;
   };
   inspector: {
     ariaShell: string;

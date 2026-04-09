@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 
+import { AntdThemeProvider } from "./antd-theme-provider";
 import { PreferencesProvider } from "../lib/preferences-context";
 
 export function AppProviders({ children }: { children: ReactNode }) {
@@ -21,7 +22,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      <PreferencesProvider>{children}</PreferencesProvider>
+      <PreferencesProvider>
+        <AntdThemeProvider>{children}</AntdThemeProvider>
+      </PreferencesProvider>
     </QueryClientProvider>
   );
 }

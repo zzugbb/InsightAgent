@@ -1,5 +1,7 @@
 "use client";
 
+import { Button, Input, Space } from "antd";
+import type { TextAreaRef } from "antd/es/input/TextArea";
 import {
   FormEvent,
   forwardRef,
@@ -13,7 +15,10 @@ type ComposerProps = {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
-  disabled: boolean;
+  /** 不可点击发送（空内容或流式中） */
+  sendDisabled: boolean;
+  /** 流式生成中，用于按钮 loading */
+  sending: boolean;
   hint: string;
   hintVariant?: "default" | "error";
   showRetry?: boolean;
@@ -25,19 +30,20 @@ export const Composer = forwardRef(function Composer(
     value,
     onChange,
     onSend,
-    disabled,
+    sendDisabled,
+    sending,
     hint,
     hintVariant = "default",
     showRetry,
     onRetry,
   }: ComposerProps,
-  ref: Ref<HTMLTextAreaElement>,
+  ref: Ref<TextAreaRef | null>,
 ) {
   const t = useMessages();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!disabled) {
+    if (!sendDisabled) {
       onSend();
     }
   }
@@ -45,7 +51,7 @@ export const Composer = forwardRef(function Composer(
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      if (!disabled) {
+      if (!sendDisabled) {
         onSend();
       }
     }
@@ -53,14 +59,16 @@ export const Composer = forwardRef(function Composer(
 
   return (
     <form className="composer-shell" onSubmit={handleSubmit}>
-      <textarea
+      <Input.TextArea
         ref={ref}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={t.composer.placeholder}
         rows={4}
+        autoSize={{ minRows: 4, maxRows: 18 }}
         aria-label={t.composer.inputAria}
+        className="composer-textarea"
       />
       <div className="composer-footer">
         <div className="composer-footer-main">
@@ -68,19 +76,26 @@ export const Composer = forwardRef(function Composer(
             {hint}
           </p>
           {showRetry && onRetry ? (
-            <button
-              type="button"
-              className="secondary-button composer-retry"
+            <Button
+              type="default"
+              className="composer-retry"
               onClick={onRetry}
             >
               {t.composer.retry}
-            </button>
+            </Button>
           ) : null}
         </div>
         <div className="composer-actions">
-          <button className="primary-button" disabled={disabled} type="submit">
-            {disabled ? t.composer.sending : t.composer.send}
-          </button>
+          <Space>
+            <Button
+              type="primary"
+              htmlType="submit"
+              disabled={sendDisabled}
+              loading={sending}
+            >
+              {sending ? t.composer.sending : t.composer.send}
+            </Button>
+          </Space>
         </div>
       </div>
     </form>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "antd";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Trash2 } from "lucide-react";
 import { forwardRef, useRef } from "react";
@@ -70,14 +71,17 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
         <div className="sidebar-section-head">
           <div className="sidebar-section-title-row">
             <h2 id="sessions-heading">{t.sidebar.sessionsHeading}</h2>
-            <button
-              type="button"
-              className="ghost-button sidebar-new-session"
+            <Button
+              type="primary"
+              ghost
+              size="small"
+              className="sidebar-new-session"
               onClick={onNewSession}
-              disabled={newSessionBusy || sessionsLoading}
+              disabled={sessionsLoading}
+              loading={newSessionBusy}
             >
               {newSessionBusy ? t.sidebar.creating : t.sidebar.newSession}
-            </button>
+            </Button>
           </div>
           <span className={sessionsLoading ? "text-muted-loading" : ""}>
             {sessionsLoading ? t.sidebar.loading : sessionsMessage}
@@ -128,18 +132,20 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                           <strong>{getSessionLabel(session, t.workbench)}</strong>
                           <span>{formatTimestamp(session.updated_at, localeTag)}</span>
                         </button>
-                        <button
-                          type="button"
+                        <Button
+                          type="text"
+                          danger
+                          size="small"
                           className="sidebar-session-delete"
                           aria-label={t.sidebar.deleteSessionAria}
                           disabled={deleting || sessionsLoading}
+                          loading={deleting}
+                          icon={<Trash2 size={18} strokeWidth={2} aria-hidden />}
                           onClick={(e) => {
                             e.stopPropagation();
                             onDeleteSession(session.id);
                           }}
-                        >
-                          <Trash2 size={18} strokeWidth={2} aria-hidden />
-                        </button>
+                        />
                       </div>
                     </div>
                   );
@@ -163,18 +169,20 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                       <strong>{getSessionLabel(session, t.workbench)}</strong>
                       <span>{formatTimestamp(session.updated_at, localeTag)}</span>
                     </button>
-                    <button
-                      type="button"
+                    <Button
+                      type="text"
+                      danger
+                      size="small"
                       className="sidebar-session-delete"
                       aria-label={t.sidebar.deleteSessionAria}
                       disabled={deleting || sessionsLoading}
+                      loading={deleting}
+                      icon={<Trash2 size={18} strokeWidth={2} aria-hidden />}
                       onClick={(e) => {
                         e.stopPropagation();
                         onDeleteSession(session.id);
                       }}
-                    >
-                      <Trash2 size={18} strokeWidth={2} aria-hidden />
-                    </button>
+                    />
                   </div>
                 );
               })
