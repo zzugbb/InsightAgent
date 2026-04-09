@@ -68,7 +68,7 @@ export type ChatStreamStore = {
 };
 
 const initialSseMessage =
-  "使用下方按钮通过 POST /api/tasks + GET /api/tasks/{id}/stream 拉取 Task Stream，展示 token 与 trace。";
+  "发送消息后，执行过程会出现在右侧「轨迹」；连接与状态说明会显示在这里。";
 
 async function consumeSseStream(
   response: Response,

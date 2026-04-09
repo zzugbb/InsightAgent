@@ -18,7 +18,7 @@
 - `app/services/settings_service.py`：最小 settings 读写服务
 - `app/services/provider_service.py`：按 settings 解析当前 provider
 - `GET /health`：返回当前运行模式和基础配置
-- `POST /api/chat`：最小非流式调试接口，已串起 mock provider
+- `POST /api/sessions`：创建空会话（可选 `title`），返回新 `session_id`
 - `GET /api/sessions`：读取最近会话列表，供前端显示已落库 session
 - `GET /api/sessions/{session_id}`：读取单个会话
 - `GET /api/sessions/{session_id}/messages`：读取会话消息
@@ -48,20 +48,18 @@ python -m uvicorn app.main:app --reload
 - 已完成前端 `trace/delta` 消费，当前进入 task 形态收口前的准备阶段
 - 当前已补 `GET /api/tasks/{task_id}/stream`，后续进入前端接入阶段
 
-## 当前 chat 能力
+## 当前对话与任务能力
 
-- 当前同时支持最小非流式调试接口与 task 形态流式接口
+- 流式入口统一为 task 形态：`POST /api/tasks` + `GET /api/tasks/{task_id}/stream`
 - 当前已支持最小 `POST /api/tasks`，可先创建 pending 任务并记录用户消息
 - 当前已支持最小 `GET /api/tasks/{task_id}/stream`
-- 当前流式入口已统一到 task 形态，`POST /api/chat` 仅保留为最小非流式调试入口
-- 当前会在请求结束后最小落库 `sessions/tasks/messages`
+- 当前会在任务流结束后最小落库 `sessions/tasks/messages`
 - 当前只调用 mock provider，不做真实远端调用
 - 当前 SSE 事件带最小 `task_id`
 - 当前 SSE 已带最小 `step_id`
 - 当前 SSE 事件包含 `start`、`state`、`trace`、`heartbeat`、`token`、`done`、`error`
 - 当前 `trace` 仅内置 2 个 mock step：1 个 `thought`，1 个 `final_answer` 占位
 - 当前 `done` 已包含最小 `usage` 占位，`completion_tokens` 为 mock 估算值
-- JSON chat 响应当前会返回 `session_id` 和 `task_id`
 - 当前已支持按 `session_id`、`task_id` 读取最小详情、全量 trace 与 delta trace
 - 当前已支持读取最近会话列表
 - 当前已支持按 session 读取消息历史
@@ -84,5 +82,5 @@ python -m uvicorn app.main:app --reload
 - `sessions`：会话主表，先保留 `id/title/created_at/updated_at`
 - `tasks`：任务主表，当前包含 `prompt/status/trace_json`
 - `messages`：消息表，按 `session_id` 归属，可选关联 `task_id`
-- 当前 JSON chat 和最小 SSE 已开始写入这些表，并支持最小按 ID 查询
+- 当前任务流与持久化逻辑会写入这些表，并支持最小按 ID 查询
 - `trace_json` 当前保存标准化后的 step 数组，包含最小 `seq`

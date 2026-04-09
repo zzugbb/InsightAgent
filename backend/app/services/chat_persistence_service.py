@@ -152,6 +152,29 @@ def complete_task(
         connection.commit()
 
 
+def create_session_record(title: str | None = None) -> dict:
+    """Insert an empty session row (no messages yet)."""
+    session_id = str(uuid4())
+    current_time = _now_iso()
+    raw = (title or "新会话").strip()
+    resolved_title = raw[:120] if raw else "新会话"
+
+    with get_db_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO sessions(id, title, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (session_id, resolved_title, current_time, current_time),
+        )
+        connection.commit()
+
+    row = get_session(session_id)
+    if row is None:
+        raise RuntimeError("Failed to read session after insert")
+    return row
+
+
 def get_session(session_id: str) -> dict | None:
     with get_db_connection() as connection:
         row = connection.execute(
@@ -167,6 +190,17 @@ def get_session(session_id: str) -> dict | None:
         return None
 
     return dict(row)
+
+
+def delete_session(session_id: str) -> bool:
+    """删除会话；关联 tasks / messages 由外键 ON DELETE CASCADE 清理。"""
+    with get_db_connection() as connection:
+        cursor = connection.execute(
+            "DELETE FROM sessions WHERE id = ?",
+            (session_id,),
+        )
+        connection.commit()
+        return cursor.rowcount > 0
 
 
 def list_sessions(limit: int = 20) -> list[dict]:

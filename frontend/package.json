@@ -9,9 +9,21 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@tanstack/react-query": "5.62.8",
+    "@tanstack/react-virtual": "3.11.2",
+    "highlight.js": "^11.11.1",
+    "katex": "^0.16.45",
+    "lowlight": "^3.3.0",
+    "lucide-react": "^1.7.0",
     "next": "15.2.4",
     "react": "19.0.0",
     "react-dom": "19.0.0",
+    "react-markdown": "9.0.1",
+    "rehype-highlight": "^7.0.2",
+    "rehype-katex": "^7.0.1",
+    "rehype-sanitize": "6.0.0",
+    "remark-gfm": "4.0.0",
+    "remark-math": "^6.0.0",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

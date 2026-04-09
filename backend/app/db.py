@@ -23,6 +23,7 @@ def get_db_connection() -> Iterator[sqlite3.Connection]:
     sqlite_path = ensure_sqlite_ready()
     connection = sqlite3.connect(sqlite_path)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON;")
     try:
         yield connection
     finally:
