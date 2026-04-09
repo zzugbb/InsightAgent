@@ -42,3 +42,13 @@ export type SettingsFormState = {
 };
 
 export type InspectorTab = "trace" | "context";
+
+/** 与 GET /api/sessions/{id}/memory/status 对齐 */
+export type SessionMemoryStatus = {
+  collection: string;
+  chroma_url: string;
+  chroma_reachable: boolean;
+  collection_exists: boolean;
+  document_count: number;
+  error: string | null;
+};

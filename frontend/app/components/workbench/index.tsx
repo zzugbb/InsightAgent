@@ -24,6 +24,7 @@ import { Inspector } from "./inspector";
 import { Sidebar } from "./sidebar";
 import type {
   InspectorTab,
+  SessionMemoryStatus,
   SessionMessage,
   SessionSummary,
   SettingsSummary,
@@ -123,6 +124,21 @@ export function Workbench() {
         `${API_BASE_URL}/api/tasks?limit=8`,
       ),
   });
+
+  const sessionMemoryQuery = useQuery({
+    queryKey: ["session-memory-status", activeSessionId],
+    queryFn: () =>
+      apiJson<SessionMemoryStatus>(
+        `${API_BASE_URL}/api/sessions/${encodeURIComponent(activeSessionId!)}/memory/status`,
+      ),
+    enabled: Boolean(activeSessionId),
+    staleTime: 20_000,
+  });
+
+  const sessionMemoryErrorBanner =
+    sessionMemoryQuery.isError && sessionMemoryQuery.error
+      ? toUserFacingError(sessionMemoryQuery.error, t.errors).banner
+      : null;
 
   useEffect(() => {
     try {
@@ -368,6 +384,9 @@ export function Workbench() {
       if (activeSessionId) {
         void queryClient.invalidateQueries({
           queryKey: ["messages", activeSessionId],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["session-memory-status", activeSessionId],
         });
       }
     }
@@ -719,6 +738,9 @@ export function Workbench() {
         onLoadDelta={handleLoadTraceDelta}
         onSelectTask={handleSelectTask}
         apiBaseUrl={API_BASE_URL}
+        sessionMemoryStatus={sessionMemoryQuery.data}
+        sessionMemoryLoading={sessionMemoryQuery.isLoading}
+        sessionMemoryError={sessionMemoryErrorBanner}
       />
     </main>
   );

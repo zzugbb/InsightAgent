@@ -10,7 +10,7 @@ import {
   usePreferences,
 } from "../../../lib/preferences-context";
 
-import type { InspectorTab, TaskSummary } from "./types";
+import type { InspectorTab, SessionMemoryStatus, TaskSummary } from "./types";
 import { TraceFlowView } from "./trace-flow-view";
 import {
   formatTimestamp,
@@ -44,6 +44,9 @@ type InspectorProps = {
   onLoadDelta: () => void;
   onSelectTask: (task: TaskSummary) => void;
   apiBaseUrl: string;
+  sessionMemoryStatus: SessionMemoryStatus | undefined;
+  sessionMemoryLoading: boolean;
+  sessionMemoryError: string | null;
 };
 
 export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspector(
@@ -69,6 +72,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     onLoadDelta,
     onSelectTask,
     apiBaseUrl,
+    sessionMemoryStatus,
+    sessionMemoryLoading,
+    sessionMemoryError,
   },
   ref,
 ) {
@@ -237,6 +243,59 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               ? `memory_${activeSessionId}`
               : "—"}
           </code>
+        </div>
+        <div className="memory-status-block" aria-live="polite">
+          {!activeSessionId ? (
+            <p className="panel-note panel-note--muted memory-pick-session">
+              {t.inspector.memory.pickSession}
+            </p>
+          ) : sessionMemoryLoading ? (
+            <p className="memory-status-loading">{t.inspector.memory.statusLoading}</p>
+          ) : sessionMemoryError ? (
+            <p className="memory-status-err">{sessionMemoryError}</p>
+          ) : sessionMemoryStatus ? (
+            <>
+              <div className="memory-status-line">
+                <span className="memory-status-key">Chroma</span>
+                <span
+                  className={
+                    sessionMemoryStatus.chroma_reachable
+                      ? "memory-status-val memory-status-val--ok"
+                      : "memory-status-val memory-status-val--bad"
+                  }
+                >
+                  {sessionMemoryStatus.chroma_reachable
+                    ? t.inspector.memory.chromaConnected
+                    : t.inspector.memory.chromaDisconnected}
+                </span>
+              </div>
+              {sessionMemoryStatus.chroma_reachable ? (
+                <>
+                  <div className="memory-status-line">
+                    <span className="memory-status-key"> </span>
+                    <span className="memory-status-val">
+                      {sessionMemoryStatus.collection_exists
+                        ? t.inspector.memory.collectionExists
+                        : t.inspector.memory.collectionMissing}
+                    </span>
+                  </div>
+                  <div className="memory-status-line">
+                    <span className="memory-status-key"> </span>
+                    <span className="memory-status-val">
+                      {t.inspector.memory.docCount(
+                        sessionMemoryStatus.document_count,
+                      )}
+                    </span>
+                  </div>
+                </>
+              ) : null}
+              {sessionMemoryStatus.error ? (
+                <p className="panel-note panel-note--muted memory-chroma-err">
+                  {sessionMemoryStatus.error}
+                </p>
+              ) : null}
+            </>
+          ) : null}
         </div>
       </div>
 

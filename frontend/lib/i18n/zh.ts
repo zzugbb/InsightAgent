@@ -155,6 +155,13 @@ export const zh: Messages = {
       lead:
         "计划使用 Chroma 存储本会话的向量记忆（摘要与近期上下文）；与长期知识库 RAG 使用不同 collection，按会话隔离。当前未接入向量服务，本区仅为契约与命名占位。",
       collectionLabel: "目标 collection 名（示意）",
+      chromaConnected: "已连接",
+      chromaDisconnected: "未连接",
+      docCount: (n: number) => `向量条数：${n}`,
+      collectionExists: "collection 已存在",
+      collectionMissing: "尚无 collection（未写入）",
+      statusLoading: "正在查询 Memory 状态…",
+      pickSession: "选择会话后将显示 Chroma 连接与条数。",
     },
   },
   settings: {

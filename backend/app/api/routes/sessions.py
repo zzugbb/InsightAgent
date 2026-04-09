@@ -1,6 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from app.services.chroma_memory_service import (
+    add_session_memory_text,
+    get_session_memory_status,
+    query_session_memory,
+)
 from app.services.chat_persistence_service import (
     create_session_record,
     delete_session,
@@ -47,6 +52,35 @@ class UpdateSessionRequest(BaseModel):
     title: str
 
 
+class SessionMemoryStatusResponse(BaseModel):
+    collection: str
+    chroma_url: str
+    chroma_reachable: bool
+    collection_exists: bool
+    document_count: int
+    error: str | None = None
+
+
+class MemoryAddRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=32_000)
+
+
+class MemoryAddResponse(BaseModel):
+    added_id: str
+    document_count: int
+
+
+class MemoryQueryRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=8_000)
+    n_results: int = Field(default=4, ge=1, le=50)
+
+
+class MemoryQueryResponse(BaseModel):
+    ids: list[list[str]]
+    documents: list[list[str]]
+    distances: list[list[float | None]] | None = None
+
+
 @router.post("", response_model=SessionResponse)
 def post_session(payload: CreateSessionRequest = CreateSessionRequest()) -> SessionResponse:
     row = create_session_record(title=payload.title)
@@ -75,6 +109,52 @@ def get_session_detail(session_id: str) -> SessionResponse:
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(**session)
+
+
+@router.get("/{session_id}/memory/status", response_model=SessionMemoryStatusResponse)
+def get_session_memory_status_route(session_id: str) -> SessionMemoryStatusResponse:
+    if get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    raw = get_session_memory_status(session_id)
+    return SessionMemoryStatusResponse(**raw)
+
+
+@router.post("/{session_id}/memory/add", response_model=MemoryAddResponse)
+def post_session_memory_add(
+    session_id: str,
+    payload: MemoryAddRequest,
+) -> MemoryAddResponse:
+    if get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        raw = add_session_memory_text(session_id, payload.text)
+        return MemoryAddResponse(**raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — Chroma 不可达等
+        msg = str(exc).strip() or type(exc).__name__
+        raise HTTPException(status_code=503, detail=msg[:400]) from exc
+
+
+@router.post("/{session_id}/memory/query", response_model=MemoryQueryResponse)
+def post_session_memory_query(
+    session_id: str,
+    payload: MemoryQueryRequest,
+) -> MemoryQueryResponse:
+    if get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        raw = query_session_memory(
+            session_id,
+            payload.text,
+            n_results=payload.n_results,
+        )
+        return MemoryQueryResponse(**raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc).strip() or type(exc).__name__
+        raise HTTPException(status_code=503, detail=msg[:400]) from exc
 
 
 @router.get("/{session_id}/messages", response_model=SessionMessagesResponse)

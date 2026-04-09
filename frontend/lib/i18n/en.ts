@@ -156,6 +156,13 @@ export const en: Messages = {
       lead:
         "Chroma will hold embeddings for this session’s summary and recent context, isolated from long-term RAG collections. The vector service is not connected yet—this block is a naming and contract placeholder.",
       collectionLabel: "Target collection name (preview)",
+      chromaConnected: "Connected",
+      chromaDisconnected: "Unreachable",
+      docCount: (n: number) => `Embeddings: ${n}`,
+      collectionExists: "Collection exists",
+      collectionMissing: "No collection yet",
+      statusLoading: "Loading memory status…",
+      pickSession: "Select a session to show Chroma status and counts.",
     },
   },
   settings: {

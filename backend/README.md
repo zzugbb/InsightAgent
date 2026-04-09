@@ -12,7 +12,8 @@
 - `app/services/chat_persistence_service.py`：会话 / 任务 / 消息持久化
 - `app/services/settings_service.py`：settings 读写
 - `app/services/provider_service.py`：按 settings 解析当前 provider
-- `app/services/chroma_status.py`：对 Chroma HTTP 做心跳探测（供 `/health` 使用；ingest/检索尚未实现）
+- `app/services/chroma_status.py`：对 Chroma HTTP 做心跳探测（供 `/health` 使用）
+- `app/services/chroma_memory_service.py`：通过 **chromadb.HttpClient** 维护会话 **memory_{session_id}**（`get_or_create`、**add**、**query**、任务成功后 **best-effort 写入摘要**）；**status** 仍用只读 `get_collection` + **count**
 - 环境变量 **`CHROMA_HOST`** / **`CHROMA_PORT`** / **`CHROMA_PROBE`**：见仓库根 `docker-compose.yml` 与 `.env.example`
 
 ### HTTP 接口（摘要）
@@ -24,6 +25,9 @@
 - `PATCH /api/sessions/{session_id}`：更新会话标题（`{ "title": "..." }`）
 - `DELETE /api/sessions/{session_id}`：删除会话（204）
 - `GET /api/sessions/{session_id}/messages`：会话及消息列表
+- `GET /api/sessions/{session_id}/memory/status`：Chroma 中 `memory_{session_id}` 是否已建 collection、**document_count**（依赖 `chromadb` 客户端与可连通的 Chroma 服务）
+- `POST /api/sessions/{session_id}/memory/add`：正文 `{ "text": "..." }`，写入一条向量文档并返回 **added_id**、**document_count**（503 表示 Chroma 不可达等）
+- `POST /api/sessions/{session_id}/memory/query`：正文 `{ "text": "...", "n_results": 4 }`，语义检索，返回 **ids** / **documents** / **distances**（collection 不存在或为空时返回空列表）
 - `GET /api/settings` / `PUT /api/settings`：非敏感设置摘要与写入骨架
 - `POST /api/tasks`：创建任务（`session_id`、`user_input` 等）
 - `GET /api/tasks`：最近任务列表
@@ -54,7 +58,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ## 下一步（与仓库根目录 README 一致）
 
-- 后端 **Memory ingest/检索** 最小 API（连接 Chroma、按会话 `memory_{session_id}` collection）
+- 后端 **Memory ingest（add）与 query** 最小 API，并在业务流中占位调用
 - 可选：为 SSE 事件体补充与 REST 对齐的文档或共享 schema
 - 保持 SSE 与 trace REST 契约稳定；trace 数据结构继续服务于 W2 可视化
 

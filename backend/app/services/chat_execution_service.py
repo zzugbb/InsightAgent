@@ -8,6 +8,7 @@ from app.services.chat_persistence_service import (
     create_message,
     update_task_status,
 )
+from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import get_llm_provider
 
 
@@ -128,6 +129,12 @@ def stream_task_execution(
             content=result.content,
         )
         complete_task(task_id=task_id, trace_steps=trace_steps)
+        try_append_task_memory(
+            session_id,
+            task_id=task_id,
+            user_prompt=prompt,
+            assistant_excerpt=result.content,
+        )
         yield sse_event(
             "done",
             {

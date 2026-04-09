@@ -159,6 +159,13 @@ export type Messages = {
       title: string;
       lead: string;
       collectionLabel: string;
+      chromaConnected: string;
+      chromaDisconnected: string;
+      docCount: (n: number) => string;
+      collectionExists: string;
+      collectionMissing: string;
+      statusLoading: string;
+      pickSession: string;
     };
   };
   settings: {
