@@ -1526,6 +1526,31 @@ code {
   margin-top: 6px;
 }
 
+.trace-view-toolbar {
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
+.trace-view-toolbar .ant-segmented {
+  width: 100%;
+}
+
+.trace-flow-root {
+  margin-top: 10px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--msg-card-bg);
+}
+
+.trace-flow-inner {
+  min-height: 200px;
+}
+
+.trace-flow-canvas .react-flow__node {
+  font-size: 0.88rem;
+}
+
 .trace-feed {
   display: flex;
   flex-direction: column;
@@ -1568,6 +1593,13 @@ code {
 .summary-card span {
   color: var(--muted);
   font-size: 0.84rem;
+}
+
+.trace-card-meta {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 .trace-card p {

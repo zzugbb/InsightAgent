@@ -1,15 +1,9 @@
 import { create } from "zustand";
 
 import { parseSseBlock, parseSseBlocks } from "../sse/parse";
+import type { TraceStepPayload } from "../types/trace";
 
-/** 与后端 mock SSE `trace` 事件中的 `step` 对齐的最小形状 */
-export type TraceStepPayload = {
-  id: string;
-  type: string;
-  content: string;
-  seq?: number;
-  meta?: Record<string, unknown>;
-};
+export type { TraceStepPayload } from "../types/trace";
 
 function getNextTraceCursor(steps: TraceStepPayload[]): number {
   return steps.reduce((maxSeq, step, index) => {

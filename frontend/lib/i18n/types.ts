@@ -135,6 +135,15 @@ export type Messages = {
     seqLabel: string;
     collapseInspectorAria: string;
     expandInspectorAria: string;
+    /** 轨迹卡片第二行：模型 / 子类 / token 占位 */
+    traceMeta: {
+      model: string;
+      stepKind: string;
+      tokens: string;
+    };
+    /** 轨迹：列表时间线 vs 流程图 */
+    traceViewList: string;
+    traceViewFlow: string;
   };
   settings: {
     title: string;

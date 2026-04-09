@@ -50,6 +50,7 @@ pnpm-debug.log*
 
 # Runtime data
 data/sqlite.db
+data/insightagent.plan.back.md
 *.db
 *.sqlite
 *.sqlite3

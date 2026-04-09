@@ -1,5 +1,5 @@
 import type { Messages } from "../../../lib/i18n/types";
-import type { TraceStepPayload } from "../../../lib/stores/chat-stream-store";
+import type { TraceStepPayload } from "../../../lib/types/trace";
 
 import type { SessionSummary, TaskSummary } from "./types";
 
@@ -65,4 +65,34 @@ export function getStepTitle(step: TraceStepPayload): string {
         ? step.meta.step_type
         : step.type;
   return String(rawTitle).replace(/_/g, " ");
+}
+
+export function formatTraceStepMetaSubtitle(
+  step: TraceStepPayload,
+  labels: Messages["inspector"]["traceMeta"],
+): string | null {
+  const meta = step.meta;
+  if (!meta) {
+    return null;
+  }
+  const model = typeof meta.model === "string" ? meta.model.trim() : "";
+  const stepKind =
+    typeof meta.step_type === "string" ? meta.step_type.replace(/_/g, " ") : "";
+  let tokensPart: string | undefined;
+  if ("tokens" in meta) {
+    const t = meta.tokens;
+    tokensPart =
+      t === null || t === undefined ? "—" : String(t);
+  }
+  const parts: string[] = [];
+  if (model) {
+    parts.push(`${labels.model} ${model}`);
+  }
+  if (stepKind) {
+    parts.push(`${labels.stepKind} ${stepKind}`);
+  }
+  if (tokensPart !== undefined) {
+    parts.push(`${labels.tokens} ${tokensPart}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }

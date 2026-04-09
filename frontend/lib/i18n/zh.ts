@@ -134,6 +134,13 @@ export const zh: Messages = {
     seqLabel: "seq",
     collapseInspectorAria: "收起右侧面板",
     expandInspectorAria: "展开轨迹与上下文",
+    traceMeta: {
+      model: "模型",
+      stepKind: "子类",
+      tokens: "Token",
+    },
+    traceViewList: "时间线",
+    traceViewFlow: "流程图",
   },
   settings: {
     title: "运行设置",

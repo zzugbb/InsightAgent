@@ -135,6 +135,13 @@ export const en: Messages = {
     seqLabel: "seq",
     collapseInspectorAria: "Collapse right panel",
     expandInspectorAria: "Expand trace and context",
+    traceMeta: {
+      model: "Model",
+      stepKind: "Kind",
+      tokens: "Tokens",
+    },
+    traceViewList: "Timeline",
+    traceViewFlow: "Flow",
   },
   settings: {
     title: "Runtime settings",

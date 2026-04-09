@@ -1,17 +1,24 @@
 "use client";
 
-import { Button, Space, Tabs } from "antd";
+import { Button, Segmented, Space, Tabs } from "antd";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { forwardRef, useMemo, useState, type MouseEvent } from "react";
 
-import type { TraceStepPayload } from "../../../lib/stores/chat-stream-store";
+import type { TraceStepPayload } from "../../../lib/types/trace";
 import {
   useMessages,
   usePreferences,
 } from "../../../lib/preferences-context";
 
 import type { InspectorTab, TaskSummary } from "./types";
-import { formatTimestamp, getStepTitle, getTaskLabel, shortenId } from "./utils";
+import { TraceFlowView } from "./trace-flow-view";
+import {
+  formatTimestamp,
+  formatTraceStepMetaSubtitle,
+  getStepTitle,
+  getTaskLabel,
+  shortenId,
+} from "./utils";
 
 const TRACE_PREVIEW = 6;
 
@@ -66,9 +73,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   ref,
 ) {
   const t = useMessages();
-  const { localeTag } = usePreferences();
+  const { localeTag, theme } = usePreferences();
   const hasTaskContext = Boolean(sseTaskId?.trim());
   const [expandAllTrace, setExpandAllTrace] = useState(false);
+  const [traceView, setTraceView] = useState<"list" | "flow">("list");
 
   const collapsedRail =
     desktopInspectorChrome && inspectorCollapsed;
@@ -105,7 +113,18 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         </span>
       </div>
 
-      {sseTraceSteps.length > TRACE_PREVIEW ? (
+      <div className="trace-view-toolbar">
+        <Segmented
+          value={traceView}
+          onChange={(v) => setTraceView(v as "list" | "flow")}
+          options={[
+            { label: t.inspector.traceViewList, value: "list" },
+            { label: t.inspector.traceViewFlow, value: "flow" },
+          ]}
+        />
+      </div>
+
+      {traceView === "list" && sseTraceSteps.length > TRACE_PREVIEW ? (
         <div className="trace-density-row">
           <Button
             type="default"
@@ -145,9 +164,16 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
 
       <p className="panel-note">{sseMessage}</p>
 
-      {visibleSteps.length > 0 ? (
+      {traceView === "flow" && sseTraceSteps.length > 0 ? (
+        <TraceFlowView steps={sseTraceSteps} colorMode={theme} />
+      ) : traceView === "list" && visibleSteps.length > 0 ? (
         <div className="trace-feed">
-          {visibleSteps.map((step) => (
+          {visibleSteps.map((step) => {
+            const metaLine = formatTraceStepMetaSubtitle(
+              step,
+              t.inspector.traceMeta,
+            );
+            return (
             <article key={step.id} className="trace-card trace-card--enter">
               <div className="trace-top">
                 <strong>{getStepTitle(step)}</strong>
@@ -157,9 +183,13 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                     : shortenId(step.id)}
                 </span>
               </div>
+              {metaLine ? (
+                <p className="trace-card-meta">{metaLine}</p>
+              ) : null}
               <p>{step.content || t.inspector.stepEmpty}</p>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="panel-empty">{t.inspector.traceEmpty}</div>
