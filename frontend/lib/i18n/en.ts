@@ -142,6 +142,14 @@ export const en: Messages = {
     },
     traceViewList: "Timeline",
     traceViewFlow: "Flow",
+    traceFlow: {
+      kindThought: "Thought",
+      kindAction: "Action",
+      kindObservation: "Observation",
+      kindOther: "Step",
+      contentDetails: "Content",
+      contentEmpty: "(empty)",
+    },
   },
   settings: {
     title: "Runtime settings",

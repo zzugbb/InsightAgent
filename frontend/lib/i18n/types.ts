@@ -144,6 +144,15 @@ export type Messages = {
     /** 轨迹：列表时间线 vs 流程图 */
     traceViewList: string;
     traceViewFlow: string;
+    /** 流程图节点：三大类标签与折叠内容 */
+    traceFlow: {
+      kindThought: string;
+      kindAction: string;
+      kindObservation: string;
+      kindOther: string;
+      contentDetails: string;
+      contentEmpty: string;
+    };
   };
   settings: {
     title: string;

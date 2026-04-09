@@ -57,6 +57,39 @@ export function getRoleLabel(role: string, roles: Messages["roles"]): string {
   return role;
 }
 
+/** 与主计划 TraceStep.type 三大类对齐；未知类型归为 other */
+export function normalizeTraceStepKind(
+  step: TraceStepPayload,
+): "thought" | "action" | "observation" | "other" {
+  const t = String(step.type ?? "").toLowerCase();
+  if (t === "thought") {
+    return "thought";
+  }
+  if (t === "action") {
+    return "action";
+  }
+  if (t === "observation") {
+    return "observation";
+  }
+  return "other";
+}
+
+export function getTraceFlowKindLabel(
+  kind: ReturnType<typeof normalizeTraceStepKind>,
+  labels: Messages["inspector"]["traceFlow"],
+): string {
+  switch (kind) {
+    case "thought":
+      return labels.kindThought;
+    case "action":
+      return labels.kindAction;
+    case "observation":
+      return labels.kindObservation;
+    default:
+      return labels.kindOther;
+  }
+}
+
 export function getStepTitle(step: TraceStepPayload): string {
   const rawTitle =
     typeof step.meta?.label === "string"

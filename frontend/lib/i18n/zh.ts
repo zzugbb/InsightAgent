@@ -141,6 +141,14 @@ export const zh: Messages = {
     },
     traceViewList: "时间线",
     traceViewFlow: "流程图",
+    traceFlow: {
+      kindThought: "思考",
+      kindAction: "行动",
+      kindObservation: "观察",
+      kindOther: "步骤",
+      contentDetails: "内容",
+      contentEmpty: "（无文本）",
+    },
   },
   settings: {
     title: "运行设置",
