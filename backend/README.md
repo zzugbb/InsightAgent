@@ -7,6 +7,7 @@
 - W1：已完成
 - W2：已完成（进入收尾）
 - W3/W4：未开始（真实工具 / RAG）
+- 工程协作：前端 `npm run lint` 已可直接执行，且当前告警已清零
 
 ## 当前已有内容
 
@@ -17,6 +18,7 @@
 - `app/providers/`：Provider 抽象 + mock 实现
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
+- `tasks.usage_json`：任务完成时持久化 `done.usage`（前端可用于任务列表摘要展示）
 
 ## HTTP 接口（摘要）
 

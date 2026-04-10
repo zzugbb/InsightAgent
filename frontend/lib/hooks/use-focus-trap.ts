@@ -17,6 +17,7 @@ export function useFocusTrap(
 
     const root = containerRef.current;
     const previous = document.activeElement as HTMLElement | null;
+    const restoreEl = restoreRef?.current ?? null;
 
     const selector =
       'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -54,8 +55,8 @@ export function useFocusTrap(
     root.addEventListener("keydown", onKeyDown);
     return () => {
       root.removeEventListener("keydown", onKeyDown);
-      if (restoreRef?.current) {
-        restoreRef.current.focus();
+      if (restoreEl) {
+        restoreEl.focus();
       } else {
         previous?.focus?.();
       }

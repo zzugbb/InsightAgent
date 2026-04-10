@@ -237,7 +237,6 @@ export function SidebarSettingsMenu() {
                       <button
                         key={hex}
                         type="button"
-                        role="listitem"
                         className={`settings-accent-swatch${active ? " is-active" : ""}`}
                         style={{ backgroundColor: hex }}
                         onClick={() => setPrimaryColor(hex)}

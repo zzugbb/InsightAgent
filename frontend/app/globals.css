@@ -2063,6 +2063,11 @@ code {
   font-size: 0.78rem;
 }
 
+.task-summary-usage {
+  font-size: 0.72rem !important;
+  opacity: 0.92;
+}
+
 .settings-form {
   display: flex;
   flex-direction: column;

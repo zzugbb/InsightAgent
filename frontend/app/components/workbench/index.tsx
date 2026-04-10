@@ -359,7 +359,7 @@ export function Workbench() {
       const u = toUserFacingError(err, t.errors);
       setBannerError((prev) => prev ?? `${u.banner}${u.hint ? ` ${u.hint}` : ""}`);
     }
-  }, [settingsQuery.error, sessionsQuery.error, tasksQuery.error]);
+  }, [settingsQuery.error, sessionsQuery.error, tasksQuery.error, t.errors]);
 
   useEffect(() => {
     if (!activeSessionId || !messagesQuery.error) {
@@ -367,7 +367,7 @@ export function Workbench() {
     }
     const u = toUserFacingError(messagesQuery.error, t.errors);
     setBannerError((prev) => prev ?? `${u.banner}${u.hint ? ` ${u.hint}` : ""}`);
-  }, [activeSessionId, messagesQuery.error]);
+  }, [activeSessionId, messagesQuery.error, t.errors]);
 
   useEffect(() => {
     if (!isNarrow) {

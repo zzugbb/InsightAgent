@@ -36,6 +36,7 @@ import {
   normalizeTraceStepKind,
   parseMemoryMetadataJson,
   resolveInspectorTaskUsage,
+  resolveTaskUsageFromTask,
   shortenId,
 } from "./utils";
 
@@ -579,6 +580,19 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <div className="task-summary-list">
             {recentTasks.map((task) => {
               const isActive = task.id === activeTaskId;
+              const usage = resolveTaskUsageFromTask(task);
+              const usageLine = usage
+                ? [
+                    usage.completion
+                      ? `${t.inspector.usageCompletion}: ${usage.completion}`
+                      : null,
+                    usage.cost
+                      ? `${t.inspector.usageCost}: ${usage.cost}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : "";
               return (
                 <button
                   key={task.id}
@@ -590,6 +604,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                   <span>
                     {task.status} · {formatTimestamp(task.updated_at, localeTag)}
                   </span>
+                  {usageLine ? (
+                    <span className="task-summary-usage">{usageLine}</span>
+                  ) : null}
                 </button>
               );
             })}

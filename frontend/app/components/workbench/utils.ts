@@ -50,6 +50,13 @@ function parseUsageJson(
   }
 }
 
+/** 任务列表项：从任务持久化字段 usage_json 解析用量。 */
+export function resolveTaskUsageFromTask(
+  task: TaskSummary,
+): InspectorUsageRow | null {
+  return parseUsageJson(task.usage_json);
+}
+
 /** 上下文面板：当前任务用量（流式 `done` 优先，否则用任务列表中的 usage_json） */
 export function resolveInspectorTaskUsage(args: {
   taskId: string | null;

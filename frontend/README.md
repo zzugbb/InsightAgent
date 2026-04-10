@@ -15,8 +15,10 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 轨迹：时间线与流程图双视图（thought/action/observation/tool/rag 区分）
 - 流式：SSE 任务状态、token 追加、trace 实时更新
 - 回放：`trace` 全量与 `trace/delta` 增量加载
+- 任务列表：每条任务显示简短 usage 摘要（completion tokens / cost，来自 `usage_json`）
 - Memory：状态展示 + add/query 调试（含 metadata）
 - 设置：主题、主题色、语言、模型与运行模式
+- 工程校验：已配置 `.eslintrc.json`，`npm run lint` 可直接运行且当前告警已清零
 
 ## 关键实现位置
 
