@@ -129,6 +129,14 @@ export type Messages = {
     currentPhase: string;
     currentTask: string;
     traceCursor: string;
+    traceSyncStatus: string;
+    traceSyncRetries: string;
+    traceSyncLastOk: string;
+    traceSyncStateIdle: string;
+    traceSyncStateSyncing: string;
+    traceSyncStateOk: string;
+    traceSyncStateRetrying: string;
+    traceSyncWarning: (n: number) => string;
     session: string;
     usageTitle: string;
     usagePrompt: string;

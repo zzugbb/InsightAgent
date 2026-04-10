@@ -58,6 +58,9 @@ type InspectorProps = {
   sseTaskId: string | null;
   phaseLabel: string;
   traceCursor: number;
+  traceDeltaSyncStatus: "idle" | "syncing" | "ok" | "retrying";
+  traceDeltaRetryCount: number;
+  traceDeltaLastOkAt: number | null;
   sseTaskUsage: SseTaskUsage | null;
   activeSessionId: string | null;
   activeTaskId: string | null;
@@ -94,6 +97,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     sseTaskId,
     phaseLabel,
     traceCursor,
+    traceDeltaSyncStatus,
+    traceDeltaRetryCount,
+    traceDeltaLastOkAt,
     sseTaskUsage,
     activeSessionId,
     activeTaskId,
@@ -231,6 +237,25 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     };
   }, [localeTag, usageSummary]);
 
+  const traceDeltaSyncStatusLabel =
+    traceDeltaSyncStatus === "syncing"
+      ? t.inspector.traceSyncStateSyncing
+      : traceDeltaSyncStatus === "ok"
+        ? t.inspector.traceSyncStateOk
+        : traceDeltaSyncStatus === "retrying"
+          ? t.inspector.traceSyncStateRetrying
+          : t.inspector.traceSyncStateIdle;
+  const traceDeltaLastOkLabel =
+    traceDeltaLastOkAt === null
+      ? "—"
+      : new Date(traceDeltaLastOkAt).toLocaleTimeString(localeTag, {
+          hour12: false,
+        });
+  const showTraceDeltaWarning =
+    isStreaming &&
+    traceDeltaSyncStatus === "retrying" &&
+    traceDeltaRetryCount >= 2;
+
   const tracePanel = (
     <section
       className="inspector-panel"
@@ -360,9 +385,20 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         <strong>{activeTaskId ? shortenId(activeTaskId) : "—"}</strong>
         <span>{t.inspector.traceCursor}</span>
         <strong>{traceCursor}</strong>
+        <span>{t.inspector.traceSyncStatus}</span>
+        <strong>{traceDeltaSyncStatusLabel}</strong>
+        <span>{t.inspector.traceSyncRetries}</span>
+        <strong>{traceDeltaRetryCount}</strong>
+        <span>{t.inspector.traceSyncLastOk}</span>
+        <strong>{traceDeltaLastOkLabel}</strong>
         <span>{t.inspector.session}</span>
         <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
       </div>
+      {showTraceDeltaWarning ? (
+        <p className="panel-note panel-note--muted">
+          {t.inspector.traceSyncWarning(traceDeltaRetryCount)}
+        </p>
+      ) : null}
 
       {inspectorTaskUsage ? (
         <>

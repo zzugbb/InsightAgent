@@ -64,7 +64,11 @@ export type ChatStreamStore = {
   setIsStreaming: (value: boolean) => void;
   setSseMessage: (message: string) => void;
   loadPersistedTrace: (apiBaseUrl: string, taskId: string) => Promise<void>;
-  loadTraceDelta: (apiBaseUrl: string, taskId: string) => Promise<void>;
+  loadTraceDelta: (
+    apiBaseUrl: string,
+    taskId: string,
+    options?: { silent?: boolean },
+  ) => Promise<boolean>;
   runTaskStream: (options: RunTaskStreamOptions) => Promise<void>;
 };
 
@@ -190,18 +194,27 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     }
   },
 
-  loadTraceDelta: async (apiBaseUrl, taskId) => {
+  loadTraceDelta: async (apiBaseUrl, taskId, options) => {
+    const silent = options?.silent === true;
     const normalizedTaskId = taskId.trim();
     if (!normalizedTaskId) {
-      set({ sseMessage: "Task ID is required to load trace delta." });
-      return;
+      if (!silent) {
+        set({ sseMessage: "Task ID is required to load trace delta." });
+      }
+      return false;
     }
 
     const currentCursor = get().traceCursor;
-    set({
-      sseMessage: `Loading trace delta after seq=${currentCursor}...`,
-      sseTaskId: normalizedTaskId,
-    });
+    if (!silent) {
+      set({
+        sseMessage: `Loading trace delta after seq=${currentCursor}...`,
+        sseTaskId: normalizedTaskId,
+      });
+    } else {
+      set({
+        sseTaskId: normalizedTaskId,
+      });
+    }
 
     try {
       const response = await fetch(
@@ -236,18 +249,23 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
           typeof data.next_cursor === "number"
             ? data.next_cursor
             : Math.max(currentCursor, getNextTraceCursor(steps)),
-        sseMessage:
-          steps.length > 0
+        sseMessage: silent
+          ? state.sseMessage
+          : steps.length > 0
             ? data.has_more
               ? `Trace delta loaded (${steps.length} steps, more available).`
               : `Trace delta loaded (${steps.length} steps).`
             : "No new trace delta steps.",
       }));
+      return true;
     } catch (error) {
-      set({
-        sseMessage:
-          error instanceof Error ? error.message : "Failed to load trace delta.",
-      });
+      if (!silent) {
+        set({
+          sseMessage:
+            error instanceof Error ? error.message : "Failed to load trace delta.",
+        });
+      }
+      return false;
     }
   },
 
@@ -307,6 +325,77 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
             ),
           }));
         }
+      }
+      return;
+    }
+    if (event === "tool_start" && payload && typeof payload === "object") {
+      const p = payload as Record<string, unknown>;
+      if (typeof p.step_id === "string" && typeof p.name === "string") {
+        const stepId = p.step_id;
+        const toolName = p.name;
+        const toolInput = p.input;
+        set((state) => ({
+          sseTraceSteps: upsertTraceStep(state.sseTraceSteps, {
+            id: stepId,
+            type: "action",
+            content: `Tool running: ${toolName}`,
+            meta: {
+              ...(state.sseTraceSteps.find((x) => x.id === stepId)?.meta ?? {}),
+              step_type: "tool_call",
+              tool: {
+                name: toolName,
+                input: toolInput,
+                status: "running",
+              },
+            },
+          }),
+          sseMessage: `Tool started: ${toolName}`,
+        }));
+      }
+      return;
+    }
+    if (event === "tool_end" && payload && typeof payload === "object") {
+      const p = payload as Record<string, unknown>;
+      if (
+        typeof p.step_id === "string" &&
+        typeof p.status === "string"
+      ) {
+        const stepId = p.step_id;
+        const status = p.status;
+        set((state) => {
+          const prev = state.sseTraceSteps.find((x) => x.id === stepId);
+          const prevMeta = prev?.meta ?? {};
+          const prevTool =
+            prevMeta.tool && typeof prevMeta.tool === "object"
+              ? prevMeta.tool
+              : undefined;
+          const toolName =
+            prevTool && typeof prevTool.name === "string"
+              ? prevTool.name
+              : "tool";
+          return {
+            sseTraceSteps: upsertTraceStep(state.sseTraceSteps, {
+              id: stepId,
+              type: "action",
+              content: `Tool ${status}: ${toolName}`,
+              meta: {
+                ...prevMeta,
+                step_type: "tool_call",
+                latency:
+                  typeof p.latency_ms === "number" ? p.latency_ms : undefined,
+                tool: {
+                  ...(prevTool ?? { name: toolName }),
+                  output: p.output_preview,
+                  status:
+                    status === "running" || status === "error"
+                      ? status
+                      : "done",
+                },
+              },
+            }),
+            sseMessage: `Tool ${status}: ${toolName}`,
+          };
+        });
       }
       return;
     }

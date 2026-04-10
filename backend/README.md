@@ -18,6 +18,7 @@
 - `app/db.py`：SQLite 初始化与基础表
 - `app/providers/`：Provider 抽象 + mock 实现
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
+- 流式阶段已支持最终 `observation` 的批次增量持久化（`seq` 递增，默认每 8 个 chunk 落库一次 + 结束兜底）
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
 - `tasks.usage_json`：任务完成时持久化 `done.usage`（前端可用于任务列表摘要展示）
 
@@ -47,12 +48,19 @@
 - `start`
 - `state`
 - `trace`
+- `tool_start`
+- `tool_end`
 - `heartbeat`
 - `token`
 - `done`
 - `error`
 
 其中 `event: trace` 的 `data.step` 与 REST TraceStep 同构（`id/type/content/meta/seq?`）。
+`tool_start/tool_end` 使用与 action 节点一致的 `step_id`，可与 trace 节点一一对齐。
+`trace/delta?after_seq=` 现可在任务流式进行中拉取到最终 `observation` 的阶段性刷新内容。
+前端已接入流式期间定时拉取、失败退避重试与流结束补拉，后端接口保持幂等增量语义。
+前端 Context 摘要会展示 delta 同步状态/重试次数/最近成功时间，便于联调与问题定位。
+当前在连续失败场景下也会显示轻提示，后端接口无需额外状态字段。
 
 ## Memory / Chroma / Embedding
 
@@ -83,6 +91,6 @@ docker compose up -d chroma
 
 - `api_key` 仅最小存储骨架，未加密
 - `remote` 模式 provider 校验仍较粗
-- 真实工具调用循环与真实 RAG 尚未接入
+- 真实工具调用循环与真实 RAG 尚未接入（当前仅 `tool_start/tool_end` mock 生命周期事件）
 - usage/token/cost 仍是占位增强阶段
-- `trace/delta` 流式中的实时增量持久化仍可继续细化
+- `trace/delta` 已具备流式增量持久化首版能力，后续可继续优化写入频率与批处理策略

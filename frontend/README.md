@@ -14,7 +14,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 会话：创建、切换、分页加载、重命名、删除
 - 轨迹：时间线与流程图双视图（thought/action/observation/tool/rag 区分）
 - 流式：SSE 任务状态、token 追加、trace 实时更新
-- 回放：`trace` 全量与 `trace/delta` 增量加载
+- 回放：`trace` 全量与 `trace/delta` 增量加载（支持流式进行中的 `seq` 递增刷新 + 自动静默轮询 + 失败退避重试）
+- 观测：Context 摘要展示 delta 自动同步状态、重试次数与最近成功时间
+- 告警：delta 连续失败时显示轻提示并持续自动重试
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
 - Memory：状态展示 + add/query 调试（含 metadata）
 - 设置：主题、主题色、语言、模型与运行模式
@@ -35,12 +37,18 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - `start`
 - `state`
 - `trace`
+- `tool_start`
+- `tool_end`
 - `heartbeat`
 - `token`
 - `done`
 - `error`
 
 `trace` 事件中的 `step` 与后端 REST `TraceStep` 同构，`dispatchSseEvent`（`lib/stores/chat-stream-store.ts`）为当前权威消费路径。
+`tool_start/tool_end` 会先行驱动 action 节点状态，再由 `trace` 事件补齐持久化快照。
+流式任务期间，Workbench 会定时静默拉取 `trace/delta`，失败时按退避策略重试，并在流结束后自动补拉一次，降低 SSE 与持久化快照的短暂偏差。
+同步健康度会在 Inspector Context 区域实时展示，便于定位网络抖动或增量拉取异常。
+当连续失败达到阈值时会显示非阻塞告警文案，不影响主任务流。
 
 ## Memory（会话级）
 
@@ -62,5 +70,7 @@ npm run dev
 ## 下一步（W2 收尾）
 
 - 配合后端接入真实工具/RAG 后补齐流程图语义
+- 将当前 mock `tool_start/tool_end` 升级为真实工具执行与失败重试可视化
 - 继续完善 usage/token/cost 的统计维度（跨会话/时间段聚合）
+- 持续优化流式回放体验（`trace/delta` 退避参数、网络抖动恢复与列表性能）
 - 继续做不阻塞主链路的可访问性与交互细化
