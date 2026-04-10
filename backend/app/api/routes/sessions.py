@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 
@@ -97,6 +99,10 @@ class MemoryQueryResponse(BaseModel):
     ids: list[list[str]]
     documents: list[list[str]]
     distances: list[list[float | None]] | None = None
+    metadatas: list[list[dict[str, Any]]] | None = Field(
+        default=None,
+        description="与 documents 对齐的 Chroma metadata；无则空 dict",
+    )
 
 
 @router.post("", response_model=SessionResponse)

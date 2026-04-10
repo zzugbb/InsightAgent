@@ -183,6 +183,7 @@ export type Messages = {
       distanceLabel: string;
       metadataPlaceholder: string;
       metadataInvalid: string;
+      hitMetadataLabel: string;
     };
   };
   settings: {

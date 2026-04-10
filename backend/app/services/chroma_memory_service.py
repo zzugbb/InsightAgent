@@ -66,11 +66,11 @@ def query_session_memory(
     try:
         collection = client.get_collection(name=name)
     except Exception:  # noqa: BLE001 — 未创建过 collection
-        return {"ids": [], "documents": [], "distances": None}
+        return {"ids": [], "documents": [], "distances": None, "metadatas": []}
 
     count = int(collection.count())
     if count == 0:
-        return {"ids": [], "documents": [], "distances": None}
+        return {"ids": [], "documents": [], "distances": None, "metadatas": []}
 
     k = max(1, min(n_results, count))
     raw = collection.query(query_texts=[q], n_results=k)
@@ -80,11 +80,40 @@ def query_session_memory(
     docs: list[list[str]] = [
         [(s or "") for s in row] for row in docs_raw
     ]
+    meta_raw = raw.get("metadatas")
+    metadatas = _normalize_query_metadatas(meta_raw, docs)
+
     return {
         "ids": ids,
         "documents": docs,
         "distances": dist,
+        "metadatas": metadatas,
     }
+
+
+def _normalize_query_metadatas(
+    meta_raw: object,
+    documents: list[list[str]],
+) -> list[list[dict[str, object]]]:
+    """与 documents 批次对齐；缺省或 None 的条目补空 dict。"""
+    if not documents or not documents[0]:
+        return []
+    expected = len(documents[0])
+    if not meta_raw or not isinstance(meta_raw, (list, tuple)):
+        return [[{} for _ in range(expected)]]
+    row0 = meta_raw[0] if meta_raw else []
+    if not isinstance(row0, (list, tuple)):
+        return [[{} for _ in range(expected)]]
+    inner: list[dict[str, object]] = []
+    for i in range(expected):
+        item = row0[i] if i < len(row0) else None
+        if item is None:
+            inner.append({})
+        elif isinstance(item, dict):
+            inner.append({str(k): v for k, v in item.items()})
+        else:
+            inner.append({})
+    return [inner]
 
 
 def try_append_task_memory(

@@ -184,6 +184,7 @@ export const zh: Messages = {
       metadataPlaceholder:
         '可选：JSON 对象，键与值均为字符串，例如 {"source":"manual","kind":"note"}',
       metadataInvalid: "metadata 须为 JSON 对象，且键与值均为字符串。",
+      hitMetadataLabel: "元数据",
     },
   },
   settings: {

@@ -64,4 +64,5 @@ export type MemoryQueryResponse = {
   ids: string[][];
   documents: string[][];
   distances: number[][] | null;
+  metadatas?: Record<string, unknown>[][] | null;
 };

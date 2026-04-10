@@ -476,9 +476,25 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                       const id =
                         memoryQueryMutation.data?.ids[0]?.[i] ?? String(i);
                       const dist = memoryQueryMutation.data?.distances?.[0]?.[i];
+                      const hitMeta =
+                        memoryQueryMutation.data?.metadatas?.[0]?.[i];
+                      const metaKeys =
+                        hitMeta && typeof hitMeta === "object" && hitMeta !== null
+                          ? Object.keys(hitMeta as Record<string, unknown>)
+                          : [];
                       return (
                         <li key={id} className="memory-query-hit-item">
                           <pre className="memory-query-hit-doc">{doc}</pre>
+                          {metaKeys.length > 0 ? (
+                            <pre className="memory-query-hit-meta">
+                              {t.inspector.memory.hitMetadataLabel}:{"\n"}
+                              {JSON.stringify(
+                                hitMeta as Record<string, unknown>,
+                                null,
+                                2,
+                              )}
+                            </pre>
+                          ) : null}
                           {typeof dist === "number" && Number.isFinite(dist) ? (
                             <span className="memory-query-hit-dist">
                               {t.inspector.memory.distanceLabel}:{" "}

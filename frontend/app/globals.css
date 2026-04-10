@@ -1990,6 +1990,20 @@ code {
   overflow: auto;
 }
 
+.memory-query-hit-meta {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--muted);
+  max-height: 96px;
+  overflow: auto;
+}
+
 .memory-query-hit-dist {
   display: block;
   margin-top: 6px;

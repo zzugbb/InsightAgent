@@ -186,6 +186,7 @@ export const en: Messages = {
         'Optional JSON object with string keys and values, e.g. {"source":"manual","kind":"note"}',
       metadataInvalid:
         "metadata must be a JSON object whose values are strings.",
+      hitMetadataLabel: "Metadata",
     },
   },
   settings: {
