@@ -339,6 +339,8 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             <strong>{inspectorTaskUsage.prompt ?? "—"}</strong>
             <span>{t.inspector.usageCompletion}</span>
             <strong>{inspectorTaskUsage.completion ?? "—"}</strong>
+            <span>{t.inspector.usageTotal}</span>
+            <strong>{inspectorTaskUsage.total ?? "—"}</strong>
             <span>{t.inspector.usageCost}</span>
             <strong>{inspectorTaskUsage.cost ?? "—"}</strong>
           </div>
@@ -585,6 +587,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                 ? [
                     usage.completion
                       ? `${t.inspector.usageCompletion}: ${usage.completion}`
+                      : null,
+                    usage.total
+                      ? `${t.inspector.usageTotal}: ${usage.total}`
                       : null,
                     usage.cost
                       ? `${t.inspector.usageCost}: ${usage.cost}`

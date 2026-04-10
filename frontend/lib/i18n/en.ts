@@ -133,6 +133,7 @@ export const en: Messages = {
     usageTitle: "Usage (current task)",
     usagePrompt: "Prompt tokens",
     usageCompletion: "Completion tokens",
+    usageTotal: "Total tokens",
     usageCost: "Cost estimate",
     currentTaskCard: "Current task",
     statusPrefix: "Status: ",

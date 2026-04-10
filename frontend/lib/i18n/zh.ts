@@ -131,6 +131,7 @@ export const zh: Messages = {
     usageTitle: "用量（当前任务）",
     usagePrompt: "提示 tokens",
     usageCompletion: "补全 tokens",
+    usageTotal: "总 tokens",
     usageCost: "预估费用",
     currentTaskCard: "当前任务",
     statusPrefix: "状态：",

@@ -133,6 +133,7 @@ export type Messages = {
     usageTitle: string;
     usagePrompt: string;
     usageCompletion: string;
+    usageTotal: string;
     usageCost: string;
     currentTaskCard: string;
     statusPrefix: string;

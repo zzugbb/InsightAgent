@@ -8,29 +8,62 @@ import type { SessionSummary, TaskSummary } from "./types";
 export type InspectorUsageRow = {
   prompt: string | null;
   completion: string | null;
+  total: string | null;
   cost: string | null;
 };
 
-function usageScalar(v: unknown): string | null {
+function parseUsageNumber(v: unknown): number | null {
   if (v === null || v === undefined) {
     return null;
   }
   if (typeof v === "number" && Number.isFinite(v)) {
-    return String(Math.trunc(v));
+    return v;
   }
-  return String(v);
+  if (typeof v === "string") {
+    const trimmed = v.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const num = Number(trimmed);
+    return Number.isFinite(num) ? num : null;
+  }
+  return null;
+}
+
+function formatTokenCount(v: unknown): string | null {
+  const n = parseUsageNumber(v);
+  if (n === null) {
+    return null;
+  }
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(Math.trunc(n));
+}
+
+function formatCost(v: unknown): string | null {
+  const n = parseUsageNumber(v);
+  if (n === null) {
+    return null;
+  }
+  return `$${n.toFixed(6)}`;
 }
 
 function normalizeUsageObject(
   raw: Record<string, unknown>,
 ): InspectorUsageRow | null {
-  const prompt = usageScalar(raw["prompt_tokens"]);
-  const completion = usageScalar(raw["completion_tokens"]);
-  const cost = usageScalar(raw["cost_estimate"]);
-  if (prompt === null && completion === null && cost === null) {
+  const promptRaw = parseUsageNumber(raw["prompt_tokens"]);
+  const completionRaw = parseUsageNumber(raw["completion_tokens"]);
+  const prompt = formatTokenCount(raw["prompt_tokens"]);
+  const completion = formatTokenCount(raw["completion_tokens"]);
+  const total =
+    promptRaw !== null || completionRaw !== null
+      ? formatTokenCount((promptRaw ?? 0) + (completionRaw ?? 0))
+      : null;
+  const cost = formatCost(raw["cost_estimate"]);
+  if (prompt === null && completion === null && total === null && cost === null) {
     return null;
   }
-  return { prompt, completion, cost };
+  return { prompt, completion, total, cost };
 }
 
 function parseUsageJson(
