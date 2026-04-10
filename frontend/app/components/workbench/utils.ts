@@ -1,7 +1,73 @@
 import type { Messages } from "../../../lib/i18n/types";
 import type { TraceStepPayload } from "../../../lib/types/trace";
 
+import type { SseTaskUsage } from "../../../lib/stores/chat-stream-store";
+
 import type { SessionSummary, TaskSummary } from "./types";
+
+export type InspectorUsageRow = {
+  prompt: string | null;
+  completion: string | null;
+  cost: string | null;
+};
+
+function usageScalar(v: unknown): string | null {
+  if (v === null || v === undefined) {
+    return null;
+  }
+  if (typeof v === "number" && Number.isFinite(v)) {
+    return String(Math.trunc(v));
+  }
+  return String(v);
+}
+
+function normalizeUsageObject(
+  raw: Record<string, unknown>,
+): InspectorUsageRow | null {
+  const prompt = usageScalar(raw["prompt_tokens"]);
+  const completion = usageScalar(raw["completion_tokens"]);
+  const cost = usageScalar(raw["cost_estimate"]);
+  if (prompt === null && completion === null && cost === null) {
+    return null;
+  }
+  return { prompt, completion, cost };
+}
+
+function parseUsageJson(
+  json: string | null | undefined,
+): InspectorUsageRow | null {
+  if (!json || !json.trim()) {
+    return null;
+  }
+  try {
+    const v = JSON.parse(json) as unknown;
+    if (!v || typeof v !== "object" || Array.isArray(v)) {
+      return null;
+    }
+    return normalizeUsageObject(v as Record<string, unknown>);
+  } catch {
+    return null;
+  }
+}
+
+/** 上下文面板：当前任务用量（流式 `done` 优先，否则用任务列表中的 usage_json） */
+export function resolveInspectorTaskUsage(args: {
+  taskId: string | null;
+  activeTask: TaskSummary | undefined;
+  sseTaskUsage: SseTaskUsage | null;
+}): InspectorUsageRow | null {
+  const { taskId, activeTask, sseTaskUsage } = args;
+  if (taskId && sseTaskUsage?.taskId === taskId) {
+    const n = normalizeUsageObject(sseTaskUsage.usage);
+    if (n) {
+      return n;
+    }
+  }
+  if (activeTask?.id === taskId && activeTask.usage_json) {
+    return parseUsageJson(activeTask.usage_json);
+  }
+  return null;
+}
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";

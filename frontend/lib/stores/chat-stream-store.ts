@@ -39,6 +39,11 @@ type TaskCreateResponse = {
   status: string;
 };
 
+export type SseTaskUsage = {
+  taskId: string;
+  usage: Record<string, unknown>;
+};
+
 export type ChatStreamStore = {
   isStreaming: boolean;
   sseMessage: string;
@@ -46,6 +51,8 @@ export type ChatStreamStore = {
   sseTraceSteps: TraceStepPayload[];
   ssePhase: string | null;
   sseTaskId: string | null;
+  /** 最近一次 `done` 事件携带的用量，按 taskId 对齐，避免切换任务后串台 */
+  sseTaskUsage: SseTaskUsage | null;
   traceCursor: number;
 
   resetStreamUi: () => void;
@@ -110,6 +117,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
   sseTraceSteps: [],
   ssePhase: null,
   sseTaskId: null,
+  sseTaskUsage: null,
   traceCursor: 0,
 
   resetStreamUi: () =>
@@ -118,6 +126,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       sseTraceSteps: [],
       ssePhase: null,
       sseTaskId: null,
+      sseTaskUsage: null,
       traceCursor: 0,
     }),
 
@@ -139,6 +148,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       sseTraceSteps: [],
       ssePhase: "replay",
       traceCursor: 0,
+      sseTaskUsage: null,
     });
 
     try {
@@ -322,7 +332,24 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       return;
     }
     if (event === "done") {
-      set({ sseMessage: "Task stream completed (done)." });
+      let nextUsage: SseTaskUsage | null = null;
+      if (payload && typeof payload === "object") {
+        const p = payload as Record<string, unknown>;
+        const tid = p.task_id;
+        const u = p.usage;
+        if (
+          typeof tid === "string" &&
+          u &&
+          typeof u === "object" &&
+          !Array.isArray(u)
+        ) {
+          nextUsage = { taskId: tid, usage: u as Record<string, unknown> };
+        }
+      }
+      set({
+        sseMessage: "Task stream completed (done).",
+        sseTaskUsage: nextUsage,
+      });
       return;
     }
     if (event === "error" && payload && typeof payload === "object") {
@@ -360,6 +387,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       sseTraceSteps: [],
       ssePhase: null,
       sseTaskId: null,
+      sseTaskUsage: null,
       traceCursor: 0,
     });
 

@@ -117,5 +117,13 @@ def initialize_database() -> Path:
             ON messages(task_id)
             """
         )
+        _ensure_tasks_usage_json_column(connection)
         connection.commit()
     return sqlite_path
+
+
+def _ensure_tasks_usage_json_column(connection: sqlite3.Connection) -> None:
+    rows = connection.execute("PRAGMA table_info(tasks)").fetchall()
+    names = {str(r["name"]) for r in rows}
+    if "usage_json" not in names:
+        connection.execute("ALTER TABLE tasks ADD COLUMN usage_json TEXT")

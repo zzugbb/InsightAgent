@@ -1531,6 +1531,10 @@ code {
   margin-top: 6px;
 }
 
+.inspector-usage-kicker {
+  margin: 16px 0 0;
+}
+
 .trace-view-toolbar {
   margin-top: 10px;
   margin-bottom: 4px;
@@ -2020,6 +2024,10 @@ code {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+
+.inspector-task-load-more {
+  margin-top: 8px;
 }
 
 .task-summary-item {

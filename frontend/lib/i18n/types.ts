@@ -130,11 +130,16 @@ export type Messages = {
     currentTask: string;
     traceCursor: string;
     session: string;
+    usageTitle: string;
+    usagePrompt: string;
+    usageCompletion: string;
+    usageCost: string;
     currentTaskCard: string;
     statusPrefix: string;
     latestTaskSession: string;
     recentTasks: string;
     sessionTasks: string;
+    loadMoreTasks: string;
     backendUrl: string;
     seqLabel: string;
     collapseInspectorAria: string;

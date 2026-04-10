@@ -37,6 +37,7 @@ class TaskResponse(BaseModel):
     prompt: str
     status: str
     trace_json: str | None = None
+    usage_json: str | None = None
     created_at: str
     updated_at: str
 

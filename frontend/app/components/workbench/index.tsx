@@ -100,6 +100,7 @@ export function Workbench() {
   const sseTaskId = useChatStreamStore((s: ChatStreamStore) => s.sseTaskId);
   const sseMessage = useChatStreamStore((s: ChatStreamStore) => s.sseMessage);
   const traceCursor = useChatStreamStore((s: ChatStreamStore) => s.traceCursor);
+  const sseTaskUsage = useChatStreamStore((s: ChatStreamStore) => s.sseTaskUsage);
   const resetStreamUi = useChatStreamStore(
     (s: ChatStreamStore) => s.resetStreamUi,
   );
@@ -131,15 +132,22 @@ export function Workbench() {
       lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
   });
 
-  const tasksQuery = useQuery({
-    queryKey: ["tasks", activeSessionId],
-    queryFn: () => {
-      const base = `${API_BASE_URL}/api/tasks?limit=${activeSessionId ? 24 : 8}`;
+  const TASK_PAGE_SESSION = 12;
+  const TASK_PAGE_GLOBAL = 8;
+
+  const tasksQuery = useInfiniteQuery({
+    queryKey: ["tasks", "paged", activeSessionId ?? "__global__"],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => {
+      const limit = activeSessionId ? TASK_PAGE_SESSION : TASK_PAGE_GLOBAL;
+      const base = `${API_BASE_URL}/api/tasks?limit=${limit}&offset=${pageParam}`;
       const url = activeSessionId
         ? `${base}&session_id=${encodeURIComponent(activeSessionId)}`
         : base;
       return apiJson<PaginatedList<TaskSummary>>(url);
     },
+    getNextPageParam: (lastPage) =>
+      lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
     retry: (failureCount, err) => {
       if (err instanceof ApiError && err.status === 404) {
         return false;
@@ -314,7 +322,10 @@ export function Workbench() {
 
   const recentSessions =
     sessionsQuery.data?.pages.flatMap((p) => p.items) ?? [];
-  const recentTasks = tasksQuery.data?.items ?? [];
+  const recentTasks =
+    tasksQuery.data?.pages.flatMap((p) => p.items) ?? [];
+  const tasksFetchNextBusy = tasksQuery.isFetchingNextPage;
+  const tasksCanLoadMore = Boolean(tasksQuery.hasNextPage);
   const settingsSummary = settingsQuery.data ?? null;
   const sessionMessages = messagesQuery.data?.messages ?? [];
 
@@ -786,11 +797,15 @@ export function Workbench() {
         sseTaskId={sseTaskId}
         phaseLabel={phaseLabel}
         traceCursor={traceCursor}
+        sseTaskUsage={sseTaskUsage}
         activeSessionId={activeSessionId}
         activeTaskId={activeTaskId}
         activeTask={activeTask}
         latestTaskForSession={latestTaskForSession}
         recentTasks={recentTasks}
+        tasksFetchNextBusy={tasksFetchNextBusy}
+        tasksCanLoadMore={tasksCanLoadMore}
+        onLoadMoreTasks={() => void tasksQuery.fetchNextPage()}
         onReplayTrace={handleLoadPersistedTrace}
         onLoadDelta={handleLoadTraceDelta}
         onSelectTask={handleSelectTask}

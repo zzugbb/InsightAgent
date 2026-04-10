@@ -7,6 +7,7 @@ from app.services.chat_persistence_service import (
     complete_task,
     create_message,
     update_task_status,
+    update_task_trace_steps,
 )
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import get_llm_provider
@@ -122,6 +123,7 @@ def stream_task_execution(
                 "step": trace_steps[0],
             },
         )
+        update_task_trace_steps(task_id, trace_steps[:1])
         yield sse_event(
             "trace",
             {
@@ -130,6 +132,7 @@ def stream_task_execution(
                 "step": trace_steps[1],
             },
         )
+        update_task_trace_steps(task_id, trace_steps[:2])
         yield sse_event(
             "trace",
             {
@@ -138,16 +141,22 @@ def stream_task_execution(
                 "step": trace_steps[2],
             },
         )
+        update_task_trace_steps(task_id, trace_steps[:3])
+        final_step_streaming: dict[str, object] = {
+            **trace_steps[3],
+            "content": "",
+        }
         yield sse_event(
             "trace",
             {
                 "task_id": task_id,
                 "step_id": final_step_id,
-                "step": {
-                    **trace_steps[3],
-                    "content": "",
-                },
+                "step": final_step_streaming,
             },
+        )
+        update_task_trace_steps(
+            task_id,
+            trace_steps[:3] + [final_step_streaming],
         )
         yield sse_event(
             "heartbeat",
@@ -178,7 +187,16 @@ def stream_task_execution(
             role="assistant",
             content=result.content,
         )
-        complete_task(task_id=task_id, trace_steps=trace_steps)
+        usage_payload: dict[str, object] = {
+            "prompt_tokens": None,
+            "completion_tokens": len(completion_chunks),
+            "cost_estimate": None,
+        }
+        complete_task(
+            task_id=task_id,
+            trace_steps=trace_steps,
+            usage=usage_payload,
+        )
         try_append_task_memory(
             session_id,
             task_id=task_id,
@@ -192,11 +210,7 @@ def stream_task_execution(
                 "task_id": task_id,
                 "step_id": final_step_id,
                 "status": "completed",
-                "usage": {
-                    "prompt_tokens": None,
-                    "completion_tokens": len(completion_chunks),
-                    "cost_estimate": None,
-                },
+                "usage": usage_payload,
             },
         )
     except Exception as exc:

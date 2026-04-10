@@ -38,6 +38,8 @@ export type TaskSummary = {
   prompt: string;
   status: string;
   trace_json: string | null;
+  /** JSON 字符串，与 SSE `done.usage` 同结构（prompt_tokens / completion_tokens / cost_estimate） */
+  usage_json?: string | null;
   created_at: string;
   updated_at: string;
 };

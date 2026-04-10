@@ -19,6 +19,7 @@ import {
   usePreferences,
 } from "../../../lib/preferences-context";
 
+import type { SseTaskUsage } from "../../../lib/stores/chat-stream-store";
 import type {
   InspectorTab,
   MemoryAddResponse,
@@ -34,6 +35,7 @@ import {
   getTaskLabel,
   normalizeTraceStepKind,
   parseMemoryMetadataJson,
+  resolveInspectorTaskUsage,
   shortenId,
 } from "./utils";
 
@@ -54,11 +56,15 @@ type InspectorProps = {
   sseTaskId: string | null;
   phaseLabel: string;
   traceCursor: number;
+  sseTaskUsage: SseTaskUsage | null;
   activeSessionId: string | null;
   activeTaskId: string | null;
   activeTask: TaskSummary | undefined;
   latestTaskForSession: TaskSummary | undefined;
   recentTasks: TaskSummary[];
+  tasksFetchNextBusy: boolean;
+  tasksCanLoadMore: boolean;
+  onLoadMoreTasks: () => void;
   onReplayTrace: () => void;
   onLoadDelta: () => void;
   onSelectTask: (task: TaskSummary) => void;
@@ -82,11 +88,15 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     sseTaskId,
     phaseLabel,
     traceCursor,
+    sseTaskUsage,
     activeSessionId,
     activeTaskId,
     activeTask,
     latestTaskForSession,
     recentTasks,
+    tasksFetchNextBusy,
+    tasksCanLoadMore,
+    onLoadMoreTasks,
     onReplayTrace,
     onLoadDelta,
     onSelectTask,
@@ -174,6 +184,16 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       hiddenCount: steps.length - TRACE_PREVIEW,
     };
   }, [sseTraceSteps, expandAllTrace]);
+
+  const inspectorTaskUsage = useMemo(
+    () =>
+      resolveInspectorTaskUsage({
+        taskId: activeTaskId,
+        activeTask,
+        sseTaskUsage,
+      }),
+    [activeTaskId, activeTask, sseTaskUsage],
+  );
 
   const tracePanel = (
     <section
@@ -307,6 +327,22 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         <span>{t.inspector.session}</span>
         <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
       </div>
+
+      {inspectorTaskUsage ? (
+        <>
+          <p className="summary-label inspector-usage-kicker">
+            {t.inspector.usageTitle}
+          </p>
+          <div className="context-grid context-grid--stats">
+            <span>{t.inspector.usagePrompt}</span>
+            <strong>{inspectorTaskUsage.prompt ?? "—"}</strong>
+            <span>{t.inspector.usageCompletion}</span>
+            <strong>{inspectorTaskUsage.completion ?? "—"}</strong>
+            <span>{t.inspector.usageCost}</span>
+            <strong>{inspectorTaskUsage.cost ?? "—"}</strong>
+          </div>
+        </>
+      ) : null}
 
       <div className="summary-card memory-placeholder-card">
         <p className="summary-label">{t.inspector.memory.kicker}</p>
@@ -558,6 +594,19 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               );
             })}
           </div>
+          {tasksCanLoadMore ? (
+            <div className="inspector-task-load-more">
+              <Button
+                type="default"
+                size="small"
+                block
+                loading={tasksFetchNextBusy}
+                onClick={() => onLoadMoreTasks()}
+              >
+                {t.inspector.loadMoreTasks}
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

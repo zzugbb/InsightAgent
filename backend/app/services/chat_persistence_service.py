@@ -127,11 +127,8 @@ def update_task_status(task_id: str, status: str) -> None:
         connection.commit()
 
 
-def complete_task(
-    task_id: str,
-    trace_steps: list[dict],
-    status: str = "completed",
-) -> None:
+def update_task_trace_steps(task_id: str, trace_steps: list[dict]) -> None:
+    """流式执行过程中写入部分 trace（不改变任务状态）。"""
     current_time = _now_iso()
     normalized_trace_steps = _normalize_trace_steps(trace_steps)
 
@@ -139,12 +136,41 @@ def complete_task(
         connection.execute(
             """
             UPDATE tasks
-            SET status = ?, trace_json = ?, updated_at = ?
+            SET trace_json = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                json.dumps(normalized_trace_steps, ensure_ascii=False),
+                current_time,
+                task_id,
+            ),
+        )
+        connection.commit()
+
+
+def complete_task(
+    task_id: str,
+    trace_steps: list[dict],
+    status: str = "completed",
+    usage: dict[str, object] | None = None,
+) -> None:
+    current_time = _now_iso()
+    normalized_trace_steps = _normalize_trace_steps(trace_steps)
+    usage_blob = (
+        json.dumps(usage, ensure_ascii=False) if usage is not None else None
+    )
+
+    with get_db_connection() as connection:
+        connection.execute(
+            """
+            UPDATE tasks
+            SET status = ?, trace_json = ?, usage_json = ?, updated_at = ?
             WHERE id = ?
             """,
             (
                 status,
                 json.dumps(normalized_trace_steps, ensure_ascii=False),
+                usage_blob,
                 current_time,
                 task_id,
             ),
@@ -279,7 +305,7 @@ def get_task(task_id: str) -> dict | None:
     with get_db_connection() as connection:
         row = connection.execute(
             """
-            SELECT id, session_id, prompt, status, trace_json, created_at, updated_at
+            SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
             FROM tasks
             WHERE id = ?
             """,
@@ -301,7 +327,7 @@ def list_tasks(
         if session_id:
             rows = connection.execute(
                 """
-                SELECT id, session_id, prompt, status, trace_json, created_at, updated_at
+                SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
                 FROM tasks
                 WHERE session_id = ?
                 ORDER BY updated_at DESC
@@ -312,7 +338,7 @@ def list_tasks(
         else:
             rows = connection.execute(
                 """
-                SELECT id, session_id, prompt, status, trace_json, created_at, updated_at
+                SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
                 FROM tasks
                 ORDER BY updated_at DESC
                 LIMIT ? OFFSET ?
@@ -331,10 +357,14 @@ def get_task_trace(task_id: str) -> list[dict]:
 
 
 def get_task_trace_delta(task_id: str, after_seq: int = 0) -> tuple[list[dict], int, bool]:
+    task = get_task(task_id)
+    if task is None:
+        return [], after_seq, False
     trace_steps = get_task_trace(task_id)
     delta_steps = [
         step for step in trace_steps if int(step.get("seq", 0)) > after_seq
     ]
     next_cursor = after_seq if not delta_steps else int(delta_steps[-1]["seq"])
-    has_more = False
+    still_running = task["status"] in ("pending", "running")
+    has_more = still_running
     return delta_steps, next_cursor, has_more
