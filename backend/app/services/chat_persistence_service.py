@@ -370,8 +370,10 @@ def get_task_trace_delta(task_id: str, after_seq: int = 0) -> tuple[list[dict], 
     return delta_steps, next_cursor, has_more
 
 
-def get_session_usage_summary(session_id: str) -> dict[str, int | float | None]:
-    """按会话聚合 tasks.usage_json（仅统计能解析出 usage_json 的任务）。"""
+def get_tasks_usage_summary(
+    session_id: str | None = None,
+) -> dict[str, int | float | None]:
+    """聚合 tasks.usage_json（可选按 session_id 过滤）。"""
     def _to_float(v: object) -> float | None:
         if v is None:
             return None
@@ -388,14 +390,22 @@ def get_session_usage_summary(session_id: str) -> dict[str, int | float | None]:
         return None
 
     with get_db_connection() as connection:
-        rows = connection.execute(
-            """
-            SELECT usage_json
-            FROM tasks
-            WHERE session_id = ?
-            """,
-            (session_id,),
-        ).fetchall()
+        if session_id:
+            rows = connection.execute(
+                """
+                SELECT usage_json
+                FROM tasks
+                WHERE session_id = ?
+                """,
+                (session_id,),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """
+                SELECT usage_json
+                FROM tasks
+                """,
+            ).fetchall()
 
     tasks_total = len(rows)
     tasks_with_usage = 0
@@ -456,3 +466,8 @@ def get_session_usage_summary(session_id: str) -> dict[str, int | float | None]:
         "avg_total_tokens": avg_total_tokens,
         "avg_cost_estimate": avg_cost_estimate,
     }
+
+
+def get_session_usage_summary(session_id: str) -> dict[str, int | float | None]:
+    """兼容保留：按会话聚合 usage。"""
+    return get_tasks_usage_summary(session_id)

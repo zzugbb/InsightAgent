@@ -8,7 +8,7 @@
 - W2：已完成（进入收尾）
 - W3/W4：未开始（真实工具 / RAG）
 - 工程协作：前端 `npm run lint` 已可直接执行，且当前告警已清零
-- 协同进展：前端会话汇总已切换到后端真实聚合接口（任务摘要 + 会话汇总 + 平均指标）
+- 协同进展：前端已切换到后端 usage 聚合接口（全局/会话双范围），并显示覆盖率与状态反馈（loading/error/empty）
 
 ## 当前已有内容
 
@@ -35,6 +35,7 @@
 - `POST /api/sessions/{session_id}/memory/query`
 - `POST /api/tasks`
 - `GET /api/tasks?limit=&offset=&session_id=`（含 `total/has_more`）
+- `GET /api/tasks/usage/summary`（可选 `session_id`）
 - `GET /api/tasks/{task_id}`
 - `GET /api/tasks/{task_id}/stream`
 - `GET /api/tasks/{task_id}/trace`

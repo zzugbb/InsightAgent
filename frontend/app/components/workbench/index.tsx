@@ -34,9 +34,9 @@ import type {
   SessionMemoryStatus,
   SessionMessage,
   SessionSummary,
-  SessionUsageSummary,
   SettingsSummary,
   TaskSummary,
+  UsageSummary,
 } from "./types";
 import {
   INSPECTOR_COLLAPSED_STORAGE_KEY,
@@ -167,15 +167,21 @@ export function Workbench() {
     staleTime: 20_000,
   });
 
-  const sessionUsageSummaryQuery = useQuery({
-    queryKey: ["session-usage-summary", activeSessionId],
+  const usageSummaryQuery = useQuery({
+    queryKey: ["tasks-usage-summary", activeSessionId ?? "__global__"],
     queryFn: () =>
-      apiJson<SessionUsageSummary>(
-        `${API_BASE_URL}/api/sessions/${encodeURIComponent(activeSessionId!)}/usage/summary`,
+      apiJson<UsageSummary>(
+        activeSessionId
+          ? `${API_BASE_URL}/api/tasks/usage/summary?session_id=${encodeURIComponent(activeSessionId)}`
+          : `${API_BASE_URL}/api/tasks/usage/summary`,
       ),
-    enabled: Boolean(activeSessionId),
     staleTime: 20_000,
   });
+
+  const usageSummaryErrorBanner =
+    usageSummaryQuery.isError && usageSummaryQuery.error
+      ? toUserFacingError(usageSummaryQuery.error, t.errors).banner
+      : null;
 
   const sessionMemoryErrorBanner =
     sessionMemoryQuery.isError && sessionMemoryQuery.error
@@ -824,7 +830,10 @@ export function Workbench() {
         sessionMemoryStatus={sessionMemoryQuery.data}
         sessionMemoryLoading={sessionMemoryQuery.isLoading}
         sessionMemoryError={sessionMemoryErrorBanner}
-        sessionUsageSummary={sessionUsageSummaryQuery.data}
+        usageSummary={usageSummaryQuery.data}
+        usageSummaryLoading={usageSummaryQuery.isLoading}
+        usageSummaryError={usageSummaryErrorBanner}
+        usageSummaryScope={activeSessionId ? "session" : "global"}
       />
     </main>
   );

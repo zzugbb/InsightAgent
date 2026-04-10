@@ -9,6 +9,7 @@ from app.services.chat_persistence_service import (
     create_task,
     ensure_session,
     get_session,
+    get_tasks_usage_summary,
     get_task,
     get_task_trace,
     get_task_trace_delta,
@@ -61,6 +62,17 @@ class TaskListResponse(BaseModel):
     limit: int
     offset: int
     has_more: bool = Field(description="是否仍有下一页")
+
+
+class TaskUsageSummaryResponse(BaseModel):
+    tasks_total: int
+    tasks_with_usage: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    cost_estimate: float
+    avg_total_tokens: float | None = None
+    avg_cost_estimate: float | None = None
 
 
 @router.post("", response_model=TaskCreateResponse)
@@ -118,6 +130,20 @@ def get_tasks(
         offset=offset,
         has_more=offset + n < total,
     )
+
+
+@router.get("/usage/summary", response_model=TaskUsageSummaryResponse)
+def get_tasks_usage_summary_route(
+    session_id: str | None = Query(
+        default=None,
+        description="可选：按会话聚合；会话不存在时返回 404",
+    ),
+) -> TaskUsageSummaryResponse:
+    sid = session_id.strip() if session_id else None
+    if sid and get_session(sid) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    raw = get_tasks_usage_summary(sid)
+    return TaskUsageSummaryResponse(**raw)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

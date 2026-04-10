@@ -25,8 +25,8 @@ import type {
   MemoryAddResponse,
   MemoryQueryResponse,
   SessionMemoryStatus,
-  SessionUsageSummary,
   TaskSummary,
+  UsageSummary,
 } from "./types";
 import { TraceFlowView } from "./trace-flow-view";
 import {
@@ -74,7 +74,10 @@ type InspectorProps = {
   sessionMemoryStatus: SessionMemoryStatus | undefined;
   sessionMemoryLoading: boolean;
   sessionMemoryError: string | null;
-  sessionUsageSummary: SessionUsageSummary | undefined;
+  usageSummary: UsageSummary | undefined;
+  usageSummaryLoading: boolean;
+  usageSummaryError: string | null;
+  usageSummaryScope: "session" | "global";
 };
 
 export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspector(
@@ -107,7 +110,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     sessionMemoryStatus,
     sessionMemoryLoading,
     sessionMemoryError,
-    sessionUsageSummary,
+    usageSummary,
+    usageSummaryLoading,
+    usageSummaryError,
+    usageSummaryScope,
   },
   ref,
 ) {
@@ -200,7 +206,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   );
 
   const sessionUsageAggregate = useMemo(() => {
-    if (!activeSessionId || !sessionUsageSummary) {
+    if (!usageSummary) {
       return null;
     }
     const tokenFmt = new Intl.NumberFormat(localeTag, {
@@ -210,20 +216,20 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       n === null || n === undefined ? null : `$${n.toFixed(6)}`;
 
     return {
-      prompt: tokenFmt.format(Math.trunc(sessionUsageSummary.prompt_tokens)),
+      prompt: tokenFmt.format(Math.trunc(usageSummary.prompt_tokens)),
       completion: tokenFmt.format(
-        Math.trunc(sessionUsageSummary.completion_tokens),
+        Math.trunc(usageSummary.completion_tokens),
       ),
-      total: tokenFmt.format(Math.trunc(sessionUsageSummary.total_tokens)),
-      cost: costFmt(sessionUsageSummary.cost_estimate),
+      total: tokenFmt.format(Math.trunc(usageSummary.total_tokens)),
+      cost: costFmt(usageSummary.cost_estimate),
       avgTotal:
-        sessionUsageSummary.avg_total_tokens === null
+        usageSummary.avg_total_tokens === null
           ? null
-          : tokenFmt.format(Math.trunc(sessionUsageSummary.avg_total_tokens)),
-      avgCost: costFmt(sessionUsageSummary.avg_cost_estimate),
-      taskCount: sessionUsageSummary.tasks_with_usage,
+          : tokenFmt.format(Math.trunc(usageSummary.avg_total_tokens)),
+      avgCost: costFmt(usageSummary.avg_cost_estimate),
+      taskCount: usageSummary.tasks_with_usage,
     };
-  }, [activeSessionId, localeTag, sessionUsageSummary]);
+  }, [localeTag, usageSummary]);
 
   const tracePanel = (
     <section
@@ -376,11 +382,24 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         </>
       ) : null}
 
+      {usageSummaryLoading ? (
+        <p className="panel-note panel-note--muted">{t.inspector.usageSummaryLoading}</p>
+      ) : null}
+
+      {usageSummaryError ? (
+        <p className="panel-note panel-note--muted">{t.inspector.usageSummaryError}</p>
+      ) : null}
+
       {sessionUsageAggregate ? (
         <div className="summary-card">
           <p className="summary-label inspector-usage-kicker">
-            {t.inspector.usageSessionTitle}
+            {t.inspector.usageSummaryTitle}
           </p>
+          <span>
+            {usageSummaryScope === "session"
+              ? t.inspector.usageScopeSession
+              : t.inspector.usageScopeGlobal}
+          </span>
           <div className="context-grid context-grid--stats compact">
             <span>{t.inspector.usagePrompt}</span>
             <strong>{sessionUsageAggregate.prompt ?? "—"}</strong>
@@ -396,7 +415,20 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             <strong>{sessionUsageAggregate.avgCost ?? "—"}</strong>
           </div>
           <span>{t.inspector.usageTaskCount(sessionUsageAggregate.taskCount)}</span>
+          <span>
+            {t.inspector.usageTaskCoverage(
+              usageSummary?.tasks_with_usage ?? sessionUsageAggregate.taskCount,
+              usageSummary?.tasks_total ?? sessionUsageAggregate.taskCount,
+            )}
+          </span>
         </div>
+      ) : null}
+
+      {!usageSummaryLoading &&
+      !usageSummaryError &&
+      usageSummary &&
+      usageSummary.tasks_with_usage === 0 ? (
+        <p className="panel-note panel-note--muted">{t.inspector.usageSummaryEmpty}</p>
       ) : null}
 
       <div className="summary-card memory-placeholder-card">

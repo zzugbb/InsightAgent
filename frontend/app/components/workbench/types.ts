@@ -64,8 +64,8 @@ export type SessionMemoryStatus = {
   error: string | null;
 };
 
-/** 与 GET /api/sessions/{id}/usage/summary 对齐 */
-export type SessionUsageSummary = {
+/** 与 GET /api/tasks/usage/summary、GET /api/sessions/{id}/usage/summary 对齐 */
+export type UsageSummary = {
   tasks_total: number;
   tasks_with_usage: number;
   prompt_tokens: number;
@@ -75,6 +75,8 @@ export type SessionUsageSummary = {
   avg_total_tokens: number | null;
   avg_cost_estimate: number | null;
 };
+
+export type SessionUsageSummary = UsageSummary;
 
 /** POST /api/sessions/{id}/memory/add */
 export type MemoryAddResponse = {

@@ -137,8 +137,18 @@ export type Messages = {
     usageCost: string;
     usageAvgTotal: string;
     usageAvgCost: string;
+    usageSummaryTitle: string;
+    usageScopeSession: string;
+    usageScopeGlobal: string;
     usageSessionTitle: string;
     usageTaskCount: (n: number) => string;
+    usageTaskCoverage: (withUsage: number, total: number) => string;
+    usageSummaryLoading: string;
+    usageSummaryError: string;
+    usageSummaryEmpty: string;
+    usageSessionLoading: string;
+    usageSessionError: string;
+    usageSessionEmpty: string;
     currentTaskCard: string;
     statusPrefix: string;
     latestTaskSession: string;
