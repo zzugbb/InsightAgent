@@ -1,39 +1,64 @@
 # Frontend
 
-Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 W1 聊天工作台。
+Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agent 工作台前端。
+
+## 当前进度
+
+- W1：已完成
+- W2：已完成（进入收尾）
+- W3/W4：未开始（真实工具 / RAG）
 
 ## 当前已有内容
 
-- 工程：`package.json`、`tsconfig.json`、`next.config.ts`、`app/layout.tsx`（含 `metadata` 与站点图标路径）
-- 样式与资源：`app/globals.css`、`app/icon.svg`、`public/favicon.ico`（ICO 可由 `scripts/generate-favicon-ico.py` 再生）
-- `app/components/workbench/`：侧栏、对话区、右侧检查器（Inspector）、`trace-flow-view.tsx`（@xyflow 自定义 `traceStep` 节点：按 thought/action/observation 配色、元信息行、`<details>` 内容摘要）、品牌 Logo 组件、运行设置菜单与模型弹窗
-- `lib/stores/chat-stream-store.ts`：Task Stream / trace 状态
-- `lib/sse/parse.ts`：SSE 分块解析
-- `lib/api-client.ts`：含 `apiPatchJson` 等与后端对接
-- `lib/storage-keys.ts`：侧栏 / 右栏宽度与折叠状态等 localStorage 键
-- `lib/i18n/`：中英文文案集中管理
+- 三栏布局：会话、消息、轨迹/上下文
+- 会话：创建、切换、分页加载、重命名、删除
+- 轨迹：时间线与流程图双视图（thought/action/observation/tool/rag 区分）
+- 流式：SSE 任务状态、token 追加、trace 实时更新
+- 回放：`trace` 全量与 `trace/delta` 增量加载
+- Memory：状态展示 + add/query 调试（含 metadata）
+- 设置：主题、主题色、语言、模型与运行模式
 
-## 当前边界（功能）
+## 关键实现位置
 
-- 主流程通过 `useChatStreamStore` 使用 `POST /api/tasks` + `GET /api/tasks/{task_id}/stream`
-- **布局**：左侧最近会话、中间消息流、右侧「轨迹 / 上下文」；左下角「设置」（主题 / **主题色（含自定义色）** / 语言 / 模型与运行）
-- **桌面宽屏**：左栏、右栏均支持 **拖拽调宽**、**折叠为窄条**（宽度与折叠状态持久化）；折叠/展开图标与 Lucide **Panel*Open / Panel*Close** 系一致
-- **会话**：列表（**分页加载更多**，`useInfiniteQuery` + `has_more`）、切换、`POST /api/sessions` 创建；**重命名**（`PATCH`）、**删除**；无选中会话时发送会先创建会话再跑任务流
-- **轨迹**：`GET .../trace` 回放、`.../trace/delta` 增量；默认仅展示最近若干步，可展开全部；流式失败提示与 **aria-live** 摘要
-- **数据请求**：TanStack Query；**`GET /api/tasks`** 使用 **`useInfiniteQuery`**（本会话 **12** 条/页、全局 **8** 条/页）+ **`has_more`**；Inspector 任务列表支持 **加载更多**；流式结束后按需 invalidate（含 **`session-memory-status`**）
-- **Markdown**：`react-markdown` + GFM + sanitize；数学/高亮等按组件配置
-- **窄屏**：左侧会话抽屉 + 右侧轨迹抽屉，遮罩与 **焦点陷阱**、Esc 关闭
-- **列表性能**：消息约 24+ 条虚拟列表；侧栏会话约 14+ 条虚拟化
-- **无障碍**：⌘K / Ctrl+K 聚焦输入框；错误映射 `lib/errors.ts`
-- **轨迹可视化（W2 起步）**：右侧「轨迹」面板支持 **时间线 / 流程图**；**时间线** 每条 `trace-card` 与流程图一致按 **`meta.tool` / `meta.rag` 与 type** 映射为 **工具 / RAG / 思考 / 行动 / 观察** 的左侧色条（`data-trace-kind`）；**流程图**（`@xyflow/react`）为 `smoothstep` 边、自定义节点徽章与折叠内容；随主题亮/暗切换）
-- **上下文 · Memory**：说明文案 + **实时状态**（`GET .../memory/status`）+ **调试区**：`POST .../memory/add`（可选 **metadata** JSON）/ `.../memory/query`（选中会话后可用；写入成功会 toast 并刷新条数）
+- `app/components/workbench/index.tsx`：工作台主编排
+- `app/components/workbench/inspector.tsx`：轨迹与上下文面板
+- `app/components/workbench/trace-flow-view.tsx`：轨迹流程图节点渲染
+- `lib/stores/chat-stream-store.ts`：SSE 事件分发与 trace 状态
+- `lib/types/trace.ts`：前端 TraceStep 类型
+- `lib/api-client.ts`：REST 请求封装
 
-## 进度与里程碑
+## SSE 消费与契约对齐
 
-**里程碑 2** 已达成交付（可观测轨迹 + Memory 调试 + 本会话任务列表等），详见仓库 **[`docs/DEVELOPMENT_PLAN.md`](../docs/DEVELOPMENT_PLAN.md)**。
+当前前端按以下事件消费：
+- `start`
+- `state`
+- `trace`
+- `heartbeat`
+- `token`
+- `done`
+- `error`
 
-消费 SSE 时请与 **[`docs/SSE_AND_TRACE_CONTRACT.md`](../docs/SSE_AND_TRACE_CONTRACT.md)** 及 `lib/types/trace.ts` 对齐；`dispatchSseEvent`（`lib/stores/chat-stream-store.ts`）为当前权威解析逻辑。Memory 与 Chroma 行为见 **[`docs/MEMORY_CHROMADB.md`](../docs/MEMORY_CHROMADB.md)**。
+`trace` 事件中的 `step` 与后端 REST `TraceStep` 同构，`dispatchSseEvent`（`lib/stores/chat-stream-store.ts`）为当前权威消费路径。
+
+## Memory（会话级）
+
+- collection 规则：`memory_{session_id}`
+- 状态读取：`GET /api/sessions/{session_id}/memory/status`
+- 写入调试：`POST /api/sessions/{session_id}/memory/add`
+- 检索调试：`POST /api/sessions/{session_id}/memory/query`
+
+## 本地启动
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+默认通过 `NEXT_PUBLIC_API_BASE_URL` 指向后端（未设置时使用 `http://127.0.0.1:8000`）。
 
 ## 下一步（W2 收尾）
 
-与根目录 `README.md` 及 `docs/DEVELOPMENT_PLAN.md` 一致：真实工具/RAG、OpenAPI 示例等；前端侧可继续按不阻塞主链路做交互与可访问性小优化。
+- 配合后端接入真实工具/RAG 后补齐流程图语义
+- 完善 usage/token/cost 的展示与可读性
+- 继续做不阻塞主链路的可访问性与交互细化

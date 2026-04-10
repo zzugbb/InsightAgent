@@ -168,7 +168,7 @@ def get_task_trace_delta_detail(
     description=(
         "返回 `text/event-stream`；`event: trace` 的 `data.step` 与 REST "
         "`GET /api/tasks/{task_id}/trace` 中的 `TraceStep` 同构。"
-        "完整事件表见仓库根目录 `docs/SSE_AND_TRACE_CONTRACT.md`。"
+        "完整事件约定见仓库根目录 `README.md` 的 SSE 与 TraceStep 契约章节。"
     ),
     response_class=StreamingResponse,
 )
