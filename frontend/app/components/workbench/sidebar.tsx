@@ -23,6 +23,9 @@ type SidebarProps = {
   deletingSessionId: string | null;
   renamingSessionId: string | null;
   sessionsLoading: boolean;
+  sessionsFetchNextBusy: boolean;
+  sessionsCanLoadMore: boolean;
+  onLoadMoreSessions: () => void;
   sessionsMessage: string;
   onNewSession: () => void;
   newSessionBusy: boolean;
@@ -43,6 +46,9 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
     deletingSessionId,
     renamingSessionId,
     sessionsLoading,
+    sessionsFetchNextBusy,
+    sessionsCanLoadMore,
+    onLoadMoreSessions,
     sessionsMessage,
     onNewSession,
     newSessionBusy,
@@ -281,6 +287,20 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
               ) : (
                 <div className="sidebar-empty">{t.sidebar.empty}</div>
               )}
+              {sessionsCanLoadMore ? (
+                <div className="sidebar-load-more-row">
+                  <Button
+                    type="default"
+                    size="small"
+                    block
+                    loading={sessionsFetchNextBusy}
+                    disabled={sessionsLoading}
+                    onClick={() => onLoadMoreSessions()}
+                  >
+                    {t.sidebar.loadMoreSessions}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
 

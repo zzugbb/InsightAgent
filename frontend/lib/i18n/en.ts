@@ -108,6 +108,7 @@ export const en: Messages = {
     sessionMoreAria: "Session actions",
     collapseSidebarAria: "Collapse sidebar",
     expandSidebarAria: "Expand sidebar",
+    loadMoreSessions: "Load more",
   },
   inspector: {
     ariaShell: "Execution and context",

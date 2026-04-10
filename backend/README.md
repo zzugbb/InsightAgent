@@ -21,7 +21,7 @@
 
 - `GET /health`：健康检查、运行模式摘要、**`chroma.url` 与 `chroma.reachable`**（由 `CHROMA_PROBE` 控制是否探测）
 - `POST /api/sessions`：创建会话（可选 `title`）
-- `GET /api/sessions`：最近会话列表（`limit`）
+- `GET /api/sessions`：最近会话列表（`limit`、`offset`）；响应含 **`total` / `has_more`** 分页元数据
 - `GET /api/sessions/{session_id}`：单个会话
 - `PATCH /api/sessions/{session_id}`：更新会话标题（`{ "title": "..." }`）
 - `DELETE /api/sessions/{session_id}`：删除会话（204）
@@ -31,7 +31,7 @@
 - `POST /api/sessions/{session_id}/memory/query`：正文 `{ "text": "...", "n_results": 4 }`，语义检索，返回 **ids** / **documents** / **distances** / **metadatas**（与文档行对齐；collection 不存在或为空时返回空列表）
 - `GET /api/settings` / `PUT /api/settings`：非敏感设置摘要与写入骨架
 - `POST /api/tasks`：创建任务（`session_id`、`user_input` 等）
-- `GET /api/tasks`：最近任务列表；可选 **`session_id`** 查询参数，仅返回该会话下任务（会话不存在则 **404**）
+- `GET /api/tasks`：最近任务列表（`limit`、`offset`）；响应含 **`total` / `has_more`**；可选 **`session_id`**（会话不存在则 **404**）
 - `GET /api/tasks/{task_id}`：单个任务
 - `GET /api/tasks/{task_id}/stream`：任务 SSE（仅 `pending` 等允许的状态）
 - `GET /api/tasks/{task_id}/trace`：trace 全量回放
@@ -57,11 +57,19 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - 任务结束后最小落库 `sessions` / `tasks` / `messages`；支持按 `session_id`、`task_id` 查询及 trace / delta 读取
 - `prompt` 中含 `[mock-error]` 时可触发一次 mock SSE error，便于联调
 
-## 下一步（与仓库根目录 README 一致）
+## 进度与里程碑
 
-- 后端 **Memory ingest（add）与 query** 最小 API，并在业务流中占位调用
-- 可选：为 SSE 事件体补充与 REST 对齐的文档或共享 schema
-- 保持 SSE 与 trace REST 契约稳定；trace 数据结构继续服务于 W2 可视化
+仓库根目录 **[`docs/DEVELOPMENT_PLAN.md`](../docs/DEVELOPMENT_PLAN.md)**：**里程碑 2（Memory + 可观测轨迹核心）已达成交付**；本节接口与限制描述与之对齐。
+
+**SSE ↔ TraceStep**：[`docs/SSE_AND_TRACE_CONTRACT.md`](../docs/SSE_AND_TRACE_CONTRACT.md)（`GET /api/tasks/{id}/stream` 事件表与 REST trace 对齐说明）。`GET .../stream` 在 OpenAPI 中有摘要描述。
+
+**Memory / Chroma / 嵌入**：[`docs/MEMORY_CHROMADB.md`](../docs/MEMORY_CHROMADB.md)（环境变量、`HttpClient`、嵌入由服务端默认承担及后续独立配置注意点）。
+
+## 下一步（W2 收尾）
+
+- **真实工具/RAG** 接入（当前为 Mock 四步 trace）
+- OpenAPI 内嵌 SSE **示例载荷**（可选，对照文档已有初版）
+- 见 `DEVELOPMENT_PLAN.md` 中「W2 收尾」清单及上文「当前限制」
 
 ## 当前限制
 
@@ -69,7 +77,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - `remote` 模式等对 provider 的校验仍较粗
 - 未做远端连通性检测
 - `trace/delta` 以落库读取为主，流式过程中实时增量持久化仍有限
-- 未实现 `tool_start/tool_end`、真实 usage、完整分页列表等
+- 未实现 `tool_start/tool_end`、真实 usage；会话/任务列表已支持 **`limit`+`offset`** 及响应中的 **`total` / `has_more`**
 
 ## 当前数据库结构（摘要）
 

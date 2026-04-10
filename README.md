@@ -1,15 +1,18 @@
 # InsightAgent
 
-InsightAgent 是一个可观测 AI Agent 平台，当前按 `.cursor` 主计划逐步开发。
+InsightAgent 是一个可观测 AI Agent 平台。**进度与里程碑以仓库内 [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md) 为准**（本地 `.cursor/plans` 可自建，但不作为唯一来源）。**SSE 与 TraceStep 对照**见 [`docs/SSE_AND_TRACE_CONTRACT.md`](docs/SSE_AND_TRACE_CONTRACT.md)；**Memory / Chroma / 嵌入**见 [`docs/MEMORY_CHROMADB.md`](docs/MEMORY_CHROMADB.md)。
 
 ## 当前阶段
 
-当前处于 **`W1 已收口` / `W2 启动`**：
+**里程碑 1（W1 主链路）**：已完成。  
+**里程碑 2（W2 核心：可观测轨迹 + Memory 最小闭环）**：**已达到** — 详见 [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md)。后续工作以 **W2 收尾**（embedding/契约文档/真实工具 RAG 等）为主。
+
+当前能力摘要：
 
 - **backend**：Task Stream、SQLite 持久化、`POST /api/tasks`、`GET /api/tasks`（可选 **`session_id`** 按会话筛任务）与 `GET /api/tasks/{task_id}/stream`、trace 全量回放与 delta（Mock Provider）；**`GET .../trace` / `trace/delta` 响应已用 Pydantic `TraceStep` / `TraceStepMeta` 显式建模（OpenAPI 与前端类型对齐）**；**`GET /health` 含 Chroma 连接信息与可达性**；**Memory**：**`GET .../memory/status`** 只读条数；**`POST .../memory/add`**、**`POST .../memory/query`** 最小写入与检索；任务成功结束后 **best-effort** 写入一条会话摘要（需 Docker Chroma 可连）；会话支持创建 / 列表 / 详情 / 消息 / **重命名（PATCH）** / **删除（DELETE）**
-- **frontend**：聊天型 Agent 工作台——左侧最近会话、中间消息流与单一「发送」入口、右侧「轨迹 / 上下文」；运行设置从侧栏进入；**桌面端**左栏与右栏均可 **拖拽调宽、折叠窄条展开**，侧栏会话支持 **重命名 / 删除**；站点 **图标与品牌区** 已接入；右侧轨迹支持 **时间线 / 流程图** 切换（`@xyflow/react`：**自定义 traceStep 节点**，含 **工具 / RAG** 与 thought/action/observation 区分配色 + 元信息 + 可折叠内容摘要）；**「上下文」Memory** 含状态与 **add/query 调试**
+- **frontend**：聊天型 Agent 工作台——左侧最近会话、中间消息流与单一「发送」入口、右侧「轨迹 / 上下文」；运行设置从侧栏进入；**桌面端**左栏与右栏均可 **拖拽调宽、折叠窄条展开**，侧栏会话支持 **重命名 / 删除**；站点 **图标与品牌区** 已接入；右侧轨迹支持 **时间线 / 流程图** 切换（`@xyflow/react`：**自定义 traceStep 节点**，含 **工具 / RAG** 与 thought/action/observation 区分配色 + 元信息 + 可折叠内容摘要）；**「上下文」Memory** 含状态与 **add/query 调试**（含 metadata、命中 **metadatas**）；任务列表支持 **本会话筛选** 与 **会话失效提示**
 - 当前流式事件已支持 `start/state/trace/heartbeat/token/done/error`
-- 当前开发策略保持不变：每次只推进一个小能力，先把 W1 主链路与补链路收口
+- 开发策略：小步迭代；**W2 收尾**阶段优先补齐文档与可选工程项（见 [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md)）
 
 ## 目录
 
@@ -19,7 +22,11 @@ InsightAgent/
 ├── frontend/
 ├── data/
 ├── docker-compose.yml   # Chroma 服务（可选）
-└── .cursor/plans/
+├── docs/
+│   ├── DEVELOPMENT_PLAN.md        # 里程碑与 W2 收尾清单
+│   ├── SSE_AND_TRACE_CONTRACT.md  # SSE 事件与 REST TraceStep 对齐说明
+│   └── MEMORY_CHROMADB.md         # Chroma 连接、嵌入边界与 Memory API
+└── .cursor/plans/   # 可选；本地 Cursor 计划（默认 gitignore）
 ```
 
 ## Docker（Chroma，可选）
@@ -38,6 +45,6 @@ docker compose up -d chroma
 - 默认按 `mock` 模式开发
 - 每次只推进一个小阶段，避免并行任务过多
 
-## 下一步
+## 下一步（W2 收尾）
 
-**Memory** 已具备 **`/memory/add`**（可选 **metadata** 键值）、**`/memory/query`** 与任务结束 **自动写入摘要**；轨迹 **时间线 / 流程图** 均已按 **tool / RAG / thought / action / observation** 区分样式。后续可接：独立 embedding、SSE 与 OpenAPI 的更细 schema 说明、真实工具/RAG 接入。工作台交互类需求以不阻塞主链路为前提迭代。
+里程碑 2 已完成；收尾阶段建议优先：**真实工具/RAG 接入**、以及 `backend/README` 中列出的工程限制项（分页、usage、`trace/delta` 实时增量等）。**Embedding / Chroma** 说明初版见 **[`docs/MEMORY_CHROMADB.md`](docs/MEMORY_CHROMADB.md)**；**SSE ↔ TraceStep** 见 **[`docs/SSE_AND_TRACE_CONTRACT.md`](docs/SSE_AND_TRACE_CONTRACT.md)**。细则与检查清单见 **[`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md)**。

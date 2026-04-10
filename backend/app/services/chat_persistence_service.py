@@ -223,16 +223,38 @@ def delete_session(session_id: str) -> bool:
         return cursor.rowcount > 0
 
 
-def list_sessions(limit: int = 20) -> list[dict]:
+def count_sessions() -> int:
+    with get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT COUNT(*) AS n FROM sessions",
+        ).fetchone()
+    return int(row["n"]) if row else 0
+
+
+def count_tasks(session_id: str | None = None) -> int:
+    with get_db_connection() as connection:
+        if session_id:
+            row = connection.execute(
+                "SELECT COUNT(*) AS n FROM tasks WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+        else:
+            row = connection.execute(
+                "SELECT COUNT(*) AS n FROM tasks",
+            ).fetchone()
+    return int(row["n"]) if row else 0
+
+
+def list_sessions(limit: int = 20, offset: int = 0) -> list[dict]:
     with get_db_connection() as connection:
         rows = connection.execute(
             """
             SELECT id, title, created_at, updated_at
             FROM sessions
             ORDER BY updated_at DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            (limit,),
+            (limit, offset),
         ).fetchall()
 
     return [dict(row) for row in rows]
@@ -270,7 +292,11 @@ def get_task(task_id: str) -> dict | None:
     return dict(row)
 
 
-def list_tasks(limit: int = 20, session_id: str | None = None) -> list[dict]:
+def list_tasks(
+    limit: int = 20,
+    session_id: str | None = None,
+    offset: int = 0,
+) -> list[dict]:
     with get_db_connection() as connection:
         if session_id:
             rows = connection.execute(
@@ -279,9 +305,9 @@ def list_tasks(limit: int = 20, session_id: str | None = None) -> list[dict]:
                 FROM tasks
                 WHERE session_id = ?
                 ORDER BY updated_at DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (session_id, limit),
+                (session_id, limit, offset),
             ).fetchall()
         else:
             rows = connection.execute(
@@ -289,9 +315,9 @@ def list_tasks(limit: int = 20, session_id: str | None = None) -> list[dict]:
                 SELECT id, session_id, prompt, status, trace_json, created_at, updated_at
                 FROM tasks
                 ORDER BY updated_at DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (limit,),
+                (limit, offset),
             ).fetchall()
 
     return [dict(row) for row in rows]

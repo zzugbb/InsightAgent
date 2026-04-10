@@ -2,7 +2,12 @@
 
 import type { TextAreaRef } from "antd/es/input/TextArea";
 import { App } from "antd";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -25,6 +30,7 @@ import { Inspector } from "./inspector";
 import { Sidebar } from "./sidebar";
 import type {
   InspectorTab,
+  PaginatedList,
   SessionMemoryStatus,
   SessionMessage,
   SessionSummary,
@@ -112,12 +118,17 @@ export function Workbench() {
     queryFn: () => apiJson<SettingsSummary>(`${API_BASE_URL}/api/settings`),
   });
 
-  const sessionsQuery = useQuery({
-    queryKey: ["sessions"],
-    queryFn: () =>
-      apiJson<{ items: SessionSummary[] }>(
-        `${API_BASE_URL}/api/sessions?limit=10`,
+  const SESSION_PAGE = 10;
+
+  const sessionsQuery = useInfiniteQuery({
+    queryKey: ["sessions", "paged"],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      apiJson<PaginatedList<SessionSummary>>(
+        `${API_BASE_URL}/api/sessions?limit=${SESSION_PAGE}&offset=${pageParam}`,
       ),
+    getNextPageParam: (lastPage) =>
+      lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
   });
 
   const tasksQuery = useQuery({
@@ -127,7 +138,7 @@ export function Workbench() {
       const url = activeSessionId
         ? `${base}&session_id=${encodeURIComponent(activeSessionId)}`
         : base;
-      return apiJson<{ items: TaskSummary[] }>(url);
+      return apiJson<PaginatedList<TaskSummary>>(url);
     },
     retry: (failureCount, err) => {
       if (err instanceof ApiError && err.status === 404) {
@@ -301,12 +312,15 @@ export function Workbench() {
     enabled: Boolean(activeSessionId),
   });
 
-  const recentSessions = sessionsQuery.data?.items ?? [];
+  const recentSessions =
+    sessionsQuery.data?.pages.flatMap((p) => p.items) ?? [];
   const recentTasks = tasksQuery.data?.items ?? [];
   const settingsSummary = settingsQuery.data ?? null;
   const sessionMessages = messagesQuery.data?.messages ?? [];
 
   const sessionsLoading = sessionsQuery.isLoading;
+  const sessionsFetchNextBusy = sessionsQuery.isFetchingNextPage;
+  const sessionsCanLoadMore = Boolean(sessionsQuery.hasNextPage);
   const sessionsMessage = sessionsQuery.isError
     ? t.errors.requestFailed
     : recentSessions.length === 0
@@ -692,6 +706,9 @@ export function Workbench() {
           renameSessionMutation.mutateAsync({ sessionId, title })
         }
         sessionsLoading={sessionsLoading}
+        sessionsFetchNextBusy={sessionsFetchNextBusy}
+        sessionsCanLoadMore={sessionsCanLoadMore}
+        onLoadMoreSessions={() => void sessionsQuery.fetchNextPage()}
         sessionsMessage={sessionsMessage}
         onNewSession={handleNewSession}
         newSessionBusy={newSessionBusy}

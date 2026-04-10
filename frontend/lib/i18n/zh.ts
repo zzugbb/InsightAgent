@@ -106,6 +106,7 @@ export const zh: Messages = {
     sessionMoreAria: "会话操作",
     collapseSidebarAria: "收起侧栏",
     expandSidebarAria: "展开侧栏",
+    loadMoreSessions: "加载更多",
   },
   inspector: {
     ariaShell: "执行与上下文",

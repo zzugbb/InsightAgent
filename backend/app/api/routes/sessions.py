@@ -9,6 +9,7 @@ from app.services.chroma_memory_service import (
     query_session_memory,
 )
 from app.services.chat_persistence_service import (
+    count_sessions,
     create_session_record,
     delete_session,
     get_session,
@@ -44,6 +45,10 @@ class SessionMessagesResponse(BaseModel):
 
 class SessionListResponse(BaseModel):
     items: list[SessionResponse]
+    total: int = Field(description="符合条件的会话总数")
+    limit: int
+    offset: int
+    has_more: bool = Field(description="是否仍有下一页（offset + len(items) < total）")
 
 
 class CreateSessionRequest(BaseModel):
@@ -112,10 +117,24 @@ def post_session(payload: CreateSessionRequest = CreateSessionRequest()) -> Sess
 
 
 @router.get("", response_model=SessionListResponse)
-def get_sessions(limit: int = Query(default=20, ge=1, le=100)) -> SessionListResponse:
-    sessions = list_sessions(limit=limit)
+def get_sessions(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        le=50_000,
+        description="跳过前 offset 条（与 limit 组合做分页）",
+    ),
+) -> SessionListResponse:
+    sessions = list_sessions(limit=limit, offset=offset)
+    total = count_sessions()
+    n = len(sessions)
     return SessionListResponse(
         items=[SessionResponse(**session) for session in sessions],
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + n < total,
     )
 
 

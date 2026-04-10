@@ -7,6 +7,15 @@ export type SettingsSummary = {
   sqlite_path: string;
 };
 
+/** 与 GET /api/sessions、GET /api/tasks 分页响应一致 */
+export type PaginatedList<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
 export type SessionSummary = {
   id: string;
   title: string | null;

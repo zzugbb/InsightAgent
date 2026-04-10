@@ -482,6 +482,11 @@ code {
   gap: 6px;
 }
 
+.sidebar-load-more-row {
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
 .sidebar-item,
 .inspector-tabs button,
 .primary-button,

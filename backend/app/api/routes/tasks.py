@@ -4,6 +4,7 @@ from starlette.responses import StreamingResponse
 
 from app.schemas.trace import TraceStep, parse_trace_steps
 from app.services.chat_persistence_service import (
+    count_tasks,
     create_message,
     create_task,
     ensure_session,
@@ -55,6 +56,10 @@ class TaskTraceDeltaResponse(BaseModel):
 
 class TaskListResponse(BaseModel):
     items: list[TaskResponse]
+    total: int = Field(description="符合条件的任务总数（全局或指定 session_id）")
+    limit: int
+    offset: int
+    has_more: bool = Field(description="是否仍有下一页")
 
 
 @router.post("", response_model=TaskCreateResponse)
@@ -84,6 +89,12 @@ def create_task_entry(payload: TaskCreateRequest) -> TaskCreateResponse:
 @router.get("", response_model=TaskListResponse)
 def get_tasks(
     limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        le=50_000,
+        description="跳过前 offset 条（与 limit 组合做分页）",
+    ),
     session_id: str | None = Query(
         default=None,
         description="仅返回该会话下的任务；会话须存在，否则 404",
@@ -93,11 +104,18 @@ def get_tasks(
         sid = session_id.strip()
         if get_session(sid) is None:
             raise HTTPException(status_code=404, detail="Session not found")
-        tasks = list_tasks(limit=limit, session_id=sid)
+        tasks = list_tasks(limit=limit, session_id=sid, offset=offset)
+        total = count_tasks(sid)
     else:
-        tasks = list_tasks(limit=limit)
+        tasks = list_tasks(limit=limit, offset=offset)
+        total = count_tasks(None)
+    n = len(tasks)
     return TaskListResponse(
         items=[TaskResponse(**task) for task in tasks],
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + n < total,
     )
 
 
@@ -143,7 +161,16 @@ def get_task_trace_delta_detail(
     )
 
 
-@router.get("/{task_id}/stream")
+@router.get(
+    "/{task_id}/stream",
+    summary="任务 SSE 流",
+    description=(
+        "返回 `text/event-stream`；`event: trace` 的 `data.step` 与 REST "
+        "`GET /api/tasks/{task_id}/trace` 中的 `TraceStep` 同构。"
+        "完整事件表见仓库根目录 `docs/SSE_AND_TRACE_CONTRACT.md`。"
+    ),
+    response_class=StreamingResponse,
+)
 def stream_task_detail(task_id: str) -> StreamingResponse:
     task = get_task(task_id)
     if task is None:

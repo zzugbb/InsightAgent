@@ -109,6 +109,7 @@ export type Messages = {
     sessionMoreAria: string;
     collapseSidebarAria: string;
     expandSidebarAria: string;
+    loadMoreSessions: string;
   };
   inspector: {
     ariaShell: string;
