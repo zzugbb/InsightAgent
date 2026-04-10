@@ -35,6 +35,8 @@ export type Messages = {
     sessionFallback: (shortId: string) => string;
     taskFallback: (shortId: string) => string;
     hintRowNarrow: string;
+    /** 任务列表因会话不存在（404）已清空选中时的提示 */
+    sessionMissingReset: string;
   };
   roles: {
     user: string;
@@ -131,6 +133,7 @@ export type Messages = {
     statusPrefix: string;
     latestTaskSession: string;
     recentTasks: string;
+    sessionTasks: string;
     backendUrl: string;
     seqLabel: string;
     collapseInspectorAria: string;

@@ -535,7 +535,11 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
 
       {recentTasks.length > 0 ? (
         <div className="summary-card">
-          <p className="summary-label">{t.inspector.recentTasks}</p>
+          <p className="summary-label">
+            {activeSessionId
+              ? t.inspector.sessionTasks
+              : t.inspector.recentTasks}
+          </p>
           <div className="task-summary-list">
             {recentTasks.map((task) => {
               const isActive = task.id === activeTaskId;

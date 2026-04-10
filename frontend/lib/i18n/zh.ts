@@ -36,6 +36,7 @@ export const zh: Messages = {
     taskFallback: (shortId: string) => `任务 ${shortId}`,
     hintRowNarrow:
       "窄屏请使用顶部「会话列表」与「轨迹与上下文」按钮打开侧栏。",
+    sessionMissingReset: "当前会话已不存在，已取消选中。",
   },
   roles: {
     user: "你",
@@ -130,6 +131,7 @@ export const zh: Messages = {
     statusPrefix: "状态：",
     latestTaskSession: "本会话最近任务",
     recentTasks: "最近任务",
+    sessionTasks: "本会话任务",
     backendUrl: "后端地址：",
     seqLabel: "seq",
     collapseInspectorAria: "收起右侧面板",

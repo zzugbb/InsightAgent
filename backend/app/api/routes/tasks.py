@@ -7,6 +7,7 @@ from app.services.chat_persistence_service import (
     create_message,
     create_task,
     ensure_session,
+    get_session,
     get_task,
     get_task_trace,
     get_task_trace_delta,
@@ -81,8 +82,20 @@ def create_task_entry(payload: TaskCreateRequest) -> TaskCreateResponse:
 
 
 @router.get("", response_model=TaskListResponse)
-def get_tasks(limit: int = Query(default=20, ge=1, le=100)) -> TaskListResponse:
-    tasks = list_tasks(limit=limit)
+def get_tasks(
+    limit: int = Query(default=20, ge=1, le=100),
+    session_id: str | None = Query(
+        default=None,
+        description="仅返回该会话下的任务；会话须存在，否则 404",
+    ),
+) -> TaskListResponse:
+    if session_id is not None and session_id.strip():
+        sid = session_id.strip()
+        if get_session(sid) is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        tasks = list_tasks(limit=limit, session_id=sid)
+    else:
+        tasks = list_tasks(limit=limit)
     return TaskListResponse(
         items=[TaskResponse(**task) for task in tasks],
     )

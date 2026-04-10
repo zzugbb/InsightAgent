@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import {
+  ApiError,
   apiDelete,
   apiJson,
   apiPatchJson,
@@ -50,7 +51,7 @@ const INSPECTOR_W_DEFAULT = 340;
 
 export function Workbench() {
   const t = useMessages();
-  const { modal } = App.useApp();
+  const { modal, message } = App.useApp();
   const queryClient = useQueryClient();
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("trace");
@@ -81,6 +82,8 @@ export function Workbench() {
   activeSessionIdRef.current = activeSessionId;
   const sessionOpenButtonRef = useRef<HTMLButtonElement>(null);
   const inspectorOpenButtonRef = useRef<HTMLButtonElement>(null);
+  /** 避免 GET /tasks?session_id= 404 时重复 toast / 重复清空 */
+  const tasksSession404HandledRef = useRef(false);
 
   const isStreaming = useChatStreamStore((s: ChatStreamStore) => s.isStreaming);
   const sseTokens = useChatStreamStore((s: ChatStreamStore) => s.sseTokens);
@@ -118,11 +121,20 @@ export function Workbench() {
   });
 
   const tasksQuery = useQuery({
-    queryKey: ["tasks"],
-    queryFn: () =>
-      apiJson<{ items: TaskSummary[] }>(
-        `${API_BASE_URL}/api/tasks?limit=8`,
-      ),
+    queryKey: ["tasks", activeSessionId],
+    queryFn: () => {
+      const base = `${API_BASE_URL}/api/tasks?limit=${activeSessionId ? 24 : 8}`;
+      const url = activeSessionId
+        ? `${base}&session_id=${encodeURIComponent(activeSessionId)}`
+        : base;
+      return apiJson<{ items: TaskSummary[] }>(url);
+    },
+    retry: (failureCount, err) => {
+      if (err instanceof ApiError && err.status === 404) {
+        return false;
+      }
+      return failureCount < 2;
+    },
   });
 
   const sessionMemoryQuery = useQuery({
@@ -139,6 +151,34 @@ export function Workbench() {
     sessionMemoryQuery.isError && sessionMemoryQuery.error
       ? toUserFacingError(sessionMemoryQuery.error, t.errors).banner
       : null;
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      tasksSession404HandledRef.current = false;
+      return;
+    }
+    if (!tasksQuery.isError || tasksQuery.error == null) {
+      return;
+    }
+    const err = tasksQuery.error;
+    if (!(err instanceof ApiError) || err.status !== 404) {
+      return;
+    }
+    if (tasksSession404HandledRef.current) {
+      return;
+    }
+    tasksSession404HandledRef.current = true;
+    setActiveSessionId(null);
+    message.warning(t.workbench.sessionMissingReset);
+    void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+  }, [
+    activeSessionId,
+    tasksQuery.isError,
+    tasksQuery.error,
+    message,
+    queryClient,
+    t.workbench.sessionMissingReset,
+  ]);
 
   useEffect(() => {
     try {

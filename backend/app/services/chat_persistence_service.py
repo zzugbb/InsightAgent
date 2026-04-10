@@ -270,17 +270,29 @@ def get_task(task_id: str) -> dict | None:
     return dict(row)
 
 
-def list_tasks(limit: int = 20) -> list[dict]:
+def list_tasks(limit: int = 20, session_id: str | None = None) -> list[dict]:
     with get_db_connection() as connection:
-        rows = connection.execute(
-            """
-            SELECT id, session_id, prompt, status, trace_json, created_at, updated_at
-            FROM tasks
-            ORDER BY updated_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        if session_id:
+            rows = connection.execute(
+                """
+                SELECT id, session_id, prompt, status, trace_json, created_at, updated_at
+                FROM tasks
+                WHERE session_id = ?
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """
+                SELECT id, session_id, prompt, status, trace_json, created_at, updated_at
+                FROM tasks
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
 
     return [dict(row) for row in rows]
 

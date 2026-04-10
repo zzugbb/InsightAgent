@@ -31,7 +31,7 @@
 - `POST /api/sessions/{session_id}/memory/query`：正文 `{ "text": "...", "n_results": 4 }`，语义检索，返回 **ids** / **documents** / **distances** / **metadatas**（与文档行对齐；collection 不存在或为空时返回空列表）
 - `GET /api/settings` / `PUT /api/settings`：非敏感设置摘要与写入骨架
 - `POST /api/tasks`：创建任务（`session_id`、`user_input` 等）
-- `GET /api/tasks`：最近任务列表
+- `GET /api/tasks`：最近任务列表；可选 **`session_id`** 查询参数，仅返回该会话下任务（会话不存在则 **404**）
 - `GET /api/tasks/{task_id}`：单个任务
 - `GET /api/tasks/{task_id}/stream`：任务 SSE（仅 `pending` 等允许的状态）
 - `GET /api/tasks/{task_id}/trace`：trace 全量回放

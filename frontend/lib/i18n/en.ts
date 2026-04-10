@@ -36,6 +36,8 @@ export const en: Messages = {
     taskFallback: (shortId: string) => `Task ${shortId}`,
     hintRowNarrow:
       "On narrow screens, use the Session list and Trace & context buttons at the top.",
+    sessionMissingReset:
+      "This session no longer exists; selection was cleared.",
   },
   roles: {
     user: "You",
@@ -131,6 +133,7 @@ export const en: Messages = {
     statusPrefix: "Status: ",
     latestTaskSession: "Latest task in this session",
     recentTasks: "Recent tasks",
+    sessionTasks: "Tasks in this session",
     backendUrl: "API base: ",
     seqLabel: "seq",
     collapseInspectorAria: "Collapse right panel",
