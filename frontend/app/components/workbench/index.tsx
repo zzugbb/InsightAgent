@@ -59,6 +59,7 @@ const TRACE_DELTA_SYNC_BASE_MS = 1800;
 const TRACE_DELTA_SYNC_MAX_MS = 15_000;
 const TRACE_DELTA_SYNC_MAX_RETRY_EXP = 3;
 const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
+const TRACE_DELTA_FAST_DRAIN_MS = 180;
 
 export function Workbench() {
   const t = useMessages();
@@ -147,7 +148,7 @@ export function Workbench() {
     (taskId: string, options?: { silent?: boolean }) => {
       const normalizedTaskId = taskId.trim();
       if (!normalizedTaskId || traceDeltaSyncInFlightRef.current) {
-        return Promise.resolve({ ok: false, error: null });
+        return Promise.resolve({ ok: false, error: null, hasMore: false });
       }
       traceDeltaSyncInFlightRef.current = true;
       setTraceDeltaSyncStatus((prev) => (prev === "retrying" ? prev : "syncing"));
@@ -559,7 +560,7 @@ export function Workbench() {
     let stopped = false;
     let timerId: number | null = null;
 
-    const scheduleNext = (ok: boolean) => {
+    const scheduleNext = (ok: boolean, hasMore: boolean) => {
       if (stopped) {
         return;
       }
@@ -584,7 +585,9 @@ export function Workbench() {
         setTraceDeltaSyncStatus("retrying");
       }
       const delay = ok
-        ? TRACE_DELTA_SYNC_BASE_MS
+        ? hasMore
+          ? TRACE_DELTA_FAST_DRAIN_MS
+          : TRACE_DELTA_SYNC_BASE_MS
         : Math.min(
             TRACE_DELTA_SYNC_MAX_MS,
             TRACE_DELTA_SYNC_BASE_MS *
@@ -605,7 +608,7 @@ export function Workbench() {
         setTraceDeltaRecoveredAt(null);
         setTraceDeltaLastError(result.error);
       }
-      scheduleNext(result.ok);
+      scheduleNext(result.ok, result.hasMore);
     };
 
     void run();

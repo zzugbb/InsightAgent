@@ -16,6 +16,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 流式：SSE 任务状态、token 追加、trace 实时更新
 - 回放：`trace` 全量与 `trace/delta` 增量加载（支持流式进行中的 `seq` 递增刷新 + 自动静默轮询 + 失败退避重试）
 - `trace/delta` 请求会携带 `limit`（当前 200）控制单次增量拉取规模
+- 若接口返回 `has_more=true`，前端会短间隔连续拉取以快速追平积压步骤
 - 调度：页面在后台时暂停自动 delta 同步，前台自动恢复
 - 观测：Context 摘要展示 delta 自动同步状态、重试次数、最近成功时间、下次重试时间、最近错误与恢复提示（恢复提示短时展示后自动消退）；重试中显示秒级倒计时
 - 告警：delta 连续失败时显示轻提示并持续自动重试

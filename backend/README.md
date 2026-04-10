@@ -40,7 +40,7 @@
 - `GET /api/tasks/{task_id}`
 - `GET /api/tasks/{task_id}/stream`
 - `GET /api/tasks/{task_id}/trace`
-- `GET /api/tasks/{task_id}/trace/delta?after_seq=&limit=`（`limit` 默认 200，最大 500）
+- `GET /api/tasks/{task_id}/trace/delta?after_seq=&limit=`（`limit` 默认 200，最大 500；`has_more` 反映剩余分页或任务仍在运行）
 
 ## SSE 与 TraceStep 契约
 
