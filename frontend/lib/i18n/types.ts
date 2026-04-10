@@ -132,11 +132,16 @@ export type Messages = {
     traceSyncStatus: string;
     traceSyncRetries: string;
     traceSyncLastOk: string;
+    traceSyncNextRetry: string;
     traceSyncStateIdle: string;
     traceSyncStateSyncing: string;
     traceSyncStateOk: string;
     traceSyncStateRetrying: string;
+    traceSyncStatePaused: string;
     traceSyncWarning: (n: number) => string;
+    traceSyncLastError: (message: string) => string;
+    traceSyncRecovered: (time: string) => string;
+    traceSyncRetryEta: (seconds: number) => string;
     session: string;
     usageTitle: string;
     usagePrompt: string;

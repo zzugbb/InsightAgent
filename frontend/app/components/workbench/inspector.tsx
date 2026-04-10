@@ -58,9 +58,12 @@ type InspectorProps = {
   sseTaskId: string | null;
   phaseLabel: string;
   traceCursor: number;
-  traceDeltaSyncStatus: "idle" | "syncing" | "ok" | "retrying";
+  traceDeltaSyncStatus: "idle" | "syncing" | "ok" | "retrying" | "paused";
   traceDeltaRetryCount: number;
   traceDeltaLastOkAt: number | null;
+  traceDeltaLastError: string | null;
+  traceDeltaNextRetryAt: number | null;
+  traceDeltaRecoveredAt: number | null;
   sseTaskUsage: SseTaskUsage | null;
   activeSessionId: string | null;
   activeTaskId: string | null;
@@ -100,6 +103,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     traceDeltaSyncStatus,
     traceDeltaRetryCount,
     traceDeltaLastOkAt,
+    traceDeltaLastError,
+    traceDeltaNextRetryAt,
+    traceDeltaRecoveredAt,
     sseTaskUsage,
     activeSessionId,
     activeTaskId,
@@ -133,6 +139,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const [memoryAddDraft, setMemoryAddDraft] = useState("");
   const [memoryMetaDraft, setMemoryMetaDraft] = useState("");
   const [memoryQueryDraft, setMemoryQueryDraft] = useState("");
+  const [retryCountdownSec, setRetryCountdownSec] = useState<number | null>(null);
 
   const memoryAddMutation = useMutation({
     mutationFn: async (payload: {
@@ -244,6 +251,8 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         ? t.inspector.traceSyncStateOk
         : traceDeltaSyncStatus === "retrying"
           ? t.inspector.traceSyncStateRetrying
+          : traceDeltaSyncStatus === "paused"
+            ? t.inspector.traceSyncStatePaused
           : t.inspector.traceSyncStateIdle;
   const traceDeltaLastOkLabel =
     traceDeltaLastOkAt === null
@@ -251,6 +260,31 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       : new Date(traceDeltaLastOkAt).toLocaleTimeString(localeTag, {
           hour12: false,
         });
+  const traceDeltaNextRetryLabel =
+    traceDeltaSyncStatus === "retrying" && traceDeltaNextRetryAt !== null
+      ? new Date(traceDeltaNextRetryAt).toLocaleTimeString(localeTag, {
+          hour12: false,
+        })
+      : "—";
+  const traceDeltaRecoveredLabel =
+    traceDeltaSyncStatus !== "ok" || traceDeltaRecoveredAt === null
+      ? null
+      : new Date(traceDeltaRecoveredAt).toLocaleTimeString(localeTag, {
+          hour12: false,
+        });
+  useEffect(() => {
+    if (traceDeltaSyncStatus !== "retrying" || traceDeltaNextRetryAt === null) {
+      setRetryCountdownSec(null);
+      return;
+    }
+    const updateCountdown = () => {
+      const ms = traceDeltaNextRetryAt - Date.now();
+      setRetryCountdownSec(ms <= 0 ? 0 : Math.ceil(ms / 1000));
+    };
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [traceDeltaSyncStatus, traceDeltaNextRetryAt]);
   const showTraceDeltaWarning =
     isStreaming &&
     traceDeltaSyncStatus === "retrying" &&
@@ -391,12 +425,29 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         <strong>{traceDeltaRetryCount}</strong>
         <span>{t.inspector.traceSyncLastOk}</span>
         <strong>{traceDeltaLastOkLabel}</strong>
+        <span>{t.inspector.traceSyncNextRetry}</span>
+        <strong>{traceDeltaNextRetryLabel}</strong>
         <span>{t.inspector.session}</span>
         <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
       </div>
       {showTraceDeltaWarning ? (
         <p className="panel-note panel-note--muted">
           {t.inspector.traceSyncWarning(traceDeltaRetryCount)}
+        </p>
+      ) : null}
+      {traceDeltaSyncStatus === "retrying" && traceDeltaLastError ? (
+        <p className="panel-note panel-note--muted">
+          {t.inspector.traceSyncLastError(traceDeltaLastError)}
+        </p>
+      ) : null}
+      {traceDeltaSyncStatus === "retrying" && retryCountdownSec !== null ? (
+        <p className="panel-note panel-note--muted">
+          {t.inspector.traceSyncRetryEta(retryCountdownSec)}
+        </p>
+      ) : null}
+      {traceDeltaRecoveredLabel ? (
+        <p className="panel-note panel-note--muted">
+          {t.inspector.traceSyncRecovered(traceDeltaRecoveredLabel)}
         </p>
       ) : null}
 

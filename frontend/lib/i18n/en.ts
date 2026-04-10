@@ -132,12 +132,18 @@ export const en: Messages = {
     traceSyncStatus: "Delta sync",
     traceSyncRetries: "Retry count",
     traceSyncLastOk: "Last success",
+    traceSyncNextRetry: "Next retry",
     traceSyncStateIdle: "Idle",
     traceSyncStateSyncing: "Syncing",
     traceSyncStateOk: "Healthy",
     traceSyncStateRetrying: "Retrying",
+    traceSyncStatePaused: "Paused (background)",
     traceSyncWarning: (n: number) =>
       `Delta sync has failed ${n} times in a row and is retrying automatically.`,
+    traceSyncLastError: (message: string) => `Last error: ${message}`,
+    traceSyncRecovered: (time: string) => `Delta sync recovered at ${time}.`,
+    traceSyncRetryEta: (seconds: number) =>
+      `Next retry in about ${seconds}s.`,
     session: "Session",
     usageTitle: "Usage (current task)",
     usagePrompt: "Prompt tokens",

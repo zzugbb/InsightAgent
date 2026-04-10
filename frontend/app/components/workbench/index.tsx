@@ -58,6 +58,7 @@ const INSPECTOR_W_DEFAULT = 340;
 const TRACE_DELTA_SYNC_BASE_MS = 1800;
 const TRACE_DELTA_SYNC_MAX_MS = 15_000;
 const TRACE_DELTA_SYNC_MAX_RETRY_EXP = 3;
+const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
 
 export function Workbench() {
   const t = useMessages();
@@ -76,11 +77,25 @@ export function Workbench() {
   const [inspectorWidthPx, setInspectorWidthPx] = useState(INSPECTOR_W_DEFAULT);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [traceDeltaSyncStatus, setTraceDeltaSyncStatus] = useState<
-    "idle" | "syncing" | "ok" | "retrying"
+    "idle" | "syncing" | "ok" | "retrying" | "paused"
   >("idle");
   const [traceDeltaRetryCount, setTraceDeltaRetryCount] = useState(0);
   const [traceDeltaLastOkAt, setTraceDeltaLastOkAt] = useState<number | null>(
     null,
+  );
+  const [traceDeltaLastError, setTraceDeltaLastError] = useState<string | null>(
+    null,
+  );
+  const [traceDeltaNextRetryAt, setTraceDeltaNextRetryAt] = useState<number | null>(
+    null,
+  );
+  const [traceDeltaRecoveredAt, setTraceDeltaRecoveredAt] = useState<number | null>(
+    null,
+  );
+  const [isPageVisible, setIsPageVisible] = useState(
+    typeof document === "undefined"
+      ? true
+      : document.visibilityState !== "hidden",
   );
 
   const prevStreamingRef = useRef(false);
@@ -132,7 +147,7 @@ export function Workbench() {
     (taskId: string, options?: { silent?: boolean }) => {
       const normalizedTaskId = taskId.trim();
       if (!normalizedTaskId || traceDeltaSyncInFlightRef.current) {
-        return Promise.resolve(false);
+        return Promise.resolve({ ok: false, error: null });
       }
       traceDeltaSyncInFlightRef.current = true;
       setTraceDeltaSyncStatus((prev) => (prev === "retrying" ? prev : "syncing"));
@@ -506,10 +521,27 @@ export function Workbench() {
   }, [isStreaming, activeSessionId, queryClient]);
 
   useEffect(() => {
+    const onVisibilityChange = () => {
+      setIsPageVisible(document.visibilityState !== "hidden");
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isStreaming) {
       traceDeltaRetryCountRef.current = 0;
       setTraceDeltaRetryCount(0);
       setTraceDeltaSyncStatus("idle");
+      setTraceDeltaNextRetryAt(null);
+      setTraceDeltaRecoveredAt(null);
+      return;
+    }
+    if (!isPageVisible) {
+      setTraceDeltaSyncStatus("paused");
+      setTraceDeltaNextRetryAt(null);
       return;
     }
     const taskId = sseTaskId?.trim() ?? "";
@@ -517,8 +549,13 @@ export function Workbench() {
       traceDeltaRetryCountRef.current = 0;
       setTraceDeltaRetryCount(0);
       setTraceDeltaSyncStatus("idle");
+      setTraceDeltaNextRetryAt(null);
+      setTraceDeltaRecoveredAt(null);
       return;
     }
+    setTraceDeltaLastError(null);
+    setTraceDeltaNextRetryAt(null);
+    setTraceDeltaRecoveredAt(null);
     let stopped = false;
     let timerId: number | null = null;
 
@@ -527,11 +564,18 @@ export function Workbench() {
         return;
       }
       if (ok) {
+        const recovered = traceDeltaRetryCountRef.current > 0;
         traceDeltaRetryCountRef.current = 0;
         setTraceDeltaRetryCount(0);
         setTraceDeltaSyncStatus("ok");
         setTraceDeltaLastOkAt(Date.now());
+        setTraceDeltaLastError(null);
+        setTraceDeltaNextRetryAt(null);
+        if (recovered) {
+          setTraceDeltaRecoveredAt(Date.now());
+        }
       } else {
+        setTraceDeltaRecoveredAt(null);
         traceDeltaRetryCountRef.current = Math.min(
           TRACE_DELTA_SYNC_MAX_RETRY_EXP,
           traceDeltaRetryCountRef.current + 1,
@@ -546,6 +590,7 @@ export function Workbench() {
             TRACE_DELTA_SYNC_BASE_MS *
               2 ** traceDeltaRetryCountRef.current,
           );
+      setTraceDeltaNextRetryAt(Date.now() + delay);
       timerId = window.setTimeout(() => {
         void run();
       }, delay);
@@ -555,8 +600,12 @@ export function Workbench() {
       if (stopped) {
         return;
       }
-      const success = await syncTraceDelta(taskId, { silent: true });
-      scheduleNext(success);
+      const result = await syncTraceDelta(taskId, { silent: true });
+      if (!result.ok && result.error) {
+        setTraceDeltaRecoveredAt(null);
+        setTraceDeltaLastError(result.error);
+      }
+      scheduleNext(result.ok);
     };
 
     void run();
@@ -566,17 +615,25 @@ export function Workbench() {
         window.clearTimeout(timerId);
       }
     };
-  }, [isStreaming, sseTaskId, syncTraceDelta]);
+  }, [isStreaming, isPageVisible, sseTaskId, syncTraceDelta]);
 
   useEffect(() => {
     const was = prevStreamingForDeltaRef.current;
     if (was && !isStreaming) {
       const taskId = sseTaskId?.trim() ?? "";
       if (taskId) {
-        void syncTraceDelta(taskId).then((ok) => {
-          if (ok) {
+        void syncTraceDelta(taskId).then((result) => {
+          if (result.ok) {
             setTraceDeltaSyncStatus("ok");
             setTraceDeltaLastOkAt(Date.now());
+            setTraceDeltaLastError(null);
+            setTraceDeltaNextRetryAt(null);
+            if (traceDeltaRetryCountRef.current > 0) {
+              setTraceDeltaRecoveredAt(Date.now());
+            }
+          } else if (result.error) {
+            setTraceDeltaRecoveredAt(null);
+            setTraceDeltaLastError(result.error);
           }
         });
       }
@@ -685,8 +742,31 @@ export function Workbench() {
     if (isNarrow) {
       openInspectorDrawer();
     }
-    syncTraceDelta(taskId);
+    void syncTraceDelta(taskId).then((result) => {
+      if (result.ok) {
+        setTraceDeltaLastError(null);
+        setTraceDeltaSyncStatus("ok");
+        setTraceDeltaLastOkAt(Date.now());
+        setTraceDeltaNextRetryAt(null);
+        if (traceDeltaRetryCountRef.current > 0) {
+          setTraceDeltaRecoveredAt(Date.now());
+        }
+      } else if (result.error) {
+        setTraceDeltaRecoveredAt(null);
+        setTraceDeltaLastError(result.error);
+      }
+    });
   }
+
+  useEffect(() => {
+    if (traceDeltaRecoveredAt === null) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setTraceDeltaRecoveredAt(null);
+    }, TRACE_DELTA_RECOVER_HINT_MS);
+    return () => window.clearTimeout(timer);
+  }, [traceDeltaRecoveredAt]);
 
   function handleSelectTask(task: TaskSummary) {
     setActiveSessionId(task.session_id);
@@ -926,6 +1006,9 @@ export function Workbench() {
         traceDeltaSyncStatus={traceDeltaSyncStatus}
         traceDeltaRetryCount={traceDeltaRetryCount}
         traceDeltaLastOkAt={traceDeltaLastOkAt}
+        traceDeltaLastError={traceDeltaLastError}
+        traceDeltaNextRetryAt={traceDeltaNextRetryAt}
+        traceDeltaRecoveredAt={traceDeltaRecoveredAt}
         sseTaskUsage={sseTaskUsage}
         activeSessionId={activeSessionId}
         activeTaskId={activeTaskId}

@@ -68,12 +68,13 @@ export type ChatStreamStore = {
     apiBaseUrl: string,
     taskId: string,
     options?: { silent?: boolean },
-  ) => Promise<boolean>;
+  ) => Promise<{ ok: boolean; error: string | null; hasMore: boolean }>;
   runTaskStream: (options: RunTaskStreamOptions) => Promise<void>;
 };
 
 const initialSseMessage =
   "发送消息后，执行过程会出现在右侧「轨迹」；连接与状态说明会显示在这里。";
+const TRACE_DELTA_FETCH_LIMIT = 200;
 
 async function consumeSseStream(
   response: Response,
@@ -201,7 +202,11 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (!silent) {
         set({ sseMessage: "Task ID is required to load trace delta." });
       }
-      return false;
+      return {
+        ok: false,
+        error: "Task ID is required to load trace delta.",
+        hasMore: false,
+      };
     }
 
     const currentCursor = get().traceCursor;
@@ -218,7 +223,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
 
     try {
       const response = await fetch(
-        `${apiBaseUrl}/api/tasks/${normalizedTaskId}/trace/delta?after_seq=${currentCursor}`,
+        `${apiBaseUrl}/api/tasks/${normalizedTaskId}/trace/delta?after_seq=${currentCursor}&limit=${TRACE_DELTA_FETCH_LIMIT}`,
         {
           cache: "no-store",
         },
@@ -257,15 +262,16 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
               : `Trace delta loaded (${steps.length} steps).`
             : "No new trace delta steps.",
       }));
-      return true;
+      return { ok: true, error: null, hasMore: data.has_more === true };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to load trace delta.";
       if (!silent) {
         set({
-          sseMessage:
-            error instanceof Error ? error.message : "Failed to load trace delta.",
+          sseMessage: errorMessage,
         });
       }
-      return false;
+      return { ok: false, error: errorMessage, hasMore: false };
     }
   },
 

@@ -171,6 +171,12 @@ def get_task_trace_detail(task_id: str) -> TaskTraceResponse:
 def get_task_trace_delta_detail(
     task_id: str,
     after_seq: int = Query(default=0, ge=0),
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=500,
+        description="单次返回的最大 delta step 数",
+    ),
 ) -> TaskTraceDeltaResponse:
     task = get_task(task_id)
     if task is None:
@@ -179,6 +185,7 @@ def get_task_trace_delta_detail(
     steps, next_cursor, has_more = get_task_trace_delta(
         task_id=task_id,
         after_seq=after_seq,
+        limit=limit,
     )
     return TaskTraceDeltaResponse(
         task_id=task_id,

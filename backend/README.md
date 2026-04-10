@@ -40,7 +40,7 @@
 - `GET /api/tasks/{task_id}`
 - `GET /api/tasks/{task_id}/stream`
 - `GET /api/tasks/{task_id}/trace`
-- `GET /api/tasks/{task_id}/trace/delta?after_seq=`
+- `GET /api/tasks/{task_id}/trace/delta?after_seq=&limit=`（`limit` 默认 200，最大 500）
 
 ## SSE 与 TraceStep 契约
 
@@ -61,6 +61,8 @@
 前端已接入流式期间定时拉取、失败退避重试与流结束补拉，后端接口保持幂等增量语义。
 前端 Context 摘要会展示 delta 同步状态/重试次数/最近成功时间，便于联调与问题定位。
 当前在连续失败场景下也会显示轻提示，后端接口无需额外状态字段。
+并会展示下次重试时间、最近错误内容与恢复提示（短时自动消退），重试中还有秒级倒计时，便于确认故障是否恢复。
+页面后台时前端会暂停自动 delta 拉取，返回前台后恢复，不影响接口幂等语义。
 
 ## Memory / Chroma / Embedding
 

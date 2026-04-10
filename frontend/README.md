@@ -15,7 +15,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 轨迹：时间线与流程图双视图（thought/action/observation/tool/rag 区分）
 - 流式：SSE 任务状态、token 追加、trace 实时更新
 - 回放：`trace` 全量与 `trace/delta` 增量加载（支持流式进行中的 `seq` 递增刷新 + 自动静默轮询 + 失败退避重试）
-- 观测：Context 摘要展示 delta 自动同步状态、重试次数与最近成功时间
+- `trace/delta` 请求会携带 `limit`（当前 200）控制单次增量拉取规模
+- 调度：页面在后台时暂停自动 delta 同步，前台自动恢复
+- 观测：Context 摘要展示 delta 自动同步状态、重试次数、最近成功时间、下次重试时间、最近错误与恢复提示（恢复提示短时展示后自动消退）；重试中显示秒级倒计时
 - 告警：delta 连续失败时显示轻提示并持续自动重试
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
 - Memory：状态展示 + add/query 调试（含 metadata）
@@ -49,6 +51,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 流式任务期间，Workbench 会定时静默拉取 `trace/delta`，失败时按退避策略重试，并在流结束后自动补拉一次，降低 SSE 与持久化快照的短暂偏差。
 同步健康度会在 Inspector Context 区域实时展示，便于定位网络抖动或增量拉取异常。
 当连续失败达到阈值时会显示非阻塞告警文案，不影响主任务流。
+重试中的最近错误信息会直接显示在摘要区，便于快速定位失败原因。
 
 ## Memory（会话级）
 
