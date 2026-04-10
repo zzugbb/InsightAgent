@@ -64,6 +64,18 @@ export type SessionMemoryStatus = {
   error: string | null;
 };
 
+/** 与 GET /api/sessions/{id}/usage/summary 对齐 */
+export type SessionUsageSummary = {
+  tasks_total: number;
+  tasks_with_usage: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cost_estimate: number;
+  avg_total_tokens: number | null;
+  avg_cost_estimate: number | null;
+};
+
 /** POST /api/sessions/{id}/memory/add */
 export type MemoryAddResponse = {
   added_id: string;

@@ -25,6 +25,7 @@ import type {
   MemoryAddResponse,
   MemoryQueryResponse,
   SessionMemoryStatus,
+  SessionUsageSummary,
   TaskSummary,
 } from "./types";
 import { TraceFlowView } from "./trace-flow-view";
@@ -73,6 +74,7 @@ type InspectorProps = {
   sessionMemoryStatus: SessionMemoryStatus | undefined;
   sessionMemoryLoading: boolean;
   sessionMemoryError: string | null;
+  sessionUsageSummary: SessionUsageSummary | undefined;
 };
 
 export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspector(
@@ -105,6 +107,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     sessionMemoryStatus,
     sessionMemoryLoading,
     sessionMemoryError,
+    sessionUsageSummary,
   },
   ref,
 ) {
@@ -195,6 +198,32 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       }),
     [activeTaskId, activeTask, sseTaskUsage],
   );
+
+  const sessionUsageAggregate = useMemo(() => {
+    if (!activeSessionId || !sessionUsageSummary) {
+      return null;
+    }
+    const tokenFmt = new Intl.NumberFormat(localeTag, {
+      maximumFractionDigits: 0,
+    });
+    const costFmt = (n: number | null | undefined) =>
+      n === null || n === undefined ? null : `$${n.toFixed(6)}`;
+
+    return {
+      prompt: tokenFmt.format(Math.trunc(sessionUsageSummary.prompt_tokens)),
+      completion: tokenFmt.format(
+        Math.trunc(sessionUsageSummary.completion_tokens),
+      ),
+      total: tokenFmt.format(Math.trunc(sessionUsageSummary.total_tokens)),
+      cost: costFmt(sessionUsageSummary.cost_estimate),
+      avgTotal:
+        sessionUsageSummary.avg_total_tokens === null
+          ? null
+          : tokenFmt.format(Math.trunc(sessionUsageSummary.avg_total_tokens)),
+      avgCost: costFmt(sessionUsageSummary.avg_cost_estimate),
+      taskCount: sessionUsageSummary.tasks_with_usage,
+    };
+  }, [activeSessionId, localeTag, sessionUsageSummary]);
 
   const tracePanel = (
     <section
@@ -345,6 +374,29 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             <strong>{inspectorTaskUsage.cost ?? "—"}</strong>
           </div>
         </>
+      ) : null}
+
+      {sessionUsageAggregate ? (
+        <div className="summary-card">
+          <p className="summary-label inspector-usage-kicker">
+            {t.inspector.usageSessionTitle}
+          </p>
+          <div className="context-grid context-grid--stats compact">
+            <span>{t.inspector.usagePrompt}</span>
+            <strong>{sessionUsageAggregate.prompt ?? "—"}</strong>
+            <span>{t.inspector.usageCompletion}</span>
+            <strong>{sessionUsageAggregate.completion ?? "—"}</strong>
+            <span>{t.inspector.usageTotal}</span>
+            <strong>{sessionUsageAggregate.total ?? "—"}</strong>
+            <span>{t.inspector.usageCost}</span>
+            <strong>{sessionUsageAggregate.cost ?? "—"}</strong>
+            <span>{t.inspector.usageAvgTotal}</span>
+            <strong>{sessionUsageAggregate.avgTotal ?? "—"}</strong>
+            <span>{t.inspector.usageAvgCost}</span>
+            <strong>{sessionUsageAggregate.avgCost ?? "—"}</strong>
+          </div>
+          <span>{t.inspector.usageTaskCount(sessionUsageAggregate.taskCount)}</span>
+        </div>
       ) : null}
 
       <div className="summary-card memory-placeholder-card">

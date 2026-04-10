@@ -8,7 +8,7 @@
 - W2：已完成（进入收尾）
 - W3/W4：未开始（真实工具 / RAG）
 - 工程协作：前端 `npm run lint` 已可直接执行，且当前告警已清零
-- 协同进展：前端已消费并格式化 `tasks.usage_json`（总 tokens / cost）
+- 协同进展：前端会话汇总已切换到后端真实聚合接口（任务摘要 + 会话汇总 + 平均指标）
 
 ## 当前已有内容
 
@@ -30,6 +30,7 @@
 - `DELETE /api/sessions/{session_id}`
 - `GET /api/sessions/{session_id}/messages`
 - `GET /api/sessions/{session_id}/memory/status`
+- `GET /api/sessions/{session_id}/usage/summary`
 - `POST /api/sessions/{session_id}/memory/add`
 - `POST /api/sessions/{session_id}/memory/query`
 - `POST /api/tasks`

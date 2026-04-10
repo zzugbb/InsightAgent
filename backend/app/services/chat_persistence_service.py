@@ -368,3 +368,91 @@ def get_task_trace_delta(task_id: str, after_seq: int = 0) -> tuple[list[dict], 
     still_running = task["status"] in ("pending", "running")
     has_more = still_running
     return delta_steps, next_cursor, has_more
+
+
+def get_session_usage_summary(session_id: str) -> dict[str, int | float | None]:
+    """按会话聚合 tasks.usage_json（仅统计能解析出 usage_json 的任务）。"""
+    def _to_float(v: object) -> float | None:
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            raw = v.strip()
+            if not raw:
+                return None
+            try:
+                return float(raw)
+            except ValueError:
+                return None
+        return None
+
+    with get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT usage_json
+            FROM tasks
+            WHERE session_id = ?
+            """,
+            (session_id,),
+        ).fetchall()
+
+    tasks_total = len(rows)
+    tasks_with_usage = 0
+    prompt_sum = 0.0
+    completion_sum = 0.0
+    cost_sum = 0.0
+    token_task_count = 0
+    cost_task_count = 0
+
+    for row in rows:
+        usage_json = row["usage_json"]
+        if not usage_json or not str(usage_json).strip():
+            continue
+        try:
+            payload = json.loads(usage_json)
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(payload, dict):
+            continue
+
+        tasks_with_usage += 1
+        prompt_raw = payload.get("prompt_tokens")
+        completion_raw = payload.get("completion_tokens")
+        cost_raw = payload.get("cost_estimate")
+
+        prompt_num = _to_float(prompt_raw)
+        completion_num = _to_float(completion_raw)
+        cost_num = _to_float(cost_raw)
+
+        has_token = False
+        if prompt_num is not None:
+            prompt_sum += prompt_num
+            has_token = True
+        if completion_num is not None:
+            completion_sum += completion_num
+            has_token = True
+        if has_token:
+            token_task_count += 1
+        if cost_num is not None:
+            cost_sum += cost_num
+            cost_task_count += 1
+
+    total_tokens = prompt_sum + completion_sum
+    avg_total_tokens = (
+        total_tokens / token_task_count if token_task_count > 0 else None
+    )
+    avg_cost_estimate = (
+        cost_sum / cost_task_count if cost_task_count > 0 else None
+    )
+
+    return {
+        "tasks_total": tasks_total,
+        "tasks_with_usage": tasks_with_usage,
+        "prompt_tokens": int(prompt_sum) if prompt_sum > 0 else 0,
+        "completion_tokens": int(completion_sum) if completion_sum > 0 else 0,
+        "total_tokens": int(total_tokens) if total_tokens > 0 else 0,
+        "cost_estimate": cost_sum if cost_sum > 0 else 0.0,
+        "avg_total_tokens": avg_total_tokens,
+        "avg_cost_estimate": avg_cost_estimate,
+    }

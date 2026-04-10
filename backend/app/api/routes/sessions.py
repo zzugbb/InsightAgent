@@ -14,6 +14,7 @@ from app.services.chat_persistence_service import (
     delete_session,
     get_session,
     get_session_messages,
+    get_session_usage_summary,
     list_sessions,
     update_session_title,
 )
@@ -66,6 +67,17 @@ class SessionMemoryStatusResponse(BaseModel):
     collection_exists: bool
     document_count: int
     error: str | None = None
+
+
+class SessionUsageSummaryResponse(BaseModel):
+    tasks_total: int
+    tasks_with_usage: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    cost_estimate: float
+    avg_total_tokens: float | None = None
+    avg_cost_estimate: float | None = None
 
 
 class MemoryAddRequest(BaseModel):
@@ -160,6 +172,14 @@ def get_session_memory_status_route(session_id: str) -> SessionMemoryStatusRespo
         raise HTTPException(status_code=404, detail="Session not found")
     raw = get_session_memory_status(session_id)
     return SessionMemoryStatusResponse(**raw)
+
+
+@router.get("/{session_id}/usage/summary", response_model=SessionUsageSummaryResponse)
+def get_session_usage_summary_route(session_id: str) -> SessionUsageSummaryResponse:
+    if get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    raw = get_session_usage_summary(session_id)
+    return SessionUsageSummaryResponse(**raw)
 
 
 @router.post("/{session_id}/memory/add", response_model=MemoryAddResponse)

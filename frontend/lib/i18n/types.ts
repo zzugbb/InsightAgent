@@ -135,6 +135,10 @@ export type Messages = {
     usageCompletion: string;
     usageTotal: string;
     usageCost: string;
+    usageAvgTotal: string;
+    usageAvgCost: string;
+    usageSessionTitle: string;
+    usageTaskCount: (n: number) => string;
     currentTaskCard: string;
     statusPrefix: string;
     latestTaskSession: string;

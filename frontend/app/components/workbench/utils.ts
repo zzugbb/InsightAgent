@@ -12,6 +12,12 @@ export type InspectorUsageRow = {
   cost: string | null;
 };
 
+export type UsageAggregateRow = InspectorUsageRow & {
+  taskCount: number;
+  avgTotal: string | null;
+  avgCost: string | null;
+};
+
 function parseUsageNumber(v: unknown): number | null {
   if (v === null || v === undefined) {
     return null;
@@ -83,11 +89,93 @@ function parseUsageJson(
   }
 }
 
+function parseUsageRaw(
+  json: string | null | undefined,
+): { prompt: number | null; completion: number | null; cost: number | null } | null {
+  if (!json || !json.trim()) {
+    return null;
+  }
+  try {
+    const v = JSON.parse(json) as unknown;
+    if (!v || typeof v !== "object" || Array.isArray(v)) {
+      return null;
+    }
+    const raw = v as Record<string, unknown>;
+    return {
+      prompt: parseUsageNumber(raw["prompt_tokens"]),
+      completion: parseUsageNumber(raw["completion_tokens"]),
+      cost: parseUsageNumber(raw["cost_estimate"]),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** 任务列表项：从任务持久化字段 usage_json 解析用量。 */
 export function resolveTaskUsageFromTask(
   task: TaskSummary,
 ): InspectorUsageRow | null {
   return parseUsageJson(task.usage_json);
+}
+
+/** 会话任务聚合用量：用于上下文面板展示当前会话的总消耗。 */
+export function resolveTasksUsageAggregate(
+  tasks: TaskSummary[],
+): UsageAggregateRow | null {
+  let promptSum = 0;
+  let completionSum = 0;
+  let costSum = 0;
+  let hasPrompt = false;
+  let hasCompletion = false;
+  let hasCost = false;
+  let taskCount = 0;
+  let tokenTaskCount = 0;
+  let costTaskCount = 0;
+
+  for (const task of tasks) {
+    const raw = parseUsageRaw(task.usage_json);
+    if (!raw) {
+      continue;
+    }
+    taskCount += 1;
+    if (raw.prompt !== null) {
+      hasPrompt = true;
+      promptSum += raw.prompt;
+    }
+    if (raw.completion !== null) {
+      hasCompletion = true;
+      completionSum += raw.completion;
+    }
+    if (raw.cost !== null) {
+      hasCost = true;
+      costSum += raw.cost;
+      costTaskCount += 1;
+    }
+    if (raw.prompt !== null || raw.completion !== null) {
+      tokenTaskCount += 1;
+    }
+  }
+
+  const prompt = hasPrompt ? formatTokenCount(promptSum) : null;
+  const completion = hasCompletion ? formatTokenCount(completionSum) : null;
+  const total =
+    hasPrompt || hasCompletion
+      ? formatTokenCount(promptSum + completionSum)
+      : null;
+  const cost = hasCost ? formatCost(costSum) : null;
+  const avgTotal =
+    tokenTaskCount > 0
+      ? formatTokenCount((promptSum + completionSum) / tokenTaskCount)
+      : null;
+  const avgCost =
+    costTaskCount > 0
+      ? formatCost(costSum / costTaskCount)
+      : null;
+
+  if (!prompt && !completion && !total && !cost && !avgTotal && !avgCost) {
+    return null;
+  }
+  return { prompt, completion, total, cost, taskCount, avgTotal, avgCost };
 }
 
 /** 上下文面板：当前任务用量（流式 `done` 优先，否则用任务列表中的 usage_json） */

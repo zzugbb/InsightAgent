@@ -34,6 +34,7 @@ import type {
   SessionMemoryStatus,
   SessionMessage,
   SessionSummary,
+  SessionUsageSummary,
   SettingsSummary,
   TaskSummary,
 } from "./types";
@@ -161,6 +162,16 @@ export function Workbench() {
     queryFn: () =>
       apiJson<SessionMemoryStatus>(
         `${API_BASE_URL}/api/sessions/${encodeURIComponent(activeSessionId!)}/memory/status`,
+      ),
+    enabled: Boolean(activeSessionId),
+    staleTime: 20_000,
+  });
+
+  const sessionUsageSummaryQuery = useQuery({
+    queryKey: ["session-usage-summary", activeSessionId],
+    queryFn: () =>
+      apiJson<SessionUsageSummary>(
+        `${API_BASE_URL}/api/sessions/${encodeURIComponent(activeSessionId!)}/usage/summary`,
       ),
     enabled: Boolean(activeSessionId),
     staleTime: 20_000,
@@ -813,6 +824,7 @@ export function Workbench() {
         sessionMemoryStatus={sessionMemoryQuery.data}
         sessionMemoryLoading={sessionMemoryQuery.isLoading}
         sessionMemoryError={sessionMemoryErrorBanner}
+        sessionUsageSummary={sessionUsageSummaryQuery.data}
       />
     </main>
   );
