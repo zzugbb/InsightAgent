@@ -12,6 +12,9 @@
 - 协同进展：前端右侧 Inspector（Context）已按可观测运维场景完成分区重排（概览/同步诊断/用量/Memory/任务索引），后端现有字段可直接支撑后续模块扩展
 - 协同进展：前端任务索引已支持本地状态筛选/时间排序/失败置顶，不新增后端接口负担
 - 协同进展：前端任务索引已支持标题/ID 快速检索与失败摘要提示（由现有任务字段推导），无需新增后端接口
+- 协同进展：前端 Trace 面板已支持步骤类型筛选/关键词检索/类型计数，复用现有 TraceStep 字段，无需新增后端接口
+- 协同进展：前端右侧 Inspector 已完成一体化收口（Trace 密度、Context 快速跳转、状态徽标），均基于现有字段推导，无需新增后端接口
+- 状态增强：`/api/tasks*` 响应已补充 `status_normalized`、`status_label`、`status_rank`，统一状态语义并保持向后兼容
 
 ## 当前已有内容
 
@@ -39,6 +42,7 @@
 - `POST /api/sessions/{session_id}/memory/query`
 - `POST /api/tasks`
 - `GET /api/tasks?limit=&offset=&session_id=`（含 `total/has_more`）
+- `GET /api/tasks*` 相关响应包含状态派生字段：`status_normalized`、`status_label`、`status_rank`
 - `GET /api/tasks/usage/summary`（可选 `session_id`）
 - `GET /api/tasks/{task_id}`
 - `GET /api/tasks/{task_id}/stream`

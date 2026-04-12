@@ -37,6 +37,9 @@ export type TaskSummary = {
   session_id: string;
   prompt: string;
   status: string;
+  status_normalized?: string;
+  status_label?: string;
+  status_rank?: number;
   trace_json: string | null;
   /** JSON 字符串，与 SSE `done.usage` 同结构（prompt_tokens / completion_tokens / cost_estimate） */
   usage_json?: string | null;

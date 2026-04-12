@@ -136,6 +136,13 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const hasTaskContext = Boolean(sseTaskId?.trim());
   const [expandAllTrace, setExpandAllTrace] = useState(false);
   const [traceView, setTraceView] = useState<"list" | "flow">("list");
+  const [traceDensity, setTraceDensity] = useState<"comfortable" | "compact">(
+    "comfortable",
+  );
+  const [traceKindFilter, setTraceKindFilter] = useState<
+    "all" | "thought" | "action" | "observation" | "tool" | "rag" | "other"
+  >("all");
+  const [traceSearchQuery, setTraceSearchQuery] = useState("");
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const [memoryAddDraft, setMemoryAddDraft] = useState("");
@@ -150,6 +157,14 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const [taskPrioritizeFailed, setTaskPrioritizeFailed] = useState(true);
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
   const [retryCountdownSec, setRetryCountdownSec] = useState<number | null>(null);
+
+  const scrollToContextSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) {
+      return;
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const memoryAddMutation = useMutation({
     mutationFn: async (payload: {
@@ -207,8 +222,57 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const showDesktopChrome =
     desktopInspectorChrome && !inspectorCollapsed;
 
+  const traceKindStats = useMemo(() => {
+    const stats = {
+      thought: 0,
+      action: 0,
+      observation: 0,
+      tool: 0,
+      rag: 0,
+      other: 0,
+    };
+    for (const step of sseTraceSteps) {
+      const kind = normalizeTraceStepKind(step);
+      if (kind in stats) {
+        stats[kind as keyof typeof stats] += 1;
+      } else {
+        stats.other += 1;
+      }
+    }
+    return stats;
+  }, [sseTraceSteps]);
+
+  const filteredTraceSteps = useMemo(() => {
+    const q = traceSearchQuery.trim().toLowerCase();
+    return sseTraceSteps.filter((step) => {
+      const kind = normalizeTraceStepKind(step);
+      if (traceKindFilter !== "all" && kind !== traceKindFilter) {
+        return false;
+      }
+      if (!q) {
+        return true;
+      }
+      const title = getStepTitle(step).toLowerCase();
+      const content = (step.content ?? "").toLowerCase();
+      const id = step.id.toLowerCase();
+      const model =
+        typeof step.meta?.model === "string" ? step.meta.model.toLowerCase() : "";
+      const toolName =
+        typeof step.meta?.tool?.name === "string"
+          ? step.meta.tool.name.toLowerCase()
+          : "";
+      return (
+        title.includes(q) ||
+        content.includes(q) ||
+        id.includes(q) ||
+        model.includes(q) ||
+        toolName.includes(q)
+      );
+    });
+  }, [sseTraceSteps, traceKindFilter, traceSearchQuery]);
+
   const { visibleSteps, hiddenCount } = useMemo(() => {
-    const steps = sseTraceSteps;
+    const steps = filteredTraceSteps;
     if (expandAllTrace || steps.length <= TRACE_PREVIEW) {
       return { visibleSteps: steps, hiddenCount: 0 };
     }
@@ -216,7 +280,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       visibleSteps: steps.slice(-TRACE_PREVIEW),
       hiddenCount: steps.length - TRACE_PREVIEW,
     };
-  }, [sseTraceSteps, expandAllTrace]);
+  }, [filteredTraceSteps, expandAllTrace]);
 
   const inspectorTaskUsage = useMemo(
     () =>
@@ -338,6 +402,24 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     });
   }, [recentTasks, taskStatusFilter, taskSortOrder, taskPrioritizeFailed, taskSearchQuery]);
 
+  const resolveTaskStatusTone = (status: string): "running" | "completed" | "failed" | "other" => {
+    const normalized = status.trim().toLowerCase();
+    if (normalized === "running" || normalized === "pending") {
+      return "running";
+    }
+    if (
+      normalized === "completed" ||
+      normalized === "done" ||
+      normalized === "success"
+    ) {
+      return "completed";
+    }
+    if (normalized === "failed" || normalized === "error") {
+      return "failed";
+    }
+    return "other";
+  };
+
   const tracePanel = (
     <section
       className="inspector-panel"
@@ -352,7 +434,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         </div>
         <span>
           {sseTraceSteps.length > 0
-            ? t.inspector.stepsCount(sseTraceSteps.length)
+            ? t.inspector.traceVisibleCount(
+                filteredTraceSteps.length,
+                sseTraceSteps.length,
+              )
             : t.inspector.stepsNone}
         </span>
       </div>
@@ -367,8 +452,52 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           ]}
         />
       </div>
+      <div className="trace-filter-toolbar">
+        <Segmented
+          size="small"
+          value={traceKindFilter}
+          onChange={(v) =>
+            setTraceKindFilter(
+              v as "all" | "thought" | "action" | "observation" | "tool" | "rag" | "other",
+            )
+          }
+          options={[
+            { label: t.inspector.traceFilterAll, value: "all" },
+            { label: t.inspector.traceFilterThought, value: "thought" },
+            { label: t.inspector.traceFilterAction, value: "action" },
+            { label: t.inspector.traceFilterObservation, value: "observation" },
+            { label: t.inspector.traceFilterTool, value: "tool" },
+            { label: t.inspector.traceFilterRag, value: "rag" },
+            { label: t.inspector.traceFilterOther, value: "other" },
+          ]}
+        />
+        <Input
+          size="small"
+          allowClear
+          value={traceSearchQuery}
+          onChange={(e) => setTraceSearchQuery(e.target.value)}
+          placeholder={t.inspector.traceSearchPlaceholder}
+        />
+        <Segmented
+          size="small"
+          value={traceDensity}
+          onChange={(v) => setTraceDensity(v as "comfortable" | "compact")}
+          options={[
+            { label: t.inspector.traceDensityComfortable, value: "comfortable" },
+            { label: t.inspector.traceDensityCompact, value: "compact" },
+          ]}
+        />
+      </div>
+      <div className="trace-kind-stats">
+        <span>{t.inspector.traceFlow.kindThought}: {traceKindStats.thought}</span>
+        <span>{t.inspector.traceFlow.kindAction}: {traceKindStats.action}</span>
+        <span>{t.inspector.traceFlow.kindObservation}: {traceKindStats.observation}</span>
+        <span>{t.inspector.traceFlow.kindTool}: {traceKindStats.tool}</span>
+        <span>{t.inspector.traceFlow.kindRag}: {traceKindStats.rag}</span>
+        <span>{t.inspector.traceFlow.kindOther}: {traceKindStats.other}</span>
+      </div>
 
-      {traceView === "list" && sseTraceSteps.length > TRACE_PREVIEW ? (
+      {traceView === "list" && filteredTraceSteps.length > TRACE_PREVIEW ? (
         <div className="trace-density-row">
           <Button
             type="default"
@@ -408,10 +537,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
 
       <p className="panel-note">{sseMessage}</p>
 
-      {traceView === "flow" && sseTraceSteps.length > 0 ? (
-        <TraceFlowView steps={sseTraceSteps} colorMode={theme} />
+      {traceView === "flow" && filteredTraceSteps.length > 0 ? (
+        <TraceFlowView steps={filteredTraceSteps} colorMode={theme} />
       ) : traceView === "list" && visibleSteps.length > 0 ? (
-        <div className="trace-feed">
+        <div className={`trace-feed trace-feed--${traceDensity}`}>
           {visibleSteps.map((step) => {
             const traceKind = normalizeTraceStepKind(step);
             const metaLine = formatTraceStepMetaSubtitle(
@@ -421,7 +550,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             return (
             <article
               key={step.id}
-              className={`trace-card trace-card--enter trace-card--kind-${traceKind}`}
+              className={`trace-card trace-card--enter trace-card--kind-${traceKind}${traceDensity === "compact" ? " trace-card--compact" : ""}`}
               data-trace-kind={traceKind}
             >
               <div className="trace-top">
@@ -440,6 +569,8 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             );
           })}
         </div>
+      ) : filteredTraceSteps.length === 0 && sseTraceSteps.length > 0 ? (
+        <div className="panel-empty">{t.inspector.traceNoMatch}</div>
       ) : (
         <div className="panel-empty">{t.inspector.traceEmpty}</div>
       )}
@@ -459,8 +590,28 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <h3>{t.inspector.summaryTitle}</h3>
         </div>
       </div>
+      <div className="context-jumpbar">
+        <span className="context-jumpbar-label">{t.inspector.contextJumpTo}</span>
+        <div className="context-jumpbar-actions">
+          <Button size="small" onClick={() => scrollToContextSection("ctx-overview")}>
+            {t.inspector.contextJumpOverview}
+          </Button>
+          <Button size="small" onClick={() => scrollToContextSection("ctx-sync")}>
+            {t.inspector.contextJumpSync}
+          </Button>
+          <Button size="small" onClick={() => scrollToContextSection("ctx-usage")}>
+            {t.inspector.contextJumpUsage}
+          </Button>
+          <Button size="small" onClick={() => scrollToContextSection("ctx-memory")}>
+            {t.inspector.contextJumpMemory}
+          </Button>
+          <Button size="small" onClick={() => scrollToContextSection("ctx-tasks")}>
+            {t.inspector.contextJumpTasks}
+          </Button>
+        </div>
+      </div>
 
-      <div className="inspector-kpi-grid">
+      <div className="inspector-kpi-grid" id="ctx-overview">
         <div className="inspector-kpi-item">
           <span>{t.inspector.currentPhase}</span>
           <strong>{phaseLabel}</strong>
@@ -483,8 +634,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         </div>
       </div>
 
-      <div className="inspector-block">
+      <div className="inspector-block" id="ctx-sync">
         <p className="summary-label">{t.inspector.traceSyncStatus}</p>
+        <p className="inspector-section-lead">{t.inspector.traceSyncLead}</p>
         <div className="context-grid context-grid--stats compact">
           <span>{t.inspector.traceSyncRetries}</span>
           <strong>{traceDeltaRetryCount}</strong>
@@ -515,8 +667,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         ) : null}
       </div>
 
-      <div className="inspector-block">
+      <div className="inspector-block" id="ctx-usage">
         <p className="summary-label inspector-usage-kicker">{t.inspector.usageTitle}</p>
+        <p className="inspector-section-lead">{t.inspector.usageLead}</p>
         {inspectorTaskUsage ? (
           <div className="context-grid context-grid--stats">
             <span>{t.inspector.usagePrompt}</span>
@@ -581,7 +734,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         ) : null}
       </div>
 
-      <div className="inspector-block memory-placeholder-card">
+      <div className="inspector-block memory-placeholder-card" id="ctx-memory">
         <p className="summary-label">{t.inspector.memory.kicker}</p>
         <strong className="memory-placeholder-title">{t.inspector.memory.title}</strong>
         <p className="panel-note panel-note--muted memory-placeholder-lead">
@@ -807,12 +960,13 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       ) : null}
 
       {recentTasks.length > 0 ? (
-        <div className="inspector-block">
+        <div className="inspector-block" id="ctx-tasks">
           <p className="summary-label">
             {activeSessionId
               ? t.inspector.sessionTasks
               : t.inspector.recentTasks}
           </p>
+          <p className="inspector-section-lead">{t.inspector.taskIndexLead}</p>
           <div className="task-index-toolbar">
             <span className="task-index-toolbar-label">{t.inspector.taskViewLabel}</span>
             <Segmented
@@ -883,9 +1037,14 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                   onClick={() => onSelectTask(task)}
                 >
                   <strong>{getTaskLabel(task, t.workbench)}</strong>
-                  <span>
-                    {task.status} · {formatTimestamp(task.updated_at, localeTag)}
-                  </span>
+                  <div className="task-summary-meta">
+                    <span
+                      className={`task-status-badge task-status-badge--${resolveTaskStatusTone(task.status)}`}
+                    >
+                      {task.status}
+                    </span>
+                    <span>{formatTimestamp(task.updated_at, localeTag)}</span>
+                  </div>
                   {usageLine ? (
                     <span className="task-summary-usage">{usageLine}</span>
                   ) : null}

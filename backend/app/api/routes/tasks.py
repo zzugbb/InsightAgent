@@ -16,6 +16,11 @@ from app.services.chat_persistence_service import (
     list_tasks,
 )
 from app.services.chat_execution_service import stream_task_execution
+from app.services.task_status_service import (
+    normalize_task_status,
+    task_status_label,
+    task_status_rank,
+)
 
 
 router = APIRouter()
@@ -30,6 +35,9 @@ class TaskCreateResponse(BaseModel):
     task_id: str
     session_id: str
     status: str
+    status_normalized: str
+    status_label: str
+    status_rank: int
 
 
 class TaskResponse(BaseModel):
@@ -37,6 +45,9 @@ class TaskResponse(BaseModel):
     session_id: str
     prompt: str
     status: str
+    status_normalized: str
+    status_label: str
+    status_rank: int
     trace_json: str | None = None
     usage_json: str | None = None
     created_at: str
@@ -47,6 +58,9 @@ class TaskTraceResponse(BaseModel):
     task_id: str
     steps: list[TraceStep]
     status: str
+    status_normalized: str
+    status_label: str
+    status_rank: int
 
 
 class TaskTraceDeltaResponse(BaseModel):
@@ -54,6 +68,16 @@ class TaskTraceDeltaResponse(BaseModel):
     steps: list[TraceStep]
     next_cursor: int
     has_more: bool
+
+
+def _with_status_meta(item: dict) -> dict:
+    status = str(item.get("status", ""))
+    return {
+        **item,
+        "status_normalized": normalize_task_status(status),
+        "status_label": task_status_label(status),
+        "status_rank": task_status_rank(status),
+    }
 
 
 class TaskListResponse(BaseModel):
@@ -96,6 +120,9 @@ def create_task_entry(payload: TaskCreateRequest) -> TaskCreateResponse:
         task_id=task_id,
         session_id=resolved_session_id,
         status="pending",
+        status_normalized=normalize_task_status("pending"),
+        status_label=task_status_label("pending"),
+        status_rank=task_status_rank("pending"),
     )
 
 
@@ -124,7 +151,7 @@ def get_tasks(
         total = count_tasks(None)
     n = len(tasks)
     return TaskListResponse(
-        items=[TaskResponse(**task) for task in tasks],
+        items=[TaskResponse(**_with_status_meta(task)) for task in tasks],
         total=total,
         limit=limit,
         offset=offset,
@@ -151,7 +178,7 @@ def get_task_detail(task_id: str) -> TaskResponse:
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return TaskResponse(**task)
+    return TaskResponse(**_with_status_meta(task))
 
 
 @router.get("/{task_id}/trace", response_model=TaskTraceResponse)
@@ -160,10 +187,14 @@ def get_task_trace_detail(task_id: str) -> TaskTraceResponse:
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     raw_steps = get_task_trace(task_id)
+    status = str(task["status"])
     return TaskTraceResponse(
         task_id=task_id,
         steps=parse_trace_steps(raw_steps),
-        status=task["status"],
+        status=status,
+        status_normalized=normalize_task_status(status),
+        status_label=task_status_label(status),
+        status_rank=task_status_rank(status),
     )
 
 
