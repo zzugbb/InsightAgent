@@ -111,6 +111,9 @@ export function ChatColumn({
     !messagesLoading &&
     !hasHistory &&
     !sseTokens;
+  const sessionLabel = activeSession
+    ? getSessionLabel(activeSession, t.workbench)
+    : t.chat.newChatTitle;
 
   const streamFailed = ssePhase === "error" && !isStreaming && Boolean(sseTokens);
 
@@ -238,9 +241,7 @@ export function ChatColumn({
           <h2 id="chat-main-title" className="chat-main-heading">
             <span className="chat-title-row">
               <span className="chat-title-text">
-                {activeSession
-                  ? getSessionLabel(activeSession, t.workbench)
-                  : t.chat.newChatTitle}
+                {sessionLabel}
               </span>
               {activeSession ? (
                 <>
