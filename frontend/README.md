@@ -21,6 +21,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 观测：Context 摘要展示 delta 自动同步状态、重试次数、最近成功时间、下次重试时间、最近错误与恢复提示（恢复提示短时展示后自动消退）；重试中显示秒级倒计时
 - 告警：delta 连续失败时显示轻提示并持续自动重试
 - 右侧 Inspector（Context）信息架构已优化为分区式布局：概览 KPI、同步诊断、用量统计、Memory、任务索引；便于后续追加更多运维/分析模块
+- 任务索引增强：支持状态筛选（全部/运行中/已完成/失败）、时间排序（最新/最早）与失败置顶
+- 任务索引增强：支持按任务标题/ID 搜索，并在失败任务上展示失败摘要提示
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
 - Memory：状态展示 + add/query 调试（含 metadata）
 - 设置：主题、主题色、语言、模型与运行模式

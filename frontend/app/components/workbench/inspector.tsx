@@ -30,10 +30,12 @@ import type {
 } from "./types";
 import { TraceFlowView } from "./trace-flow-view";
 import {
+  extractTaskFailureHint,
   formatTimestamp,
   formatTraceStepMetaSubtitle,
   getStepTitle,
   getTaskLabel,
+  isTaskFailedStatus,
   normalizeTraceStepKind,
   parseMemoryMetadataJson,
   resolveInspectorTaskUsage,
@@ -139,6 +141,14 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const [memoryAddDraft, setMemoryAddDraft] = useState("");
   const [memoryMetaDraft, setMemoryMetaDraft] = useState("");
   const [memoryQueryDraft, setMemoryQueryDraft] = useState("");
+  const [taskStatusFilter, setTaskStatusFilter] = useState<
+    "all" | "running" | "completed" | "failed"
+  >("all");
+  const [taskSortOrder, setTaskSortOrder] = useState<"latest" | "oldest">(
+    "latest",
+  );
+  const [taskPrioritizeFailed, setTaskPrioritizeFailed] = useState(true);
+  const [taskSearchQuery, setTaskSearchQuery] = useState("");
   const [retryCountdownSec, setRetryCountdownSec] = useState<number | null>(null);
 
   const memoryAddMutation = useMutation({
@@ -289,6 +299,44 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     isStreaming &&
     traceDeltaSyncStatus === "retrying" &&
     traceDeltaRetryCount >= 2;
+
+  const filteredTasks = useMemo(() => {
+    const q = taskSearchQuery.trim().toLowerCase();
+    const statusMatched = recentTasks.filter((task) => {
+      if (taskStatusFilter === "all") {
+        return true;
+      }
+      const status = task.status.trim().toLowerCase();
+      if (taskStatusFilter === "running") {
+        return status === "running" || status === "pending";
+      }
+      if (taskStatusFilter === "completed") {
+        return status === "completed" || status === "done" || status === "success";
+      }
+      return status === "failed" || status === "error";
+    });
+    const queryMatched =
+      q.length === 0
+        ? statusMatched
+        : statusMatched.filter((task) => {
+            const prompt = task.prompt.trim().toLowerCase();
+            const id = task.id.toLowerCase();
+            return prompt.includes(q) || id.includes(q);
+          });
+    const sorted = [...queryMatched].sort((a, b) => {
+      const at = new Date(a.updated_at).getTime();
+      const bt = new Date(b.updated_at).getTime();
+      return taskSortOrder === "latest" ? bt - at : at - bt;
+    });
+    if (!taskPrioritizeFailed) {
+      return sorted;
+    }
+    return sorted.sort((a, b) => {
+      const af = isTaskFailedStatus(a.status) ? 1 : 0;
+      const bf = isTaskFailedStatus(b.status) ? 1 : 0;
+      return bf - af;
+    });
+  }, [recentTasks, taskStatusFilter, taskSortOrder, taskPrioritizeFailed, taskSearchQuery]);
 
   const tracePanel = (
     <section
@@ -765,9 +813,52 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               ? t.inspector.sessionTasks
               : t.inspector.recentTasks}
           </p>
+          <div className="task-index-toolbar">
+            <span className="task-index-toolbar-label">{t.inspector.taskViewLabel}</span>
+            <Segmented
+              size="small"
+              value={taskStatusFilter}
+              onChange={(v) =>
+                setTaskStatusFilter(v as "all" | "running" | "completed" | "failed")
+              }
+              options={[
+                { label: t.inspector.taskFilterAll, value: "all" },
+                { label: t.inspector.taskFilterRunning, value: "running" },
+                { label: t.inspector.taskFilterDone, value: "completed" },
+                { label: t.inspector.taskFilterError, value: "failed" },
+              ]}
+            />
+            <Input
+              size="small"
+              allowClear
+              value={taskSearchQuery}
+              onChange={(e) => setTaskSearchQuery(e.target.value)}
+              placeholder={t.inspector.taskSearchPlaceholder}
+            />
+            <Segmented
+              size="small"
+              value={taskSortOrder}
+              onChange={(v) => setTaskSortOrder(v as "latest" | "oldest")}
+              options={[
+                { label: t.inspector.taskSortLatest, value: "latest" },
+                { label: t.inspector.taskSortOldest, value: "oldest" },
+              ]}
+            />
+            <Button
+              type={taskPrioritizeFailed ? "primary" : "default"}
+              size="small"
+              onClick={() => setTaskPrioritizeFailed((v) => !v)}
+            >
+              {t.inspector.taskPinFailed}
+            </Button>
+          </div>
+          <p className="task-index-summary">
+            {t.inspector.taskVisibleCount(filteredTasks.length, recentTasks.length)}
+          </p>
           <div className="task-summary-list">
-            {recentTasks.map((task) => {
+            {filteredTasks.map((task) => {
               const isActive = task.id === activeTaskId;
+              const failedHint = extractTaskFailureHint(task);
               const usage = resolveTaskUsageFromTask(task);
               const usageLine = usage
                 ? [
@@ -787,7 +878,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               return (
                 <button
                   key={task.id}
-                  className={`task-summary-item${isActive ? " is-active" : ""}`}
+                  className={`task-summary-item${isActive ? " is-active" : ""}${isTaskFailedStatus(task.status) ? " task-summary-item--failed" : ""}`}
                   type="button"
                   onClick={() => onSelectTask(task)}
                 >
@@ -798,10 +889,18 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                   {usageLine ? (
                     <span className="task-summary-usage">{usageLine}</span>
                   ) : null}
+                  {failedHint ? (
+                    <span className="task-summary-failed-hint">
+                      {t.inspector.taskFailureHint}: {failedHint}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
           </div>
+          {filteredTasks.length === 0 ? (
+            <p className="panel-note panel-note--muted">{t.inspector.taskEmpty}</p>
+          ) : null}
           {tasksCanLoadMore ? (
             <div className="inspector-task-load-more">
               <Button

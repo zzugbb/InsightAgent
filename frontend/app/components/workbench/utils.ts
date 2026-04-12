@@ -241,6 +241,52 @@ export function getTaskLabel(
   return prompt.length > 48 ? `${prompt.slice(0, 48)}...` : prompt;
 }
 
+function normalizeTaskStatus(status: string): "running" | "completed" | "failed" | "other" {
+  const s = status.trim().toLowerCase();
+  if (s === "running" || s === "pending") {
+    return "running";
+  }
+  if (s === "completed" || s === "done" || s === "success") {
+    return "completed";
+  }
+  if (s === "failed" || s === "error") {
+    return "failed";
+  }
+  return "other";
+}
+
+export function isTaskFailedStatus(status: string): boolean {
+  return normalizeTaskStatus(status) === "failed";
+}
+
+export function extractTaskFailureHint(task: TaskSummary): string | null {
+  if (!isTaskFailedStatus(task.status) || !task.trace_json?.trim()) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(task.trace_json) as unknown;
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return null;
+    }
+    const reversed = [...parsed].reverse();
+    for (const step of reversed) {
+      if (!step || typeof step !== "object" || Array.isArray(step)) {
+        continue;
+      }
+      const content = (step as { content?: unknown }).content;
+      if (typeof content === "string" && content.trim()) {
+        const normalized = content.trim().replace(/\s+/g, " ");
+        return normalized.length > 96
+          ? `${normalized.slice(0, 96)}...`
+          : normalized;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function getRoleLabel(role: string, roles: Messages["roles"]): string {
   if (role === "user") {
     return roles.user;

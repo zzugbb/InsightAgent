@@ -167,6 +167,18 @@ export type Messages = {
     latestTaskSession: string;
     recentTasks: string;
     sessionTasks: string;
+    taskViewLabel: string;
+    taskFilterAll: string;
+    taskFilterRunning: string;
+    taskFilterDone: string;
+    taskFilterError: string;
+    taskSortLatest: string;
+    taskSortOldest: string;
+    taskPinFailed: string;
+    taskSearchPlaceholder: string;
+    taskFailureHint: string;
+    taskVisibleCount: (shown: number, total: number) => string;
+    taskEmpty: string;
     loadMoreTasks: string;
     backendUrl: string;
     seqLabel: string;
