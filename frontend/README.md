@@ -5,7 +5,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 ## 当前进度
 
 - W1：已完成
-- W2：已完成（进入收尾）
+- W2：已完成（已收口）
 - W3/W4：未开始（真实工具 / RAG）
 
 ## 当前已有内容
@@ -20,6 +20,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 调度：页面在后台时暂停自动 delta 同步，前台自动恢复
 - 观测：Context 摘要展示 delta 自动同步状态、重试次数、最近成功时间、下次重试时间、最近错误与恢复提示（恢复提示短时展示后自动消退）；重试中显示秒级倒计时
 - 告警：delta 连续失败时显示轻提示并持续自动重试
+- 右侧 Inspector（Context）信息架构已优化为分区式布局：概览 KPI、同步诊断、用量统计、Memory、任务索引；便于后续追加更多运维/分析模块
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
 - Memory：状态展示 + add/query 调试（含 metadata）
 - 设置：主题、主题色、语言、模型与运行模式
@@ -71,10 +72,10 @@ npm run dev
 
 默认通过 `NEXT_PUBLIC_API_BASE_URL` 指向后端（未设置时使用 `http://127.0.0.1:8000`）。
 
-## 下一步（W2 收尾）
+## 下一步（W3/W4）
 
 - 配合后端接入真实工具/RAG 后补齐流程图语义
 - 将当前 mock `tool_start/tool_end` 升级为真实工具执行与失败重试可视化
 - 继续完善 usage/token/cost 的统计维度（跨会话/时间段聚合）
-- 持续优化流式回放体验（`trace/delta` 退避参数、网络抖动恢复与列表性能）
+- 持续优化流式回放体验（参数级调优与性能提升）
 - 继续做不阻塞主链路的可访问性与交互细化

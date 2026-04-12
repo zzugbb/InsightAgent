@@ -5,10 +5,11 @@
 ## 当前进度
 
 - W1：已完成
-- W2：已完成（进入收尾）
+- W2：已完成（已收口）
 - W3/W4：未开始（真实工具 / RAG）
 - 工程协作：前端 `npm run lint` 已可直接执行，且当前告警已清零
 - 协同进展：前端已切换到后端 usage 聚合接口（全局/会话双范围），并显示覆盖率与状态反馈（loading/error/empty）
+- 协同进展：前端右侧 Inspector（Context）已按可观测运维场景完成分区重排（概览/同步诊断/用量/Memory/任务索引），后端现有字段可直接支撑后续模块扩展
 
 ## 当前已有内容
 
@@ -89,10 +90,10 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 docker compose up -d chroma
 ```
 
-## 当前限制（W2 收尾）
+## 当前限制（W3/W4 前）
 
 - `api_key` 仅最小存储骨架，未加密
 - `remote` 模式 provider 校验仍较粗
 - 真实工具调用循环与真实 RAG 尚未接入（当前仅 `tool_start/tool_end` mock 生命周期事件）
 - usage/token/cost 仍是占位增强阶段
-- `trace/delta` 已具备流式增量持久化首版能力，后续可继续优化写入频率与批处理策略
+- `trace/delta` 当前链路已稳定，后续仅做参数级调优（不影响 W2 已收口）

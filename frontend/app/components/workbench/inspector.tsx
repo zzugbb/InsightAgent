@@ -412,50 +412,64 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         </div>
       </div>
 
-      <div className="context-grid context-grid--stats">
-        <span>{t.inspector.currentPhase}</span>
-        <strong>{phaseLabel}</strong>
-        <span>{t.inspector.currentTask}</span>
-        <strong>{activeTaskId ? shortenId(activeTaskId) : "—"}</strong>
-        <span>{t.inspector.traceCursor}</span>
-        <strong>{traceCursor}</strong>
-        <span>{t.inspector.traceSyncStatus}</span>
-        <strong>{traceDeltaSyncStatusLabel}</strong>
-        <span>{t.inspector.traceSyncRetries}</span>
-        <strong>{traceDeltaRetryCount}</strong>
-        <span>{t.inspector.traceSyncLastOk}</span>
-        <strong>{traceDeltaLastOkLabel}</strong>
-        <span>{t.inspector.traceSyncNextRetry}</span>
-        <strong>{traceDeltaNextRetryLabel}</strong>
-        <span>{t.inspector.session}</span>
-        <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
+      <div className="inspector-kpi-grid">
+        <div className="inspector-kpi-item">
+          <span>{t.inspector.currentPhase}</span>
+          <strong>{phaseLabel}</strong>
+        </div>
+        <div className="inspector-kpi-item">
+          <span>{t.inspector.currentTask}</span>
+          <strong>{activeTaskId ? shortenId(activeTaskId) : "—"}</strong>
+        </div>
+        <div className="inspector-kpi-item">
+          <span>{t.inspector.traceCursor}</span>
+          <strong>{traceCursor}</strong>
+        </div>
+        <div className="inspector-kpi-item">
+          <span>{t.inspector.traceSyncStatus}</span>
+          <strong>{traceDeltaSyncStatusLabel}</strong>
+        </div>
+        <div className="inspector-kpi-item">
+          <span>{t.inspector.session}</span>
+          <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
+        </div>
       </div>
-      {showTraceDeltaWarning ? (
-        <p className="panel-note panel-note--muted">
-          {t.inspector.traceSyncWarning(traceDeltaRetryCount)}
-        </p>
-      ) : null}
-      {traceDeltaSyncStatus === "retrying" && traceDeltaLastError ? (
-        <p className="panel-note panel-note--muted">
-          {t.inspector.traceSyncLastError(traceDeltaLastError)}
-        </p>
-      ) : null}
-      {traceDeltaSyncStatus === "retrying" && retryCountdownSec !== null ? (
-        <p className="panel-note panel-note--muted">
-          {t.inspector.traceSyncRetryEta(retryCountdownSec)}
-        </p>
-      ) : null}
-      {traceDeltaRecoveredLabel ? (
-        <p className="panel-note panel-note--muted">
-          {t.inspector.traceSyncRecovered(traceDeltaRecoveredLabel)}
-        </p>
-      ) : null}
 
-      {inspectorTaskUsage ? (
-        <>
-          <p className="summary-label inspector-usage-kicker">
-            {t.inspector.usageTitle}
+      <div className="inspector-block">
+        <p className="summary-label">{t.inspector.traceSyncStatus}</p>
+        <div className="context-grid context-grid--stats compact">
+          <span>{t.inspector.traceSyncRetries}</span>
+          <strong>{traceDeltaRetryCount}</strong>
+          <span>{t.inspector.traceSyncLastOk}</span>
+          <strong>{traceDeltaLastOkLabel}</strong>
+          <span>{t.inspector.traceSyncNextRetry}</span>
+          <strong>{traceDeltaNextRetryLabel}</strong>
+        </div>
+        {showTraceDeltaWarning ? (
+          <p className="panel-note panel-note--muted">
+            {t.inspector.traceSyncWarning(traceDeltaRetryCount)}
           </p>
+        ) : null}
+        {traceDeltaSyncStatus === "retrying" && traceDeltaLastError ? (
+          <p className="panel-note panel-note--muted">
+            {t.inspector.traceSyncLastError(traceDeltaLastError)}
+          </p>
+        ) : null}
+        {traceDeltaSyncStatus === "retrying" && retryCountdownSec !== null ? (
+          <p className="panel-note panel-note--muted">
+            {t.inspector.traceSyncRetryEta(retryCountdownSec)}
+          </p>
+        ) : null}
+        {traceDeltaRecoveredLabel ? (
+          <p className="panel-note panel-note--muted">
+            {t.inspector.traceSyncRecovered(traceDeltaRecoveredLabel)}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="inspector-block">
+        <p className="summary-label inspector-usage-kicker">{t.inspector.usageTitle}</p>
+        {inspectorTaskUsage ? (
           <div className="context-grid context-grid--stats">
             <span>{t.inspector.usagePrompt}</span>
             <strong>{inspectorTaskUsage.prompt ?? "—"}</strong>
@@ -466,59 +480,60 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             <span>{t.inspector.usageCost}</span>
             <strong>{inspectorTaskUsage.cost ?? "—"}</strong>
           </div>
-        </>
-      ) : null}
+        ) : (
+          <p className="panel-note panel-note--muted">{t.inspector.usageSummaryEmpty}</p>
+        )}
 
-      {usageSummaryLoading ? (
-        <p className="panel-note panel-note--muted">{t.inspector.usageSummaryLoading}</p>
-      ) : null}
+        {usageSummaryLoading ? (
+          <p className="panel-note panel-note--muted">{t.inspector.usageSummaryLoading}</p>
+        ) : null}
+        {usageSummaryError ? (
+          <p className="panel-note panel-note--muted">{t.inspector.usageSummaryError}</p>
+        ) : null}
 
-      {usageSummaryError ? (
-        <p className="panel-note panel-note--muted">{t.inspector.usageSummaryError}</p>
-      ) : null}
-
-      {sessionUsageAggregate ? (
-        <div className="summary-card">
-          <p className="summary-label inspector-usage-kicker">
-            {t.inspector.usageSummaryTitle}
-          </p>
-          <span>
-            {usageSummaryScope === "session"
-              ? t.inspector.usageScopeSession
-              : t.inspector.usageScopeGlobal}
-          </span>
-          <div className="context-grid context-grid--stats compact">
-            <span>{t.inspector.usagePrompt}</span>
-            <strong>{sessionUsageAggregate.prompt ?? "—"}</strong>
-            <span>{t.inspector.usageCompletion}</span>
-            <strong>{sessionUsageAggregate.completion ?? "—"}</strong>
-            <span>{t.inspector.usageTotal}</span>
-            <strong>{sessionUsageAggregate.total ?? "—"}</strong>
-            <span>{t.inspector.usageCost}</span>
-            <strong>{sessionUsageAggregate.cost ?? "—"}</strong>
-            <span>{t.inspector.usageAvgTotal}</span>
-            <strong>{sessionUsageAggregate.avgTotal ?? "—"}</strong>
-            <span>{t.inspector.usageAvgCost}</span>
-            <strong>{sessionUsageAggregate.avgCost ?? "—"}</strong>
+        {sessionUsageAggregate ? (
+          <div className="inspector-subblock">
+            <p className="summary-label inspector-usage-kicker">
+              {t.inspector.usageSummaryTitle}
+            </p>
+            <span>
+              {usageSummaryScope === "session"
+                ? t.inspector.usageScopeSession
+                : t.inspector.usageScopeGlobal}
+            </span>
+            <div className="context-grid context-grid--stats compact">
+              <span>{t.inspector.usagePrompt}</span>
+              <strong>{sessionUsageAggregate.prompt ?? "—"}</strong>
+              <span>{t.inspector.usageCompletion}</span>
+              <strong>{sessionUsageAggregate.completion ?? "—"}</strong>
+              <span>{t.inspector.usageTotal}</span>
+              <strong>{sessionUsageAggregate.total ?? "—"}</strong>
+              <span>{t.inspector.usageCost}</span>
+              <strong>{sessionUsageAggregate.cost ?? "—"}</strong>
+              <span>{t.inspector.usageAvgTotal}</span>
+              <strong>{sessionUsageAggregate.avgTotal ?? "—"}</strong>
+              <span>{t.inspector.usageAvgCost}</span>
+              <strong>{sessionUsageAggregate.avgCost ?? "—"}</strong>
+            </div>
+            <span>{t.inspector.usageTaskCount(sessionUsageAggregate.taskCount)}</span>
+            <span>
+              {t.inspector.usageTaskCoverage(
+                usageSummary?.tasks_with_usage ?? sessionUsageAggregate.taskCount,
+                usageSummary?.tasks_total ?? sessionUsageAggregate.taskCount,
+              )}
+            </span>
           </div>
-          <span>{t.inspector.usageTaskCount(sessionUsageAggregate.taskCount)}</span>
-          <span>
-            {t.inspector.usageTaskCoverage(
-              usageSummary?.tasks_with_usage ?? sessionUsageAggregate.taskCount,
-              usageSummary?.tasks_total ?? sessionUsageAggregate.taskCount,
-            )}
-          </span>
-        </div>
-      ) : null}
+        ) : null}
 
-      {!usageSummaryLoading &&
-      !usageSummaryError &&
-      usageSummary &&
-      usageSummary.tasks_with_usage === 0 ? (
-        <p className="panel-note panel-note--muted">{t.inspector.usageSummaryEmpty}</p>
-      ) : null}
+        {!usageSummaryLoading &&
+        !usageSummaryError &&
+        usageSummary &&
+        usageSummary.tasks_with_usage === 0 ? (
+          <p className="panel-note panel-note--muted">{t.inspector.usageSummaryEmpty}</p>
+        ) : null}
+      </div>
 
-      <div className="summary-card memory-placeholder-card">
+      <div className="inspector-block memory-placeholder-card">
         <p className="summary-label">{t.inspector.memory.kicker}</p>
         <strong className="memory-placeholder-title">{t.inspector.memory.title}</strong>
         <p className="panel-note panel-note--muted memory-placeholder-lead">
@@ -723,7 +738,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       </div>
 
       {activeTask ? (
-        <div className="summary-card">
+        <div className="inspector-block">
           <p className="summary-label">{t.inspector.currentTaskCard}</p>
           <strong>{getTaskLabel(activeTask, t.workbench)}</strong>
           <span>
@@ -734,7 +749,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       ) : null}
 
       {latestTaskForSession ? (
-        <div className="summary-card">
+        <div className="inspector-block">
           <p className="summary-label">{t.inspector.latestTaskSession}</p>
           <strong>{getTaskLabel(latestTaskForSession, t.workbench)}</strong>
           <span>
@@ -744,7 +759,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       ) : null}
 
       {recentTasks.length > 0 ? (
-        <div className="summary-card">
+        <div className="inspector-block">
           <p className="summary-label">
             {activeSessionId
               ? t.inspector.sessionTasks
