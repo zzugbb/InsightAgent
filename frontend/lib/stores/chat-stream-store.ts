@@ -7,6 +7,8 @@ import type { TraceStepPayload } from "../types/trace";
 export type { TraceStepPayload } from "../types/trace";
 
 const DEFAULT_STREAM_MESSAGES: Messages["stream"] = {
+  idleHint:
+    "Execution trace will appear in the right panel after sending a message.",
   streamStarted: "Task stream started.",
   streamCompleted: "Task stream completed (done).",
   streamHeartbeat: "Receiving task stream (heartbeat ok).",
@@ -40,6 +42,18 @@ const DEFAULT_STREAM_MESSAGES: Messages["stream"] = {
   failedReadStream: "Failed to read task stream.",
 };
 
+const KNOWN_SSE_PHASES = new Set([
+  "pending",
+  "running",
+  "thinking",
+  "tool_running",
+  "tool_retry",
+  "streaming",
+  "replay",
+  "error",
+  "done",
+]);
+
 function normalizeSsePhase(raw: unknown): string | null {
   if (typeof raw !== "string") {
     return null;
@@ -53,6 +67,9 @@ function normalizeSsePhase(raw: unknown): string | null {
   }
   if (phase === "failed") {
     return "error";
+  }
+  if (KNOWN_SSE_PHASES.has(phase)) {
+    return phase;
   }
   return phase;
 }
@@ -73,6 +90,15 @@ function normalizeTraceSteps(steps: TraceStepPayload[]): TraceStepPayload[] {
     .map((entry) => entry.step);
 }
 
+const MAX_TRACE_STEPS = 2000;
+
+function capTraceSteps(steps: TraceStepPayload[]): TraceStepPayload[] {
+  if (steps.length <= MAX_TRACE_STEPS) {
+    return steps;
+  }
+  return steps.slice(steps.length - MAX_TRACE_STEPS);
+}
+
 function getNextTraceCursor(steps: TraceStepPayload[]): number {
   return steps.reduce((maxSeq, step, index) => {
     const fallbackSeq = index + 1;
@@ -89,9 +115,9 @@ function upsertTraceStep(
   if (index >= 0) {
     const next = [...steps];
     next[index] = { ...next[index], ...step };
-    return normalizeTraceSteps(next);
+    return capTraceSteps(normalizeTraceSteps(next));
   }
-  return normalizeTraceSteps([...steps, step]);
+  return capTraceSteps(normalizeTraceSteps([...steps, step]));
 }
 
 export type RunTaskStreamOptions = {
@@ -143,7 +169,7 @@ export type ChatStreamStore = {
 };
 
 const initialSseMessage =
-  "发送消息后，执行过程会出现在右侧「轨迹」；连接与状态说明会显示在这里。";
+  DEFAULT_STREAM_MESSAGES.idleHint;
 const TRACE_DELTA_FETCH_LIMIT = 200;
 
 async function consumeSseStream(
@@ -210,7 +236,18 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
 
   setSseMessage: (message) => set({ sseMessage: message }),
 
-  setStreamMessages: (messages) => set({ streamMessages: messages }),
+  setStreamMessages: (messages) =>
+    set((state) => {
+      const shouldRefreshIdleHint =
+        !state.isStreaming &&
+        state.ssePhase === null &&
+        state.sseTaskId === null &&
+        state.sseTokens.length === 0;
+      return {
+        streamMessages: messages,
+        ...(shouldRefreshIdleHint ? { sseMessage: messages.idleHint } : {}),
+      };
+    }),
 
   loadPersistedTrace: async (apiBaseUrl, taskId) => {
     const sm = get().streamMessages;
@@ -255,8 +292,11 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
 
       set({
         sseTaskId: data.task_id || normalizedTaskId,
-        sseTraceSteps: normalizeTraceSteps(steps),
-        ssePhase: typeof data.status === "string" ? data.status : "replay",
+        sseTraceSteps: capTraceSteps(normalizeTraceSteps(steps)),
+        ssePhase:
+          typeof data.status === "string"
+            ? (normalizeSsePhase(data.status) ?? "replay")
+            : "replay",
         traceCursor,
         sseMessage:
           steps.length > 0
@@ -335,16 +375,14 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         }
         return {
           sseTaskId: data.task_id || normalizedTaskId,
-          sseTraceSteps: normalizeTraceSteps(
-            steps.reduce(
-              (mergedSteps, step) => upsertTraceStep(mergedSteps, step),
-              state.sseTraceSteps,
-            ),
+          sseTraceSteps: steps.reduce(
+            (mergedSteps, step) => upsertTraceStep(mergedSteps, step),
+            state.sseTraceSteps,
           ),
           traceCursor:
             typeof data.next_cursor === "number"
-              ? data.next_cursor
-              : Math.max(currentCursor, getNextTraceCursor(steps)),
+              ? Math.max(state.traceCursor, data.next_cursor)
+              : Math.max(state.traceCursor, getNextTraceCursor(steps)),
           sseMessage: silent
             ? state.sseMessage
             : steps.length > 0
@@ -520,20 +558,22 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       const p = payload as Record<string, unknown>;
       if (typeof p.delta === "string") {
         const delta = p.delta;
-        set((state) => ({ sseTokens: state.sseTokens + delta }));
-        if (typeof p.step_id === "string") {
+        set((state) => {
+          if (typeof p.step_id !== "string") {
+            return { sseTokens: state.sseTokens + delta };
+          }
           const stepId = p.step_id;
-          set((state) => ({
+          const prevStep = state.sseTraceSteps.find((x) => x.id === stepId);
+          return {
+            sseTokens: state.sseTokens + delta,
             sseTraceSteps: upsertTraceStep(state.sseTraceSteps, {
               id: stepId,
               type: "observation",
-              content:
-                (state.sseTraceSteps.find((x) => x.id === stepId)?.content ?? "") +
-                delta,
-              meta: state.sseTraceSteps.find((x) => x.id === stepId)?.meta,
+              content: (prevStep?.content ?? "") + delta,
+              meta: prevStep?.meta,
             }),
-          }));
-        }
+          };
+        });
       }
       return;
     }
@@ -626,7 +666,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       const createdTask = (await taskResponse.json()) as TaskCreateResponse;
       set({
         sseTaskId: createdTask.task_id,
-        ssePhase: createdTask.status,
+        ssePhase: normalizeSsePhase(createdTask.status) ?? createdTask.status,
       });
       if (createdTask.session_id) {
         onSessionResolved?.(createdTask.session_id);

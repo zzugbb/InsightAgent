@@ -72,6 +72,7 @@ export type Messages = {
     sending: string;
   };
   stream: {
+    idleHint: string;
     streamStarted: string;
     streamCompleted: string;
     streamHeartbeat: string;

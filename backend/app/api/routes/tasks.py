@@ -1,15 +1,20 @@
+import asyncio
 import json
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from datetime import datetime
-from time import monotonic, sleep
+from time import monotonic
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
 from app.config import get_settings
 from app.schemas.trace import TraceStep, parse_trace_steps
-from app.services.chat_execution_service import sse_event, stream_task_execution
+from app.services.chat_execution_service import (
+    sse_error_payload,
+    sse_event,
+    stream_task_execution,
+)
 from app.services.chat_persistence_service import (
     count_tasks,
     create_message,
@@ -19,7 +24,6 @@ from app.services.chat_persistence_service import (
     get_tasks_usage_summary,
     get_task,
     get_task_trace,
-    get_task_trace_delta,
     get_task_trace_delta_from_task,
     list_tasks,
 )
@@ -33,9 +37,40 @@ from app.services.task_status_service import (
 router = APIRouter()
 
 
-def stream_running_task_reconnect(task_id: str) -> Iterator[str]:
+def _parse_last_event_id(value: str | None) -> int | None:
+    if value is None:
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _latest_seq_from_task(task: dict) -> int:
+    trace_json = task.get("trace_json")
+    if not isinstance(trace_json, str) or not trace_json.strip():
+        return 0
+    try:
+        raw = json.loads(trace_json)
+    except Exception:
+        return 0
+    if not isinstance(raw, list):
+        return 0
+    steps = parse_trace_steps([x for x in raw if isinstance(x, dict)])
+    if not steps:
+        return 0
+    return max((s.seq or 0) for s in steps)
+
+
+async def stream_running_task_reconnect(
+    task_id: str, *, after_seq: int = 0
+) -> AsyncIterator[str]:
     settings = get_settings()
-    cursor = 0
+    cursor = max(0, int(after_seq))
     poll_delay_fast_sec = max(0.05, float(settings.stream_reconnect_poll_fast_sec))
     poll_delay_max_sec = max(
         poll_delay_fast_sec,
@@ -72,12 +107,13 @@ def stream_running_task_reconnect(task_id: str) -> Iterator[str]:
         if task is None:
             yield sse_event(
                 "error",
-                {
-                    "task_id": task_id,
-                    "message": "Task not found during reconnect stream.",
-                    "fatal": True,
-                    "retryCount": 0,
-                },
+                sse_error_payload(
+                    task_id=task_id,
+                    message="Task not found during reconnect stream.",
+                    code="task_not_found",
+                    fatal=True,
+                    retry_count=0,
+                ),
             )
             return
 
@@ -140,12 +176,15 @@ def stream_running_task_reconnect(task_id: str) -> Iterator[str]:
                 yield sse_event(
                     "error",
                     {
+                        **sse_error_payload(
+                            task_id=task_id,
+                            step_id=last_emitted_step_id,
+                            message="Task ended with failed status.",
+                            code="task_failed",
+                            fatal=True,
+                            retry_count=0,
+                        ),
                         "session_id": str(task.get("session_id", "")) or session_id,
-                        "task_id": task_id,
-                        "step_id": last_emitted_step_id,
-                        "message": "Task ended with failed status.",
-                        "fatal": True,
-                        "retryCount": 0,
                         "resumed": True,
                     },
                 )
@@ -166,7 +205,7 @@ def stream_running_task_reconnect(task_id: str) -> Iterator[str]:
                 },
             )
             last_heartbeat_ts = now
-        sleep(poll_delay_sec)
+        await asyncio.sleep(poll_delay_sec)
 
 
 class TaskCreateRequest(BaseModel):
@@ -211,6 +250,9 @@ class TaskTraceDeltaResponse(BaseModel):
     steps: list[TraceStep]
     next_cursor: int
     has_more: bool
+    server_time: str = Field(description="服务端生成响应时间（ISO8601）")
+    lag_seq: int = Field(description="当前游标到最新 seq 的差值")
+    dropped: bool = Field(description="是否发生服务端丢步（当前实现恒为 false）")
 
 
 def _with_status_meta(item: dict) -> dict:
@@ -356,16 +398,21 @@ def get_task_trace_delta_detail(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    steps, next_cursor, has_more = get_task_trace_delta(
-        task_id=task_id,
+    steps, next_cursor, has_more = get_task_trace_delta_from_task(
+        task,
         after_seq=after_seq,
         limit=limit,
     )
+    parsed_steps = parse_trace_steps(steps)
+    lag_seq = max(0, _latest_seq_from_task(task) - next_cursor)
     return TaskTraceDeltaResponse(
         task_id=task_id,
-        steps=parse_trace_steps(steps),
+        steps=parsed_steps,
         next_cursor=next_cursor,
         has_more=has_more,
+        server_time=datetime.now().isoformat(),
+        lag_seq=lag_seq,
+        dropped=False,
     )
 
 
@@ -379,7 +426,11 @@ def get_task_trace_delta_detail(
     ),
     response_class=StreamingResponse,
 )
-def stream_task_detail(task_id: str) -> StreamingResponse:
+def stream_task_detail(
+    task_id: str,
+    request: Request,
+    after_seq: int = Query(default=0, ge=0),
+) -> StreamingResponse:
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -390,8 +441,10 @@ def stream_task_detail(task_id: str) -> StreamingResponse:
         )
 
     if task["status"] == "running":
+        header_cursor = _parse_last_event_id(request.headers.get("Last-Event-ID"))
+        resume_cursor = max(after_seq, header_cursor or 0)
         return StreamingResponse(
-            stream_running_task_reconnect(task_id),
+            stream_running_task_reconnect(task_id, after_seq=resume_cursor),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

@@ -74,6 +74,8 @@ export const en: Messages = {
     sending: "Generating…",
   },
   stream: {
+    idleHint:
+      "After sending a message, execution trace appears on the right; stream status details are shown here.",
     streamStarted: "Task stream started.",
     streamCompleted: "Task stream completed (done).",
     streamHeartbeat: "Receiving task stream (heartbeat ok).",

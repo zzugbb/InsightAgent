@@ -73,6 +73,8 @@ export const zh: Messages = {
     sending: "生成中…",
   },
   stream: {
+    idleHint:
+      "发送消息后，执行过程会出现在右侧「轨迹」；连接与状态说明会显示在这里。",
     streamStarted: "任务流已开始。",
     streamCompleted: "任务流已完成（done）。",
     streamHeartbeat: "任务流连接正常（heartbeat）。",

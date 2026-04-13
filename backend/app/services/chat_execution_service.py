@@ -27,6 +27,28 @@ def sse_event(event: str, data: dict[str, object]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+def sse_error_payload(
+    *,
+    task_id: str,
+    message: str,
+    code: str,
+    fatal: bool,
+    retry_count: int = 0,
+    step_id: str | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "task_id": task_id,
+        "message": message,
+        "code": code,
+        "fatal": fatal,
+        "retryable": not fatal,
+        "retryCount": retry_count,
+    }
+    if step_id:
+        payload["step_id"] = step_id
+    return payload
+
+
 def _extract_calc_expression(prompt: str) -> str | None:
     tagged = re.search(r"\[calc:(.+?)\]", prompt, flags=re.IGNORECASE)
     if tagged:
@@ -393,13 +415,14 @@ def stream_task_execution(
                     )
                     yield sse_event(
                         "error",
-                        {
-                            "task_id": task_id,
-                            "step_id": action_step_id,
-                            "message": last_error,
-                            "fatal": not is_retryable,
-                            "retryCount": attempt + 1,
-                        },
+                        sse_error_payload(
+                            task_id=task_id,
+                            step_id=action_step_id,
+                            message=last_error,
+                            code="tool_execution_error",
+                            fatal=not is_retryable,
+                            retry_count=attempt + 1,
+                        ),
                     )
                     if is_retryable:
                         attempt += 1
@@ -565,6 +588,7 @@ def stream_task_execution(
         usage_payload: dict[str, object] = {
             "prompt_tokens": None,
             "completion_tokens": _estimate_token_count(final_content),
+            "completion_tokens_source": "estimated",
             "cost_estimate": None,
         }
 
@@ -596,10 +620,11 @@ def stream_task_execution(
         yield sse_event("state", {"task_id": task_id, "phase": "error"})
         yield sse_event(
             "error",
-            {
-                "task_id": task_id,
-                "message": str(exc),
-                "fatal": True,
-                "retryCount": 0,
-            },
+            sse_error_payload(
+                task_id=task_id,
+                message=str(exc),
+                code="task_stream_failure",
+                fatal=True,
+                retry_count=0,
+            ),
         )
