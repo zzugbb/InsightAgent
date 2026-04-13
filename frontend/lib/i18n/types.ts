@@ -71,6 +71,32 @@ export type Messages = {
     send: string;
     sending: string;
   };
+  stream: {
+    streamStarted: string;
+    streamCompleted: string;
+    streamHeartbeat: string;
+    loadingPersistedTrace: string;
+    persistedTraceLoaded: string;
+    persistedTraceEmpty: string;
+    taskIdRequiredTrace: string;
+    failedLoadPersistedTrace: string;
+    taskIdRequiredDelta: string;
+    loadingTraceDeltaAfter: (seq: number) => string;
+    traceDeltaLoaded: (count: number) => string;
+    traceDeltaLoadedMore: (count: number) => string;
+    traceDeltaEmpty: string;
+    failedLoadTraceDelta: string;
+    toolRunning: (name: string) => string;
+    toolStarted: (name: string) => string;
+    toolStatus: (status: string, name: string) => string;
+    streamErrorFallback: string;
+    streamErrorMessage: (message: string, fatal: boolean | null, retryCount: number | null) => string;
+    promptEmpty: string;
+    creatingAndOpening: string;
+    taskCreateFailed: string;
+    streamClosed: string;
+    failedReadStream: string;
+  };
   sidebar: {
     ariaLabel: string;
     brandTitle: string;

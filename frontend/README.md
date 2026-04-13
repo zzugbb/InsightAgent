@@ -36,6 +36,10 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - W2 稳定性优化：`trace/delta` 增加任务隔离保护，切换任务时旧请求晚到不会串写当前轨迹
 - W2 稳定性优化：SSE 事件增加 `task_id` 活动任务隔离，避免并发/延迟事件污染当前任务
 - W2 收敛优化：SSE phase 统一归一（`completed→done`、`failed→error`），并集中流式文案常量，减少状态分支判断
+- W2 稳态优化：有活动任务时，缺失 `task_id` 的非 `start` 事件会被忽略，进一步降低串台风险
+- W2 性能优化：`trace` 事件处理移除重复 `upsert` 计算，降低高频流式更新开销
+- W2 展示优化：phase 映射补齐 `thinking/tool_running/tool_retry`，统一运行态展示
+- W1/W2 国际化优化：`chat-stream-store` 流式提示改为 i18n 文案（`stream` 分组），支持中英文动态切换并消除硬编码英文
 - W3 稳定性优化：仅在 `error.fatal=true` 时将流状态置为 `error`，可重试工具错误不再误触发全局失败态
 - W2 协同优化：后端 `running` 重连流的 `done/error` 事件已补齐关键字段（`session_id/step_id/resumed`），前端消费契约更稳定
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示

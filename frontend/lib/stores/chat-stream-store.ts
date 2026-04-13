@@ -1,15 +1,44 @@
 import { create } from "zustand";
 
+import type { Messages } from "../i18n";
 import { parseSseBlock, parseSseBlocks } from "../sse/parse";
 import type { TraceStepPayload } from "../types/trace";
 
 export type { TraceStepPayload } from "../types/trace";
 
-const STREAM_MESSAGE = {
-  started: "Task stream started.",
-  completed: "Task stream completed (done).",
-  heartbeat: "Receiving task stream (heartbeat ok).",
-} as const;
+const DEFAULT_STREAM_MESSAGES: Messages["stream"] = {
+  streamStarted: "Task stream started.",
+  streamCompleted: "Task stream completed (done).",
+  streamHeartbeat: "Receiving task stream (heartbeat ok).",
+  loadingPersistedTrace: "Loading persisted trace...",
+  persistedTraceLoaded: "Persisted trace loaded.",
+  persistedTraceEmpty: "Persisted trace is empty for this task.",
+  taskIdRequiredTrace: "Task ID is required to load trace.",
+  failedLoadPersistedTrace: "Failed to load persisted trace.",
+  taskIdRequiredDelta: "Task ID is required to load trace delta.",
+  loadingTraceDeltaAfter: (seq) => `Loading trace delta after seq=${seq}...`,
+  traceDeltaLoaded: (count) => `Trace delta loaded (${count} steps).`,
+  traceDeltaLoadedMore: (count) =>
+    `Trace delta loaded (${count} steps, more available).`,
+  traceDeltaEmpty: "No new trace delta steps.",
+  failedLoadTraceDelta: "Failed to load trace delta.",
+  toolRunning: (name) => `Tool running: ${name}`,
+  toolStarted: (name) => `Tool started: ${name}`,
+  toolStatus: (status, name) => `Tool ${status}: ${name}`,
+  streamErrorFallback: "Task stream error received.",
+  streamErrorMessage: (message, fatal, retryCount) => {
+    const fatalSuffix =
+      fatal === null ? "" : fatal ? " (fatal)" : " (retryable)";
+    const retrySuffix =
+      typeof retryCount === "number" ? ` [retry=${retryCount}]` : "";
+    return `Task stream error: ${message}${fatalSuffix}${retrySuffix}`;
+  },
+  promptEmpty: "Prompt cannot be empty.",
+  creatingAndOpening: "Creating task and opening task stream...",
+  taskCreateFailed: "Task creation failed.",
+  streamClosed: "Task stream closed.",
+  failedReadStream: "Failed to read task stream.",
+};
 
 function normalizeSsePhase(raw: unknown): string | null {
   if (typeof raw !== "string") {
@@ -93,8 +122,10 @@ export type ChatStreamStore = {
   /** 最近一次 `done` 事件携带的用量，按 taskId 对齐，避免切换任务后串台 */
   sseTaskUsage: SseTaskUsage | null;
   traceCursor: number;
+  streamMessages: Messages["stream"];
 
   resetStreamUi: () => void;
+  setStreamMessages: (messages: Messages["stream"]) => void;
   dispatchSseEvent: (
     event: string,
     payload: unknown,
@@ -163,6 +194,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
   sseTaskId: null,
   sseTaskUsage: null,
   traceCursor: 0,
+  streamMessages: DEFAULT_STREAM_MESSAGES,
 
   resetStreamUi: () =>
     set({
@@ -178,15 +210,18 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
 
   setSseMessage: (message) => set({ sseMessage: message }),
 
+  setStreamMessages: (messages) => set({ streamMessages: messages }),
+
   loadPersistedTrace: async (apiBaseUrl, taskId) => {
+    const sm = get().streamMessages;
     const normalizedTaskId = taskId.trim();
     if (!normalizedTaskId) {
-      set({ sseMessage: "Task ID is required to load trace." });
+      set({ sseMessage: sm.taskIdRequiredTrace });
       return;
     }
 
     set({
-      sseMessage: "Loading persisted trace...",
+      sseMessage: sm.loadingPersistedTrace,
       sseTaskId: normalizedTaskId,
       sseTokens: "",
       sseTraceSteps: [],
@@ -205,7 +240,9 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || `Failed to load trace (${response.status})`);
+        throw new Error(
+          errorText || `${sm.failedLoadPersistedTrace} (${response.status})`,
+        );
       }
 
       const data = (await response.json()) as {
@@ -223,27 +260,27 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         traceCursor,
         sseMessage:
           steps.length > 0
-            ? "Persisted trace loaded."
-            : "Persisted trace is empty for this task.",
+            ? sm.persistedTraceLoaded
+            : sm.persistedTraceEmpty,
       });
     } catch (error) {
       set({
-        sseMessage:
-          error instanceof Error ? error.message : "Failed to load persisted trace.",
+        sseMessage: error instanceof Error ? error.message : sm.failedLoadPersistedTrace,
       });
     }
   },
 
   loadTraceDelta: async (apiBaseUrl, taskId, options) => {
+    const sm = get().streamMessages;
     const silent = options?.silent === true;
     const normalizedTaskId = taskId.trim();
     if (!normalizedTaskId) {
       if (!silent) {
-        set({ sseMessage: "Task ID is required to load trace delta." });
+        set({ sseMessage: sm.taskIdRequiredDelta });
       }
       return {
         ok: false,
-        error: "Task ID is required to load trace delta.",
+        error: sm.taskIdRequiredDelta,
         hasMore: false,
       };
     }
@@ -259,7 +296,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     }
     if (!silent) {
       set({
-        sseMessage: `Loading trace delta after seq=${currentCursor}...`,
+        sseMessage: sm.loadingTraceDeltaAfter(currentCursor),
       });
     } else if (!currentTaskId) {
       set({
@@ -278,7 +315,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          errorText || `Failed to load trace delta (${response.status})`,
+          errorText || `${sm.failedLoadTraceDelta} (${response.status})`,
         );
       }
 
@@ -312,15 +349,15 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
             ? state.sseMessage
             : steps.length > 0
               ? data.has_more
-                ? `Trace delta loaded (${steps.length} steps, more available).`
-                : `Trace delta loaded (${steps.length} steps).`
-              : "No new trace delta steps.",
+                ? sm.traceDeltaLoadedMore(steps.length)
+                : sm.traceDeltaLoaded(steps.length)
+              : sm.traceDeltaEmpty,
         };
       });
       return { ok: true, error: null, hasMore: data.has_more === true };
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to load trace delta.";
+        error instanceof Error ? error.message : sm.failedLoadTraceDelta;
       if (!silent) {
         set({
           sseMessage: errorMessage,
@@ -339,14 +376,14 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (
         event !== "start" &&
         activeTaskId &&
-        eventTaskId &&
-        eventTaskId !== activeTaskId
+        (!eventTaskId || eventTaskId !== activeTaskId)
       ) {
         return;
       }
     }
 
     if (event === "start" && payload && typeof payload === "object") {
+      const sm = get().streamMessages;
       const p = payload as Record<string, unknown>;
       if (typeof p.task_id === "string") {
         set({ sseTaskId: p.task_id });
@@ -354,7 +391,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (typeof p.session_id === "string") {
         onSessionResolved?.(p.session_id);
       }
-      set({ sseMessage: STREAM_MESSAGE.started });
+      set({ sseMessage: sm.streamStarted });
       return;
     }
     if (event === "state" && payload && typeof payload === "object") {
@@ -378,34 +415,28 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
             s.meta && typeof s.meta === "object"
               ? (s.meta as Record<string, unknown>)
               : undefined;
-          set((state) => ({
-            sseTraceSteps: upsertTraceStep(state.sseTraceSteps, {
+          set((state) => {
+            const mergedSteps = upsertTraceStep(state.sseTraceSteps, {
               id: stepId,
               type: stepType,
               content,
               seq: typeof s.seq === "number" ? s.seq : undefined,
               meta,
-            }),
-            traceCursor: Math.max(
-              state.traceCursor,
-              typeof s.seq === "number"
-                ? s.seq
-                : getNextTraceCursor(
-                    upsertTraceStep(state.sseTraceSteps, {
-                      id: stepId,
-                      type: stepType,
-                      content,
-                      seq: undefined,
-                      meta,
-                    }),
-                  ),
-            ),
-          }));
+            });
+            return {
+              sseTraceSteps: mergedSteps,
+              traceCursor: Math.max(
+                state.traceCursor,
+                typeof s.seq === "number" ? s.seq : getNextTraceCursor(mergedSteps),
+              ),
+            };
+          });
         }
       }
       return;
     }
     if (event === "tool_start" && payload && typeof payload === "object") {
+      const sm = get().streamMessages;
       const p = payload as Record<string, unknown>;
       if (typeof p.step_id === "string" && typeof p.name === "string") {
         const stepId = p.step_id;
@@ -417,7 +448,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
           sseTraceSteps: upsertTraceStep(state.sseTraceSteps, {
             id: stepId,
             type: "action",
-            content: `Tool running: ${toolName}`,
+            content: sm.toolRunning(toolName),
             meta: {
               ...(state.sseTraceSteps.find((x) => x.id === stepId)?.meta ?? {}),
               step_type: "tool_call",
@@ -429,12 +460,13 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
               },
             },
           }),
-          sseMessage: `Tool started: ${toolName}`,
+          sseMessage: sm.toolStarted(toolName),
         }));
       }
       return;
     }
     if (event === "tool_end" && payload && typeof payload === "object") {
+      const sm = get().streamMessages;
       const p = payload as Record<string, unknown>;
       if (
         typeof p.step_id === "string" &&
@@ -457,7 +489,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
             sseTraceSteps: upsertTraceStep(state.sseTraceSteps, {
               id: stepId,
               type: "action",
-              content: `Tool ${status}: ${toolName}`,
+              content: sm.toolStatus(status, toolName),
               meta: {
                 ...prevMeta,
                 step_type: "tool_call",
@@ -478,7 +510,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
                 },
               },
             }),
-            sseMessage: `Tool ${status}: ${toolName}`,
+            sseMessage: sm.toolStatus(status, toolName),
           };
         });
       }
@@ -506,6 +538,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       return;
     }
     if (event === "done") {
+      const sm = get().streamMessages;
       let nextUsage: SseTaskUsage | null = null;
       if (payload && typeof payload === "object") {
         const p = payload as Record<string, unknown>;
@@ -522,46 +555,47 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       }
       set({
         ssePhase: "done",
-        sseMessage: STREAM_MESSAGE.completed,
+        sseMessage: sm.streamCompleted,
         sseTaskUsage: nextUsage,
       });
       return;
     }
     if (event === "error" && payload && typeof payload === "object") {
+      const sm = get().streamMessages;
       const p = payload as Record<string, unknown>;
       const msg =
-        typeof p.message === "string" ? p.message : "Task stream error received.";
+        typeof p.message === "string" ? p.message : sm.streamErrorFallback;
       const fatal = typeof p.fatal === "boolean" ? p.fatal : null;
-      const fatalSuffix =
-        fatal === null ? "" : fatal ? " (fatal)" : " (retryable)";
-      const retrySuffix =
-        typeof p.retryCount === "number" ? ` [retry=${p.retryCount}]` : "";
+      const retryCount =
+        typeof p.retryCount === "number" ? p.retryCount : null;
       set((state) => ({
         ssePhase: fatal ? "error" : state.ssePhase,
-        sseMessage: `Task stream error: ${msg}${fatalSuffix}${retrySuffix}`,
+        sseMessage: sm.streamErrorMessage(msg, fatal, retryCount),
       }));
       return;
     }
     if (event === "heartbeat") {
+      const sm = get().streamMessages;
       set((state) => ({
-        sseMessage: state.sseMessage.startsWith(STREAM_MESSAGE.started)
+        sseMessage: state.sseMessage.startsWith(sm.streamStarted)
           ? state.sseMessage
-          : STREAM_MESSAGE.heartbeat,
+          : sm.streamHeartbeat,
       }));
     }
   },
 
   runTaskStream: async (options) => {
+    const sm = get().streamMessages;
     const prompt = options.prompt.trim();
     if (!prompt) {
-      set({ sseMessage: "Prompt cannot be empty." });
+      set({ sseMessage: sm.promptEmpty });
       return;
     }
 
     const { onSessionResolved } = options;
     set({
       isStreaming: true,
-      sseMessage: "Creating task and opening task stream...",
+      sseMessage: sm.creatingAndOpening,
       sseTokens: "",
       sseTraceSteps: [],
       ssePhase: null,
@@ -585,7 +619,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (!taskResponse.ok) {
         const errorText = await taskResponse.text();
         throw new Error(
-          errorText || `Task creation failed (${taskResponse.status})`,
+          errorText || `${sm.taskCreateFailed} (${taskResponse.status})`,
         );
       }
 
@@ -611,7 +645,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (!streamResponse.ok) {
         const errorText = await streamResponse.text();
         throw new Error(
-          errorText || `Task stream failed (${streamResponse.status})`,
+          errorText || `${sm.failedReadStream} (${streamResponse.status})`,
         );
       }
 
@@ -622,14 +656,14 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       );
 
       set((state) => ({
-        sseMessage: state.sseMessage.includes("completed")
+        sseMessage: state.sseMessage.includes(sm.streamCompleted)
           ? state.sseMessage
-          : "Task stream closed.",
+          : sm.streamClosed,
       }));
     } catch (error) {
       set({
         sseMessage:
-          error instanceof Error ? error.message : "Failed to read task stream.",
+          error instanceof Error ? error.message : sm.failedReadStream,
       });
     } finally {
       set({ isStreaming: false });

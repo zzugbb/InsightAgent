@@ -73,6 +73,44 @@ export const en: Messages = {
     send: "Send",
     sending: "Generating…",
   },
+  stream: {
+    streamStarted: "Task stream started.",
+    streamCompleted: "Task stream completed (done).",
+    streamHeartbeat: "Receiving task stream (heartbeat ok).",
+    loadingPersistedTrace: "Loading persisted trace...",
+    persistedTraceLoaded: "Persisted trace loaded.",
+    persistedTraceEmpty: "Persisted trace is empty for this task.",
+    taskIdRequiredTrace: "Task ID is required to load trace.",
+    failedLoadPersistedTrace: "Failed to load persisted trace.",
+    taskIdRequiredDelta: "Task ID is required to load trace delta.",
+    loadingTraceDeltaAfter: (seq: number) =>
+      `Loading trace delta after seq=${seq}...`,
+    traceDeltaLoaded: (count: number) => `Trace delta loaded (${count} steps).`,
+    traceDeltaLoadedMore: (count: number) =>
+      `Trace delta loaded (${count} steps, more available).`,
+    traceDeltaEmpty: "No new trace delta steps.",
+    failedLoadTraceDelta: "Failed to load trace delta.",
+    toolRunning: (name: string) => `Tool running: ${name}`,
+    toolStarted: (name: string) => `Tool started: ${name}`,
+    toolStatus: (status: string, name: string) => `Tool ${status}: ${name}`,
+    streamErrorFallback: "Task stream error received.",
+    streamErrorMessage: (
+      message: string,
+      fatal: boolean | null,
+      retryCount: number | null,
+    ) => {
+      const fatalSuffix =
+        fatal === null ? "" : fatal ? " (fatal)" : " (retryable)";
+      const retrySuffix =
+        typeof retryCount === "number" ? ` [retry=${retryCount}]` : "";
+      return `Task stream error: ${message}${fatalSuffix}${retrySuffix}`;
+    },
+    promptEmpty: "Prompt cannot be empty.",
+    creatingAndOpening: "Creating task and opening task stream...",
+    taskCreateFailed: "Task creation failed.",
+    streamClosed: "Task stream closed.",
+    failedReadStream: "Failed to read task stream.",
+  },
   sidebar: {
     ariaLabel: "Session list",
     brandTitle: "Observable Agent",

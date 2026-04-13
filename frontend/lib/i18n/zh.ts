@@ -72,6 +72,43 @@ export const zh: Messages = {
     send: "发送",
     sending: "生成中…",
   },
+  stream: {
+    streamStarted: "任务流已开始。",
+    streamCompleted: "任务流已完成（done）。",
+    streamHeartbeat: "任务流连接正常（heartbeat）。",
+    loadingPersistedTrace: "正在加载持久化轨迹…",
+    persistedTraceLoaded: "已加载持久化轨迹。",
+    persistedTraceEmpty: "该任务暂无持久化轨迹。",
+    taskIdRequiredTrace: "加载轨迹需要任务 ID。",
+    failedLoadPersistedTrace: "加载持久化轨迹失败。",
+    taskIdRequiredDelta: "加载轨迹增量需要任务 ID。",
+    loadingTraceDeltaAfter: (seq: number) => `正在加载 seq>${seq} 的轨迹增量…`,
+    traceDeltaLoaded: (count: number) => `已加载轨迹增量（${count} 步）。`,
+    traceDeltaLoadedMore: (count: number) =>
+      `已加载轨迹增量（${count} 步，仍有更多）。`,
+    traceDeltaEmpty: "暂无新的轨迹增量。",
+    failedLoadTraceDelta: "加载轨迹增量失败。",
+    toolRunning: (name: string) => `工具执行中：${name}`,
+    toolStarted: (name: string) => `工具已开始：${name}`,
+    toolStatus: (status: string, name: string) => `工具${status}：${name}`,
+    streamErrorFallback: "收到任务流错误事件。",
+    streamErrorMessage: (
+      message: string,
+      fatal: boolean | null,
+      retryCount: number | null,
+    ) => {
+      const fatalSuffix =
+        fatal === null ? "" : fatal ? "（致命）" : "（可重试）";
+      const retrySuffix =
+        typeof retryCount === "number" ? ` [retry=${retryCount}]` : "";
+      return `任务流错误：${message}${fatalSuffix}${retrySuffix}`;
+    },
+    promptEmpty: "输入内容不能为空。",
+    creatingAndOpening: "正在创建任务并打开任务流…",
+    taskCreateFailed: "创建任务失败。",
+    streamClosed: "任务流已关闭。",
+    failedReadStream: "读取任务流失败。",
+  },
   sidebar: {
     ariaLabel: "会话列表",
     brandTitle: "可观测智能体",

@@ -143,6 +143,13 @@ export function Workbench() {
   const loadTraceDelta = useChatStreamStore(
     (s: ChatStreamStore) => s.loadTraceDelta,
   );
+  const setStreamMessages = useChatStreamStore(
+    (s: ChatStreamStore) => s.setStreamMessages,
+  );
+
+  useEffect(() => {
+    setStreamMessages(t.stream);
+  }, [setStreamMessages, t.stream]);
 
   const syncTraceDelta = useCallback(
     (taskId: string, options?: { silent?: boolean }) => {
@@ -808,6 +815,9 @@ export function Workbench() {
     streaming: t.workbench.phaseRunning,
     running: t.workbench.phaseRunning,
     pending: t.workbench.phaseRunning,
+    thinking: t.workbench.phaseRunning,
+    tool_running: t.workbench.phaseRunning,
+    tool_retry: t.workbench.phaseRunning,
   };
   const phaseLabel = ssePhase
     ? (phaseLabelMap[ssePhase] ?? ssePhase)
