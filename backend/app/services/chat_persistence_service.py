@@ -356,6 +356,34 @@ def get_task_trace(task_id: str) -> list[dict]:
     return _normalize_trace_steps(json.loads(task["trace_json"]))
 
 
+def get_task_trace_delta_from_task(
+    task: dict,
+    *,
+    after_seq: int = 0,
+    limit: int = 200,
+) -> tuple[list[dict], int, bool]:
+    bounded_limit = max(1, int(limit))
+    trace_json = task.get("trace_json")
+    raw_steps: list[dict] = []
+    if isinstance(trace_json, str) and trace_json.strip():
+        try:
+            loaded = json.loads(trace_json)
+            if isinstance(loaded, list):
+                raw_steps = [x for x in loaded if isinstance(x, dict)]
+        except Exception:
+            raw_steps = []
+    trace_steps = _normalize_trace_steps(raw_steps)
+    all_delta_steps = [
+        step for step in trace_steps if int(step.get("seq", 0)) > after_seq
+    ]
+    delta_steps = all_delta_steps[:bounded_limit]
+    next_cursor = after_seq if not delta_steps else int(delta_steps[-1]["seq"])
+    status = str(task.get("status", ""))
+    still_running = status in ("pending", "running")
+    has_more = len(all_delta_steps) > len(delta_steps) or still_running
+    return delta_steps, next_cursor, has_more
+
+
 def get_task_trace_delta(
     task_id: str,
     after_seq: int = 0,
@@ -364,16 +392,11 @@ def get_task_trace_delta(
     task = get_task(task_id)
     if task is None:
         return [], after_seq, False
-    bounded_limit = max(1, int(limit))
-    trace_steps = get_task_trace(task_id)
-    all_delta_steps = [
-        step for step in trace_steps if int(step.get("seq", 0)) > after_seq
-    ]
-    delta_steps = all_delta_steps[:bounded_limit]
-    next_cursor = after_seq if not delta_steps else int(delta_steps[-1]["seq"])
-    still_running = task["status"] in ("pending", "running")
-    has_more = len(all_delta_steps) > len(delta_steps) or still_running
-    return delta_steps, next_cursor, has_more
+    return get_task_trace_delta_from_task(
+        task,
+        after_seq=after_seq,
+        limit=limit,
+    )
 
 
 def get_tasks_usage_summary(

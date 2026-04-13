@@ -59,6 +59,24 @@ class Settings(BaseSettings):
         alias="TRACE_PERSIST_MIN_INTERVAL_SEC",
         description="trace 增量写入最小间隔（秒）；0 表示不节流",
     )
+    stream_reconnect_poll_fast_sec: float = Field(
+        default=0.3,
+        gt=0.0,
+        alias="STREAM_RECONNECT_POLL_FAST_SEC",
+        description="running 重连流有增量时的快轮询间隔（秒）",
+    )
+    stream_reconnect_poll_max_sec: float = Field(
+        default=2.0,
+        gt=0.0,
+        alias="STREAM_RECONNECT_POLL_MAX_SEC",
+        description="running 重连流无增量退避到的最大轮询间隔（秒）",
+    )
+    stream_reconnect_heartbeat_interval_sec: float = Field(
+        default=2.0,
+        gt=0.0,
+        alias="STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC",
+        description="running 重连流 heartbeat 周期（秒）",
+    )
 
     @property
     def chroma_http_url(self) -> str:

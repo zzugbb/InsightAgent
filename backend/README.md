@@ -26,8 +26,10 @@
 - W2 优化：`GET /api/tasks/{task_id}/stream` 支持 `running` 状态重连（回补增量，不重复执行任务）
 - W2 重连流优化：`running` 重连返回的 `done/error` 事件补齐 `session_id/step_id` 并标记 `resumed=true`
 - W2 重连轮询优化：重连流按“有增量快轮询、无增量退避慢轮询”策略拉取 delta，降低 DB 轮询压力
+- W2 后端性能优化：新增 task 快照级 delta 计算，重连流循环复用单次 `get_task` 结果，减少重复查询
 - W1 可调优优化：trace 写入节流间隔支持环境变量 `TRACE_PERSIST_MIN_INTERVAL_SEC`
-- W1 usage 语义优化：`stream_generate` 为空走 fallback `generate` 时，`completion_tokens` 使用估算值
+- W1/W2 可调优优化：running 重连流轮询与 heartbeat 参数支持环境变量（`STREAM_RECONNECT_POLL_FAST_SEC` / `STREAM_RECONNECT_POLL_MAX_SEC` / `STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC`）
+- W1 usage 语义优化：`completion_tokens` 改为基于最终输出文本估算（覆盖流式与 fallback 场景）
 
 ## 当前已有内容
 
@@ -96,6 +98,10 @@
 - 连接方式：`chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)`
 - 默认配置：`CHROMA_HOST=127.0.0.1`、`CHROMA_PORT=8001`、`CHROMA_PROBE=true`
 - 流式 trace 写入节流：`TRACE_PERSIST_MIN_INTERVAL_SEC`（默认 `0.35` 秒）
+- running 重连流参数：
+  - `STREAM_RECONNECT_POLL_FAST_SEC`（默认 `0.3`）
+  - `STREAM_RECONNECT_POLL_MAX_SEC`（默认 `2.0`）
+  - `STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC`（默认 `2.0`）
 - 当前 embedding 边界：应用层未显式传自定义 embedding function，依赖 Chroma Server 默认策略
 - Chroma 不可达时：`memory/add`、`memory/query` 返回 503；任务后的摘要写入为 best-effort
 

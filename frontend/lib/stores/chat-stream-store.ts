@@ -5,6 +5,29 @@ import type { TraceStepPayload } from "../types/trace";
 
 export type { TraceStepPayload } from "../types/trace";
 
+const STREAM_MESSAGE = {
+  started: "Task stream started.",
+  completed: "Task stream completed (done).",
+  heartbeat: "Receiving task stream (heartbeat ok).",
+} as const;
+
+function normalizeSsePhase(raw: unknown): string | null {
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const phase = raw.trim().toLowerCase();
+  if (!phase) {
+    return null;
+  }
+  if (phase === "completed" || phase === "done") {
+    return "done";
+  }
+  if (phase === "failed") {
+    return "error";
+  }
+  return phase;
+}
+
 function normalizeTraceSteps(steps: TraceStepPayload[]): TraceStepPayload[] {
   return [...steps]
     .map((step, index) => ({ step, index }))
@@ -308,6 +331,21 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
   },
 
   dispatchSseEvent: (event, payload, onSessionResolved) => {
+    if (payload && typeof payload === "object") {
+      const p = payload as Record<string, unknown>;
+      const eventTaskId =
+        typeof p.task_id === "string" ? p.task_id.trim() : "";
+      const activeTaskId = get().sseTaskId?.trim() ?? "";
+      if (
+        event !== "start" &&
+        activeTaskId &&
+        eventTaskId &&
+        eventTaskId !== activeTaskId
+      ) {
+        return;
+      }
+    }
+
     if (event === "start" && payload && typeof payload === "object") {
       const p = payload as Record<string, unknown>;
       if (typeof p.task_id === "string") {
@@ -316,13 +354,14 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (typeof p.session_id === "string") {
         onSessionResolved?.(p.session_id);
       }
-      set({ sseMessage: "Task stream started." });
+      set({ sseMessage: STREAM_MESSAGE.started });
       return;
     }
     if (event === "state" && payload && typeof payload === "object") {
       const p = payload as Record<string, unknown>;
-      if (typeof p.phase === "string") {
-        set({ ssePhase: p.phase });
+      const normalizedPhase = normalizeSsePhase(p.phase);
+      if (normalizedPhase) {
+        set({ ssePhase: normalizedPhase });
       }
       return;
     }
@@ -482,7 +521,8 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         }
       }
       set({
-        sseMessage: "Task stream completed (done).",
+        ssePhase: "done",
+        sseMessage: STREAM_MESSAGE.completed,
         sseTaskUsage: nextUsage,
       });
       return;
@@ -504,9 +544,9 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     }
     if (event === "heartbeat") {
       set((state) => ({
-        sseMessage: state.sseMessage.startsWith("Task stream started")
+        sseMessage: state.sseMessage.startsWith(STREAM_MESSAGE.started)
           ? state.sseMessage
-          : "Receiving task stream (heartbeat ok).",
+          : STREAM_MESSAGE.heartbeat,
       }));
     }
   },

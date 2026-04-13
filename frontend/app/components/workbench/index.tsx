@@ -801,18 +801,19 @@ export function Workbench() {
     (t) => t.session_id === activeSessionId,
   );
 
-  const phaseLabel =
-    ssePhase === "done"
-      ? t.workbench.phaseDone
-      : ssePhase === "error"
-        ? t.workbench.phaseError
-        : ssePhase === "replay"
-          ? t.workbench.phaseReplay
-          : ssePhase
-            ? ssePhase
-            : isStreaming
-              ? t.workbench.phaseRunning
-              : t.workbench.phaseIdle;
+  const phaseLabelMap: Record<string, string> = {
+    done: t.workbench.phaseDone,
+    error: t.workbench.phaseError,
+    replay: t.workbench.phaseReplay,
+    streaming: t.workbench.phaseRunning,
+    running: t.workbench.phaseRunning,
+    pending: t.workbench.phaseRunning,
+  };
+  const phaseLabel = ssePhase
+    ? (phaseLabelMap[ssePhase] ?? ssePhase)
+    : isStreaming
+      ? t.workbench.phaseRunning
+      : t.workbench.phaseIdle;
 
   let composerHint = t.workbench.composerEnterSend;
   let composerHintVariant: "default" | "error" = "default";

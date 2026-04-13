@@ -79,6 +79,15 @@ def _safe_eval_expression(expr: str) -> float:
     return _eval(tree)
 
 
+def _estimate_token_count(text: str) -> int:
+    normalized = text.strip()
+    if not normalized:
+        return 0
+    cjk_units = len(re.findall(r"[\u4e00-\u9fff]", normalized))
+    latin_words = len(re.findall(r"[A-Za-z0-9_]+", normalized))
+    return max(1, cjk_units + latin_words)
+
+
 def _build_tool_plan(prompt: str) -> list[dict[str, object]]:
     normalized = prompt.strip().lower()
     plan: list[dict[str, object]] = [
@@ -497,13 +506,12 @@ def stream_task_execution(
             provider_prompt = (
                 f"{prompt}\n\nTool observations:\n" + "\n".join(tool_observations)
             )
-        completion_tokens = 0
-        fallback_completion_tokens = 0
+        stream_chunk_count = 0
 
         streamed_content = ""
         final_step_seq = int(final_step_streaming.get("seq", seq_cursor))
         for chunk in provider.stream_generate(provider_prompt):
-            completion_tokens += 1
+            stream_chunk_count += 1
             now = monotonic()
             if now - last_heartbeat_ts >= STREAM_HEARTBEAT_INTERVAL_SEC:
                 yield sse_event(
@@ -523,7 +531,7 @@ def stream_task_execution(
                 },
             )
             streamed_content += chunk
-            should_persist = completion_tokens % STREAM_TRACE_PERSIST_EVERY == 0
+            should_persist = stream_chunk_count % STREAM_TRACE_PERSIST_EVERY == 0
             if should_persist:
                 final_step_seq += 1
                 final_step_streaming = {
@@ -538,7 +546,6 @@ def stream_task_execution(
         if not final_content:
             fallback = provider.generate(provider_prompt)
             final_content = fallback.content
-            fallback_completion_tokens = len(final_content.split())
         else:
             final_step_seq += 1
         trace_steps[-1] = {
@@ -557,7 +564,7 @@ def stream_task_execution(
 
         usage_payload: dict[str, object] = {
             "prompt_tokens": None,
-            "completion_tokens": completion_tokens or fallback_completion_tokens,
+            "completion_tokens": _estimate_token_count(final_content),
             "cost_estimate": None,
         }
 

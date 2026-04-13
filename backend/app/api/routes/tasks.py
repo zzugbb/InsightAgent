@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
+from app.config import get_settings
 from app.schemas.trace import TraceStep, parse_trace_steps
 from app.services.chat_execution_service import sse_event, stream_task_execution
 from app.services.chat_persistence_service import (
@@ -19,6 +20,7 @@ from app.services.chat_persistence_service import (
     get_task,
     get_task_trace,
     get_task_trace_delta,
+    get_task_trace_delta_from_task,
     list_tasks,
 )
 from app.services.task_status_service import (
@@ -32,11 +34,18 @@ router = APIRouter()
 
 
 def stream_running_task_reconnect(task_id: str) -> Iterator[str]:
+    settings = get_settings()
     cursor = 0
-    poll_delay_fast_sec = 0.3
-    poll_delay_max_sec = 2.0
+    poll_delay_fast_sec = max(0.05, float(settings.stream_reconnect_poll_fast_sec))
+    poll_delay_max_sec = max(
+        poll_delay_fast_sec,
+        float(settings.stream_reconnect_poll_max_sec),
+    )
     poll_delay_sec = poll_delay_fast_sec
-    heartbeat_interval_sec = 2.0
+    heartbeat_interval_sec = max(
+        0.1,
+        float(settings.stream_reconnect_heartbeat_interval_sec),
+    )
     last_heartbeat_ts = monotonic()
     last_emitted_step_id: str | None = None
     last_phase: str | None = None
@@ -72,8 +81,8 @@ def stream_running_task_reconnect(task_id: str) -> Iterator[str]:
             )
             return
 
-        steps, next_cursor, _ = get_task_trace_delta(
-            task_id=task_id,
+        steps, next_cursor, _ = get_task_trace_delta_from_task(
+            task,
             after_seq=cursor,
             limit=200,
         )
