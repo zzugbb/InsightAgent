@@ -1,46 +1,12 @@
 import { create } from "zustand";
 
-import type { Messages } from "../i18n";
+import { en, type Messages } from "../i18n";
 import { parseSseBlock, parseSseBlocks } from "../sse/parse";
 import type { TraceStepPayload } from "../types/trace";
 
 export type { TraceStepPayload } from "../types/trace";
 
-const DEFAULT_STREAM_MESSAGES: Messages["stream"] = {
-  idleHint:
-    "Execution trace will appear in the right panel after sending a message.",
-  streamStarted: "Task stream started.",
-  streamCompleted: "Task stream completed (done).",
-  streamHeartbeat: "Receiving task stream (heartbeat ok).",
-  loadingPersistedTrace: "Loading persisted trace...",
-  persistedTraceLoaded: "Persisted trace loaded.",
-  persistedTraceEmpty: "Persisted trace is empty for this task.",
-  taskIdRequiredTrace: "Task ID is required to load trace.",
-  failedLoadPersistedTrace: "Failed to load persisted trace.",
-  taskIdRequiredDelta: "Task ID is required to load trace delta.",
-  loadingTraceDeltaAfter: (seq) => `Loading trace delta after seq=${seq}...`,
-  traceDeltaLoaded: (count) => `Trace delta loaded (${count} steps).`,
-  traceDeltaLoadedMore: (count) =>
-    `Trace delta loaded (${count} steps, more available).`,
-  traceDeltaEmpty: "No new trace delta steps.",
-  failedLoadTraceDelta: "Failed to load trace delta.",
-  toolRunning: (name) => `Tool running: ${name}`,
-  toolStarted: (name) => `Tool started: ${name}`,
-  toolStatus: (status, name) => `Tool ${status}: ${name}`,
-  streamErrorFallback: "Task stream error received.",
-  streamErrorMessage: (message, fatal, retryCount) => {
-    const fatalSuffix =
-      fatal === null ? "" : fatal ? " (fatal)" : " (retryable)";
-    const retrySuffix =
-      typeof retryCount === "number" ? ` [retry=${retryCount}]` : "";
-    return `Task stream error: ${message}${fatalSuffix}${retrySuffix}`;
-  },
-  promptEmpty: "Prompt cannot be empty.",
-  creatingAndOpening: "Creating task and opening task stream...",
-  taskCreateFailed: "Task creation failed.",
-  streamClosed: "Task stream closed.",
-  failedReadStream: "Failed to read task stream.",
-};
+const DEFAULT_STREAM_MESSAGES: Messages["stream"] = en.stream;
 
 const KNOWN_SSE_PHASES = new Set([
   "pending",
