@@ -1,4 +1,6 @@
 import json
+import re
+from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
 from collections.abc import Iterator
 from datetime import datetime
 from uuid import uuid4
@@ -21,6 +23,58 @@ class MockToolExecutionError(RuntimeError):
 
 def sse_event(event: str, data: dict[str, object]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _extract_calc_expression(prompt: str) -> str | None:
+    tagged = re.search(r"\[calc:(.+?)\]", prompt, flags=re.IGNORECASE)
+    if tagged:
+        expr = tagged.group(1).strip()
+        return expr or None
+
+    plain = re.search(r"(?:计算|calc)\s*[:：]?\s*([0-9+\-*/().%\s]{3,})", prompt)
+    if plain:
+        expr = plain.group(1).strip()
+        return expr or None
+
+    return None
+
+
+def _safe_eval_expression(expr: str) -> float:
+    tree = parse(expr, mode="eval")
+
+    def _eval(node: object) -> float:
+        if isinstance(node, Expression):
+            return _eval(node.body)
+        if isinstance(node, BinOp):
+            left = _eval(node.left)
+            right = _eval(node.right)
+            if isinstance(node.op, Add):
+                return left + right
+            if isinstance(node.op, Sub):
+                return left - right
+            if isinstance(node.op, Mult):
+                return left * right
+            if isinstance(node.op, Div):
+                return left / right
+            if isinstance(node.op, Mod):
+                return left % right
+            if isinstance(node.op, Pow):
+                return left**right
+            raise ValueError("unsupported binary operator")
+        if isinstance(node, UnaryOp):
+            value = _eval(node.operand)
+            if isinstance(node.op, UAdd):
+                return value
+            if isinstance(node.op, USub):
+                return -value
+            raise ValueError("unsupported unary operator")
+        if isinstance(node, int | float):
+            return float(node)
+        if hasattr(node, "value") and isinstance(getattr(node, "value"), (int, float)):
+            return float(getattr(node, "value"))
+        raise ValueError("unsupported expression node")
+
+    return _eval(tree)
 
 
 def _build_tool_plan(prompt: str) -> list[dict[str, object]]:
@@ -47,6 +101,17 @@ def _build_tool_plan(prompt: str) -> list[dict[str, object]]:
                 "input": {
                     "query": prompt.strip()[:80] or "default query",
                     "top_k": 2,
+                },
+            }
+        )
+
+    calc_expr = _extract_calc_expression(prompt)
+    if calc_expr:
+        plan.append(
+            {
+                "name": "calc_eval",
+                "input": {
+                    "expression": calc_expr,
                 },
             }
         )
@@ -89,6 +154,26 @@ def _run_mock_tool(
                 "(mock) Retrieved snippet B with supporting detail.",
             ],
             "knowledge_base_id": "mock_kb",
+        }
+
+    if name == "calc_eval":
+        expression = str(tool_input.get("expression", "")).strip()
+        if not expression:
+            raise MockToolExecutionError(
+                "Calculator tool requires a non-empty expression.",
+                fatal=False,
+            )
+        try:
+            value = _safe_eval_expression(expression)
+        except Exception as exc:
+            raise MockToolExecutionError(
+                f"Calculator parse/eval failed: {exc}",
+                fatal=False,
+            ) from exc
+        return {
+            "expression": expression,
+            "result": value,
+            "tool_kind": "local_calculator",
         }
 
     raise MockToolExecutionError(f"Unknown mock tool: {name}", fatal=True)

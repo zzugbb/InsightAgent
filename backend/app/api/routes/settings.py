@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, model_validator
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from app.db import get_sqlite_path
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
@@ -47,6 +49,15 @@ class SettingsSummaryResponse(BaseModel):
     sqlite_path: str
 
 
+class SettingsValidateResponse(BaseModel):
+    ok: bool
+    mode: str
+    provider: str
+    model: str
+    message: str
+    error: str | None = None
+
+
 @router.get("", response_model=SettingsSummaryResponse)
 def get_settings_summary() -> SettingsSummaryResponse:
     settings = get_stored_settings()
@@ -78,4 +89,66 @@ def update_settings(payload: SettingsUpdateRequest) -> SettingsSummaryResponse:
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
         sqlite_path=str(get_sqlite_path()),
+    )
+
+
+@router.post("/validate", response_model=SettingsValidateResponse)
+def validate_settings(payload: SettingsUpdateRequest) -> SettingsValidateResponse:
+    if payload.mode == "mock":
+        return SettingsValidateResponse(
+            ok=True,
+            mode=payload.mode,
+            provider=payload.provider,
+            model=payload.model,
+            message="mock mode is ready.",
+        )
+
+    if payload.base_url:
+        parsed = urlparse(payload.base_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            return SettingsValidateResponse(
+                ok=False,
+                mode=payload.mode,
+                provider=payload.provider,
+                model=payload.model,
+                message="base_url is invalid.",
+                error="base_url must be a valid http(s) URL",
+            )
+
+        try:
+            request = Request(payload.base_url, method="HEAD")
+            with urlopen(request, timeout=3) as response:
+                status_code = int(getattr(response, "status", 0))
+                if 200 <= status_code < 500:
+                    return SettingsValidateResponse(
+                        ok=True,
+                        mode=payload.mode,
+                        provider=payload.provider,
+                        model=payload.model,
+                        message="remote preflight succeeded.",
+                    )
+                return SettingsValidateResponse(
+                    ok=False,
+                    mode=payload.mode,
+                    provider=payload.provider,
+                    model=payload.model,
+                    message="remote preflight failed.",
+                    error=f"unexpected status: {status_code}",
+                )
+        except Exception as exc:
+            return SettingsValidateResponse(
+                ok=False,
+                mode=payload.mode,
+                provider=payload.provider,
+                model=payload.model,
+                message="remote preflight failed.",
+                error=str(exc),
+            )
+
+    return SettingsValidateResponse(
+        ok=True,
+        mode=payload.mode,
+        provider=payload.provider,
+        model=payload.model,
+        message="remote mode payload is structurally valid.",
     )

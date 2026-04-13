@@ -55,6 +55,15 @@ export type SettingsFormState = {
   api_key: string;
 };
 
+export type SettingsValidateResponse = {
+  ok: boolean;
+  mode: string;
+  provider: string;
+  model: string;
+  message: string;
+  error: string | null;
+};
+
 export type InspectorTab = "trace" | "context";
 
 /** 与 GET /api/sessions/{id}/memory/status 对齐 */

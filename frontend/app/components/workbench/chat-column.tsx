@@ -231,7 +231,7 @@ export function ChatColumn({
           showIcon
           closable
           onClose={onDismissBanner}
-          message={apiBanner}
+          title={apiBanner}
           role="alert"
         />
       ) : null}

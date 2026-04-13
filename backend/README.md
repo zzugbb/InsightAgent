@@ -19,6 +19,8 @@
 - 协同进展：前端已按最新交互要求收敛头部占位（移除会话状态胶囊与输入计数提示），继续复用现有接口与字段
 - 状态增强：`/api/tasks*` 响应已补充 `status_normalized`、`status_label`、`status_rank`，统一状态语义并保持向后兼容
 - W3 增量：mock 工具链路支持可复现错误语义（`[mock-tool-error]` 可恢复重试，`[mock-tool-fatal]` 致命失败），`tool_end/error/trace.meta.tool` 已输出 `retry_count/error`
+- W3 优化：新增本地计算器工具 `calc_eval`（支持 `[calc:1+2*3]` 与“计算 1+2*3”触发），纳入统一工具生命周期事件
+- W1 优化：新增 `POST /api/settings/validate`，用于设置保存前的结构/连通性预校验（不落库）
 
 ## 当前已有内容
 
@@ -35,6 +37,9 @@
 ## HTTP 接口（摘要）
 
 - `GET /health`
+- `GET /api/settings`
+- `PUT /api/settings`
+- `POST /api/settings/validate`
 - `POST /api/sessions`
 - `GET /api/sessions?limit=&offset=`（含 `total/has_more`）
 - `PATCH /api/sessions/{session_id}`
@@ -70,6 +75,7 @@
 `tool_start/tool_end` 使用与 action 节点一致的 `step_id`，可与 trace 节点一一对齐。
 当输入包含 `[mock-tool-error]` 时，会先触发一次工具错误并发出 `error(fatal=false,retryCount=1)`，随后自动重试并完成；
 当输入包含 `[mock-tool-fatal]` 时，会触发工具致命失败并直接结束任务（`status=failed`）。
+当输入包含 `[calc:表达式]`（如 `[calc:1+2*3]`）或文本“计算 1+2*3”时，会触发本地计算器工具并在 Trace 中记录 `input/output/status`。
 `trace/delta?after_seq=` 现可在任务流式进行中拉取到最终 `observation` 的阶段性刷新内容。
 前端已接入流式期间定时拉取、失败退避重试与流结束补拉，后端接口保持幂等增量语义。
 前端 Context 摘要会展示 delta 同步状态/重试次数/最近成功时间，便于联调与问题定位。

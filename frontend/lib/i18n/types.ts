@@ -271,6 +271,10 @@ export type Messages = {
     optionalPlaceholder: string;
     save: string;
     saving: string;
+    validate: string;
+    validating: string;
+    validatePass: string;
+    validateFail: string;
     apiKeyConfiguredKeep: string;
     apiKeyOptionalMock: string;
     metaProvider: string;
