@@ -46,6 +46,7 @@ def stream_task_execution(
         result = provider.generate(prompt)
         completion_chunks = list(provider.stream_generate(prompt))
         preview = prompt.strip()[:120]
+        normalized_prompt = prompt.strip().lower()
         tool_name = "mock_plan"
         tool_input = {"prompt_preview": preview}
         tool_output = {"echo": True}
@@ -72,7 +73,8 @@ def stream_task_execution(
                         "name": tool_name,
                         "input": tool_input,
                         "output": tool_output,
-                        "status": "done",
+                        "status": "running",
+                        "retry_count": 0,
                     },
                 },
             },
@@ -148,6 +150,57 @@ def stream_task_execution(
                 "phase": "tool_running",
             },
         )
+        tool_retry_count = 0
+        tool_error_message: str | None = None
+        if "[mock-tool-error]" in normalized_prompt:
+            tool_retry_count = 1
+            tool_error_message = (
+                "Mock tool transient error: plan source unavailable on first attempt."
+            )
+            yield sse_event(
+                "tool_end",
+                {
+                    "task_id": task_id,
+                    "step_id": tool_step_id,
+                    "status": "error",
+                    "latency_ms": 12,
+                    "output_preview": {"error": tool_error_message},
+                    "retry_count": tool_retry_count,
+                    "error": tool_error_message,
+                },
+            )
+            yield sse_event(
+                "error",
+                {
+                    "task_id": task_id,
+                    "step_id": tool_step_id,
+                    "message": tool_error_message,
+                    "fatal": False,
+                    "retryCount": tool_retry_count,
+                },
+            )
+            yield sse_event(
+                "state",
+                {
+                    "task_id": task_id,
+                    "phase": "tool_retry",
+                },
+            )
+            yield sse_event(
+                "tool_start",
+                {
+                    "task_id": task_id,
+                    "step_id": tool_step_id,
+                    "name": tool_name,
+                    "input": tool_input,
+                    "retry_count": tool_retry_count,
+                },
+            )
+            tool_output = {
+                "echo": True,
+                "recovered": True,
+                "retry_count": tool_retry_count,
+            }
         yield sse_event(
             "tool_end",
             {
@@ -156,8 +209,18 @@ def stream_task_execution(
                 "status": "done",
                 "latency_ms": 12,
                 "output_preview": tool_output,
+                "retry_count": tool_retry_count,
             },
         )
+        trace_steps[1]["meta"]["retryCount"] = tool_retry_count
+        trace_steps[1]["meta"]["tool"] = {
+            "name": tool_name,
+            "input": tool_input,
+            "output": tool_output,
+            "status": "done",
+            "retry_count": tool_retry_count,
+            "error": tool_error_message,
+        }
         yield sse_event(
             "trace",
             {

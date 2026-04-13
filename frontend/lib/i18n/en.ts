@@ -216,6 +216,8 @@ export const en: Messages = {
       tokens: "Tokens",
       toolLine: (name: string, status: string) =>
         `Tool ${name} · ${status}`,
+      toolRetry: (count: number) => `retry ${count}`,
+      toolError: (message: string) => `error ${message}`,
       ragLine: (chunkCount: number, knowledgeBaseId?: string) =>
         knowledgeBaseId
           ? `RAG · ${chunkCount} chunks · ${knowledgeBaseId}`

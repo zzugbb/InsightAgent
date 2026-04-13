@@ -387,6 +387,14 @@ export function formatTraceStepMetaSubtitle(
     const name = String(meta.tool.name).trim();
     if (name) {
       parts.push(labels.toolLine(name, String(meta.tool.status ?? "")));
+      const retryCountRaw = meta.tool.retry_count;
+      if (typeof retryCountRaw === "number" && retryCountRaw > 0) {
+        parts.push(labels.toolRetry(retryCountRaw));
+      }
+      const errRaw = meta.tool.error;
+      if (typeof errRaw === "string" && errRaw.trim()) {
+        parts.push(labels.toolError(errRaw.trim()));
+      }
     }
   }
   if (meta.rag?.chunks?.length) {

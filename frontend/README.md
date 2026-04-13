@@ -28,6 +28,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 左侧/中栏优化：侧栏会话区强化激活层级；聊天头部改为统一 runtime strip；消息流与输入区补充克制动效并统一节奏
 - 交互收敛：已移除会话状态胶囊与输入计数提示，模式/提供方/模型恢复为头部紧凑标签展示，减少纵向占用
 - 后端任务接口已提供 `status_normalized/status_label/status_rank`，前端可继续按需切换到后端统一状态语义
+- W3 增量：`tool_end` 与 `trace.meta.tool` 已接入 `retry_count/error`，Trace 元信息可展示工具重试次数与错误摘要（配合 `[mock-tool-error]` 触发）
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
 - Memory：状态展示 + add/query 调试（含 metadata）
 - 设置：主题、主题色、语言、模型与运行模式
@@ -83,6 +84,7 @@ npm run dev
 
 - 配合后端接入真实工具/RAG 后补齐流程图语义
 - 将当前 mock `tool_start/tool_end` 升级为真实工具执行与失败重试可视化
+- 在真实工具接入阶段复用当前 `retry_count/error` 字段语义，减少前端重构
 - 继续完善 usage/token/cost 的统计维度（跨会话/时间段聚合）
 - 持续优化流式回放体验（参数级调优与性能提升）
 - 继续做不阻塞主链路的可访问性与交互细化

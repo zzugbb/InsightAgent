@@ -17,6 +17,7 @@
 - 协同进展：前端左侧与中栏已完成风格收口（导航层级、runtime strip、输入区动效与密度），继续复用现有接口与字段
 - 协同进展：前端已按最新交互要求收敛头部占位（移除会话状态胶囊与输入计数提示），继续复用现有接口与字段
 - 状态增强：`/api/tasks*` 响应已补充 `status_normalized`、`status_label`、`status_rank`，统一状态语义并保持向后兼容
+- W3 增量：mock 工具链路支持可复现错误重试（`[mock-tool-error]`），`tool_end/error/trace.meta.tool` 已输出 `retry_count/error`
 
 ## 当前已有内容
 
@@ -66,6 +67,7 @@
 
 其中 `event: trace` 的 `data.step` 与 REST TraceStep 同构（`id/type/content/meta/seq?`）。
 `tool_start/tool_end` 使用与 action 节点一致的 `step_id`，可与 trace 节点一一对齐。
+当输入包含 `[mock-tool-error]` 时，会先触发一次工具错误并发出 `error(fatal=false,retryCount=1)`，随后自动重试并完成，便于前端联调错误/重试 UI。
 `trace/delta?after_seq=` 现可在任务流式进行中拉取到最终 `observation` 的阶段性刷新内容。
 前端已接入流式期间定时拉取、失败退避重试与流结束补拉，后端接口保持幂等增量语义。
 前端 Context 摘要会展示 delta 同步状态/重试次数/最近成功时间，便于联调与问题定位。

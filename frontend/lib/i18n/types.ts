@@ -211,6 +211,8 @@ export type Messages = {
       stepKind: string;
       tokens: string;
       toolLine: (name: string, status: string) => string;
+      toolRetry: (count: number) => string;
+      toolError: (message: string) => string;
       ragLine: (chunkCount: number, knowledgeBaseId?: string) => string;
     };
     /** 轨迹：列表时间线 vs 流程图 */

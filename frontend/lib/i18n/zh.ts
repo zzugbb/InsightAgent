@@ -213,6 +213,8 @@ export const zh: Messages = {
       tokens: "Token",
       toolLine: (name: string, status: string) =>
         `工具 ${name} · ${status}`,
+      toolRetry: (count: number) => `重试 ${count} 次`,
+      toolError: (message: string) => `错误 ${message}`,
       ragLine: (chunkCount: number, knowledgeBaseId?: string) =>
         knowledgeBaseId
           ? `RAG · ${chunkCount} 条片段 · ${knowledgeBaseId}`
