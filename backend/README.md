@@ -22,6 +22,12 @@
 - W3 优化：新增本地计算器工具 `calc_eval`（支持 `[calc:1+2*3]` 与“计算 1+2*3”触发），纳入统一工具生命周期事件
 - W1 优化：新增 `POST /api/settings/validate`，用于设置保存前的结构/连通性预校验（不落库）
 - W1 稳定性优化：`remote` 模式保存/校验支持沿用已存储 `api_key`（空值提交不再清空历史密钥）
+- W1/W2 稳定性优化：SSE 流式输出增加周期 heartbeat（长输出保活更稳定）+ trace 持久化写入节流（降低 SQLite 写放大）
+- W2 优化：`GET /api/tasks/{task_id}/stream` 支持 `running` 状态重连（回补增量，不重复执行任务）
+- W2 重连流优化：`running` 重连返回的 `done/error` 事件补齐 `session_id/step_id` 并标记 `resumed=true`
+- W2 重连轮询优化：重连流按“有增量快轮询、无增量退避慢轮询”策略拉取 delta，降低 DB 轮询压力
+- W1 可调优优化：trace 写入节流间隔支持环境变量 `TRACE_PERSIST_MIN_INTERVAL_SEC`
+- W1 usage 语义优化：`stream_generate` 为空走 fallback `generate` 时，`completion_tokens` 使用估算值
 
 ## 当前已有内容
 
@@ -55,7 +61,7 @@
 - `GET /api/tasks*` 相关响应包含状态派生字段：`status_normalized`、`status_label`、`status_rank`
 - `GET /api/tasks/usage/summary`（可选 `session_id`）
 - `GET /api/tasks/{task_id}`
-- `GET /api/tasks/{task_id}/stream`
+- `GET /api/tasks/{task_id}/stream`（`pending/running`；running 为重连回补流）
 - `GET /api/tasks/{task_id}/trace`
 - `GET /api/tasks/{task_id}/trace/delta?after_seq=&limit=`（`limit` 默认 200，最大 500；`has_more` 反映剩余分页或任务仍在运行）
 
@@ -89,6 +95,7 @@
 - collection 命名：`memory_{session_id}`
 - 连接方式：`chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)`
 - 默认配置：`CHROMA_HOST=127.0.0.1`、`CHROMA_PORT=8001`、`CHROMA_PROBE=true`
+- 流式 trace 写入节流：`TRACE_PERSIST_MIN_INTERVAL_SEC`（默认 `0.35` 秒）
 - 当前 embedding 边界：应用层未显式传自定义 embedding function，依赖 Chroma Server 默认策略
 - Chroma 不可达时：`memory/add`、`memory/query` 返回 503；任务后的摘要写入为 best-effort
 

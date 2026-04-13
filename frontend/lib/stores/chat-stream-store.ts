@@ -226,12 +226,19 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     }
 
     const currentCursor = get().traceCursor;
+    const currentTaskId = get().sseTaskId?.trim() ?? "";
+    if (currentTaskId && currentTaskId !== normalizedTaskId) {
+      return {
+        ok: true,
+        error: null,
+        hasMore: false,
+      };
+    }
     if (!silent) {
       set({
         sseMessage: `Loading trace delta after seq=${currentCursor}...`,
-        sseTaskId: normalizedTaskId,
       });
-    } else {
+    } else if (!currentTaskId) {
       set({
         sseTaskId: normalizedTaskId,
       });
@@ -260,26 +267,33 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       };
       const steps = Array.isArray(data.steps) ? data.steps : [];
 
-      set((state) => ({
-        sseTaskId: data.task_id || normalizedTaskId,
-        sseTraceSteps: normalizeTraceSteps(
-          steps.reduce(
-            (mergedSteps, step) => upsertTraceStep(mergedSteps, step),
-            state.sseTraceSteps,
+      set((state) => {
+        const targetTaskId = (data.task_id || normalizedTaskId).trim();
+        const activeTaskId = state.sseTaskId?.trim() ?? "";
+        if (activeTaskId && targetTaskId !== activeTaskId) {
+          return state;
+        }
+        return {
+          sseTaskId: data.task_id || normalizedTaskId,
+          sseTraceSteps: normalizeTraceSteps(
+            steps.reduce(
+              (mergedSteps, step) => upsertTraceStep(mergedSteps, step),
+              state.sseTraceSteps,
+            ),
           ),
-        ),
-        traceCursor:
-          typeof data.next_cursor === "number"
-            ? data.next_cursor
-            : Math.max(currentCursor, getNextTraceCursor(steps)),
-        sseMessage: silent
-          ? state.sseMessage
-          : steps.length > 0
-            ? data.has_more
-              ? `Trace delta loaded (${steps.length} steps, more available).`
-              : `Trace delta loaded (${steps.length} steps).`
-            : "No new trace delta steps.",
-      }));
+          traceCursor:
+            typeof data.next_cursor === "number"
+              ? data.next_cursor
+              : Math.max(currentCursor, getNextTraceCursor(steps)),
+          sseMessage: silent
+            ? state.sseMessage
+            : steps.length > 0
+              ? data.has_more
+                ? `Trace delta loaded (${steps.length} steps, more available).`
+                : `Trace delta loaded (${steps.length} steps).`
+              : "No new trace delta steps.",
+        };
+      });
       return { ok: true, error: null, hasMore: data.has_more === true };
     } catch (error) {
       const errorMessage =

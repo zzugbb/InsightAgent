@@ -1,8 +1,14 @@
+import json
+from collections.abc import Iterator
+from datetime import datetime
+from time import monotonic, sleep
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
 from app.schemas.trace import TraceStep, parse_trace_steps
+from app.services.chat_execution_service import sse_event, stream_task_execution
 from app.services.chat_persistence_service import (
     count_tasks,
     create_message,
@@ -15,7 +21,6 @@ from app.services.chat_persistence_service import (
     get_task_trace_delta,
     list_tasks,
 )
-from app.services.chat_execution_service import stream_task_execution
 from app.services.task_status_service import (
     normalize_task_status,
     task_status_label,
@@ -24,6 +29,135 @@ from app.services.task_status_service import (
 
 
 router = APIRouter()
+
+
+def stream_running_task_reconnect(task_id: str) -> Iterator[str]:
+    cursor = 0
+    poll_delay_fast_sec = 0.3
+    poll_delay_max_sec = 2.0
+    poll_delay_sec = poll_delay_fast_sec
+    heartbeat_interval_sec = 2.0
+    last_heartbeat_ts = monotonic()
+    last_emitted_step_id: str | None = None
+    last_phase: str | None = None
+
+    def emit_state(phase: str) -> str | None:
+        nonlocal last_phase
+        if phase == last_phase:
+            return None
+        last_phase = phase
+        return sse_event("state", {"task_id": task_id, "phase": phase})
+
+    first_task = get_task(task_id)
+    session_id = str(first_task.get("session_id")) if first_task else None
+    yield sse_event(
+        "start",
+        {
+            "session_id": session_id,
+            "task_id": task_id,
+            "resumed": True,
+        },
+    )
+    while True:
+        task = get_task(task_id)
+        if task is None:
+            yield sse_event(
+                "error",
+                {
+                    "task_id": task_id,
+                    "message": "Task not found during reconnect stream.",
+                    "fatal": True,
+                    "retryCount": 0,
+                },
+            )
+            return
+
+        steps, next_cursor, _ = get_task_trace_delta(
+            task_id=task_id,
+            after_seq=cursor,
+            limit=200,
+        )
+        if steps:
+            parsed_steps = parse_trace_steps(steps)
+            for step in parsed_steps:
+                step_payload = step.model_dump(exclude_none=True)
+                last_emitted_step_id = step.id
+                yield sse_event(
+                    "trace",
+                    {
+                        "task_id": task_id,
+                        "step_id": step.id,
+                        "step": step_payload,
+                    },
+                )
+            cursor = next_cursor
+            poll_delay_sec = poll_delay_fast_sec
+        else:
+            poll_delay_sec = min(poll_delay_max_sec, poll_delay_sec * 1.6)
+
+        status = str(task.get("status", "running"))
+        if status in {"completed", "failed"}:
+            if last_emitted_step_id is None:
+                full_steps = get_task_trace(task_id)
+                if full_steps:
+                    maybe_id = full_steps[-1].get("id")
+                    if isinstance(maybe_id, str):
+                        last_emitted_step_id = maybe_id
+            if status == "completed":
+                usage_payload: dict[str, object] | None = None
+                usage_raw = task.get("usage_json")
+                if isinstance(usage_raw, str) and usage_raw.strip():
+                    try:
+                        parsed_usage = json.loads(usage_raw)
+                        if isinstance(parsed_usage, dict):
+                            usage_payload = parsed_usage
+                    except Exception:
+                        usage_payload = None
+                yield sse_event(
+                    "done",
+                    {
+                        "session_id": str(task.get("session_id", "")) or session_id,
+                        "task_id": task_id,
+                        "step_id": last_emitted_step_id,
+                        "status": "completed",
+                        "usage": usage_payload,
+                        "resumed": True,
+                    },
+                )
+            else:
+                state_event = emit_state("error")
+                if state_event is not None:
+                    yield state_event
+                yield sse_event(
+                    "error",
+                    {
+                        "session_id": str(task.get("session_id", "")) or session_id,
+                        "task_id": task_id,
+                        "step_id": last_emitted_step_id,
+                        "message": "Task ended with failed status.",
+                        "fatal": True,
+                        "retryCount": 0,
+                        "resumed": True,
+                    },
+                )
+            return
+
+        phase_event = emit_state("streaming" if status == "running" else status)
+        if phase_event is not None:
+            yield phase_event
+
+        now = monotonic()
+        if now - last_heartbeat_ts >= heartbeat_interval_sec:
+            yield sse_event(
+                "heartbeat",
+                {
+                    "task_id": task_id,
+                    "ts": datetime.now().isoformat(),
+                    "resumed": True,
+                },
+            )
+            last_heartbeat_ts = now
+        sleep(poll_delay_sec)
 
 
 class TaskCreateRequest(BaseModel):
@@ -240,10 +374,20 @@ def stream_task_detail(task_id: str) -> StreamingResponse:
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task["status"] != "pending":
+    if task["status"] not in {"pending", "running"}:
         raise HTTPException(
             status_code=409,
-            detail="Task stream can only be opened for pending tasks",
+            detail="Task stream can only be opened for pending/running tasks",
+        )
+
+    if task["status"] == "running":
+        return StreamingResponse(
+            stream_running_task_reconnect(task_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
         )
 
     return StreamingResponse(

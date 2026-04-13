@@ -53,6 +53,12 @@ class Settings(BaseSettings):
         alias="CHROMA_PROBE",
         description="是否在 /health 中对 Chroma 发起心跳探测（可关以避免阻塞）",
     )
+    trace_persist_min_interval_sec: float = Field(
+        default=0.35,
+        ge=0.0,
+        alias="TRACE_PERSIST_MIN_INTERVAL_SEC",
+        description="trace 增量写入最小间隔（秒）；0 表示不节流",
+    )
 
     @property
     def chroma_http_url(self) -> str:

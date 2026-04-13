@@ -3,8 +3,10 @@ import re
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
 from collections.abc import Iterator
 from datetime import datetime
+from time import monotonic
 from uuid import uuid4
 
+from app.config import get_settings
 from app.services.chat_persistence_service import (
     complete_task,
     create_message,
@@ -187,9 +189,28 @@ def stream_task_execution(
     persist_user_message: bool = False,
 ) -> Iterator[str]:
     STREAM_TRACE_PERSIST_EVERY = 8
+    STREAM_HEARTBEAT_INTERVAL_SEC = 2.0
+    TRACE_PERSIST_MIN_INTERVAL_SEC = max(
+        0.0, float(get_settings().trace_persist_min_interval_sec)
+    )
     TOOL_MAX_RETRY = 1
     trace_steps: list[dict[str, object]] = []
     seq_cursor = 0
+    last_trace_persist_ts = 0.0
+
+    def persist_trace(*, force: bool = False) -> None:
+        nonlocal last_trace_persist_ts
+        if not trace_steps:
+            return
+        now = monotonic()
+        if (
+            not force
+            and last_trace_persist_ts > 0
+            and now - last_trace_persist_ts < TRACE_PERSIST_MIN_INTERVAL_SEC
+        ):
+            return
+        update_task_trace_steps(task_id, trace_steps)
+        last_trace_persist_ts = now
 
     if persist_user_message:
         create_message(
@@ -237,7 +258,7 @@ def stream_task_execution(
             "trace",
             {"task_id": task_id, "step_id": plan_step_id, "step": plan_step},
         )
-        update_task_trace_steps(task_id, trace_steps)
+        persist_trace(force=True)
 
         tool_observations: list[str] = []
 
@@ -384,7 +405,7 @@ def stream_task_execution(
                             "step": action_step,
                         },
                     )
-                    update_task_trace_steps(task_id, trace_steps)
+                    persist_trace(force=True)
                     complete_task(task_id=task_id, trace_steps=trace_steps, status="failed")
                     yield sse_event("state", {"task_id": task_id, "phase": "error"})
                     return
@@ -398,7 +419,7 @@ def stream_task_execution(
                     "step": action_step,
                 },
             )
-            update_task_trace_steps(task_id, trace_steps)
+            persist_trace()
 
             tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
             tool_obj = (
@@ -434,7 +455,7 @@ def stream_task_execution(
                         "trace",
                         {"task_id": task_id, "step_id": rag_step_id, "step": rag_step},
                     )
-                    update_task_trace_steps(task_id, trace_steps)
+                    persist_trace()
 
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
         final_step_id = str(uuid4())
@@ -460,8 +481,9 @@ def stream_task_execution(
                 "step": final_step_streaming,
             },
         )
-        update_task_trace_steps(task_id, trace_steps)
+        persist_trace(force=True)
 
+        last_heartbeat_ts = monotonic()
         yield sse_event(
             "heartbeat",
             {
@@ -475,12 +497,23 @@ def stream_task_execution(
             provider_prompt = (
                 f"{prompt}\n\nTool observations:\n" + "\n".join(tool_observations)
             )
-        result = provider.generate(provider_prompt)
-        completion_chunks = list(provider.stream_generate(provider_prompt))
+        completion_tokens = 0
+        fallback_completion_tokens = 0
 
         streamed_content = ""
         final_step_seq = int(final_step_streaming.get("seq", seq_cursor))
-        for index, chunk in enumerate(completion_chunks, start=1):
+        for chunk in provider.stream_generate(provider_prompt):
+            completion_tokens += 1
+            now = monotonic()
+            if now - last_heartbeat_ts >= STREAM_HEARTBEAT_INTERVAL_SEC:
+                yield sse_event(
+                    "heartbeat",
+                    {
+                        "task_id": task_id,
+                        "ts": datetime.now().isoformat(),
+                    },
+                )
+                last_heartbeat_ts = now
             yield sse_event(
                 "token",
                 {
@@ -490,10 +523,7 @@ def stream_task_execution(
                 },
             )
             streamed_content += chunk
-            should_persist = (
-                index % STREAM_TRACE_PERSIST_EVERY == 0
-                or index == len(completion_chunks)
-            )
+            should_persist = completion_tokens % STREAM_TRACE_PERSIST_EVERY == 0
             if should_persist:
                 final_step_seq += 1
                 final_step_streaming = {
@@ -502,14 +532,21 @@ def stream_task_execution(
                     "seq": final_step_seq,
                 }
                 trace_steps[-1] = final_step_streaming
-                update_task_trace_steps(task_id, trace_steps)
+                persist_trace()
 
-        final_content = streamed_content or result.content
+        final_content = streamed_content
+        if not final_content:
+            fallback = provider.generate(provider_prompt)
+            final_content = fallback.content
+            fallback_completion_tokens = len(final_content.split())
+        else:
+            final_step_seq += 1
         trace_steps[-1] = {
             **final_step_streaming,
             "content": final_content,
             "seq": final_step_seq,
         }
+        persist_trace(force=True)
 
         create_message(
             session_id=session_id,
@@ -520,7 +557,7 @@ def stream_task_execution(
 
         usage_payload: dict[str, object] = {
             "prompt_tokens": None,
-            "completion_tokens": len(completion_chunks),
+            "completion_tokens": completion_tokens or fallback_completion_tokens,
             "cost_estimate": None,
         }
 
