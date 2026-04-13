@@ -5,6 +5,22 @@ import type { TraceStepPayload } from "../types/trace";
 
 export type { TraceStepPayload } from "../types/trace";
 
+function normalizeTraceSteps(steps: TraceStepPayload[]): TraceStepPayload[] {
+  return [...steps]
+    .map((step, index) => ({ step, index }))
+    .sort((a, b) => {
+      const aSeq =
+        typeof a.step.seq === "number" ? a.step.seq : Number.MAX_SAFE_INTEGER;
+      const bSeq =
+        typeof b.step.seq === "number" ? b.step.seq : Number.MAX_SAFE_INTEGER;
+      if (aSeq === bSeq) {
+        return a.index - b.index;
+      }
+      return aSeq - bSeq;
+    })
+    .map((entry) => entry.step);
+}
+
 function getNextTraceCursor(steps: TraceStepPayload[]): number {
   return steps.reduce((maxSeq, step, index) => {
     const fallbackSeq = index + 1;
@@ -21,9 +37,9 @@ function upsertTraceStep(
   if (index >= 0) {
     const next = [...steps];
     next[index] = { ...next[index], ...step };
-    return next;
+    return normalizeTraceSteps(next);
   }
-  return [...steps, step];
+  return normalizeTraceSteps([...steps, step]);
 }
 
 export type RunTaskStreamOptions = {
@@ -179,7 +195,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
 
       set({
         sseTaskId: data.task_id || normalizedTaskId,
-        sseTraceSteps: steps,
+        sseTraceSteps: normalizeTraceSteps(steps),
         ssePhase: typeof data.status === "string" ? data.status : "replay",
         traceCursor,
         sseMessage:
@@ -246,9 +262,11 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
 
       set((state) => ({
         sseTaskId: data.task_id || normalizedTaskId,
-        sseTraceSteps: steps.reduce(
-          (mergedSteps, step) => upsertTraceStep(mergedSteps, step),
-          state.sseTraceSteps,
+        sseTraceSteps: normalizeTraceSteps(
+          steps.reduce(
+            (mergedSteps, step) => upsertTraceStep(mergedSteps, step),
+            state.sseTraceSteps,
+          ),
         ),
         traceCursor:
           typeof data.next_cursor === "number"
@@ -459,14 +477,15 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       const p = payload as Record<string, unknown>;
       const msg =
         typeof p.message === "string" ? p.message : "Task stream error received.";
+      const fatal = typeof p.fatal === "boolean" ? p.fatal : null;
       const fatalSuffix =
-        typeof p.fatal === "boolean" ? (p.fatal ? " (fatal)" : " (retryable)") : "";
+        fatal === null ? "" : fatal ? " (fatal)" : " (retryable)";
       const retrySuffix =
         typeof p.retryCount === "number" ? ` [retry=${p.retryCount}]` : "";
-      set({
-        ssePhase: "error",
+      set((state) => ({
+        ssePhase: fatal ? "error" : state.ssePhase,
         sseMessage: `Task stream error: ${msg}${fatalSuffix}${retrySuffix}`,
-      });
+      }));
       return;
     }
     if (event === "heartbeat") {

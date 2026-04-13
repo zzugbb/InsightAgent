@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -33,9 +33,6 @@ class SettingsUpdateRequest(BaseModel):
 
         if not self.model:
             raise ValueError("model is required")
-
-        if self.mode == "remote" and not self.api_key:
-            raise ValueError("api_key is required when mode is 'remote'")
 
         return self
 
@@ -73,13 +70,21 @@ def get_settings_summary() -> SettingsSummaryResponse:
 
 @router.put("", response_model=SettingsSummaryResponse)
 def update_settings(payload: SettingsUpdateRequest) -> SettingsSummaryResponse:
+    existing = get_stored_settings()
+    effective_api_key = payload.api_key or existing.api_key
+    if payload.mode == "remote" and not effective_api_key:
+        raise HTTPException(
+            status_code=422,
+            detail="api_key is required when mode is 'remote'",
+        )
+
     settings = save_settings(
         StoredSettings(
             mode=payload.mode,
             provider=payload.provider,
             model=payload.model,
             base_url=payload.base_url,
-            api_key=payload.api_key,
+            api_key=effective_api_key,
         )
     )
     return SettingsSummaryResponse(
@@ -94,6 +99,18 @@ def update_settings(payload: SettingsUpdateRequest) -> SettingsSummaryResponse:
 
 @router.post("/validate", response_model=SettingsValidateResponse)
 def validate_settings(payload: SettingsUpdateRequest) -> SettingsValidateResponse:
+    existing = get_stored_settings()
+    effective_api_key = payload.api_key or existing.api_key
+    if payload.mode == "remote" and not effective_api_key:
+        return SettingsValidateResponse(
+            ok=False,
+            mode=payload.mode,
+            provider=payload.provider,
+            model=payload.model,
+            message="remote mode preflight failed.",
+            error="api_key is required when mode is 'remote'",
+        )
+
     if payload.mode == "mock":
         return SettingsValidateResponse(
             ok=True,
