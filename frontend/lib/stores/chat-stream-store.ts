@@ -457,12 +457,15 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     }
     if (event === "error" && payload && typeof payload === "object") {
       const p = payload as Record<string, unknown>;
+      const msg =
+        typeof p.message === "string" ? p.message : "Task stream error received.";
+      const fatalSuffix =
+        typeof p.fatal === "boolean" ? (p.fatal ? " (fatal)" : " (retryable)") : "";
+      const retrySuffix =
+        typeof p.retryCount === "number" ? ` [retry=${p.retryCount}]` : "";
       set({
         ssePhase: "error",
-        sseMessage:
-          typeof p.message === "string"
-            ? `Task stream error: ${p.message}`
-            : "Task stream error received.",
+        sseMessage: `Task stream error: ${msg}${fatalSuffix}${retrySuffix}`,
       });
       return;
     }

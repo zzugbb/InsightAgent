@@ -6,7 +6,8 @@
 
 - W1：已完成
 - W2：已完成（已收口）
-- W3/W4：未开始（真实工具 / RAG）
+- W3：已完成（mock 范围）
+- W4：进行中（真实工具 / RAG 生产化）
 - 工程协作：前端 `npm run lint` 已可直接执行，且当前告警已清零
 - 协同进展：前端已切换到后端 usage 聚合接口（全局/会话双范围），并显示覆盖率与状态反馈（loading/error/empty）
 - 协同进展：前端右侧 Inspector（Context）已按可观测运维场景完成分区重排（概览/同步诊断/用量/Memory/任务索引），后端现有字段可直接支撑后续模块扩展
@@ -17,7 +18,7 @@
 - 协同进展：前端左侧与中栏已完成风格收口（导航层级、runtime strip、输入区动效与密度），继续复用现有接口与字段
 - 协同进展：前端已按最新交互要求收敛头部占位（移除会话状态胶囊与输入计数提示），继续复用现有接口与字段
 - 状态增强：`/api/tasks*` 响应已补充 `status_normalized`、`status_label`、`status_rank`，统一状态语义并保持向后兼容
-- W3 增量：mock 工具链路支持可复现错误重试（`[mock-tool-error]`），`tool_end/error/trace.meta.tool` 已输出 `retry_count/error`
+- W3 增量：mock 工具链路支持可复现错误语义（`[mock-tool-error]` 可恢复重试，`[mock-tool-fatal]` 致命失败），`tool_end/error/trace.meta.tool` 已输出 `retry_count/error`
 
 ## 当前已有内容
 
@@ -67,7 +68,8 @@
 
 其中 `event: trace` 的 `data.step` 与 REST TraceStep 同构（`id/type/content/meta/seq?`）。
 `tool_start/tool_end` 使用与 action 节点一致的 `step_id`，可与 trace 节点一一对齐。
-当输入包含 `[mock-tool-error]` 时，会先触发一次工具错误并发出 `error(fatal=false,retryCount=1)`，随后自动重试并完成，便于前端联调错误/重试 UI。
+当输入包含 `[mock-tool-error]` 时，会先触发一次工具错误并发出 `error(fatal=false,retryCount=1)`，随后自动重试并完成；
+当输入包含 `[mock-tool-fatal]` 时，会触发工具致命失败并直接结束任务（`status=failed`）。
 `trace/delta?after_seq=` 现可在任务流式进行中拉取到最终 `observation` 的阶段性刷新内容。
 前端已接入流式期间定时拉取、失败退避重试与流结束补拉，后端接口保持幂等增量语义。
 前端 Context 摘要会展示 delta 同步状态/重试次数/最近成功时间，便于联调与问题定位。
@@ -100,10 +102,10 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 docker compose up -d chroma
 ```
 
-## 当前限制（W3/W4 前）
+## 当前限制（W4 生产化前）
 
 - `api_key` 仅最小存储骨架，未加密
 - `remote` 模式 provider 校验仍较粗
-- 真实工具调用循环与真实 RAG 尚未接入（当前仅 `tool_start/tool_end` mock 生命周期事件）
+- 真实工具调用循环与真实 RAG 尚未完全生产化（当前已具备 `tool_start/tool_end` mock 生命周期 + 错误重试语义）
 - usage/token/cost 仍是占位增强阶段
 - `trace/delta` 当前链路已稳定，后续仅做参数级调优（不影响 W2 已收口）

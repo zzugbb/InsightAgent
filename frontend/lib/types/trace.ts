@@ -18,6 +18,8 @@ export type TraceStepMeta = {
     input?: unknown;
     output?: unknown;
     status: "running" | "done" | "error";
+    retry_count?: number;
+    error?: string | null;
   };
   rag?: { chunks: string[]; knowledge_base_id?: string };
   memory?: string[];
