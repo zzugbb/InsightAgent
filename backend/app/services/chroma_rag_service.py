@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from uuid import uuid4
 
@@ -30,8 +31,15 @@ def normalize_knowledge_base_id(value: str | None) -> str:
     return normalized[:48]
 
 
-def rag_collection_name(knowledge_base_id: str) -> str:
-    return f"kb_{normalize_knowledge_base_id(knowledge_base_id)}"
+def _normalize_user_scope(user_id: str) -> str:
+    raw = user_id.strip().lower()
+    if not raw:
+        return "anon"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def rag_collection_name(user_id: str, knowledge_base_id: str) -> str:
+    return f"kb_{_normalize_user_scope(user_id)}_{normalize_knowledge_base_id(knowledge_base_id)}"
 
 
 def _chunk_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[str]:
@@ -69,6 +77,7 @@ def _normalize_metadata(metadata: dict[str, str] | None) -> dict[str, object]:
 
 def ingest_knowledge_documents(
     *,
+    user_id: str,
     knowledge_base_id: str,
     documents: list[dict[str, object]],
     chunk_size: int,
@@ -80,7 +89,7 @@ def ingest_knowledge_documents(
         raise ValueError("chunk_overlap must be less than chunk_size")
 
     kb_id = normalize_knowledge_base_id(knowledge_base_id)
-    collection_name = rag_collection_name(kb_id)
+    collection_name = rag_collection_name(user_id, kb_id)
 
     client = _http_client()
     collection = client.get_or_create_collection(name=collection_name)
@@ -146,6 +155,7 @@ def ingest_knowledge_documents(
 
 def query_knowledge_base(
     *,
+    user_id: str,
     knowledge_base_id: str,
     query_text: str,
     top_k: int,
@@ -155,7 +165,7 @@ def query_knowledge_base(
         raise ValueError("query text is empty")
 
     kb_id = normalize_knowledge_base_id(knowledge_base_id)
-    collection_name = rag_collection_name(kb_id)
+    collection_name = rag_collection_name(user_id, kb_id)
     client = _http_client()
 
     try:
@@ -215,9 +225,9 @@ def query_knowledge_base(
     }
 
 
-def get_knowledge_base_status(*, knowledge_base_id: str) -> dict[str, object]:
+def get_knowledge_base_status(*, user_id: str, knowledge_base_id: str) -> dict[str, object]:
     kb_id = normalize_knowledge_base_id(knowledge_base_id)
-    collection_name = rag_collection_name(kb_id)
+    collection_name = rag_collection_name(user_id, kb_id)
     settings = get_settings()
     base: dict[str, object] = {
         "knowledge_base_id": kb_id,

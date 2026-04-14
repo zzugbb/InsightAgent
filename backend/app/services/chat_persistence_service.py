@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from datetime import datetime
 from uuid import uuid4
@@ -27,33 +29,36 @@ def _normalize_trace_steps(trace_steps: list[dict]) -> list[dict]:
     return normalized_steps
 
 
-def ensure_session(prompt: str, session_id: str | None = None) -> str:
+def ensure_session(prompt: str, user_id: str, session_id: str | None = None) -> str:
     current_time = _now_iso()
     resolved_session_id = session_id or str(uuid4())
     title = _build_session_title(prompt)
 
     with get_db_connection() as connection:
         existing = connection.execute(
-            "SELECT id FROM sessions WHERE id = ?",
+            "SELECT id, user_id FROM sessions WHERE id = ?",
             (resolved_session_id,),
         ).fetchone()
 
         if existing is None:
             connection.execute(
                 """
-                INSERT INTO sessions(id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO sessions(id, user_id, title, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (resolved_session_id, title, current_time, current_time),
+                (resolved_session_id, user_id, title, current_time, current_time),
             )
         else:
+            owner = existing["user_id"]
+            if owner and owner != user_id:
+                raise ValueError("session does not belong to current user")
             connection.execute(
                 """
                 UPDATE sessions
-                SET updated_at = ?
+                SET user_id = COALESCE(user_id, ?), updated_at = ?
                 WHERE id = ?
                 """,
-                (current_time, resolved_session_id),
+                (user_id, current_time, resolved_session_id),
             )
         connection.commit()
 
@@ -63,6 +68,7 @@ def ensure_session(prompt: str, session_id: str | None = None) -> str:
 def create_task(
     session_id: str,
     prompt: str,
+    user_id: str,
     task_id: str | None = None,
     status: str = "running",
 ) -> str:
@@ -72,10 +78,19 @@ def create_task(
     with get_db_connection() as connection:
         connection.execute(
             """
-            INSERT INTO tasks(id, session_id, prompt, status, trace_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks(id, user_id, session_id, prompt, status, trace_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (resolved_task_id, session_id, prompt, status, None, current_time, current_time),
+            (
+                resolved_task_id,
+                user_id,
+                session_id,
+                prompt,
+                status,
+                None,
+                current_time,
+                current_time,
+            ),
         )
         connection.commit()
 
@@ -84,6 +99,7 @@ def create_task(
 
 def create_message(
     session_id: str,
+    user_id: str,
     role: str,
     content: str,
     task_id: str | None = None,
@@ -94,25 +110,25 @@ def create_message(
     with get_db_connection() as connection:
         connection.execute(
             """
-            INSERT INTO messages(id, session_id, task_id, role, content, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO messages(id, user_id, session_id, task_id, role, content, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (message_id, session_id, task_id, role, content, current_time),
+            (message_id, user_id, session_id, task_id, role, content, current_time),
         )
         connection.execute(
             """
             UPDATE sessions
             SET updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
-            (current_time, session_id),
+            (current_time, session_id, user_id),
         )
         connection.commit()
 
     return message_id
 
 
-def update_task_status(task_id: str, status: str) -> None:
+def update_task_status(task_id: str, status: str, user_id: str) -> None:
     current_time = _now_iso()
 
     with get_db_connection() as connection:
@@ -120,14 +136,14 @@ def update_task_status(task_id: str, status: str) -> None:
             """
             UPDATE tasks
             SET status = ?, updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
-            (status, current_time, task_id),
+            (status, current_time, task_id, user_id),
         )
         connection.commit()
 
 
-def update_task_trace_steps(task_id: str, trace_steps: list[dict]) -> None:
+def update_task_trace_steps(task_id: str, trace_steps: list[dict], user_id: str) -> None:
     """流式执行过程中写入部分 trace（不改变任务状态）。"""
     current_time = _now_iso()
     normalized_trace_steps = _normalize_trace_steps(trace_steps)
@@ -137,12 +153,13 @@ def update_task_trace_steps(task_id: str, trace_steps: list[dict]) -> None:
             """
             UPDATE tasks
             SET trace_json = ?, updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
             (
                 json.dumps(normalized_trace_steps, ensure_ascii=False),
                 current_time,
                 task_id,
+                user_id,
             ),
         )
         connection.commit()
@@ -151,21 +168,20 @@ def update_task_trace_steps(task_id: str, trace_steps: list[dict]) -> None:
 def complete_task(
     task_id: str,
     trace_steps: list[dict],
+    user_id: str,
     status: str = "completed",
     usage: dict[str, object] | None = None,
 ) -> None:
     current_time = _now_iso()
     normalized_trace_steps = _normalize_trace_steps(trace_steps)
-    usage_blob = (
-        json.dumps(usage, ensure_ascii=False) if usage is not None else None
-    )
+    usage_blob = json.dumps(usage, ensure_ascii=False) if usage is not None else None
 
     with get_db_connection() as connection:
         connection.execute(
             """
             UPDATE tasks
             SET status = ?, trace_json = ?, usage_json = ?, updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
             (
                 status,
@@ -173,13 +189,16 @@ def complete_task(
                 usage_blob,
                 current_time,
                 task_id,
+                user_id,
             ),
         )
         connection.commit()
 
 
-def create_session_record(title: str | None = None) -> dict:
+def create_session_record(title: str | None = None, user_id: str = "") -> dict:
     """Insert an empty session row (no messages yet)."""
+    if not user_id.strip():
+        raise ValueError("user_id is required")
     session_id = str(uuid4())
     current_time = _now_iso()
     raw = (title or "新会话").strip()
@@ -188,28 +207,28 @@ def create_session_record(title: str | None = None) -> dict:
     with get_db_connection() as connection:
         connection.execute(
             """
-            INSERT INTO sessions(id, title, created_at, updated_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO sessions(id, user_id, title, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (session_id, resolved_title, current_time, current_time),
+            (session_id, user_id, resolved_title, current_time, current_time),
         )
         connection.commit()
 
-    row = get_session(session_id)
+    row = get_session(session_id, user_id)
     if row is None:
-        raise RuntimeError("Failed to read session after insert")
+        raise RuntimeError("failed to read session after insert")
     return row
 
 
-def get_session(session_id: str) -> dict | None:
+def get_session(session_id: str, user_id: str) -> dict | None:
     with get_db_connection() as connection:
         row = connection.execute(
             """
             SELECT id, title, created_at, updated_at
             FROM sessions
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
-            (session_id,),
+            (session_id, user_id),
         ).fetchone()
 
     if row is None:
@@ -218,7 +237,7 @@ def get_session(session_id: str) -> dict | None:
     return dict(row)
 
 
-def update_session_title(session_id: str, title: str) -> dict | None:
+def update_session_title(session_id: str, title: str, user_id: str) -> dict | None:
     """更新会话标题；title 为空则保持「未命名」式占位。"""
     raw = title.strip()
     resolved = raw[:120] if raw else "新会话"
@@ -228,88 +247,91 @@ def update_session_title(session_id: str, title: str) -> dict | None:
             """
             UPDATE sessions
             SET title = ?, updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
-            (resolved, current_time, session_id),
+            (resolved, current_time, session_id, user_id),
         )
         connection.commit()
         if cursor.rowcount == 0:
             return None
-    return get_session(session_id)
+    return get_session(session_id, user_id)
 
 
-def delete_session(session_id: str) -> bool:
+def delete_session(session_id: str, user_id: str) -> bool:
     """删除会话；关联 tasks / messages 由外键 ON DELETE CASCADE 清理。"""
     with get_db_connection() as connection:
         cursor = connection.execute(
-            "DELETE FROM sessions WHERE id = ?",
-            (session_id,),
+            "DELETE FROM sessions WHERE id = ? AND user_id = ?",
+            (session_id, user_id),
         )
         connection.commit()
         return cursor.rowcount > 0
 
 
-def count_sessions() -> int:
+def count_sessions(user_id: str) -> int:
     with get_db_connection() as connection:
         row = connection.execute(
-            "SELECT COUNT(*) AS n FROM sessions",
+            "SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?",
+            (user_id,),
         ).fetchone()
     return int(row["n"]) if row else 0
 
 
-def count_tasks(session_id: str | None = None) -> int:
+def count_tasks(user_id: str, session_id: str | None = None) -> int:
     with get_db_connection() as connection:
         if session_id:
             row = connection.execute(
-                "SELECT COUNT(*) AS n FROM tasks WHERE session_id = ?",
-                (session_id,),
+                "SELECT COUNT(*) AS n FROM tasks WHERE user_id = ? AND session_id = ?",
+                (user_id, session_id),
             ).fetchone()
         else:
             row = connection.execute(
-                "SELECT COUNT(*) AS n FROM tasks",
+                "SELECT COUNT(*) AS n FROM tasks WHERE user_id = ?",
+                (user_id,),
             ).fetchone()
     return int(row["n"]) if row else 0
 
 
-def list_sessions(limit: int = 20, offset: int = 0) -> list[dict]:
+def list_sessions(user_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
     with get_db_connection() as connection:
         rows = connection.execute(
             """
             SELECT id, title, created_at, updated_at
             FROM sessions
+            WHERE user_id = ?
             ORDER BY updated_at DESC
             LIMIT ? OFFSET ?
             """,
-            (limit, offset),
+            (user_id, limit, offset),
         ).fetchall()
 
     return [dict(row) for row in rows]
 
 
-def get_session_messages(session_id: str) -> list[dict]:
+def get_session_messages(session_id: str, user_id: str) -> list[dict]:
     with get_db_connection() as connection:
         rows = connection.execute(
             """
             SELECT id, session_id, task_id, role, content, created_at
             FROM messages
-            WHERE session_id = ?
+            WHERE session_id = ? AND user_id = ?
             ORDER BY created_at ASC
             """,
-            (session_id,),
+            (session_id, user_id),
         ).fetchall()
 
     return [dict(row) for row in rows]
 
 
-def get_task(task_id: str) -> dict | None:
+def get_task(task_id: str, user_id: str) -> dict | None:
     with get_db_connection() as connection:
         row = connection.execute(
             """
             SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
             FROM tasks
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
-            (task_id,),
+            (task_id, user_id),
         ).fetchone()
 
     if row is None:
@@ -319,6 +341,7 @@ def get_task(task_id: str) -> dict | None:
 
 
 def list_tasks(
+    user_id: str,
     limit: int = 20,
     session_id: str | None = None,
     offset: int = 0,
@@ -329,28 +352,29 @@ def list_tasks(
                 """
                 SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
                 FROM tasks
-                WHERE session_id = ?
+                WHERE user_id = ? AND session_id = ?
                 ORDER BY updated_at DESC
                 LIMIT ? OFFSET ?
                 """,
-                (session_id, limit, offset),
+                (user_id, session_id, limit, offset),
             ).fetchall()
         else:
             rows = connection.execute(
                 """
                 SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
                 FROM tasks
+                WHERE user_id = ?
                 ORDER BY updated_at DESC
                 LIMIT ? OFFSET ?
                 """,
-                (limit, offset),
+                (user_id, limit, offset),
             ).fetchall()
 
     return [dict(row) for row in rows]
 
 
-def get_task_trace(task_id: str) -> list[dict]:
-    task = get_task(task_id)
+def get_task_trace(task_id: str, user_id: str) -> list[dict]:
+    task = get_task(task_id, user_id)
     if task is None or not task["trace_json"]:
         return []
     return _normalize_trace_steps(json.loads(task["trace_json"]))
@@ -386,10 +410,11 @@ def get_task_trace_delta_from_task(
 
 def get_task_trace_delta(
     task_id: str,
+    user_id: str,
     after_seq: int = 0,
     limit: int = 200,
 ) -> tuple[list[dict], int, bool]:
-    task = get_task(task_id)
+    task = get_task(task_id, user_id)
     if task is None:
         return [], after_seq, False
     return get_task_trace_delta_from_task(
@@ -400,9 +425,11 @@ def get_task_trace_delta(
 
 
 def get_tasks_usage_summary(
+    user_id: str,
     session_id: str | None = None,
 ) -> dict[str, int | float | None]:
     """聚合 tasks.usage_json（可选按 session_id 过滤）。"""
+
     def _to_float(v: object) -> float | None:
         if v is None:
             return None
@@ -424,16 +451,18 @@ def get_tasks_usage_summary(
                 """
                 SELECT usage_json
                 FROM tasks
-                WHERE session_id = ?
+                WHERE user_id = ? AND session_id = ?
                 """,
-                (session_id,),
+                (user_id, session_id),
             ).fetchall()
         else:
             rows = connection.execute(
                 """
                 SELECT usage_json
                 FROM tasks
+                WHERE user_id = ?
                 """,
+                (user_id,),
             ).fetchall()
 
     tasks_total = len(rows)
@@ -478,12 +507,8 @@ def get_tasks_usage_summary(
             cost_task_count += 1
 
     total_tokens = prompt_sum + completion_sum
-    avg_total_tokens = (
-        total_tokens / token_task_count if token_task_count > 0 else None
-    )
-    avg_cost_estimate = (
-        cost_sum / cost_task_count if cost_task_count > 0 else None
-    )
+    avg_total_tokens = total_tokens / token_task_count if token_task_count > 0 else None
+    avg_cost_estimate = cost_sum / cost_task_count if cost_task_count > 0 else None
 
     return {
         "tasks_total": tasks_total,
@@ -497,6 +522,9 @@ def get_tasks_usage_summary(
     }
 
 
-def get_session_usage_summary(session_id: str) -> dict[str, int | float | None]:
+def get_session_usage_summary(
+    session_id: str,
+    user_id: str,
+) -> dict[str, int | float | None]:
     """兼容保留：按会话聚合 usage。"""
-    return get_tasks_usage_summary(session_id)
+    return get_tasks_usage_summary(user_id, session_id)

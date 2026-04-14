@@ -1,5 +1,5 @@
-import { Workbench } from "./components/workbench";
+import { AuthGate } from "./components/auth/auth-gate";
 
 export default function HomePage() {
-  return <Workbench />;
+  return <AuthGate />;
 }

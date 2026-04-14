@@ -8,6 +8,7 @@
 - W2：已完成（已收口）
 - W3：已完成（mock 范围）
 - W4：已完成（RAG + Token/Cost + compose.full）
+- 阶段 5 增量：`full-data-auth` 首版已落地（JWT、用户隔离、用户级设置与密钥加密存储）
 - 工程协作：前端 `npm run lint` 已可直接执行，且当前告警已清零
 - 协同进展：前端已切换到后端 usage 聚合接口（全局/会话双范围），并显示覆盖率与状态反馈（loading/error/empty）
 - 协同进展：前端右侧 Inspector（Context）已按可观测运维场景完成分区重排（概览/同步诊断/用量/Memory/任务索引），后端现有字段可直接支撑后续模块扩展
@@ -40,7 +41,7 @@
 
 - `app/config.py`：统一配置读取
 - `app/schemas/trace.py`：`TraceStep` / `TraceStepMeta` 与解析校验
-- `app/api/routes/`：`health`、`sessions`、`tasks`、`settings`、`rag`
+- `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`settings`、`rag`
 - `app/db.py`：SQLite 初始化与基础表
 - `app/providers/`：Provider 抽象 + mock 实现
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
@@ -51,6 +52,9 @@
 ## HTTP 接口（摘要）
 
 - `GET /health`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
 - `GET /api/settings`
 - `PUT /api/settings`
 - `POST /api/settings/validate`
@@ -74,6 +78,7 @@
 - `GET /api/tasks/{task_id}/stream`（`pending/running`；running 为重连回补流）
 - `GET /api/tasks/{task_id}/trace`
 - `GET /api/tasks/{task_id}/trace/delta?after_seq=&limit=`（`limit` 默认 200，最大 500；`has_more` 反映剩余分页或任务仍在运行）
+- 除 `/health` 与 `/api/auth/*` 外，其余业务接口均需 `Authorization: Bearer <token>`
 
 ## SSE 与 TraceStep 契约
 
@@ -103,7 +108,7 @@
 ## Memory / Chroma / Embedding
 
 - collection 命名：`memory_{session_id}`
-- RAG collection 命名：`kb_{knowledge_base_id}`
+- RAG collection 命名：`kb_{user_hash}_{knowledge_base_id}`（按用户隔离）
 - 连接方式：`chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)`
 - 默认配置：`CHROMA_HOST=127.0.0.1`、`CHROMA_PORT=8001`、`CHROMA_PROBE=true`
 - 流式 trace 写入节流：`TRACE_PERSIST_MIN_INTERVAL_SEC`（默认 `0.35` 秒）
@@ -124,7 +129,7 @@
   - 存当前会话的可检索记忆片段（含任务完成后的摘要追加）。
   - 目标是低成本召回“这次会话刚刚说过的重要信息”。
 - `Chroma RAG`（知识库检索）：
-  - collection：`kb_{knowledge_base_id}`。
+  - collection：`kb_{user_hash}_{knowledge_base_id}`。
   - 存 ingest 后的文档分块与 metadata，用于跨会话复用知识检索。
 
 为什么不合并成一个库：
@@ -139,7 +144,7 @@
 
 ## W4 新增说明
 
-- 执行链路 `mock_retrieve` 已接入真实知识库检索（默认 `kb_default`，可通过 `[kb:xxx]` 指定）
+- 执行链路 `mock_retrieve` 已接入真实知识库检索（默认 `kb_{user_hash}_default`，可通过 `[kb:xxx]` 指定）
 - `TraceStep.meta.rag` 会记录命中 `chunks` 与 `knowledge_base_id`
 - usage 升级为可计算字段：
   - `prompt_tokens`、`completion_tokens`
@@ -149,6 +154,16 @@
   - `RAG_DEFAULT_TOP_K`
   - `USAGE_PROMPT_TOKEN_PRICE_PER_1K`
   - `USAGE_COMPLETION_TOKEN_PRICE_PER_1K`
+
+## 阶段 5 增量（full-data-auth 首版）
+
+- 新增用户认证：`register/login/me`，JWT（HS256）签发与校验
+- 新增 `users` / `user_settings` 表，并将 `sessions/tasks/messages` 写入与查询切为 `user_id` 隔离
+- 设置改为用户级，`api_key` 以服务端主密钥加密后落库（`user_settings.api_key_enc`）
+- 新增环境变量：
+  - `INSIGHT_AGENT_JWT_SECRET`
+  - `INSIGHT_AGENT_ACCESS_TOKEN_TTL_MINUTES`
+  - `INSIGHT_AGENT_SECRET_KEY`
 
 ## 本地启动
 
@@ -167,9 +182,26 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 docker compose up -d chroma
 ```
 
+## 后续阶段决策（后端视角）
+
+### 优先做
+
+1. `full-data-auth`：用户模型、JWT/API 鉴权、凭证加密存储。
+   - 当前状态：已完成 SQLite 首版，后续补 PostgreSQL 迁移。
+2. `full-trace-session`：任务/Trace 结构化持久化、历史检索、导出复用。
+3. `full-agent-scale`（轻量）：进程内队列 + 并发上限 + 取消/超时。
+4. `full-rag-governance`（MVP）：知识库上传/删除/版本与索引重建。
+5. `full-qa-ops`（基础）：pytest + e2e + CI。
+
+### 暂不做
+
+1. Redis/Kafka/Celery 分布式队列（当前规模不需要）。
+2. K8s / 微服务拆分（对当前阶段收益低）。
+3. 复杂多跳 RAG 与重排体系（先把治理与稳定性做扎实）。
+
 ## 当前限制（W4 生产化前）
 
-- `api_key` 仅最小存储骨架，未加密
+- PostgreSQL 尚未接入（当前 full-data-auth 首版基于 SQLite）
 - `remote` 模式 provider 校验仍较粗
 - 真实工具调用循环仍以 mock 工具编排为主（RAG 检索已真实接入）
 - token 仍为估算值（非 provider 官方 usage 回传）

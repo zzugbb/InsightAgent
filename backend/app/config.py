@@ -101,6 +101,23 @@ class Settings(BaseSettings):
         alias="USAGE_COMPLETION_TOKEN_PRICE_PER_1K",
         description="completion tokens 每 1k 估算单价（USD）",
     )
+    auth_jwt_secret: str = Field(
+        default="dev-only-change-me",
+        alias="INSIGHT_AGENT_JWT_SECRET",
+        description="JWT HS256 签名密钥（生产环境必须替换）",
+    )
+    auth_access_token_ttl_minutes: int = Field(
+        default=7 * 24 * 60,
+        ge=5,
+        le=60 * 24 * 30,
+        alias="INSIGHT_AGENT_ACCESS_TOKEN_TTL_MINUTES",
+        description="访问令牌有效期（分钟）",
+    )
+    auth_secret_key: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_SECRET_KEY",
+        description="用户密钥加密主密钥；为空时回退 JWT 密钥（仅开发建议）",
+    )
 
     @property
     def chroma_http_url(self) -> str:

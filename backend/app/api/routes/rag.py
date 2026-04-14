@@ -1,8 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
+from app.api.deps import get_current_user
 from app.services.chroma_rag_service import (
     get_knowledge_base_status,
     ingest_knowledge_documents,
@@ -81,16 +82,24 @@ class RagStatusResponse(BaseModel):
 @router.get("/status", response_model=RagStatusResponse)
 def get_rag_status(
     knowledge_base_id: str = Query(default="default", max_length=64),
+    current_user: dict = Depends(get_current_user),
 ) -> RagStatusResponse:
-    raw = get_knowledge_base_status(knowledge_base_id=knowledge_base_id)
+    raw = get_knowledge_base_status(
+        user_id=str(current_user["id"]),
+        knowledge_base_id=knowledge_base_id,
+    )
     return RagStatusResponse(**raw)
 
 
 @router.post("/ingest", response_model=RagIngestResponse)
-def post_rag_ingest(payload: RagIngestRequest) -> RagIngestResponse:
+def post_rag_ingest(
+    payload: RagIngestRequest,
+    current_user: dict = Depends(get_current_user),
+) -> RagIngestResponse:
     docs = [x.model_dump(exclude_none=True) for x in payload.documents]
     try:
         raw = ingest_knowledge_documents(
+            user_id=str(current_user["id"]),
             knowledge_base_id=payload.knowledge_base_id,
             documents=docs,
             chunk_size=payload.chunk_size,
@@ -105,9 +114,13 @@ def post_rag_ingest(payload: RagIngestRequest) -> RagIngestResponse:
 
 
 @router.post("/query", response_model=RagQueryResponse)
-def post_rag_query(payload: RagQueryRequest) -> RagQueryResponse:
+def post_rag_query(
+    payload: RagQueryRequest,
+    current_user: dict = Depends(get_current_user),
+) -> RagQueryResponse:
     try:
         raw = query_knowledge_base(
+            user_id=str(current_user["id"]),
             knowledge_base_id=payload.knowledge_base_id,
             query_text=payload.query,
             top_k=payload.top_k,

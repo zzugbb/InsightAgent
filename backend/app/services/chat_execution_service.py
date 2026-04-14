@@ -183,6 +183,7 @@ def _run_mock_tool(
     name: str,
     tool_input: dict[str, object],
     prompt: str,
+    user_id: str,
     attempt: int,
 ) -> dict[str, object]:
     normalized = prompt.strip().lower()
@@ -213,6 +214,7 @@ def _run_mock_tool(
         kb_id = str(kb_raw or get_settings().rag_default_knowledge_base_id)
         try:
             result = query_knowledge_base(
+                user_id=user_id,
                 knowledge_base_id=kb_id,
                 query_text=query or prompt,
                 top_k=top_k,
@@ -263,6 +265,7 @@ def stream_task_execution(
     *,
     task_id: str,
     session_id: str,
+    user_id: str,
     prompt: str,
     persist_user_message: bool = False,
 ) -> Iterator[str]:
@@ -287,21 +290,22 @@ def stream_task_execution(
             and now - last_trace_persist_ts < TRACE_PERSIST_MIN_INTERVAL_SEC
         ):
             return
-        update_task_trace_steps(task_id, trace_steps)
+        update_task_trace_steps(task_id, trace_steps, user_id)
         last_trace_persist_ts = now
 
     if persist_user_message:
         create_message(
             session_id=session_id,
+            user_id=user_id,
             task_id=task_id,
             role="user",
             content=prompt,
         )
 
-    update_task_status(task_id=task_id, status="running")
+    update_task_status(task_id=task_id, status="running", user_id=user_id)
 
     try:
-        provider = get_llm_provider()
+        provider = get_llm_provider(user_id)
 
         yield sse_event(
             "start",
@@ -401,6 +405,7 @@ def stream_task_execution(
                         name=tool_name,
                         tool_input=tool_input,
                         prompt=prompt,
+                        user_id=user_id,
                         attempt=attempt,
                     )
 
@@ -495,7 +500,12 @@ def stream_task_execution(
                         },
                     )
                     persist_trace(force=True)
-                    complete_task(task_id=task_id, trace_steps=trace_steps, status="failed")
+                    complete_task(
+                        task_id=task_id,
+                        trace_steps=trace_steps,
+                        user_id=user_id,
+                        status="failed",
+                    )
                     yield sse_event("state", {"task_id": task_id, "phase": "error"})
                     return
 
@@ -652,6 +662,7 @@ def stream_task_execution(
 
         create_message(
             session_id=session_id,
+            user_id=user_id,
             task_id=task_id,
             role="assistant",
             content=final_content,
@@ -669,6 +680,7 @@ def stream_task_execution(
         complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
+            user_id=user_id,
             usage=usage_payload,
         )
         try_append_task_memory(
@@ -690,7 +702,12 @@ def stream_task_execution(
         )
 
     except Exception as exc:
-        complete_task(task_id=task_id, trace_steps=trace_steps, status="failed")
+        complete_task(
+            task_id=task_id,
+            trace_steps=trace_steps,
+            user_id=user_id,
+            status="failed",
+        )
         yield sse_event("state", {"task_id": task_id, "phase": "error"})
         yield sse_event(
             "error",

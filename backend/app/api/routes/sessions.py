@@ -1,8 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 
+from app.api.deps import get_current_user
 from app.services.chroma_memory_service import (
     add_session_memory_text,
     cleanup_session_memory_collection,
@@ -124,8 +125,11 @@ class MemoryQueryResponse(BaseModel):
 
 
 @router.post("", response_model=SessionResponse)
-def post_session(payload: CreateSessionRequest = CreateSessionRequest()) -> SessionResponse:
-    row = create_session_record(title=payload.title)
+def post_session(
+    payload: CreateSessionRequest = CreateSessionRequest(),
+    current_user: dict = Depends(get_current_user),
+) -> SessionResponse:
+    row = create_session_record(title=payload.title, user_id=str(current_user["id"]))
     return SessionResponse(**row)
 
 
@@ -138,9 +142,11 @@ def get_sessions(
         le=50_000,
         description="跳过前 offset 条（与 limit 组合做分页）",
     ),
+    current_user: dict = Depends(get_current_user),
 ) -> SessionListResponse:
-    sessions = list_sessions(limit=limit, offset=offset)
-    total = count_sessions()
+    user_id = str(current_user["id"])
+    sessions = list_sessions(user_id=user_id, limit=limit, offset=offset)
+    total = count_sessions(user_id=user_id)
     n = len(sessions)
     return SessionListResponse(
         items=[SessionResponse(**session) for session in sessions],
@@ -152,34 +158,49 @@ def get_sessions(
 
 
 @router.patch("/{session_id}", response_model=SessionResponse)
-def patch_session(session_id: str, payload: UpdateSessionRequest) -> SessionResponse:
-    row = update_session_title(session_id, payload.title)
+def patch_session(
+    session_id: str,
+    payload: UpdateSessionRequest,
+    current_user: dict = Depends(get_current_user),
+) -> SessionResponse:
+    row = update_session_title(session_id, payload.title, str(current_user["id"]))
     if row is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(**row)
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
-def get_session_detail(session_id: str) -> SessionResponse:
-    session = get_session(session_id)
+def get_session_detail(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> SessionResponse:
+    session = get_session(session_id, str(current_user["id"]))
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return SessionResponse(**session)
 
 
 @router.get("/{session_id}/memory/status", response_model=SessionMemoryStatusResponse)
-def get_session_memory_status_route(session_id: str) -> SessionMemoryStatusResponse:
-    if get_session(session_id) is None:
+def get_session_memory_status_route(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> SessionMemoryStatusResponse:
+    user_id = str(current_user["id"])
+    if get_session(session_id, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
     raw = get_session_memory_status(session_id)
     return SessionMemoryStatusResponse(**raw)
 
 
 @router.get("/{session_id}/usage/summary", response_model=SessionUsageSummaryResponse)
-def get_session_usage_summary_route(session_id: str) -> SessionUsageSummaryResponse:
-    if get_session(session_id) is None:
+def get_session_usage_summary_route(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> SessionUsageSummaryResponse:
+    user_id = str(current_user["id"])
+    if get_session(session_id, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    raw = get_session_usage_summary(session_id)
+    raw = get_session_usage_summary(session_id, user_id=user_id)
     return SessionUsageSummaryResponse(**raw)
 
 
@@ -187,8 +208,9 @@ def get_session_usage_summary_route(session_id: str) -> SessionUsageSummaryRespo
 def post_session_memory_add(
     session_id: str,
     payload: MemoryAddRequest,
+    current_user: dict = Depends(get_current_user),
 ) -> MemoryAddResponse:
-    if get_session(session_id) is None:
+    if get_session(session_id, str(current_user["id"])) is None:
         raise HTTPException(status_code=404, detail="Session not found")
     try:
         raw = add_session_memory_text(
@@ -208,8 +230,9 @@ def post_session_memory_add(
 def post_session_memory_query(
     session_id: str,
     payload: MemoryQueryRequest,
+    current_user: dict = Depends(get_current_user),
 ) -> MemoryQueryResponse:
-    if get_session(session_id) is None:
+    if get_session(session_id, str(current_user["id"])) is None:
         raise HTTPException(status_code=404, detail="Session not found")
     try:
         raw = query_session_memory(
@@ -226,11 +249,15 @@ def post_session_memory_query(
 
 
 @router.get("/{session_id}/messages", response_model=SessionMessagesResponse)
-def get_session_messages_detail(session_id: str) -> SessionMessagesResponse:
-    session = get_session(session_id)
+def get_session_messages_detail(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> SessionMessagesResponse:
+    user_id = str(current_user["id"])
+    session = get_session(session_id, user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    messages = get_session_messages(session_id)
+    messages = get_session_messages(session_id, user_id)
     return SessionMessagesResponse(
         session=SessionResponse(**session),
         messages=[MessageResponse(**message) for message in messages],
@@ -238,10 +265,14 @@ def get_session_messages_detail(session_id: str) -> SessionMessagesResponse:
 
 
 @router.delete("/{session_id}", status_code=204)
-def delete_session_route(session_id: str) -> Response:
-    if get_session(session_id) is None:
+def delete_session_route(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> Response:
+    user_id = str(current_user["id"])
+    if get_session(session_id, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    if not delete_session(session_id):
+    if not delete_session(session_id, user_id):
         raise HTTPException(status_code=404, detail="Session not found")
     # best-effort: 清理 Chroma 会话 memory collection，失败不阻塞主删除流程
     cleanup_session_memory_collection(session_id)

@@ -1,3 +1,5 @@
+import { AUTH_TOKEN_STORAGE_KEY } from "./storage-keys";
+
 export class ApiError extends Error {
   readonly status: number;
   readonly url: string;
@@ -10,6 +12,82 @@ export class ApiError extends Error {
     this.url = url;
     this.bodySnippet = bodySnippet;
   }
+}
+
+function dispatchAuthExpired(url: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("insightagent:auth-expired", {
+      detail: { url },
+    }),
+  );
+}
+
+function readStoredToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    const token = raw?.trim();
+    return token ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getAuthToken(): string | null {
+  return readStoredToken();
+}
+
+export function setAuthToken(token: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const normalized = token.trim();
+  if (!normalized) {
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    return;
+  }
+  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, normalized);
+}
+
+export function clearAuthToken(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+function withAuthHeaders(headers?: HeadersInit): Headers {
+  const resolved = new Headers(headers ?? {});
+  const token = readStoredToken();
+  if (token && !resolved.has("Authorization")) {
+    resolved.set("Authorization", `Bearer ${token}`);
+  }
+  return resolved;
+}
+
+export async function authFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const requestUrl = typeof input === "string" ? input : String(input);
+  const response = await fetch(input, {
+    ...init,
+    cache: init?.cache ?? "no-store",
+    headers: withAuthHeaders(init?.headers),
+  });
+  if (
+    response.status === 401 &&
+    !requestUrl.includes("/api/auth/login") &&
+    !requestUrl.includes("/api/auth/register")
+  ) {
+    dispatchAuthExpired(requestUrl);
+  }
+  return response;
 }
 
 async function readResponse(response: Response, url: string): Promise<string> {
@@ -28,7 +106,7 @@ async function readResponse(response: Response, url: string): Promise<string> {
 export async function apiJson<T>(url: string): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, { cache: "no-store" });
+    response = await authFetch(url);
   } catch (cause) {
     const msg =
       cause instanceof TypeError && cause.message.includes("fetch")
@@ -53,11 +131,10 @@ export async function apiJson<T>(url: string): Promise<T> {
 export async function apiPostJson<T>(url: string, body: unknown): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await authFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      cache: "no-store",
     });
   } catch (cause) {
     throw new ApiError(
@@ -79,11 +156,10 @@ export async function apiPostJson<T>(url: string, body: unknown): Promise<T> {
 export async function apiPatchJson<T>(url: string, body: unknown): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await authFetch(url, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      cache: "no-store",
     });
   } catch (cause) {
     throw new ApiError(
@@ -105,11 +181,10 @@ export async function apiPatchJson<T>(url: string, body: unknown): Promise<T> {
 export async function apiPutJson<T>(url: string, body: unknown): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await authFetch(url, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      cache: "no-store",
     });
   } catch (cause) {
     throw new ApiError(
@@ -131,7 +206,7 @@ export async function apiPutJson<T>(url: string, body: unknown): Promise<T> {
 export async function apiDelete(url: string): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(url, { method: "DELETE", cache: "no-store" });
+    response = await authFetch(url, { method: "DELETE" });
   } catch (cause) {
     throw new ApiError(
       0,

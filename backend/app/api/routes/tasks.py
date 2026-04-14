@@ -4,10 +4,11 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from time import monotonic
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
+from app.api.deps import get_current_user
 from app.config import get_settings
 from app.schemas.trace import TraceStep, parse_trace_steps
 from app.services.chat_execution_service import (
@@ -67,7 +68,10 @@ def _latest_seq_from_task(task: dict) -> int:
 
 
 async def stream_running_task_reconnect(
-    task_id: str, *, after_seq: int = 0
+    task_id: str,
+    user_id: str,
+    *,
+    after_seq: int = 0,
 ) -> AsyncIterator[str]:
     settings = get_settings()
     cursor = max(0, int(after_seq))
@@ -92,7 +96,7 @@ async def stream_running_task_reconnect(
         last_phase = phase
         return sse_event("state", {"task_id": task_id, "phase": phase})
 
-    first_task = get_task(task_id)
+    first_task = get_task(task_id, user_id)
     session_id = str(first_task.get("session_id")) if first_task else None
     yield sse_event(
         "start",
@@ -103,7 +107,7 @@ async def stream_running_task_reconnect(
         },
     )
     while True:
-        task = get_task(task_id)
+        task = get_task(task_id, user_id)
         if task is None:
             yield sse_event(
                 "error",
@@ -143,7 +147,7 @@ async def stream_running_task_reconnect(
         status = str(task.get("status", "running"))
         if status in {"completed", "failed"}:
             if last_emitted_step_id is None:
-                full_steps = get_task_trace(task_id)
+                full_steps = get_task_trace(task_id, user_id)
                 if full_steps:
                     maybe_id = full_steps[-1].get("id")
                     if isinstance(maybe_id, str):
@@ -285,18 +289,28 @@ class TaskUsageSummaryResponse(BaseModel):
 
 
 @router.post("", response_model=TaskCreateResponse)
-def create_task_entry(payload: TaskCreateRequest) -> TaskCreateResponse:
-    resolved_session_id = ensure_session(
-        prompt=payload.user_input,
-        session_id=payload.session_id,
-    )
+def create_task_entry(
+    payload: TaskCreateRequest,
+    current_user: dict = Depends(get_current_user),
+) -> TaskCreateResponse:
+    user_id = str(current_user["id"])
+    try:
+        resolved_session_id = ensure_session(
+            prompt=payload.user_input,
+            user_id=user_id,
+            session_id=payload.session_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     task_id = create_task(
         session_id=resolved_session_id,
         prompt=payload.user_input,
+        user_id=user_id,
         status="pending",
     )
     create_message(
         session_id=resolved_session_id,
+        user_id=user_id,
         task_id=task_id,
         role="user",
         content=payload.user_input,
@@ -324,16 +338,18 @@ def get_tasks(
         default=None,
         description="仅返回该会话下的任务；会话须存在，否则 404",
     ),
+    current_user: dict = Depends(get_current_user),
 ) -> TaskListResponse:
+    user_id = str(current_user["id"])
     if session_id is not None and session_id.strip():
         sid = session_id.strip()
-        if get_session(sid) is None:
+        if get_session(sid, user_id) is None:
             raise HTTPException(status_code=404, detail="Session not found")
-        tasks = list_tasks(limit=limit, session_id=sid, offset=offset)
-        total = count_tasks(sid)
+        tasks = list_tasks(user_id=user_id, limit=limit, session_id=sid, offset=offset)
+        total = count_tasks(user_id, sid)
     else:
-        tasks = list_tasks(limit=limit, offset=offset)
-        total = count_tasks(None)
+        tasks = list_tasks(user_id=user_id, limit=limit, offset=offset)
+        total = count_tasks(user_id, None)
     n = len(tasks)
     return TaskListResponse(
         items=[TaskResponse(**_with_status_meta(task)) for task in tasks],
@@ -350,28 +366,37 @@ def get_tasks_usage_summary_route(
         default=None,
         description="可选：按会话聚合；会话不存在时返回 404",
     ),
+    current_user: dict = Depends(get_current_user),
 ) -> TaskUsageSummaryResponse:
+    user_id = str(current_user["id"])
     sid = session_id.strip() if session_id else None
-    if sid and get_session(sid) is None:
+    if sid and get_session(sid, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    raw = get_tasks_usage_summary(sid)
+    raw = get_tasks_usage_summary(user_id, sid)
     return TaskUsageSummaryResponse(**raw)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
-def get_task_detail(task_id: str) -> TaskResponse:
-    task = get_task(task_id)
+def get_task_detail(
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> TaskResponse:
+    task = get_task(task_id, str(current_user["id"]))
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskResponse(**_with_status_meta(task))
 
 
 @router.get("/{task_id}/trace", response_model=TaskTraceResponse)
-def get_task_trace_detail(task_id: str) -> TaskTraceResponse:
-    task = get_task(task_id)
+def get_task_trace_detail(
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> TaskTraceResponse:
+    user_id = str(current_user["id"])
+    task = get_task(task_id, user_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    raw_steps = get_task_trace(task_id)
+    raw_steps = get_task_trace(task_id, user_id)
     status = str(task["status"])
     return TaskTraceResponse(
         task_id=task_id,
@@ -393,8 +418,9 @@ def get_task_trace_delta_detail(
         le=500,
         description="单次返回的最大 delta step 数",
     ),
+    current_user: dict = Depends(get_current_user),
 ) -> TaskTraceDeltaResponse:
-    task = get_task(task_id)
+    task = get_task(task_id, str(current_user["id"]))
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -430,8 +456,10 @@ def stream_task_detail(
     task_id: str,
     request: Request,
     after_seq: int = Query(default=0, ge=0),
+    current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
-    task = get_task(task_id)
+    user_id = str(current_user["id"])
+    task = get_task(task_id, user_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     if task["status"] not in {"pending", "running"}:
@@ -444,7 +472,11 @@ def stream_task_detail(
         header_cursor = _parse_last_event_id(request.headers.get("Last-Event-ID"))
         resume_cursor = max(after_seq, header_cursor or 0)
         return StreamingResponse(
-            stream_running_task_reconnect(task_id, after_seq=resume_cursor),
+            stream_running_task_reconnect(
+                task_id,
+                user_id=user_id,
+                after_seq=resume_cursor,
+            ),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -456,6 +488,7 @@ def stream_task_detail(
         stream_task_execution(
             task_id=task_id,
             session_id=task["session_id"],
+            user_id=user_id,
             prompt=task["prompt"],
             persist_user_message=False,
         ),

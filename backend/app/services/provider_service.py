@@ -3,8 +3,8 @@ from app.providers.mock_provider import MockLLMProvider
 from app.services.settings_service import get_stored_settings
 
 
-def get_llm_provider() -> LLMProvider:
-    settings = get_stored_settings()
+def get_llm_provider(user_id: str) -> LLMProvider:
+    settings = get_stored_settings(user_id)
     if settings.mode == "mock":
         return MockLLMProvider(
             model=settings.model,

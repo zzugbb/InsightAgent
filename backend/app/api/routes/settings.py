@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from app.api.deps import get_current_user
 from app.db import get_sqlite_path
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 
@@ -56,8 +57,9 @@ class SettingsValidateResponse(BaseModel):
 
 
 @router.get("", response_model=SettingsSummaryResponse)
-def get_settings_summary() -> SettingsSummaryResponse:
-    settings = get_stored_settings()
+def get_settings_summary(current_user: dict = Depends(get_current_user)) -> SettingsSummaryResponse:
+    user_id = str(current_user["id"])
+    settings = get_stored_settings(user_id)
     return SettingsSummaryResponse(
         mode=settings.mode,
         provider=settings.provider,
@@ -69,8 +71,12 @@ def get_settings_summary() -> SettingsSummaryResponse:
 
 
 @router.put("", response_model=SettingsSummaryResponse)
-def update_settings(payload: SettingsUpdateRequest) -> SettingsSummaryResponse:
-    existing = get_stored_settings()
+def update_settings(
+    payload: SettingsUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+) -> SettingsSummaryResponse:
+    user_id = str(current_user["id"])
+    existing = get_stored_settings(user_id)
     effective_api_key = payload.api_key or existing.api_key
     if payload.mode == "remote" and not effective_api_key:
         raise HTTPException(
@@ -79,6 +85,7 @@ def update_settings(payload: SettingsUpdateRequest) -> SettingsSummaryResponse:
         )
 
     settings = save_settings(
+        user_id,
         StoredSettings(
             mode=payload.mode,
             provider=payload.provider,
@@ -98,8 +105,12 @@ def update_settings(payload: SettingsUpdateRequest) -> SettingsSummaryResponse:
 
 
 @router.post("/validate", response_model=SettingsValidateResponse)
-def validate_settings(payload: SettingsUpdateRequest) -> SettingsValidateResponse:
-    existing = get_stored_settings()
+def validate_settings(
+    payload: SettingsUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+) -> SettingsValidateResponse:
+    user_id = str(current_user["id"])
+    existing = get_stored_settings(user_id)
     effective_api_key = payload.api_key or existing.api_key
     if payload.mode == "remote" and not effective_api_key:
         return SettingsValidateResponse(
@@ -149,8 +160,8 @@ def validate_settings(payload: SettingsUpdateRequest) -> SettingsValidateRespons
                     mode=payload.mode,
                     provider=payload.provider,
                     model=payload.model,
-                        message="remote preflight failed.",
-                        error=f"unexpected status: {status_code}",
+                    message="remote preflight failed.",
+                    error=f"unexpected status: {status_code}",
                 )
         except Exception as exc:
             # 某些网关/服务禁用 HEAD，回退 GET 以减少误判

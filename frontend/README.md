@@ -8,10 +8,12 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - W2：已完成（已收口）
 - W3：已完成（mock 范围）
 - W4：已完成（RAG 面板 + Token/Cost 展示）
+- 阶段 5 增量：已完成登录/注册入口页与 Auth Gate（token 持久化、401 自动回登录）
 
 ## 当前已有内容
 
 - 三栏布局：会话、消息、轨迹/上下文
+- Auth Gate：登录/注册、登录态校验、退出登录、401 自动失效处理
 - 会话：创建、切换、分页加载、重命名、删除
 - 轨迹：时间线与流程图双视图（thought/action/observation/tool/rag 区分）
 - 流式：SSE 任务状态、token 追加、trace 实时更新
@@ -53,6 +55,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - Trace 元信息：支持展示步骤级 `cost_estimate`
 - 设置：主题、主题色、语言、模型与运行模式
 - 工程校验：已配置 `.eslintrc.json`，`npm run lint` 可直接运行且当前告警已清零
+- 鉴权联动：除 `/health` 与 `/api/auth/*` 外，其余请求统一自动注入 Bearer token
 
 ## 关键实现位置
 
@@ -62,6 +65,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - `lib/stores/chat-stream-store.ts`：SSE 事件分发与 trace 状态
 - `lib/types/trace.ts`：前端 TraceStep 类型
 - `lib/api-client.ts`：REST 请求封装
+- `app/components/auth/auth-gate.tsx`：登录/注册页与鉴权网关
 
 ## SSE 消费与契约对齐
 
@@ -96,6 +100,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 写入：`POST /api/rag/ingest`
 - 检索：`POST /api/rag/query`
 - 默认知识库：`default`（对应 collection：`kb_default`）
+- 后端落库会按用户隔离：`kb_{user_hash}_{knowledge_base_id}`
 
 ## SQLite / Memory / RAG 怎么看（前端通俗版）
 
@@ -105,7 +110,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
   - 面向当前 `session_id` 的语义记忆（`memory_{session_id}`）。
   - 适合查看“本次对话中需要记住的约束和结论”是否被写入/检索到。
 - RAG 面板（知识库级）：
-  - 面向 `knowledge_base_id` 的知识库（`kb_{knowledge_base_id}`）。
+  - 面向 `knowledge_base_id` 的知识库（后端落库为 `kb_{user_hash}_{knowledge_base_id}`）。
   - 适合管理手册、FAQ、文档片段的 ingest 与检索命中。
 
 可用一句话理解：
@@ -123,6 +128,26 @@ npm run dev
 ```
 
 默认通过 `NEXT_PUBLIC_API_BASE_URL` 指向后端（未设置时使用 `http://127.0.0.1:8000`）。
+
+## 后续阶段决策（前端与部署视角）
+
+### 优先做
+
+1. 用户登录态与权限感知 UI（与后端鉴权联动）。
+   - 当前状态：首版已完成（Auth Gate + token 注入 + 401 自动回登录），后续补权限细粒度 UI。
+2. 历史会话/任务回放与导出体验（突出可观测卖点）。
+3. 成本治理可视化（按用户/会话统计，配额/告警提示）。
+4. 关键 e2e（登录、任务流、Trace 回放、RAG 检索）。
+
+### 暂不做
+
+1. 大规模 UI 重构或炫技动效重写（当前可用性已满足演示）。
+2. 过早做复杂多模型编排面板（先把稳定性与治理打牢）。
+
+### 部署建议
+
+1. 前端优先部署到 Vercel 免费版。
+2. 后端/FastAPI 与数据服务独立部署，不与前端运行环境绑定。
 
 ## 下一步（W4+）
 

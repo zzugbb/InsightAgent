@@ -8,3 +8,4 @@ export const SIDEBAR_WIDTH_STORAGE_KEY = "insightagent.sidebarWidth";
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = "insightagent.sidebarCollapsed";
 export const INSPECTOR_WIDTH_STORAGE_KEY = "insightagent.inspectorWidth";
 export const INSPECTOR_COLLAPSED_STORAGE_KEY = "insightagent.inspectorCollapsed";
+export const AUTH_TOKEN_STORAGE_KEY = "insightagent.authToken";

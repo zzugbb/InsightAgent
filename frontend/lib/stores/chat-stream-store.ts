@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { authFetch } from "../api-client";
 import { en, type Messages } from "../i18n";
 import { parseSseBlock, parseSseBlocks } from "../sse/parse";
 import type { TraceStepPayload } from "../types/trace";
@@ -234,7 +235,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     });
 
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${apiBaseUrl}/api/tasks/${normalizedTaskId}/trace`,
         {
           cache: "no-store",
@@ -311,7 +312,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     }
 
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${apiBaseUrl}/api/tasks/${normalizedTaskId}/trace/delta?after_seq=${currentCursor}&limit=${TRACE_DELTA_FETCH_LIMIT}`,
         {
           cache: "no-store",
@@ -611,7 +612,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     });
 
     try {
-      const taskResponse = await fetch(`${options.apiBaseUrl}/api/tasks`, {
+      const taskResponse = await authFetch(`${options.apiBaseUrl}/api/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -638,7 +639,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         onSessionResolved?.(createdTask.session_id);
       }
 
-      const streamResponse = await fetch(
+      const streamResponse = await authFetch(
         `${options.apiBaseUrl}/api/tasks/${createdTask.task_id}/stream`,
         {
           method: "GET",
