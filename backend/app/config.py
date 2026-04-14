@@ -112,6 +112,13 @@ class Settings(BaseSettings):
         alias="INSIGHT_AGENT_ACCESS_TOKEN_TTL_MINUTES",
         description="访问令牌有效期（分钟）",
     )
+    auth_refresh_token_ttl_days: int = Field(
+        default=30,
+        ge=1,
+        le=180,
+        alias="INSIGHT_AGENT_REFRESH_TOKEN_TTL_DAYS",
+        description="刷新令牌有效期（天）",
+    )
     auth_secret_key: str | None = Field(
         default=None,
         alias="INSIGHT_AGENT_SECRET_KEY",

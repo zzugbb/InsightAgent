@@ -7,11 +7,15 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import {
   ApiError,
+  authFetch,
   apiJson,
   apiPostJson,
-  clearAuthToken,
+  clearAuthSessionStorage,
   getAuthToken,
+  getRefreshToken,
+  setAuthSessionId,
   setAuthToken,
+  setRefreshToken,
 } from "../../../lib/api-client";
 import { useChatStreamStore } from "../../../lib/stores/chat-stream-store";
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
@@ -33,6 +37,8 @@ type AuthUser = {
 
 type AuthResponse = {
   access_token: string;
+  refresh_token: string;
+  session_id: string;
   token_type: string;
   user: AuthUser;
 };
@@ -103,8 +109,8 @@ export function AuthGate() {
     let cancelled = false;
 
     async function bootstrap() {
-      const token = getAuthToken();
-      if (!token) {
+      const hasAuthState = Boolean(getAuthToken() || getRefreshToken());
+      if (!hasAuthState) {
         if (!cancelled) {
           setStatus("anonymous");
         }
@@ -118,7 +124,7 @@ export function AuthGate() {
         setUser(me);
         setStatus("authenticated");
       } catch {
-        clearAuthToken();
+        clearAuthSessionStorage();
         resetUserScopedClientState();
         if (!cancelled) {
           setStatus("anonymous");
@@ -134,7 +140,7 @@ export function AuthGate() {
 
   useEffect(() => {
     function onAuthExpired() {
-      clearAuthToken();
+      clearAuthSessionStorage();
       resetUserScopedClientState();
       setUser(null);
       setStatus("anonymous");
@@ -189,6 +195,8 @@ export function AuthGate() {
       );
       resetUserScopedClientState();
       setAuthToken(response.access_token);
+      setRefreshToken(response.refresh_token);
+      setAuthSessionId(response.session_id);
       setUser(response.user);
       setStatus("authenticated");
       setPassword("");
@@ -205,12 +213,27 @@ export function AuthGate() {
   }
 
   function handleLogout() {
-    clearAuthToken();
-    resetUserScopedClientState();
-    setUser(null);
-    setStatus("anonymous");
-    setPassword("");
-    message.info(authMessages.logoutSuccess);
+    const refreshToken = getRefreshToken();
+    void (async () => {
+      try {
+        if (refreshToken) {
+          await authFetch(`${API_BASE_URL}/api/auth/logout`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+          });
+        }
+      } catch {
+        // logout 是幂等操作，这里忽略网络或鉴权失败，继续本地清理
+      } finally {
+        clearAuthSessionStorage();
+        resetUserScopedClientState();
+        setUser(null);
+        setStatus("anonymous");
+        setPassword("");
+        message.info(authMessages.logoutSuccess);
+      }
+    })();
   }
 
   if (status === "checking") {

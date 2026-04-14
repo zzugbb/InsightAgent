@@ -45,6 +45,22 @@ def create_access_token(*, user_id: str, email: str) -> str:
     return f"{header_part}.{payload_part}.{sign_part}"
 
 
+def create_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_token(token: str) -> str:
+    normalized = token.strip()
+    if not normalized:
+        raise ValueError("refresh token is empty")
+    digest = hmac.new(
+        _secret_material(),
+        normalized.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"v1.{digest}"
+
+
 def parse_access_token(token: str) -> dict[str, object]:
     parts = token.split(".")
     if len(parts) != 3:

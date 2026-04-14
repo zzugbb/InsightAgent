@@ -172,6 +172,23 @@ def initialize_postgres_database() -> None:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                refresh_token_hash TEXT NOT NULL UNIQUE,
+                user_agent TEXT,
+                ip_address TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                last_used_at TEXT,
+                revoked_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
                 user_id TEXT,
@@ -258,6 +275,12 @@ def _ensure_common_indexes(connection: DbConnectionAdapter) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_messages_task_id
         ON messages(task_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id
+        ON auth_sessions(user_id)
         """
     )
 

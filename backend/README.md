@@ -9,6 +9,7 @@
 - W3：已完成（mock 范围）
 - W4：已完成（RAG + Token/Cost + compose.full）
 - 阶段 5 增量：`full-data-auth` 首版已落地（JWT、用户隔离、用户级设置与密钥加密存储）
+- 阶段 5 增量：最小会话管理已落地（refresh token 轮换、会话查询/撤销、退出当前/全部会话）
 - 阶段 5 增量：PostgreSQL 迁移主线已启动（后端运行时已收敛为 PostgreSQL + 平迁脚本）
 - 阶段 5 排查修复（2026-04-14）：修复 PostgreSQL 下 `POST /api/tasks` 的 `CASE WHEN` 参数类型错误（smallint -> boolean），恢复消息发送链路
 - 阶段 5 排查补充：已复核 `sessions/tasks/messages/settings/rag` 查询与写入路径，核心数据均按 `user_id` 隔离
@@ -51,6 +52,7 @@
 - `app/schemas/trace.py`：`TraceStep` / `TraceStepMeta` 与解析校验
 - `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`settings`、`rag`
 - `app/db.py`：PostgreSQL 连接、初始化与索引
+- 新增 `auth_sessions` 表：refresh token 哈希持久化、会话过期/撤销管理
 - `app/providers/`：Provider 抽象 + mock 实现
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
 - 流式阶段已支持最终 `observation` 的批次增量持久化（`seq` 递增，默认每 8 个 chunk 落库一次 + 结束兜底）
@@ -62,6 +64,11 @@
 - `GET /health`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `POST /api/auth/logout-all`
+- `GET /api/auth/sessions`
+- `DELETE /api/auth/sessions/{session_id}`
 - `GET /api/auth/me`
 - `GET /api/settings`
 - `PUT /api/settings`
@@ -166,11 +173,14 @@
 ## 阶段 5 增量（full-data-auth 首版）
 
 - 新增用户认证：`register/login/me`，JWT（HS256）签发与校验
+- 新增最小会话管理：refresh token（哈希落库）轮换、会话查询与撤销（按 session / 全部）
 - 新增 `users` / `user_settings` 表，并将 `sessions/tasks/messages` 写入与查询切为 `user_id` 隔离
+- 新增 `auth_sessions` 表（refresh token 哈希、过期时间、撤销时间、UA/IP）
 - 设置改为用户级，`api_key` 以服务端主密钥加密后落库（`user_settings.api_key_enc`）
 - 新增环境变量：
   - `INSIGHT_AGENT_JWT_SECRET`
   - `INSIGHT_AGENT_ACCESS_TOKEN_TTL_MINUTES`
+  - `INSIGHT_AGENT_REFRESH_TOKEN_TTL_DAYS`
   - `INSIGHT_AGENT_SECRET_KEY`
 
 ## 阶段 5 增量（PostgreSQL 迁移主线）
@@ -211,8 +221,8 @@ docker compose up -d chroma
 
 ### 优先做
 
-1. `full-data-auth`：用户模型、JWT/API 鉴权、凭证加密存储。
-   - 当前状态：已完成 PostgreSQL 主线接入，后续补 refresh/session/audit。
+1. `full-data-auth`：用户模型、JWT/API 鉴权、refresh 会话管理、凭证加密存储。
+   - 当前状态：已完成 PostgreSQL 主线接入与最小会话治理，后续补审计与权限扩展位。
 2. `full-trace-session`：任务/Trace 结构化持久化、历史检索、导出复用。
 3. `full-agent-scale`（轻量）：进程内队列 + 并发上限 + 取消/超时。
 4. `full-rag-governance`（MVP）：知识库上传/删除/版本与索引重建。

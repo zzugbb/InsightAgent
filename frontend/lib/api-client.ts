@@ -1,4 +1,8 @@
-import { AUTH_TOKEN_STORAGE_KEY } from "./storage-keys";
+import {
+  AUTH_SESSION_ID_STORAGE_KEY,
+  AUTH_TOKEN_STORAGE_KEY,
+  REFRESH_TOKEN_STORAGE_KEY,
+} from "./storage-keys";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -38,8 +42,25 @@ function readStoredToken(): string | null {
   }
 }
 
+function readStoredRefreshToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
+    const token = raw?.trim();
+    return token ? token : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getAuthToken(): string | null {
   return readStoredToken();
+}
+
+export function getRefreshToken(): string | null {
+  return readStoredRefreshToken();
 }
 
 export function setAuthToken(token: string): void {
@@ -54,11 +75,51 @@ export function setAuthToken(token: string): void {
   localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, normalized);
 }
 
+export function setRefreshToken(token: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const normalized = token.trim();
+  if (!normalized) {
+    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+    return;
+  }
+  localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, normalized);
+}
+
+export function setAuthSessionId(sessionId: string | null): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const normalized = sessionId?.trim() ?? "";
+  if (!normalized) {
+    localStorage.removeItem(AUTH_SESSION_ID_STORAGE_KEY);
+    return;
+  }
+  localStorage.setItem(AUTH_SESSION_ID_STORAGE_KEY, normalized);
+}
+
 export function clearAuthToken(): void {
   if (typeof window === "undefined") {
     return;
   }
   localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+export function clearRefreshToken(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+}
+
+export function clearAuthSessionStorage(): void {
+  clearAuthToken();
+  clearRefreshToken();
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.removeItem(AUTH_SESSION_ID_STORAGE_KEY);
 }
 
 function withAuthHeaders(headers?: HeadersInit): Headers {
@@ -70,23 +131,103 @@ function withAuthHeaders(headers?: HeadersInit): Headers {
   return resolved;
 }
 
+function isAuthBootstrapEndpoint(requestUrl: string): boolean {
+  return (
+    requestUrl.includes("/api/auth/login") ||
+    requestUrl.includes("/api/auth/register") ||
+    requestUrl.includes("/api/auth/refresh")
+  );
+}
+
+function resolveRefreshUrl(requestUrl: string): string {
+  if (typeof window === "undefined") {
+    return "/api/auth/refresh";
+  }
+  try {
+    const parsed = new URL(requestUrl, window.location.origin);
+    return `${parsed.origin}/api/auth/refresh`;
+  } catch {
+    return "/api/auth/refresh";
+  }
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function tryRefreshAuthSession(requestUrl: string): Promise<boolean> {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+  refreshInFlight = (async () => {
+    const refreshToken = readStoredRefreshToken();
+    if (!refreshToken) {
+      return false;
+    }
+    try {
+      const response = await fetch(resolveRefreshUrl(requestUrl), {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!response.ok) {
+        return false;
+      }
+      const payload = (await response.json()) as {
+        access_token?: unknown;
+        refresh_token?: unknown;
+        session_id?: unknown;
+      };
+      if (
+        typeof payload.access_token !== "string" ||
+        typeof payload.refresh_token !== "string"
+      ) {
+        return false;
+      }
+      setAuthToken(payload.access_token);
+      setRefreshToken(payload.refresh_token);
+      setAuthSessionId(
+        typeof payload.session_id === "string" ? payload.session_id : null,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
+}
+
 export async function authFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
   const requestUrl = typeof input === "string" ? input : String(input);
-  const response = await fetch(input, {
+  let response = await fetch(input, {
     ...init,
     cache: init?.cache ?? "no-store",
     headers: withAuthHeaders(init?.headers),
   });
-  if (
-    response.status === 401 &&
-    !requestUrl.includes("/api/auth/login") &&
-    !requestUrl.includes("/api/auth/register")
-  ) {
-    dispatchAuthExpired(requestUrl);
+  if (response.status !== 401 || isAuthBootstrapEndpoint(requestUrl)) {
+    return response;
   }
+
+  const refreshed = await tryRefreshAuthSession(requestUrl);
+  if (refreshed) {
+    response = await fetch(input, {
+      ...init,
+      cache: init?.cache ?? "no-store",
+      headers: withAuthHeaders(init?.headers),
+    });
+    if (response.status !== 401) {
+      return response;
+    }
+  }
+
+  clearAuthSessionStorage();
+  dispatchAuthExpired(requestUrl);
   return response;
 }
 
