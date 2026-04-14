@@ -96,6 +96,23 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 检索：`POST /api/rag/query`
 - 默认知识库：`default`（对应 collection：`kb_default`）
 
+## SQLite / Memory / RAG 怎么看（前端通俗版）
+
+- 聊天记录来源（左侧会话 + 中栏消息 + 任务历史）：
+  - 来自后端 `SQLite` 的会话/消息/任务数据。
+- Memory 面板（会话级）：
+  - 面向当前 `session_id` 的语义记忆（`memory_{session_id}`）。
+  - 适合查看“本次对话中需要记住的约束和结论”是否被写入/检索到。
+- RAG 面板（知识库级）：
+  - 面向 `knowledge_base_id` 的知识库（`kb_{knowledge_base_id}`）。
+  - 适合管理手册、FAQ、文档片段的 ingest 与检索命中。
+
+可用一句话理解：
+
+- `SQLite` 管完整历史；
+- `Memory` 管会话便签；
+- `RAG` 管外部知识库。
+
 ## 本地启动
 
 ```bash

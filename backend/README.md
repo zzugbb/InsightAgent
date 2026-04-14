@@ -113,6 +113,29 @@
 - 当前 embedding 边界：应用层未显式传自定义 embedding function，依赖 Chroma Server 默认策略
 - Chroma 不可达时：`memory/add`、`memory/query`、`rag/ingest`、`rag/query` 返回 503；任务后的摘要写入为 best-effort
 
+### 通俗分工（后端视角）
+
+- `SQLite`（业务主存储）：
+  - 存 `sessions / tasks / messages`，以及任务 `trace_json / usage_json`。
+  - 用于会话列表、消息历史、任务状态回放与统计聚合。
+- `Chroma Memory`（会话记忆）：
+  - collection：`memory_{session_id}`。
+  - 存当前会话的可检索记忆片段（含任务完成后的摘要追加）。
+  - 目标是低成本召回“这次会话刚刚说过的重要信息”。
+- `Chroma RAG`（知识库检索）：
+  - collection：`kb_{knowledge_base_id}`。
+  - 存 ingest 后的文档分块与 metadata，用于跨会话复用知识检索。
+
+为什么不合并成一个库：
+
+- `RAG` 主要解决“系统知道什么文档”，不等于“当前会话刚约定了什么”。
+- `Memory` 主要解决“当前会话记住什么”，不适合承载大规模知识文档治理。
+- `SQLite` 是权威历史账本；Chroma 两类 collection 是检索层索引，不替代业务主数据。
+
+当前实现注意点：
+
+- 删除会话时会级联删除 SQLite 的 tasks/messages，但不会自动删除 Chroma `memory_{session_id}` collection（可能存在孤儿向量，后续可按治理策略补清理任务）。
+
 ## W4 新增说明
 
 - 执行链路 `mock_retrieve` 已接入真实知识库检索（默认 `kb_default`，可通过 `[kb:xxx]` 指定）
