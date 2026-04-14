@@ -10,6 +10,7 @@ import {
   Moon,
   Palette,
   Settings2,
+  ShieldCheck,
   Sun,
 } from "lucide-react";
 import {
@@ -28,6 +29,7 @@ import {
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
 import { ModelSettingsModal } from "./model-settings-modal";
+import { AuditLogsModal } from "./audit-logs-modal";
 
 type SectionId = "theme" | "accent" | "language";
 
@@ -40,6 +42,7 @@ export function SidebarSettingsMenu() {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<SectionId | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [popoverPos, setPopoverPos] = useState<PopoverPos | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -121,6 +124,12 @@ export function SidebarSettingsMenu() {
     setOpen(false);
     setExpanded(null);
     setModelOpen(true);
+  }
+
+  function openAudit() {
+    setOpen(false);
+    setExpanded(null);
+    setAuditOpen(true);
   }
 
   const themeLabel =
@@ -329,6 +338,22 @@ export function SidebarSettingsMenu() {
           type="button"
           role="menuitem"
           className="settings-menu-row settings-menu-row--footer"
+          onClick={openAudit}
+        >
+          <ShieldCheck size={18} strokeWidth={1.75} aria-hidden />
+          <span className="settings-menu-row-label">{t.sidebar.menuAudit}</span>
+          <ChevronRight
+            size={18}
+            strokeWidth={1.75}
+            aria-hidden
+            className="settings-menu-chevron"
+          />
+        </button>
+
+        <button
+          type="button"
+          role="menuitem"
+          className="settings-menu-row settings-menu-row--footer"
           onClick={openModel}
         >
           <Monitor size={18} strokeWidth={1.75} aria-hidden />
@@ -365,6 +390,7 @@ export function SidebarSettingsMenu() {
         onClose={() => setModelOpen(false)}
         triggerRef={triggerRef}
       />
+      <AuditLogsModal open={auditOpen} onClose={() => setAuditOpen(false)} />
     </div>
   );
 }

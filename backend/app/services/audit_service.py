@@ -50,6 +50,8 @@ def list_audit_logs(
     limit: int = 20,
     offset: int = 0,
     event_type: str | None = None,
+    session_id: str | None = None,
+    task_id: str | None = None,
     start_at: str | None = None,
     end_at: str | None = None,
 ) -> list[dict]:
@@ -60,6 +62,18 @@ def list_audit_logs(
     if normalized_event_type:
         conditions.append("event_type = ?")
         params.append(normalized_event_type)
+
+    normalized_session_id = session_id.strip() if isinstance(session_id, str) else ""
+    if normalized_session_id:
+        conditions.append("event_detail_json IS NOT NULL")
+        conditions.append("(event_detail_json::jsonb ->> 'session_id') = ?")
+        params.append(normalized_session_id)
+
+    normalized_task_id = task_id.strip() if isinstance(task_id, str) else ""
+    if normalized_task_id:
+        conditions.append("event_detail_json IS NOT NULL")
+        conditions.append("(event_detail_json::jsonb ->> 'task_id') = ?")
+        params.append(normalized_task_id)
 
     if isinstance(start_at, str) and start_at.strip():
         conditions.append("created_at >= ?")
@@ -87,6 +101,8 @@ def count_audit_logs(
     *,
     user_id: str,
     event_type: str | None = None,
+    session_id: str | None = None,
+    task_id: str | None = None,
     start_at: str | None = None,
     end_at: str | None = None,
 ) -> int:
@@ -97,6 +113,18 @@ def count_audit_logs(
     if normalized_event_type:
         conditions.append("event_type = ?")
         params.append(normalized_event_type)
+
+    normalized_session_id = session_id.strip() if isinstance(session_id, str) else ""
+    if normalized_session_id:
+        conditions.append("event_detail_json IS NOT NULL")
+        conditions.append("(event_detail_json::jsonb ->> 'session_id') = ?")
+        params.append(normalized_session_id)
+
+    normalized_task_id = task_id.strip() if isinstance(task_id, str) else ""
+    if normalized_task_id:
+        conditions.append("event_detail_json IS NOT NULL")
+        conditions.append("(event_detail_json::jsonb ->> 'task_id') = ?")
+        params.append(normalized_task_id)
 
     if isinstance(start_at, str) and start_at.strip():
         conditions.append("created_at >= ?")

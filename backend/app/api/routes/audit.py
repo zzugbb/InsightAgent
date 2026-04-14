@@ -18,6 +18,8 @@ class AuditLogItemResponse(BaseModel):
     id: str
     event_type: str
     event_detail: dict[str, Any] | None = None
+    session_id: str | None = None
+    task_id: str | None = None
     created_at: str
 
 
@@ -65,6 +67,8 @@ def get_audit_logs(
         default=None,
         description="可选：按事件类型过滤（login/logout/refresh/settings_update）",
     ),
+    session_id: str | None = Query(default=None, description="可选：按会话 ID 过滤"),
+    task_id: str | None = Query(default=None, description="可选：按任务 ID 过滤"),
     start_at: str | None = Query(default=None, description="可选：开始时间（ISO8601）"),
     end_at: str | None = Query(default=None, description="可选：结束时间（ISO8601）"),
     current_user: dict = Depends(get_current_user),
@@ -89,25 +93,44 @@ def get_audit_logs(
         limit=limit,
         offset=offset,
         event_type=normalized_event_type,
+        session_id=session_id,
+        task_id=task_id,
         start_at=start_iso,
         end_at=end_iso,
     )
     total = count_audit_logs(
         user_id=user_id,
         event_type=normalized_event_type,
+        session_id=session_id,
+        task_id=task_id,
         start_at=start_iso,
         end_at=end_iso,
     )
-    return AuditLogListResponse(
-        items=[
+    items: list[AuditLogItemResponse] = []
+    for row in rows:
+        detail = _parse_event_detail(row.get("event_detail_json"))
+        resolved_session_id = (
+            str(detail.get("session_id")).strip()
+            if isinstance(detail, dict) and isinstance(detail.get("session_id"), str)
+            else None
+        )
+        resolved_task_id = (
+            str(detail.get("task_id")).strip()
+            if isinstance(detail, dict) and isinstance(detail.get("task_id"), str)
+            else None
+        )
+        items.append(
             AuditLogItemResponse(
                 id=str(row["id"]),
                 event_type=str(row["event_type"]),
-                event_detail=_parse_event_detail(row.get("event_detail_json")),
+                event_detail=detail,
+                session_id=resolved_session_id or None,
+                task_id=resolved_task_id or None,
                 created_at=str(row["created_at"]),
             )
-            for row in rows
-        ],
+        )
+    return AuditLogListResponse(
+        items=items,
         total=total,
         limit=limit,
         offset=offset,

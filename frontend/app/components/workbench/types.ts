@@ -128,6 +128,8 @@ export type AuditLogItem = {
   id: string;
   event_type: "login" | "logout" | "refresh" | "settings_update" | string;
   event_detail: Record<string, unknown> | null;
+  session_id?: string | null;
+  task_id?: string | null;
   created_at: string;
 };
 

@@ -52,6 +52,17 @@ function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+function readAutofilledValue(selector: string): string {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  const element = document.querySelector<HTMLInputElement>(selector);
+  if (!element) {
+    return "";
+  }
+  return element.value.trim();
+}
+
 function parseAuthError(error: unknown, messages: Messages["auth"]): string {
   if (!(error instanceof ApiError)) {
     return error instanceof Error ? error.message : messages.requestFailedRetry;
@@ -191,10 +202,18 @@ export function AuthGate() {
   }, [email, mode, password]);
 
   async function handleSubmit() {
-    if (!canSubmit || submitting) {
+    if (submitting) {
       return;
     }
-    if (!isValidEmail(email)) {
+    // 兼容浏览器密码管理器自动填充：以真实输入框值兜底，避免 React state 偶发不同步。
+    const domEmail = readAutofilledValue("#auth-email");
+    const domPassword = readAutofilledValue("#auth-password");
+    const resolvedEmail = (domEmail || email).trim();
+    const resolvedPassword = domPassword || password;
+    if (!resolvedEmail || !resolvedPassword) {
+      return;
+    }
+    if (!isValidEmail(resolvedEmail)) {
       setErrorText(authMessages.invalidEmail);
       return;
     }
@@ -204,12 +223,12 @@ export function AuthGate() {
       const payload =
         mode === "login"
           ? {
-              email: email.trim(),
-              password,
+              email: resolvedEmail,
+              password: resolvedPassword,
             }
           : {
-              email: email.trim(),
-              password,
+              email: resolvedEmail,
+              password: resolvedPassword,
               display_name: displayName.trim() || null,
             };
       const endpoint = mode === "login" ? "login" : "register";
@@ -217,6 +236,8 @@ export function AuthGate() {
         `${API_BASE_URL}/api/auth/${endpoint}`,
         payload,
       );
+      // 把真实提交值回写到 state，减少下一次 autofill/状态漂移。
+      setEmail(resolvedEmail);
       resetUserScopedClientState();
       setAuthToken(response.access_token);
       setRefreshToken(response.refresh_token);
