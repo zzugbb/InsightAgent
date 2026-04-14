@@ -386,7 +386,7 @@ export const zh: Messages = {
     metaApiKey: "API 密钥",
     metaConfigured: "已配置",
     metaNotConfigured: "未配置",
-    metaSqlite: "SQLite",
+    metaDatabase: "数据库连接",
     appearanceTitle: "外观与语言",
     themeLabel: "主题",
     themeDark: "深色",

@@ -392,7 +392,7 @@ export const en: Messages = {
     metaApiKey: "API key",
     metaConfigured: "Configured",
     metaNotConfigured: "Not set",
-    metaSqlite: "SQLite",
+    metaDatabase: "Database",
     appearanceTitle: "Appearance & language",
     themeLabel: "Theme",
     themeDark: "Dark",

@@ -9,7 +9,7 @@
 - W3：已完成（mock 范围）
 - W4：已完成（RAG + Token/Cost + compose.full）
 - 阶段 5 增量：`full-data-auth` 首版已落地（JWT、用户隔离、用户级设置与密钥加密存储）
-- 阶段 5 增量：PostgreSQL 迁移主线已启动（SQLite/PostgreSQL 双后端切换 + 平迁脚本）
+- 阶段 5 增量：PostgreSQL 迁移主线已启动（后端运行时已收敛为 PostgreSQL + 平迁脚本）
 - 阶段 5 排查补充：已复核 `sessions/tasks/messages/settings/rag` 查询与写入路径，核心数据均按 `user_id` 隔离
 - 会话命名补充：空会话在首条消息发送时，若仍为占位标题则自动改为首条消息前缀
 - 会话命名规则补充：仅在“无历史消息 + 占位标题”条件下自动命名，不覆盖用户手动重命名
@@ -33,7 +33,7 @@
 - W1 优化：新增 `POST /api/settings/validate`，用于设置保存前的结构/连通性预校验（不落库）
 - W1 优化补强：`settings/validate` 在 `HEAD` 失败时自动回退 `GET`，减少远端网关不支持 HEAD 时的误判
 - W1 稳定性优化：`remote` 模式保存/校验支持沿用已存储 `api_key`（空值提交不再清空历史密钥）
-- W1/W2 稳定性优化：SSE 流式输出增加周期 heartbeat（长输出保活更稳定）+ trace 持久化写入节流（降低 SQLite 写放大）
+- W1/W2 稳定性优化：SSE 流式输出增加周期 heartbeat（长输出保活更稳定）+ trace 持久化写入节流（降低数据库写放大）
 - W2 优化：`GET /api/tasks/{task_id}/stream` 支持 `running` 状态重连（回补增量，不重复执行任务）
 - W2 重连流优化：`running` 重连返回的 `done/error` 事件补齐 `session_id/step_id` 并标记 `resumed=true`
 - W2 重连轮询优化：重连流按“有增量快轮询、无增量退避慢轮询”策略拉取 delta，降低 DB 轮询压力
@@ -49,7 +49,7 @@
 - `app/config.py`：统一配置读取
 - `app/schemas/trace.py`：`TraceStep` / `TraceStepMeta` 与解析校验
 - `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`settings`、`rag`
-- `app/db.py`：SQLite/PostgreSQL 双后端连接、初始化与索引
+- `app/db.py`：PostgreSQL 连接、初始化与索引
 - `app/providers/`：Provider 抽象 + mock 实现
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
 - 流式阶段已支持最终 `observation` 的批次增量持久化（`seq` 递增，默认每 8 个 chunk 落库一次 + 结束兜底）
@@ -128,7 +128,7 @@
 
 ### 通俗分工（后端视角）
 
-- `SQLite`（业务主存储）：
+- `PostgreSQL`（业务主存储）：
   - 存 `sessions / tasks / messages`，以及任务 `trace_json / usage_json`。
   - 用于会话列表、消息历史、任务状态回放与统计聚合。
 - `Chroma Memory`（会话记忆）：
@@ -143,11 +143,11 @@
 
 - `RAG` 主要解决“系统知道什么文档”，不等于“当前会话刚约定了什么”。
 - `Memory` 主要解决“当前会话记住什么”，不适合承载大规模知识文档治理。
-- `SQLite` 是权威历史账本；Chroma 两类 collection 是检索层索引，不替代业务主数据。
+- `PostgreSQL` 是权威历史账本；Chroma 两类 collection 是检索层索引，不替代业务主数据。
 
 当前实现注意点：
 
-- 删除会话时会级联删除 SQLite 的 tasks/messages，并会 best-effort 删除 Chroma `memory_{session_id}` collection（清理失败不阻塞主删除流程）。
+- 删除会话时会级联删除 PostgreSQL 的 tasks/messages，并会 best-effort 删除 Chroma `memory_{session_id}` collection（清理失败不阻塞主删除流程）。
 
 ## W4 新增说明
 
@@ -174,10 +174,9 @@
 
 ## 阶段 5 增量（PostgreSQL 迁移主线）
 
-- 新增数据库后端切换：
-  - `INSIGHT_AGENT_DB_BACKEND=sqlite|postgres|auto`
+- 后端运行时统一使用 PostgreSQL：
   - `INSIGHT_AGENT_DATABASE_URL=postgresql://...`
-- `app/db.py` 已支持在不改业务 SQL 调用层的前提下切换 SQLite / PostgreSQL
+- `app/db.py` 已收敛为 PostgreSQL 单后端实现（业务 SQL 调用层保持不变）
 - 新增迁移脚本：`scripts/migrate_sqlite_to_postgres.py`
   - 平迁表：`users`、`user_settings`、`sessions`、`tasks`、`messages`
   - 策略：幂等 upsert（可重复执行）
@@ -212,7 +211,7 @@ docker compose up -d chroma
 ### 优先做
 
 1. `full-data-auth`：用户模型、JWT/API 鉴权、凭证加密存储。
-   - 当前状态：已完成 SQLite 首版；PostgreSQL 迁移主线已启动，后续补 refresh/session/audit。
+   - 当前状态：已完成 PostgreSQL 主线接入，后续补 refresh/session/audit。
 2. `full-trace-session`：任务/Trace 结构化持久化、历史检索、导出复用。
 3. `full-agent-scale`（轻量）：进程内队列 + 并发上限 + 取消/超时。
 4. `full-rag-governance`（MVP）：知识库上传/删除/版本与索引重建。
@@ -226,7 +225,7 @@ docker compose up -d chroma
 
 ## 当前限制（W4 生产化前）
 
-- PostgreSQL 已接入双后端能力，但生产切换前仍需完成真实环境平迁与回滚演练
+- PostgreSQL 已成为默认且唯一运行后端，仍需完成真实环境平迁与回滚演练
 - `remote` 模式 provider 校验仍较粗
 - 真实工具调用循环仍以 mock 工具编排为主（RAG 检索已真实接入）
 - token 仍为估算值（非 provider 官方 usage 回传）

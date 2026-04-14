@@ -368,7 +368,7 @@ export type Messages = {
     metaApiKey: string;
     metaConfigured: string;
     metaNotConfigured: string;
-    metaSqlite: string;
+    metaDatabase: string;
     appearanceTitle: string;
     themeLabel: string;
     themeDark: string;

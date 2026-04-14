@@ -250,8 +250,8 @@ export function ModelSettingsModal({
               ? t.settings.metaConfigured
               : t.settings.metaNotConfigured}
           </Descriptions.Item>
-          <Descriptions.Item label={t.settings.metaSqlite}>
-            <code className="model-settings-sqlite-path">{data.sqlite_path}</code>
+          <Descriptions.Item label={t.settings.metaDatabase}>
+            <code className="model-settings-database-path">{data.database_locator}</code>
           </Descriptions.Item>
         </Descriptions>
       ) : null}

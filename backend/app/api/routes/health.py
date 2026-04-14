@@ -25,7 +25,7 @@ def health() -> dict[str, object]:
         "mode": settings.mode,
         "provider": settings.provider,
         "model": settings.model_name,
-        "sqlite_path": get_database_locator(),
+        "database_locator": get_database_locator(),
         "chroma": {
             "url": chroma_url,
             "reachable": chroma_reachable,

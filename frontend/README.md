@@ -112,10 +112,10 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 默认知识库：`default`（对应 collection：`kb_default`）
 - 后端落库会按用户隔离：`kb_{user_hash}_{knowledge_base_id}`
 
-## SQLite / Memory / RAG 怎么看（前端通俗版）
+## PostgreSQL / Memory / RAG 怎么看（前端通俗版）
 
 - 聊天记录来源（左侧会话 + 中栏消息 + 任务历史）：
-  - 来自后端 `SQLite` 的会话/消息/任务数据。
+  - 来自后端 `PostgreSQL` 的会话/消息/任务数据。
 - Memory 面板（会话级）：
   - 面向当前 `session_id` 的语义记忆（`memory_{session_id}`）。
   - 适合查看“本次对话中需要记住的约束和结论”是否被写入/检索到。
@@ -125,7 +125,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 
 可用一句话理解：
 
-- `SQLite` 管完整历史；
+- `PostgreSQL` 管完整历史；
 - `Memory` 管会话便签；
 - `RAG` 管外部知识库。
 

@@ -44,7 +44,7 @@ class SettingsSummaryResponse(BaseModel):
     model: str
     api_key_configured: bool
     base_url_configured: bool
-    sqlite_path: str
+    database_locator: str
 
 
 class SettingsValidateResponse(BaseModel):
@@ -66,7 +66,7 @@ def get_settings_summary(current_user: dict = Depends(get_current_user)) -> Sett
         model=settings.model,
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
-        sqlite_path=get_database_locator(),
+        database_locator=get_database_locator(),
     )
 
 
@@ -100,7 +100,7 @@ def update_settings(
         model=settings.model,
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
-        sqlite_path=get_database_locator(),
+        database_locator=get_database_locator(),
     )
 
 

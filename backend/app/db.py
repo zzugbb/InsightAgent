@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-import sqlite3
 from contextlib import contextmanager
-from pathlib import Path
-from typing import Any, Iterator, Literal
+from typing import Any, Iterator
 from urllib.parse import urlsplit, urlunsplit
 
 from app.config import get_settings
-
-
-DbBackend = Literal["sqlite", "postgres"]
 
 
 class CursorAdapter:
@@ -28,16 +23,12 @@ class CursorAdapter:
 
 
 class DbConnectionAdapter:
-    def __init__(self, connection: Any, backend: DbBackend):
+    def __init__(self, connection: Any):
         self._connection = connection
-        self._backend = backend
 
     def execute(self, query: str, params: tuple[Any, ...] | list[Any] = ()) -> CursorAdapter:
-        if self._backend == "postgres":
-            adapted_query = _adapt_qmark_to_format(query)
-            cursor = self._connection.execute(adapted_query, params)
-            return CursorAdapter(cursor)
-        cursor = self._connection.execute(query, params)
+        adapted_query = _adapt_qmark_to_format(query)
+        cursor = self._connection.execute(adapted_query, params)
         return CursorAdapter(cursor)
 
     def commit(self) -> None:
@@ -51,33 +42,13 @@ class DbConnectionAdapter:
 
 
 def _adapt_qmark_to_format(query: str) -> str:
-    # 当前 SQL 都使用 qmark 占位（?）；psycopg 需要 %s。
+    # 项目内 SQL 统一使用 qmark(?)，在 PostgreSQL 执行前转换为 psycopg 的 %s。
     return query.replace("?", "%s")
-
-
-def get_sqlite_path() -> Path:
-    settings = get_settings()
-    return Path(settings.sqlite_path)
-
-
-def get_db_backend() -> DbBackend:
-    settings = get_settings()
-    raw = (settings.db_backend or "sqlite").strip().lower()
-    if raw == "auto":
-        db_url = (settings.database_url or "").strip().lower()
-        if db_url.startswith("postgres://") or db_url.startswith("postgresql://"):
-            return "postgres"
-        return "sqlite"
-    if raw in {"sqlite", "postgres"}:
-        return raw  # type: ignore[return-value]
-    return "sqlite"
 
 
 def get_database_locator() -> str:
     settings = get_settings()
-    if get_db_backend() == "postgres":
-        return _safe_database_locator((settings.database_url or "").strip())
-    return str(get_sqlite_path())
+    return _safe_database_locator(settings.database_url.strip())
 
 
 def _safe_database_locator(database_url: str) -> str:
@@ -115,168 +86,31 @@ def _safe_database_locator(database_url: str) -> str:
     )
 
 
-def ensure_sqlite_ready() -> Path:
-    sqlite_path = get_sqlite_path()
-    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-    sqlite_path.touch(exist_ok=True)
-    return sqlite_path
-
-
 @contextmanager
 def get_db_connection() -> Iterator[DbConnectionAdapter]:
-    backend = get_db_backend()
-    if backend == "postgres":
-        settings = get_settings()
-        database_url = (settings.database_url or "").strip()
-        if not database_url:
-            raise RuntimeError(
-                "INSIGHT_AGENT_DATABASE_URL is required when INSIGHT_AGENT_DB_BACKEND=postgres"
-            )
-        try:
-            import psycopg  # type: ignore
-            from psycopg.rows import dict_row  # type: ignore
-        except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(
-                "psycopg is required for postgres backend. Install dependencies from requirements.txt."
-            ) from exc
+    settings = get_settings()
+    database_url = settings.database_url.strip()
+    if not database_url:
+        raise RuntimeError("INSIGHT_AGENT_DATABASE_URL is required")
+    try:
+        import psycopg  # type: ignore
+        from psycopg.rows import dict_row  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            "psycopg is required. Please install dependencies from requirements.txt."
+        ) from exc
 
-        raw_connection = psycopg.connect(database_url, row_factory=dict_row)
-        connection = DbConnectionAdapter(raw_connection, backend="postgres")
-        try:
-            yield connection
-        finally:
-            connection.close()
-        return
-
-    sqlite_path = ensure_sqlite_ready()
-    raw_connection = sqlite3.connect(sqlite_path)
-    raw_connection.row_factory = sqlite3.Row
-    raw_connection.execute("PRAGMA foreign_keys = ON;")
-    connection = DbConnectionAdapter(raw_connection, backend="sqlite")
+    raw_connection = psycopg.connect(database_url, row_factory=dict_row)
+    connection = DbConnectionAdapter(raw_connection)
     try:
         yield connection
     finally:
         connection.close()
 
 
-def initialize_database() -> Path | str:
-    backend = get_db_backend()
-    if backend == "postgres":
-        initialize_postgres_database()
-        return get_database_locator()
-    return initialize_sqlite_database()
-
-
-def initialize_sqlite_database() -> Path:
-    sqlite_path = ensure_sqlite_ready()
-    with get_db_connection() as connection:
-        connection.execute("PRAGMA foreign_keys = ON;")
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS app_meta (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-            """
-        )
-        connection.execute(
-            """
-            INSERT INTO app_meta(key, value)
-            VALUES ('schema_version', 'w1-bootstrap')
-            ON CONFLICT(key) DO NOTHING
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS app_settings (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                mode TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                model TEXT NOT NULL,
-                base_url TEXT,
-                api_key TEXT
-            )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
-                email TEXT NOT NULL UNIQUE,
-                display_name TEXT,
-                password_salt TEXT NOT NULL,
-                password_hash TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS user_settings (
-                user_id TEXT PRIMARY KEY,
-                mode TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                model TEXT NOT NULL,
-                base_url TEXT,
-                api_key_enc TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sessions (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                title TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tasks (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                session_id TEXT NOT NULL,
-                prompt TEXT NOT NULL,
-                status TEXT NOT NULL,
-                trace_json TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-            )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS messages (
-                id TEXT PRIMARY KEY,
-                user_id TEXT,
-                session_id TEXT NOT NULL,
-                task_id TEXT,
-                role TEXT NOT NULL,
-                content TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
-            )
-            """
-        )
-        _ensure_tasks_usage_json_column_sqlite(connection)
-        _ensure_sessions_user_id_column_sqlite(connection)
-        _ensure_tasks_user_id_column_sqlite(connection)
-        _ensure_messages_user_id_column_sqlite(connection)
-        _ensure_common_indexes(connection)
-        connection.commit()
-    return sqlite_path
+def initialize_database() -> str:
+    initialize_postgres_database()
+    return get_database_locator()
 
 
 def initialize_postgres_database() -> None:
@@ -357,6 +191,7 @@ def initialize_postgres_database() -> None:
                 prompt TEXT NOT NULL,
                 status TEXT NOT NULL,
                 trace_json TEXT,
+                usage_json TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -425,34 +260,6 @@ def _ensure_common_indexes(connection: DbConnectionAdapter) -> None:
         ON messages(task_id)
         """
     )
-
-
-def _ensure_tasks_usage_json_column_sqlite(connection: DbConnectionAdapter) -> None:
-    rows = connection.execute("PRAGMA table_info(tasks)").fetchall()
-    names = {str(r["name"]) for r in rows}
-    if "usage_json" not in names:
-        connection.execute("ALTER TABLE tasks ADD COLUMN usage_json TEXT")
-
-
-def _ensure_sessions_user_id_column_sqlite(connection: DbConnectionAdapter) -> None:
-    rows = connection.execute("PRAGMA table_info(sessions)").fetchall()
-    names = {str(r["name"]) for r in rows}
-    if "user_id" not in names:
-        connection.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT")
-
-
-def _ensure_tasks_user_id_column_sqlite(connection: DbConnectionAdapter) -> None:
-    rows = connection.execute("PRAGMA table_info(tasks)").fetchall()
-    names = {str(r["name"]) for r in rows}
-    if "user_id" not in names:
-        connection.execute("ALTER TABLE tasks ADD COLUMN user_id TEXT")
-
-
-def _ensure_messages_user_id_column_sqlite(connection: DbConnectionAdapter) -> None:
-    rows = connection.execute("PRAGMA table_info(messages)").fetchall()
-    names = {str(r["name"]) for r in rows}
-    if "user_id" not in names:
-        connection.execute("ALTER TABLE messages ADD COLUMN user_id TEXT")
 
 
 def _ensure_postgres_column(

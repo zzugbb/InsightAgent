@@ -36,7 +36,7 @@ export type TraceStepPayload = {
   id: string;
   type: TraceStepKind | string;
   content: string;
-  /** 与 SQLite / delta 游标对齐的序号，缺省时由索引推导 */
+  /** 与 delta 游标对齐的序号，缺省时由索引推导 */
   seq?: number;
   meta?: TraceStepMeta;
 };

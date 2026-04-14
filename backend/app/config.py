@@ -6,8 +6,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-PROJECT_ROOT = BACKEND_DIR.parent
-DEFAULT_SQLITE_PATH = PROJECT_ROOT / "data" / "sqlite.db"
 
 
 class Settings(BaseSettings):
@@ -32,19 +30,10 @@ class Settings(BaseSettings):
         ],
         alias="INSIGHT_AGENT_CORS_ORIGINS",
     )
-    sqlite_path: Path = Field(
-        default=DEFAULT_SQLITE_PATH,
-        alias="SQLITE_PATH",
-    )
-    db_backend: str = Field(
-        default="sqlite",
-        alias="INSIGHT_AGENT_DB_BACKEND",
-        description="数据库后端：sqlite / postgres / auto",
-    )
-    database_url: str | None = Field(
-        default=None,
+    database_url: str = Field(
+        default="postgresql://insight:insight@127.0.0.1:5432/insightagent",
         alias="INSIGHT_AGENT_DATABASE_URL",
-        description="PostgreSQL 连接串（postgres 模式必填）",
+        description="PostgreSQL 连接串",
     )
     chroma_host: str = Field(
         default="127.0.0.1",

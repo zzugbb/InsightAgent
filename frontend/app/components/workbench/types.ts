@@ -4,7 +4,7 @@ export type SettingsSummary = {
   model: string;
   api_key_configured: boolean;
   base_url_configured: boolean;
-  sqlite_path: string;
+  database_locator: string;
 };
 
 /** 与 GET /api/sessions、GET /api/tasks 分页响应一致 */
