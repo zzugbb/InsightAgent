@@ -55,16 +55,17 @@ export function ModelSettingsModal({
   });
 
   useEffect(() => {
-    if (data) {
-      setForm({
-        mode: data.mode,
-        provider: data.provider,
-        model: data.model,
-        base_url: "",
-        api_key: "",
-      });
+    if (!open || !data) {
+      return;
     }
-  }, [data]);
+    setForm({
+      mode: data.mode,
+      provider: data.provider,
+      model: data.model,
+      base_url: "",
+      api_key: "",
+    });
+  }, [data, open]);
 
   useEffect(() => {
     if (isError && error) {
@@ -109,6 +110,15 @@ export function ModelSettingsModal({
       setBannerKind("error");
     },
   });
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setForm(DEFAULT_FORM);
+    setBanner(null);
+    setBannerKind("error");
+  }, [open]);
 
   function submitForm() {
     saveMutation.mutate({
@@ -158,7 +168,12 @@ export function ModelSettingsModal({
       {isLoading ? (
         <Typography.Paragraph type="secondary">{t.settings.loading}</Typography.Paragraph>
       ) : (
-        <Form layout="vertical" className="model-settings-ant-form" onFinish={submitForm}>
+        <Form
+          autoComplete="off"
+          layout="vertical"
+          className="model-settings-ant-form"
+          onFinish={submitForm}
+        >
           <Form.Item label={t.settings.fieldMode}>
             <Select
               value={form.mode}
@@ -171,6 +186,10 @@ export function ModelSettingsModal({
           </Form.Item>
           <Form.Item label={t.settings.fieldProvider}>
             <Input
+              autoComplete="off"
+              name="model-provider"
+              data-1p-ignore="true"
+              data-lpignore="true"
               value={form.provider}
               onChange={(e) =>
                 setForm((c) => ({ ...c, provider: e.target.value }))
@@ -180,6 +199,10 @@ export function ModelSettingsModal({
           </Form.Item>
           <Form.Item label={t.settings.fieldModel}>
             <Input
+              autoComplete="off"
+              name="model-name"
+              data-1p-ignore="true"
+              data-lpignore="true"
               value={form.model}
               onChange={(e) =>
                 setForm((c) => ({ ...c, model: e.target.value }))
@@ -189,6 +212,10 @@ export function ModelSettingsModal({
           </Form.Item>
           <Form.Item label={t.settings.fieldBaseUrl}>
             <Input
+              autoComplete="off"
+              name="model-base-url"
+              data-1p-ignore="true"
+              data-lpignore="true"
               value={form.base_url}
               onChange={(e) =>
                 setForm((c) => ({ ...c, base_url: e.target.value }))
@@ -198,6 +225,10 @@ export function ModelSettingsModal({
           </Form.Item>
           <Form.Item label={t.settings.fieldApiKey}>
             <Input.Password
+              autoComplete="new-password"
+              name="model-api-key"
+              data-1p-ignore="true"
+              data-lpignore="true"
               value={form.api_key}
               onChange={(e) =>
                 setForm((c) => ({ ...c, api_key: e.target.value }))

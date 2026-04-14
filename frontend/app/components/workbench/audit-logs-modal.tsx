@@ -2,7 +2,7 @@
 
 import { App, Button, Input, Modal, Segmented, Select, Space, Table, Tag } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { apiJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
@@ -104,10 +104,25 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
   const [taskIdFilter, setTaskIdFilter] = useState("");
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(10);
   const [exporting, setExporting] = useState<"json" | "csv" | null>(null);
   const [exportScope, setExportScope] = useState<ExportScope>("all");
   const offset = (page - 1) * pageSize;
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setEventFilter("all");
+    setTimeFilter("7d");
+    setSessionIdFilter("");
+    setTaskIdFilter("");
+    setKeyword("");
+    setPage(1);
+    setPageSize(10);
+    setExportScope("all");
+    setExporting(null);
+  }, [open]);
 
   const query = useQuery({
     queryKey: [
