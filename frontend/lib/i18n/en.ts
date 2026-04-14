@@ -184,6 +184,7 @@ export const en: Messages = {
     contextJumpSync: "Sync",
     contextJumpUsage: "Usage",
     contextJumpMemory: "Memory",
+    contextJumpRag: "Knowledge base",
     contextJumpTasks: "Tasks",
     currentPhase: "Current phase",
     currentTask: "Current task",
@@ -313,6 +314,7 @@ export const en: Messages = {
         "Ingest text into a knowledge base and query semantic hits. Retrieved chunks are also reflected in trace as RAG steps.",
       kbIdLabel: "Knowledge base ID",
       kbIdPlaceholder: "Default: default ([a-z0-9_-])",
+      applyKb: "Apply",
       statusLoading: "Loading knowledge base status…",
       ingestPlaceholder:
         "Paste text to ingest into the knowledge base (auto chunking enabled)…",

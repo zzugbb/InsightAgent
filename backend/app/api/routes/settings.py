@@ -149,18 +149,40 @@ def validate_settings(payload: SettingsUpdateRequest) -> SettingsValidateRespons
                     mode=payload.mode,
                     provider=payload.provider,
                     model=payload.model,
-                    message="remote preflight failed.",
-                    error=f"unexpected status: {status_code}",
+                        message="remote preflight failed.",
+                        error=f"unexpected status: {status_code}",
                 )
         except Exception as exc:
-            return SettingsValidateResponse(
-                ok=False,
-                mode=payload.mode,
-                provider=payload.provider,
-                model=payload.model,
-                message="remote preflight failed.",
-                error=str(exc),
-            )
+            # 某些网关/服务禁用 HEAD，回退 GET 以减少误判
+            try:
+                fallback = Request(payload.base_url, method="GET")
+                with urlopen(fallback, timeout=3) as response:
+                    status_code = int(getattr(response, "status", 0))
+                    if 200 <= status_code < 500:
+                        return SettingsValidateResponse(
+                            ok=True,
+                            mode=payload.mode,
+                            provider=payload.provider,
+                            model=payload.model,
+                            message="remote preflight succeeded (GET fallback).",
+                        )
+                    return SettingsValidateResponse(
+                        ok=False,
+                        mode=payload.mode,
+                        provider=payload.provider,
+                        model=payload.model,
+                        message="remote preflight failed.",
+                        error=f"unexpected status: {status_code}",
+                    )
+            except Exception as fallback_exc:
+                return SettingsValidateResponse(
+                    ok=False,
+                    mode=payload.mode,
+                    provider=payload.provider,
+                    model=payload.model,
+                    message="remote preflight failed.",
+                    error=f"{exc}; fallback_get={fallback_exc}",
+                )
 
     return SettingsValidateResponse(
         ok=True,

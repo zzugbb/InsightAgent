@@ -170,6 +170,7 @@ export type Messages = {
     contextJumpSync: string;
     contextJumpUsage: string;
     contextJumpMemory: string;
+    contextJumpRag: string;
     contextJumpTasks: string;
     currentPhase: string;
     currentTask: string;
@@ -291,6 +292,7 @@ export type Messages = {
       lead: string;
       kbIdLabel: string;
       kbIdPlaceholder: string;
+      applyKb: string;
       statusLoading: string;
       ingestPlaceholder: string;
       ingestSourcePlaceholder: string;

@@ -49,6 +49,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
 - Memory：状态展示 + add/query 调试（含 metadata）
 - RAG：知识库状态展示 + 文本 ingest + 语义检索命中展示（`/api/rag/*`）
+- RAG 交互优化：知识库 ID 采用“输入后应用”模式，避免输入期间频繁触发状态请求
 - Trace 元信息：支持展示步骤级 `cost_estimate`
 - 设置：主题、主题色、语言、模型与运行模式
 - 工程校验：已配置 `.eslintrc.json`，`npm run lint` 可直接运行且当前告警已清零

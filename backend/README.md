@@ -23,6 +23,7 @@
 - W3 增量：mock 工具链路支持可复现错误语义（`[mock-tool-error]` 可恢复重试，`[mock-tool-fatal]` 致命失败），`tool_end/error/trace.meta.tool` 已输出 `retry_count/error`
 - W3 优化：新增本地计算器工具 `calc_eval`（支持 `[calc:1+2*3]` 与“计算 1+2*3”触发），纳入统一工具生命周期事件
 - W1 优化：新增 `POST /api/settings/validate`，用于设置保存前的结构/连通性预校验（不落库）
+- W1 优化补强：`settings/validate` 在 `HEAD` 失败时自动回退 `GET`，减少远端网关不支持 HEAD 时的误判
 - W1 稳定性优化：`remote` 模式保存/校验支持沿用已存储 `api_key`（空值提交不再清空历史密钥）
 - W1/W2 稳定性优化：SSE 流式输出增加周期 heartbeat（长输出保活更稳定）+ trace 持久化写入节流（降低 SQLite 写放大）
 - W2 优化：`GET /api/tasks/{task_id}/stream` 支持 `running` 状态重连（回补增量，不重复执行任务）
@@ -134,7 +135,7 @@
 
 当前实现注意点：
 
-- 删除会话时会级联删除 SQLite 的 tasks/messages，但不会自动删除 Chroma `memory_{session_id}` collection（可能存在孤儿向量，后续可按治理策略补清理任务）。
+- 删除会话时会级联删除 SQLite 的 tasks/messages，并会 best-effort 删除 Chroma `memory_{session_id}` collection（清理失败不阻塞主删除流程）。
 
 ## W4 新增说明
 

@@ -152,6 +152,8 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const [memoryMetaDraft, setMemoryMetaDraft] = useState("");
   const [memoryQueryDraft, setMemoryQueryDraft] = useState("");
   const [ragKnowledgeBaseId, setRagKnowledgeBaseId] = useState("default");
+  const [ragAppliedKnowledgeBaseId, setRagAppliedKnowledgeBaseId] =
+    useState("default");
   const [ragIngestDraft, setRagIngestDraft] = useState("");
   const [ragIngestSource, setRagIngestSource] = useState("");
   const [ragQueryDraft, setRagQueryDraft] = useState("");
@@ -245,11 +247,11 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   });
 
   const ragStatusQuery = useQuery({
-    queryKey: ["rag-status", ragKnowledgeBaseId.trim() || "default"],
+    queryKey: ["rag-status", ragAppliedKnowledgeBaseId.trim() || "default"],
     queryFn: () =>
       apiJson<RagStatus>(
         `${apiBaseUrl}/api/rag/status?knowledge_base_id=${encodeURIComponent(
-          ragKnowledgeBaseId.trim() || "default",
+          ragAppliedKnowledgeBaseId.trim() || "default",
         )}`,
       ),
     staleTime: 10_000,
@@ -260,6 +262,12 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     ragStatusQuery.isError && ragStatusQuery.error
       ? toUserFacingError(ragStatusQuery.error, t.errors).banner
       : null;
+
+  const applyRagKnowledgeBase = () => {
+    const next = ragKnowledgeBaseId.trim() || "default";
+    setRagKnowledgeBaseId(next);
+    setRagAppliedKnowledgeBaseId(next);
+  };
 
   useEffect(() => {
     setMemoryAddDraft("");
@@ -659,6 +667,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <Button size="small" onClick={() => scrollToContextSection("ctx-memory")}>
             {t.inspector.contextJumpMemory}
           </Button>
+          <Button size="small" onClick={() => scrollToContextSection("ctx-rag")}>
+            {t.inspector.contextJumpRag}
+          </Button>
           <Button size="small" onClick={() => scrollToContextSection("ctx-tasks")}>
             {t.inspector.contextJumpTasks}
           </Button>
@@ -1001,13 +1012,19 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
 
         <div className="memory-collection-row">
           <span className="memory-collection-label">{t.inspector.rag.kbIdLabel}</span>
-          <Input
-            size="small"
-            value={ragKnowledgeBaseId}
-            onChange={(e) => setRagKnowledgeBaseId(e.target.value)}
-            placeholder={t.inspector.rag.kbIdPlaceholder}
-            className="rag-kb-input"
-          />
+          <Space.Compact size="small" className="rag-kb-compact">
+            <Input
+              size="small"
+              value={ragKnowledgeBaseId}
+              onChange={(e) => setRagKnowledgeBaseId(e.target.value)}
+              onPressEnter={applyRagKnowledgeBase}
+              placeholder={t.inspector.rag.kbIdPlaceholder}
+              className="rag-kb-input"
+            />
+            <Button size="small" onClick={applyRagKnowledgeBase}>
+              {t.inspector.rag.applyKb}
+            </Button>
+          </Space.Compact>
         </div>
 
         <div className="memory-status-block" aria-live="polite">
@@ -1082,7 +1099,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                   return;
                 }
                 ragIngestMutation.mutate({
-                  knowledgeBaseId: ragKnowledgeBaseId.trim() || "default",
+                  knowledgeBaseId: ragAppliedKnowledgeBaseId.trim() || "default",
                   text,
                   source: ragIngestSource.trim(),
                 });
@@ -1119,7 +1136,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                   return;
                 }
                 ragQueryMutation.mutate({
-                  knowledgeBaseId: ragKnowledgeBaseId.trim() || "default",
+                  knowledgeBaseId: ragAppliedKnowledgeBaseId.trim() || "default",
                   query: text,
                 });
               }}

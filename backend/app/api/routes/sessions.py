@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.services.chroma_memory_service import (
     add_session_memory_text,
+    cleanup_session_memory_collection,
     get_session_memory_status,
     query_session_memory,
 )
@@ -238,6 +239,10 @@ def get_session_messages_detail(session_id: str) -> SessionMessagesResponse:
 
 @router.delete("/{session_id}", status_code=204)
 def delete_session_route(session_id: str) -> Response:
+    if get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
     if not delete_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
+    # best-effort: 清理 Chroma 会话 memory collection，失败不阻塞主删除流程
+    cleanup_session_memory_collection(session_id)
     return Response(status_code=204)

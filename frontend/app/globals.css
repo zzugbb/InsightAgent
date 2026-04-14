@@ -1983,6 +1983,14 @@ code {
   margin-top: 8px;
 }
 
+.rag-kb-compact {
+  width: 100%;
+}
+
+.rag-kb-input {
+  min-width: 0;
+}
+
 .memory-collection-label {
   font-size: 0.8rem;
   color: var(--muted);

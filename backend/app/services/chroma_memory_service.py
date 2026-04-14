@@ -178,3 +178,32 @@ def get_session_memory_status(session_id: str) -> dict[str, object]:
         base["document_count"] = 0
 
     return base
+
+
+def cleanup_session_memory_collection(session_id: str) -> dict[str, object]:
+    """
+    best-effort 删除会话对应的 memory collection。
+    - 不存在 collection 视为成功（deleted=False）
+    - Chroma 不可达时返回 deleted=False + error
+    """
+    name = memory_collection_name(session_id)
+    base: dict[str, object] = {
+        "collection": name,
+        "deleted": False,
+        "error": None,
+    }
+    try:
+        client = _http_client()
+    except Exception as exc:  # noqa: BLE001
+        base["error"] = (str(exc).strip() or type(exc).__name__)[:280]
+        return base
+
+    try:
+        client.delete_collection(name=name)
+        base["deleted"] = True
+    except Exception as exc:  # noqa: BLE001
+        msg = (str(exc).strip() or type(exc).__name__).lower()
+        if "not found" in msg or "does not exist" in msg:
+            return base
+        base["error"] = msg[:280]
+    return base
