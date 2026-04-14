@@ -9,13 +9,13 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - W3：已完成（mock 范围）
 - W4：已完成（RAG 面板 + Token/Cost 展示）
 - 阶段 5 增量：已完成登录/注册入口页与 Auth Gate（token 持久化、401 自动回登录）
-- 阶段 5 增量：已完成首次引导页（登录后若未配置 API Key，先配置 `provider/model/api_key` 再进入工作台）
+- 阶段 5 调整：已移除首次引导页，登录后直接进入工作台
 - 阶段 5 收口：登录页文案与白底可读性优化、退出按钮对齐优化、会话空标题默认展示回退为“新会话”
 - 阶段 5 细化：登录区标题文案调整为“账号登录”、提交按钮禁用态可读性优化、退出入口迁移至左下角设置区并避让折叠控件
 - 阶段 5 细化（继续）：移除“当前用户：未登录”提示、注册邮箱格式前置校验（替代 422 生硬报错）、登录输入 autofill/已填充态样式优化并适配浅色表单
 - 阶段 5 文案收口：登录页左侧说明融合主页叙事（可观测智能体、对话到任务闭环），并补回 SSE/Trace、Memory/RAG、Token/Cost 等关键信息点
 - 阶段 5 交互修复：登录密码框显隐图标恢复可见与可点击（支持显示/隐藏切换）
-- 阶段 5 协同：后端 PostgreSQL 迁移主线已启动（本轮前端页面无新增），为后续首次引导页与 auth e2e 打基础
+- 阶段 5 协同：后端 PostgreSQL 迁移主线已启动（本轮前端页面无新增），为后续 auth e2e 打基础
 - 阶段 5 联调排障（2026-04-14）：定位“发会话消息无响应”为后端 `POST /api/tasks` 返回 500（PostgreSQL SQL 类型兼容），后端修复后前端发送与流式恢复
 - 阶段 5 国际化补齐：登录页（Auth Gate）接入 i18n，新增 `auth` 文案分组并覆盖中英文登录/注册全链路文案
 - 阶段 5 体验补齐：登录页新增轻量设置模块（语言/主题/主题色），并完成登录页样式对深浅主题与主题色的联动适配
@@ -25,7 +25,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 
 - 三栏布局：会话、消息、轨迹/上下文
 - Auth Gate：登录/注册、登录态校验、401 自动失效处理；退出入口融合到侧栏左下角设置区
-- 首次引导：首次登录若缺少 API Key，会展示引导页并保存为 `remote` 模式配置后再进入 Workbench
+- 登录后默认策略：直接进入 Workbench；若用户未配置模型密钥，后端按用户默认设置运行（默认 `mock`）
 - 审计入口迁移到左下角设置菜单（独立子页）：查看 `login/logout/refresh/settings_update` 事件，支持事件类型/时间范围/`session_id`/`task_id` 筛选、详情展开与 JSON/CSV 导出（可选“当前页/全部筛选结果”）
 - 会话鉴权：登录返回 `access_token + refresh_token + session_id`；退出时调用后端 `/api/auth/logout` 撤销当前会话 refresh token
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
