@@ -39,6 +39,8 @@ export const en: Messages = {
     passwordPlaceholderLogin: "Enter your password",
     submitLogin: "Enter Workbench",
     submitRegister: "Create account and continue",
+    settingsButton: "Appearance & language",
+    settingsTitle: "Sign-in page settings",
   },
   workbench: {
     selectSessionForHistory: "Pick a session on the left to load history.",

@@ -39,6 +39,8 @@ export const zh: Messages = {
     passwordPlaceholderLogin: "输入账号密码",
     submitLogin: "进入工作台",
     submitRegister: "创建账号并进入",
+    settingsButton: "外观与语言",
+    settingsTitle: "登录页设置",
   },
   workbench: {
     selectSessionForHistory: "选择左侧会话可查看历史消息。",

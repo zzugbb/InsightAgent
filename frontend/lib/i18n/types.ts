@@ -37,6 +37,8 @@ export type Messages = {
     passwordPlaceholderLogin: string;
     submitLogin: string;
     submitRegister: string;
+    settingsButton: string;
+    settingsTitle: string;
   };
   workbench: {
     selectSessionForHistory: string;

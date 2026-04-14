@@ -1,7 +1,7 @@
 "use client";
 
-import { App, Button, Input, Spin, Tabs } from "antd";
-import { Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { App, Button, ColorPicker, Input, Popover, Segmented, Spin, Tabs } from "antd";
+import { Check, Eye, EyeOff, Palette, Settings2, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -14,8 +14,9 @@ import {
   setAuthToken,
 } from "../../../lib/api-client";
 import { useChatStreamStore } from "../../../lib/stores/chat-stream-store";
-import { useMessages } from "../../../lib/preferences-context";
+import { useMessages, usePreferences } from "../../../lib/preferences-context";
 import type { Messages } from "../../../lib/i18n/types";
+import { hexKeyForCompare, PRESET_SWATCHES } from "../../../lib/theme-primary";
 import { Workbench } from "../workbench";
 import styles from "./auth-gate.module.css";
 
@@ -76,6 +77,8 @@ function parseAuthError(error: unknown, messages: Messages["auth"]): string {
 export function AuthGate() {
   const { message } = App.useApp();
   const messages = useMessages();
+  const { theme, setTheme, locale, setLocale, primaryColor, setPrimaryColor } =
+    usePreferences();
   const authMessages = messages.auth;
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>("checking");
@@ -87,6 +90,7 @@ export function AuthGate() {
   const [submitting, setSubmitting] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const resetUserScopedClientState = useCallback(() => {
     queryClient.clear();
@@ -222,8 +226,89 @@ export function AuthGate() {
     return <Workbench onLogout={handleLogout} />;
   }
 
+  const settingsContent = (
+    <div className={styles.settingsPopover}>
+      <p className={styles.settingsTitle}>{authMessages.settingsTitle}</p>
+      <div className={styles.settingsSection}>
+        <span className={styles.settingsLabel}>{messages.settings.languageLabel}</span>
+        <Segmented
+          block
+          size="small"
+          value={locale}
+          options={[
+            { label: messages.settings.languageZh, value: "zh" },
+            { label: messages.settings.languageEn, value: "en" },
+          ]}
+          onChange={(value) => {
+            setLocale(value === "en" ? "en" : "zh");
+          }}
+        />
+      </div>
+      <div className={styles.settingsSection}>
+        <span className={styles.settingsLabel}>{messages.settings.themeLabel}</span>
+        <Segmented
+          block
+          size="small"
+          value={theme}
+          options={[
+            { label: messages.settings.themeDark, value: "dark" },
+            { label: messages.settings.themeLight, value: "light" },
+          ]}
+          onChange={(value) => {
+            setTheme(value === "light" ? "light" : "dark");
+          }}
+        />
+      </div>
+      <div className={styles.settingsSection}>
+        <span className={styles.settingsLabel}>{messages.sidebar.menuAccent}</span>
+        <div className={styles.swatches}>
+          {PRESET_SWATCHES.map((hex) => {
+            const active = hexKeyForCompare(primaryColor) === hexKeyForCompare(hex);
+            return (
+              <button
+                key={hex}
+                type="button"
+                className={`${styles.swatch}${active ? ` ${styles.swatchActive}` : ""}`}
+                style={{ backgroundColor: hex }}
+                onClick={() => setPrimaryColor(hex)}
+                aria-label={hex}
+                aria-pressed={active}
+              >
+                {active ? <Check size={12} strokeWidth={3} aria-hidden /> : null}
+              </button>
+            );
+          })}
+        </div>
+        <div className={styles.customColorRow}>
+          <Palette size={14} strokeWidth={1.75} aria-hidden />
+          <ColorPicker
+            value={primaryColor}
+            onChangeComplete={(c) => setPrimaryColor(c.toHexString())}
+            format="hex"
+            showText
+            disabledAlpha={false}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <main className={styles.authShell}>
+      <div className={styles.topActions}>
+        <Popover
+          trigger="click"
+          placement="bottomRight"
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          content={settingsContent}
+          destroyOnHidden
+        >
+          <Button type="text" className={styles.settingsBtn} icon={<Settings2 size={16} />}>
+            {authMessages.settingsButton}
+          </Button>
+        </Popover>
+      </div>
       <section className={styles.heroArea}>
         <div className={styles.heroGlow} />
         <p className={styles.eyebrow}>INSIGHTAGENT</p>
