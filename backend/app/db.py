@@ -232,6 +232,18 @@ def initialize_postgres_database() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                event_type TEXT NOT NULL,
+                event_detail_json TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            )
+            """
+        )
         _ensure_postgres_column(connection, "tasks", "usage_json", "TEXT")
         _ensure_postgres_column(connection, "sessions", "user_id", "TEXT")
         _ensure_postgres_column(connection, "tasks", "user_id", "TEXT")
@@ -281,6 +293,18 @@ def _ensure_common_indexes(connection: DbConnectionAdapter) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id
         ON auth_sessions(user_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id
+        ON audit_logs(user_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type_created_at
+        ON audit_logs(event_type, created_at DESC)
         """
     )
 

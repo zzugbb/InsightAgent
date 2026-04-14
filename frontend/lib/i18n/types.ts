@@ -39,6 +39,20 @@ export type Messages = {
     submitRegister: string;
     settingsButton: string;
     settingsTitle: string;
+    onboardingTitle: string;
+    onboardingLead: string;
+    onboardingProviderLabel: string;
+    onboardingProviderPlaceholder: string;
+    onboardingModelLabel: string;
+    onboardingModelPlaceholder: string;
+    onboardingBaseUrlLabel: string;
+    onboardingBaseUrlPlaceholder: string;
+    onboardingApiKeyLabel: string;
+    onboardingApiKeyPlaceholder: string;
+    onboardingSave: string;
+    onboardingSaving: string;
+    onboardingSaved: string;
+    onboardingLogout: string;
   };
   workbench: {
     selectSessionForHistory: string;

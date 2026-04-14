@@ -10,6 +10,7 @@
 - W4：已完成（RAG + Token/Cost + compose.full）
 - 阶段 5 增量：`full-data-auth` 首版已落地（JWT、用户隔离、用户级设置与密钥加密存储）
 - 阶段 5 增量：最小会话管理已落地（refresh token 轮换、会话查询/撤销、退出当前/全部会话）
+- 阶段 5 增量：最小审计已落地（`login/logout/refresh/settings_update` 事件写入 `audit_logs`）
 - 阶段 5 增量：PostgreSQL 迁移主线已启动（后端运行时已收敛为 PostgreSQL + 平迁脚本）
 - 阶段 5 排查修复（2026-04-14）：修复 PostgreSQL 下 `POST /api/tasks` 的 `CASE WHEN` 参数类型错误（smallint -> boolean），恢复消息发送链路
 - 阶段 5 排查补充：已复核 `sessions/tasks/messages/settings/rag` 查询与写入路径，核心数据均按 `user_id` 隔离
@@ -53,6 +54,7 @@
 - `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`settings`、`rag`
 - `app/db.py`：PostgreSQL 连接、初始化与索引
 - 新增 `auth_sessions` 表：refresh token 哈希持久化、会话过期/撤销管理
+- 新增 `audit_logs` 表：最小审计事件持久化（`event_type` + `event_detail_json`）
 - `app/providers/`：Provider 抽象 + mock 实现
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
 - 流式阶段已支持最终 `observation` 的批次增量持久化（`seq` 递增，默认每 8 个 chunk 落库一次 + 结束兜底）
@@ -69,6 +71,7 @@
 - `POST /api/auth/logout-all`
 - `GET /api/auth/sessions`
 - `DELETE /api/auth/sessions/{session_id}`
+- 最小审计事件：`login`、`logout`、`refresh`、`settings_update`
 - `GET /api/auth/me`
 - `GET /api/settings`
 - `PUT /api/settings`
@@ -209,6 +212,12 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 python scripts/migrate_sqlite_to_postgres.py \
   --sqlite-path ../data/sqlite.db \
   --database-url postgresql://insight:insight@127.0.0.1:5432/insightagent
+```
+
+最小 e2e 基线（登录/过期/登出/跨账号隔离/发送流）可执行：
+
+```bash
+python scripts/e2e_baseline.py --base-url http://127.0.0.1:8000
 ```
 
 如需 Memory 能力，在仓库根目录执行：

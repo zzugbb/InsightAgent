@@ -13,6 +13,7 @@ from app.services.auth_session_service import (
     revoke_auth_session_by_refresh_token,
 )
 from app.services.auth_service import authenticate_user, create_user, is_valid_email
+from app.services.audit_service import record_audit_event
 
 
 router = APIRouter()
@@ -121,6 +122,19 @@ def _user_agent(request: Request) -> str | None:
     return text[:240] if text else None
 
 
+def _safe_record_audit_event(
+    *,
+    user_id: str | None,
+    event_type: str,
+    detail: dict[str, object] | None = None,
+) -> None:
+    try:
+        record_audit_event(user_id=user_id, event_type=event_type, detail=detail)
+    except Exception:
+        # 审计日志采用 best-effort，不影响主流程成功返回
+        return
+
+
 @router.post("/register", response_model=AuthTokenResponse)
 def register(payload: RegisterRequest, request: Request) -> AuthTokenResponse:
     try:
@@ -140,6 +154,14 @@ def register(payload: RegisterRequest, request: Request) -> AuthTokenResponse:
         user_agent=_user_agent(request),
         ip_address=_client_ip(request),
     )
+    _safe_record_audit_event(
+        user_id=str(user["id"]),
+        event_type="login",
+        detail={
+            "reason": "register_auto_login",
+            "session_id": str(issued["session_id"]),
+        },
+    )
     return AuthTokenResponse(
         access_token=str(issued["access_token"]),
         refresh_token=str(issued["refresh_token"]),
@@ -157,6 +179,14 @@ def login(payload: LoginRequest, request: Request) -> AuthTokenResponse:
         user=user,
         user_agent=_user_agent(request),
         ip_address=_client_ip(request),
+    )
+    _safe_record_audit_event(
+        user_id=str(user["id"]),
+        event_type="login",
+        detail={
+            "reason": "password",
+            "session_id": str(issued["session_id"]),
+        },
     )
     return AuthTokenResponse(
         access_token=str(issued["access_token"]),
@@ -178,6 +208,11 @@ def refresh(payload: RefreshRequest, request: Request) -> AuthTokenResponse:
     user = issued["user"]
     if not isinstance(user, dict):
         raise HTTPException(status_code=401, detail="invalid refresh token user")
+    _safe_record_audit_event(
+        user_id=str(user["id"]),
+        event_type="refresh",
+        detail={"session_id": str(issued["session_id"])},
+    )
     return AuthTokenResponse(
         access_token=str(issued["access_token"]),
         refresh_token=str(issued["refresh_token"]),
@@ -195,10 +230,20 @@ def logout(
     revoked = False
     if payload.session_id:
         revoked = revoke_auth_session_by_id(user_id=user_id, session_id=payload.session_id)
+        _safe_record_audit_event(
+            user_id=user_id,
+            event_type="logout",
+            detail={"scope": "single", "session_id": payload.session_id, "revoked": revoked},
+        )
     elif payload.refresh_token:
         revoked = revoke_auth_session_by_refresh_token(
             user_id=user_id,
             refresh_token=payload.refresh_token,
+        )
+        _safe_record_audit_event(
+            user_id=user_id,
+            event_type="logout",
+            detail={"scope": "refresh_token", "revoked": revoked},
         )
     return LogoutResponse(revoked=revoked)
 
@@ -207,6 +252,11 @@ def logout(
 def logout_all(current_user: dict = Depends(get_current_user)) -> LogoutAllResponse:
     user_id = str(current_user["id"])
     revoked = revoke_all_auth_sessions(user_id=user_id)
+    _safe_record_audit_event(
+        user_id=user_id,
+        event_type="logout",
+        detail={"scope": "all", "revoked": revoked},
+    )
     return LogoutAllResponse(revoked=revoked)
 
 

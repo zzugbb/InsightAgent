@@ -22,6 +22,8 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 import type { Messages } from "../../../lib/i18n/types";
 import { hexKeyForCompare, PRESET_SWATCHES } from "../../../lib/theme-primary";
 import { Workbench } from "../workbench";
+import { OnboardingSetup } from "./onboarding-setup";
+import type { SettingsSummary } from "../workbench/types";
 import styles from "./auth-gate.module.css";
 
 const API_BASE_URL =
@@ -97,6 +99,8 @@ export function AuthGate() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [settingsSnapshot, setSettingsSnapshot] = useState<SettingsSummary | null>(null);
 
   const resetUserScopedClientState = useCallback(() => {
     queryClient.clear();
@@ -104,6 +108,18 @@ export function AuthGate() {
     streamStore.resetStreamUi();
     streamStore.setIsStreaming(false);
   }, [queryClient]);
+
+  const syncOnboardingRequirement = useCallback(async (): Promise<void> => {
+    try {
+      const settings = await apiJson<SettingsSummary>(`${API_BASE_URL}/api/settings`);
+      setSettingsSnapshot(settings);
+      setNeedsOnboarding(!settings.api_key_configured);
+    } catch {
+      // 若设置读取失败，为避免用户直接误入工作台，这里保守进入引导页
+      setSettingsSnapshot(null);
+      setNeedsOnboarding(true);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,10 +138,16 @@ export function AuthGate() {
           return;
         }
         setUser(me);
+        await syncOnboardingRequirement();
+        if (cancelled) {
+          return;
+        }
         setStatus("authenticated");
       } catch {
         clearAuthSessionStorage();
         resetUserScopedClientState();
+        setNeedsOnboarding(false);
+        setSettingsSnapshot(null);
         if (!cancelled) {
           setStatus("anonymous");
         }
@@ -136,13 +158,15 @@ export function AuthGate() {
     return () => {
       cancelled = true;
     };
-  }, [resetUserScopedClientState]);
+  }, [resetUserScopedClientState, syncOnboardingRequirement]);
 
   useEffect(() => {
     function onAuthExpired() {
       clearAuthSessionStorage();
       resetUserScopedClientState();
       setUser(null);
+      setNeedsOnboarding(false);
+      setSettingsSnapshot(null);
       setStatus("anonymous");
       setPassword("");
       message.warning(authMessages.expiredRelogin);
@@ -198,6 +222,7 @@ export function AuthGate() {
       setRefreshToken(response.refresh_token);
       setAuthSessionId(response.session_id);
       setUser(response.user);
+      await syncOnboardingRequirement();
       setStatus("authenticated");
       setPassword("");
       message.success(
@@ -212,7 +237,7 @@ export function AuthGate() {
     }
   }
 
-  function handleLogout() {
+  const handleLogout = useCallback(() => {
     const refreshToken = getRefreshToken();
     void (async () => {
       try {
@@ -229,12 +254,14 @@ export function AuthGate() {
         clearAuthSessionStorage();
         resetUserScopedClientState();
         setUser(null);
+        setNeedsOnboarding(false);
+        setSettingsSnapshot(null);
         setStatus("anonymous");
         setPassword("");
         message.info(authMessages.logoutSuccess);
       }
     })();
-  }
+  }, [authMessages.logoutSuccess, message, resetUserScopedClientState]);
 
   if (status === "checking") {
     return (
@@ -246,6 +273,17 @@ export function AuthGate() {
   }
 
   if (status === "authenticated") {
+    if (needsOnboarding) {
+      return (
+        <OnboardingSetup
+          initialSettings={settingsSnapshot}
+          onComplete={() => {
+            setNeedsOnboarding(false);
+          }}
+          onLogout={handleLogout}
+        />
+      );
+    }
     return <Workbench onLogout={handleLogout} />;
   }
 

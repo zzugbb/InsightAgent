@@ -9,6 +9,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - W3：已完成（mock 范围）
 - W4：已完成（RAG 面板 + Token/Cost 展示）
 - 阶段 5 增量：已完成登录/注册入口页与 Auth Gate（token 持久化、401 自动回登录）
+- 阶段 5 增量：已完成首次引导页（登录后若未配置 API Key，先配置 `provider/model/api_key` 再进入工作台）
 - 阶段 5 收口：登录页文案与白底可读性优化、退出按钮对齐优化、会话空标题默认展示回退为“新会话”
 - 阶段 5 细化：登录区标题文案调整为“账号登录”、提交按钮禁用态可读性优化、退出入口迁移至左下角设置区并避让折叠控件
 - 阶段 5 细化（继续）：移除“当前用户：未登录”提示、注册邮箱格式前置校验（替代 422 生硬报错）、登录输入 autofill/已填充态样式优化并适配浅色表单
@@ -24,6 +25,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 
 - 三栏布局：会话、消息、轨迹/上下文
 - Auth Gate：登录/注册、登录态校验、401 自动失效处理；退出入口融合到侧栏左下角设置区
+- 首次引导：首次登录若缺少 API Key，会展示引导页并保存为 `remote` 模式配置后再进入 Workbench
 - 会话鉴权：登录返回 `access_token + refresh_token + session_id`；退出时调用后端 `/api/auth/logout` 撤销当前会话 refresh token
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
 - 会话命名体验：空会话在首条消息发送后会自动改名为消息前缀（后端规则驱动）

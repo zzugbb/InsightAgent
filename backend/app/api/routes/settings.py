@@ -5,10 +5,24 @@ from urllib.request import Request, urlopen
 
 from app.api.deps import get_current_user
 from app.db import get_database_locator
+from app.services.audit_service import record_audit_event
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 
 
 router = APIRouter()
+
+
+def _safe_record_audit_event(
+    *,
+    user_id: str | None,
+    event_type: str,
+    detail: dict[str, object] | None = None,
+) -> None:
+    try:
+        record_audit_event(user_id=user_id, event_type=event_type, detail=detail)
+    except Exception:
+        # 审计日志采用 best-effort，不影响设置保存主流程
+        return
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -93,6 +107,17 @@ def update_settings(
             base_url=payload.base_url,
             api_key=effective_api_key,
         )
+    )
+    _safe_record_audit_event(
+        user_id=user_id,
+        event_type="settings_update",
+        detail={
+            "mode": settings.mode,
+            "provider": settings.provider,
+            "model": settings.model,
+            "base_url_configured": bool(settings.base_url),
+            "api_key_configured": bool(settings.api_key),
+        },
     )
     return SettingsSummaryResponse(
         mode=settings.mode,

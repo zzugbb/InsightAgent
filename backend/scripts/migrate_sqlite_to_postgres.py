@@ -146,6 +146,18 @@ def _ensure_postgres_schema(pg_connection) -> None:
         """
     )
     pg_connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            event_type TEXT NOT NULL,
+            event_detail_json TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+        """
+    )
+    pg_connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id)"
     )
     pg_connection.execute(
@@ -165,6 +177,12 @@ def _ensure_postgres_schema(pg_connection) -> None:
     )
     pg_connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id)"
+    )
+    pg_connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)"
+    )
+    pg_connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type_created_at ON audit_logs(event_type, created_at DESC)"
     )
 
 
