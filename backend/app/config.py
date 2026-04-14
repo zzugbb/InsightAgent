@@ -36,6 +36,16 @@ class Settings(BaseSettings):
         default=DEFAULT_SQLITE_PATH,
         alias="SQLITE_PATH",
     )
+    db_backend: str = Field(
+        default="sqlite",
+        alias="INSIGHT_AGENT_DB_BACKEND",
+        description="数据库后端：sqlite / postgres / auto",
+    )
+    database_url: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_DATABASE_URL",
+        description="PostgreSQL 连接串（postgres 模式必填）",
+    )
     chroma_host: str = Field(
         default="127.0.0.1",
         alias="CHROMA_HOST",

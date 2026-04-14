@@ -8,6 +8,8 @@ services:
     env_file:
       - ./backend/.env
     environment:
+      INSIGHT_AGENT_DB_BACKEND: postgres
+      INSIGHT_AGENT_DATABASE_URL: postgresql://insight:insight@postgres:5432/insightagent
       SQLITE_PATH: /app/data/sqlite.db
       CHROMA_HOST: chroma
       CHROMA_PORT: 8000

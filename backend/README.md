@@ -9,12 +9,13 @@
 - W3：已完成（mock 范围）
 - W4：已完成（RAG + Token/Cost + compose.full）
 - 阶段 5 增量：`full-data-auth` 首版已落地（JWT、用户隔离、用户级设置与密钥加密存储）
+- 阶段 5 增量：PostgreSQL 迁移主线已启动（SQLite/PostgreSQL 双后端切换 + 平迁脚本）
 - 阶段 5 排查补充：已复核 `sessions/tasks/messages/settings/rag` 查询与写入路径，核心数据均按 `user_id` 隔离
 - 会话命名补充：空会话在首条消息发送时，若仍为占位标题则自动改为首条消息前缀
 - 会话命名规则补充：仅在“无历史消息 + 占位标题”条件下自动命名，不覆盖用户手动重命名
-- 协同进展：本轮无后端接口变更；前端已完成登录表单填充态样式优化、密码显隐图标可见性与切换修复、登录页左侧文案（主页叙事 + 关键信息）收口、退出入口并入左下角设置模块
-- 协同进展：本轮无后端接口变更；前端已完成登录页国际化接入（Auth Gate 新增 `auth` 文案分组并覆盖中英文）
-- 协同进展：本轮无后端接口变更；前端已完成登录页设置模块（语言/主题/主题色）与主题/主题色联动适配
+- 协同进展（前端侧）：已完成登录表单填充态样式优化、密码显隐图标可见性与切换修复、登录页左侧文案（主页叙事 + 关键信息）收口、退出入口并入左下角设置模块
+- 协同进展（前端侧）：已完成登录页国际化接入（Auth Gate 新增 `auth` 文案分组并覆盖中英文）
+- 协同进展（前端侧）：已完成登录页设置模块（语言/主题/主题色）与主题/主题色联动适配
 - 工程协作：前端 `npm run lint` 已可直接执行，且当前告警已清零
 - 协同进展：前端已切换到后端 usage 聚合接口（全局/会话双范围），并显示覆盖率与状态反馈（loading/error/empty）
 - 协同进展：前端右侧 Inspector（Context）已按可观测运维场景完成分区重排（概览/同步诊断/用量/Memory/任务索引），后端现有字段可直接支撑后续模块扩展
@@ -48,7 +49,7 @@
 - `app/config.py`：统一配置读取
 - `app/schemas/trace.py`：`TraceStep` / `TraceStepMeta` 与解析校验
 - `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`settings`、`rag`
-- `app/db.py`：SQLite 初始化与基础表
+- `app/db.py`：SQLite/PostgreSQL 双后端连接、初始化与索引
 - `app/providers/`：Provider 抽象 + mock 实现
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
 - 流式阶段已支持最终 `observation` 的批次增量持久化（`seq` 递增，默认每 8 个 chunk 落库一次 + 结束兜底）
@@ -171,6 +172,16 @@
   - `INSIGHT_AGENT_ACCESS_TOKEN_TTL_MINUTES`
   - `INSIGHT_AGENT_SECRET_KEY`
 
+## 阶段 5 增量（PostgreSQL 迁移主线）
+
+- 新增数据库后端切换：
+  - `INSIGHT_AGENT_DB_BACKEND=sqlite|postgres|auto`
+  - `INSIGHT_AGENT_DATABASE_URL=postgresql://...`
+- `app/db.py` 已支持在不改业务 SQL 调用层的前提下切换 SQLite / PostgreSQL
+- 新增迁移脚本：`scripts/migrate_sqlite_to_postgres.py`
+  - 平迁表：`users`、`user_settings`、`sessions`、`tasks`、`messages`
+  - 策略：幂等 upsert（可重复执行）
+
 ## 本地启动
 
 ```bash
@@ -181,6 +192,14 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 可复制 `.env.example` 为 `.env` 覆盖默认配置。
+
+如需将本地 SQLite 数据迁移到 PostgreSQL，可执行：
+
+```bash
+python scripts/migrate_sqlite_to_postgres.py \
+  --sqlite-path ../data/sqlite.db \
+  --database-url postgresql://insight:insight@127.0.0.1:5432/insightagent
+```
 
 如需 Memory 能力，在仓库根目录执行：
 
@@ -193,7 +212,7 @@ docker compose up -d chroma
 ### 优先做
 
 1. `full-data-auth`：用户模型、JWT/API 鉴权、凭证加密存储。
-   - 当前状态：已完成 SQLite 首版，后续补 PostgreSQL 迁移。
+   - 当前状态：已完成 SQLite 首版；PostgreSQL 迁移主线已启动，后续补 refresh/session/audit。
 2. `full-trace-session`：任务/Trace 结构化持久化、历史检索、导出复用。
 3. `full-agent-scale`（轻量）：进程内队列 + 并发上限 + 取消/超时。
 4. `full-rag-governance`（MVP）：知识库上传/删除/版本与索引重建。
@@ -207,7 +226,7 @@ docker compose up -d chroma
 
 ## 当前限制（W4 生产化前）
 
-- PostgreSQL 尚未接入（当前 full-data-auth 首版基于 SQLite）
+- PostgreSQL 已接入双后端能力，但生产切换前仍需完成真实环境平迁与回滚演练
 - `remote` 模式 provider 校验仍较粗
 - 真实工具调用循环仍以 mock 工具编排为主（RAG 检索已真实接入）
 - token 仍为估算值（非 provider 官方 usage 回传）

@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from app.api.deps import get_current_user
-from app.db import get_sqlite_path
+from app.db import get_database_locator
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 
 
@@ -66,7 +66,7 @@ def get_settings_summary(current_user: dict = Depends(get_current_user)) -> Sett
         model=settings.model,
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
-        sqlite_path=str(get_sqlite_path()),
+        sqlite_path=get_database_locator(),
     )
 
 
@@ -100,7 +100,7 @@ def update_settings(
         model=settings.model,
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
-        sqlite_path=str(get_sqlite_path()),
+        sqlite_path=get_database_locator(),
     )
 
 

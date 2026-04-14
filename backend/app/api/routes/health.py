@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.config import get_settings
-from app.db import get_sqlite_path
+from app.db import get_database_locator
 from app.services.chroma_status import probe_chroma_reachable
 
 
@@ -25,7 +25,7 @@ def health() -> dict[str, object]:
         "mode": settings.mode,
         "provider": settings.provider,
         "model": settings.model_name,
-        "sqlite_path": str(get_sqlite_path()),
+        "sqlite_path": get_database_locator(),
         "chroma": {
             "url": chroma_url,
             "reachable": chroma_reachable,
