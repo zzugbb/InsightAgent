@@ -42,3 +42,77 @@ def record_audit_event(
             ),
         )
         connection.commit()
+
+
+def list_audit_logs(
+    *,
+    user_id: str,
+    limit: int = 20,
+    offset: int = 0,
+    event_type: str | None = None,
+    start_at: str | None = None,
+    end_at: str | None = None,
+) -> list[dict]:
+    conditions = ["user_id = ?"]
+    params: list[object] = [user_id]
+
+    normalized_event_type = event_type.strip().lower() if isinstance(event_type, str) else ""
+    if normalized_event_type:
+        conditions.append("event_type = ?")
+        params.append(normalized_event_type)
+
+    if isinstance(start_at, str) and start_at.strip():
+        conditions.append("created_at >= ?")
+        params.append(start_at.strip())
+    if isinstance(end_at, str) and end_at.strip():
+        conditions.append("created_at <= ?")
+        params.append(end_at.strip())
+
+    where_sql = " AND ".join(conditions)
+    with get_db_connection() as connection:
+        rows = connection.execute(
+            f"""
+            SELECT id, event_type, event_detail_json, created_at
+            FROM audit_logs
+            WHERE {where_sql}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            tuple([*params, limit, offset]),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def count_audit_logs(
+    *,
+    user_id: str,
+    event_type: str | None = None,
+    start_at: str | None = None,
+    end_at: str | None = None,
+) -> int:
+    conditions = ["user_id = ?"]
+    params: list[object] = [user_id]
+
+    normalized_event_type = event_type.strip().lower() if isinstance(event_type, str) else ""
+    if normalized_event_type:
+        conditions.append("event_type = ?")
+        params.append(normalized_event_type)
+
+    if isinstance(start_at, str) and start_at.strip():
+        conditions.append("created_at >= ?")
+        params.append(start_at.strip())
+    if isinstance(end_at, str) and end_at.strip():
+        conditions.append("created_at <= ?")
+        params.append(end_at.strip())
+
+    where_sql = " AND ".join(conditions)
+    with get_db_connection() as connection:
+        row = connection.execute(
+            f"""
+            SELECT COUNT(*) AS n
+            FROM audit_logs
+            WHERE {where_sql}
+            """,
+            tuple(params),
+        ).fetchone()
+    return int(row["n"]) if row else 0

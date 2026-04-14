@@ -26,6 +26,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 三栏布局：会话、消息、轨迹/上下文
 - Auth Gate：登录/注册、登录态校验、401 自动失效处理；退出入口融合到侧栏左下角设置区
 - 首次引导：首次登录若缺少 API Key，会展示引导页并保存为 `remote` 模式配置后再进入 Workbench
+- Context 面板新增最小审计区：查看 `login/logout/refresh/settings_update` 事件，支持事件类型/时间范围筛选与分页加载
 - 会话鉴权：登录返回 `access_token + refresh_token + session_id`；退出时调用后端 `/api/auth/logout` 撤销当前会话 refresh token
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
 - 会话命名体验：空会话在首条消息发送后会自动改名为消息前缀（后端规则驱动）

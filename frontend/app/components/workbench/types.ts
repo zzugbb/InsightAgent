@@ -124,6 +124,21 @@ export type RagIngestResponse = {
   chunk_overlap: number;
 };
 
+export type AuditLogItem = {
+  id: string;
+  event_type: "login" | "logout" | "refresh" | "settings_update" | string;
+  event_detail: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type AuditLogListResponse = {
+  items: AuditLogItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
 /** POST /api/sessions/{id}/memory/add */
 export type MemoryAddResponse = {
   added_id: string;

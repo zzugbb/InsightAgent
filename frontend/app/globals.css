@@ -2207,6 +2207,12 @@ code {
   gap: 8px;
 }
 
+.audit-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .task-index-toolbar-label {
   color: var(--muted);
   font-size: 0.78rem;
@@ -2222,8 +2228,58 @@ code {
   width: 100%;
 }
 
+.audit-toolbar .ant-segmented {
+  width: 100%;
+}
+
 .task-index-toolbar .ant-input {
   font-size: 0.82rem;
+}
+
+.audit-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.audit-log-item {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--msg-card-bg);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.audit-log-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.audit-log-meta span {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.audit-log-detail-label {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.audit-log-detail {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  max-height: 112px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .inspector-task-load-more {

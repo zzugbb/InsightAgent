@@ -216,6 +216,7 @@ export type Messages = {
     contextJumpUsage: string;
     contextJumpMemory: string;
     contextJumpRag: string;
+    contextJumpAudit: string;
     contextJumpTasks: string;
     currentPhase: string;
     currentTask: string;
@@ -356,6 +357,33 @@ export type Messages = {
       chromaDisconnected: string;
       distanceLabel: string;
       hitMetadataLabel: string;
+    };
+    audit: {
+      kicker: string;
+      title: string;
+      lead: string;
+      filterEventLabel: string;
+      filterEventAll: string;
+      filterEventLogin: string;
+      filterEventLogout: string;
+      filterEventRefresh: string;
+      filterEventSettingsUpdate: string;
+      filterRangeLabel: string;
+      filterRangeAll: string;
+      filterRange7d: string;
+      filterRange30d: string;
+      loading: string;
+      error: string;
+      empty: string;
+      loadMore: string;
+      total: (n: number) => string;
+      eventAt: (ts: string) => string;
+      detailLabel: string;
+      eventLabelLogin: string;
+      eventLabelLogout: string;
+      eventLabelRefresh: string;
+      eventLabelSettingsUpdate: string;
+      eventLabelUnknown: string;
     };
   };
   settings: {

@@ -72,6 +72,7 @@
 - `GET /api/auth/sessions`
 - `DELETE /api/auth/sessions/{session_id}`
 - 最小审计事件：`login`、`logout`、`refresh`、`settings_update`
+- 审计查询：`GET /api/audit/logs?event_type=&start_at=&end_at=&limit=&offset=`
 - `GET /api/auth/me`
 - `GET /api/settings`
 - `PUT /api/settings`

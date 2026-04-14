@@ -21,6 +21,8 @@ import {
 
 import type { SseTaskUsage } from "../../../lib/stores/chat-stream-store";
 import type {
+  AuditLogItem,
+  AuditLogListResponse,
   InspectorTab,
   MemoryAddResponse,
   MemoryQueryResponse,
@@ -47,6 +49,7 @@ import {
 } from "./utils";
 
 const TRACE_PREVIEW = 6;
+const AUDIT_PAGE_SIZE = 20;
 
 const { TextArea } = Input;
 
@@ -165,6 +168,13 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   );
   const [taskPrioritizeFailed, setTaskPrioritizeFailed] = useState(true);
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
+  const [auditEventFilter, setAuditEventFilter] = useState<
+    "all" | "login" | "logout" | "refresh" | "settings_update"
+  >("all");
+  const [auditTimeRange, setAuditTimeRange] = useState<"all" | "7d" | "30d">("7d");
+  const [auditOffset, setAuditOffset] = useState(0);
+  const [auditRows, setAuditRows] = useState<AuditLogItem[]>([]);
+  const [auditHasMore, setAuditHasMore] = useState(false);
   const [retryCountdownSec, setRetryCountdownSec] = useState<number | null>(null);
 
   const scrollToContextSection = (id: string) => {
@@ -263,6 +273,35 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       ? toUserFacingError(ragStatusQuery.error, t.errors).banner
       : null;
 
+  const auditStartAt = useMemo(() => {
+    if (auditTimeRange === "all") {
+      return null;
+    }
+    const days = auditTimeRange === "7d" ? 7 : 30;
+    return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  }, [auditTimeRange]);
+
+  const auditQuery = useQuery({
+    queryKey: ["audit-logs", auditEventFilter, auditTimeRange, auditOffset],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      params.set("limit", String(AUDIT_PAGE_SIZE));
+      params.set("offset", String(auditOffset));
+      if (auditEventFilter !== "all") {
+        params.set("event_type", auditEventFilter);
+      }
+      if (auditStartAt) {
+        params.set("start_at", auditStartAt);
+      }
+      return apiJson<AuditLogListResponse>(`${apiBaseUrl}/api/audit/logs?${params.toString()}`);
+    },
+    staleTime: 8_000,
+  });
+  const auditError =
+    auditQuery.isError && auditQuery.error
+      ? toUserFacingError(auditQuery.error, t.errors).banner
+      : null;
+
   const applyRagKnowledgeBase = () => {
     const next = ragKnowledgeBaseId.trim() || "default";
     setRagKnowledgeBaseId(next);
@@ -278,6 +317,34 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     // 仅在切换会话时清空调试区
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
+
+  useEffect(() => {
+    setAuditOffset(0);
+    setAuditRows([]);
+    setAuditHasMore(false);
+  }, [auditEventFilter, auditTimeRange]);
+
+  useEffect(() => {
+    if (!auditQuery.data) {
+      return;
+    }
+    const incoming = auditQuery.data.items ?? [];
+    if (auditOffset === 0) {
+      setAuditRows(incoming);
+    } else {
+      setAuditRows((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        const merged = [...prev];
+        for (const item of incoming) {
+          if (!seen.has(item.id)) {
+            merged.push(item);
+          }
+        }
+        return merged;
+      });
+    }
+    setAuditHasMore(Boolean(auditQuery.data.has_more));
+  }, [auditOffset, auditQuery.data]);
 
   const collapsedRail =
     desktopInspectorChrome && inspectorCollapsed;
@@ -482,6 +549,23 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     return "other";
   };
 
+  const resolveAuditEventLabel = (eventType: string): string => {
+    const normalized = eventType.trim().toLowerCase();
+    if (normalized === "login") {
+      return t.inspector.audit.eventLabelLogin;
+    }
+    if (normalized === "logout") {
+      return t.inspector.audit.eventLabelLogout;
+    }
+    if (normalized === "refresh") {
+      return t.inspector.audit.eventLabelRefresh;
+    }
+    if (normalized === "settings_update") {
+      return t.inspector.audit.eventLabelSettingsUpdate;
+    }
+    return t.inspector.audit.eventLabelUnknown;
+  };
+
   const tracePanel = (
     <section
       className="inspector-panel"
@@ -669,6 +753,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           </Button>
           <Button size="small" onClick={() => scrollToContextSection("ctx-rag")}>
             {t.inspector.contextJumpRag}
+          </Button>
+          <Button size="small" onClick={() => scrollToContextSection("ctx-audit")}>
+            {t.inspector.contextJumpAudit}
           </Button>
           <Button size="small" onClick={() => scrollToContextSection("ctx-tasks")}>
             {t.inspector.contextJumpTasks}
@@ -1185,6 +1272,99 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             </div>
           ) : null}
         </div>
+      </div>
+
+      <div className="inspector-block" id="ctx-audit">
+        <p className="summary-label">{t.inspector.audit.kicker}</p>
+        <strong>{t.inspector.audit.title}</strong>
+        <p className="inspector-section-lead">{t.inspector.audit.lead}</p>
+        <div className="audit-toolbar">
+          <span className="task-index-toolbar-label">{t.inspector.audit.filterEventLabel}</span>
+          <Segmented
+            size="small"
+            value={auditEventFilter}
+            onChange={(value) =>
+              setAuditEventFilter(
+                value as "all" | "login" | "logout" | "refresh" | "settings_update",
+              )
+            }
+            options={[
+              { label: t.inspector.audit.filterEventAll, value: "all" },
+              { label: t.inspector.audit.filterEventLogin, value: "login" },
+              { label: t.inspector.audit.filterEventLogout, value: "logout" },
+              { label: t.inspector.audit.filterEventRefresh, value: "refresh" },
+              {
+                label: t.inspector.audit.filterEventSettingsUpdate,
+                value: "settings_update",
+              },
+            ]}
+          />
+          <span className="task-index-toolbar-label">{t.inspector.audit.filterRangeLabel}</span>
+          <Segmented
+            size="small"
+            value={auditTimeRange}
+            onChange={(value) => setAuditTimeRange(value as "all" | "7d" | "30d")}
+            options={[
+              { label: t.inspector.audit.filterRangeAll, value: "all" },
+              { label: t.inspector.audit.filterRange7d, value: "7d" },
+              { label: t.inspector.audit.filterRange30d, value: "30d" },
+            ]}
+          />
+        </div>
+        {auditQuery.isLoading && auditOffset === 0 ? (
+          <p className="panel-note panel-note--muted">{t.inspector.audit.loading}</p>
+        ) : null}
+        {auditError ? <p className="panel-note panel-note--muted">{t.inspector.audit.error}</p> : null}
+        {auditRows.length > 0 ? (
+          <>
+            <p className="task-index-summary">{t.inspector.audit.total(auditRows.length)}</p>
+            <div className="audit-log-list">
+              {auditRows.map((item) => {
+                const detail =
+                  item.event_detail && Object.keys(item.event_detail).length > 0
+                    ? JSON.stringify(item.event_detail, null, 2)
+                    : null;
+                return (
+                  <div className="audit-log-item" key={item.id}>
+                    <div className="audit-log-meta">
+                      <strong>{resolveAuditEventLabel(item.event_type)}</strong>
+                      <span>
+                        {t.inspector.audit.eventAt(formatTimestamp(item.created_at, localeTag))}
+                      </span>
+                    </div>
+                    {detail ? (
+                      <>
+                        <span className="audit-log-detail-label">{t.inspector.audit.detailLabel}</span>
+                        <pre className="audit-log-detail">{detail}</pre>
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+        {!auditQuery.isLoading && !auditError && auditRows.length === 0 ? (
+          <p className="panel-note panel-note--muted">{t.inspector.audit.empty}</p>
+        ) : null}
+        {auditHasMore ? (
+          <div className="inspector-task-load-more">
+            <Button
+              type="default"
+              size="small"
+              block
+              loading={auditQuery.isFetching && auditOffset > 0}
+              onClick={() => {
+                if (auditQuery.isFetching) {
+                  return;
+                }
+                setAuditOffset((v) => v + AUDIT_PAGE_SIZE);
+              }}
+            >
+              {t.inspector.audit.loadMore}
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {activeTask ? (
