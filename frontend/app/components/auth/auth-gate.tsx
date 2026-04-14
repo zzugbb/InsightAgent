@@ -14,6 +14,8 @@ import {
   setAuthToken,
 } from "../../../lib/api-client";
 import { useChatStreamStore } from "../../../lib/stores/chat-stream-store";
+import { useMessages } from "../../../lib/preferences-context";
+import type { Messages } from "../../../lib/i18n/types";
 import { Workbench } from "../workbench";
 import styles from "./auth-gate.module.css";
 
@@ -41,12 +43,12 @@ function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-function parseAuthError(error: unknown): string {
+function parseAuthError(error: unknown, messages: Messages["auth"]): string {
   if (!(error instanceof ApiError)) {
-    return error instanceof Error ? error.message : "请求失败，请稍后重试。";
+    return error instanceof Error ? error.message : messages.requestFailedRetry;
   }
   if (!error.bodySnippet) {
-    return `请求失败（${error.status}）`;
+    return messages.requestFailedWithStatus(error.status);
   }
   try {
     const parsed = JSON.parse(error.bodySnippet) as {
@@ -59,7 +61,7 @@ function parseAuthError(error: unknown): string {
       const first = parsed.detail[0];
       const loc = Array.isArray(first?.loc) ? first.loc.map(String) : [];
       if (loc.includes("email")) {
-        return "请输入有效的邮箱地址。";
+        return messages.invalidEmail;
       }
       if (typeof first?.msg === "string" && first.msg.trim()) {
         return first.msg;
@@ -68,11 +70,13 @@ function parseAuthError(error: unknown): string {
   } catch {
     // ignore
   }
-  return `请求失败（${error.status}）`;
+  return messages.requestFailedWithStatus(error.status);
 }
 
 export function AuthGate() {
   const { message } = App.useApp();
+  const messages = useMessages();
+  const authMessages = messages.auth;
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>("checking");
   const [, setUser] = useState<AuthUser | null>(null);
@@ -131,13 +135,13 @@ export function AuthGate() {
       setUser(null);
       setStatus("anonymous");
       setPassword("");
-      message.warning("登录已过期，请重新登录。");
+      message.warning(authMessages.expiredRelogin);
     }
     window.addEventListener("insightagent:auth-expired", onAuthExpired);
     return () => {
       window.removeEventListener("insightagent:auth-expired", onAuthExpired);
     };
-  }, [message, resetUserScopedClientState]);
+  }, [authMessages.expiredRelogin, message, resetUserScopedClientState]);
 
   const canSubmit = useMemo(() => {
     if (!email.trim() || !password.trim()) {
@@ -157,7 +161,7 @@ export function AuthGate() {
       return;
     }
     if (!isValidEmail(email)) {
-      setErrorText("请输入有效的邮箱地址。");
+      setErrorText(authMessages.invalidEmail);
       return;
     }
     setSubmitting(true);
@@ -184,9 +188,13 @@ export function AuthGate() {
       setUser(response.user);
       setStatus("authenticated");
       setPassword("");
-      message.success(mode === "login" ? "登录成功" : "注册成功，已自动登录");
+      message.success(
+        mode === "login"
+          ? authMessages.loginSuccess
+          : authMessages.registerSuccessAutoLogin,
+      );
     } catch (error) {
-      setErrorText(parseAuthError(error));
+      setErrorText(parseAuthError(error, authMessages));
     } finally {
       setSubmitting(false);
     }
@@ -198,14 +206,14 @@ export function AuthGate() {
     setUser(null);
     setStatus("anonymous");
     setPassword("");
-    message.info("已退出登录");
+    message.info(authMessages.logoutSuccess);
   }
 
   if (status === "checking") {
     return (
       <main className={styles.loadingShell}>
         <Spin size="large" />
-        <p className={styles.loadingText}>正在校验登录状态...</p>
+        <p className={styles.loadingText}>{authMessages.checkingStatus}</p>
       </main>
     );
   }
@@ -219,22 +227,20 @@ export function AuthGate() {
       <section className={styles.heroArea}>
         <div className={styles.heroGlow} />
         <p className={styles.eyebrow}>INSIGHTAGENT</p>
-        <h1 className={styles.heroTitle}>可观测智能体工作台</h1>
-        <p className={styles.heroDesc}>
-          聚焦对话、执行轨迹、RAG 与成本统计，把调试、观测与协作放到同一工作台，形成从对话到任务交付的闭环。
-        </p>
+        <h1 className={styles.heroTitle}>{authMessages.heroTitle}</h1>
+        <p className={styles.heroDesc}>{authMessages.heroDesc}</p>
         <ul className={styles.heroList}>
-          <li>SSE 实时流式 + Trace 全链路回放</li>
-          <li>会话、任务、轨迹同屏联动</li>
-          <li>Memory 与 RAG 双上下文支撑</li>
-          <li>任务级 Token / Cost 全程可追踪</li>
+          <li>{authMessages.heroFeatureSseTrace}</li>
+          <li>{authMessages.heroFeatureSessionTaskTrace}</li>
+          <li>{authMessages.heroFeatureMemoryRag}</li>
+          <li>{authMessages.heroFeatureTokenCost}</li>
         </ul>
       </section>
 
       <section className={styles.formArea}>
         <div className={styles.formHeader}>
           <ShieldCheck size={18} />
-          <span>账号登录</span>
+          <span>{authMessages.formTitle}</span>
         </div>
 
         <Tabs
@@ -244,14 +250,14 @@ export function AuthGate() {
             setErrorText(null);
           }}
           items={[
-            { key: "login", label: "登录" },
-            { key: "register", label: "注册" },
+            { key: "login", label: authMessages.tabLogin },
+            { key: "register", label: authMessages.tabRegister },
           ]}
         />
 
         <div className={styles.fieldStack}>
           <label className={styles.label} htmlFor="auth-email">
-            邮箱
+            {authMessages.emailLabel}
           </label>
           <Input
             id="auth-email"
@@ -264,12 +270,12 @@ export function AuthGate() {
           {mode === "register" ? (
             <>
               <label className={styles.label} htmlFor="auth-display-name">
-                昵称（可选）
+                {authMessages.displayNameOptionalLabel}
               </label>
               <Input
                 id="auth-display-name"
                 autoComplete="nickname"
-                placeholder="你的昵称"
+                placeholder={authMessages.displayNamePlaceholder}
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
               />
@@ -277,12 +283,16 @@ export function AuthGate() {
           ) : null}
 
           <label className={styles.label} htmlFor="auth-password">
-            密码
+            {authMessages.passwordLabel}
           </label>
           <Input.Password
             id="auth-password"
             autoComplete={mode === "login" ? "current-password" : "new-password"}
-            placeholder={mode === "register" ? "至少 8 位" : "输入账号密码"}
+            placeholder={
+              mode === "register"
+                ? authMessages.passwordPlaceholderRegister
+                : authMessages.passwordPlaceholderLogin
+            }
             value={password}
             visibilityToggle={{
               visible: passwordVisible,
@@ -313,7 +323,9 @@ export function AuthGate() {
               void handleSubmit();
             }}
           >
-            {mode === "login" ? "进入工作台" : "创建账号并进入"}
+            {mode === "login"
+              ? authMessages.submitLogin
+              : authMessages.submitRegister}
           </Button>
         </div>
 

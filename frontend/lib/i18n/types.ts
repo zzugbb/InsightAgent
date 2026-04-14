@@ -11,6 +11,33 @@ export type Messages = {
     checkBackend: string;
     requestFailed: string;
   };
+  auth: {
+    requestFailedRetry: string;
+    requestFailedWithStatus: (status: number) => string;
+    invalidEmail: string;
+    expiredRelogin: string;
+    loginSuccess: string;
+    registerSuccessAutoLogin: string;
+    logoutSuccess: string;
+    checkingStatus: string;
+    heroTitle: string;
+    heroDesc: string;
+    heroFeatureSseTrace: string;
+    heroFeatureSessionTaskTrace: string;
+    heroFeatureMemoryRag: string;
+    heroFeatureTokenCost: string;
+    formTitle: string;
+    tabLogin: string;
+    tabRegister: string;
+    emailLabel: string;
+    displayNameOptionalLabel: string;
+    displayNamePlaceholder: string;
+    passwordLabel: string;
+    passwordPlaceholderRegister: string;
+    passwordPlaceholderLogin: string;
+    submitLogin: string;
+    submitRegister: string;
+  };
   workbench: {
     selectSessionForHistory: string;
     sessionEmpty: string;

@@ -14,6 +14,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 阶段 5 细化（继续）：移除“当前用户：未登录”提示、注册邮箱格式前置校验（替代 422 生硬报错）、登录输入 autofill/已填充态样式优化并适配浅色表单
 - 阶段 5 文案收口：登录页左侧说明融合主页叙事（可观测智能体、对话到任务闭环），并补回 SSE/Trace、Memory/RAG、Token/Cost 等关键信息点
 - 阶段 5 交互修复：登录密码框显隐图标恢复可见与可点击（支持显示/隐藏切换）
+- 阶段 5 国际化补齐：登录页（Auth Gate）接入 i18n，新增 `auth` 文案分组并覆盖中英文登录/注册全链路文案
 
 ## 当前已有内容
 
