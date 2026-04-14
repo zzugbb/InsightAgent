@@ -382,6 +382,15 @@ export function formatTraceStepMetaSubtitle(
     tokensPart =
       t === null || t === undefined ? "—" : String(t);
   }
+  let costPart: string | undefined;
+  if ("cost_estimate" in meta) {
+    const c = meta.cost_estimate;
+    if (typeof c === "number" && Number.isFinite(c)) {
+      costPart = `$${c.toFixed(6)}`;
+    } else if (c === null || c === undefined) {
+      costPart = "—";
+    }
+  }
   const parts: string[] = [];
   if (meta.tool?.name) {
     const name = String(meta.tool.name).trim();
@@ -413,6 +422,9 @@ export function formatTraceStepMetaSubtitle(
   }
   if (tokensPart !== undefined) {
     parts.push(`${labels.tokens} ${tokensPart}`);
+  }
+  if (costPart !== undefined) {
+    parts.push(`${labels.cost} ${costPart}`);
   }
   return parts.length > 0 ? parts.join(" · ") : null;
 }

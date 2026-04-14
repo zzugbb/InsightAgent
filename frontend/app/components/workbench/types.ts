@@ -90,6 +90,40 @@ export type UsageSummary = {
 
 export type SessionUsageSummary = UsageSummary;
 
+export type RagStatus = {
+  knowledge_base_id: string;
+  collection: string;
+  chroma_url: string;
+  chroma_reachable: boolean;
+  collection_exists: boolean;
+  document_count: number;
+  error: string | null;
+};
+
+export type RagHit = {
+  id: string;
+  content: string;
+  distance: number | null;
+  metadata: Record<string, unknown>;
+};
+
+export type RagQueryResponse = {
+  knowledge_base_id: string;
+  collection: string;
+  hit_count: number;
+  hits: RagHit[];
+};
+
+export type RagIngestResponse = {
+  knowledge_base_id: string;
+  collection: string;
+  documents_ingested: number;
+  chunks_added: number;
+  document_count: number;
+  chunk_size: number;
+  chunk_overlap: number;
+};
+
 /** POST /api/sessions/{id}/memory/add */
 export type MemoryAddResponse = {
   added_id: string;

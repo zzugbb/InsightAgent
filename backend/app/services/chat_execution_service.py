@@ -14,6 +14,7 @@ from app.services.chat_persistence_service import (
     update_task_trace_steps,
 )
 from app.services.chroma_memory_service import try_append_task_memory
+from app.services.chroma_rag_service import query_knowledge_base
 from app.services.provider_service import get_llm_provider
 
 
@@ -110,8 +111,32 @@ def _estimate_token_count(text: str) -> int:
     return max(1, cjk_units + latin_words)
 
 
+def _estimate_usage_cost(*, prompt_tokens: int, completion_tokens: int) -> float | None:
+    settings = get_settings()
+    prompt_unit = float(settings.usage_prompt_token_price_per_1k)
+    completion_unit = float(settings.usage_completion_token_price_per_1k)
+    if prompt_unit <= 0 and completion_unit <= 0:
+        return None
+    cost = (prompt_tokens / 1000.0) * prompt_unit + (
+        completion_tokens / 1000.0
+    ) * completion_unit
+    return round(cost, 8)
+
+
+def _extract_knowledge_base_id(prompt: str) -> str | None:
+    tagged = re.search(r"\[kb:([a-zA-Z0-9_-]{1,64})\]", prompt)
+    if not tagged:
+        return None
+    value = tagged.group(1).strip()
+    return value or None
+
+
 def _build_tool_plan(prompt: str) -> list[dict[str, object]]:
     normalized = prompt.strip().lower()
+    settings = get_settings()
+    knowledge_base_id = (
+        _extract_knowledge_base_id(prompt) or settings.rag_default_knowledge_base_id
+    )
     plan: list[dict[str, object]] = [
         {
             "name": "mock_plan",
@@ -133,7 +158,8 @@ def _build_tool_plan(prompt: str) -> list[dict[str, object]]:
                 "name": "mock_retrieve",
                 "input": {
                     "query": prompt.strip()[:80] or "default query",
-                    "top_k": 2,
+                    "top_k": settings.rag_default_top_k,
+                    "knowledge_base_id": knowledge_base_id,
                 },
             }
         )
@@ -181,12 +207,33 @@ def _run_mock_tool(
 
     if name == "mock_retrieve":
         query = str(tool_input.get("query", ""))
+        top_k_raw = tool_input.get("top_k")
+        top_k = top_k_raw if isinstance(top_k_raw, int) else 4
+        kb_raw = tool_input.get("knowledge_base_id")
+        kb_id = str(kb_raw or get_settings().rag_default_knowledge_base_id)
+        try:
+            result = query_knowledge_base(
+                knowledge_base_id=kb_id,
+                query_text=query or prompt,
+                top_k=top_k,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise MockToolExecutionError(
+                f"RAG query failed: {exc}",
+                fatal=False,
+            ) from exc
+        chunks = [
+            str(x.get("content", "")).strip()
+            for x in result.get("hits", [])
+            if isinstance(x, dict)
+        ]
+        clean_chunks = [x for x in chunks if x]
         return {
-            "chunks": [
-                f"(mock) Retrieved snippet A for: {query}",
-                "(mock) Retrieved snippet B with supporting detail.",
-            ],
-            "knowledge_base_id": "mock_kb",
+            "chunks": clean_chunks,
+            "hits": result.get("hits", []),
+            "hit_count": int(result.get("hit_count", 0) or 0),
+            "knowledge_base_id": str(result.get("knowledge_base_id", kb_id)),
+            "collection": result.get("collection"),
         }
 
     if name == "calc_eval":
@@ -282,6 +329,8 @@ def stream_task_execution(
                 "model": getattr(provider, "model", "mock-gpt"),
                 "step_type": "planning",
                 "label": "tool_plan",
+                "tokens": _estimate_token_count(plan_content),
+                "cost_estimate": None,
             },
         }
         trace_steps.append(plan_step)
@@ -310,6 +359,10 @@ def stream_task_execution(
                     "step_type": "tool_call",
                     "label": f"tool_{idx}",
                     "retryCount": 0,
+                    "tokens": _estimate_token_count(
+                        f"{tool_name} {json.dumps(tool_input, ensure_ascii=False)}"
+                    ),
+                    "cost_estimate": None,
                     "tool": {
                         "name": tool_name,
                         "input": tool_input,
@@ -358,6 +411,9 @@ def stream_task_execution(
                             **dict(action_step.get("meta", {})),
                             "step_type": "tool_call",
                             "retryCount": attempt,
+                            "tokens": _estimate_token_count(
+                                f"{tool_name} {json.dumps(output, ensure_ascii=False)}"
+                            ),
                             "tool": {
                                 "name": tool_name,
                                 "input": tool_input,
@@ -391,6 +447,7 @@ def stream_task_execution(
                             **dict(action_step.get("meta", {})),
                             "step_type": "tool_call",
                             "retryCount": attempt + 1,
+                            "tokens": _estimate_token_count(last_error),
                             "tool": {
                                 "name": tool_name,
                                 "input": tool_input,
@@ -476,9 +533,13 @@ def stream_task_execution(
                         "meta": {
                             "model": getattr(provider, "model", "mock-gpt"),
                             "step_type": "rag_retrieval",
+                            "tokens": _estimate_token_count("\n".join(str(x) for x in chunks)),
+                            "cost_estimate": None,
                             "rag": {
                                 "chunks": [str(x) for x in chunks],
-                                "knowledge_base_id": str(kb) if kb else "mock_kb",
+                                "knowledge_base_id": str(kb)
+                                if kb
+                                else get_settings().rag_default_knowledge_base_id,
                             },
                         },
                     }
@@ -529,6 +590,7 @@ def stream_task_execution(
             provider_prompt = (
                 f"{prompt}\n\nTool observations:\n" + "\n".join(tool_observations)
             )
+        prompt_tokens_estimated = _estimate_token_count(provider_prompt)
         stream_chunk_count = 0
 
         streamed_content = ""
@@ -571,10 +633,20 @@ def stream_task_execution(
             final_content = fallback.content
         else:
             final_step_seq += 1
+        completion_tokens_estimated = _estimate_token_count(final_content)
+        usage_cost_estimate = _estimate_usage_cost(
+            prompt_tokens=prompt_tokens_estimated,
+            completion_tokens=completion_tokens_estimated,
+        )
         trace_steps[-1] = {
             **final_step_streaming,
             "content": final_content,
             "seq": final_step_seq,
+            "meta": {
+                **dict(final_step_streaming.get("meta", {})),
+                "tokens": completion_tokens_estimated,
+                "cost_estimate": usage_cost_estimate,
+            },
         }
         persist_trace(force=True)
 
@@ -586,10 +658,12 @@ def stream_task_execution(
         )
 
         usage_payload: dict[str, object] = {
-            "prompt_tokens": None,
-            "completion_tokens": _estimate_token_count(final_content),
+            "prompt_tokens": prompt_tokens_estimated,
+            "completion_tokens": completion_tokens_estimated,
             "completion_tokens_source": "estimated",
-            "cost_estimate": None,
+            "cost_estimate": usage_cost_estimate,
+            "prompt_token_price_per_1k": get_settings().usage_prompt_token_price_per_1k,
+            "completion_token_price_per_1k": get_settings().usage_completion_token_price_per_1k,
         }
 
         complete_task(

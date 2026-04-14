@@ -7,7 +7,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - W1：已完成
 - W2：已完成（已收口）
 - W3：已完成（mock 范围）
-- W4：进行中（真实工具 / RAG 生产化）
+- W4：已完成（RAG 面板 + Token/Cost 展示）
 
 ## 当前已有内容
 
@@ -48,6 +48,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - W2 协同优化：后端 `running` 重连流的 `done/error` 事件已补齐关键字段（`session_id/step_id/resumed`），前端消费契约更稳定
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
 - Memory：状态展示 + add/query 调试（含 metadata）
+- RAG：知识库状态展示 + 文本 ingest + 语义检索命中展示（`/api/rag/*`）
+- Trace 元信息：支持展示步骤级 `cost_estimate`
 - 设置：主题、主题色、语言、模型与运行模式
 - 工程校验：已配置 `.eslintrc.json`，`npm run lint` 可直接运行且当前告警已清零
 
@@ -86,6 +88,13 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 状态读取：`GET /api/sessions/{session_id}/memory/status`
 - 写入调试：`POST /api/sessions/{session_id}/memory/add`
 - 检索调试：`POST /api/sessions/{session_id}/memory/query`
+
+## RAG（知识库）
+
+- 状态：`GET /api/rag/status?knowledge_base_id=...`
+- 写入：`POST /api/rag/ingest`
+- 检索：`POST /api/rag/query`
+- 默认知识库：`default`（对应 collection：`kb_default`）
 
 ## 本地启动
 

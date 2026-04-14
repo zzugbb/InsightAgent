@@ -254,6 +254,7 @@ export const en: Messages = {
       model: "Model",
       stepKind: "Kind",
       tokens: "Tokens",
+      cost: "Cost",
       toolLine: (name: string, status: string) =>
         `Tool ${name} · ${status}`,
       toolRetry: (count: number) => `retry ${count}`,
@@ -303,6 +304,34 @@ export const en: Messages = {
         'Optional JSON object with string keys and values, e.g. {"source":"manual","kind":"note"}',
       metadataInvalid:
         "metadata must be a JSON object whose values are strings.",
+      hitMetadataLabel: "Metadata",
+    },
+    rag: {
+      kicker: "Knowledge retrieval",
+      title: "RAG (Knowledge Base)",
+      lead:
+        "Ingest text into a knowledge base and query semantic hits. Retrieved chunks are also reflected in trace as RAG steps.",
+      kbIdLabel: "Knowledge base ID",
+      kbIdPlaceholder: "Default: default ([a-z0-9_-])",
+      statusLoading: "Loading knowledge base status…",
+      ingestPlaceholder:
+        "Paste text to ingest into the knowledge base (auto chunking enabled)…",
+      ingestSourcePlaceholder: "Optional source label (e.g. handbook.md)",
+      ingestButton: "Ingest",
+      ingestEmpty: "Enter text before ingesting.",
+      ingestSuccess: (chunks: number, total: number) =>
+        `Ingested ${chunks} chunks. Total: ${total}.`,
+      queryPlaceholder: "Ask a question or enter keywords…",
+      queryButton: "Query KB",
+      queryEmptyInput: "Enter a query before searching.",
+      queryEmpty: "No hits in this knowledge base yet.",
+      queryHits: (n: number) => `${n} hit(s)`,
+      docCount: (n: number) => `Knowledge chunks: ${n}`,
+      collectionExists: "Collection exists",
+      collectionMissing: "No collection yet",
+      chromaConnected: "Connected",
+      chromaDisconnected: "Unreachable",
+      distanceLabel: "Distance",
       hitMetadataLabel: "Metadata",
     },
   },

@@ -1,7 +1,7 @@
 "use client";
 
 import { App, Button, Input, Segmented, Space, Tabs } from "antd";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import {
   forwardRef,
@@ -11,7 +11,7 @@ import {
   type MouseEvent,
 } from "react";
 
-import { apiPostJson } from "../../../lib/api-client";
+import { apiJson, apiPostJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
 import type { TraceStepPayload } from "../../../lib/types/trace";
 import {
@@ -24,6 +24,9 @@ import type {
   InspectorTab,
   MemoryAddResponse,
   MemoryQueryResponse,
+  RagIngestResponse,
+  RagQueryResponse,
+  RagStatus,
   SessionMemoryStatus,
   TaskSummary,
   UsageSummary,
@@ -148,6 +151,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const [memoryAddDraft, setMemoryAddDraft] = useState("");
   const [memoryMetaDraft, setMemoryMetaDraft] = useState("");
   const [memoryQueryDraft, setMemoryQueryDraft] = useState("");
+  const [ragKnowledgeBaseId, setRagKnowledgeBaseId] = useState("default");
+  const [ragIngestDraft, setRagIngestDraft] = useState("");
+  const [ragIngestSource, setRagIngestSource] = useState("");
+  const [ragQueryDraft, setRagQueryDraft] = useState("");
   const [taskStatusFilter, setTaskStatusFilter] = useState<
     "all" | "running" | "completed" | "failed"
   >("all");
@@ -206,6 +213,53 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       );
     },
   });
+
+  const ragIngestMutation = useMutation({
+    mutationFn: async (payload: { knowledgeBaseId: string; text: string; source: string }) =>
+      apiPostJson<RagIngestResponse>(`${apiBaseUrl}/api/rag/ingest`, {
+        knowledge_base_id: payload.knowledgeBaseId,
+        documents: [
+          {
+            text: payload.text,
+            source: payload.source || "manual",
+          },
+        ],
+      }),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["rag-status"],
+      });
+      message.success(
+        t.inspector.rag.ingestSuccess(data.chunks_added, data.document_count),
+      );
+    },
+  });
+
+  const ragQueryMutation = useMutation({
+    mutationFn: async (payload: { knowledgeBaseId: string; query: string }) =>
+      apiPostJson<RagQueryResponse>(`${apiBaseUrl}/api/rag/query`, {
+        knowledge_base_id: payload.knowledgeBaseId,
+        query: payload.query,
+        top_k: 6,
+      }),
+  });
+
+  const ragStatusQuery = useQuery({
+    queryKey: ["rag-status", ragKnowledgeBaseId.trim() || "default"],
+    queryFn: () =>
+      apiJson<RagStatus>(
+        `${apiBaseUrl}/api/rag/status?knowledge_base_id=${encodeURIComponent(
+          ragKnowledgeBaseId.trim() || "default",
+        )}`,
+      ),
+    staleTime: 10_000,
+  });
+  const ragStatus = ragStatusQuery.data;
+  const ragStatusLoading = ragStatusQuery.isLoading;
+  const ragStatusError =
+    ragStatusQuery.isError && ragStatusQuery.error
+      ? toUserFacingError(ragStatusQuery.error, t.errors).banner
+      : null;
 
   useEffect(() => {
     setMemoryAddDraft("");
@@ -936,6 +990,184 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             ) : null}
           </div>
         ) : null}
+      </div>
+
+      <div className="inspector-block memory-placeholder-card" id="ctx-rag">
+        <p className="summary-label">{t.inspector.rag.kicker}</p>
+        <strong className="memory-placeholder-title">{t.inspector.rag.title}</strong>
+        <p className="panel-note panel-note--muted memory-placeholder-lead">
+          {t.inspector.rag.lead}
+        </p>
+
+        <div className="memory-collection-row">
+          <span className="memory-collection-label">{t.inspector.rag.kbIdLabel}</span>
+          <Input
+            size="small"
+            value={ragKnowledgeBaseId}
+            onChange={(e) => setRagKnowledgeBaseId(e.target.value)}
+            placeholder={t.inspector.rag.kbIdPlaceholder}
+            className="rag-kb-input"
+          />
+        </div>
+
+        <div className="memory-status-block" aria-live="polite">
+          {ragStatusLoading ? (
+            <p className="memory-status-loading">{t.inspector.rag.statusLoading}</p>
+          ) : ragStatusError ? (
+            <p className="memory-status-err">{ragStatusError}</p>
+          ) : ragStatus ? (
+            <>
+              <div className="memory-status-line">
+                <span className="memory-status-key">Chroma</span>
+                <span
+                  className={
+                    ragStatus.chroma_reachable
+                      ? "memory-status-val memory-status-val--ok"
+                      : "memory-status-val memory-status-val--bad"
+                  }
+                >
+                  {ragStatus.chroma_reachable
+                    ? t.inspector.rag.chromaConnected
+                    : t.inspector.rag.chromaDisconnected}
+                </span>
+              </div>
+              <div className="memory-status-line">
+                <span className="memory-status-key"> </span>
+                <span className="memory-status-val">
+                  {ragStatus.collection_exists
+                    ? t.inspector.rag.collectionExists
+                    : t.inspector.rag.collectionMissing}
+                </span>
+              </div>
+              <div className="memory-status-line">
+                <span className="memory-status-key"> </span>
+                <span className="memory-status-val">
+                  {t.inspector.rag.docCount(ragStatus.document_count)}
+                </span>
+              </div>
+              {ragStatus.error ? (
+                <p className="panel-note panel-note--muted memory-chroma-err">
+                  {ragStatus.error}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+
+        <div className="memory-debug-block">
+          <TextArea
+            className="memory-debug-textarea"
+            value={ragIngestDraft}
+            onChange={(e) => setRagIngestDraft(e.target.value)}
+            placeholder={t.inspector.rag.ingestPlaceholder}
+            rows={3}
+            disabled={ragIngestMutation.isPending}
+          />
+          <Input
+            size="small"
+            value={ragIngestSource}
+            onChange={(e) => setRagIngestSource(e.target.value)}
+            placeholder={t.inspector.rag.ingestSourcePlaceholder}
+            disabled={ragIngestMutation.isPending}
+          />
+          <div className="memory-debug-actions">
+            <Button
+              type="primary"
+              size="small"
+              loading={ragIngestMutation.isPending}
+              onClick={() => {
+                const text = ragIngestDraft.trim();
+                if (!text) {
+                  message.warning(t.inspector.rag.ingestEmpty);
+                  return;
+                }
+                ragIngestMutation.mutate({
+                  knowledgeBaseId: ragKnowledgeBaseId.trim() || "default",
+                  text,
+                  source: ragIngestSource.trim(),
+                });
+              }}
+            >
+              {t.inspector.rag.ingestButton}
+            </Button>
+          </div>
+          {ragIngestMutation.isError && ragIngestMutation.error ? (
+            <p className="memory-debug-err">
+              {(() => {
+                const u = toUserFacingError(ragIngestMutation.error, t.errors);
+                return u.hint ? `${u.banner} ${u.hint}` : u.banner;
+              })()}
+            </p>
+          ) : null}
+
+          <TextArea
+            className="memory-debug-textarea memory-debug-textarea--query"
+            value={ragQueryDraft}
+            onChange={(e) => setRagQueryDraft(e.target.value)}
+            placeholder={t.inspector.rag.queryPlaceholder}
+            rows={2}
+            disabled={ragQueryMutation.isPending}
+          />
+          <div className="memory-debug-actions">
+            <Button
+              size="small"
+              loading={ragQueryMutation.isPending}
+              onClick={() => {
+                const text = ragQueryDraft.trim();
+                if (!text) {
+                  message.warning(t.inspector.rag.queryEmptyInput);
+                  return;
+                }
+                ragQueryMutation.mutate({
+                  knowledgeBaseId: ragKnowledgeBaseId.trim() || "default",
+                  query: text,
+                });
+              }}
+            >
+              {t.inspector.rag.queryButton}
+            </Button>
+          </div>
+          {ragQueryMutation.isError && ragQueryMutation.error ? (
+            <p className="memory-debug-err">
+              {(() => {
+                const u = toUserFacingError(ragQueryMutation.error, t.errors);
+                return u.hint ? `${u.banner} ${u.hint}` : u.banner;
+              })()}
+            </p>
+          ) : null}
+          {ragQueryMutation.isSuccess && ragQueryMutation.data ? (
+            <div className="memory-query-results" aria-live="polite">
+              <p className="memory-query-hits-label">
+                {t.inspector.rag.queryHits(ragQueryMutation.data.hit_count)}
+              </p>
+              {ragQueryMutation.data.hit_count <= 0 ? (
+                <p className="panel-note panel-note--muted">{t.inspector.rag.queryEmpty}</p>
+              ) : (
+                <ul className="memory-query-hit-list">
+                  {ragQueryMutation.data.hits.map((hit) => {
+                    const metaKeys = Object.keys(hit.metadata || {});
+                    return (
+                      <li key={hit.id} className="memory-query-hit-item">
+                        <pre className="memory-query-hit-doc">{hit.content}</pre>
+                        {metaKeys.length > 0 ? (
+                          <pre className="memory-query-hit-meta">
+                            {t.inspector.rag.hitMetadataLabel}:{"\n"}
+                            {JSON.stringify(hit.metadata, null, 2)}
+                          </pre>
+                        ) : null}
+                        {typeof hit.distance === "number" && Number.isFinite(hit.distance) ? (
+                          <span className="memory-query-hit-dist">
+                            {t.inspector.rag.distanceLabel}: {hit.distance.toFixed(4)}
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {activeTask ? (

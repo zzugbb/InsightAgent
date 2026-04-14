@@ -7,7 +7,7 @@
 - W1：已完成
 - W2：已完成（已收口）
 - W3：已完成（mock 范围）
-- W4：进行中（真实工具 / RAG 生产化）
+- W4：已完成（RAG + Token/Cost + compose.full）
 - 工程协作：前端 `npm run lint` 已可直接执行，且当前告警已清零
 - 协同进展：前端已切换到后端 usage 聚合接口（全局/会话双范围），并显示覆盖率与状态反馈（loading/error/empty）
 - 协同进展：前端右侧 Inspector（Context）已按可观测运维场景完成分区重排（概览/同步诊断/用量/Memory/任务索引），后端现有字段可直接支撑后续模块扩展
@@ -39,7 +39,7 @@
 
 - `app/config.py`：统一配置读取
 - `app/schemas/trace.py`：`TraceStep` / `TraceStepMeta` 与解析校验
-- `app/api/routes/`：`health`、`sessions`、`tasks`、`settings`
+- `app/api/routes/`：`health`、`sessions`、`tasks`、`settings`、`rag`
 - `app/db.py`：SQLite 初始化与基础表
 - `app/providers/`：Provider 抽象 + mock 实现
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
@@ -66,6 +66,9 @@
 - `GET /api/tasks?limit=&offset=&session_id=`（含 `total/has_more`）
 - `GET /api/tasks*` 相关响应包含状态派生字段：`status_normalized`、`status_label`、`status_rank`
 - `GET /api/tasks/usage/summary`（可选 `session_id`）
+- `GET /api/rag/status`
+- `POST /api/rag/ingest`
+- `POST /api/rag/query`
 - `GET /api/tasks/{task_id}`
 - `GET /api/tasks/{task_id}/stream`（`pending/running`；running 为重连回补流）
 - `GET /api/tasks/{task_id}/trace`
@@ -99,6 +102,7 @@
 ## Memory / Chroma / Embedding
 
 - collection 命名：`memory_{session_id}`
+- RAG collection 命名：`kb_{knowledge_base_id}`
 - 连接方式：`chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)`
 - 默认配置：`CHROMA_HOST=127.0.0.1`、`CHROMA_PORT=8001`、`CHROMA_PROBE=true`
 - 流式 trace 写入节流：`TRACE_PERSIST_MIN_INTERVAL_SEC`（默认 `0.35` 秒）
@@ -107,7 +111,20 @@
   - `STREAM_RECONNECT_POLL_MAX_SEC`（默认 `2.0`）
   - `STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC`（默认 `2.0`）
 - 当前 embedding 边界：应用层未显式传自定义 embedding function，依赖 Chroma Server 默认策略
-- Chroma 不可达时：`memory/add`、`memory/query` 返回 503；任务后的摘要写入为 best-effort
+- Chroma 不可达时：`memory/add`、`memory/query`、`rag/ingest`、`rag/query` 返回 503；任务后的摘要写入为 best-effort
+
+## W4 新增说明
+
+- 执行链路 `mock_retrieve` 已接入真实知识库检索（默认 `kb_default`，可通过 `[kb:xxx]` 指定）
+- `TraceStep.meta.rag` 会记录命中 `chunks` 与 `knowledge_base_id`
+- usage 升级为可计算字段：
+  - `prompt_tokens`、`completion_tokens`
+  - `cost_estimate`（可通过环境变量配置单价）
+- 新增环境变量：
+  - `RAG_DEFAULT_KNOWLEDGE_BASE_ID`
+  - `RAG_DEFAULT_TOP_K`
+  - `USAGE_PROMPT_TOKEN_PRICE_PER_1K`
+  - `USAGE_COMPLETION_TOKEN_PRICE_PER_1K`
 
 ## 本地启动
 
@@ -130,6 +147,6 @@ docker compose up -d chroma
 
 - `api_key` 仅最小存储骨架，未加密
 - `remote` 模式 provider 校验仍较粗
-- 真实工具调用循环与真实 RAG 尚未完全生产化（当前已具备 `tool_start/tool_end` mock 生命周期 + 错误重试语义）
-- usage/token/cost 仍是占位增强阶段
+- 真实工具调用循环仍以 mock 工具编排为主（RAG 检索已真实接入）
+- token 仍为估算值（非 provider 官方 usage 回传）
 - `trace/delta` 当前链路已稳定，后续仅做参数级调优（不影响 W2 已收口）

@@ -77,6 +77,30 @@ class Settings(BaseSettings):
         alias="STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC",
         description="running 重连流 heartbeat 周期（秒）",
     )
+    rag_default_knowledge_base_id: str = Field(
+        default="default",
+        alias="RAG_DEFAULT_KNOWLEDGE_BASE_ID",
+        description="RAG 默认知识库 ID",
+    )
+    rag_default_top_k: int = Field(
+        default=4,
+        ge=1,
+        le=20,
+        alias="RAG_DEFAULT_TOP_K",
+        description="RAG 默认检索条数",
+    )
+    usage_prompt_token_price_per_1k: float = Field(
+        default=0.001,
+        ge=0.0,
+        alias="USAGE_PROMPT_TOKEN_PRICE_PER_1K",
+        description="prompt tokens 每 1k 估算单价（USD）",
+    )
+    usage_completion_token_price_per_1k: float = Field(
+        default=0.002,
+        ge=0.0,
+        alias="USAGE_COMPLETION_TOKEN_PRICE_PER_1K",
+        description="completion tokens 每 1k 估算单价（USD）",
+    )
 
     @property
     def chroma_http_url(self) -> str:
