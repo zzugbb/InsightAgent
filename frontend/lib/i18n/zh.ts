@@ -32,7 +32,7 @@ export const zh: Messages = {
     phaseReplay: "回放中",
     phaseRunning: "运行中",
     phaseIdle: "待命",
-    sessionFallback: (shortId: string) => `会话 ${shortId}`,
+    sessionFallback: () => "新会话",
     taskFallback: (shortId: string) => `任务 ${shortId}`,
     hintRowNarrow:
       "窄屏请使用顶部「会话列表」与「轨迹与上下文」按钮打开侧栏。",

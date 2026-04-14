@@ -16,6 +16,20 @@ def _build_session_title(prompt: str) -> str:
     return normalized[:60] or "New Session"
 
 
+def _is_placeholder_session_title(title: object) -> bool:
+    if not isinstance(title, str):
+        return True
+    raw = title.strip()
+    if not raw:
+        return True
+    lowered = raw.lower()
+    if lowered in {"新会话", "new session"}:
+        return True
+    if lowered.startswith("会话 ") or lowered.startswith("session "):
+        return True
+    return False
+
+
 def _normalize_trace_steps(trace_steps: list[dict]) -> list[dict]:
     normalized_steps: list[dict] = []
     for index, step in enumerate(trace_steps, start=1):
@@ -36,7 +50,7 @@ def ensure_session(prompt: str, user_id: str, session_id: str | None = None) -> 
 
     with get_db_connection() as connection:
         existing = connection.execute(
-            "SELECT id, user_id FROM sessions WHERE id = ?",
+            "SELECT id, user_id, title FROM sessions WHERE id = ?",
             (resolved_session_id,),
         ).fetchone()
 
@@ -52,13 +66,38 @@ def ensure_session(prompt: str, user_id: str, session_id: str | None = None) -> 
             owner = existing["user_id"]
             if owner and owner != user_id:
                 raise ValueError("session does not belong to current user")
+            message_count_row = connection.execute(
+                """
+                SELECT COUNT(*) AS n
+                FROM messages
+                WHERE session_id = ? AND user_id = ?
+                """,
+                (resolved_session_id, user_id),
+            ).fetchone()
+            message_count = int(message_count_row["n"]) if message_count_row else 0
+            should_autofill_title = (
+                message_count == 0
+                and _is_placeholder_session_title(existing["title"])
+            )
             connection.execute(
                 """
                 UPDATE sessions
-                SET user_id = COALESCE(user_id, ?), updated_at = ?
+                SET
+                    user_id = COALESCE(user_id, ?),
+                    title = CASE
+                        WHEN ? THEN ?
+                        ELSE title
+                    END,
+                    updated_at = ?
                 WHERE id = ?
                 """,
-                (user_id, current_time, resolved_session_id),
+                (
+                    user_id,
+                    1 if should_autofill_title else 0,
+                    title,
+                    current_time,
+                    resolved_session_id,
+                ),
             )
         connection.commit()
 

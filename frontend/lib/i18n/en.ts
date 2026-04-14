@@ -32,7 +32,7 @@ export const en: Messages = {
     phaseReplay: "Replaying",
     phaseRunning: "Running",
     phaseIdle: "Idle",
-    sessionFallback: (shortId: string) => `Session ${shortId}`,
+    sessionFallback: () => "New session",
     taskFallback: (shortId: string) => `Task ${shortId}`,
     hintRowNarrow:
       "On narrow screens, use the Session list and Trace & context buttons at the top.",

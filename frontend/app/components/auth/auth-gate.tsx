@@ -2,7 +2,7 @@
 
 import { App, Button, Input, Spin, Tabs } from "antd";
 import { LogOut, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -13,6 +13,7 @@ import {
   getAuthToken,
   setAuthToken,
 } from "../../../lib/api-client";
+import { useChatStreamStore } from "../../../lib/stores/chat-stream-store";
 import { Workbench } from "../workbench";
 import styles from "./auth-gate.module.css";
 
@@ -36,6 +37,10 @@ type AuthResponse = {
 type AuthMode = "login" | "register";
 type AuthStatus = "checking" | "anonymous" | "authenticated";
 
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 function parseAuthError(error: unknown): string {
   if (!(error instanceof ApiError)) {
     return error instanceof Error ? error.message : "请求失败，请稍后重试。";
@@ -44,9 +49,21 @@ function parseAuthError(error: unknown): string {
     return `请求失败（${error.status}）`;
   }
   try {
-    const parsed = JSON.parse(error.bodySnippet) as { detail?: string };
+    const parsed = JSON.parse(error.bodySnippet) as {
+      detail?: string | Array<{ loc?: unknown[]; msg?: string; type?: string }>;
+    };
     if (typeof parsed.detail === "string" && parsed.detail.trim()) {
       return parsed.detail;
+    }
+    if (Array.isArray(parsed.detail) && parsed.detail.length > 0) {
+      const first = parsed.detail[0];
+      const loc = Array.isArray(first?.loc) ? first.loc.map(String) : [];
+      if (loc.includes("email")) {
+        return "请输入有效的邮箱地址。";
+      }
+      if (typeof first?.msg === "string" && first.msg.trim()) {
+        return first.msg;
+      }
     }
   } catch {
     // ignore
@@ -58,13 +75,20 @@ export function AuthGate() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>("checking");
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [, setUser] = useState<AuthUser | null>(null);
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  const resetUserScopedClientState = useCallback(() => {
+    queryClient.clear();
+    const streamStore = useChatStreamStore.getState();
+    streamStore.resetStreamUi();
+    streamStore.setIsStreaming(false);
+  }, [queryClient]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +110,7 @@ export function AuthGate() {
         setStatus("authenticated");
       } catch {
         clearAuthToken();
+        resetUserScopedClientState();
         if (!cancelled) {
           setStatus("anonymous");
         }
@@ -96,12 +121,12 @@ export function AuthGate() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [resetUserScopedClientState]);
 
   useEffect(() => {
     function onAuthExpired() {
       clearAuthToken();
-      queryClient.clear();
+      resetUserScopedClientState();
       setUser(null);
       setStatus("anonymous");
       setPassword("");
@@ -111,10 +136,13 @@ export function AuthGate() {
     return () => {
       window.removeEventListener("insightagent:auth-expired", onAuthExpired);
     };
-  }, [message, queryClient]);
+  }, [message, resetUserScopedClientState]);
 
   const canSubmit = useMemo(() => {
     if (!email.trim() || !password.trim()) {
+      return false;
+    }
+    if (!isValidEmail(email)) {
       return false;
     }
     if (mode === "register" && password.trim().length < 8) {
@@ -125,6 +153,10 @@ export function AuthGate() {
 
   async function handleSubmit() {
     if (!canSubmit || submitting) {
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setErrorText("请输入有效的邮箱地址。");
       return;
     }
     setSubmitting(true);
@@ -146,6 +178,7 @@ export function AuthGate() {
         `${API_BASE_URL}/api/auth/${endpoint}`,
         payload,
       );
+      resetUserScopedClientState();
       setAuthToken(response.access_token);
       setUser(response.user);
       setStatus("authenticated");
@@ -160,7 +193,7 @@ export function AuthGate() {
 
   function handleLogout() {
     clearAuthToken();
-    queryClient.clear();
+    resetUserScopedClientState();
     setUser(null);
     setStatus("anonymous");
     setPassword("");
@@ -195,7 +228,7 @@ export function AuthGate() {
         <p className={styles.eyebrow}>INSIGHTAGENT</p>
         <h1 className={styles.heroTitle}>可观测 Agent 工作台</h1>
         <p className={styles.heroDesc}>
-          面向面试展示与真实部署的 AI Agent 项目。对话、执行轨迹、RAG、成本统计统一在一个工作界面完成闭环。
+          聚焦对话、执行轨迹、RAG 与成本统计的一体化智能体工作台，让调试、观测与协作在一个界面内闭环。
         </p>
         <ul className={styles.heroList}>
           <li>SSE 实时流式 + Trace 可回放</li>
@@ -207,7 +240,7 @@ export function AuthGate() {
       <section className={styles.formArea}>
         <div className={styles.formHeader}>
           <ShieldCheck size={18} />
-          <span>账号鉴权入口</span>
+          <span>登录账号</span>
         </div>
 
         <Tabs
@@ -242,7 +275,7 @@ export function AuthGate() {
               <Input
                 id="auth-display-name"
                 autoComplete="nickname"
-                placeholder="面试展示账号"
+                placeholder="你的昵称"
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
               />
@@ -279,9 +312,6 @@ export function AuthGate() {
           </Button>
         </div>
 
-        <p className={styles.formFootnote}>
-          当前用户：{user?.display_name || user?.email || "未登录"}
-        </p>
       </section>
     </main>
   );
