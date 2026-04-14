@@ -93,7 +93,7 @@ def ensure_session(prompt: str, user_id: str, session_id: str | None = None) -> 
                 """,
                 (
                     user_id,
-                    1 if should_autofill_title else 0,
+                    should_autofill_title,
                     title,
                     current_time,
                     resolved_session_id,

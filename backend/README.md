@@ -10,6 +10,7 @@
 - W4：已完成（RAG + Token/Cost + compose.full）
 - 阶段 5 增量：`full-data-auth` 首版已落地（JWT、用户隔离、用户级设置与密钥加密存储）
 - 阶段 5 增量：PostgreSQL 迁移主线已启动（后端运行时已收敛为 PostgreSQL + 平迁脚本）
+- 阶段 5 排查修复（2026-04-14）：修复 PostgreSQL 下 `POST /api/tasks` 的 `CASE WHEN` 参数类型错误（smallint -> boolean），恢复消息发送链路
 - 阶段 5 排查补充：已复核 `sessions/tasks/messages/settings/rag` 查询与写入路径，核心数据均按 `user_id` 隔离
 - 会话命名补充：空会话在首条消息发送时，若仍为占位标题则自动改为首条消息前缀
 - 会话命名规则补充：仅在“无历史消息 + 占位标题”条件下自动命名，不覆盖用户手动重命名
