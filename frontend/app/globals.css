@@ -2420,18 +2420,84 @@ code {
   margin-bottom: 10px;
 }
 
+.audit-modal-filter-row {
+  --audit-filter-height: 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.2fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.audit-modal-filter-row--secondary {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.audit-modal-filter-row .ant-select {
+  width: 100%;
+  height: var(--audit-filter-height) !important;
+}
+
+.audit-modal-filter-row .ant-select-single {
+  height: var(--audit-filter-height) !important;
+}
+
+.audit-modal-filter-row .ant-select-single .ant-select-selector {
+  height: var(--audit-filter-height) !important;
+  padding: 0 11px !important;
+  display: flex;
+  align-items: center;
+}
+
+.audit-modal-filter-row .ant-select-single .ant-select-selection-item,
+.audit-modal-filter-row .ant-select-single .ant-select-selection-placeholder {
+  line-height: calc(var(--audit-filter-height) - 2px) !important;
+}
+
+.audit-modal-filter-row .ant-input-affix-wrapper {
+  height: var(--audit-filter-height) !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  display: flex;
+  align-items: center;
+}
+
+.audit-modal-filter-row .ant-input-affix-wrapper .ant-input {
+  height: calc(var(--audit-filter-height) - 2px) !important;
+  line-height: calc(var(--audit-filter-height) - 2px) !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.audit-modal-filter-row .ant-input {
+  height: var(--audit-filter-height) !important;
+  line-height: calc(var(--audit-filter-height) - 2px) !important;
+}
+
+.audit-modal-filter-row .ant-btn {
+  height: var(--audit-filter-height) !important;
+  min-height: var(--audit-filter-height) !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: calc(var(--audit-filter-height) - 2px) !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.audit-modal-reset-btn {
+  min-width: 96px;
+}
+
 .audit-modal-label {
   color: var(--muted);
   font-size: 0.78rem;
 }
 
-.audit-modal-toolbar .ant-segmented {
-  width: 100%;
-}
-
 .audit-modal-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
@@ -2466,11 +2532,27 @@ code {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  align-items: baseline;
+  align-items: flex-start;
   flex-wrap: wrap;
 }
 
-.audit-modal-item-head span {
+.audit-modal-item-title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audit-modal-item-title strong {
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.audit-modal-item-title .ant-tag {
+  margin-inline-end: 0;
+}
+
+.audit-modal-item-time {
   color: var(--muted);
   font-size: 0.76rem;
 }
@@ -2485,6 +2567,30 @@ code {
 .audit-modal-item-meta span {
   color: var(--muted);
   font-size: 0.76rem;
+}
+
+.audit-modal-detail-list {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 4px;
+}
+
+.audit-modal-detail-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.audit-modal-detail-row dt {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.audit-modal-detail-row dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.76rem;
+  word-break: break-word;
 }
 
 .audit-modal-details {
@@ -2512,6 +2618,61 @@ code {
 
 .audit-modal-loadmore {
   margin-top: 10px;
+}
+
+.audit-modal-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.audit-modal-table-summary {
+  display: inline-block;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.audit-modal-table-detail-inline {
+  display: inline-block;
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.audit-modal-expanded {
+  display: grid;
+  gap: 8px;
+}
+
+.audit-modal-expanded-raw {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.audit-modal-footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+@media (max-width: 780px) {
+  .audit-modal-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-modal-detail-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
 }
 
 .field {

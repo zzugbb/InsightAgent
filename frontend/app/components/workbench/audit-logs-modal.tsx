@@ -1,8 +1,8 @@
 "use client";
 
-import { App, Button, Input, Modal, Segmented, Space } from "antd";
+import { App, Button, Input, Modal, Segmented, Select, Space, Table, Tag } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { apiJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
@@ -14,8 +14,6 @@ import { shortenId } from "./utils";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
-const PAGE_SIZE = 20;
-
 type AuditLogsModalProps = {
   open: boolean;
   onClose: () => void;
@@ -24,6 +22,7 @@ type AuditLogsModalProps = {
 type EventFilter = "all" | "login" | "logout" | "refresh" | "settings_update";
 type TimeFilter = "all" | "7d" | "30d";
 type ExportScope = "current" | "all";
+type DetailEntry = { key: string; label: string; value: string };
 
 function buildAuditUrl(params: {
   limit: number;
@@ -75,6 +74,25 @@ function csvEscape(value: unknown): string {
   return raw;
 }
 
+function asDetailMap(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
 export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
   const { message } = App.useApp();
   const t = useMessages();
@@ -84,11 +102,12 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("7d");
   const [sessionIdFilter, setSessionIdFilter] = useState("");
   const [taskIdFilter, setTaskIdFilter] = useState("");
-  const [offset, setOffset] = useState(0);
-  const [rows, setRows] = useState<AuditLogItem[]>([]);
-  const [hasMore, setHasMore] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [exporting, setExporting] = useState<"json" | "csv" | null>(null);
   const [exportScope, setExportScope] = useState<ExportScope>("all");
+  const offset = (page - 1) * pageSize;
 
   const query = useQuery({
     queryKey: [
@@ -97,6 +116,8 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
       timeFilter,
       sessionIdFilter,
       taskIdFilter,
+      keyword,
+      pageSize,
       offset,
       open,
     ],
@@ -104,7 +125,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     queryFn: () =>
       apiJson<AuditLogListResponse>(
         buildAuditUrl({
-          limit: PAGE_SIZE,
+          limit: pageSize,
           offset,
           eventType: eventFilter,
           timeFilter,
@@ -114,37 +135,6 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
       ),
     staleTime: 8_000,
   });
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setOffset(0);
-    setRows([]);
-    setHasMore(false);
-  }, [open, eventFilter, timeFilter, sessionIdFilter, taskIdFilter]);
-
-  useEffect(() => {
-    if (!query.data) {
-      return;
-    }
-    const incoming = query.data.items ?? [];
-    if (offset === 0) {
-      setRows(incoming);
-    } else {
-      setRows((prev) => {
-        const seen = new Set(prev.map((r) => r.id));
-        const merged = [...prev];
-        for (const item of incoming) {
-          if (!seen.has(item.id)) {
-            merged.push(item);
-          }
-        }
-        return merged;
-      });
-    }
-    setHasMore(Boolean(query.data.has_more));
-  }, [offset, query.data]);
 
   const errorText = useMemo(() => {
     if (!query.isError || !query.error) {
@@ -170,6 +160,192 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     return t.sidebar.audit.eventLabelUnknown;
   };
 
+  const resolveEventColor = (eventType: string): string => {
+    const normalized = eventType.trim().toLowerCase();
+    if (normalized === "login") {
+      return "green";
+    }
+    if (normalized === "logout") {
+      return "volcano";
+    }
+    if (normalized === "refresh") {
+      return "blue";
+    }
+    if (normalized === "settings_update") {
+      return "purple";
+    }
+    return "default";
+  };
+
+  const resolveReasonLabel = (reason: string | null): string | null => {
+    if (!reason) {
+      return null;
+    }
+    if (reason === "password") {
+      return t.sidebar.audit.reasonPassword;
+    }
+    if (reason === "register_auto_login") {
+      return t.sidebar.audit.reasonRegisterAutoLogin;
+    }
+    return reason;
+  };
+
+  const resolveScopeLabel = (scope: string | null): string | null => {
+    if (!scope) {
+      return null;
+    }
+    if (scope === "all") {
+      return t.sidebar.audit.scopeAll;
+    }
+    if (scope === "single") {
+      return t.sidebar.audit.scopeSingle;
+    }
+    if (scope === "refresh_token") {
+      return t.sidebar.audit.scopeRefreshToken;
+    }
+    return scope;
+  };
+
+  const resolveSummaryText = (item: AuditLogItem): string => {
+    const eventLabel = resolveEventLabel(item.event_type);
+    const detail = asDetailMap(item.event_detail);
+    if (!detail) {
+      return eventLabel;
+    }
+
+    const reason = resolveReasonLabel(asString(detail.reason));
+    const scope = resolveScopeLabel(asString(detail.scope));
+    const revoked = asBoolean(detail.revoked);
+    const mode = asString(detail.mode);
+    const provider = asString(detail.provider);
+    const model = asString(detail.model);
+
+    if (item.event_type === "login" && reason) {
+      return `${eventLabel} · ${reason}`;
+    }
+    if (item.event_type === "logout") {
+      const parts: string[] = [];
+      if (scope) {
+        parts.push(scope);
+      }
+      if (revoked !== null) {
+        parts.push(
+          `${t.sidebar.audit.fieldRevoked} ${
+            revoked ? t.sidebar.audit.boolYes : t.sidebar.audit.boolNo
+          }`,
+        );
+      }
+      return parts.length > 0 ? `${eventLabel} · ${parts.join(" · ")}` : eventLabel;
+    }
+    if (item.event_type === "settings_update") {
+      const triplet = [mode, provider, model].filter(Boolean).join(" / ");
+      return triplet ? `${eventLabel} · ${triplet}` : eventLabel;
+    }
+    return eventLabel;
+  };
+
+  const resolveReadableDetail = (item: AuditLogItem): DetailEntry[] => {
+    const detail = asDetailMap(item.event_detail);
+    if (!detail) {
+      return [];
+    }
+    const entries: DetailEntry[] = [];
+    const pushIfPresent = (
+      key: string,
+      label: string,
+      value: unknown,
+      transform?: (raw: unknown) => string | null,
+    ) => {
+      if (value === undefined || value === null) {
+        return;
+      }
+      const finalValue = transform ? transform(value) : asString(value);
+      if (!finalValue) {
+        return;
+      }
+      entries.push({ key, label, value: finalValue });
+    };
+
+    pushIfPresent(
+      "reason",
+      t.sidebar.audit.fieldReason,
+      detail.reason,
+      (raw) => resolveReasonLabel(asString(raw)),
+    );
+    pushIfPresent(
+      "scope",
+      t.sidebar.audit.fieldScope,
+      detail.scope,
+      (raw) => resolveScopeLabel(asString(raw)),
+    );
+    pushIfPresent("mode", t.sidebar.audit.fieldMode, detail.mode);
+    pushIfPresent("provider", t.sidebar.audit.fieldProvider, detail.provider);
+    pushIfPresent("model", t.sidebar.audit.fieldModel, detail.model);
+    pushIfPresent(
+      "revoked",
+      t.sidebar.audit.fieldRevoked,
+      detail.revoked,
+      (raw) => {
+        const parsed = asBoolean(raw);
+        if (parsed === null) {
+          return null;
+        }
+        return parsed ? t.sidebar.audit.boolYes : t.sidebar.audit.boolNo;
+      },
+    );
+    pushIfPresent(
+      "base_url_configured",
+      t.sidebar.audit.fieldBaseUrlConfigured,
+      detail.base_url_configured,
+      (raw) => {
+        const parsed = asBoolean(raw);
+        if (parsed === null) {
+          return null;
+        }
+        return parsed ? t.sidebar.audit.boolYes : t.sidebar.audit.boolNo;
+      },
+    );
+    pushIfPresent(
+      "api_key_configured",
+      t.sidebar.audit.fieldApiKeyConfigured,
+      detail.api_key_configured,
+      (raw) => {
+        const parsed = asBoolean(raw);
+        if (parsed === null) {
+          return null;
+        }
+        return parsed ? t.sidebar.audit.boolYes : t.sidebar.audit.boolNo;
+      },
+    );
+    return entries;
+  };
+
+  const resolveDetailInlineText = (item: AuditLogItem): string => {
+    const entries = resolveReadableDetail(item);
+    if (entries.length === 0) {
+      return "—";
+    }
+    return entries.map((entry) => `${entry.label}: ${entry.value}`).join(" · ");
+  };
+
+  const rows = query.data?.items ?? [];
+  const total = query.data?.total ?? 0;
+  const normalizedKeyword = keyword.trim().toLowerCase();
+  const filteredRows = !normalizedKeyword
+    ? rows
+    : rows.filter((item) => {
+        const haystack = [
+          resolveEventLabel(item.event_type),
+          resolveSummaryText(item),
+          resolveDetailInlineText(item),
+          item.session_id ?? "",
+          item.task_id ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(normalizedKeyword);
+      });
+
   const exportAllRows = async (): Promise<AuditLogItem[]> => {
     const allRows: AuditLogItem[] = [];
     let nextOffset = 0;
@@ -190,7 +366,22 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
       }
       nextOffset += page.items.length;
     }
-    return allRows;
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    if (!normalizedKeyword) {
+      return allRows;
+    }
+    return allRows.filter((item) => {
+      const haystack = [
+        resolveEventLabel(item.event_type),
+        resolveSummaryText(item),
+        item.session_id ?? "",
+        item.task_id ?? "",
+        JSON.stringify(item.event_detail ?? {}),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedKeyword);
+    });
   };
 
   const resolveExportRows = async (): Promise<AuditLogItem[]> => {
@@ -271,48 +462,89 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     >
       <p className="audit-modal-lead">{t.sidebar.audit.lead}</p>
       <div className="audit-modal-toolbar">
-        <span className="audit-modal-label">{t.sidebar.audit.filterEventLabel}</span>
-        <Segmented
-          size="small"
-          value={eventFilter}
-          onChange={(value) => setEventFilter(value as EventFilter)}
-          options={[
-            { label: t.sidebar.audit.filterEventAll, value: "all" },
-            { label: t.sidebar.audit.filterEventLogin, value: "login" },
-            { label: t.sidebar.audit.filterEventLogout, value: "logout" },
-            { label: t.sidebar.audit.filterEventRefresh, value: "refresh" },
-            {
-              label: t.sidebar.audit.filterEventSettingsUpdate,
-              value: "settings_update",
-            },
-          ]}
-        />
-
-        <span className="audit-modal-label">{t.sidebar.audit.filterRangeLabel}</span>
-        <Segmented
-          size="small"
-          value={timeFilter}
-          onChange={(value) => setTimeFilter(value as TimeFilter)}
-          options={[
-            { label: t.sidebar.audit.filterRangeAll, value: "all" },
-            { label: t.sidebar.audit.filterRange7d, value: "7d" },
-            { label: t.sidebar.audit.filterRange30d, value: "30d" },
-          ]}
-        />
-        <Input
-          value={sessionIdFilter}
-          onChange={(event) => setSessionIdFilter(event.target.value)}
-          placeholder={t.sidebar.audit.filterSessionPlaceholder}
-        />
-        <Input
-          value={taskIdFilter}
-          onChange={(event) => setTaskIdFilter(event.target.value)}
-          placeholder={t.sidebar.audit.filterTaskPlaceholder}
-        />
+        <div className="audit-modal-filter-row audit-modal-filter-row--primary">
+          <Select
+            showSearch
+            value={eventFilter}
+            onChange={(value) => {
+              setEventFilter(value as EventFilter);
+              setPage(1);
+            }}
+            options={[
+              { label: t.sidebar.audit.filterEventAll, value: "all" },
+              { label: t.sidebar.audit.filterEventLogin, value: "login" },
+              { label: t.sidebar.audit.filterEventLogout, value: "logout" },
+              { label: t.sidebar.audit.filterEventRefresh, value: "refresh" },
+              {
+                label: t.sidebar.audit.filterEventSettingsUpdate,
+                value: "settings_update",
+              },
+            ]}
+            optionFilterProp="label"
+            placeholder={t.sidebar.audit.filterEventLabel}
+          />
+          <Select
+            showSearch
+            value={timeFilter}
+            onChange={(value) => {
+              setTimeFilter(value as TimeFilter);
+              setPage(1);
+            }}
+            options={[
+              { label: t.sidebar.audit.filterRangeAll, value: "all" },
+              { label: t.sidebar.audit.filterRange7d, value: "7d" },
+              { label: t.sidebar.audit.filterRange30d, value: "30d" },
+            ]}
+            optionFilterProp="label"
+            placeholder={t.sidebar.audit.filterRangeLabel}
+          />
+          <Input
+            allowClear
+            value={keyword}
+            onChange={(event) => {
+              setKeyword(event.target.value);
+              setPage(1);
+            }}
+            placeholder={t.sidebar.audit.searchPlaceholder}
+          />
+        </div>
+        <div className="audit-modal-filter-row audit-modal-filter-row--secondary">
+          <Input
+            allowClear
+            value={sessionIdFilter}
+            onChange={(event) => {
+              setSessionIdFilter(event.target.value);
+              setPage(1);
+            }}
+            placeholder={t.sidebar.audit.filterSessionPlaceholder}
+          />
+          <Input
+            allowClear
+            value={taskIdFilter}
+            onChange={(event) => {
+              setTaskIdFilter(event.target.value);
+              setPage(1);
+            }}
+            placeholder={t.sidebar.audit.filterTaskPlaceholder}
+          />
+          <Button
+            className="audit-modal-reset-btn"
+            onClick={() => {
+              setEventFilter("all");
+              setTimeFilter("7d");
+              setKeyword("");
+              setSessionIdFilter("");
+              setTaskIdFilter("");
+              setPage(1);
+            }}
+          >
+            {t.sidebar.audit.filterReset}
+          </Button>
+        </div>
       </div>
 
       <div className="audit-modal-actions">
-        <Space>
+        <Space wrap>
           <span className="audit-modal-label">{t.sidebar.audit.exportScopeLabel}</span>
           <Segmented
             size="small"
@@ -345,59 +577,114 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
       {query.isLoading && offset === 0 ? (
         <p className="audit-modal-note">{t.sidebar.audit.loading}</p>
       ) : null}
-      {errorText ? <p className="audit-modal-note">{t.sidebar.audit.error}</p> : null}
-      {!query.isLoading && !errorText && rows.length === 0 ? (
+      {errorText ? <p className="audit-modal-note">{`${t.sidebar.audit.error} ${errorText}`}</p> : null}
+      {!query.isLoading && !errorText && filteredRows.length === 0 ? (
         <p className="audit-modal-note">{t.sidebar.audit.empty}</p>
       ) : null}
 
-      {rows.length > 0 ? (
+      {filteredRows.length > 0 ? (
         <>
-          <p className="audit-modal-total">{t.sidebar.audit.total(rows.length)}</p>
-          <div className="audit-modal-list">
-            {rows.map((item) => {
-              const detailText = item.event_detail
-                ? JSON.stringify(item.event_detail, null, 2)
-                : "";
-              return (
-                <article key={item.id} className="audit-modal-item">
-                  <div className="audit-modal-item-head">
-                    <strong>{resolveEventLabel(item.event_type)}</strong>
-                    <span>
-                      {new Date(item.created_at).toLocaleString(localeTag, { hour12: false })}
+          <div className="audit-modal-table-wrap">
+            <Table<AuditLogItem>
+              size="small"
+              rowKey={(record) => record.id}
+              dataSource={filteredRows}
+              pagination={{
+                current: page,
+                pageSize,
+                total,
+                showSizeChanger: true,
+                showTotal: (n) => t.sidebar.audit.total(n),
+                onChange: (nextPage, nextPageSize) => {
+                  setPage(nextPage);
+                  if (nextPageSize && nextPageSize !== pageSize) {
+                    setPageSize(nextPageSize);
+                  }
+                },
+              }}
+              className="audit-modal-table"
+              columns={[
+                {
+                  title: t.sidebar.audit.colEvent,
+                  dataIndex: "event_type",
+                  key: "event_type",
+                  width: 130,
+                  render: (_value, record) => (
+                    <Tag color={resolveEventColor(record.event_type)}>
+                      {resolveEventLabel(record.event_type)}
+                    </Tag>
+                  ),
+                },
+                {
+                  title: t.sidebar.audit.colDetail,
+                  key: "summary",
+                  render: (_value, record) => (
+                    <span className="audit-modal-table-summary">
+                      {resolveSummaryText(record)}
                     </span>
-                  </div>
-                  <div className="audit-modal-item-meta">
-                    <span>
-                      {t.sidebar.audit.colSession}: {item.session_id ? shortenId(item.session_id) : "—"}
-                    </span>
-                    <span>
-                      {t.sidebar.audit.colTask}: {item.task_id ? shortenId(item.task_id) : "—"}
-                    </span>
-                  </div>
-                  {detailText ? (
-                    <details className="audit-modal-details">
-                      <summary>{t.sidebar.audit.detailExpand}</summary>
-                      <pre>{detailText}</pre>
-                    </details>
-                  ) : null}
-                </article>
-              );
-            })}
+                  ),
+                },
+                {
+                  title: t.sidebar.audit.colSession,
+                  key: "session_id",
+                  width: 120,
+                  render: (_value, record) =>
+                    record.session_id ? shortenId(record.session_id) : "—",
+                },
+                {
+                  title: t.sidebar.audit.colTask,
+                  key: "task_id",
+                  width: 120,
+                  render: (_value, record) =>
+                    record.task_id ? shortenId(record.task_id) : "—",
+                },
+                {
+                  title: t.sidebar.audit.colTime,
+                  key: "created_at",
+                  width: 180,
+                  render: (_value, record) =>
+                    new Date(record.created_at).toLocaleString(localeTag, {
+                      hour12: false,
+                    }),
+                },
+              ]}
+              expandable={{
+                expandedRowRender: (record) => {
+                  const detailRows = resolveReadableDetail(record);
+                  const detailText = record.event_detail
+                    ? JSON.stringify(record.event_detail, null, 2)
+                    : "";
+                  if (detailRows.length === 0 && !detailText) {
+                    return <span className="audit-modal-note">—</span>;
+                  }
+                  return (
+                    <div className="audit-modal-expanded">
+                      {detailRows.length > 0 ? (
+                        <dl className="audit-modal-detail-list">
+                          {detailRows.map((entry) => (
+                            <div key={entry.key} className="audit-modal-detail-row">
+                              <dt>{entry.label}</dt>
+                              <dd>{entry.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : null}
+                      {detailText ? (
+                        <pre className="audit-modal-expanded-raw">{detailText}</pre>
+                      ) : null}
+                    </div>
+                  );
+                },
+                rowExpandable: (record) =>
+                  resolveReadableDetail(record).length > 0 || Boolean(record.event_detail),
+              }}
+              rowClassName={() => "audit-modal-table-row"}
+            />
+          </div>
+          <div className="audit-modal-footer">
+            <span className="audit-modal-total">{t.sidebar.audit.total(total)}</span>
           </div>
         </>
-      ) : null}
-
-      {hasMore ? (
-        <div className="audit-modal-loadmore">
-          <Button
-            block
-            size="small"
-            loading={query.isFetching && offset > 0}
-            onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
-          >
-            {t.sidebar.audit.loadMore}
-          </Button>
-        </div>
       ) : null}
     </Modal>
   );

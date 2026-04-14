@@ -191,6 +191,8 @@ export type Messages = {
       filterTaskId: string;
       filterSessionPlaceholder: string;
       filterTaskPlaceholder: string;
+      filterReset: string;
+      searchPlaceholder: string;
       loading: string;
       error: string;
       empty: string;
@@ -216,6 +218,25 @@ export type Messages = {
       colSession: string;
       colTask: string;
       colDetail: string;
+      rawJsonLabel: string;
+      boolYes: string;
+      boolNo: string;
+      reasonPassword: string;
+      reasonRegisterAutoLogin: string;
+      scopeAll: string;
+      scopeSingle: string;
+      scopeRefreshToken: string;
+      fieldReason: string;
+      fieldScope: string;
+      fieldRevoked: string;
+      fieldMode: string;
+      fieldProvider: string;
+      fieldModel: string;
+      fieldBaseUrlConfigured: string;
+      fieldApiKeyConfigured: string;
+      sessionLinked: string;
+      sessionUserScope: string;
+      taskLinked: string;
     };
   };
   inspector: {
