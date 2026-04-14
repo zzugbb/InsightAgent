@@ -68,6 +68,7 @@ class SettingsValidateResponse(BaseModel):
     model: str
     message: str
     error: str | None = None
+    error_code: str | None = None
 
 
 @router.get("", response_model=SettingsSummaryResponse)
@@ -145,6 +146,7 @@ def validate_settings(
             model=payload.model,
             message="remote mode preflight failed.",
             error="api_key is required when mode is 'remote'",
+            error_code="remote_api_key_required",
         )
 
     if payload.mode == "mock":
@@ -166,6 +168,7 @@ def validate_settings(
                 model=payload.model,
                 message="base_url is invalid.",
                 error="base_url must be a valid http(s) URL",
+                error_code="remote_base_url_invalid",
             )
 
         try:
@@ -187,6 +190,7 @@ def validate_settings(
                     model=payload.model,
                     message="remote preflight failed.",
                     error=f"unexpected status: {status_code}",
+                    error_code="remote_base_url_unexpected_status",
                 )
         except Exception as exc:
             # 某些网关/服务禁用 HEAD，回退 GET 以减少误判
@@ -209,6 +213,7 @@ def validate_settings(
                         model=payload.model,
                         message="remote preflight failed.",
                         error=f"unexpected status: {status_code}",
+                        error_code="remote_base_url_unexpected_status",
                     )
             except Exception as fallback_exc:
                 return SettingsValidateResponse(
@@ -218,12 +223,15 @@ def validate_settings(
                     model=payload.model,
                     message="remote preflight failed.",
                     error=f"{exc}; fallback_get={fallback_exc}",
+                    error_code="remote_preflight_network_error",
                 )
 
     return SettingsValidateResponse(
-        ok=True,
+        ok=False,
         mode=payload.mode,
         provider=payload.provider,
         model=payload.model,
-        message="remote mode payload is structurally valid.",
+        message="remote mode preflight failed.",
+        error="remote provider is not implemented yet",
+        error_code="remote_provider_not_implemented",
     )

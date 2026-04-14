@@ -89,6 +89,13 @@ export const zh: Messages = {
     streamLatest: "最新输出",
     scrollToBottom: "↓ 回到底部",
     scrollToBottomAria: "回到底部",
+    runtimeNoticeMock: "当前运行在 mock 模式，输出为模拟结果。",
+    runtimeNoticeRemote:
+      "当前已切换到 remote 模式，但本版本尚未接入真实 Provider，发送会失败。",
+    runtimeNoticeRemoteMissingKey:
+      "当前为 remote 模式，但尚未配置 API Key，请先完成模型配置。",
+    goConfigureModel: "去配置模型",
+    remoteModeNeedConfig: "Remote 模式未完成配置，请先在设置中补全模型参数。",
     sessionEmptyTitle: "本会话暂无消息",
     sessionEmptyLead: "在下方输入并发送即可开始。",
     onboardingTitle: "开始对话",

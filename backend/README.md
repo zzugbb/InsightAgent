@@ -37,6 +37,8 @@
 - W1 优化：新增 `POST /api/settings/validate`，用于设置保存前的结构/连通性预校验（不落库）
 - W1 优化补强：`settings/validate` 在 `HEAD` 失败时自动回退 `GET`，减少远端网关不支持 HEAD 时的误判
 - W1 稳定性优化：`remote` 模式保存/校验支持沿用已存储 `api_key`（空值提交不再清空历史密钥）
+- W1 行为收口：`remote` 模式 provider 选择改为严格失败（缺少 `api_key` 或 provider 未实现均返回明确错误码，不再回落 `mock`）
+- W1 接口收口：`POST /api/settings/validate` 新增 `error_code`，并对未实现 provider 返回 `remote_provider_not_implemented`
 - W1/W2 稳定性优化：SSE 流式输出增加周期 heartbeat（长输出保活更稳定）+ trace 持久化写入节流（降低数据库写放大）
 - W2 优化：`GET /api/tasks/{task_id}/stream` 支持 `running` 状态重连（回补增量，不重复执行任务）
 - W2 重连流优化：`running` 重连返回的 `done/error` 事件补齐 `session_id/step_id` 并标记 `resumed=true`
@@ -248,7 +250,7 @@ docker compose up -d chroma
 ## 当前限制（W4 生产化前）
 
 - PostgreSQL 已成为默认且唯一运行后端，仍需完成真实环境平迁与回滚演练
-- `remote` 模式 provider 校验仍较粗
+- `remote` 模式仍未接入真实 provider（当前会明确失败而非降级到 mock）
 - 真实工具调用循环仍以 mock 工具编排为主（RAG 检索已真实接入）
 - token 仍为估算值（非 provider 官方 usage 回传）
 - `trace/delta` 当前链路已稳定，后续仅做参数级调优（不影响 W2 已收口）

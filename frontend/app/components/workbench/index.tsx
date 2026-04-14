@@ -60,6 +60,7 @@ const TRACE_DELTA_SYNC_MAX_MS = 15_000;
 const TRACE_DELTA_SYNC_MAX_RETRY_EXP = 3;
 const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
 const TRACE_DELTA_FAST_DRAIN_MS = 180;
+const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
 
 type WorkbenchProps = {
   onLogout?: () => void;
@@ -72,6 +73,7 @@ export function Workbench({ onLogout }: WorkbenchProps) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("trace");
   const [bannerError, setBannerError] = useState<string | null>(null);
+  const [runtimeNoticeDismissed, setRuntimeNoticeDismissed] = useState(false);
   const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
   const [newSessionBusy, setNewSessionBusy] = useState(false);
@@ -401,6 +403,23 @@ export function Workbench({ onLogout }: WorkbenchProps) {
   const tasksFetchNextBusy = tasksQuery.isFetchingNextPage;
   const tasksCanLoadMore = Boolean(tasksQuery.hasNextPage);
   const settingsSummary = settingsQuery.data ?? null;
+  const runtimeNotice =
+    settingsSummary?.mode === "remote"
+      ? settingsSummary.api_key_configured
+        ? t.chat.runtimeNoticeRemote
+        : t.chat.runtimeNoticeRemoteMissingKey
+      : settingsSummary?.mode === "mock"
+        ? t.chat.runtimeNoticeMock
+        : null;
+
+  useEffect(() => {
+    setRuntimeNoticeDismissed(false);
+  }, [settingsSummary?.mode, settingsSummary?.api_key_configured]);
+
+  const openModelSettings = useCallback(() => {
+    window.dispatchEvent(new CustomEvent(OPEN_MODEL_SETTINGS_EVENT));
+  }, []);
+
   const sessionMessages = messagesQuery.data?.messages ?? [];
 
   const sessionsLoading = sessionsQuery.isLoading;
@@ -702,6 +721,14 @@ export function Workbench({ onLogout }: WorkbenchProps) {
     if (!text) {
       return;
     }
+    if (
+      settingsSummary?.mode === "remote" &&
+      !settingsSummary.api_key_configured
+    ) {
+      setBannerError(t.chat.remoteModeNeedConfig);
+      openModelSettings();
+      return;
+    }
     try {
       const sessionId = await ensureSessionForSend();
       lastSentPromptRef.current = text;
@@ -987,6 +1014,9 @@ export function Workbench({ onLogout }: WorkbenchProps) {
         onRetryStream={handleRetryStream}
         composerRef={composerRef}
         liveRegionText={liveRegionText}
+        runtimeNotice={runtimeNoticeDismissed ? null : runtimeNotice}
+        onOpenModelSettings={openModelSettings}
+        onDismissRuntimeNotice={() => setRuntimeNoticeDismissed(true)}
       />
 
       {isNarrow ? (

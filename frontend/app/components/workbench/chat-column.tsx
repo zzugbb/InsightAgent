@@ -32,6 +32,7 @@ type SettingsSummaryLite = {
   mode: string;
   provider: string;
   model: string;
+  api_key_configured?: boolean;
 } | null;
 
 const MSG_VIRTUAL_THRESHOLD = 24;
@@ -66,6 +67,9 @@ type ChatColumnProps = {
   onRetryStream: () => void;
   composerRef: RefObject<TextAreaRef | null>;
   liveRegionText: string;
+  runtimeNotice: string | null;
+  onOpenModelSettings: () => void;
+  onDismissRuntimeNotice: () => void;
 };
 
 const SCROLL_BOTTOM_THRESHOLD = 96;
@@ -99,6 +103,9 @@ export function ChatColumn({
   onRetryStream,
   composerRef,
   liveRegionText,
+  runtimeNotice,
+  onOpenModelSettings,
+  onDismissRuntimeNotice,
 }: ChatColumnProps) {
   const t = useMessages();
   const { localeTag } = usePreferences();
@@ -233,6 +240,21 @@ export function ChatColumn({
           onClose={onDismissBanner}
           title={apiBanner}
           role="alert"
+        />
+      ) : null}
+      {!apiBanner && runtimeNotice ? (
+        <Alert
+          className="chat-api-alert"
+          type="warning"
+          showIcon
+          closable
+          onClose={onDismissRuntimeNotice}
+          title={runtimeNotice}
+          action={
+            <Button type="link" size="small" onClick={onOpenModelSettings}>
+              {t.chat.goConfigureModel}
+            </Button>
+          }
         />
       ) : null}
 

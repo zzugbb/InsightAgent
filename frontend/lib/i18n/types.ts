@@ -88,6 +88,11 @@ export type Messages = {
     streamLatest: string;
     scrollToBottom: string;
     scrollToBottomAria: string;
+    runtimeNoticeMock: string;
+    runtimeNoticeRemote: string;
+    runtimeNoticeRemoteMissingKey: string;
+    goConfigureModel: string;
+    remoteModeNeedConfig: string;
     sessionEmptyTitle: string;
     sessionEmptyLead: string;
     onboardingTitle: string;

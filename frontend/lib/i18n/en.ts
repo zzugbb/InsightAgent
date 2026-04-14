@@ -90,6 +90,14 @@ export const en: Messages = {
     streamLatest: "Latest output",
     scrollToBottom: "↓ Back to bottom",
     scrollToBottomAria: "Scroll to bottom",
+    runtimeNoticeMock: "Running in mock mode. Responses are simulated.",
+    runtimeNoticeRemote:
+      "Remote mode is selected, but this version does not provide a real provider yet; requests will fail.",
+    runtimeNoticeRemoteMissingKey:
+      "Remote mode is selected but API key is not configured yet.",
+    goConfigureModel: "Configure model",
+    remoteModeNeedConfig:
+      "Remote mode is not fully configured. Please complete model settings first.",
     sessionEmptyTitle: "No messages in this session",
     sessionEmptyLead: "Type below and send to start.",
     onboardingTitle: "Start a conversation",

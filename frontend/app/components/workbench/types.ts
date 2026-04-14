@@ -62,6 +62,7 @@ export type SettingsValidateResponse = {
   model: string;
   message: string;
   error: string | null;
+  error_code?: string | null;
 };
 
 export type InspectorTab = "trace" | "context";

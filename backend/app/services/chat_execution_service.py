@@ -15,7 +15,7 @@ from app.services.chat_persistence_service import (
 )
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.chroma_rag_service import query_knowledge_base
-from app.services.provider_service import get_llm_provider
+from app.services.provider_service import ProviderSelectionError, get_llm_provider
 
 
 class MockToolExecutionError(RuntimeError):
@@ -701,6 +701,24 @@ def stream_task_execution(
             },
         )
 
+    except ProviderSelectionError as exc:
+        complete_task(
+            task_id=task_id,
+            trace_steps=trace_steps,
+            user_id=user_id,
+            status="failed",
+        )
+        yield sse_event("state", {"task_id": task_id, "phase": "error"})
+        yield sse_event(
+            "error",
+            sse_error_payload(
+                task_id=task_id,
+                message=exc.user_message,
+                code=exc.code,
+                fatal=True,
+                retry_count=0,
+            ),
+        )
     except Exception as exc:
         complete_task(
             task_id=task_id,

@@ -34,6 +34,7 @@ import { AuditLogsModal } from "./audit-logs-modal";
 type SectionId = "theme" | "accent" | "language";
 
 type PopoverPos = { left: number; bottom: number; width: number };
+const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
 
 export function SidebarSettingsMenu() {
   const t = useMessages();
@@ -115,6 +116,18 @@ export function SidebarSettingsMenu() {
       setExpanded(null);
     }
   }, [open]);
+
+  useEffect(() => {
+    function onOpenModelSettings() {
+      setOpen(false);
+      setExpanded(null);
+      setModelOpen(true);
+    }
+    window.addEventListener(OPEN_MODEL_SETTINGS_EVENT, onOpenModelSettings);
+    return () => {
+      window.removeEventListener(OPEN_MODEL_SETTINGS_EVENT, onOpenModelSettings);
+    };
+  }, []);
 
   function toggleSection(id: SectionId) {
     setExpanded((prev) => (prev === id ? null : id));

@@ -10,6 +10,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - W4：已完成（RAG 面板 + Token/Cost 展示）
 - 阶段 5 增量：已完成登录/注册入口页与 Auth Gate（token 持久化、401 自动回登录）
 - 阶段 5 调整：已移除首次引导页，登录后直接进入工作台
+- 阶段 5 收口：新增运行态提示条（mock/remote）与“去配置模型”快捷入口
+- 阶段 5 收口：`remote` 未配置 `api_key` 时发送前前端直接阻断并引导配置
 - 阶段 5 收口：登录页文案与白底可读性优化、退出按钮对齐优化、会话空标题默认展示回退为“新会话”
 - 阶段 5 细化：登录区标题文案调整为“账号登录”、提交按钮禁用态可读性优化、退出入口迁移至左下角设置区并避让折叠控件
 - 阶段 5 细化（继续）：移除“当前用户：未登录”提示、注册邮箱格式前置校验（替代 422 生硬报错）、登录输入 autofill/已填充态样式优化并适配浅色表单
@@ -25,7 +27,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 
 - 三栏布局：会话、消息、轨迹/上下文
 - Auth Gate：登录/注册、登录态校验、401 自动失效处理；退出入口融合到侧栏左下角设置区
-- 登录后默认策略：直接进入 Workbench；若用户未配置模型密钥，后端按用户默认设置运行（默认 `mock`）
+- 登录后默认策略：直接进入 Workbench；运行模式由设置决定，`remote` 配置不完整会被前端阻断并提示
 - 审计入口迁移到左下角设置菜单（独立子页）：查看 `login/logout/refresh/settings_update` 事件，支持事件类型/时间范围/`session_id`/`task_id` 筛选、详情展开与 JSON/CSV 导出（可选“当前页/全部筛选结果”）
 - 会话鉴权：登录返回 `access_token + refresh_token + session_id`；退出时调用后端 `/api/auth/logout` 撤销当前会话 refresh token
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
