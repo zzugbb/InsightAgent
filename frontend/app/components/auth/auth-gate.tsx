@@ -1,7 +1,7 @@
 "use client";
 
 import { App, Button, Input, Spin, Tabs } from "antd";
-import { LogOut, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -81,6 +81,7 @@ export function AuthGate() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
   const resetUserScopedClientState = useCallback(() => {
@@ -210,15 +211,7 @@ export function AuthGate() {
   }
 
   if (status === "authenticated") {
-    return (
-      <div className={styles.workspaceShell}>
-        <button type="button" className={styles.logoutButton} onClick={handleLogout}>
-          <LogOut size={16} />
-          退出
-        </button>
-        <Workbench />
-      </div>
-    );
+    return <Workbench onLogout={handleLogout} />;
   }
 
   return (
@@ -226,21 +219,22 @@ export function AuthGate() {
       <section className={styles.heroArea}>
         <div className={styles.heroGlow} />
         <p className={styles.eyebrow}>INSIGHTAGENT</p>
-        <h1 className={styles.heroTitle}>可观测 Agent 工作台</h1>
+        <h1 className={styles.heroTitle}>可观测智能体工作台</h1>
         <p className={styles.heroDesc}>
-          聚焦对话、执行轨迹、RAG 与成本统计的一体化智能体工作台，让调试、观测与协作在一个界面内闭环。
+          聚焦对话、执行轨迹、RAG 与成本统计，把调试、观测与协作放到同一工作台，形成从对话到任务交付的闭环。
         </p>
         <ul className={styles.heroList}>
-          <li>SSE 实时流式 + Trace 可回放</li>
-          <li>Memory 与 RAG 双上下文能力</li>
-          <li>任务级 Token / Cost 可追踪</li>
+          <li>SSE 实时流式 + Trace 全链路回放</li>
+          <li>会话、任务、轨迹同屏联动</li>
+          <li>Memory 与 RAG 双上下文支撑</li>
+          <li>任务级 Token / Cost 全程可追踪</li>
         </ul>
       </section>
 
       <section className={styles.formArea}>
         <div className={styles.formHeader}>
           <ShieldCheck size={18} />
-          <span>登录账号</span>
+          <span>账号登录</span>
         </div>
 
         <Tabs
@@ -290,6 +284,17 @@ export function AuthGate() {
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             placeholder={mode === "register" ? "至少 8 位" : "输入账号密码"}
             value={password}
+            visibilityToggle={{
+              visible: passwordVisible,
+              onVisibleChange: setPasswordVisible,
+            }}
+            iconRender={(visible) =>
+              visible ? (
+                <Eye size={16} strokeWidth={2} className={styles.passwordEyeIcon} />
+              ) : (
+                <EyeOff size={16} strokeWidth={2} className={styles.passwordEyeIcon} />
+              )
+            }
             onChange={(event) => setPassword(event.target.value)}
             onPressEnter={() => {
               void handleSubmit();

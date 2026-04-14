@@ -2,7 +2,7 @@
 
 import { Button, Dropdown, Input, Modal, type MenuProps } from "antd";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { MoreHorizontal, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LogOut, MoreHorizontal, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { forwardRef, useCallback, useRef, useState } from "react";
 
 import { useMessages } from "../../../lib/preferences-context";
@@ -34,6 +34,7 @@ type SidebarProps = {
   sidebarCollapsed: boolean;
   onToggleSidebarCollapsed: () => void;
   onSidebarResizeStart: (event: React.MouseEvent) => void;
+  onLogout?: () => void;
 };
 
 export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
@@ -57,6 +58,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
     sidebarCollapsed,
     onToggleSidebarCollapsed,
     onSidebarResizeStart,
+    onLogout,
   },
   ref,
 ) {
@@ -305,6 +307,16 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
           </div>
 
           <div className="sidebar-footer">
+            {onLogout ? (
+              <button
+                type="button"
+                className="sidebar-logout-btn"
+                onClick={onLogout}
+              >
+                <LogOut size={16} strokeWidth={2} aria-hidden />
+                <span>{t.sidebar.logout}</span>
+              </button>
+            ) : null}
             <SidebarSettingsMenu />
           </div>
         </>

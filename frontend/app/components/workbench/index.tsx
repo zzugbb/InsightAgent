@@ -61,7 +61,11 @@ const TRACE_DELTA_SYNC_MAX_RETRY_EXP = 3;
 const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
 const TRACE_DELTA_FAST_DRAIN_MS = 180;
 
-export function Workbench() {
+type WorkbenchProps = {
+  onLogout?: () => void;
+};
+
+export function Workbench({ onLogout }: WorkbenchProps) {
   const t = useMessages();
   const { modal, message } = App.useApp();
   const queryClient = useQueryClient();
@@ -948,6 +952,7 @@ export function Workbench() {
         sidebarCollapsed={sidebarCollapsed}
         onToggleSidebarCollapsed={() => setSidebarCollapsed((c) => !c)}
         onSidebarResizeStart={onSidebarResizeStart}
+        onLogout={onLogout}
       />
 
       <ChatColumn

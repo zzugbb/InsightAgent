@@ -121,6 +121,7 @@ export const zh: Messages = {
     loading: "加载中…",
     empty: "还没有会话记录。",
     settingsButton: "设置",
+    logout: "退出登录",
     settingsMenuLabel: "菜单",
     menuTheme: "主题",
     menuAccent: "主题色",

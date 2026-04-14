@@ -123,6 +123,7 @@ export const en: Messages = {
     loading: "Loading…",
     empty: "No sessions yet.",
     settingsButton: "Settings",
+    logout: "Log out",
     settingsMenuLabel: "Menu",
     menuTheme: "Theme",
     menuAccent: "Accent color",

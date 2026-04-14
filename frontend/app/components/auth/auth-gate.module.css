@@ -119,6 +119,56 @@
   border-color: #c4d4df !important;
 }
 
+.formArea :global(.ant-input-affix-wrapper) {
+  background: #ffffff !important;
+  border-color: #c4d4df !important;
+}
+
+.formArea :global(.ant-input-suffix) {
+  color: #3f5f73 !important;
+}
+
+.formArea :global(.ant-input-password-icon) {
+  color: #3f5f73 !important;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.formArea :global(.ant-input-password-icon:hover) {
+  color: #0f766e !important;
+}
+
+.formArea :global(.ant-input-affix-wrapper:hover),
+.formArea :global(.ant-input:hover) {
+  border-color: #9bb6c6 !important;
+}
+
+.formArea :global(.ant-input-affix-wrapper-focused),
+.formArea :global(.ant-input:focus),
+.formArea :global(.ant-input-focused) {
+  border-color: #0f766e !important;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.16) !important;
+}
+
+.formArea :global(.ant-input:not(:placeholder-shown)),
+.formArea :global(.ant-input-password input:not(:placeholder-shown)) {
+  background: linear-gradient(180deg, #f7fbff 0%, #f3f8fd 100%) !important;
+  color: #0f2332 !important;
+}
+
+.formArea :global(.ant-input:-webkit-autofill),
+.formArea :global(.ant-input:-webkit-autofill:hover),
+.formArea :global(.ant-input:-webkit-autofill:focus),
+.formArea :global(.ant-input-password input:-webkit-autofill),
+.formArea :global(.ant-input-password input:-webkit-autofill:hover),
+.formArea :global(.ant-input-password input:-webkit-autofill:focus) {
+  -webkit-text-fill-color: #0f2332 !important;
+  box-shadow: 0 0 0 1000px #f3f8fd inset !important;
+  caret-color: #0f2332 !important;
+  transition: background-color 9999s ease-out 0s;
+}
+
 .formArea :global(.ant-input::placeholder) {
   color: #7b8f9f !important;
 }
@@ -148,39 +198,8 @@
   font-size: 0.86rem;
 }
 
-.workspaceShell {
-  position: relative;
-}
-
-.logoutButton {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--line-strong);
-  background: var(--panel-soft);
-  color: var(--text);
-  border-radius: 10px;
-  height: 38px;
-  padding: 0 12px;
-  line-height: 1;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
-}
-
-.logoutButton svg {
+.passwordEyeIcon {
   display: block;
-}
-
-.logoutButton:hover {
-  background: var(--surface-hover);
-  color: var(--muted-strong);
 }
 
 .loadingShell {
@@ -213,9 +232,5 @@
     border-left: 0;
     border-top: 1px solid rgba(16, 32, 45, 0.12);
     box-shadow: none;
-  }
-
-  .logoutButton {
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
   }
 }

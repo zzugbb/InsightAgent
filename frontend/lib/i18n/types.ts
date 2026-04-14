@@ -110,6 +110,8 @@ export type Messages = {
     empty: string;
     /** 左下角设置按钮 */
     settingsButton: string;
+    /** 左下角退出按钮 */
+    logout: string;
     settingsMenuLabel: string;
     menuTheme: string;
     /** 强调色 / 主色 */
