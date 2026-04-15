@@ -12,6 +12,7 @@ import {
   Settings2,
   ShieldCheck,
   Sun,
+  UserRound,
 } from "lucide-react";
 import {
   useCallback,
@@ -36,7 +37,15 @@ type SectionId = "theme" | "accent" | "language";
 type PopoverPos = { left: number; bottom: number; width: number };
 const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
 
-export function SidebarSettingsMenu() {
+type SidebarSettingsMenuProps = {
+  currentUser?: {
+    id: string;
+    email: string;
+    display_name?: string | null;
+  } | null;
+};
+
+export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
   const t = useMessages();
   const { theme, setTheme, primaryColor, setPrimaryColor, locale, setLocale } =
     usePreferences();
@@ -151,6 +160,10 @@ export function SidebarSettingsMenu() {
     locale === "zh" ? t.sidebar.langCurrentZh : t.sidebar.langCurrentEn;
 
   const primarySummary = primaryColor.toUpperCase();
+  const userPrimary =
+    currentUser?.display_name?.trim() ||
+    currentUser?.email ||
+    t.sidebar.currentUserUnknown;
 
   const popoverWidth = Math.max(popoverPos?.width ?? 0, 300);
 
@@ -168,6 +181,23 @@ export function SidebarSettingsMenu() {
         }}
         role="presentation"
       >
+        <div
+          className="settings-menu-row settings-menu-row--identity"
+          aria-label={t.sidebar.currentUserLabel}
+          role="status"
+        >
+          <UserRound size={18} strokeWidth={1.75} aria-hidden />
+          <span className="settings-menu-row-label">{t.sidebar.currentUserLabel}</span>
+          <span
+            className="settings-menu-row-value settings-menu-row-value--identity"
+            title={userPrimary}
+          >
+            {userPrimary}
+          </span>
+        </div>
+
+        <div className="settings-menu-divider" role="separator" />
+
         <div className="settings-accordion" role="list" aria-label={t.sidebar.settingsMenuLabel}>
           <div className="settings-accordion-item" role="listitem">
             <button

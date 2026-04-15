@@ -99,7 +99,7 @@ export function AuthGate() {
   const authMessages = messages.auth;
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>("checking");
-  const [, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -267,7 +267,7 @@ export function AuthGate() {
   }
 
   if (status === "authenticated") {
-    return <Workbench onLogout={handleLogout} />;
+    return <Workbench currentUser={user} onLogout={handleLogout} />;
   }
 
   const settingsContent = (

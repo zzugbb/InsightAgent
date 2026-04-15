@@ -3372,6 +3372,14 @@ code {
   background: var(--surface-hover);
 }
 
+.settings-menu-row--identity {
+  cursor: default;
+}
+
+.settings-menu-row--identity:hover {
+  background: transparent;
+}
+
 .settings-menu-row-label {
   flex: 1;
   min-width: 0;
@@ -3457,6 +3465,13 @@ code {
   max-width: 11em;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.settings-menu-row-value--identity {
+  max-width: 56%;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .settings-menu-subview--accent {

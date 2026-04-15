@@ -63,10 +63,15 @@ const TRACE_DELTA_FAST_DRAIN_MS = 180;
 const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
 
 type WorkbenchProps = {
+  currentUser?: {
+    id: string;
+    email: string;
+    display_name?: string | null;
+  } | null;
   onLogout?: () => void;
 };
 
-export function Workbench({ onLogout }: WorkbenchProps) {
+export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const t = useMessages();
   const { modal, message } = App.useApp();
   const queryClient = useQueryClient();
@@ -979,6 +984,7 @@ export function Workbench({ onLogout }: WorkbenchProps) {
         sidebarCollapsed={sidebarCollapsed}
         onToggleSidebarCollapsed={() => setSidebarCollapsed((c) => !c)}
         onSidebarResizeStart={onSidebarResizeStart}
+        currentUser={currentUser}
         onLogout={onLogout}
       />
 

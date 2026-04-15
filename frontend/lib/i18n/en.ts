@@ -160,6 +160,8 @@ export const en: Messages = {
     creating: "Creating…",
     loading: "Loading…",
     empty: "No sessions yet.",
+    currentUserLabel: "Signed in as",
+    currentUserUnknown: "Unknown user",
     settingsButton: "Settings",
     logout: "Log out",
     settingsMenuLabel: "Menu",

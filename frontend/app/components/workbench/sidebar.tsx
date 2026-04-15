@@ -34,6 +34,11 @@ type SidebarProps = {
   sidebarCollapsed: boolean;
   onToggleSidebarCollapsed: () => void;
   onSidebarResizeStart: (event: React.MouseEvent) => void;
+  currentUser?: {
+    id: string;
+    email: string;
+    display_name?: string | null;
+  } | null;
   onLogout?: () => void;
 };
 
@@ -58,6 +63,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
     sidebarCollapsed,
     onToggleSidebarCollapsed,
     onSidebarResizeStart,
+    currentUser,
     onLogout,
   },
   ref,
@@ -317,7 +323,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                 <span>{t.sidebar.logout}</span>
               </button>
             ) : null}
-            <SidebarSettingsMenu />
+            <SidebarSettingsMenu currentUser={currentUser} />
           </div>
         </>
       )}

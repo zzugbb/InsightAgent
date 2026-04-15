@@ -157,6 +157,8 @@ export const zh: Messages = {
     creating: "创建中…",
     loading: "加载中…",
     empty: "还没有会话记录。",
+    currentUserLabel: "当前登录用户",
+    currentUserUnknown: "未知用户",
     settingsButton: "设置",
     logout: "退出登录",
     settingsMenuLabel: "菜单",

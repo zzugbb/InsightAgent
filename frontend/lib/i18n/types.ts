@@ -142,6 +142,8 @@ export type Messages = {
     creating: string;
     loading: string;
     empty: string;
+    currentUserLabel: string;
+    currentUserUnknown: string;
     /** 左下角设置按钮 */
     settingsButton: string;
     /** 左下角退出按钮 */
