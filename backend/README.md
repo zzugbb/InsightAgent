@@ -44,6 +44,7 @@
 - W3 优化：新增本地计算器工具 `calc_eval`（支持 `[calc:1+2*3]` 与“计算 1+2*3”触发），纳入统一工具生命周期事件
 - W1 优化：新增 `POST /api/settings/validate`，用于设置保存前的结构/连通性预校验（不落库）
 - W1 优化补强：`settings/validate` 在 `HEAD` 失败时自动回退 `GET`，减少远端网关不支持 HEAD 时的误判
+- W1 预检修复：`settings/validate` 的远端探测请求补充 `Authorization` 头；`401/403` 返回 `remote_api_key_unauthorized`（不再归类为 network error）
 - W1 设置语义收口：`remote` 模式下 `api_key` 留空即视为清空，不再沿用历史密钥
 - W1 能力补齐：`remote` 模式已接入 OpenAI-compatible provider（`base_url + api_key + model`）
 - W1 接口校验补齐：`remote` 模式 `provider/model/base_url` 必填；`api_key` 在未配置历史密钥时必填，已配置时可留空沿用
