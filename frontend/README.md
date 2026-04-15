@@ -174,16 +174,20 @@ npm run dev
 
 ### 优先做
 
-1. 用户登录态与权限感知 UI（与后端鉴权联动）。
-   - 当前状态：`full-data-auth` 首版联动已完成（Auth Gate + token 注入 + 401 自动回登录），后续补权限细粒度 UI 与受限能力显隐策略。
-2. 历史会话/任务回放与导出体验（突出可观测卖点）。
-3. 成本治理可视化（按用户/会话统计，配额/告警提示）。
-4. 关键 e2e（登录、任务流、Trace 回放、RAG 检索）。
+1. `full-trace-session-lite`：任务详情抽屉/页面，展示 prompt、最终回答、Trace、RAG 命中、usage 与错误摘要。
+2. `trace-export-json-md`：单任务 JSON/Markdown 导出入口。
+3. `session-export-lite`：当前会话消息、任务摘要与 Trace 片段导出。
+4. `remote-provider-hardening`：真实模型错误提示、重试建议与设置入口联动。
+5. `e2e-main-path`：登录、模型设置、发送消息、Trace 回放、RAG 检索、导出主路径。
+6. `task-cancel-timeout`：运行中取消/超时 UI 与状态反馈。
+7. `rag-kb-governance-lite`：知识库列表、清空/删除、来源展示。
+8. `usage-dashboard-lite`：用户/会话/任务维度成本统计增强。
 
 ### 暂不做
 
 1. 大规模 UI 重构或炫技动效重写（当前可用性已满足演示）。
 2. 过早做复杂多模型编排面板（先把稳定性与治理打牢）。
+3. PDF/视频/GIF 自动导出（先用 JSON/Markdown 导出服务回放与演示）。
 
 ### 部署建议
 
@@ -192,8 +196,6 @@ npm run dev
 
 ## 下一步（W4+）
 
-- 配合后端把当前 mock `tool_start/tool_end` 升级为真实工具执行与失败重试可视化
-- 在真实工具接入阶段复用当前 `retry_count/error` 字段语义，减少前端重构
-- 继续完善 usage/token/cost 的统计维度（跨会话/时间段聚合）
-- 持续优化流式回放体验（参数级调优与性能提升）
-- 继续做不阻塞主链路的可访问性与交互细化
+- 下一步从历史任务详情/Trace 回放开始，先补可回放产品闭环。
+- 随后补 JSON/Markdown 导出、会话导出与 remote 错误体验。
+- P0 完成后再推进任务取消/超时、RAG 知识库治理与 usage 统计增强。

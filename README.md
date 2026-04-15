@@ -197,21 +197,19 @@ docker compose -f compose.full.yml up -d
 
 ## 后续阶段最终决策（定位 / 面试 / 单 Mac / 部署）
 
-### 必须做（建议按顺序）
+### 后续开发总路线（建议按优先级）
 
-1. `full-data-auth`：已完成首版 + 最小会话管理（用户体系 + JWT/API 鉴权 + refresh 轮换 + 会话撤销 + 凭证加密存储）+ 最小审计（login/logout/refresh/settings_update），后续补更细粒度权限。
-2. `full-trace-session`：Trace 与消息结构化持久化、历史任务检索、导出/复用会话。
-3. `full-agent-scale`（轻量版）：进程内队列、并发上限、任务取消、超时控制。
-4. `full-rag-governance`（MVP）：知识库上传/删除/版本与重建索引，来源追踪。
-5. `full-qa-ops`（基础版）：后端 pytest、关键 e2e、CI 自动校验（当前已补最小 e2e 基线脚本：`backend/scripts/e2e_baseline.py`）。
-6. 成本治理：按用户/会话统计 token/cost，提供简单配额或告警。
+1. P0：历史任务详情与 Trace 回放、Trace/任务 JSON + Markdown 导出、会话级导出、remote provider 错误体验收口、最小 e2e 主链路。
+2. P1：任务取消与超时、运行中任务恢复、RAG 知识库最小治理、usage 统计增强、审计事件补充。
+3. P2：provider 官方 usage 对齐、轻量 RBAC、实验性 Trace step 重跑、生产部署 Runbook、Playwright e2e。
 
-### 现阶段不建议做
+### 当前明确暂缓
 
-1. Redis/Kafka/Celery 分布式队列（当前规模用进程内队列即可）。
+1. Redis/Kafka/Celery 分布式队列（当前规模用进程内取消/超时/并发上限即可）。
 2. Kubernetes、微服务拆分、服务网格（复杂度明显高于收益）。
-3. 复杂多跳 RAG 与大规模重排体系（先完成治理与稳定性）。
-4. 企业级 SSO/RBAC 全套（保留接口占位，按真实需求再上）。
+3. 企业级 SSO/RBAC 全套（保留扩展位，先做轻量 RBAC）。
+4. 复杂多模型编排面板、复杂多跳 RAG、大规模重排体系（先完成稳定性与治理闭环）。
+5. 大规模 UI 重构、PDF/视频/GIF 自动导出（先用当前 UI + JSON/Markdown 导出满足演示与复盘）。
 
 ### 部署策略（结合单 Mac 开发 + 后续正式部署）
 
@@ -222,8 +220,6 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步（W4+）
 
-- `full-data-auth` 首版已完成，下一阶段聚焦细粒度权限与安全治理（设备会话风控、审计字段标准化）
-- 真实工具调用与错误/重试语义（生产化，从当前 mock 语义升级）
-- 继续扩展更多 OpenAI-compatible 厂商与 provider 官方 usage 对齐
-- 多知识库治理（版本、删除、权限）与更复杂 RAG 策略
-- usage / token / cost 展示继续完善（如跨会话历史趋势）
+- 从 `full-trace-session-lite` 开始：历史任务详情、Trace 回放、JSON/Markdown 导出。
+- 随后补 `session-export-lite` 与 `remote-provider-hardening`，把演示闭环和真实模型联调体验打稳。
+- 再推进 `task-cancel-timeout`、`rag-kb-governance-lite`、`usage-dashboard-lite`。

@@ -250,18 +250,21 @@ docker compose up -d chroma
 
 ### 优先做
 
-1. `full-data-auth`：用户模型、JWT/API 鉴权、refresh 会话管理、凭证加密存储。
-   - 当前状态：首版已完成（含最小审计与用户数据隔离）；后续补细粒度权限、凭证轮换策略与安全基线加固。
-2. `full-trace-session`：任务/Trace 结构化持久化、历史检索、导出复用。
-3. `full-agent-scale`（轻量）：进程内队列 + 并发上限 + 取消/超时。
-4. `full-rag-governance`（MVP）：知识库上传/删除/版本与索引重建。
-5. `full-qa-ops`（基础）：pytest + e2e + CI。
+1. `full-trace-session-lite`：提供任务详情读取/导出所需字段，稳定 Trace 回放契约。
+2. `trace-export-json-md`：后端提供单任务 JSON/Markdown 导出接口或导出数据结构。
+3. `session-export-lite`：聚合会话消息、任务摘要、usage 与 Trace 片段。
+4. `remote-provider-hardening`：统一远端 401/403、网络错误、SSE 中断、空响应与 JSON 异常错误码。
+5. `e2e-main-path`：保持登录、模型配置、任务流、Trace、RAG、导出主链路可验证。
+6. `task-cancel-timeout`：P0 后加入单进程取消、超时与状态落库。
+7. `rag-kb-governance-lite`：知识库列表、清空/删除 collection、来源展示。
+8. `usage-dashboard-lite` / `audit-event-expansion`：补用户/会话/任务维度统计与关键事件审计。
 
 ### 暂不做
 
 1. Redis/Kafka/Celery 分布式队列（当前规模不需要）。
 2. K8s / 微服务拆分（对当前阶段收益低）。
-3. 复杂多跳 RAG 与重排体系（先把治理与稳定性做扎实）。
+3. 复杂多跳 RAG 与重排体系（先把最小治理与导出复盘做扎实）。
+4. 企业级 SSO/RBAC 全套（保留扩展位，先做轻量 RBAC）。
 
 ## 当前限制（W4 生产化前）
 
