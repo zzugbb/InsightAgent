@@ -45,6 +45,7 @@ type ChatColumnProps = {
   apiBanner: string | null;
   onDismissBanner: () => void;
   sessionMessages: SessionMessage[];
+  pendingUserInput: string;
   messagesLoading: boolean;
   messagesMessage: string;
   sseTokens: string;
@@ -82,6 +83,7 @@ export function ChatColumn({
   apiBanner,
   onDismissBanner,
   sessionMessages,
+  pendingUserInput,
   messagesLoading,
   messagesMessage,
   sseTokens,
@@ -117,12 +119,25 @@ export function ChatColumn({
     Boolean(activeSessionId) &&
     !messagesLoading &&
     !hasHistory &&
-    !sseTokens;
+    !sseTokens &&
+    !pendingUserInput.trim();
   const sessionLabel = activeSession
     ? getSessionLabel(activeSession, t.workbench)
     : t.chat.newChatTitle;
 
   const streamFailed = ssePhase === "error" && !isStreaming && Boolean(sseTokens);
+  const showLiveAssistant = Boolean(sseTokens) && (isStreaming || streamFailed);
+  const showPendingUser = (() => {
+    const pending = pendingUserInput.trim();
+    if (!pending) {
+      return false;
+    }
+    const last = sessionMessages.at(-1);
+    if (!last) {
+      return true;
+    }
+    return !(last.role === "user" && last.content.trim() === pending);
+  })();
 
   const stageRef = useRef<HTMLElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -179,7 +194,7 @@ export function ChatColumn({
   }, []);
 
   const hasScrollableFeed =
-    !showSessionLoading && (hasHistory || Boolean(sseTokens));
+    !showSessionLoading && (hasHistory || showPendingUser || showLiveAssistant);
   const showScrollFab = hasScrollableFeed && !pinnedToBottom;
 
   function renderMessageRow(message: SessionMessage, index: number) {
@@ -342,7 +357,7 @@ export function ChatColumn({
           </div>
         ) : null}
 
-        {!showSessionLoading && (hasHistory || sseTokens) ? (
+        {!showSessionLoading && (hasHistory || showPendingUser || showLiveAssistant) ? (
           <div ref={feedRef} className="message-feed">
             {useMsgVirtual ? (
               <div
@@ -374,7 +389,25 @@ export function ChatColumn({
               sessionMessages.map((m, i) => renderMessageRow(m, i))
             )}
 
-            {sseTokens ? (
+            {showPendingUser ? (
+              <article className="message-row user pending">
+                <div className="avatar" aria-hidden>
+                  {t.roles.user}
+                </div>
+                <div className="message-card">
+                  <div className="message-card-body">
+                    <p className="message-plain">{pendingUserInput.trim()}</p>
+                  </div>
+                  <footer className="message-card-foot message-card-foot--live">
+                    <span className="message-live-status">
+                      {t.chat.streamOutputting}
+                    </span>
+                  </footer>
+                </div>
+              </article>
+            ) : null}
+
+            {showLiveAssistant ? (
               <article
                 className={`message-row assistant live${streamFailed ? " message-row--failed" : ""}`}
               >
@@ -432,7 +465,7 @@ export function ChatColumn({
           </div>
         ) : null}
 
-        {!showSessionLoading && (hasHistory || sseTokens) ? (
+        {!showSessionLoading && (hasHistory || showPendingUser || showLiveAssistant) ? (
           <p className="message-stage-footnote">{messagesMessage}</p>
         ) : null}
       </section>

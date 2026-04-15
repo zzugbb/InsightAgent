@@ -39,6 +39,7 @@
 - 协同进展：模型设置弹窗提示改为 antd 上下文 `message`（通过 `App.useApp()`），消除动态主题下静态 message 警告
 - 协同进展：模型设置切换到 `mock` 后保存会显式清空 `api_key/base_url`，避免历史 remote 凭证残留
 - 协同进展：当已保存 `remote` 配置时，前端切换回 `remote` 会回显后端已存 `provider/model/base_url`
+- 协同进展：前端聊天区已修复“发送消息不即时显示 + assistant 重复显示”问题（用户消息乐观显示，流式回复仅在生成中/失败态展示）
 - 状态增强：`/api/tasks*` 响应已补充 `status_normalized`、`status_label`、`status_rank`，统一状态语义并保持向后兼容
 - W3 增量：mock 工具链路支持可复现错误语义（`[mock-tool-error]` 可恢复重试，`[mock-tool-fatal]` 致命失败），`tool_end/error/trace.meta.tool` 已输出 `retry_count/error`
 - W3 优化：新增本地计算器工具 `calc_eval`（支持 `[calc:1+2*3]` 与“计算 1+2*3”触发），纳入统一工具生命周期事件

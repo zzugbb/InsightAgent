@@ -990,6 +990,7 @@ export function Workbench({ onLogout }: WorkbenchProps) {
         apiBanner={bannerError}
         onDismissBanner={() => setBannerError(null)}
         sessionMessages={sessionMessages}
+        pendingUserInput={isStreaming ? lastSentPromptRef.current : ""}
         messagesLoading={messagesLoading}
         messagesMessage={messagesMessage}
         sseTokens={sseTokens}

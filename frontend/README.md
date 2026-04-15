@@ -42,6 +42,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 模型设置提示修复：改用 `App.useApp().message` 显示保存/校验结果，避免 Ant Design 静态 message 主题上下文告警
 - 模型设置展示优化：元信息区 `base_url/database` 改为普通文本展示；切换到 `mock` 时清空当前编辑态并在保存后清空远端凭证
 - 模型设置回显修复：若后端当前已保存为 `remote`，切换回 `remote` 时会回显已保存 `provider/model/base_url`
+- 聊天消息显示修复：发送后立即显示用户临时消息；assistant 流式消息仅在生成中/失败态显示，避免与落库历史消息重复
 - 会话鉴权：登录返回 `access_token + refresh_token + session_id`；退出时调用后端 `/api/auth/logout` 撤销当前会话 refresh token
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
 - 会话命名体验：空会话在首条消息发送后会自动改名为消息前缀（后端规则驱动）
