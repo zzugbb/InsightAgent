@@ -1,6 +1,6 @@
 # Backend
 
-基于 FastAPI 的 Agent 后端，当前以 `mock` 模式优先，覆盖任务流、轨迹、会话持久化与会话级 Memory。
+基于 FastAPI 的 Agent 后端，当前以 `mock` 模式作为默认演示路径，同时支持 OpenAI-compatible `remote` 模式；覆盖任务流、轨迹、PostgreSQL 会话持久化、用户级鉴权、Memory 与 RAG。
 
 ## 当前进度
 
@@ -11,7 +11,7 @@
 - 阶段 5 增量：`full-data-auth` 首版已落地（JWT、用户隔离、用户级设置与密钥加密存储）
 - 阶段 5 增量：最小会话管理已落地（refresh token 轮换、会话查询/撤销、退出当前/全部会话）
 - 阶段 5 增量：最小审计已落地（`login/logout/refresh/settings_update` 事件写入 `audit_logs`）
-- 阶段 5 增量：PostgreSQL 迁移主线已启动（后端运行时已收敛为 PostgreSQL + 平迁脚本）
+- 阶段 5 增量：PostgreSQL 迁移主线已完成运行时收敛（后端运行时使用 PostgreSQL + 保留平迁脚本）
 - 阶段 5 排查修复（2026-04-14）：修复 PostgreSQL 下 `POST /api/tasks` 的 `CASE WHEN` 参数类型错误（smallint -> boolean），恢复消息发送链路
 - 阶段 5 排查补充：已复核 `sessions/tasks/messages/settings/rag` 查询与写入路径，核心数据均按 `user_id` 隔离
 - 会话命名补充：空会话在首条消息发送时，若仍为占位标题则自动改为首条消息前缀
@@ -32,9 +32,7 @@
 - 协同进展：前端右侧 Inspector 已完成一体化收口（Trace 密度、Context 快速跳转、状态徽标），均基于现有字段推导，无需新增后端接口
 - 协同进展：前端左侧与中栏已完成风格收口（导航层级、runtime strip、输入区动效与密度），继续复用现有接口与字段
 - 协同进展：前端已按最新交互要求收敛头部占位（移除会话状态胶囊与输入计数提示），继续复用现有接口与字段
-- 协同进展：前端侧栏左下角已新增“当前登录用户”信息卡片（昵称/邮箱展示），帮助确认当前账号上下文
-- 协同进展：前端将用户信息展示融合到左下角“设置”弹窗顶部，移除外层独立卡片，降低侧栏视觉干扰
-- 协同进展：前端将用户信息样式收口为设置行风格（图标 + 标题 + 值），与主题/主题色/语言保持一致
+- 协同进展：前端侧栏账户展示已收口到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的设置行风格（图标 + 标题 + 值）
 - 协同进展：前端流式状态提示已完成 i18n 化（去除硬编码英文，按语言动态切换），后端接口契约无需调整
 - 协同进展：前端 store 默认流式文案改为复用 `en.stream`，减少文案漂移风险，后端契约保持不变
 - 协同进展：模型设置弹窗元信息补充 `base_url` 展示，并在 `remote` 模式下增加 OpenAI-compatible 协议提示，前后端设置契约保持不变
@@ -49,7 +47,7 @@
 - W1 优化：新增 `POST /api/settings/validate`，用于设置保存前的结构/连通性预校验（不落库）
 - W1 优化补强：`settings/validate` 在 `HEAD` 失败时自动回退 `GET`，减少远端网关不支持 HEAD 时的误判
 - W1 预检修复：`settings/validate` 的远端探测请求补充 `Authorization` 头；`401/403` 返回 `remote_api_key_unauthorized`（不再归类为 network error）
-- W1 设置语义收口：`remote` 模式下 `api_key` 留空即视为清空，不再沿用历史密钥
+- W1 设置语义收口：`remote` 模式下 `api_key` 留空沿用历史密钥（首次配置仍必填）
 - W1 能力补齐：`remote` 模式已接入 OpenAI-compatible provider（`base_url + api_key + model`）
 - W1 接口校验补齐：`remote` 模式 `provider/model/base_url` 必填；`api_key` 在未配置历史密钥时必填，已配置时可留空沿用
 - W1 接口收口：`POST /api/settings/validate` 新增 `error_code`，并补充 `remote_base_url_required`
@@ -68,7 +66,7 @@
 
 - `app/config.py`：统一配置读取
 - `app/schemas/trace.py`：`TraceStep` / `TraceStepMeta` 与解析校验
-- `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`settings`、`rag`
+- `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`settings`、`rag`、`audit`
 - `app/db.py`：PostgreSQL 连接、初始化与索引
 - 新增 `auth_sessions` 表：refresh token 哈希持久化、会话过期/撤销管理
 - 新增 `audit_logs` 表：最小审计事件持久化（`event_type` + `event_detail_json`）
@@ -76,6 +74,10 @@
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
 - 流式阶段已支持最终 `observation` 的批次增量持久化（`seq` 递增，默认每 8 个 chunk 落库一次 + 结束兜底）
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
+- `app/services/chroma_rag_service.py`：用户级 RAG collection 命名、ingest/query/status
+- `app/services/settings_service.py`：用户级模型设置读取/保存与 `api_key` 加密解密
+- `app/services/auth_service.py` / `auth_session_service.py`：用户认证、access token、refresh token 轮换与会话撤销
+- `app/services/audit_service.py`：审计事件写入、分页查询与筛选
 - `tasks.usage_json`：任务完成时持久化 `done.usage`（前端可用于任务列表摘要展示）
 
 ## HTTP 接口（摘要）

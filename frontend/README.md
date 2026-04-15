@@ -1,6 +1,6 @@
 # Frontend
 
-Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agent 工作台前端。
+Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React Flow 的 Agent 工作台前端。
 
 ## 当前进度
 
@@ -17,16 +17,18 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 阶段 5 细化（继续）：移除“当前用户：未登录”提示、注册邮箱格式前置校验（替代 422 生硬报错）、登录输入 autofill/已填充态样式优化并适配浅色表单
 - 阶段 5 文案收口：登录页左侧说明融合主页叙事（可观测智能体、对话到任务闭环），并补回 SSE/Trace、Memory/RAG、Token/Cost 等关键信息点
 - 阶段 5 交互修复：登录密码框显隐图标恢复可见与可点击（支持显示/隐藏切换）
-- 阶段 5 协同：后端 PostgreSQL 迁移主线已启动（本轮前端页面无新增），为后续 auth e2e 打基础
+- 阶段 5 协同：后端 PostgreSQL 迁移主线已完成运行时收敛（前端请求统一通过鉴权 API 访问用户级数据）
 - 阶段 5 联调排障（2026-04-14）：定位“发会话消息无响应”为后端 `POST /api/tasks` 返回 500（PostgreSQL SQL 类型兼容），后端修复后前端发送与流式恢复
 - 阶段 5 国际化补齐：登录页（Auth Gate）接入 i18n，新增 `auth` 文案分组并覆盖中英文登录/注册全链路文案
 - 阶段 5 体验补齐：登录页新增轻量设置模块（语言/主题/主题色），并完成登录页样式对深浅主题与主题色的联动适配
 - 阶段 5 鉴权增强：接入 refresh token 持久化与自动刷新；401 优先尝试 `/api/auth/refresh` 轮换后重试，失败再回登录
+- 阶段 5 账户可见性收口：当前登录用户展示已融合到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的“图标 + 标题 + 值”行样式
+- 阶段 5 聊天显示修复：发送后立即展示用户临时消息；assistant 流式卡片仅在生成中/失败态显示，避免切回会话前看到重复回复
 
 ## 当前已有内容
 
 - 三栏布局：会话、消息、轨迹/上下文
-- Auth Gate：登录/注册、登录态校验、401 自动失效处理；退出入口融合到侧栏左下角设置区
+- Auth Gate：登录/注册、登录态校验、401 优先 refresh token 轮换并重试；刷新失败后自动回登录；退出入口融合到侧栏左下角设置区
 - 登录后默认策略：直接进入 Workbench；运行模式由设置决定，`remote` 配置不完整会被前端阻断并提示
 - 审计入口迁移到左下角设置菜单（独立子页）：查看 `login/logout/refresh/settings_update` 事件，支持事件类型/时间范围/`session_id`/`task_id` 筛选、详情展开与 JSON/CSV 导出（可选“当前页/全部筛选结果”）
 - 审计页交互收口：改为分页表格主视图；筛选改为双行下拉+输入检索并统一控件尺寸（支持一键重置）；事件类型标签化；总数下置表格左下角、操作区右对齐；会话/任务恢复 ID 展示，并恢复行展开查看明细（无二次展开，分页默认每页 10 条）
@@ -45,9 +47,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 聊天消息显示修复：发送后立即显示用户临时消息；assistant 流式消息仅在生成中/失败态显示，避免与落库历史消息重复
 - 会话鉴权：登录返回 `access_token + refresh_token + session_id`；退出时调用后端 `/api/auth/logout` 撤销当前会话 refresh token
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
-- 侧栏账户可见性增强：左下角新增“当前登录用户”卡片，展示当前账号昵称/邮箱，便于确认当前登录身份
-- 侧栏账户展示收口：用户信息已融合到左下角“设置”弹窗顶部展示（昵称/邮箱），不再独立占用设置区外层空间
-- 侧栏账户样式收口：用户信息改为与“主题/主题色/语言”同款行样式（图标 + 标题 + 值）展示，视觉层级更统一
+- 侧栏账户展示收口：用户信息已融合到左下角“设置”弹窗顶部，并采用与“主题/主题色/语言”同款行样式（图标 + 标题 + 值）展示，便于确认当前登录身份
 - 会话命名体验：空会话在首条消息发送后会自动改名为消息前缀（后端规则驱动）
 - 会话：创建、切换、分页加载、重命名、删除
 - 轨迹：时间线与流程图双视图（thought/action/observation/tool/rag 区分）
@@ -97,9 +97,15 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - `app/components/workbench/index.tsx`：工作台主编排
 - `app/components/workbench/inspector.tsx`：轨迹与上下文面板
 - `app/components/workbench/trace-flow-view.tsx`：轨迹流程图节点渲染
+- `app/components/workbench/chat-column.tsx`：消息历史、用户临时消息与流式 assistant 展示
+- `app/components/workbench/sidebar.tsx`：会话列表、折叠侧栏与设置入口
+- `app/components/workbench/sidebar-settings-menu.tsx`：主题/主题色/语言、当前登录用户、模型设置与审计入口
+- `app/components/workbench/model-settings-modal.tsx`：mock/remote 模型设置、校验与保存
+- `app/components/workbench/audit-logs-modal.tsx`：审计日志筛选、分页、展开与导出
 - `lib/stores/chat-stream-store.ts`：SSE 事件分发与 trace 状态
 - `lib/types/trace.ts`：前端 TraceStep 类型
-- `lib/api-client.ts`：REST 请求封装
+- `lib/api-client.ts`：REST 请求封装、Bearer 注入、refresh token 自动续期与 401 失效广播
+- `lib/preferences-context.tsx` / `lib/i18n/*`：主题、主题色、语言与中英文文案
 - `app/components/auth/auth-gate.tsx`：登录/注册页与鉴权网关
 
 ## SSE 消费与契约对齐
@@ -134,8 +140,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 状态：`GET /api/rag/status?knowledge_base_id=...`
 - 写入：`POST /api/rag/ingest`
 - 检索：`POST /api/rag/query`
-- 默认知识库：`default`（对应 collection：`kb_default`）
-- 后端落库会按用户隔离：`kb_{user_hash}_{knowledge_base_id}`
+- 默认知识库 ID：`default`
+- 实际 collection：`kb_{user_hash}_{knowledge_base_id}`；默认知识库在当前用户下对应 `kb_{user_hash}_default`
 
 ## PostgreSQL / Memory / RAG 怎么看（前端通俗版）
 
