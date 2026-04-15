@@ -459,8 +459,11 @@ export type Messages = {
     validating: string;
     validatePass: string;
     validateFail: string;
-    apiKeyConfiguredKeep: string;
-    apiKeyOptionalMock: string;
+    saveSuccess: string;
+    saveFail: string;
+    requiredSuffix: string;
+    apiKeyConfiguredClear: string;
+    apiKeyRemoteRequired: string;
     metaProvider: string;
     metaModel: string;
     metaBaseUrl: string;

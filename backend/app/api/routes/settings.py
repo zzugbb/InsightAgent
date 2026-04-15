@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -43,11 +44,16 @@ class SettingsUpdateRequest(BaseModel):
         if self.mode not in {"mock", "remote"}:
             raise ValueError("mode must be either 'mock' or 'remote'")
 
-        if not self.provider:
-            raise ValueError("provider is required")
+        if self.mode == "mock":
+            self.provider = "mock"
+            self.model = "mock-gpt"
+            self.base_url = None
+            self.api_key = None
 
         if not self.model:
             raise ValueError("model is required")
+        if not self.provider:
+            raise ValueError("provider is required")
 
         return self
 
@@ -72,6 +78,43 @@ class SettingsValidateResponse(BaseModel):
     error_code: str | None = None
 
 
+def _build_preflight_response(
+    *,
+    status_code: int,
+    mode: str,
+    provider: str,
+    model: str,
+    success_message: str,
+) -> SettingsValidateResponse:
+    if status_code in {401, 403}:
+        return SettingsValidateResponse(
+            ok=False,
+            mode=mode,
+            provider=provider,
+            model=model,
+            message="remote preflight failed.",
+            error=f"HTTP {status_code}: unauthorized, please verify api_key and base_url",
+            error_code="remote_api_key_unauthorized",
+        )
+    if 200 <= status_code < 500:
+        return SettingsValidateResponse(
+            ok=True,
+            mode=mode,
+            provider=provider,
+            model=model,
+            message=success_message,
+        )
+    return SettingsValidateResponse(
+        ok=False,
+        mode=mode,
+        provider=provider,
+        model=model,
+        message="remote preflight failed.",
+        error=f"unexpected status: {status_code}",
+        error_code="remote_base_url_unexpected_status",
+    )
+
+
 @router.get("", response_model=SettingsSummaryResponse)
 def get_settings_summary(current_user: dict = Depends(get_current_user)) -> SettingsSummaryResponse:
     user_id = str(current_user["id"])
@@ -94,8 +137,12 @@ def update_settings(
 ) -> SettingsSummaryResponse:
     user_id = str(current_user["id"])
     existing = get_stored_settings(user_id)
-    effective_api_key = payload.api_key or existing.api_key
-    effective_base_url = payload.base_url or existing.base_url
+    if payload.mode == "mock":
+        effective_api_key = None
+        effective_base_url = None
+    else:
+        effective_api_key = payload.api_key or existing.api_key
+        effective_base_url = payload.base_url
     if payload.mode == "remote" and not effective_api_key:
         raise HTTPException(
             status_code=422,
@@ -147,7 +194,7 @@ def validate_settings(
     user_id = str(current_user["id"])
     existing = get_stored_settings(user_id)
     effective_api_key = payload.api_key or existing.api_key
-    effective_base_url = payload.base_url or existing.base_url
+    effective_base_url = payload.base_url
     if payload.mode == "remote" and not effective_api_key:
         return SettingsValidateResponse(
             ok=False,
@@ -191,60 +238,58 @@ def validate_settings(
                 error_code="remote_base_url_invalid",
             )
 
+        headers: dict[str, str] = {}
+        if effective_api_key:
+            headers["Authorization"] = f"Bearer {effective_api_key}"
+        head_error: Exception | None = None
+
         try:
-            request = Request(effective_base_url, method="HEAD")
-            with urlopen(request, timeout=3) as response:
-                status_code = int(getattr(response, "status", 0))
-                if 200 <= status_code < 500:
-                    return SettingsValidateResponse(
-                        ok=True,
-                        mode=payload.mode,
-                        provider=payload.provider,
-                        model=payload.model,
-                        message="remote preflight succeeded.",
-                    )
-                return SettingsValidateResponse(
-                    ok=False,
-                    mode=payload.mode,
-                    provider=payload.provider,
-                    model=payload.model,
-                    message="remote preflight failed.",
-                    error=f"unexpected status: {status_code}",
-                    error_code="remote_base_url_unexpected_status",
-                )
-        except Exception as exc:
-            # 某些网关/服务禁用 HEAD，回退 GET 以减少误判
+            request = Request(effective_base_url, method="HEAD", headers=headers)
             try:
-                fallback = Request(effective_base_url, method="GET")
+                with urlopen(request, timeout=3) as response:
+                    status_code = int(getattr(response, "status", 0))
+            except HTTPError as exc:
+                status_code = int(exc.code)
+            head_result = _build_preflight_response(
+                status_code=status_code,
+                mode=payload.mode,
+                provider=payload.provider,
+                model=payload.model,
+                success_message="remote preflight succeeded.",
+            )
+            if head_result.ok or head_result.error_code == "remote_api_key_unauthorized":
+                return head_result
+        except URLError as exc:
+            head_error = exc
+        except Exception as exc:  # noqa: BLE001
+            head_error = exc
+
+        # 某些网关/服务禁用 HEAD，回退 GET 以减少误判
+        try:
+            fallback = Request(effective_base_url, method="GET", headers=headers)
+            try:
                 with urlopen(fallback, timeout=3) as response:
                     status_code = int(getattr(response, "status", 0))
-                    if 200 <= status_code < 500:
-                        return SettingsValidateResponse(
-                            ok=True,
-                            mode=payload.mode,
-                            provider=payload.provider,
-                            model=payload.model,
-                            message="remote preflight succeeded (GET fallback).",
-                        )
-                    return SettingsValidateResponse(
-                        ok=False,
-                        mode=payload.mode,
-                        provider=payload.provider,
-                        model=payload.model,
-                        message="remote preflight failed.",
-                        error=f"unexpected status: {status_code}",
-                        error_code="remote_base_url_unexpected_status",
-                    )
-            except Exception as fallback_exc:
-                return SettingsValidateResponse(
-                    ok=False,
-                    mode=payload.mode,
-                    provider=payload.provider,
-                    model=payload.model,
-                    message="remote preflight failed.",
-                    error=f"{exc}; fallback_get={fallback_exc}",
-                    error_code="remote_preflight_network_error",
-                )
+            except HTTPError as exc:
+                status_code = int(exc.code)
+            return _build_preflight_response(
+                status_code=status_code,
+                mode=payload.mode,
+                provider=payload.provider,
+                model=payload.model,
+                success_message="remote preflight succeeded (GET fallback).",
+            )
+        except Exception as fallback_exc:  # noqa: BLE001
+            base_error = head_error if head_error is not None else "head request failed"
+            return SettingsValidateResponse(
+                ok=False,
+                mode=payload.mode,
+                provider=payload.provider,
+                model=payload.model,
+                message="remote preflight failed.",
+                error=f"{base_error}; fallback_get={fallback_exc}",
+                error_code="remote_preflight_network_error",
+            )
 
     return SettingsValidateResponse(
         ok=True,

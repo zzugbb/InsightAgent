@@ -35,6 +35,12 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand 的 Agen
 - 模型设置弹窗回显修复：解决打开弹窗时默认值覆盖后端配置导致显示 `mock` 的问题
 - 模型设置弹窗优化：下方元信息表新增 `base_url` 行；`remote` 模式显示“仅支持 OpenAI-compatible 接口”提示
 - 模型设置弹窗模式联动：切换 `mock/remote` 时，表单字段与下方元信息同步切换；`mock` 仅保留固定 `provider/model`，隐藏 `base_url/api_key`
+- 模型设置反馈收口：保存/校验成功失败统一使用 message 浮层提示（不再在弹窗顶部堆叠可关闭提示）
+- 模型设置密钥语义调整：`remote` 下 `api_key` 留空将沿用已存密钥；仅在首次 remote 配置时必填
+- 模型设置表单校验补齐：`remote` 下 `provider/model/base_url` 必填；`api_key` 在无历史密钥时必填
+- 模型设置提示修复：改用 `App.useApp().message` 显示保存/校验结果，避免 Ant Design 静态 message 主题上下文告警
+- 模型设置展示优化：元信息区 `base_url/database` 改为普通文本展示；切换到 `mock` 时清空当前编辑态并在保存后清空远端凭证
+- 模型设置回显修复：若后端当前已保存为 `remote`，切换回 `remote` 时会回显已保存 `provider/model/base_url`
 - 会话鉴权：登录返回 `access_token + refresh_token + session_id`；退出时调用后端 `/api/auth/logout` 撤销当前会话 refresh token
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
 - 会话命名体验：空会话在首条消息发送后会自动改名为消息前缀（后端规则驱动）

@@ -36,13 +36,17 @@
 - 协同进展：前端 store 默认流式文案改为复用 `en.stream`，减少文案漂移风险，后端契约保持不变
 - 协同进展：模型设置弹窗元信息补充 `base_url` 展示，并在 `remote` 模式下增加 OpenAI-compatible 协议提示，前后端设置契约保持不变
 - 协同进展：模型设置弹窗按模式联动展示；`mock` 固定 `provider/model` 且隐藏 `base_url/api_key`，切换模式时回显逻辑与后端设置保持一致
+- 协同进展：模型设置弹窗提示改为 antd 上下文 `message`（通过 `App.useApp()`），消除动态主题下静态 message 警告
+- 协同进展：模型设置切换到 `mock` 后保存会显式清空 `api_key/base_url`，避免历史 remote 凭证残留
+- 协同进展：当已保存 `remote` 配置时，前端切换回 `remote` 会回显后端已存 `provider/model/base_url`
 - 状态增强：`/api/tasks*` 响应已补充 `status_normalized`、`status_label`、`status_rank`，统一状态语义并保持向后兼容
 - W3 增量：mock 工具链路支持可复现错误语义（`[mock-tool-error]` 可恢复重试，`[mock-tool-fatal]` 致命失败），`tool_end/error/trace.meta.tool` 已输出 `retry_count/error`
 - W3 优化：新增本地计算器工具 `calc_eval`（支持 `[calc:1+2*3]` 与“计算 1+2*3”触发），纳入统一工具生命周期事件
 - W1 优化：新增 `POST /api/settings/validate`，用于设置保存前的结构/连通性预校验（不落库）
 - W1 优化补强：`settings/validate` 在 `HEAD` 失败时自动回退 `GET`，减少远端网关不支持 HEAD 时的误判
-- W1 稳定性优化：`remote` 模式保存/校验支持沿用已存储 `api_key`（空值提交不再清空历史密钥）
+- W1 设置语义收口：`remote` 模式下 `api_key` 留空即视为清空，不再沿用历史密钥
 - W1 能力补齐：`remote` 模式已接入 OpenAI-compatible provider（`base_url + api_key + model`）
+- W1 接口校验补齐：`remote` 模式 `provider/model/base_url` 必填；`api_key` 在未配置历史密钥时必填，已配置时可留空沿用
 - W1 接口收口：`POST /api/settings/validate` 新增 `error_code`，并补充 `remote_base_url_required`
 - W1/W2 稳定性优化：SSE 流式输出增加周期 heartbeat（长输出保活更稳定）+ trace 持久化写入节流（降低数据库写放大）
 - W2 优化：`GET /api/tasks/{task_id}/stream` 支持 `running` 状态重连（回补增量，不重复执行任务）
