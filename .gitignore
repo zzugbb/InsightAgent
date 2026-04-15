@@ -36,6 +36,7 @@ build/
 .nuxt/
 .turbo/
 .vite/
+logs/
 coverage/
 *.tsbuildinfo
 npm-debug.log*

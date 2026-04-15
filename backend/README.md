@@ -34,14 +34,16 @@
 - 协同进展：前端已按最新交互要求收敛头部占位（移除会话状态胶囊与输入计数提示），继续复用现有接口与字段
 - 协同进展：前端流式状态提示已完成 i18n 化（去除硬编码英文，按语言动态切换），后端接口契约无需调整
 - 协同进展：前端 store 默认流式文案改为复用 `en.stream`，减少文案漂移风险，后端契约保持不变
+- 协同进展：模型设置弹窗元信息补充 `base_url` 展示，并在 `remote` 模式下增加 OpenAI-compatible 协议提示，前后端设置契约保持不变
+- 协同进展：模型设置弹窗按模式联动展示；`mock` 固定 `provider/model` 且隐藏 `base_url/api_key`，切换模式时回显逻辑与后端设置保持一致
 - 状态增强：`/api/tasks*` 响应已补充 `status_normalized`、`status_label`、`status_rank`，统一状态语义并保持向后兼容
 - W3 增量：mock 工具链路支持可复现错误语义（`[mock-tool-error]` 可恢复重试，`[mock-tool-fatal]` 致命失败），`tool_end/error/trace.meta.tool` 已输出 `retry_count/error`
 - W3 优化：新增本地计算器工具 `calc_eval`（支持 `[calc:1+2*3]` 与“计算 1+2*3”触发），纳入统一工具生命周期事件
 - W1 优化：新增 `POST /api/settings/validate`，用于设置保存前的结构/连通性预校验（不落库）
 - W1 优化补强：`settings/validate` 在 `HEAD` 失败时自动回退 `GET`，减少远端网关不支持 HEAD 时的误判
 - W1 稳定性优化：`remote` 模式保存/校验支持沿用已存储 `api_key`（空值提交不再清空历史密钥）
-- W1 行为收口：`remote` 模式 provider 选择改为严格失败（缺少 `api_key` 或 provider 未实现均返回明确错误码，不再回落 `mock`）
-- W1 接口收口：`POST /api/settings/validate` 新增 `error_code`，并对未实现 provider 返回 `remote_provider_not_implemented`
+- W1 能力补齐：`remote` 模式已接入 OpenAI-compatible provider（`base_url + api_key + model`）
+- W1 接口收口：`POST /api/settings/validate` 新增 `error_code`，并补充 `remote_base_url_required`
 - W1/W2 稳定性优化：SSE 流式输出增加周期 heartbeat（长输出保活更稳定）+ trace 持久化写入节流（降低数据库写放大）
 - W2 优化：`GET /api/tasks/{task_id}/stream` 支持 `running` 状态重连（回补增量，不重复执行任务）
 - W2 重连流优化：`running` 重连返回的 `done/error` 事件补齐 `session_id/step_id` 并标记 `resumed=true`
@@ -61,7 +63,7 @@
 - `app/db.py`：PostgreSQL 连接、初始化与索引
 - 新增 `auth_sessions` 表：refresh token 哈希持久化、会话过期/撤销管理
 - 新增 `audit_logs` 表：最小审计事件持久化（`event_type` + `event_detail_json`）
-- `app/providers/`：Provider 抽象 + mock 实现
+- `app/providers/`：Provider 抽象 + mock 实现 + OpenAI-compatible provider
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
 - 流式阶段已支持最终 `observation` 的批次增量持久化（`seq` 递增，默认每 8 个 chunk 落库一次 + 结束兜底）
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
@@ -238,7 +240,7 @@ docker compose up -d chroma
 ### 优先做
 
 1. `full-data-auth`：用户模型、JWT/API 鉴权、refresh 会话管理、凭证加密存储。
-   - 当前状态：已完成 PostgreSQL 主线接入与最小会话治理，后续补审计与权限扩展位。
+   - 当前状态：首版已完成（含最小审计与用户数据隔离）；后续补细粒度权限、凭证轮换策略与安全基线加固。
 2. `full-trace-session`：任务/Trace 结构化持久化、历史检索、导出复用。
 3. `full-agent-scale`（轻量）：进程内队列 + 并发上限 + 取消/超时。
 4. `full-rag-governance`（MVP）：知识库上传/删除/版本与索引重建。
@@ -253,7 +255,6 @@ docker compose up -d chroma
 ## 当前限制（W4 生产化前）
 
 - PostgreSQL 已成为默认且唯一运行后端，仍需完成真实环境平迁与回滚演练
-- `remote` 模式仍未接入真实 provider（当前会明确失败而非降级到 mock）
 - 真实工具调用循环仍以 mock 工具编排为主（RAG 检索已真实接入）
 - token 仍为估算值（非 provider 官方 usage 回传）
 - `trace/delta` 当前链路已稳定，后续仅做参数级调优（不影响 W2 已收口）

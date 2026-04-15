@@ -33,6 +33,8 @@ const DEFAULT_FORM: SettingsFormState = {
   api_key: "",
 };
 
+type RemoteFormState = Omit<SettingsFormState, "mode">;
+
 type ModelSettingsModalProps = {
   open: boolean;
   onClose: () => void;
@@ -46,6 +48,12 @@ export function ModelSettingsModal({
   const t = useMessages();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<SettingsFormState>(DEFAULT_FORM);
+  const [lastRemoteForm, setLastRemoteForm] = useState<RemoteFormState>({
+    provider: "",
+    model: "",
+    base_url: "",
+    api_key: "",
+  });
   const [banner, setBanner] = useState<string | null>(null);
   const [bannerKind, setBannerKind] = useState<"error" | "success">("error");
 
@@ -58,13 +66,22 @@ export function ModelSettingsModal({
     if (!open || !data) {
       return;
     }
-    setForm({
+    const nextForm: SettingsFormState = {
       mode: data.mode,
       provider: data.provider,
       model: data.model,
-      base_url: "",
+      base_url: data.base_url ?? "",
       api_key: "",
-    });
+    };
+    setForm(nextForm);
+    if (data.mode === "remote") {
+      setLastRemoteForm({
+        provider: nextForm.provider,
+        model: nextForm.model,
+        base_url: nextForm.base_url,
+        api_key: "",
+      });
+    }
   }, [data, open]);
 
   useEffect(() => {
@@ -113,32 +130,93 @@ export function ModelSettingsModal({
 
   useEffect(() => {
     if (!open) {
-      return;
+      setForm(DEFAULT_FORM);
+      setLastRemoteForm({
+        provider: "",
+        model: "",
+        base_url: "",
+        api_key: "",
+      });
     }
-    setForm(DEFAULT_FORM);
     setBanner(null);
     setBannerKind("error");
   }, [open]);
 
+  function setRemoteField(
+    field: keyof RemoteFormState,
+    value: string,
+  ) {
+    setForm((current) => ({ ...current, [field]: value }));
+    setLastRemoteForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleModeChange(nextMode: string) {
+    if (nextMode === form.mode) {
+      return;
+    }
+    if (nextMode === "mock") {
+      if (form.mode === "remote") {
+        setLastRemoteForm({
+          provider: form.provider,
+          model: form.model,
+          base_url: form.base_url,
+          api_key: form.api_key,
+        });
+      }
+      setForm(DEFAULT_FORM);
+      return;
+    }
+
+    const restoreFromData: RemoteFormState = {
+      provider: data?.mode === "remote" ? data.provider : "",
+      model: data?.mode === "remote" ? data.model : "",
+      base_url: data?.mode === "remote" ? (data.base_url ?? "") : "",
+      api_key: "",
+    };
+    const hasDraft =
+      Boolean(lastRemoteForm.provider.trim()) ||
+      Boolean(lastRemoteForm.model.trim()) ||
+      Boolean(lastRemoteForm.base_url.trim()) ||
+      Boolean(lastRemoteForm.api_key.trim());
+    const restored = hasDraft ? lastRemoteForm : restoreFromData;
+    setForm({
+      mode: "remote",
+      provider: restored.provider,
+      model: restored.model,
+      base_url: restored.base_url,
+      api_key: restored.api_key,
+    });
+  }
+
   function submitForm() {
+    const isMockMode = form.mode === "mock";
     saveMutation.mutate({
       mode: form.mode,
-      provider: form.provider,
-      model: form.model,
-      base_url: form.base_url || null,
-      api_key: form.api_key || null,
+      provider: isMockMode ? "mock" : form.provider,
+      model: isMockMode ? "mock-gpt" : form.model,
+      base_url: isMockMode ? null : form.base_url || null,
+      api_key: isMockMode ? null : form.api_key || null,
     });
   }
 
   function validateForm() {
+    const isMockMode = form.mode === "mock";
     validateMutation.mutate({
       mode: form.mode,
-      provider: form.provider,
-      model: form.model,
-      base_url: form.base_url || null,
-      api_key: form.api_key || null,
+      provider: isMockMode ? "mock" : form.provider,
+      model: isMockMode ? "mock-gpt" : form.model,
+      base_url: isMockMode ? null : form.base_url || null,
+      api_key: isMockMode ? null : form.api_key || null,
     });
   }
+
+  const isRemoteMode = form.mode === "remote";
+  const summaryProvider = isRemoteMode ? form.provider || "—" : "mock";
+  const summaryModel = isRemoteMode ? form.model || "—" : "mock-gpt";
+  const summaryBaseUrl = isRemoteMode ? form.base_url || "—" : "";
+  const summaryApiConfigured = isRemoteMode
+    ? Boolean(form.api_key.trim()) || Boolean(data?.api_key_configured)
+    : false;
 
   return (
     <Modal
@@ -164,6 +242,14 @@ export function ModelSettingsModal({
           style={{ marginBottom: 16 }}
         />
       ) : null}
+      {form.mode === "remote" ? (
+        <Alert
+          type="info"
+          showIcon
+          title={t.settings.remoteCompatibilityHint}
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
 
       {isLoading ? (
         <Typography.Paragraph type="secondary">{t.settings.loading}</Typography.Paragraph>
@@ -177,7 +263,7 @@ export function ModelSettingsModal({
           <Form.Item label={t.settings.fieldMode}>
             <Select
               value={form.mode}
-              onChange={(v) => setForm((c) => ({ ...c, mode: v }))}
+              onChange={handleModeChange}
               options={[
                 { value: "mock", label: "mock" },
                 { value: "remote", label: "remote" },
@@ -185,61 +271,65 @@ export function ModelSettingsModal({
             />
           </Form.Item>
           <Form.Item label={t.settings.fieldProvider}>
-            <Input
-              autoComplete="off"
-              name="model-provider"
-              data-1p-ignore="true"
-              data-lpignore="true"
-              value={form.provider}
-              onChange={(e) =>
-                setForm((c) => ({ ...c, provider: e.target.value }))
-              }
-              placeholder="mock"
-            />
+            {isRemoteMode ? (
+              <Input
+                autoComplete="off"
+                name="model-provider"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                value={form.provider}
+                onChange={(e) => setRemoteField("provider", e.target.value)}
+                placeholder="openai-compatible"
+              />
+            ) : (
+              <Input value="mock" disabled />
+            )}
           </Form.Item>
           <Form.Item label={t.settings.fieldModel}>
-            <Input
-              autoComplete="off"
-              name="model-name"
-              data-1p-ignore="true"
-              data-lpignore="true"
-              value={form.model}
-              onChange={(e) =>
-                setForm((c) => ({ ...c, model: e.target.value }))
-              }
-              placeholder="mock-gpt"
-            />
+            {isRemoteMode ? (
+              <Input
+                autoComplete="off"
+                name="model-name"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                value={form.model}
+                onChange={(e) => setRemoteField("model", e.target.value)}
+                placeholder="gpt-4o-mini / deepseek-chat / glm-4.5"
+              />
+            ) : (
+              <Input value="mock-gpt" disabled />
+            )}
           </Form.Item>
-          <Form.Item label={t.settings.fieldBaseUrl}>
-            <Input
-              autoComplete="off"
-              name="model-base-url"
-              data-1p-ignore="true"
-              data-lpignore="true"
-              value={form.base_url}
-              onChange={(e) =>
-                setForm((c) => ({ ...c, base_url: e.target.value }))
-              }
-              placeholder={t.settings.optionalPlaceholder}
-            />
-          </Form.Item>
-          <Form.Item label={t.settings.fieldApiKey}>
-            <Input.Password
-              autoComplete="new-password"
-              name="model-api-key"
-              data-1p-ignore="true"
-              data-lpignore="true"
-              value={form.api_key}
-              onChange={(e) =>
-                setForm((c) => ({ ...c, api_key: e.target.value }))
-              }
-              placeholder={
-                data?.api_key_configured
-                  ? t.settings.apiKeyConfiguredKeep
-                  : t.settings.apiKeyOptionalMock
-              }
-            />
-          </Form.Item>
+          {isRemoteMode ? (
+            <>
+              <Form.Item label={t.settings.fieldBaseUrl}>
+                <Input
+                  autoComplete="off"
+                  name="model-base-url"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  value={form.base_url}
+                  onChange={(e) => setRemoteField("base_url", e.target.value)}
+                  placeholder={t.settings.optionalPlaceholder}
+                />
+              </Form.Item>
+              <Form.Item label={t.settings.fieldApiKey}>
+                <Input.Password
+                  autoComplete="new-password"
+                  name="model-api-key"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  value={form.api_key}
+                  onChange={(e) => setRemoteField("api_key", e.target.value)}
+                  placeholder={
+                    data?.api_key_configured
+                      ? t.settings.apiKeyConfiguredKeep
+                      : t.settings.apiKeyOptionalMock
+                  }
+                />
+              </Form.Item>
+            </>
+          ) : null}
           <Form.Item>
             <Space>
               <Button
@@ -271,16 +361,23 @@ export function ModelSettingsModal({
           style={{ marginTop: 8 }}
         >
           <Descriptions.Item label={t.settings.metaProvider}>
-            {data.provider}
+            {summaryProvider}
           </Descriptions.Item>
           <Descriptions.Item label={t.settings.metaModel}>
-            {data.model}
+            {summaryModel}
           </Descriptions.Item>
-          <Descriptions.Item label={t.settings.metaApiKey}>
-            {data.api_key_configured
-              ? t.settings.metaConfigured
-              : t.settings.metaNotConfigured}
-          </Descriptions.Item>
+          {isRemoteMode ? (
+            <>
+              <Descriptions.Item label={t.settings.metaBaseUrl}>
+                <code className="model-settings-database-path">{summaryBaseUrl}</code>
+              </Descriptions.Item>
+              <Descriptions.Item label={t.settings.metaApiKey}>
+                {summaryApiConfigured
+                  ? t.settings.metaConfigured
+                  : t.settings.metaNotConfigured}
+              </Descriptions.Item>
+            </>
+          ) : null}
           <Descriptions.Item label={t.settings.metaDatabase}>
             <code className="model-settings-database-path">{data.database_locator}</code>
           </Descriptions.Item>

@@ -463,10 +463,12 @@ export type Messages = {
     apiKeyOptionalMock: string;
     metaProvider: string;
     metaModel: string;
+    metaBaseUrl: string;
     metaApiKey: string;
     metaConfigured: string;
     metaNotConfigured: string;
     metaDatabase: string;
+    remoteCompatibilityHint: string;
     appearanceTitle: string;
     themeLabel: string;
     themeDark: string;

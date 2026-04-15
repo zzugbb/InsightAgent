@@ -91,7 +91,7 @@ export const zh: Messages = {
     scrollToBottomAria: "回到底部",
     runtimeNoticeMock: "当前运行在 mock 模式，输出为模拟结果。",
     runtimeNoticeRemote:
-      "当前已切换到 remote 模式，但本版本尚未接入真实 Provider，发送会失败。",
+      "当前运行在 remote 模式，请确认 Provider / Model / Base URL 与 API Key 配置正确。",
     runtimeNoticeRemoteMissingKey:
       "当前为 remote 模式，但尚未配置 API Key，请先完成模型配置。",
     goConfigureModel: "去配置模型",
@@ -484,10 +484,13 @@ export const zh: Messages = {
     apiKeyOptionalMock: "mock 可留空",
     metaProvider: "提供方",
     metaModel: "模型",
+    metaBaseUrl: "基础地址",
     metaApiKey: "API 密钥",
     metaConfigured: "已配置",
     metaNotConfigured: "未配置",
     metaDatabase: "数据库连接",
+    remoteCompatibilityHint:
+      "remote 目前仅支持 OpenAI-compatible 接口（/chat/completions 与 SSE）。",
     appearanceTitle: "外观与语言",
     themeLabel: "主题",
     themeDark: "深色",

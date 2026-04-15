@@ -92,7 +92,7 @@ export const en: Messages = {
     scrollToBottomAria: "Scroll to bottom",
     runtimeNoticeMock: "Running in mock mode. Responses are simulated.",
     runtimeNoticeRemote:
-      "Remote mode is selected, but this version does not provide a real provider yet; requests will fail.",
+      "Running in remote mode. Verify provider, model, base URL, and API key settings.",
     runtimeNoticeRemoteMissingKey:
       "Remote mode is selected but API key is not configured yet.",
     goConfigureModel: "Configure model",
@@ -492,10 +492,13 @@ export const en: Messages = {
     apiKeyOptionalMock: "Optional for mock",
     metaProvider: "Provider",
     metaModel: "Model",
+    metaBaseUrl: "Base URL",
     metaApiKey: "API key",
     metaConfigured: "Configured",
     metaNotConfigured: "Not set",
     metaDatabase: "Database",
+    remoteCompatibilityHint:
+      "Remote currently supports OpenAI-compatible APIs only (/chat/completions with SSE).",
     appearanceTitle: "Appearance & language",
     themeLabel: "Theme",
     themeDark: "Dark",

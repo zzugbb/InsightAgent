@@ -2,6 +2,7 @@ export type SettingsSummary = {
   mode: string;
   provider: string;
   model: string;
+  base_url: string | null;
   api_key_configured: boolean;
   base_url_configured: boolean;
   database_locator: string;

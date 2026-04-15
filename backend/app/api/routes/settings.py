@@ -56,6 +56,7 @@ class SettingsSummaryResponse(BaseModel):
     mode: str
     provider: str
     model: str
+    base_url: str | None = None
     api_key_configured: bool
     base_url_configured: bool
     database_locator: str
@@ -79,6 +80,7 @@ def get_settings_summary(current_user: dict = Depends(get_current_user)) -> Sett
         mode=settings.mode,
         provider=settings.provider,
         model=settings.model,
+        base_url=settings.base_url,
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
         database_locator=get_database_locator(),
@@ -93,10 +95,16 @@ def update_settings(
     user_id = str(current_user["id"])
     existing = get_stored_settings(user_id)
     effective_api_key = payload.api_key or existing.api_key
+    effective_base_url = payload.base_url or existing.base_url
     if payload.mode == "remote" and not effective_api_key:
         raise HTTPException(
             status_code=422,
             detail="api_key is required when mode is 'remote'",
+        )
+    if payload.mode == "remote" and not effective_base_url:
+        raise HTTPException(
+            status_code=422,
+            detail="base_url is required when mode is 'remote'",
         )
 
     settings = save_settings(
@@ -105,7 +113,7 @@ def update_settings(
             mode=payload.mode,
             provider=payload.provider,
             model=payload.model,
-            base_url=payload.base_url,
+            base_url=effective_base_url,
             api_key=effective_api_key,
         )
     )
@@ -124,6 +132,7 @@ def update_settings(
         mode=settings.mode,
         provider=settings.provider,
         model=settings.model,
+        base_url=settings.base_url,
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
         database_locator=get_database_locator(),
@@ -138,6 +147,7 @@ def validate_settings(
     user_id = str(current_user["id"])
     existing = get_stored_settings(user_id)
     effective_api_key = payload.api_key or existing.api_key
+    effective_base_url = payload.base_url or existing.base_url
     if payload.mode == "remote" and not effective_api_key:
         return SettingsValidateResponse(
             ok=False,
@@ -147,6 +157,16 @@ def validate_settings(
             message="remote mode preflight failed.",
             error="api_key is required when mode is 'remote'",
             error_code="remote_api_key_required",
+        )
+    if payload.mode == "remote" and not effective_base_url:
+        return SettingsValidateResponse(
+            ok=False,
+            mode=payload.mode,
+            provider=payload.provider,
+            model=payload.model,
+            message="remote mode preflight failed.",
+            error="base_url is required when mode is 'remote'",
+            error_code="remote_base_url_required",
         )
 
     if payload.mode == "mock":
@@ -158,8 +178,8 @@ def validate_settings(
             message="mock mode is ready.",
         )
 
-    if payload.base_url:
-        parsed = urlparse(payload.base_url)
+    if effective_base_url:
+        parsed = urlparse(effective_base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             return SettingsValidateResponse(
                 ok=False,
@@ -172,7 +192,7 @@ def validate_settings(
             )
 
         try:
-            request = Request(payload.base_url, method="HEAD")
+            request = Request(effective_base_url, method="HEAD")
             with urlopen(request, timeout=3) as response:
                 status_code = int(getattr(response, "status", 0))
                 if 200 <= status_code < 500:
@@ -195,7 +215,7 @@ def validate_settings(
         except Exception as exc:
             # 某些网关/服务禁用 HEAD，回退 GET 以减少误判
             try:
-                fallback = Request(payload.base_url, method="GET")
+                fallback = Request(effective_base_url, method="GET")
                 with urlopen(fallback, timeout=3) as response:
                     status_code = int(getattr(response, "status", 0))
                     if 200 <= status_code < 500:
@@ -227,11 +247,9 @@ def validate_settings(
                 )
 
     return SettingsValidateResponse(
-        ok=False,
+        ok=True,
         mode=payload.mode,
         provider=payload.provider,
         model=payload.model,
-        message="remote mode preflight failed.",
-        error="remote provider is not implemented yet",
-        error_code="remote_provider_not_implemented",
+        message="remote mode is ready.",
     )

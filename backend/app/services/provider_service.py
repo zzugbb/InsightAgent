@@ -1,5 +1,6 @@
 from app.providers.base import LLMProvider
 from app.providers.mock_provider import MockLLMProvider
+from app.providers.openai_compatible_provider import OpenAICompatibleLLMProvider
 from app.services.settings_service import get_stored_settings
 
 
@@ -30,8 +31,15 @@ def get_llm_provider(user_id: str) -> LLMProvider:
             user_message="Remote 模式需要先配置 API Key，请在设置中补全后再发送。",
         )
 
-    # 当前版本仍未接入真实 remote provider，禁止静默回落 mock，避免用户误判执行环境。
-    raise ProviderSelectionError(
-        code="remote_provider_not_implemented",
-        user_message="Remote 模式尚未接入真实 Provider，当前版本请先切换到 mock 或等待下一版本。",
+    if not (settings.base_url or "").strip():
+        raise ProviderSelectionError(
+            code="remote_base_url_required",
+            user_message="Remote 模式需要先配置 Base URL，请在设置中补全后再发送。",
+        )
+
+    return OpenAICompatibleLLMProvider(
+        model=settings.model,
+        provider=settings.provider,
+        base_url=settings.base_url or "",
+        api_key=settings.api_key or "",
     )
