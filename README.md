@@ -234,6 +234,5 @@ macOS 下也可在 Finder 中双击 [`start_insightagent.command`](/Users/gaobin
 
 ## 下一步（W4+）
 
-- `full-trace-session-lite` 与导出链路持续推进中：任务快照、单任务导出、会话导出与 remote 错误体验收口已落地；下一步进入主链路 e2e 与导出 e2e 校验。
-- 先补 `e2e-main-path`（登录 -> 模型校验 -> 发送 -> Trace -> RAG -> 导出），再推进 `task-cancel-timeout`、`rag-kb-governance-lite`、`usage-dashboard-lite`。
-- 再推进 `task-cancel-timeout`、`rag-kb-governance-lite`、`usage-dashboard-lite`。
+- `full-trace-session-lite` 与导出链路持续推进中：任务快照、单任务导出、会话导出、remote 错误体验与主链路 e2e 首版脚本均已落地；下一步补导出稳定性校验并接入 CI。
+- 先推进 `task-cancel-timeout`、`rag-kb-governance-lite`、`usage-dashboard-lite`。

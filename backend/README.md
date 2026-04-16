@@ -258,6 +258,12 @@ python scripts/migrate_sqlite_to_postgres.py \
 python scripts/e2e_baseline.py --base-url http://127.0.0.1:8000
 ```
 
+主链路 e2e（登录 -> 设置校验/保存 -> 发送任务并校验 trace -> RAG ingest/query -> 任务/会话导出）可执行：
+
+```bash
+python scripts/e2e_main_path.py --base-url http://127.0.0.1:8000
+```
+
 如需 Memory 能力，在仓库根目录执行：
 
 ```bash
@@ -272,7 +278,7 @@ docker compose up -d chroma
 2. `trace-export-json-md`：单任务 JSON/Markdown 导出接口已落地；后续补字段稳定性与导出 e2e 校验。
 3. `session-export-lite`：会话级 JSON/Markdown 导出接口已落地；后续补字段稳定性与导出 e2e 校验。
 4. `remote-provider-hardening`：已完成首轮（错误码归一 + SSE 透传 + 前端映射联动）。
-5. `e2e-main-path`：保持登录、模型配置、任务流、Trace、RAG、导出主链路可验证。
+5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）；后续接入 CI 与失败快照留档。
 6. `task-cancel-timeout`：P0 后加入单进程取消、超时与状态落库。
 7. `rag-kb-governance-lite`：知识库列表、清空/删除 collection、来源展示。
 8. `usage-dashboard-lite` / `audit-event-expansion`：补用户/会话/任务维度统计与关键事件审计。

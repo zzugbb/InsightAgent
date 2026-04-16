@@ -195,7 +195,7 @@ npm run dev
 2. `trace-export-json-md`：单任务 JSON/Markdown 导出入口已接入；后续补导出 e2e。
 3. `session-export-lite`：当前会话 JSON/Markdown 导出入口已接入；后续补导出 e2e。
 4. `remote-provider-hardening`：真实模型错误提示、重试建议与设置入口联动。
-5. `e2e-main-path`：登录、模型设置、发送消息、Trace 回放、RAG 检索、导出主路径。
+5. `e2e-main-path`：后端主链路 e2e 脚本已落地（登录、模型设置、发送消息、Trace 回放、RAG 检索、导出），前端后续接入 CI 与可视化回归。
 6. `task-cancel-timeout`：运行中取消/超时 UI 与状态反馈。
 7. `rag-kb-governance-lite`：知识库列表、清空/删除、来源展示。
 8. `usage-dashboard-lite`：用户/会话/任务维度成本统计增强。
@@ -214,5 +214,5 @@ npm run dev
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步补主链路 e2e 与导出 e2e。
+- 下一步补导出 e2e 稳定性与前端可视化回归（CI）。
 - P0 完成后再推进任务取消/超时、RAG 知识库治理与 usage 统计增强。
