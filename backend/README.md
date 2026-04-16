@@ -232,7 +232,7 @@
 
 ## 本地启动
 
-推荐使用 **Python 3.14**（与 `compose.full.yml`、GitHub Actions `backend-e2e` 一致；仓库根 `.python-version` 为 `3.14`，便于 pyenv 等对齐）。
+推荐使用 **Python 3.14**（与 `compose.full.yml`、GitHub Actions `backend-e2e` 一致；仓库根 `.python-version` 为 `3.14`，便于 pyenv 等对齐）。若旧版解释器创建过 `backend/.venv`，`pyvenv.cfg` 可能仍指向旧版本且与 `bin/python` 不一致，应**删除 `backend/.venv` 后**用 3.14 重新执行 `python -m venv .venv` 与 `pip install -r requirements.txt`，不要手改 `pyvenv.cfg`。
 
 ```bash
 cd backend
@@ -251,6 +251,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 该脚本会自动拉起并等待 `postgres/chroma` 就绪，且已兼容 `backend/.env` 缺失场景。
 脚本内 Chroma 就绪检查使用 `v2` heartbeat，兼容新版 Chroma 容器；启动前会额外清理旧后端进程，并等待后端健康检查通过。
+后端进程由**本机解释器**启动：优先 `backend/.venv/bin/python`，否则回退 `python3`（见脚本内逻辑）；请使用 **Python 3.14** 创建/重建 `.venv`，与仓库根 `.python-version` 及 CI 一致。`compose.full.yml` 中的 `python:3.14-slim` 仅在「用 Compose 跑后端容器」时使用，与一键脚本的本地 uvicorn 路径相互独立。前端 dev 依赖本机 **Node.js 24.x**（与根目录 `.nvmrc`、`frontend/package.json` 的 `engines` 一致；一键脚本里为 `npm run dev`，不经过 `node:24-alpine` 镜像）。
 
 如需将本地 SQLite 数据迁移到 PostgreSQL，可执行：
 
