@@ -36,7 +36,7 @@
 - 阶段 5 增量：`remote-provider-hardening` 首轮已完成；Provider 运行时统一输出结构化错误码（401/403、429、5xx、网络、无效 JSON、空响应、SSE 中断），任务流 SSE `error` 事件透传 `code/fatal/retryable/detail/status_code`
 - 阶段 5 增量：`task-cancel-timeout` 首版已落地；新增取消接口与超时中断，任务流支持 `cancelled/timeout` 事件
 - 阶段 5 增量：`task-cancel-timeout` e2e 已补齐；新增 `scripts/e2e_task_cancel_timeout.py`，覆盖取消链路与超时链路（低 `TASK_TIMEOUT_SEC` 环境）
-- 工程化增量：后端 e2e CI 首版已接入（`.github/workflows/backend-e2e.yml`）
+- 工程化增量：后端 e2e CI 首版已接入（`.github/workflows/backend-e2e.yml`，已升级 `checkout`/`setup-python` 主版本以适配 GitHub Actions Node 24 运行时；Python **3.14** 与 `compose.full.yml`、根目录 `.python-version` 对齐）
 - 协同进展：前端左侧与中栏已完成风格收口（导航层级、runtime strip、输入区动效与密度），继续复用现有接口与字段
 - 协同进展：前端已按最新交互要求收敛头部占位（移除会话状态胶囊与输入计数提示），继续复用现有接口与字段
 - 协同进展：前端侧栏账户展示已收口到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的设置行风格（图标 + 标题 + 值）
@@ -231,6 +231,8 @@
   - 策略：幂等 upsert（可重复执行）
 
 ## 本地启动
+
+推荐使用 **Python 3.14**（与 `compose.full.yml`、GitHub Actions `backend-e2e` 一致；仓库根 `.python-version` 为 `3.14`，便于 pyenv 等对齐）。
 
 ```bash
 cd backend
