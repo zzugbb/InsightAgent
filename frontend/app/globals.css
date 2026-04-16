@@ -2286,6 +2286,34 @@ code {
   margin-top: 8px;
 }
 
+.task-snapshot-subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.task-snapshot-body {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 176px;
+  overflow: auto;
+}
+
+.task-snapshot-failure {
+  margin: 2px 0 0;
+  color: #b91c1c;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .task-summary-item {
   width: 100%;
   display: flex;

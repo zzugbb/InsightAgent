@@ -272,6 +272,7 @@ export type Messages = {
     contextJumpOverview: string;
     contextJumpSync: string;
     contextJumpUsage: string;
+    contextJumpTaskSnapshot: string;
     contextJumpMemory: string;
     contextJumpRag: string;
     contextJumpAudit: string;
@@ -314,6 +315,19 @@ export type Messages = {
     usageSessionLoading: string;
     usageSessionError: string;
     usageSessionEmpty: string;
+    taskSnapshotTitle: string;
+    taskSnapshotLead: string;
+    taskSnapshotStatus: string;
+    taskSnapshotCreatedAt: string;
+    taskSnapshotUpdatedAt: string;
+    taskSnapshotStepCount: string;
+    taskSnapshotRagHits: string;
+    taskSnapshotRagKnowledgeBases: (ids: string) => string;
+    taskSnapshotPrompt: string;
+    taskSnapshotFinalAnswer: string;
+    taskSnapshotFinalAnswerEmpty: string;
+    taskSnapshotLastObservation: string;
+    taskSnapshotNoSelection: string;
     currentTaskCard: string;
     statusPrefix: string;
     latestTaskSession: string;

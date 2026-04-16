@@ -18,6 +18,14 @@ export type UsageAggregateRow = InspectorUsageRow & {
   avgCost: string | null;
 };
 
+export type TaskSnapshotSummary = {
+  stepCount: number;
+  ragHitCount: number;
+  ragKnowledgeBaseIds: string[];
+  finalAnswer: string | null;
+  lastObservation: string | null;
+};
+
 function parseUsageNumber(v: unknown): number | null {
   if (v === null || v === undefined) {
     return null;
@@ -285,6 +293,144 @@ export function extractTaskFailureHint(task: TaskSummary): string | null {
   } catch {
     return null;
   }
+}
+
+function normalizeTraceContent(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function sortTraceStepsBySeq(steps: TraceStepPayload[]): TraceStepPayload[] {
+  return [...steps]
+    .map((step, index) => ({ step, index }))
+    .sort((a, b) => {
+      const aSeq =
+        typeof a.step.seq === "number" ? a.step.seq : Number.MAX_SAFE_INTEGER;
+      const bSeq =
+        typeof b.step.seq === "number" ? b.step.seq : Number.MAX_SAFE_INTEGER;
+      if (aSeq === bSeq) {
+        return a.index - b.index;
+      }
+      return aSeq - bSeq;
+    })
+    .map((entry) => entry.step);
+}
+
+export function parseTaskTraceJson(
+  traceJson: string | null | undefined,
+): TraceStepPayload[] {
+  if (!traceJson || !traceJson.trim()) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(traceJson) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    const steps: TraceStepPayload[] = [];
+    for (let i = 0; i < parsed.length; i += 1) {
+      const raw = parsed[i];
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        continue;
+      }
+      const row = raw as Record<string, unknown>;
+      const id =
+        typeof row.id === "string" && row.id.trim()
+          ? row.id.trim()
+          : `trace-${i + 1}`;
+      const type =
+        typeof row.type === "string" && row.type.trim()
+          ? row.type.trim()
+          : "other";
+      const content = typeof row.content === "string" ? row.content : "";
+      const seq =
+        typeof row.seq === "number" && Number.isFinite(row.seq)
+          ? row.seq
+          : undefined;
+      const meta =
+        row.meta && typeof row.meta === "object" && !Array.isArray(row.meta)
+          ? (row.meta as TraceStepPayload["meta"])
+          : undefined;
+      steps.push({
+        id,
+        type,
+        content,
+        ...(seq !== undefined ? { seq } : {}),
+        ...(meta ? { meta } : {}),
+      });
+    }
+    return sortTraceStepsBySeq(steps);
+  } catch {
+    return [];
+  }
+}
+
+function findLastStepContent(
+  steps: TraceStepPayload[],
+  predicate?: (step: TraceStepPayload) => boolean,
+): string | null {
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const step = steps[i];
+    if (predicate && !predicate(step)) {
+      continue;
+    }
+    const content = normalizeTraceContent(step.content);
+    if (content) {
+      return content;
+    }
+  }
+  return null;
+}
+
+export function resolveTaskSnapshotSummary(args: {
+  task: TaskSummary;
+  traceSteps?: TraceStepPayload[];
+}): TaskSnapshotSummary {
+  const steps =
+    args.traceSteps && args.traceSteps.length > 0
+      ? sortTraceStepsBySeq(args.traceSteps)
+      : parseTaskTraceJson(args.task.trace_json);
+
+  let ragHitCount = 0;
+  const ragKnowledgeBaseIds = new Set<string>();
+  for (const step of steps) {
+    const ragMeta = step.meta?.rag;
+    if (!ragMeta) {
+      continue;
+    }
+    if (Array.isArray(ragMeta.chunks)) {
+      ragHitCount += ragMeta.chunks.length;
+    }
+    if (
+      typeof ragMeta.knowledge_base_id === "string" &&
+      ragMeta.knowledge_base_id.trim()
+    ) {
+      ragKnowledgeBaseIds.add(ragMeta.knowledge_base_id.trim());
+    }
+  }
+
+  const lastObservation = findLastStepContent(
+    steps,
+    (step) => normalizeTraceStepKind(step) === "observation",
+  );
+  const finalAnswer =
+    lastObservation ??
+    findLastStepContent(
+      steps,
+      (step) => !["tool", "rag", "thought"].includes(normalizeTraceStepKind(step)),
+    ) ??
+    findLastStepContent(steps);
+
+  return {
+    stepCount: steps.length,
+    ragHitCount,
+    ragKnowledgeBaseIds: [...ragKnowledgeBaseIds],
+    finalAnswer,
+    lastObservation,
+  };
 }
 
 export function getRoleLabel(role: string, roles: Messages["roles"]): string {

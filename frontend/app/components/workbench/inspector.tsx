@@ -41,6 +41,7 @@ import {
   isTaskFailedStatus,
   normalizeTraceStepKind,
   parseMemoryMetadataJson,
+  resolveTaskSnapshotSummary,
   resolveInspectorTaskUsage,
   resolveTaskUsageFromTask,
   shortenId,
@@ -355,6 +356,25 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     [activeTaskId, activeTask, sseTaskUsage],
   );
 
+  const activeTaskSnapshot = useMemo(() => {
+    if (!activeTask) {
+      return null;
+    }
+    const traceSteps =
+      activeTask.id === sseTaskId && sseTraceSteps.length > 0
+        ? sseTraceSteps
+        : undefined;
+    return resolveTaskSnapshotSummary({
+      task: activeTask,
+      traceSteps,
+    });
+  }, [activeTask, sseTaskId, sseTraceSteps]);
+
+  const activeTaskFailureHint = useMemo(
+    () => (activeTask ? extractTaskFailureHint(activeTask) : null),
+    [activeTask],
+  );
+
   const sessionUsageAggregate = useMemo(() => {
     if (!usageSummary) {
       return null;
@@ -665,6 +685,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <Button size="small" onClick={() => scrollToContextSection("ctx-usage")}>
             {t.inspector.contextJumpUsage}
           </Button>
+          <Button size="small" onClick={() => scrollToContextSection("ctx-task-snapshot")}>
+            {t.inspector.contextJumpTaskSnapshot}
+          </Button>
           <Button size="small" onClick={() => scrollToContextSection("ctx-memory")}>
             {t.inspector.contextJumpMemory}
           </Button>
@@ -798,6 +821,82 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         usageSummary.tasks_with_usage === 0 ? (
           <p className="panel-note panel-note--muted">{t.inspector.usageSummaryEmpty}</p>
         ) : null}
+      </div>
+
+      <div className="inspector-block" id="ctx-task-snapshot">
+        <p className="summary-label">{t.inspector.taskSnapshotTitle}</p>
+        <p className="inspector-section-lead">{t.inspector.taskSnapshotLead}</p>
+        {activeTask ? (
+          <>
+            <strong>{getTaskLabel(activeTask, t.workbench)}</strong>
+            <div className="context-grid context-grid--stats compact">
+              <span>{t.inspector.taskSnapshotStatus}</span>
+              <strong>{activeTask.status}</strong>
+              <span>{t.inspector.taskSnapshotCreatedAt}</span>
+              <strong>{formatTimestamp(activeTask.created_at, localeTag)}</strong>
+              <span>{t.inspector.taskSnapshotUpdatedAt}</span>
+              <strong>{formatTimestamp(activeTask.updated_at, localeTag)}</strong>
+              <span>{t.inspector.taskSnapshotStepCount}</span>
+              <strong>{activeTaskSnapshot?.stepCount ?? 0}</strong>
+              <span>{t.inspector.taskSnapshotRagHits}</span>
+              <strong>{activeTaskSnapshot?.ragHitCount ?? 0}</strong>
+            </div>
+
+            {inspectorTaskUsage ? (
+              <div className="context-grid context-grid--stats compact">
+                <span>{t.inspector.usagePrompt}</span>
+                <strong>{inspectorTaskUsage.prompt ?? "—"}</strong>
+                <span>{t.inspector.usageCompletion}</span>
+                <strong>{inspectorTaskUsage.completion ?? "—"}</strong>
+                <span>{t.inspector.usageTotal}</span>
+                <strong>{inspectorTaskUsage.total ?? "—"}</strong>
+                <span>{t.inspector.usageCost}</span>
+                <strong>{inspectorTaskUsage.cost ?? "—"}</strong>
+              </div>
+            ) : null}
+
+            {activeTaskSnapshot &&
+            activeTaskSnapshot.ragKnowledgeBaseIds.length > 0 ? (
+              <p className="panel-note panel-note--muted">
+                {t.inspector.taskSnapshotRagKnowledgeBases(
+                  activeTaskSnapshot.ragKnowledgeBaseIds.join(", "),
+                )}
+              </p>
+            ) : null}
+
+            <p className="task-snapshot-subtitle">{t.inspector.taskSnapshotPrompt}</p>
+            <pre className="task-snapshot-body">
+              {activeTask.prompt.trim() || "—"}
+            </pre>
+
+            <p className="task-snapshot-subtitle">{t.inspector.taskSnapshotFinalAnswer}</p>
+            <pre className="task-snapshot-body">
+              {activeTaskSnapshot?.finalAnswer ?? t.inspector.taskSnapshotFinalAnswerEmpty}
+            </pre>
+
+            {activeTaskSnapshot?.lastObservation &&
+            activeTaskSnapshot.lastObservation !== activeTaskSnapshot.finalAnswer ? (
+              <>
+                <p className="task-snapshot-subtitle">
+                  {t.inspector.taskSnapshotLastObservation}
+                </p>
+                <pre className="task-snapshot-body">
+                  {activeTaskSnapshot.lastObservation}
+                </pre>
+              </>
+            ) : null}
+
+            {activeTaskFailureHint ? (
+              <p className="task-snapshot-failure">
+                {t.inspector.taskFailureHint}: {activeTaskFailureHint}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="panel-note panel-note--muted">
+            {t.inspector.taskSnapshotNoSelection}
+          </p>
+        )}
       </div>
 
       <div className="inspector-block memory-placeholder-card" id="ctx-memory">
