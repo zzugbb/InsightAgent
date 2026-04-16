@@ -100,7 +100,14 @@ export function ModelSettingsModal({
         message.success(`${t.settings.validatePass}: ${data.message}`);
         return;
       }
-      message.error(`${t.settings.validateFail}: ${data.error || data.message}`);
+      const code =
+        typeof data.error_code === "string" && data.error_code.trim().length > 0
+          ? data.error_code.trim()
+          : null;
+      const mapped = code ? t.settings.validateErrorByCode(code) : null;
+      const reason = mapped || data.error || data.message;
+      const codeSuffix = code ? ` [${code}]` : "";
+      message.error(`${t.settings.validateFail}: ${reason}${codeSuffix}`);
     },
     onError: (e) => {
       const u = toUserFacingError(e, t.errors);

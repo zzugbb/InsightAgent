@@ -7,6 +7,7 @@ from time import monotonic
 from uuid import uuid4
 
 from app.config import get_settings
+from app.providers.base import ProviderCallError
 from app.services.chat_persistence_service import (
     complete_task,
     create_message,
@@ -36,6 +37,8 @@ def sse_error_payload(
     fatal: bool,
     retry_count: int = 0,
     step_id: str | None = None,
+    detail: str | None = None,
+    status_code: int | None = None,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "task_id": task_id,
@@ -47,6 +50,10 @@ def sse_error_payload(
     }
     if step_id:
         payload["step_id"] = step_id
+    if detail:
+        payload["detail"] = detail
+    if isinstance(status_code, int):
+        payload["status_code"] = status_code
     return payload
 
 
@@ -717,6 +724,26 @@ def stream_task_execution(
                 code=exc.code,
                 fatal=True,
                 retry_count=0,
+            ),
+        )
+    except ProviderCallError as exc:
+        complete_task(
+            task_id=task_id,
+            trace_steps=trace_steps,
+            user_id=user_id,
+            status="failed",
+        )
+        yield sse_event("state", {"task_id": task_id, "phase": "error"})
+        yield sse_event(
+            "error",
+            sse_error_payload(
+                task_id=task_id,
+                message=exc.user_message,
+                code=exc.code,
+                fatal=not exc.retryable,
+                retry_count=0,
+                detail=exc.detail,
+                status_code=exc.status_code,
             ),
         )
     except Exception as exc:

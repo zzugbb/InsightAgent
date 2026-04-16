@@ -133,6 +133,43 @@ export const en: Messages = {
     toolRunning: (name: string) => `Tool running: ${name}`,
     toolStarted: (name: string) => `Tool started: ${name}`,
     toolStatus: (status: string, name: string) => `Tool ${status}: ${name}`,
+    streamErrorByCode: (code: string) => {
+      const normalized = code.trim().toLowerCase();
+      if (normalized === "remote_api_key_required") {
+        return "Remote mode requires an API key.";
+      }
+      if (normalized === "remote_base_url_required") {
+        return "Remote mode requires a base URL.";
+      }
+      if (normalized === "remote_api_key_unauthorized") {
+        return "Remote provider authorization failed. Check API key and base URL.";
+      }
+      if (normalized === "remote_provider_rate_limited") {
+        return "Remote provider rate limit reached. Please retry later.";
+      }
+      if (normalized === "remote_provider_upstream_error") {
+        return "Remote provider is temporarily unavailable. Please retry later.";
+      }
+      if (normalized === "remote_provider_http_error") {
+        return "Remote provider request failed. Check provider configuration.";
+      }
+      if (normalized === "remote_provider_network_error") {
+        return "Failed to reach remote provider. Check network or base URL.";
+      }
+      if (normalized === "remote_provider_invalid_json") {
+        return "Remote provider returned invalid JSON.";
+      }
+      if (normalized === "remote_provider_empty_response") {
+        return "Remote provider returned no usable content.";
+      }
+      if (normalized === "remote_provider_stream_invalid_json") {
+        return "Remote provider stream returned malformed JSON chunks.";
+      }
+      if (normalized === "remote_provider_stream_interrupted") {
+        return "Remote provider stream was interrupted.";
+      }
+      return null;
+    },
     streamErrorFallback: "Task stream error received.",
     streamErrorMessage: (
       message: string,
@@ -519,6 +556,28 @@ export const en: Messages = {
     validating: "Validating…",
     validatePass: "Validation passed",
     validateFail: "Validation failed",
+    validateErrorByCode: (code: string) => {
+      const normalized = code.trim().toLowerCase();
+      if (normalized === "remote_api_key_required") {
+        return "Missing API key. Configure it before validation.";
+      }
+      if (normalized === "remote_base_url_required") {
+        return "Missing base URL. Configure it before validation.";
+      }
+      if (normalized === "remote_base_url_invalid") {
+        return "Invalid base URL. Use a full http(s) URL.";
+      }
+      if (normalized === "remote_api_key_unauthorized") {
+        return "Authorization failed (401/403). Check API key and base URL pairing.";
+      }
+      if (normalized === "remote_preflight_network_error") {
+        return "Preflight network check failed. Verify connectivity and gateway URL.";
+      }
+      if (normalized === "remote_base_url_unexpected_status") {
+        return "Preflight returned an unexpected status. Check gateway and model endpoint.";
+      }
+      return null;
+    },
     saveSuccess: "Settings saved successfully",
     saveFail: "Failed to save settings",
     requiredSuffix: "is required",

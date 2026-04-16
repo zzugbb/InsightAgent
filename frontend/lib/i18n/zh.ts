@@ -130,6 +130,43 @@ export const zh: Messages = {
     toolRunning: (name: string) => `工具执行中：${name}`,
     toolStarted: (name: string) => `工具已开始：${name}`,
     toolStatus: (status: string, name: string) => `工具${status}：${name}`,
+    streamErrorByCode: (code: string) => {
+      const normalized = code.trim().toLowerCase();
+      if (normalized === "remote_api_key_required") {
+        return "Remote 模式需要先配置 API Key。";
+      }
+      if (normalized === "remote_base_url_required") {
+        return "Remote 模式需要先配置 Base URL。";
+      }
+      if (normalized === "remote_api_key_unauthorized") {
+        return "远程模型鉴权失败，请检查 API Key 与 Base URL。";
+      }
+      if (normalized === "remote_provider_rate_limited") {
+        return "远程模型触发限流，请稍后重试。";
+      }
+      if (normalized === "remote_provider_upstream_error") {
+        return "远程模型服务暂时不可用，请稍后重试。";
+      }
+      if (normalized === "remote_provider_http_error") {
+        return "远程模型请求失败，请检查提供方配置。";
+      }
+      if (normalized === "remote_provider_network_error") {
+        return "连接远程模型失败，请检查网络或 Base URL。";
+      }
+      if (normalized === "remote_provider_invalid_json") {
+        return "远程模型返回了不可解析的数据。";
+      }
+      if (normalized === "remote_provider_empty_response") {
+        return "远程模型未返回有效内容。";
+      }
+      if (normalized === "remote_provider_stream_invalid_json") {
+        return "远程模型流式返回格式异常。";
+      }
+      if (normalized === "remote_provider_stream_interrupted") {
+        return "远程模型流式响应中断。";
+      }
+      return null;
+    },
     streamErrorFallback: "收到任务流错误事件。",
     streamErrorMessage: (
       message: string,
@@ -509,6 +546,28 @@ export const zh: Messages = {
     validating: "校验中…",
     validatePass: "校验通过",
     validateFail: "校验失败",
+    validateErrorByCode: (code: string) => {
+      const normalized = code.trim().toLowerCase();
+      if (normalized === "remote_api_key_required") {
+        return "缺少 API Key，请先配置后再校验。";
+      }
+      if (normalized === "remote_base_url_required") {
+        return "缺少 Base URL，请先配置后再校验。";
+      }
+      if (normalized === "remote_base_url_invalid") {
+        return "Base URL 格式不正确，请使用完整的 http(s) 地址。";
+      }
+      if (normalized === "remote_api_key_unauthorized") {
+        return "鉴权失败（401/403），请检查 API Key 与 Base URL 是否匹配。";
+      }
+      if (normalized === "remote_preflight_network_error") {
+        return "预检网络失败，请检查网络连通性或网关地址。";
+      }
+      if (normalized === "remote_base_url_unexpected_status") {
+        return "预检返回异常状态码，请检查网关与模型服务配置。";
+      }
+      return null;
+    },
     saveSuccess: "设置保存成功",
     saveFail: "设置保存失败",
     requiredSuffix: "为必填项",

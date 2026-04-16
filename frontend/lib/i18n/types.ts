@@ -124,6 +124,7 @@ export type Messages = {
     toolRunning: (name: string) => string;
     toolStarted: (name: string) => string;
     toolStatus: (status: string, name: string) => string;
+    streamErrorByCode: (code: string) => string | null;
     streamErrorFallback: string;
     streamErrorMessage: (message: string, fatal: boolean | null, retryCount: number | null) => string;
     promptEmpty: string;
@@ -487,6 +488,7 @@ export type Messages = {
     validating: string;
     validatePass: string;
     validateFail: string;
+    validateErrorByCode: (code: string) => string | null;
     saveSuccess: string;
     saveFail: string;
     requiredSuffix: string;

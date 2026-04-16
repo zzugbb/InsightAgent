@@ -24,6 +24,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 鉴权增强：接入 refresh token 持久化与自动刷新；401 优先尝试 `/api/auth/refresh` 轮换后重试，失败再回登录
 - 阶段 5 账户可见性收口：当前登录用户展示已融合到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的“图标 + 标题 + 值”行样式
 - 阶段 5 聊天显示修复：发送后立即展示用户临时消息；assistant 流式卡片仅在生成中/失败态显示，避免切回会话前看到重复回复
+- 阶段 5 增量：`remote-provider-hardening` 前端收口已完成首轮；流式 `error` 与设置校验失败已按 `error_code` 做本地化提示映射，并保留错误码用于排障
 
 ## 当前已有内容
 
@@ -41,6 +42,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 模型设置密钥语义调整：`remote` 下 `api_key` 留空将沿用已存密钥；仅在首次 remote 配置时必填
 - 模型设置表单校验补齐：`remote` 下 `provider/model/base_url` 必填；`api_key` 在无历史密钥时必填
 - 模型设置校验反馈优化：当远端返回 `401/403` 时，后端会返回明确鉴权错误（`remote_api_key_unauthorized`），避免展示为网络连通错误
+- 模型设置错误提示补充：`validate` 失败时会优先按 `error_code` 映射友好文案，并附带错误码（如 `remote_preflight_network_error`）便于联调
 - 模型设置提示修复：改用 `App.useApp().message` 显示保存/校验结果，避免 Ant Design 静态 message 主题上下文告警
 - 模型设置展示优化：元信息区 `base_url/database` 改为普通文本展示；切换到 `mock` 时清空当前编辑态并在保存后清空远端凭证
 - 模型设置回显修复：若后端当前已保存为 `remote`，切换回 `remote` 时会回显已保存 `provider/model/base_url`
@@ -85,6 +87,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - W1/W2 国际化收口：流式“空闲提示”纳入 i18n，语言切换时空闲提示可即时刷新
 - W1/W2 国际化维护优化：store 默认流式文案直接复用 `en.stream`，避免与 i18n 文案表双份维护
 - W3 稳定性优化：仅在 `error.fatal=true` 时将流状态置为 `error`，可重试工具错误不再误触发全局失败态
+- W4+ 稳定性优化：流式 `error` 事件已读取 `code/detail/status_code`，优先展示按错误码映射后的本地化提示，并在消息中附带错误码
 - W2 协同优化：后端 `running` 重连流的 `done/error` 事件已补齐关键字段（`session_id/step_id/resumed`），前端消费契约更稳定
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
 - Memory：状态展示 + add/query 调试（含 metadata）
@@ -211,5 +214,5 @@ npm run dev
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步补 remote 错误体验收口与主链路 e2e。
+- 下一步补主链路 e2e 与导出 e2e。
 - P0 完成后再推进任务取消/超时、RAG 知识库治理与 usage 统计增强。

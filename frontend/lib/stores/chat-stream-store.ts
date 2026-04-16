@@ -570,8 +570,29 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     if (event === "error" && payload && typeof payload === "object") {
       const sm = get().streamMessages;
       const p = payload as Record<string, unknown>;
-      const msg =
-        typeof p.message === "string" ? p.message : sm.streamErrorFallback;
+      const code =
+        typeof p.code === "string" && p.code.trim().length > 0
+          ? p.code.trim()
+          : null;
+      const backendMessage =
+        typeof p.message === "string" && p.message.trim().length > 0
+          ? p.message.trim()
+          : sm.streamErrorFallback;
+      const mappedMessage = code ? sm.streamErrorByCode(code) : null;
+      const detail =
+        typeof p.detail === "string" && p.detail.trim().length > 0
+          ? p.detail.trim()
+          : null;
+      const statusCode =
+        typeof p.status_code === "number" && Number.isFinite(p.status_code)
+          ? p.status_code
+          : null;
+      const baseMessage = mappedMessage ?? backendMessage;
+      const withStatus =
+        statusCode !== null ? `${baseMessage} (HTTP ${statusCode})` : baseMessage;
+      const withDetail =
+        detail && mappedMessage ? `${withStatus} [${detail}]` : withStatus;
+      const msg = code ? `[${code}] ${withDetail}` : withDetail;
       const fatal = typeof p.fatal === "boolean" ? p.fatal : null;
       const retryCount =
         typeof p.retryCount === "number" ? p.retryCount : null;
