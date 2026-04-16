@@ -328,6 +328,10 @@ export type Messages = {
     taskSnapshotFinalAnswerEmpty: string;
     taskSnapshotLastObservation: string;
     taskSnapshotNoSelection: string;
+    taskExportJson: string;
+    taskExportMarkdown: string;
+    taskExportJsonDone: string;
+    taskExportMarkdownDone: string;
     currentTaskCard: string;
     statusPrefix: string;
     latestTaskSession: string;

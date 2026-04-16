@@ -11,7 +11,7 @@ import {
   type MouseEvent,
 } from "react";
 
-import { apiJson, apiPostJson } from "../../../lib/api-client";
+import { apiJson, apiPostJson, authFetch } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
 import type { TraceStepPayload } from "../../../lib/types/trace";
 import {
@@ -166,6 +166,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const [taskPrioritizeFailed, setTaskPrioritizeFailed] = useState(true);
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
   const [retryCountdownSec, setRetryCountdownSec] = useState<number | null>(null);
+  const [taskExporting, setTaskExporting] = useState<"json" | "markdown" | null>(
+    null,
+  );
 
   const scrollToContextSection = (id: string) => {
     const el = document.getElementById(id);
@@ -173,6 +176,80 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       return;
     }
     el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const parseAttachmentFilename = (
+    value: string | null,
+    fallback: string,
+  ): string => {
+    if (!value) {
+      return fallback;
+    }
+    const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match?.[1]) {
+      try {
+        return decodeURIComponent(utf8Match[1]).trim() || fallback;
+      } catch {
+        return utf8Match[1].trim() || fallback;
+      }
+    }
+    const plainMatch = value.match(/filename="?([^";]+)"?/i);
+    if (!plainMatch?.[1]) {
+      return fallback;
+    }
+    const normalized = plainMatch[1].trim();
+    return normalized || fallback;
+  };
+
+  const triggerDownload = (filename: string, blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportTask = async (format: "json" | "markdown") => {
+    if (!activeTask?.id) {
+      message.warning(t.inspector.taskSnapshotNoSelection);
+      return;
+    }
+    setTaskExporting(format);
+    const taskId = encodeURIComponent(activeTask.id);
+    const route = format === "json" ? "json" : "markdown";
+    const fallbackFilename =
+      format === "json"
+        ? `insightagent-task-${activeTask.id}.json`
+        : `insightagent-task-${activeTask.id}.md`;
+    try {
+      const response = await authFetch(
+        `${apiBaseUrl}/api/tasks/${taskId}/export/${route}?download=1`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `${response.status}`);
+      }
+      const filename = parseAttachmentFilename(
+        response.headers.get("content-disposition"),
+        fallbackFilename,
+      );
+      const blob = await response.blob();
+      triggerDownload(filename, blob);
+      message.success(
+        format === "json"
+          ? t.inspector.taskExportJsonDone
+          : t.inspector.taskExportMarkdownDone,
+      );
+    } catch (error) {
+      const u = toUserFacingError(error, t.errors);
+      message.error(u.hint ? `${u.banner} ${u.hint}` : u.banner);
+    } finally {
+      setTaskExporting(null);
+    }
   };
 
   const memoryAddMutation = useMutation({
@@ -891,6 +968,26 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                 {t.inspector.taskFailureHint}: {activeTaskFailureHint}
               </p>
             ) : null}
+            <div className="task-export-actions">
+              <Button
+                size="small"
+                loading={taskExporting === "json"}
+                onClick={() => {
+                  void handleExportTask("json");
+                }}
+              >
+                {t.inspector.taskExportJson}
+              </Button>
+              <Button
+                size="small"
+                loading={taskExporting === "markdown"}
+                onClick={() => {
+                  void handleExportTask("markdown");
+                }}
+              >
+                {t.inspector.taskExportMarkdown}
+              </Button>
+            </div>
           </>
         ) : (
           <p className="panel-note panel-note--muted">

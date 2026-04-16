@@ -2314,6 +2314,17 @@ code {
   line-height: 1.45;
 }
 
+.task-export-actions {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.task-export-actions .ant-btn {
+  border-radius: 999px;
+}
+
 .task-summary-item {
   width: 100%;
   display: flex;

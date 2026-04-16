@@ -362,6 +362,21 @@ def get_session_messages(session_id: str, user_id: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def get_task_messages(task_id: str, user_id: str) -> list[dict]:
+    with get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, session_id, task_id, role, content, created_at
+            FROM messages
+            WHERE task_id = ? AND user_id = ?
+            ORDER BY created_at ASC
+            """,
+            (task_id, user_id),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
 def get_task(task_id: str, user_id: str) -> dict | None:
     with get_db_connection() as connection:
         row = connection.execute(

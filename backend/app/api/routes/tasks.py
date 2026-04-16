@@ -1,12 +1,13 @@
 import asyncio
 import json
+import re
 from collections.abc import AsyncIterator
 from datetime import datetime
 from time import monotonic
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
-from starlette.responses import StreamingResponse
+from starlette.responses import PlainTextResponse, StreamingResponse
 
 from app.api.deps import get_current_user
 from app.config import get_settings
@@ -22,6 +23,7 @@ from app.services.chat_persistence_service import (
     create_task,
     ensure_session,
     get_session,
+    get_task_messages,
     get_tasks_usage_summary,
     get_task,
     get_task_trace,
@@ -288,6 +290,239 @@ class TaskUsageSummaryResponse(BaseModel):
     avg_cost_estimate: float | None = None
 
 
+class TaskExportMessage(BaseModel):
+    id: str
+    role: str
+    content: str
+    created_at: str
+
+
+class TaskExportRagChunk(BaseModel):
+    step_id: str
+    knowledge_base_id: str | None = None
+    content: str
+
+
+class TaskExportTask(BaseModel):
+    id: str
+    session_id: str
+    prompt: str
+    status: str
+    status_normalized: str
+    status_label: str
+    status_rank: int
+    created_at: str
+    updated_at: str
+
+
+class TaskExportTrace(BaseModel):
+    step_count: int
+    rag_hit_count: int
+    rag_knowledge_base_ids: list[str]
+    rag_chunks: list[TaskExportRagChunk]
+    steps: list[TraceStep]
+
+
+class TaskExportJsonResponse(BaseModel):
+    version: str
+    exported_at: str
+    task: TaskExportTask
+    usage: dict[str, object] | None = None
+    messages: list[TaskExportMessage]
+    trace: TaskExportTrace
+
+
+def _normalize_filename_part(raw: str, fallback: str) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9._-]+", "-", raw).strip("-._")
+    return normalized or fallback
+
+
+def _build_task_export_filename(task: dict, ext: str) -> str:
+    task_id_part = _normalize_filename_part(str(task.get("id", "")), "task")
+    session_id_part = _normalize_filename_part(
+        str(task.get("session_id", "")),
+        "session",
+    )
+    return f"insightagent-task-{task_id_part}-session-{session_id_part}.{ext}"
+
+
+def _parse_task_usage_blob(task: dict) -> dict[str, object] | None:
+    usage_raw = task.get("usage_json")
+    if not isinstance(usage_raw, str) or not usage_raw.strip():
+        return None
+    try:
+        parsed = json.loads(usage_raw)
+    except Exception:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
+
+
+def _collect_rag_export(steps: list[TraceStep]) -> tuple[int, list[str], list[TaskExportRagChunk]]:
+    rag_hit_count = 0
+    rag_knowledge_base_ids: list[str] = []
+    rag_chunks: list[TaskExportRagChunk] = []
+    seen_kb_ids: set[str] = set()
+
+    for step in steps:
+        rag_meta = step.meta.rag if step.meta else None
+        if not isinstance(rag_meta, dict):
+            continue
+        raw_chunks = rag_meta.get("chunks")
+        kb_id = rag_meta.get("knowledge_base_id")
+        kb_id_text = kb_id.strip() if isinstance(kb_id, str) and kb_id.strip() else None
+        if kb_id_text and kb_id_text not in seen_kb_ids:
+            seen_kb_ids.add(kb_id_text)
+            rag_knowledge_base_ids.append(kb_id_text)
+        if isinstance(raw_chunks, list):
+            for chunk in raw_chunks:
+                if not isinstance(chunk, str):
+                    continue
+                chunk_text = chunk.strip()
+                if not chunk_text:
+                    continue
+                rag_hit_count += 1
+                rag_chunks.append(
+                    TaskExportRagChunk(
+                        step_id=step.id,
+                        knowledge_base_id=kb_id_text,
+                        content=chunk_text,
+                    ),
+                )
+
+    return rag_hit_count, rag_knowledge_base_ids, rag_chunks
+
+
+def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonResponse:
+    task_id = str(task["id"])
+    raw_steps = get_task_trace(task_id, user_id)
+    parsed_steps = parse_trace_steps(raw_steps)
+    rag_hit_count, rag_knowledge_base_ids, rag_chunks = _collect_rag_export(parsed_steps)
+    return TaskExportJsonResponse(
+        version="1.0",
+        exported_at=datetime.now().isoformat(),
+        task=TaskExportTask(**_with_status_meta(task)),
+        usage=_parse_task_usage_blob(task),
+        messages=[
+            TaskExportMessage(
+                id=row["id"],
+                role=row["role"],
+                content=row["content"],
+                created_at=row["created_at"],
+            )
+            for row in get_task_messages(task_id, user_id)
+        ],
+        trace=TaskExportTrace(
+            step_count=len(parsed_steps),
+            rag_hit_count=rag_hit_count,
+            rag_knowledge_base_ids=rag_knowledge_base_ids,
+            rag_chunks=rag_chunks,
+            steps=parsed_steps,
+        ),
+    )
+
+
+def _append_fenced_block(lines: list[str], content: str, language: str = "text") -> None:
+    text = content.rstrip("\n")
+    fence = "```"
+    if "```" in text:
+        fence = "~~~"
+    lines.append(f"{fence}{language}".rstrip())
+    lines.append(text)
+    lines.append(fence)
+
+
+def _build_task_export_markdown(payload: TaskExportJsonResponse) -> str:
+    lines: list[str] = []
+    lines.append("# InsightAgent Task Export")
+    lines.append("")
+    lines.append(f"- Exported At: {payload.exported_at}")
+    lines.append(f"- Task ID: {payload.task.id}")
+    lines.append(f"- Session ID: {payload.task.session_id}")
+    lines.append(
+        f"- Status: {payload.task.status} ({payload.task.status_normalized}, rank={payload.task.status_rank})",
+    )
+    lines.append(f"- Created At: {payload.task.created_at}")
+    lines.append(f"- Updated At: {payload.task.updated_at}")
+    lines.append("")
+    lines.append("## Prompt")
+    lines.append("")
+    _append_fenced_block(lines, payload.task.prompt or "", "text")
+    lines.append("")
+
+    if payload.usage:
+        lines.append("## Usage")
+        lines.append("")
+        _append_fenced_block(
+            lines,
+            json.dumps(payload.usage, ensure_ascii=False, indent=2),
+            "json",
+        )
+        lines.append("")
+
+    lines.append("## Messages")
+    lines.append("")
+    if not payload.messages:
+        lines.append("_No task-linked messages_")
+        lines.append("")
+    else:
+        for idx, msg in enumerate(payload.messages, start=1):
+            lines.append(f"### {idx}. {msg.role.upper()} · {msg.created_at}")
+            lines.append("")
+            _append_fenced_block(lines, msg.content or "", "text")
+            lines.append("")
+
+    lines.append("## Trace Summary")
+    lines.append("")
+    lines.append(f"- Step Count: {payload.trace.step_count}")
+    lines.append(f"- RAG Hit Count: {payload.trace.rag_hit_count}")
+    if payload.trace.rag_knowledge_base_ids:
+        lines.append(
+            "- RAG Knowledge Bases: "
+            + ", ".join(payload.trace.rag_knowledge_base_ids),
+        )
+    else:
+        lines.append("- RAG Knowledge Bases: (none)")
+    lines.append("")
+
+    if payload.trace.rag_chunks:
+        lines.append("## RAG Chunks")
+        lines.append("")
+        for idx, chunk in enumerate(payload.trace.rag_chunks, start=1):
+            kb = chunk.knowledge_base_id or "default"
+            lines.append(f"### {idx}. step={chunk.step_id} · kb={kb}")
+            lines.append("")
+            _append_fenced_block(lines, chunk.content, "text")
+            lines.append("")
+
+    lines.append("## Trace Steps")
+    lines.append("")
+    if not payload.trace.steps:
+        lines.append("_No trace steps_")
+        lines.append("")
+    else:
+        for idx, step in enumerate(payload.trace.steps, start=1):
+            seq = step.seq if step.seq is not None else idx
+            lines.append(f"### {idx}. seq={seq} · {step.type} · {step.id}")
+            lines.append("")
+            if step.meta is not None:
+                _append_fenced_block(
+                    lines,
+                    json.dumps(
+                        step.meta.model_dump(exclude_none=True),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    "json",
+                )
+                lines.append("")
+            _append_fenced_block(lines, step.content or "", "text")
+            lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
 @router.post("", response_model=TaskCreateResponse)
 def create_task_entry(
     payload: TaskCreateRequest,
@@ -385,6 +620,55 @@ def get_task_detail(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskResponse(**_with_status_meta(task))
+
+
+@router.get("/{task_id}/export/json", response_model=TaskExportJsonResponse)
+def export_task_json(
+    task_id: str,
+    response: Response,
+    download: bool = Query(
+        default=False,
+        description="为 true 时附加 Content-Disposition 附件头",
+    ),
+    current_user: dict = Depends(get_current_user),
+) -> TaskExportJsonResponse:
+    user_id = str(current_user["id"])
+    task = get_task(task_id, user_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    payload = _build_task_export_payload(task, user_id)
+    if download:
+        response.headers["Content-Disposition"] = (
+            f'attachment; filename="{_build_task_export_filename(task, "json")}"'
+        )
+    return payload
+
+
+@router.get("/{task_id}/export/markdown", response_class=PlainTextResponse)
+def export_task_markdown(
+    task_id: str,
+    download: bool = Query(
+        default=False,
+        description="为 true 时附加 Content-Disposition 附件头",
+    ),
+    current_user: dict = Depends(get_current_user),
+) -> PlainTextResponse:
+    user_id = str(current_user["id"])
+    task = get_task(task_id, user_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    payload = _build_task_export_payload(task, user_id)
+    markdown = _build_task_export_markdown(payload)
+    headers: dict[str, str] = {}
+    if download:
+        headers["Content-Disposition"] = (
+            f'attachment; filename="{_build_task_export_filename(task, "md")}"'
+        )
+    return PlainTextResponse(
+        markdown,
+        headers=headers,
+        media_type="text/markdown; charset=utf-8",
+    )
 
 
 @router.get("/{task_id}/trace", response_model=TaskTraceResponse)
