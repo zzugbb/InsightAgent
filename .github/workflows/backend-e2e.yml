@@ -1,0 +1,123 @@
+name: backend-e2e
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-e2e.yml"
+      - "compose.full.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-e2e.yml"
+      - "compose.full.yml"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: insight
+          POSTGRES_PASSWORD: insight
+          POSTGRES_DB: insightagent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U insight -d insightagent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      chroma:
+        image: chromadb/chroma:latest
+        env:
+          IS_PERSISTENT: "FALSE"
+          ANONYMIZED_TELEMETRY: "FALSE"
+        ports:
+          - 8001:8000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Start backend on :8000 (default timeout)
+        env:
+          INSIGHT_AGENT_DATABASE_URL: postgresql://insight:insight@127.0.0.1:5432/insightagent
+          CHROMA_HOST: 127.0.0.1
+          CHROMA_PORT: "8001"
+        run: |
+          nohup uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 >/tmp/backend-8000.log 2>&1 &
+          echo $! > /tmp/backend-8000.pid
+
+      - name: Wait backend :8000 health
+        run: |
+          for i in {1..60}; do
+            code=$(curl -s -o /tmp/health-8000.json -w "%{http_code}" http://127.0.0.1:8000/health || true)
+            if [ "$code" = "200" ]; then
+              cat /tmp/health-8000.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "backend :8000 failed to become healthy"
+          cat /tmp/backend-8000.log || true
+          exit 1
+
+      - name: Run baseline/main-path/cancel e2e on :8000
+        run: |
+          python3 backend/scripts/e2e_baseline.py --base-url http://127.0.0.1:8000
+          python3 backend/scripts/e2e_main_path.py --base-url http://127.0.0.1:8000
+          python3 backend/scripts/e2e_task_cancel_timeout.py --base-url http://127.0.0.1:8000 --skip-timeout
+
+      - name: Start backend on :8010 (timeout=1s)
+        env:
+          INSIGHT_AGENT_DATABASE_URL: postgresql://insight:insight@127.0.0.1:5432/insightagent
+          CHROMA_HOST: 127.0.0.1
+          CHROMA_PORT: "8001"
+          TASK_TIMEOUT_SEC: "1"
+        run: |
+          nohup uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8010 >/tmp/backend-8010.log 2>&1 &
+          echo $! > /tmp/backend-8010.pid
+
+      - name: Wait backend :8010 health
+        run: |
+          for i in {1..60}; do
+            code=$(curl -s -o /tmp/health-8010.json -w "%{http_code}" http://127.0.0.1:8010/health || true)
+            if [ "$code" = "200" ]; then
+              cat /tmp/health-8010.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "backend :8010 failed to become healthy"
+          cat /tmp/backend-8010.log || true
+          exit 1
+
+      - name: Run timeout e2e on :8010
+        run: |
+          python3 backend/scripts/e2e_task_cancel_timeout.py \
+            --base-url http://127.0.0.1:8010 \
+            --cancel-prompt-words 180000 \
+            --timeout-prompt-words 250000
+
+      - name: Show backend logs on failure
+        if: failure()
+        run: |
+          echo "===== backend-8000.log ====="
+          cat /tmp/backend-8000.log || true
+          echo "===== backend-8010.log ====="
+          cat /tmp/backend-8010.log || true
