@@ -61,6 +61,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 右侧 Inspector（Context）信息架构已优化为分区式布局：概览 KPI、同步诊断、用量统计、Memory、任务索引；便于后续追加更多运维/分析模块
 - `full-trace-session-lite` 首个切片已落地：Context 新增「任务快照」分区，支持展示选中任务的 prompt、最终回答摘要、最终观察、RAG 命中、步骤数、状态/时间与失败提示，并接入快速跳转
 - `trace-export-json-md` 首版已落地：任务快照分区新增“导出 JSON / 导出 Markdown”按钮，可一键导出当前任务（task-linked 消息、TraceStep、RAG chunks、usage、元信息）
+- `session-export-lite` 首版已落地：Context 新增“会话导出”分区，支持导出当前会话 JSON / Markdown（消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage）
 - 任务索引增强：支持状态筛选（全部/运行中/已完成/失败）、时间排序（最新/最早）与失败置顶
 - 任务索引增强：支持按任务标题/ID 搜索，并在失败任务上展示失败摘要提示
 - Trace 面板增强：支持步骤类型筛选（全部/思考/行动/观察/工具/RAG/其他）、关键词检索、类型计数统计，且在时间线与流程图视图一致生效
@@ -99,6 +100,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `app/components/workbench/index.tsx`：工作台主编排
 - `app/components/workbench/inspector.tsx`：轨迹与上下文面板
 - `app/components/workbench/inspector.tsx`：任务快照导出入口（JSON/Markdown）
+- `app/components/workbench/inspector.tsx`：会话导出入口（Session JSON/Markdown）
 - `app/components/workbench/trace-flow-view.tsx`：轨迹流程图节点渲染
 - `app/components/workbench/chat-column.tsx`：消息历史、用户临时消息与流式 assistant 展示
 - `app/components/workbench/sidebar.tsx`：会话列表、折叠侧栏与设置入口
@@ -186,9 +188,9 @@ npm run dev
 
 ### 优先做
 
-1. `full-trace-session-lite`：任务详情抽屉/页面，展示 prompt、最终回答、Trace、RAG 命中、usage 与错误摘要。
-2. `trace-export-json-md`：单任务 JSON/Markdown 导出入口。
-3. `session-export-lite`：当前会话消息、任务摘要与 Trace 片段导出。
+1. `full-trace-session-lite`：任务详情抽屉/页面（任务快照 + 回放）已接入；后续补详情视图增强与导出 e2e。
+2. `trace-export-json-md`：单任务 JSON/Markdown 导出入口已接入；后续补导出 e2e。
+3. `session-export-lite`：当前会话 JSON/Markdown 导出入口已接入；后续补导出 e2e。
 4. `remote-provider-hardening`：真实模型错误提示、重试建议与设置入口联动。
 5. `e2e-main-path`：登录、模型设置、发送消息、Trace 回放、RAG 检索、导出主路径。
 6. `task-cancel-timeout`：运行中取消/超时 UI 与状态反馈。
@@ -208,6 +210,6 @@ npm run dev
 
 ## 下一步（W4+）
 
-- 历史任务详情/Trace 回放已进入开发：任务快照与 JSON/Markdown 导出已完成，下一步补会话级导出。
-- 随后补会话导出与 remote 错误体验收口。
+- 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
+- 下一步补 remote 错误体验收口与主链路 e2e。
 - P0 完成后再推进任务取消/超时、RAG 知识库治理与 usage 统计增强。

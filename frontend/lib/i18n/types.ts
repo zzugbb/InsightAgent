@@ -273,6 +273,7 @@ export type Messages = {
     contextJumpSync: string;
     contextJumpUsage: string;
     contextJumpTaskSnapshot: string;
+    contextJumpSessionExport: string;
     contextJumpMemory: string;
     contextJumpRag: string;
     contextJumpAudit: string;
@@ -332,6 +333,13 @@ export type Messages = {
     taskExportMarkdown: string;
     taskExportJsonDone: string;
     taskExportMarkdownDone: string;
+    sessionExportTitle: string;
+    sessionExportLead: string;
+    sessionExportNoSelection: string;
+    sessionExportJson: string;
+    sessionExportMarkdown: string;
+    sessionExportJsonDone: string;
+    sessionExportMarkdownDone: string;
     currentTaskCard: string;
     statusPrefix: string;
     latestTaskSession: string;

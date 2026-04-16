@@ -169,6 +169,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const [taskExporting, setTaskExporting] = useState<"json" | "markdown" | null>(
     null,
   );
+  const [sessionExporting, setSessionExporting] = useState<
+    "json" | "markdown" | null
+  >(null);
 
   const scrollToContextSection = (id: string) => {
     const el = document.getElementById(id);
@@ -249,6 +252,47 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       message.error(u.hint ? `${u.banner} ${u.hint}` : u.banner);
     } finally {
       setTaskExporting(null);
+    }
+  };
+
+  const handleExportSession = async (format: "json" | "markdown") => {
+    const sessionId = activeSessionId?.trim();
+    if (!sessionId) {
+      message.warning(t.inspector.sessionExportNoSelection);
+      return;
+    }
+    setSessionExporting(format);
+    const encodedSessionId = encodeURIComponent(sessionId);
+    const route = format === "json" ? "json" : "markdown";
+    const fallbackFilename =
+      format === "json"
+        ? `insightagent-session-${sessionId}.json`
+        : `insightagent-session-${sessionId}.md`;
+    try {
+      const response = await authFetch(
+        `${apiBaseUrl}/api/sessions/${encodedSessionId}/export/${route}?download=1`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `${response.status}`);
+      }
+      const filename = parseAttachmentFilename(
+        response.headers.get("content-disposition"),
+        fallbackFilename,
+      );
+      const blob = await response.blob();
+      triggerDownload(filename, blob);
+      message.success(
+        format === "json"
+          ? t.inspector.sessionExportJsonDone
+          : t.inspector.sessionExportMarkdownDone,
+      );
+    } catch (error) {
+      const u = toUserFacingError(error, t.errors);
+      message.error(u.hint ? `${u.banner} ${u.hint}` : u.banner);
+    } finally {
+      setSessionExporting(null);
     }
   };
 
@@ -765,6 +809,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <Button size="small" onClick={() => scrollToContextSection("ctx-task-snapshot")}>
             {t.inspector.contextJumpTaskSnapshot}
           </Button>
+          <Button size="small" onClick={() => scrollToContextSection("ctx-session-export")}>
+            {t.inspector.contextJumpSessionExport}
+          </Button>
           <Button size="small" onClick={() => scrollToContextSection("ctx-memory")}>
             {t.inspector.contextJumpMemory}
           </Button>
@@ -994,6 +1041,37 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             {t.inspector.taskSnapshotNoSelection}
           </p>
         )}
+      </div>
+
+      <div className="inspector-block" id="ctx-session-export">
+        <p className="summary-label">{t.inspector.sessionExportTitle}</p>
+        <p className="inspector-section-lead">{t.inspector.sessionExportLead}</p>
+        <div className="context-grid context-grid--stats compact">
+          <span>{t.inspector.session}</span>
+          <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
+        </div>
+        <div className="session-export-actions">
+          <Button
+            size="small"
+            loading={sessionExporting === "json"}
+            disabled={!activeSessionId}
+            onClick={() => {
+              void handleExportSession("json");
+            }}
+          >
+            {t.inspector.sessionExportJson}
+          </Button>
+          <Button
+            size="small"
+            loading={sessionExporting === "markdown"}
+            disabled={!activeSessionId}
+            onClick={() => {
+              void handleExportSession("markdown");
+            }}
+          >
+            {t.inspector.sessionExportMarkdown}
+          </Button>
+        </div>
       </div>
 
       <div className="inspector-block memory-placeholder-card" id="ctx-memory">

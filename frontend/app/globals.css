@@ -2325,6 +2325,17 @@ code {
   border-radius: 999px;
 }
 
+.session-export-actions {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.session-export-actions .ant-btn {
+  border-radius: 999px;
+}
+
 .task-summary-item {
   width: 100%;
   display: flex;

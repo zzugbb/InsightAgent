@@ -427,6 +427,21 @@ def list_tasks(
     return [dict(row) for row in rows]
 
 
+def get_session_tasks(session_id: str, user_id: str) -> list[dict]:
+    with get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
+            FROM tasks
+            WHERE user_id = ? AND session_id = ?
+            ORDER BY created_at ASC
+            """,
+            (user_id, session_id),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
 def get_task_trace(task_id: str, user_id: str) -> list[dict]:
     task = get_task(task_id, user_id)
     if task is None or not task["trace_json"]:

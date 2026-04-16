@@ -32,6 +32,7 @@
 - 协同进展：前端右侧 Inspector 已完成一体化收口（Trace 密度、Context 快速跳转、状态徽标），均基于现有字段推导，无需新增后端接口
 - 协同进展：`full-trace-session-lite` 首个前端切片已接入（任务快照：prompt/最终回答摘要/最终观察/RAG 命中/状态与失败提示），复用现有 `GET /api/tasks` + `GET /api/tasks/{task_id}/trace` 契约，无需新增后端接口
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage
+- 协同进展：`session-export-lite` 首版已接入；新增 `GET /api/sessions/{session_id}/export/json` 与 `GET /api/sessions/{session_id}/export/markdown`，导出包含会话消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage 汇总
 - 协同进展：前端左侧与中栏已完成风格收口（导航层级、runtime strip、输入区动效与密度），继续复用现有接口与字段
 - 协同进展：前端已按最新交互要求收敛头部占位（移除会话状态胶囊与输入计数提示），继续复用现有接口与字段
 - 协同进展：前端侧栏账户展示已收口到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的设置行风格（图标 + 标题 + 值）
@@ -103,6 +104,8 @@
 - `PATCH /api/sessions/{session_id}`
 - `DELETE /api/sessions/{session_id}`
 - `GET /api/sessions/{session_id}/messages`
+- `GET /api/sessions/{session_id}/export/json`
+- `GET /api/sessions/{session_id}/export/markdown`
 - `GET /api/sessions/{session_id}/memory/status`
 - `GET /api/sessions/{session_id}/usage/summary`
 - `POST /api/sessions/{session_id}/memory/add`
@@ -263,9 +266,9 @@ docker compose up -d chroma
 
 ### 优先做
 
-1. `full-trace-session-lite`：任务详情前端快照与导出入口已接入；后续补会话级导出与详情视图增强。
+1. `full-trace-session-lite`：任务详情快照与导出入口已接入；后续补详情视图增强与导出 e2e。
 2. `trace-export-json-md`：单任务 JSON/Markdown 导出接口已落地；后续补字段稳定性与导出 e2e 校验。
-3. `session-export-lite`：聚合会话消息、任务摘要、usage 与 Trace 片段。
+3. `session-export-lite`：会话级 JSON/Markdown 导出接口已落地；后续补字段稳定性与导出 e2e 校验。
 4. `remote-provider-hardening`：统一远端 401/403、网络错误、SSE 中断、空响应与 JSON 异常错误码。
 5. `e2e-main-path`：保持登录、模型配置、任务流、Trace、RAG、导出主链路可验证。
 6. `task-cancel-timeout`：P0 后加入单进程取消、超时与状态落库。
