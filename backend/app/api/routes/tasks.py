@@ -28,6 +28,7 @@ from app.services.chat_persistence_service import (
     get_task,
     get_task_trace,
     get_task_trace_delta_from_task,
+    update_task_status,
     list_tasks,
 )
 from app.services.task_status_service import (
@@ -240,6 +241,16 @@ class TaskResponse(BaseModel):
     usage_json: str | None = None
     created_at: str
     updated_at: str
+
+
+class TaskCancelResponse(BaseModel):
+    task_id: str
+    previous_status: str
+    status: str
+    status_normalized: str
+    status_label: str
+    status_rank: int
+    already_terminal: bool
 
 
 class TaskTraceResponse(BaseModel):
@@ -620,6 +631,36 @@ def get_task_detail(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskResponse(**_with_status_meta(task))
+
+
+@router.post("/{task_id}/cancel", response_model=TaskCancelResponse)
+def cancel_task(
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> TaskCancelResponse:
+    user_id = str(current_user["id"])
+    task = get_task(task_id, user_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    previous_status = str(task.get("status", ""))
+    normalized_prev = normalize_task_status(previous_status)
+    already_terminal = normalized_prev in {"completed", "failed", "cancelled", "timed_out"}
+
+    if not already_terminal:
+        update_task_status(task_id=task_id, status="cancelled", user_id=user_id)
+        task = get_task(task_id, user_id) or {**task, "status": "cancelled"}
+
+    current_status = str(task.get("status", ""))
+    return TaskCancelResponse(
+        task_id=task_id,
+        previous_status=previous_status,
+        status=current_status,
+        status_normalized=normalize_task_status(current_status),
+        status_label=task_status_label(current_status),
+        status_rank=task_status_rank(current_status),
+        already_terminal=already_terminal,
+    )
 
 
 @router.get("/{task_id}/export/json", response_model=TaskExportJsonResponse)

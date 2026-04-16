@@ -16,6 +16,8 @@ const KNOWN_SSE_PHASES = new Set([
   "tool_running",
   "tool_retry",
   "streaming",
+  "cancelled",
+  "timeout",
   "replay",
   "error",
   "done",
@@ -564,6 +566,22 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         ssePhase: "done",
         sseMessage: sm.streamCompleted,
         sseTaskUsage: nextUsage,
+      });
+      return;
+    }
+    if (event === "cancelled") {
+      const sm = get().streamMessages;
+      set({
+        ssePhase: "cancelled",
+        sseMessage: sm.streamCancelled,
+      });
+      return;
+    }
+    if (event === "timeout") {
+      const sm = get().streamMessages;
+      set({
+        ssePhase: "timeout",
+        sseMessage: sm.streamTimeout,
       });
       return;
     }

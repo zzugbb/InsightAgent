@@ -59,6 +59,8 @@ export const en: Messages = {
     traceHidden: (n: number) => `${n} more steps hidden`,
     phaseDone: "Done",
     phaseError: "Failed",
+    phaseCancelled: "Cancelled",
+    phaseTimeout: "Timed out",
     phaseReplay: "Replaying",
     phaseRunning: "Running",
     phaseIdle: "Idle",
@@ -116,6 +118,8 @@ export const en: Messages = {
       "After sending a message, execution trace appears on the right; stream status details are shown here.",
     streamStarted: "Task stream started.",
     streamCompleted: "Task stream completed (done).",
+    streamCancelled: "Task was cancelled.",
+    streamTimeout: "Task timed out.",
     streamHeartbeat: "Receiving task stream (heartbeat ok).",
     loadingPersistedTrace: "Loading persisted trace...",
     persistedTraceLoaded: "Persisted trace loaded.",
@@ -167,6 +171,12 @@ export const en: Messages = {
       }
       if (normalized === "remote_provider_stream_interrupted") {
         return "Remote provider stream was interrupted.";
+      }
+      if (normalized === "task_cancelled") {
+        return "Task was cancelled.";
+      }
+      if (normalized === "task_timeout") {
+        return "Task timed out.";
       }
       return null;
     },
@@ -420,6 +430,10 @@ export const en: Messages = {
     taskVisibleCount: (shown: number, total: number) =>
       `Showing ${shown} of ${total}`,
     taskEmpty: "No tasks match this filter.",
+    taskCancel: "Cancel task",
+    taskCancelDone: "Task cancel requested",
+    taskCancelAlreadyTerminal: "Task is already finished",
+    taskCancelFailed: "Failed to cancel task",
     loadMoreTasks: "Load more",
     backendUrl: "API base: ",
     seqLabel: "seq",

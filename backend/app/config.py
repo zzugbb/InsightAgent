@@ -76,6 +76,12 @@ class Settings(BaseSettings):
         alias="STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC",
         description="running 重连流 heartbeat 周期（秒）",
     )
+    task_timeout_sec: float = Field(
+        default=180.0,
+        gt=0.0,
+        alias="TASK_TIMEOUT_SEC",
+        description="单任务流式执行超时阈值（秒）",
+    )
     rag_default_knowledge_base_id: str = Field(
         default="default",
         alias="RAG_DEFAULT_KNOWLEDGE_BASE_ID",

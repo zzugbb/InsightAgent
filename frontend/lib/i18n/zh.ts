@@ -59,6 +59,8 @@ export const zh: Messages = {
     traceHidden: (n: number) => `另有 ${n} 步已折叠`,
     phaseDone: "已完成",
     phaseError: "失败",
+    phaseCancelled: "已取消",
+    phaseTimeout: "已超时",
     phaseReplay: "回放中",
     phaseRunning: "运行中",
     phaseIdle: "待命",
@@ -114,6 +116,8 @@ export const zh: Messages = {
       "发送消息后，执行过程会出现在右侧「轨迹」；连接与状态说明会显示在这里。",
     streamStarted: "任务流已开始。",
     streamCompleted: "任务流已完成（done）。",
+    streamCancelled: "任务已取消。",
+    streamTimeout: "任务已超时。",
     streamHeartbeat: "任务流连接正常（heartbeat）。",
     loadingPersistedTrace: "正在加载持久化轨迹…",
     persistedTraceLoaded: "已加载持久化轨迹。",
@@ -164,6 +168,12 @@ export const zh: Messages = {
       }
       if (normalized === "remote_provider_stream_interrupted") {
         return "远程模型流式响应中断。";
+      }
+      if (normalized === "task_cancelled") {
+        return "任务已取消。";
+      }
+      if (normalized === "task_timeout") {
+        return "任务执行超时。";
       }
       return null;
     },
@@ -413,6 +423,10 @@ export const zh: Messages = {
     taskVisibleCount: (shown: number, total: number) =>
       `显示 ${shown} / ${total}`,
     taskEmpty: "当前筛选条件下暂无任务。",
+    taskCancel: "取消任务",
+    taskCancelDone: "已请求取消任务",
+    taskCancelAlreadyTerminal: "任务已结束，无需取消",
+    taskCancelFailed: "取消任务失败",
     loadMoreTasks: "加载更多",
     backendUrl: "后端地址：",
     seqLabel: "seq",

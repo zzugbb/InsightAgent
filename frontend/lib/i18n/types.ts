@@ -58,6 +58,8 @@ export type Messages = {
     traceHidden: (n: number) => string;
     phaseDone: string;
     phaseError: string;
+    phaseCancelled: string;
+    phaseTimeout: string;
     phaseReplay: string;
     phaseRunning: string;
     phaseIdle: string;
@@ -109,6 +111,8 @@ export type Messages = {
     idleHint: string;
     streamStarted: string;
     streamCompleted: string;
+    streamCancelled: string;
+    streamTimeout: string;
     streamHeartbeat: string;
     loadingPersistedTrace: string;
     persistedTraceLoaded: string;
@@ -359,6 +363,10 @@ export type Messages = {
     taskFailureHint: string;
     taskVisibleCount: (shown: number, total: number) => string;
     taskEmpty: string;
+    taskCancel: string;
+    taskCancelDone: string;
+    taskCancelAlreadyTerminal: string;
+    taskCancelFailed: string;
     loadMoreTasks: string;
     backendUrl: string;
     seqLabel: string;

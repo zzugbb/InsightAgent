@@ -81,6 +81,8 @@ type InspectorProps = {
   onReplayTrace: () => void;
   onLoadDelta: () => void;
   onSelectTask: (task: TaskSummary) => void;
+  onCancelTask: (task: TaskSummary) => void;
+  cancellingTaskId: string | null;
   apiBaseUrl: string;
   sessionMemoryStatus: SessionMemoryStatus | undefined;
   sessionMemoryLoading: boolean;
@@ -123,6 +125,8 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     onReplayTrace,
     onLoadDelta,
     onSelectTask,
+    onCancelTask,
+    cancellingTaskId,
     apiBaseUrl,
     sessionMemoryStatus,
     sessionMemoryLoading,
@@ -622,6 +626,11 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       return "failed";
     }
     return "other";
+  };
+
+  const isTaskCancelable = (status: string): boolean => {
+    const normalized = status.trim().toLowerCase();
+    return normalized === "pending" || normalized === "running";
   };
 
   const tracePanel = (
@@ -1470,6 +1479,18 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             {t.inspector.statusPrefix}
             {activeTask.status}
           </span>
+          {isTaskCancelable(activeTask.status) ? (
+            <div className="task-export-actions">
+              <Button
+                size="small"
+                danger
+                loading={cancellingTaskId === activeTask.id}
+                onClick={() => onCancelTask(activeTask)}
+              >
+                {t.inspector.taskCancel}
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

@@ -11,6 +11,7 @@ from app.providers.base import ProviderCallError
 from app.services.chat_persistence_service import (
     complete_task,
     create_message,
+    get_task,
     update_task_status,
     update_task_trace_steps,
 )
@@ -23,6 +24,22 @@ class MockToolExecutionError(RuntimeError):
     def __init__(self, message: str, *, fatal: bool):
         super().__init__(message)
         self.fatal = fatal
+
+
+class TaskExecutionAbortError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        code: str,
+        status: str,
+        event: str,
+        user_message: str,
+    ) -> None:
+        super().__init__(user_message)
+        self.code = code
+        self.status = status
+        self.event = event
+        self.user_message = user_message
 
 
 def sse_event(event: str, data: dict[str, object]) -> str:
@@ -278,13 +295,18 @@ def stream_task_execution(
 ) -> Iterator[str]:
     STREAM_TRACE_PERSIST_EVERY = 8
     STREAM_HEARTBEAT_INTERVAL_SEC = 2.0
+    TASK_STATUS_PROBE_MIN_INTERVAL_SEC = 0.25
     TRACE_PERSIST_MIN_INTERVAL_SEC = max(
         0.0, float(get_settings().trace_persist_min_interval_sec)
     )
+    TASK_TIMEOUT_SEC = max(1.0, float(get_settings().task_timeout_sec))
     TOOL_MAX_RETRY = 1
     trace_steps: list[dict[str, object]] = []
     seq_cursor = 0
     last_trace_persist_ts = 0.0
+    last_status_probe_ts = 0.0
+    cached_task_status = "pending"
+    stream_started_ts = monotonic()
 
     def persist_trace(*, force: bool = False) -> None:
         nonlocal last_trace_persist_ts
@@ -300,6 +322,60 @@ def stream_task_execution(
         update_task_trace_steps(task_id, trace_steps, user_id)
         last_trace_persist_ts = now
 
+    def probe_task_status(*, force: bool = False) -> str:
+        nonlocal last_status_probe_ts, cached_task_status
+        now = monotonic()
+        if (
+            not force
+            and last_status_probe_ts > 0
+            and now - last_status_probe_ts < TASK_STATUS_PROBE_MIN_INTERVAL_SEC
+        ):
+            return cached_task_status
+        task = get_task(task_id, user_id)
+        if task is None:
+            cached_task_status = "missing"
+        else:
+            cached_task_status = str(task.get("status", "")).strip().lower()
+        last_status_probe_ts = now
+        return cached_task_status
+
+    def raise_if_should_abort(*, force_status_probe: bool = False) -> None:
+        status = probe_task_status(force=force_status_probe)
+        if status in {"cancelled", "canceled"}:
+            raise TaskExecutionAbortError(
+                code="task_cancelled",
+                status="cancelled",
+                event="cancelled",
+                user_message="Task was cancelled by user.",
+            )
+        if status in {"timed_out", "timeout"}:
+            raise TaskExecutionAbortError(
+                code="task_timeout",
+                status="timed_out",
+                event="timeout",
+                user_message="Task exceeded timeout limit.",
+            )
+        elapsed = monotonic() - stream_started_ts
+        if elapsed >= TASK_TIMEOUT_SEC:
+            update_task_status(task_id=task_id, status="timed_out", user_id=user_id)
+            probe_task_status(force=True)
+            raise TaskExecutionAbortError(
+                code="task_timeout",
+                status="timed_out",
+                event="timeout",
+                user_message=(
+                    f"Task timed out after {TASK_TIMEOUT_SEC:.1f}s. "
+                    "Please retry with a shorter request or cancel earlier."
+                ),
+            )
+        if status == "missing":
+            raise TaskExecutionAbortError(
+                code="task_not_found",
+                status="failed",
+                event="error",
+                user_message="Task no longer exists.",
+            )
+
     if persist_user_message:
         create_message(
             session_id=session_id,
@@ -310,9 +386,11 @@ def stream_task_execution(
         )
 
     update_task_status(task_id=task_id, status="running", user_id=user_id)
+    probe_task_status(force=True)
 
     try:
         provider = get_llm_provider(user_id)
+        raise_if_should_abort(force_status_probe=True)
 
         yield sse_event(
             "start",
@@ -354,6 +432,7 @@ def stream_task_execution(
         tool_observations: list[str] = []
 
         for idx, tool_spec in enumerate(tool_plan, start=1):
+            raise_if_should_abort()
             tool_name = str(tool_spec["name"])
             tool_input = tool_spec.get("input")
             if not isinstance(tool_input, dict):
@@ -389,6 +468,7 @@ def stream_task_execution(
             last_error: str | None = None
 
             while True:
+                raise_if_should_abort()
                 yield sse_event(
                     "tool_start",
                     {
@@ -408,6 +488,7 @@ def stream_task_execution(
                 )
 
                 try:
+                    raise_if_should_abort()
                     output = _run_mock_tool(
                         name=tool_name,
                         tool_input=tool_input,
@@ -568,6 +649,7 @@ def stream_task_execution(
                     persist_trace()
 
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
+        raise_if_should_abort()
         final_step_id = str(uuid4())
         seq_cursor += 1
         final_step_streaming: dict[str, object] = {
@@ -613,6 +695,7 @@ def stream_task_execution(
         streamed_content = ""
         final_step_seq = int(final_step_streaming.get("seq", seq_cursor))
         for chunk in provider.stream_generate(provider_prompt):
+            raise_if_should_abort()
             stream_chunk_count += 1
             now = monotonic()
             if now - last_heartbeat_ts >= STREAM_HEARTBEAT_INTERVAL_SEC:
@@ -646,6 +729,7 @@ def stream_task_execution(
 
         final_content = streamed_content
         if not final_content:
+            raise_if_should_abort(force_status_probe=True)
             fallback = provider.generate(provider_prompt)
             final_content = fallback.content
         else:
@@ -708,6 +792,35 @@ def stream_task_execution(
             },
         )
 
+    except TaskExecutionAbortError as exc:
+        complete_task(
+            task_id=task_id,
+            trace_steps=trace_steps,
+            user_id=user_id,
+            status=exc.status,
+        )
+        phase = exc.event if exc.event in {"cancelled", "timeout"} else "error"
+        yield sse_event("state", {"task_id": task_id, "phase": phase})
+        if exc.event in {"cancelled", "timeout"}:
+            yield sse_event(
+                exc.event,
+                {
+                    "task_id": task_id,
+                    "status": exc.status,
+                    "code": exc.code,
+                    "message": exc.user_message,
+                },
+            )
+        yield sse_event(
+            "error",
+            sse_error_payload(
+                task_id=task_id,
+                message=exc.user_message,
+                code=exc.code,
+                fatal=True,
+                retry_count=0,
+            ),
+        )
     except ProviderSelectionError as exc:
         complete_task(
             task_id=task_id,

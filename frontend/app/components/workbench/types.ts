@@ -48,6 +48,16 @@ export type TaskSummary = {
   updated_at: string;
 };
 
+export type TaskCancelResponse = {
+  task_id: string;
+  previous_status: string;
+  status: string;
+  status_normalized: string;
+  status_label: string;
+  status_rank: number;
+  already_terminal: boolean;
+};
+
 export type SettingsFormState = {
   mode: string;
   provider: string;

@@ -35,6 +35,7 @@ import type {
   SessionMessage,
   SessionSummary,
   SettingsSummary,
+  TaskCancelResponse,
   TaskSummary,
   UsageSummary,
 } from "./types";
@@ -389,6 +390,28 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     onError: (err) => {
       const u = toUserFacingError(err, t.errors);
       setBannerError(`${u.banner}${u.hint ? ` ${u.hint}` : ""}`);
+    },
+  });
+
+  const cancelTaskMutation = useMutation({
+    mutationFn: (taskId: string) =>
+      apiPostJson<TaskCancelResponse>(
+        `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/cancel`,
+        {},
+      ),
+    onSuccess: (data) => {
+      if (data.already_terminal) {
+        message.info(t.inspector.taskCancelAlreadyTerminal);
+      } else {
+        message.success(t.inspector.taskCancelDone);
+      }
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: (err) => {
+      const u = toUserFacingError(err, t.errors);
+      message.error(
+        `${t.inspector.taskCancelFailed}: ${u.banner}${u.hint ? ` ${u.hint}` : ""}`,
+      );
     },
   });
 
@@ -847,6 +870,8 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const phaseLabelMap: Record<string, string> = {
     done: t.workbench.phaseDone,
     error: t.workbench.phaseError,
+    cancelled: t.workbench.phaseCancelled,
+    timeout: t.workbench.phaseTimeout,
     replay: t.workbench.phaseReplay,
     streaming: t.workbench.phaseRunning,
     running: t.workbench.phaseRunning,
@@ -860,6 +885,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     : isStreaming
       ? t.workbench.phaseRunning
       : t.workbench.phaseIdle;
+  const cancellingTaskId = cancelTaskMutation.isPending
+    ? (cancelTaskMutation.variables ?? null)
+    : null;
 
   let composerHint = t.workbench.composerEnterSend;
   let composerHintVariant: "default" | "error" = "default";
@@ -1077,6 +1105,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         onReplayTrace={handleLoadPersistedTrace}
         onLoadDelta={handleLoadTraceDelta}
         onSelectTask={handleSelectTask}
+        onCancelTask={(task) => {
+          cancelTaskMutation.mutate(task.id);
+        }}
+        cancellingTaskId={cancellingTaskId}
         apiBaseUrl={API_BASE_URL}
         sessionMemoryStatus={sessionMemoryQuery.data}
         sessionMemoryLoading={sessionMemoryQuery.isLoading}

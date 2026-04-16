@@ -34,6 +34,7 @@
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage
 - 协同进展：`session-export-lite` 首版已接入；新增 `GET /api/sessions/{session_id}/export/json` 与 `GET /api/sessions/{session_id}/export/markdown`，导出包含会话消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage 汇总
 - 阶段 5 增量：`remote-provider-hardening` 首轮已完成；Provider 运行时统一输出结构化错误码（401/403、429、5xx、网络、无效 JSON、空响应、SSE 中断），任务流 SSE `error` 事件透传 `code/fatal/retryable/detail/status_code`
+- 阶段 5 增量：`task-cancel-timeout` 首版已落地；新增取消接口与超时中断，任务流支持 `cancelled/timeout` 事件
 - 协同进展：前端左侧与中栏已完成风格收口（导航层级、runtime strip、输入区动效与密度），继续复用现有接口与字段
 - 协同进展：前端已按最新交互要求收敛头部占位（移除会话状态胶囊与输入计数提示），继续复用现有接口与字段
 - 协同进展：前端侧栏账户展示已收口到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的设置行风格（图标 + 标题 + 值）
@@ -119,6 +120,7 @@
 - `POST /api/rag/ingest`
 - `POST /api/rag/query`
 - `GET /api/tasks/{task_id}`
+- `POST /api/tasks/{task_id}/cancel`
 - `GET /api/tasks/{task_id}/export/json`
 - `GET /api/tasks/{task_id}/export/markdown`
 - `GET /api/tasks/{task_id}/stream`（`pending/running`；running 为重连回补流）
@@ -136,6 +138,8 @@
 - `tool_end`
 - `heartbeat`
 - `token`
+- `cancelled`
+- `timeout`
 - `done`
 - `error`
 
@@ -279,7 +283,7 @@ docker compose up -d chroma
 3. `session-export-lite`：会话级 JSON/Markdown 导出接口已落地；后续补字段稳定性与导出 e2e 校验。
 4. `remote-provider-hardening`：已完成首轮（错误码归一 + SSE 透传 + 前端映射联动）。
 5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）；后续接入 CI 与失败快照留档。
-6. `task-cancel-timeout`：P0 后加入单进程取消、超时与状态落库。
+6. `task-cancel-timeout`：首版已落地（取消接口 + 超时中断 + SSE 事件）；后续补 e2e 覆盖与细粒度状态反馈。
 7. `rag-kb-governance-lite`：知识库列表、清空/删除 collection、来源展示。
 8. `usage-dashboard-lite` / `audit-event-expansion`：补用户/会话/任务维度统计与关键事件审计。
 
