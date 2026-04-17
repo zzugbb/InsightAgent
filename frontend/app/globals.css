@@ -1187,11 +1187,11 @@ code {
 
 .scroll-bottom-fab-wrap {
   position: absolute;
-  right: clamp(16px, 3vw, 40px);
-  bottom: clamp(92px, 13vh, 136px);
+  right: clamp(8px, 1.8vw, 20px);
+  bottom: clamp(116px, 16vh, 170px);
   z-index: 4;
   inset-inline-start: auto;
-  inset-inline-end: clamp(16px, 3vw, 40px);
+  inset-inline-end: clamp(8px, 1.8vw, 20px);
 }
 
 .scroll-bottom-fab {
