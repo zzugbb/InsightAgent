@@ -96,6 +96,13 @@ export type RunTaskStreamOptions = {
   onSessionResolved?: (sessionId: string) => void;
 };
 
+export type ResumeTaskStreamOptions = {
+  apiBaseUrl: string;
+  taskId: string;
+  afterSeq?: number;
+  onSessionResolved?: (sessionId: string) => void;
+};
+
 type TaskCreateResponse = {
   task_id: string;
   session_id: string;
@@ -134,6 +141,7 @@ export type ChatStreamStore = {
     taskId: string,
     options?: { silent?: boolean },
   ) => Promise<{ ok: boolean; error: string | null; hasMore: boolean }>;
+  resumeTaskStream: (options: ResumeTaskStreamOptions) => Promise<boolean>;
   runTaskStream: (options: RunTaskStreamOptions) => Promise<void>;
 };
 
@@ -627,6 +635,83 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
           ? state.sseMessage
           : sm.streamHeartbeat,
       }));
+    }
+  },
+
+  resumeTaskStream: async (options) => {
+    const sm = get().streamMessages;
+    const taskId = options.taskId.trim();
+    if (!taskId) {
+      set({ sseMessage: sm.taskIdRequiredTrace });
+      return false;
+    }
+
+    if (get().isStreaming) {
+      const currentTaskId = get().sseTaskId?.trim() ?? "";
+      if (currentTaskId === taskId) {
+        return true;
+      }
+      return false;
+    }
+
+    const currentTaskId = get().sseTaskId?.trim() ?? "";
+    const fallbackCursor = currentTaskId === taskId ? get().traceCursor : 0;
+    const rawAfterSeq =
+      typeof options.afterSeq === "number" ? options.afterSeq : fallbackCursor;
+    const afterSeq = Math.max(
+      0,
+      Math.floor(Number.isFinite(rawAfterSeq) ? rawAfterSeq : 0),
+    );
+
+    set({
+      isStreaming: true,
+      sseMessage: sm.loadingTraceDeltaAfter(afterSeq),
+      sseTokens: "",
+      sseTraceSteps: [],
+      ssePhase: "running",
+      sseTaskId: taskId,
+      sseTaskUsage: null,
+      traceCursor: afterSeq,
+    });
+
+    try {
+      const streamResponse = await authFetch(
+        `${options.apiBaseUrl}/api/tasks/${taskId}/stream?after_seq=${afterSeq}`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "text/event-stream",
+          },
+        },
+      );
+
+      if (!streamResponse.ok) {
+        const errorText = await streamResponse.text();
+        throw new Error(
+          errorText || `${sm.failedReadStream} (${streamResponse.status})`,
+        );
+      }
+
+      await consumeSseStream(
+        streamResponse,
+        get().dispatchSseEvent,
+        options.onSessionResolved,
+      );
+
+      set((state) => ({
+        sseMessage: state.sseMessage.includes(sm.streamCompleted)
+          ? state.sseMessage
+          : sm.streamClosed,
+      }));
+      return true;
+    } catch (error) {
+      set({
+        sseMessage:
+          error instanceof Error ? error.message : sm.failedReadStream,
+      });
+      return false;
+    } finally {
+      set({ isStreaming: false });
     }
   },
 

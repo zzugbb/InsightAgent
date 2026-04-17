@@ -29,6 +29,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 增量：`remote-provider-hardening` 前端收口已完成首轮；流式 `error` 与设置校验失败已按 `error_code` 做本地化提示映射，并保留错误码用于排障
 - 阶段 5 增量：`task-cancel-timeout` 前端首版已落地；Inspector「当前任务」支持取消运行中任务，流式状态接入 `cancelled/timeout` 事件提示
 - 阶段 5 协同：后端已补齐 `task-cancel-timeout` e2e 脚本并接入后端 CI（baseline/main-path/cancel/timeout；CI 已升级 `checkout`/`setup-python` 以适配 GitHub Actions Node 24；后端 Python 与 compose/`.python-version` 统一为 3.14）；前端 Node 与 compose/`.nvmrc`/engines 统一为 **24.x**，可继续专注可视化回归与状态细化
+- 阶段 5 增量：`running-task-recovery` 前端首版已落地；刷新页面或切回会话时会自动接管该会话下 `pending/running` 任务流
 
 ## 当前已有内容
 
@@ -54,6 +55,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 会话鉴权：登录返回 `access_token + refresh_token + session_id`；退出时调用后端 `/api/auth/logout` 撤销当前会话 refresh token
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
 - 侧栏账户展示收口：用户信息已融合到左下角“设置”弹窗顶部，并采用与“主题/主题色/语言”同款行样式（图标 + 标题 + 值）展示，便于确认当前登录身份
+- running task 恢复：持久化当前会话 ID，刷新后自动回到上次会话；若该会话存在 `pending/running` 任务，会自动复用 `/api/tasks/{task_id}/stream` 重连流继续展示
 - 会话命名体验：空会话在首条消息发送后会自动改名为消息前缀（后端规则驱动）
 - 会话：创建、切换、分页加载、重命名、删除
 - 轨迹：时间线与流程图双视图（thought/action/observation/tool/rag 区分）
@@ -201,6 +203,7 @@ npm run dev
 4. `remote-provider-hardening`：真实模型错误提示、重试建议与设置入口联动。
 5. `e2e-main-path`：后端主链路 e2e 脚本已落地（登录、模型设置、发送消息、Trace 回放、RAG 检索、导出），前端后续接入 CI 与可视化回归。
 6. `task-cancel-timeout`：首版已落地（取消按钮 + 状态提示）；后端 e2e/CI 已补齐，前端后续补更细粒度反馈与可视化回归。
+7. `running-task-recovery`：前端首版已落地（刷新/切回会话自动恢复 running 任务流）；后续补恢复状态可视化与失败快照。
 7. `rag-kb-governance-lite`：知识库列表、清空/删除、来源展示。
 8. `usage-dashboard-lite`：用户/会话/任务维度成本统计增强。
 
@@ -218,5 +221,5 @@ npm run dev
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦前端可视化回归（CI）与取消/超时状态细粒度反馈。
+- 下一步聚焦前端可视化回归（CI）与运行态细粒度反馈（cancel/timeout/recovery）。
 - P0 完成后再推进任务取消/超时、RAG 知识库治理与 usage 统计增强。

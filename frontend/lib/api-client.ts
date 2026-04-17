@@ -1,4 +1,5 @@
 import {
+  ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
   AUTH_SESSION_ID_STORAGE_KEY,
   AUTH_TOKEN_STORAGE_KEY,
   REFRESH_TOKEN_STORAGE_KEY,
@@ -120,6 +121,7 @@ export function clearAuthSessionStorage(): void {
     return;
   }
   localStorage.removeItem(AUTH_SESSION_ID_STORAGE_KEY);
+  localStorage.removeItem(ACTIVE_WORKBENCH_SESSION_STORAGE_KEY);
 }
 
 function withAuthHeaders(headers?: HeadersInit): Headers {

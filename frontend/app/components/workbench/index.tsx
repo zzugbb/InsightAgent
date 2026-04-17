@@ -8,7 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import {
@@ -40,6 +40,7 @@ import type {
   UsageSummary,
 } from "./types";
 import {
+  ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
   INSPECTOR_COLLAPSED_STORAGE_KEY,
   INSPECTOR_WIDTH_STORAGE_KEY,
   SIDEBAR_COLLAPSED_STORAGE_KEY,
@@ -62,6 +63,15 @@ const TRACE_DELTA_SYNC_MAX_RETRY_EXP = 3;
 const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
 const TRACE_DELTA_FAST_DRAIN_MS = 180;
 const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
+const RUNNING_TASK_STATUSES = new Set(["pending", "running"]);
+const STREAMING_LIKE_PHASES = new Set([
+  "pending",
+  "running",
+  "thinking",
+  "tool_running",
+  "tool_retry",
+  "streaming",
+]);
 
 type WorkbenchProps = {
   currentUser?: {
@@ -71,6 +81,18 @@ type WorkbenchProps = {
   } | null;
   onLogout?: () => void;
 };
+
+function normalizedTaskStatus(task: TaskSummary): string {
+  const raw =
+    (typeof task.status_normalized === "string"
+      ? task.status_normalized
+      : task.status) ?? "";
+  return raw.trim().toLowerCase();
+}
+
+function isTaskRunningLike(task: TaskSummary): boolean {
+  return RUNNING_TASK_STATUSES.has(normalizedTaskStatus(task));
+}
 
 export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const t = useMessages();
@@ -132,6 +154,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const inspectorOpenButtonRef = useRef<HTMLButtonElement>(null);
   /** 避免 GET /tasks?session_id= 404 时重复 toast / 重复清空 */
   const tasksSession404HandledRef = useRef(false);
+  const pendingRestoreSessionIdRef = useRef<string | null>(null);
+  const blockedRecoveryTaskIdsRef = useRef<Set<string>>(new Set());
+  const recoveringTaskIdRef = useRef<string | null>(null);
 
   const isStreaming = useChatStreamStore((s: ChatStreamStore) => s.isStreaming);
   const sseTokens = useChatStreamStore((s: ChatStreamStore) => s.sseTokens);
@@ -148,6 +173,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   );
   const runTaskStream = useChatStreamStore(
     (s: ChatStreamStore) => s.runTaskStream,
+  );
+  const resumeTaskStream = useChatStreamStore(
+    (s: ChatStreamStore) => s.resumeTaskStream,
   );
   const loadPersistedTrace = useChatStreamStore(
     (s: ChatStreamStore) => s.loadPersistedTrace,
@@ -307,6 +335,13 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       if (localStorage.getItem(INSPECTOR_COLLAPSED_STORAGE_KEY) === "1") {
         setInspectorCollapsed(true);
       }
+      const activeSessionRaw = localStorage.getItem(
+        ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
+      );
+      const activeSessionStored = activeSessionRaw?.trim();
+      if (activeSessionStored) {
+        pendingRestoreSessionIdRef.current = activeSessionStored;
+      }
     } catch {
       /* ignore */
     }
@@ -352,6 +387,21 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       /* ignore */
     }
   }, [inspectorCollapsed]);
+
+  useEffect(() => {
+    try {
+      if (activeSessionId && activeSessionId.trim()) {
+        localStorage.setItem(
+          ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
+          activeSessionId.trim(),
+        );
+      } else {
+        localStorage.removeItem(ACTIVE_WORKBENCH_SESSION_STORAGE_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [activeSessionId]);
 
   const deleteSessionMutation = useMutation({
     mutationFn: (sessionId: string) =>
@@ -424,10 +474,14 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     enabled: Boolean(activeSessionId),
   });
 
-  const recentSessions =
-    sessionsQuery.data?.pages.flatMap((p) => p.items) ?? [];
-  const recentTasks =
-    tasksQuery.data?.pages.flatMap((p) => p.items) ?? [];
+  const recentSessions = useMemo(
+    () => sessionsQuery.data?.pages.flatMap((p) => p.items) ?? [],
+    [sessionsQuery.data],
+  );
+  const recentTasks = useMemo(
+    () => tasksQuery.data?.pages.flatMap((p) => p.items) ?? [],
+    [tasksQuery.data],
+  );
   const tasksFetchNextBusy = tasksQuery.isFetchingNextPage;
   const tasksCanLoadMore = Boolean(tasksQuery.hasNextPage);
   const settingsSummary = settingsQuery.data ?? null;
@@ -458,6 +512,18 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     : recentSessions.length === 0
       ? t.workbench.noSessions
       : "";
+
+  useEffect(() => {
+    if (activeSessionId) {
+      return;
+    }
+    const pending = pendingRestoreSessionIdRef.current?.trim() ?? "";
+    if (!pending) {
+      return;
+    }
+    pendingRestoreSessionIdRef.current = null;
+    setActiveSessionId(pending);
+  }, [activeSessionId]);
 
   const messagesLoading = Boolean(activeSessionId) && messagesQuery.isLoading;
   let messagesMessage: string = t.workbench.selectSessionForHistory;
@@ -709,6 +775,91 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     void queryClient.invalidateQueries({ queryKey: ["sessions"] });
     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
   }, [activeSessionId, queryClient]);
+
+  useEffect(() => {
+    const blocked = blockedRecoveryTaskIdsRef.current;
+    if (blocked.size === 0) {
+      return;
+    }
+    const runningTaskIds = new Set(
+      recentTasks.filter((task) => isTaskRunningLike(task)).map((task) => task.id),
+    );
+    for (const taskId of Array.from(blocked)) {
+      if (!runningTaskIds.has(taskId)) {
+        blocked.delete(taskId);
+      }
+    }
+  }, [recentTasks]);
+
+  useEffect(() => {
+    if (!activeSessionId || !isPageVisible) {
+      return;
+    }
+
+    const activeSessionRunningTask = recentTasks
+      .filter(
+        (task) =>
+          task.session_id === activeSessionId && isTaskRunningLike(task),
+      )
+      .sort(
+        (a, b) =>
+          Date.parse(b.updated_at || "") - Date.parse(a.updated_at || ""),
+      )[0];
+
+    if (!activeSessionRunningTask) {
+      return;
+    }
+
+    const runningTaskId = activeSessionRunningTask.id.trim();
+    if (!runningTaskId) {
+      return;
+    }
+    if (recoveringTaskIdRef.current === runningTaskId) {
+      return;
+    }
+    if (blockedRecoveryTaskIdsRef.current.has(runningTaskId)) {
+      return;
+    }
+
+    const currentTaskId = sseTaskId?.trim() ?? "";
+    if (isStreaming && currentTaskId === runningTaskId) {
+      return;
+    }
+    if (
+      !isStreaming &&
+      currentTaskId === runningTaskId &&
+      typeof ssePhase === "string" &&
+      STREAMING_LIKE_PHASES.has(ssePhase)
+    ) {
+      return;
+    }
+
+    recoveringTaskIdRef.current = runningTaskId;
+    setInspectorTab("trace");
+    void resumeTaskStream({
+      apiBaseUrl: API_BASE_URL,
+      taskId: runningTaskId,
+      onSessionResolved: setActiveSessionId,
+    })
+      .then((ok) => {
+        if (!ok) {
+          blockedRecoveryTaskIdsRef.current.add(runningTaskId);
+        }
+      })
+      .finally(() => {
+        if (recoveringTaskIdRef.current === runningTaskId) {
+          recoveringTaskIdRef.current = null;
+        }
+      });
+  }, [
+    activeSessionId,
+    isPageVisible,
+    isStreaming,
+    recentTasks,
+    resumeTaskStream,
+    ssePhase,
+    sseTaskId,
+  ]);
 
   async function ensureSessionForSend(): Promise<string> {
     if (activeSessionId) {
