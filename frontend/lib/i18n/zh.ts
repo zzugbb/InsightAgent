@@ -53,6 +53,7 @@ export const zh: Messages = {
     liveRegionError: "回答生成失败。",
     composerEnterSend: "按 Enter 发送，Shift + Enter 换行。",
     composerGenerating: "正在生成回答…",
+    composerCoolingDown: "正在停止上一条远端请求，请稍后再发送。",
     cmdKHint: "⌘K / Ctrl+K 聚焦输入框",
     traceExpandAll: "展开全部步骤",
     traceCollapse: "仅显示最近 6 步",

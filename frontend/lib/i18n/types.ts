@@ -51,6 +51,7 @@ export type Messages = {
     liveRegionError: string;
     composerEnterSend: string;
     composerGenerating: string;
+    composerCoolingDown: string;
     /** 悬停在输入框上提示 ⌘K / Ctrl+K */
     cmdKHint: string;
     traceExpandAll: string;

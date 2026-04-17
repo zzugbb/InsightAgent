@@ -143,6 +143,10 @@ export type ChatStreamStore = {
     taskId: string,
     options?: { silent?: boolean },
   ) => Promise<{ ok: boolean; error: string | null; hasMore: boolean }>;
+  cancelActiveStreamLocal: (options?: {
+    taskId?: string | null;
+    reason?: "cancelled" | "timeout";
+  }) => boolean;
   resumeTaskStream: (options: ResumeTaskStreamOptions) => Promise<boolean>;
   runTaskStream: (options: RunTaskStreamOptions) => Promise<void>;
 };
@@ -150,6 +154,32 @@ export type ChatStreamStore = {
 const initialSseMessage =
   DEFAULT_STREAM_MESSAGES.idleHint;
 const TRACE_DELTA_FETCH_LIMIT = 200;
+let activeStreamController: AbortController | null = null;
+let activeStreamControllerTaskId: string | null = null;
+let activeStreamRunId = 0;
+
+function isAbortLikeError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
+
+function setActiveStreamController(
+  controller: AbortController,
+  taskId: string | null,
+): void {
+  activeStreamController = controller;
+  activeStreamControllerTaskId = taskId?.trim() || null;
+}
+
+function clearActiveStreamController(controller: AbortController): void {
+  if (activeStreamController !== controller) {
+    return;
+  }
+  activeStreamController = null;
+  activeStreamControllerTaskId = null;
+}
 
 async function consumeSseStream(
   response: Response,
@@ -384,6 +414,31 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       }
       return { ok: false, error: errorMessage, hasMore: false };
     }
+  },
+
+  cancelActiveStreamLocal: (options) => {
+    const sm = get().streamMessages;
+    const targetTaskId = options?.taskId?.trim() ?? "";
+    const reason = options?.reason ?? "cancelled";
+    const activeTaskId = get().sseTaskId?.trim() ?? "";
+    if (targetTaskId && activeTaskId && targetTaskId !== activeTaskId) {
+      return false;
+    }
+
+    if (activeStreamController) {
+      const streamTaskId = activeStreamControllerTaskId?.trim() ?? "";
+      if (!targetTaskId || !streamTaskId || streamTaskId === targetTaskId) {
+        activeStreamController.abort();
+      }
+    }
+
+    set({
+      isStreaming: false,
+      ssePhase: reason === "timeout" ? "timeout" : "cancelled",
+      sseMessage:
+        reason === "timeout" ? sm.streamTimeout : sm.streamCancelled,
+    });
+    return true;
   },
 
   dispatchSseEvent: (event, payload, onSessionResolved) => {
@@ -693,6 +748,8 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       0,
       Math.floor(Number.isFinite(rawAfterSeq) ? rawAfterSeq : 0),
     );
+    const runId = ++activeStreamRunId;
+    let streamController: AbortController | null = null;
 
     set({
       isStreaming: true,
@@ -707,6 +764,8 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     });
 
     try {
+      streamController = new AbortController();
+      setActiveStreamController(streamController, taskId);
       const streamResponse = await authFetch(
         `${options.apiBaseUrl}/api/tasks/${taskId}/stream?after_seq=${afterSeq}`,
         {
@@ -714,6 +773,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
           headers: {
             Accept: "text/event-stream",
           },
+          signal: streamController.signal,
         },
       );
 
@@ -753,13 +813,21 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       }));
       return true;
     } catch (error) {
+      if (isAbortLikeError(error)) {
+        return get().ssePhase === "cancelled" || get().ssePhase === "timeout";
+      }
       set({
         sseMessage:
           error instanceof Error ? error.message : sm.failedReadStream,
       });
       return false;
     } finally {
-      set({ isStreaming: false });
+      if (streamController) {
+        clearActiveStreamController(streamController);
+      }
+      if (activeStreamRunId === runId) {
+        set({ isStreaming: false });
+      }
     }
   },
 
@@ -771,6 +839,8 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       return;
     }
 
+    const runId = ++activeStreamRunId;
+    let streamController: AbortController | null = null;
     const { onSessionResolved } = options;
     set({
       isStreaming: true,
@@ -813,6 +883,8 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         onSessionResolved?.(createdTask.session_id);
       }
 
+      streamController = new AbortController();
+      setActiveStreamController(streamController, createdTask.task_id);
       const streamResponse = await authFetch(
         `${options.apiBaseUrl}/api/tasks/${createdTask.task_id}/stream`,
         {
@@ -820,6 +892,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
           headers: {
             Accept: "text/event-stream",
           },
+          signal: streamController.signal,
         },
       );
 
@@ -846,12 +919,20 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
             : sm.streamClosed,
       }));
     } catch (error) {
+      if (isAbortLikeError(error)) {
+        return;
+      }
       set({
         sseMessage:
           error instanceof Error ? error.message : sm.failedReadStream,
       });
     } finally {
-      set({ isStreaming: false });
+      if (streamController) {
+        clearActiveStreamController(streamController);
+      }
+      if (activeStreamRunId === runId) {
+        set({ isStreaming: false });
+      }
     }
   },
 }));

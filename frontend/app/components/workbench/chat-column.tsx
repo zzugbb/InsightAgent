@@ -158,6 +158,10 @@ export function ChatColumn({
   const stageRef = useRef<HTMLElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
+  const [pendingJumpCount, setPendingJumpCount] = useState(0);
+  const prevTokenLengthRef = useRef(0);
+  const prevMessageCountRef = useRef(0);
+  const prevSessionIdRef = useRef<string | null>(activeSessionId);
 
   const flatRows = useMemo(() => {
     const rows: { kind: "msg"; message: SessionMessage }[] = sessionMessages.map(
@@ -203,14 +207,41 @@ export function ChatColumn({
     const el = stageRef.current;
     if (!el) return;
     setPinnedToBottom(true);
+    setPendingJumpCount(0);
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
   }, []);
 
+  useEffect(() => {
+    if (prevSessionIdRef.current === activeSessionId) {
+      return;
+    }
+    prevSessionIdRef.current = activeSessionId;
+    setPendingJumpCount(0);
+    prevTokenLengthRef.current = sseTokens.length;
+    prevMessageCountRef.current = sessionMessages.length;
+  }, [activeSessionId, sessionMessages.length, sseTokens.length]);
+
+  useEffect(() => {
+    const tokenLength = sseTokens.length;
+    const messageCount = sessionMessages.length;
+    const tokenIncreased = tokenLength > prevTokenLengthRef.current;
+    const messageIncreased = messageCount > prevMessageCountRef.current;
+    if (!pinnedToBottom && (tokenIncreased || messageIncreased)) {
+      const delta = (messageCount - prevMessageCountRef.current) + (tokenIncreased ? 1 : 0);
+      setPendingJumpCount((count) => Math.min(99, count + Math.max(1, delta)));
+    } else if (pinnedToBottom && pendingJumpCount !== 0) {
+      setPendingJumpCount(0);
+    }
+    prevTokenLengthRef.current = tokenLength;
+    prevMessageCountRef.current = messageCount;
+  }, [pendingJumpCount, pinnedToBottom, sessionMessages.length, sseTokens.length]);
+
   const hasScrollableFeed =
     !showSessionLoading && (hasHistory || showPendingUser || showLiveAssistant);
   const showScrollFab = hasScrollableFeed && !pinnedToBottom;
+  const scrollFabLive = isStreaming || pendingJumpCount > 0;
 
   function renderMessageRow(message: SessionMessage, index: number) {
     const prev = index > 0 ? sessionMessages[index - 1] : undefined;
@@ -463,19 +494,6 @@ export function ChatColumn({
           </div>
         ) : null}
 
-        {showScrollFab ? (
-          <Button
-            type="primary"
-            shape="circle"
-            size="large"
-            icon={<ArrowDown size={20} aria-hidden />}
-            className="scroll-bottom-fab"
-            onClick={scrollToBottom}
-            aria-label={t.chat.scrollToBottomAria}
-            title={t.chat.scrollToBottom}
-          />
-        ) : null}
-
         {showSessionEmpty ? (
           <div className="empty-hero empty-hero--compact">
             <h3>{t.chat.sessionEmptyTitle}</h3>
@@ -494,6 +512,27 @@ export function ChatColumn({
           <p className="message-stage-footnote">{messagesMessage}</p>
         ) : null}
       </section>
+
+      {showScrollFab ? (
+        <div className="scroll-bottom-fab-wrap">
+          <Button
+            type="primary"
+            shape="circle"
+            size="large"
+            className={`scroll-bottom-fab${scrollFabLive ? " scroll-bottom-fab--live" : ""}`}
+            onClick={scrollToBottom}
+            aria-label={t.chat.scrollToBottomAria}
+            title={t.chat.scrollToBottom}
+          >
+            <ArrowDown size={20} aria-hidden />
+            {pendingJumpCount > 0 ? (
+              <span className="scroll-bottom-fab-badge">
+                {pendingJumpCount >= 99 ? "99+" : pendingJumpCount}
+              </span>
+            ) : null}
+          </Button>
+        </div>
+      ) : null}
 
       <Composer
         ref={composerRef}

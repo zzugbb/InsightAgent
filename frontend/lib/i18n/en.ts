@@ -53,6 +53,7 @@ export const en: Messages = {
     liveRegionError: "Assistant response failed.",
     composerEnterSend: "Enter to send, Shift+Enter for a new line.",
     composerGenerating: "Generating reply…",
+    composerCoolingDown: "Stopping the previous remote request. Please wait a moment.",
     cmdKHint: "⌘K / Ctrl+K focuses the input",
     traceExpandAll: "Show all steps",
     traceCollapse: "Show last 6 steps only",

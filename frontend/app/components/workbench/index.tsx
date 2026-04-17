@@ -64,6 +64,7 @@ const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
 const TRACE_DELTA_FAST_DRAIN_MS = 180;
 const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
 const RUNNING_TASK_STATUSES = new Set(["pending", "running"]);
+const CANCEL_SEND_COOLDOWN_MS = 2200;
 const RUNNING_STREAM_PHASES = new Set([
   "pending",
   "running",
@@ -131,6 +132,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     type: "info" | "success" | "error";
     text: string;
   } | null>(null);
+  const [cancelSendCooldownUntil, setCancelSendCooldownUntil] = useState<
+    number | null
+  >(null);
   const [isPageVisible, setIsPageVisible] = useState(
     typeof document === "undefined"
       ? true
@@ -161,6 +165,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const pendingRestoreSessionIdRef = useRef<string | null>(null);
   const blockedRecoveryTaskIdsRef = useRef<Set<string>>(new Set());
   const recoveringTaskIdRef = useRef<string | null>(null);
+  const cancelSendCooldownTimerRef = useRef<number | null>(null);
 
   const isStreaming = useChatStreamStore((s: ChatStreamStore) => s.isStreaming);
   const sseTokens = useChatStreamStore((s: ChatStreamStore) => s.sseTokens);
@@ -180,6 +185,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   );
   const runTaskStream = useChatStreamStore(
     (s: ChatStreamStore) => s.runTaskStream,
+  );
+  const cancelActiveStreamLocal = useChatStreamStore(
+    (s: ChatStreamStore) => s.cancelActiveStreamLocal,
   );
   const resumeTaskStream = useChatStreamStore(
     (s: ChatStreamStore) => s.resumeTaskStream,
@@ -456,7 +464,13 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/cancel`,
         {},
       ),
-    onSuccess: (data) => {
+    onSuccess: (data, taskId) => {
+      if (!data.already_terminal) {
+        cancelActiveStreamLocal({ taskId, reason: "cancelled" });
+        if (settingsSummary?.mode === "remote") {
+          startCancelSendCooldown();
+        }
+      }
       if (data.already_terminal) {
         message.info(t.inspector.taskCancelAlreadyTerminal);
       } else {
@@ -515,6 +529,42 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const openModelSettings = useCallback(() => {
     window.dispatchEvent(new CustomEvent(OPEN_MODEL_SETTINGS_EVENT));
   }, []);
+
+  const startCancelSendCooldown = useCallback(() => {
+    if (cancelSendCooldownTimerRef.current !== null) {
+      window.clearTimeout(cancelSendCooldownTimerRef.current);
+      cancelSendCooldownTimerRef.current = null;
+    }
+    const nextUntil = Date.now() + CANCEL_SEND_COOLDOWN_MS;
+    setCancelSendCooldownUntil(nextUntil);
+    cancelSendCooldownTimerRef.current = window.setTimeout(() => {
+      setCancelSendCooldownUntil(null);
+      cancelSendCooldownTimerRef.current = null;
+    }, CANCEL_SEND_COOLDOWN_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (cancelSendCooldownTimerRef.current !== null) {
+        window.clearTimeout(cancelSendCooldownTimerRef.current);
+        cancelSendCooldownTimerRef.current = null;
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (settingsSummary?.mode === "remote") {
+      return;
+    }
+    if (cancelSendCooldownTimerRef.current !== null) {
+      window.clearTimeout(cancelSendCooldownTimerRef.current);
+      cancelSendCooldownTimerRef.current = null;
+    }
+    if (cancelSendCooldownUntil !== null) {
+      setCancelSendCooldownUntil(null);
+    }
+  }, [cancelSendCooldownUntil, settingsSummary?.mode]);
 
   const sessionMessages = messagesQuery.data?.messages ?? [];
 
@@ -941,6 +991,13 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (!text) {
       return;
     }
+    if (
+      settingsSummary?.mode === "remote" &&
+      cancelSendCooldownUntil !== null
+    ) {
+      message.info(t.workbench.composerCoolingDown);
+      return;
+    }
     setRecoveryNotice(null);
     if (
       settingsSummary?.mode === "remote" &&
@@ -1140,11 +1197,15 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const cancellingTaskId = cancelTaskMutation.isPending
     ? (cancelTaskMutation.variables ?? null)
     : null;
+  const remoteSendCoolingDown =
+    settingsSummary?.mode === "remote" && cancelSendCooldownUntil !== null;
 
   let composerHint = t.workbench.composerEnterSend;
   let composerHintVariant: "default" | "error" = "default";
   if (scopedIsStreaming) {
     composerHint = t.workbench.composerGenerating;
+  } else if (remoteSendCoolingDown) {
+    composerHint = t.workbench.composerCoolingDown;
   }
   if (scopedSsePhase === "error") {
     composerHint = scopedSseMessage;
@@ -1285,7 +1346,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         prompt={prompt}
         onPromptChange={setPrompt}
         onSend={handleSend}
-        sendDisabled={scopedIsStreaming || !prompt.trim()}
+        sendDisabled={scopedIsStreaming || remoteSendCoolingDown || !prompt.trim()}
         composerHint={composerHint}
         composerHintVariant={composerHintVariant}
         showSessionDrawerTrigger={isNarrow}

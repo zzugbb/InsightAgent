@@ -1185,17 +1185,25 @@ code {
   color: var(--muted-strong);
 }
 
-.scroll-bottom-fab {
+.scroll-bottom-fab-wrap {
   position: absolute;
   right: clamp(16px, 3vw, 40px);
-  bottom: 20px;
+  bottom: clamp(92px, 13vh, 136px);
   z-index: 4;
+  inset-inline-start: auto;
+  inset-inline-end: clamp(16px, 3vw, 40px);
+}
+
+.scroll-bottom-fab {
+  position: relative;
   border-radius: 999px !important;
   width: 48px !important;
   height: 48px !important;
   min-width: 48px !important;
   padding: 0 !important;
   box-shadow: var(--shadow);
+  display: grid !important;
+  place-items: center !important;
 }
 
 .scroll-bottom-fab.ant-btn.ant-btn-primary {
@@ -1204,6 +1212,45 @@ code {
 
 .scroll-bottom-fab:hover {
   filter: brightness(1.06);
+}
+
+.scroll-bottom-fab--live {
+  animation: scroll-fab-live-pulse 1.45s ease-in-out infinite;
+}
+
+.scroll-bottom-fab-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+@keyframes scroll-fab-live-pulse {
+  0% {
+    box-shadow:
+      var(--shadow),
+      0 0 0 0 color-mix(in srgb, var(--accent) 34%, transparent);
+  }
+  70% {
+    box-shadow:
+      var(--shadow),
+      0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+  100% {
+    box-shadow:
+      var(--shadow),
+      0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
+  }
 }
 
 .empty-hero {
