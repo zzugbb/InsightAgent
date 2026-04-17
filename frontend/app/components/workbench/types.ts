@@ -112,26 +112,10 @@ export type RagStatus = {
   error: string | null;
 };
 
-export type RagKnowledgeBaseSource = {
-  source: string;
-  sampled_count: number;
-};
-
-export type RagKnowledgeBaseDocumentId = {
-  document_id: string;
-  sampled_count: number;
-};
-
 export type RagKnowledgeBaseSummary = {
   knowledge_base_id: string;
   collection: string;
   document_count: number;
-  source_sample_size: number;
-  source_total_known: number;
-  source_unknown_count: number;
-  top_sources: RagKnowledgeBaseSource[];
-  top_document_ids: RagKnowledgeBaseDocumentId[];
-  sample_chunks: string[];
 };
 
 export type RagKnowledgeBaseListResponse = {

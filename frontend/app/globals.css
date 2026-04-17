@@ -2792,41 +2792,10 @@ code {
   color: var(--muted);
 }
 
-.kb-governance-toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-  min-height: 28px;
-}
-
-.kb-governance-toolbar--refresh-only {
-  justify-content: flex-end;
-}
-
-.kb-governance-toolbar-note {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.5;
-}
-
 .kb-governance-table-wrap {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
-}
-
-.kb-governance-table-wrap .ant-table-expanded-row > .ant-table-cell {
-  padding: 8px 16px 12px !important;
-  background: color-mix(in srgb, var(--foreground) 2%, transparent);
-}
-
-.kb-governance-expanded {
-  max-width: 100%;
 }
 
 .kb-governance-table-wrap .ant-table-thead > tr > th {
@@ -2861,92 +2830,6 @@ code {
 
 .kb-count-cell {
   font-variant-numeric: tabular-nums;
-}
-
-.kb-source-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.kb-source-tag {
-  margin-inline-end: 0 !important;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: help;
-}
-
-.kb-source-tag--muted {
-  color: var(--muted-strong) !important;
-  border-color: var(--line) !important;
-}
-
-.kb-source-empty {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.kb-chunk-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 100%;
-}
-
-.kb-chunk-details {
-  margin: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--foreground) 2%, transparent);
-  overflow: hidden;
-}
-
-.kb-chunk-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
-  list-style: none;
-  font-size: 0.76rem;
-  line-height: 1.45;
-  color: var(--muted-strong);
-}
-
-.kb-chunk-summary::-webkit-details-marker {
-  display: none;
-}
-
-.kb-chunk-summary-index {
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  font-size: 0.74rem;
-}
-
-.kb-chunk-summary-preview {
-  flex: 1;
-  min-width: 0;
-  word-break: break-word;
-}
-
-.kb-chunk-expanded {
-  margin: 0;
-  padding: 8px 10px 10px;
-  border-top: 1px solid var(--line);
-  border-radius: 0 0 7px 7px;
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-  max-height: 180px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 0.74rem;
-  line-height: 1.45;
-  color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
 }
 
 .kb-row-actions {

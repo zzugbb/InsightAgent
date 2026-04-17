@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections import Counter
 from uuid import uuid4
 
 import chromadb
@@ -279,82 +278,7 @@ def get_knowledge_base_status(*, user_id: str, knowledge_base_id: str) -> dict[s
     return base
 
 
-def _sample_knowledge_sources(
-    collection: chromadb.Collection,
-    *,
-    sample_limit: int,
-) -> dict[str, object]:
-    sample = max(1, min(int(sample_limit), 2_000))
-    try:
-        result = collection.peek(limit=sample)
-        metadatas = result.get("metadatas") if isinstance(result, dict) else None
-        documents = result.get("documents") if isinstance(result, dict) else None
-    except Exception:
-        metadatas = None
-        documents = None
-
-    if not isinstance(metadatas, list):
-        return {
-            "source_sample_size": 0,
-            "source_total_known": 0,
-            "source_unknown_count": 0,
-            "top_sources": [],
-            "top_document_ids": [],
-            "sample_chunks": [],
-        }
-
-    counter: Counter[str] = Counter()
-    doc_id_counter: Counter[str] = Counter()
-    unknown = 0
-    for item in metadatas:
-        if isinstance(item, dict):
-            source_raw = item.get("source")
-            source = str(source_raw or "").strip()
-            if source:
-                counter[source[:240]] += 1
-            else:
-                unknown += 1
-            doc_id_raw = item.get("document_id")
-            doc_id = str(doc_id_raw or "").strip()
-            if doc_id:
-                doc_id_counter[doc_id[:160]] += 1
-        else:
-            unknown += 1
-
-    top_sources = [
-        {"source": source, "sampled_count": count}
-        for source, count in sorted(counter.items(), key=lambda pair: (-pair[1], pair[0]))[:8]
-    ]
-
-    top_document_ids = [
-        {"document_id": document_id, "sampled_count": count}
-        for document_id, count in sorted(
-            doc_id_counter.items(),
-            key=lambda pair: (-pair[1], pair[0]),
-        )[:6]
-    ]
-
-    sample_chunks: list[str] = []
-    if isinstance(documents, list):
-        for item in documents:
-            text = str(item or "").strip()
-            if not text:
-                continue
-            sample_chunks.append(text[:320])
-            if len(sample_chunks) >= 3:
-                break
-
-    return {
-        "source_sample_size": len(metadatas),
-        "source_total_known": sum(counter.values()),
-        "source_unknown_count": unknown,
-        "top_sources": top_sources,
-        "top_document_ids": top_document_ids,
-        "sample_chunks": sample_chunks,
-    }
-
-
-def list_knowledge_bases(*, user_id: str, source_sample_limit: int = 300) -> dict[str, object]:
+def list_knowledge_bases(*, user_id: str) -> dict[str, object]:
     settings = get_settings()
     result: dict[str, object] = {
         "knowledge_bases": [],
@@ -389,22 +313,10 @@ def list_knowledge_bases(*, user_id: str, source_sample_limit: int = 300) -> dic
             "knowledge_base_id": kb_id,
             "collection": collection_name,
             "document_count": 0,
-            "source_sample_size": 0,
-            "source_total_known": 0,
-            "source_unknown_count": 0,
-            "top_sources": [],
-            "top_document_ids": [],
-            "sample_chunks": [],
         }
         try:
             collection = client.get_collection(name=collection_name)
             row["document_count"] = int(collection.count())
-            row.update(
-                _sample_knowledge_sources(
-                    collection,
-                    sample_limit=source_sample_limit,
-                ),
-            )
         except Exception:
             pass
         rows.append(row)

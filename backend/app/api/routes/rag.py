@@ -82,26 +82,10 @@ class RagStatusResponse(BaseModel):
     error: str | None = None
 
 
-class RagKnowledgeBaseSource(BaseModel):
-    source: str
-    sampled_count: int
-
-
-class RagKnowledgeBaseDocumentId(BaseModel):
-    document_id: str
-    sampled_count: int
-
-
 class RagKnowledgeBaseSummary(BaseModel):
     knowledge_base_id: str
     collection: str
     document_count: int
-    source_sample_size: int
-    source_total_known: int
-    source_unknown_count: int
-    top_sources: list[RagKnowledgeBaseSource] = Field(default_factory=list)
-    top_document_ids: list[RagKnowledgeBaseDocumentId] = Field(default_factory=list)
-    sample_chunks: list[str] = Field(default_factory=list)
 
 
 class RagKnowledgeBaseListResponse(BaseModel):
@@ -134,13 +118,9 @@ def get_rag_status(
 
 @router.get("/knowledge-bases", response_model=RagKnowledgeBaseListResponse)
 def get_rag_knowledge_bases(
-    source_sample_limit: int = Query(default=300, ge=20, le=2_000),
     current_user: dict = Depends(get_current_user),
 ) -> RagKnowledgeBaseListResponse:
-    raw = list_knowledge_bases(
-        user_id=str(current_user["id"]),
-        source_sample_limit=source_sample_limit,
-    )
+    raw = list_knowledge_bases(user_id=str(current_user["id"]))
     return RagKnowledgeBaseListResponse(**raw)
 
 
