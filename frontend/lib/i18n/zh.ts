@@ -244,7 +244,8 @@ export const zh: Messages = {
     loadMoreSessions: "加载更多",
     knowledgeBase: {
       title: "知识库治理",
-      lead: "集中查看当前账号下的知识库状态、来源采样，并支持清空或删除。",
+      lead:
+        "集中查看当前账号下的知识库状态、来源采样，并支持清空或删除；点击表格左侧展开可查看该知识库的样本片段。",
       statusConnected: "Chroma 已连接",
       statusDisconnected: "Chroma 不可达",
       kbCount: (n: number) => `知识库 ${n} 个`,
@@ -258,10 +259,10 @@ export const zh: Messages = {
       tableCollection: "Collection",
       tableDocuments: "条数",
       tableSources: "来源（采样）",
-      tableSamples: "样本片段",
       tableActions: "操作",
       noSource: "暂无来源",
       noSampleChunk: "暂无样本片段",
+      sampleChunkLabel: (index: number) => `片段 ${index}`,
       sourceUnknown: (n: number) => `未知 ${n}`,
       actionClear: "清空",
       actionDelete: "删除",

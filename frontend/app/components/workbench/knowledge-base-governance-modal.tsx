@@ -61,10 +61,19 @@ function formatSourceTags(
   return <div className="kb-source-tags">{tags}</div>;
 }
 
+function previewChunkText(chunk: string, maxChars: number): string {
+  const normalized = chunk.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxChars)}…`;
+}
+
 function formatSampleChunks(
   row: RagKnowledgeBaseSummary,
   labels: {
     noSampleChunk: string;
+    chunkLabel: (index: number) => string;
   },
 ): ReactNode {
   const chunks = row.sample_chunks ?? [];
@@ -72,13 +81,15 @@ function formatSampleChunks(
     return <span className="kb-source-empty">{labels.noSampleChunk}</span>;
   }
   return (
-    <div className="kb-chunk-samples">
+    <div className="kb-chunk-list">
       {chunks.map((chunk, index) => (
-        <Tooltip key={`${row.collection}-chunk-${index}`} title={chunk} placement="topLeft">
-          <span className="kb-chunk-sample">
-            {chunk}
-          </span>
-        </Tooltip>
+        <details key={`${row.collection}-chunk-${index}`} className="kb-chunk-details">
+          <summary className="kb-chunk-summary">
+            <span className="kb-chunk-summary-index">{labels.chunkLabel(index + 1)}</span>
+            <span className="kb-chunk-summary-preview">{previewChunkText(chunk, 72)}</span>
+          </summary>
+          <pre className="kb-chunk-expanded">{chunk}</pre>
+        </details>
       ))}
     </div>
   );
@@ -179,16 +190,9 @@ export function KnowledgeBaseGovernanceModal({
         }),
     },
     {
-      title: t.sidebar.knowledgeBase.tableSamples,
-      width: 320,
-      render: (_, row) =>
-        formatSampleChunks(row, {
-          noSampleChunk: t.sidebar.knowledgeBase.noSampleChunk,
-        }),
-    },
-    {
       title: t.sidebar.knowledgeBase.tableActions,
-      width: 150,
+      className: "kb-actions-col",
+      width: 118,
       render: (_, row) => {
         const clearBusy =
           clearMutation.isPending && clearMutation.variables === row.knowledge_base_id;
@@ -196,7 +200,7 @@ export function KnowledgeBaseGovernanceModal({
           deleteMutation.isPending && deleteMutation.variables === row.knowledge_base_id;
         const disabled = clearBusy || deleteBusy;
         return (
-          <Space size={8} className="kb-row-actions">
+          <div className="kb-row-actions">
             <Popconfirm
               title={t.sidebar.knowledgeBase.clearConfirmTitle(row.knowledge_base_id)}
               description={t.sidebar.knowledgeBase.clearConfirmDescription}
@@ -239,7 +243,7 @@ export function KnowledgeBaseGovernanceModal({
                   : t.sidebar.knowledgeBase.actionDelete}
               </Button>
             </Popconfirm>
-          </Space>
+          </div>
         );
       },
     },
@@ -280,13 +284,19 @@ export function KnowledgeBaseGovernanceModal({
         </Space>
 
       </div>
-      {sampleSize > 0 ? (
-        <p className="kb-governance-sample-note">
-          {t.sidebar.knowledgeBase.sourceSampleExplain(sampleSize)}
-        </p>
-      ) : null}
 
-      <div className="kb-governance-table-head">
+      <div
+        className={
+          sampleSize > 0
+            ? "kb-governance-toolbar"
+            : "kb-governance-toolbar kb-governance-toolbar--refresh-only"
+        }
+      >
+        {sampleSize > 0 ? (
+          <p className="kb-governance-toolbar-note">
+            {t.sidebar.knowledgeBase.sourceSampleExplain(sampleSize)}
+          </p>
+        ) : null}
         <Tooltip title={t.sidebar.knowledgeBase.refresh}>
           <Button
             size="small"
@@ -311,7 +321,18 @@ export function KnowledgeBaseGovernanceModal({
           loading={listQuery.isLoading}
           pagination={false}
           locale={{ emptyText: t.sidebar.knowledgeBase.noKnowledgeBases }}
-          scroll={{ x: 1040 }}
+          scroll={{ x: 800 }}
+          expandable={{
+            expandedRowRender: (record) => (
+              <div className="kb-governance-expanded">
+                {formatSampleChunks(record, {
+                  noSampleChunk: t.sidebar.knowledgeBase.noSampleChunk,
+                  chunkLabel: t.sidebar.knowledgeBase.sampleChunkLabel,
+                })}
+              </div>
+            ),
+            rowExpandable: (record) => (record.sample_chunks?.length ?? 0) > 0,
+          }}
         />
       </div>
     </Modal>

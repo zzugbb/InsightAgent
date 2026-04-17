@@ -201,10 +201,10 @@ export type Messages = {
       tableCollection: string;
       tableDocuments: string;
       tableSources: string;
-      tableSamples: string;
       tableActions: string;
       noSource: string;
       noSampleChunk: string;
+      sampleChunkLabel: (index: number) => string;
       sourceUnknown: (n: number) => string;
       actionClear: string;
       actionDelete: string;

@@ -249,7 +249,7 @@ export const en: Messages = {
     knowledgeBase: {
       title: "Knowledge base governance",
       lead:
-        "Inspect per-account knowledge bases, sampled sources, and perform clear/delete operations.",
+        "Inspect per-account knowledge bases, sampled sources, and perform clear/delete operations. Expand a row to view sampled chunks.",
       statusConnected: "Chroma connected",
       statusDisconnected: "Chroma unreachable",
       kbCount: (n: number) => `${n} knowledge base(s)`,
@@ -263,10 +263,10 @@ export const en: Messages = {
       tableCollection: "Collection",
       tableDocuments: "Chunks",
       tableSources: "Sources (sample)",
-      tableSamples: "Sample chunks",
       tableActions: "Actions",
       noSource: "No source",
       noSampleChunk: "No sampled chunk",
+      sampleChunkLabel: (index: number) => `Chunk ${index}`,
       sourceUnknown: (n: number) => `Unknown ${n}`,
       actionClear: "Clear",
       actionDelete: "Delete",
