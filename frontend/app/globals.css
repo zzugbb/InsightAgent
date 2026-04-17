@@ -2799,6 +2799,12 @@ code {
   line-height: 1.5;
 }
 
+.kb-governance-table-head {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
 .kb-governance-table-wrap {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -2852,18 +2858,39 @@ code {
   font-size: 0.78rem;
 }
 
+.kb-chunk-samples {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kb-chunk-sample {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  color: var(--muted-strong);
+  cursor: help;
+}
+
 .kb-row-actions {
   justify-content: flex-start;
 }
 
 .kb-action-btn {
   min-width: 64px;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .kb-refresh-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 @media (max-width: 780px) {

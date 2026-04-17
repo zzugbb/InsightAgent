@@ -61,6 +61,29 @@ function formatSourceTags(
   return <div className="kb-source-tags">{tags}</div>;
 }
 
+function formatSampleChunks(
+  row: RagKnowledgeBaseSummary,
+  labels: {
+    noSampleChunk: string;
+  },
+): ReactNode {
+  const chunks = row.sample_chunks ?? [];
+  if (chunks.length <= 0) {
+    return <span className="kb-source-empty">{labels.noSampleChunk}</span>;
+  }
+  return (
+    <div className="kb-chunk-samples">
+      {chunks.map((chunk, index) => (
+        <Tooltip key={`${row.collection}-chunk-${index}`} title={chunk} placement="topLeft">
+          <span className="kb-chunk-sample">
+            {chunk}
+          </span>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
+
 export function KnowledgeBaseGovernanceModal({
   open,
   onClose,
@@ -148,11 +171,19 @@ export function KnowledgeBaseGovernanceModal({
     },
     {
       title: t.sidebar.knowledgeBase.tableSources,
-      width: 300,
+      width: 260,
       render: (_, row) =>
         formatSourceTags(row, {
           noSource: t.sidebar.knowledgeBase.noSource,
           sourceUnknown: t.sidebar.knowledgeBase.sourceUnknown,
+        }),
+    },
+    {
+      title: t.sidebar.knowledgeBase.tableSamples,
+      width: 320,
+      render: (_, row) =>
+        formatSampleChunks(row, {
+          noSampleChunk: t.sidebar.knowledgeBase.noSampleChunk,
         }),
     },
     {
@@ -176,6 +207,7 @@ export function KnowledgeBaseGovernanceModal({
             >
               <Button
                 size="small"
+                type="text"
                 loading={clearBusy}
                 disabled={disabled}
                 className="kb-action-btn"
@@ -197,6 +229,7 @@ export function KnowledgeBaseGovernanceModal({
               <Button
                 size="small"
                 danger
+                type="text"
                 className="kb-action-btn"
                 loading={deleteBusy}
                 disabled={disabled}
@@ -246,9 +279,18 @@ export function KnowledgeBaseGovernanceModal({
           ) : null}
         </Space>
 
+      </div>
+      {sampleSize > 0 ? (
+        <p className="kb-governance-sample-note">
+          {t.sidebar.knowledgeBase.sourceSampleExplain(sampleSize)}
+        </p>
+      ) : null}
+
+      <div className="kb-governance-table-head">
         <Tooltip title={t.sidebar.knowledgeBase.refresh}>
           <Button
             size="small"
+            type="text"
             className="kb-refresh-btn"
             onClick={() => {
               void listQuery.refetch();
@@ -259,11 +301,6 @@ export function KnowledgeBaseGovernanceModal({
           />
         </Tooltip>
       </div>
-      {sampleSize > 0 ? (
-        <p className="kb-governance-sample-note">
-          {t.sidebar.knowledgeBase.sourceSampleExplain(sampleSize)}
-        </p>
-      ) : null}
 
       <div className="kb-governance-table-wrap">
         <Table<RagKnowledgeBaseSummary>
@@ -274,7 +311,7 @@ export function KnowledgeBaseGovernanceModal({
           loading={listQuery.isLoading}
           pagination={false}
           locale={{ emptyText: t.sidebar.knowledgeBase.noKnowledgeBases }}
-          scroll={{ x: 860 }}
+          scroll={{ x: 1040 }}
         />
       </div>
     </Modal>

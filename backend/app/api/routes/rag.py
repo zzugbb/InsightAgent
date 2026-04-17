@@ -87,6 +87,11 @@ class RagKnowledgeBaseSource(BaseModel):
     sampled_count: int
 
 
+class RagKnowledgeBaseDocumentId(BaseModel):
+    document_id: str
+    sampled_count: int
+
+
 class RagKnowledgeBaseSummary(BaseModel):
     knowledge_base_id: str
     collection: str
@@ -95,6 +100,8 @@ class RagKnowledgeBaseSummary(BaseModel):
     source_total_known: int
     source_unknown_count: int
     top_sources: list[RagKnowledgeBaseSource] = Field(default_factory=list)
+    top_document_ids: list[RagKnowledgeBaseDocumentId] = Field(default_factory=list)
+    sample_chunks: list[str] = Field(default_factory=list)
 
 
 class RagKnowledgeBaseListResponse(BaseModel):
