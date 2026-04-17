@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter
 from uuid import uuid4
 
 import chromadb
@@ -40,6 +41,27 @@ def _normalize_user_scope(user_id: str) -> str:
 
 def rag_collection_name(user_id: str, knowledge_base_id: str) -> str:
     return f"kb_{_normalize_user_scope(user_id)}_{normalize_knowledge_base_id(knowledge_base_id)}"
+
+
+def _rag_collection_prefix(user_id: str) -> str:
+    return f"kb_{_normalize_user_scope(user_id)}_"
+
+
+def _resolve_collection_name(entry: object) -> str | None:
+    if isinstance(entry, str):
+        resolved = entry.strip()
+        return resolved or None
+    if isinstance(entry, dict):
+        raw = entry.get("name")
+        if isinstance(raw, str):
+            resolved = raw.strip()
+            return resolved or None
+        return None
+    raw = getattr(entry, "name", None)
+    if isinstance(raw, str):
+        resolved = raw.strip()
+        return resolved or None
+    return None
 
 
 def _chunk_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[str]:
@@ -255,3 +277,161 @@ def get_knowledge_base_status(*, user_id: str, knowledge_base_id: str) -> dict[s
         base["document_count"] = 0
 
     return base
+
+
+def _sample_knowledge_sources(
+    collection: chromadb.Collection,
+    *,
+    sample_limit: int,
+) -> dict[str, object]:
+    sample = max(1, min(int(sample_limit), 2_000))
+    try:
+        result = collection.peek(limit=sample)
+        metadatas = result.get("metadatas") if isinstance(result, dict) else None
+    except Exception:
+        metadatas = None
+
+    if not isinstance(metadatas, list):
+        return {
+            "source_sample_size": 0,
+            "source_total_known": 0,
+            "source_unknown_count": 0,
+            "top_sources": [],
+        }
+
+    counter: Counter[str] = Counter()
+    unknown = 0
+    for item in metadatas:
+        if isinstance(item, dict):
+            source_raw = item.get("source")
+            source = str(source_raw or "").strip()
+            if source:
+                counter[source[:240]] += 1
+            else:
+                unknown += 1
+        else:
+            unknown += 1
+
+    top_sources = [
+        {"source": source, "sampled_count": count}
+        for source, count in sorted(counter.items(), key=lambda pair: (-pair[1], pair[0]))[:8]
+    ]
+    return {
+        "source_sample_size": len(metadatas),
+        "source_total_known": sum(counter.values()),
+        "source_unknown_count": unknown,
+        "top_sources": top_sources,
+    }
+
+
+def list_knowledge_bases(*, user_id: str, source_sample_limit: int = 300) -> dict[str, object]:
+    settings = get_settings()
+    result: dict[str, object] = {
+        "knowledge_bases": [],
+        "knowledge_base_count": 0,
+        "chroma_url": settings.chroma_http_url,
+        "chroma_reachable": False,
+        "error": None,
+    }
+    try:
+        client = _http_client()
+        result["chroma_reachable"] = True
+    except Exception as exc:  # noqa: BLE001
+        result["error"] = (str(exc).strip() or type(exc).__name__)[:300]
+        return result
+
+    prefix = _rag_collection_prefix(user_id)
+    try:
+        collections = client.list_collections()
+    except Exception as exc:  # noqa: BLE001
+        result["error"] = (str(exc).strip() or type(exc).__name__)[:300]
+        return result
+
+    rows: list[dict[str, object]] = []
+    for entry in collections:
+        collection_name = _resolve_collection_name(entry)
+        if not collection_name or not collection_name.startswith(prefix):
+            continue
+        kb_id = collection_name[len(prefix) :].strip()
+        if not kb_id:
+            continue
+        row: dict[str, object] = {
+            "knowledge_base_id": kb_id,
+            "collection": collection_name,
+            "document_count": 0,
+            "source_sample_size": 0,
+            "source_total_known": 0,
+            "source_unknown_count": 0,
+            "top_sources": [],
+        }
+        try:
+            collection = client.get_collection(name=collection_name)
+            row["document_count"] = int(collection.count())
+            row.update(
+                _sample_knowledge_sources(
+                    collection,
+                    sample_limit=source_sample_limit,
+                ),
+            )
+        except Exception:
+            pass
+        rows.append(row)
+
+    rows.sort(key=lambda item: str(item["knowledge_base_id"]))
+    result["knowledge_bases"] = rows
+    result["knowledge_base_count"] = len(rows)
+    return result
+
+
+def clear_knowledge_base(*, user_id: str, knowledge_base_id: str) -> dict[str, object]:
+    kb_id = normalize_knowledge_base_id(knowledge_base_id)
+    collection_name = rag_collection_name(user_id, kb_id)
+
+    client = _http_client()
+    existed = False
+    deleted_chunks = 0
+    try:
+        collection = client.get_collection(name=collection_name)
+        existed = True
+        deleted_chunks = int(collection.count())
+    except Exception:
+        existed = False
+        deleted_chunks = 0
+
+    if existed:
+        client.delete_collection(name=collection_name)
+        client.get_or_create_collection(name=collection_name)
+
+    return {
+        "knowledge_base_id": kb_id,
+        "collection": collection_name,
+        "existed": existed,
+        "deleted_chunks": deleted_chunks,
+        "document_count": 0,
+    }
+
+
+def delete_knowledge_base(*, user_id: str, knowledge_base_id: str) -> dict[str, object]:
+    kb_id = normalize_knowledge_base_id(knowledge_base_id)
+    collection_name = rag_collection_name(user_id, kb_id)
+
+    client = _http_client()
+    existed = False
+    deleted_chunks = 0
+    try:
+        collection = client.get_collection(name=collection_name)
+        existed = True
+        deleted_chunks = int(collection.count())
+    except Exception:
+        existed = False
+        deleted_chunks = 0
+
+    if existed:
+        client.delete_collection(name=collection_name)
+
+    return {
+        "knowledge_base_id": kb_id,
+        "collection": collection_name,
+        "existed": existed,
+        "deleted_chunks": deleted_chunks,
+    }

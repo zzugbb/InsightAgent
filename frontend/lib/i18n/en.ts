@@ -224,6 +224,7 @@ export const en: Messages = {
     menuLanguage: "Language",
     menuModel: "Model & runtime",
     menuAudit: "Audit logs",
+    menuKnowledgeBase: "Knowledge bases",
     subviewBack: "Back",
     themeCurrentDark: "Dark",
     themeCurrentLight: "Light",
@@ -245,6 +246,38 @@ export const en: Messages = {
     collapseSidebarAria: "Collapse sidebar",
     expandSidebarAria: "Expand sidebar",
     loadMoreSessions: "Load more",
+    knowledgeBase: {
+      title: "Knowledge base governance",
+      lead:
+        "Inspect per-account knowledge bases, sampled sources, and perform clear/delete operations.",
+      statusConnected: "Chroma connected",
+      statusDisconnected: "Chroma unreachable",
+      kbCount: (n: number) => `${n} knowledge base(s)`,
+      refresh: "Refresh",
+      sourceSampleHint: (n: number) => `Source sample ${n}`,
+      noKnowledgeBases: "No knowledge bases for this account yet.",
+      tableKbId: "Knowledge base ID",
+      tableCollection: "Collection",
+      tableDocuments: "Chunks",
+      tableSources: "Sources (sample)",
+      noSource: "No source",
+      sourceUnknown: (n: number) => `Unknown ${n}`,
+      actionClear: "Clear",
+      actionDelete: "Delete",
+      actioning: "Processing…",
+      clearConfirmTitle: (kbId: string) => `Clear knowledge base "${kbId}"?`,
+      clearConfirmDescription:
+        "All chunks in this knowledge base will be removed, while the knowledge base remains.",
+      deleteConfirmTitle: (kbId: string) =>
+        `Delete knowledge base "${kbId}"?`,
+      deleteConfirmDescription:
+        "This permanently deletes the knowledge base and all its data.",
+      clearDone: (kbId: string, deleted: number) =>
+        `Cleared ${kbId} (${deleted} removed).`,
+      deleteDone: (kbId: string, deleted: number) =>
+        `Deleted ${kbId} (${deleted} removed).`,
+      opFailed: "Operation failed",
+    },
     audit: {
       title: "Audit logs",
       lead:

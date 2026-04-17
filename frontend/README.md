@@ -48,6 +48,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Auth Gate：登录/注册、登录态校验、401 优先 refresh token 轮换并重试；刷新失败后自动回登录；退出入口融合到侧栏左下角设置区
 - 登录后默认策略：直接进入 Workbench；运行模式由设置决定，`remote` 配置不完整会被前端阻断并提示
 - 审计入口迁移到左下角设置菜单（独立子页）：查看 `login/logout/refresh/settings_update` 事件，支持事件类型/时间范围/`session_id`/`task_id` 筛选、详情展开与 JSON/CSV 导出（可选“当前页/全部筛选结果”）
+- 设置菜单新增“知识库治理”子页：查看当前账号知识库列表、来源采样与文档条数，并支持行级清空/删除
 - 审计页交互收口：改为分页表格主视图；筛选改为双行下拉+输入检索并统一控件尺寸（支持一键重置）；事件类型标签化；总数下置表格左下角、操作区右对齐；会话/任务恢复 ID 展示，并恢复行展开查看明细（无二次展开，分页默认每页 10 条）
 - 弹窗状态收口：审计日志弹窗与模型设置弹窗在每次打开时重置筛选/分页/提示与临时输入状态
 - 模型设置弹窗：打开时按后端配置回显当前 `mode/provider/model/base_url`，并通过 `autocomplete` 策略禁用浏览器自动填充
@@ -118,6 +119,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
 - Memory：状态展示 + add/query 调试（含 metadata）
 - RAG：知识库状态展示 + 文本 ingest + 语义检索命中展示（`/api/rag/*`）
+- RAG 治理（设置弹窗）：知识库列表、来源采样、清空/删除（`/api/rag/knowledge-bases*`）
 - RAG 交互优化：知识库 ID 采用“输入后应用”模式，避免输入期间频繁触发状态请求
 - Trace 元信息：支持展示步骤级 `cost_estimate`
 - 设置：主题、主题色、语言、模型与运行模式
@@ -133,9 +135,10 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `app/components/workbench/trace-flow-view.tsx`：轨迹流程图节点渲染
 - `app/components/workbench/chat-column.tsx`：消息历史、用户临时消息与流式 assistant 展示
 - `app/components/workbench/sidebar.tsx`：会话列表、折叠侧栏与设置入口
-- `app/components/workbench/sidebar-settings-menu.tsx`：主题/主题色/语言、当前登录用户、模型设置与审计入口
+- `app/components/workbench/sidebar-settings-menu.tsx`：主题/主题色/语言、当前登录用户、模型设置、审计与知识库治理入口
 - `app/components/workbench/model-settings-modal.tsx`：mock/remote 模型设置、校验与保存
 - `app/components/workbench/audit-logs-modal.tsx`：审计日志筛选、分页、展开与导出
+- `app/components/workbench/knowledge-base-governance-modal.tsx`：知识库列表、来源采样与清空/删除治理
 - `lib/stores/chat-stream-store.ts`：SSE 事件分发与 trace 状态
 - `lib/types/trace.ts`：前端 TraceStep 类型
 - `lib/api-client.ts`：REST 请求封装、Bearer 注入、refresh token 自动续期与 401 失效广播
@@ -224,8 +227,7 @@ npm run dev
 5. `e2e-main-path`：后端主链路 e2e 脚本已落地（登录、模型设置、发送消息、Trace 回放、RAG 检索、导出），前端后续接入 CI 与可视化回归。
 6. `task-cancel-timeout`：首版已落地（取消按钮 + 状态提示）；后端 e2e/CI 已补齐，前端后续补更细粒度反馈与可视化回归。
 7. `running-task-recovery`：前端首版与恢复状态提示已落地（刷新/切回会话自动恢复 running 任务流）；后续补失败快照与可观测指标。
-7. `rag-kb-governance-lite`：知识库列表、清空/删除、来源展示。
-8. `usage-dashboard-lite`：用户/会话/任务维度成本统计增强。
+7. `usage-dashboard-lite`：用户/会话/任务维度成本统计增强。
 
 ### 暂不做
 
@@ -241,5 +243,5 @@ npm run dev
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦前端可视化回归（CI）与运行态细粒度反馈（cancel/timeout）。
-- P0 完成后再推进任务取消/超时、RAG 知识库治理与 usage 统计增强。
+- 下一步聚焦前端可视化回归（CI）与 usage/audit 统计增强。
+- `rag-kb-governance-lite` 首版已完成，后续按计划补 usage dashboard 与审计事件扩展。

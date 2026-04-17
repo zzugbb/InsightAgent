@@ -112,6 +112,37 @@ export type RagStatus = {
   error: string | null;
 };
 
+export type RagKnowledgeBaseSource = {
+  source: string;
+  sampled_count: number;
+};
+
+export type RagKnowledgeBaseSummary = {
+  knowledge_base_id: string;
+  collection: string;
+  document_count: number;
+  source_sample_size: number;
+  source_total_known: number;
+  source_unknown_count: number;
+  top_sources: RagKnowledgeBaseSource[];
+};
+
+export type RagKnowledgeBaseListResponse = {
+  knowledge_bases: RagKnowledgeBaseSummary[];
+  knowledge_base_count: number;
+  chroma_url: string;
+  chroma_reachable: boolean;
+  error: string | null;
+};
+
+export type RagKnowledgeBaseMutateResponse = {
+  knowledge_base_id: string;
+  collection: string;
+  existed: boolean;
+  deleted_chunks: number;
+  document_count?: number | null;
+};
+
 export type RagHit = {
   id: string;
   content: string;

@@ -5,8 +5,11 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.api.deps import get_current_user
 from app.services.chroma_rag_service import (
+    clear_knowledge_base,
+    delete_knowledge_base,
     get_knowledge_base_status,
     ingest_knowledge_documents,
+    list_knowledge_bases,
     query_knowledge_base,
 )
 
@@ -79,6 +82,37 @@ class RagStatusResponse(BaseModel):
     error: str | None = None
 
 
+class RagKnowledgeBaseSource(BaseModel):
+    source: str
+    sampled_count: int
+
+
+class RagKnowledgeBaseSummary(BaseModel):
+    knowledge_base_id: str
+    collection: str
+    document_count: int
+    source_sample_size: int
+    source_total_known: int
+    source_unknown_count: int
+    top_sources: list[RagKnowledgeBaseSource] = Field(default_factory=list)
+
+
+class RagKnowledgeBaseListResponse(BaseModel):
+    knowledge_bases: list[RagKnowledgeBaseSummary]
+    knowledge_base_count: int
+    chroma_url: str
+    chroma_reachable: bool
+    error: str | None = None
+
+
+class RagKnowledgeBaseMutateResponse(BaseModel):
+    knowledge_base_id: str
+    collection: str
+    existed: bool
+    deleted_chunks: int
+    document_count: int | None = None
+
+
 @router.get("/status", response_model=RagStatusResponse)
 def get_rag_status(
     knowledge_base_id: str = Query(default="default", max_length=64),
@@ -89,6 +123,60 @@ def get_rag_status(
         knowledge_base_id=knowledge_base_id,
     )
     return RagStatusResponse(**raw)
+
+
+@router.get("/knowledge-bases", response_model=RagKnowledgeBaseListResponse)
+def get_rag_knowledge_bases(
+    source_sample_limit: int = Query(default=300, ge=20, le=2_000),
+    current_user: dict = Depends(get_current_user),
+) -> RagKnowledgeBaseListResponse:
+    raw = list_knowledge_bases(
+        user_id=str(current_user["id"]),
+        source_sample_limit=source_sample_limit,
+    )
+    return RagKnowledgeBaseListResponse(**raw)
+
+
+@router.post(
+    "/knowledge-bases/{knowledge_base_id}/clear",
+    response_model=RagKnowledgeBaseMutateResponse,
+)
+def post_rag_clear_knowledge_base(
+    knowledge_base_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> RagKnowledgeBaseMutateResponse:
+    try:
+        raw = clear_knowledge_base(
+            user_id=str(current_user["id"]),
+            knowledge_base_id=knowledge_base_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc).strip() or type(exc).__name__
+        raise HTTPException(status_code=503, detail=msg[:400]) from exc
+    return RagKnowledgeBaseMutateResponse(**raw)
+
+
+@router.delete(
+    "/knowledge-bases/{knowledge_base_id}",
+    response_model=RagKnowledgeBaseMutateResponse,
+)
+def delete_rag_knowledge_base(
+    knowledge_base_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> RagKnowledgeBaseMutateResponse:
+    try:
+        raw = delete_knowledge_base(
+            user_id=str(current_user["id"]),
+            knowledge_base_id=knowledge_base_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc).strip() or type(exc).__name__
+        raise HTTPException(status_code=503, detail=msg[:400]) from exc
+    return RagKnowledgeBaseMutateResponse(**raw)
 
 
 @router.post("/ingest", response_model=RagIngestResponse)

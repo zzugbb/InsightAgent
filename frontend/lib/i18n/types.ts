@@ -164,6 +164,7 @@ export type Messages = {
     menuLanguage: string;
     menuModel: string;
     menuAudit: string;
+    menuKnowledgeBase: string;
     subviewBack: string;
     themeCurrentDark: string;
     themeCurrentLight: string;
@@ -185,6 +186,32 @@ export type Messages = {
     collapseSidebarAria: string;
     expandSidebarAria: string;
     loadMoreSessions: string;
+    knowledgeBase: {
+      title: string;
+      lead: string;
+      statusConnected: string;
+      statusDisconnected: string;
+      kbCount: (n: number) => string;
+      refresh: string;
+      sourceSampleHint: (n: number) => string;
+      noKnowledgeBases: string;
+      tableKbId: string;
+      tableCollection: string;
+      tableDocuments: string;
+      tableSources: string;
+      noSource: string;
+      sourceUnknown: (n: number) => string;
+      actionClear: string;
+      actionDelete: string;
+      actioning: string;
+      clearConfirmTitle: (kbId: string) => string;
+      clearConfirmDescription: string;
+      deleteConfirmTitle: (kbId: string) => string;
+      deleteConfirmDescription: string;
+      clearDone: (kbId: string, deleted: number) => string;
+      deleteDone: (kbId: string, deleted: number) => string;
+      opFailed: string;
+    };
     audit: {
       title: string;
       lead: string;

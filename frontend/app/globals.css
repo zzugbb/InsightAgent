@@ -2761,6 +2761,89 @@ code {
   margin-top: 8px;
 }
 
+.knowledge-base-governance-ant-modal .ant-modal-body {
+  padding-top: 8px;
+}
+
+.kb-governance-lead {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.kb-governance-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.kb-governance-status {
+  margin-inline-end: 0;
+}
+
+.kb-governance-metric {
+  font-size: 0.82rem;
+  color: var(--muted-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.kb-governance-metric--muted {
+  color: var(--muted);
+}
+
+.kb-governance-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.kb-id-cell {
+  font-size: 0.78rem;
+}
+
+.kb-collection-cell {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--muted-strong);
+}
+
+.kb-count-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+.kb-source-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kb-source-tag {
+  margin-inline-end: 0 !important;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-source-tag--muted {
+  color: var(--muted-strong) !important;
+  border-color: var(--line) !important;
+}
+
+.kb-source-empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.kb-row-actions {
+  justify-content: flex-end;
+}
+
 @media (max-width: 780px) {
   .audit-modal-filter-row {
     grid-template-columns: 1fr;
@@ -2769,6 +2852,11 @@ code {
   .audit-modal-detail-row {
     grid-template-columns: 1fr;
     gap: 2px;
+  }
+
+  .kb-governance-topline {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

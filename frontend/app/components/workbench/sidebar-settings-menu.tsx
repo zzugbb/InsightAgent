@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Database,
   Globe,
   Monitor,
   Moon,
@@ -31,6 +32,7 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
 import { ModelSettingsModal } from "./model-settings-modal";
 import { AuditLogsModal } from "./audit-logs-modal";
+import { KnowledgeBaseGovernanceModal } from "./knowledge-base-governance-modal";
 
 type SectionId = "theme" | "accent" | "language";
 
@@ -53,6 +55,7 @@ export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
   const [expanded, setExpanded] = useState<SectionId | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [popoverPos, setPopoverPos] = useState<PopoverPos | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -152,6 +155,12 @@ export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
     setOpen(false);
     setExpanded(null);
     setAuditOpen(true);
+  }
+
+  function openKnowledgeBase() {
+    setOpen(false);
+    setExpanded(null);
+    setKnowledgeBaseOpen(true);
   }
 
   const themeLabel =
@@ -381,6 +390,24 @@ export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
           type="button"
           role="menuitem"
           className="settings-menu-row settings-menu-row--footer"
+          onClick={openKnowledgeBase}
+        >
+          <Database size={18} strokeWidth={1.75} aria-hidden />
+          <span className="settings-menu-row-label">
+            {t.sidebar.menuKnowledgeBase}
+          </span>
+          <ChevronRight
+            size={18}
+            strokeWidth={1.75}
+            aria-hidden
+            className="settings-menu-chevron"
+          />
+        </button>
+
+        <button
+          type="button"
+          role="menuitem"
+          className="settings-menu-row settings-menu-row--footer"
           onClick={openAudit}
         >
           <ShieldCheck size={18} strokeWidth={1.75} aria-hidden />
@@ -434,6 +461,10 @@ export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
         triggerRef={triggerRef}
       />
       <AuditLogsModal open={auditOpen} onClose={() => setAuditOpen(false)} />
+      <KnowledgeBaseGovernanceModal
+        open={knowledgeBaseOpen}
+        onClose={() => setKnowledgeBaseOpen(false)}
+      />
     </div>
   );
 }

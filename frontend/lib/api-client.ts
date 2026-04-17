@@ -360,3 +360,23 @@ export async function apiDelete(url: string): Promise<void> {
   }
   await readResponse(response, url);
 }
+
+export async function apiDeleteJson<T>(url: string): Promise<T> {
+  let response: Response;
+  try {
+    response = await authFetch(url, { method: "DELETE" });
+  } catch (cause) {
+    throw new ApiError(
+      0,
+      cause instanceof TypeError ? "NETWORK" : "UNKNOWN",
+      url,
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
+  const text = await readResponse(response, url);
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError(response.status, "INVALID_JSON", url, text.slice(0, 120));
+  }
+}

@@ -41,6 +41,7 @@
 - 协同修复：前端流式展示已按 `session_id` 做会话隔离，切换会话时不再短暂串出其他会话任务
 - 协同修复：针对任务完成瞬间的状态滞后场景，前端恢复链路已避免误报“恢复失败”（同任务去重 + stream 409 无害收敛）
 - 协同修复：前端聊天区流式自动滚动已改为“仅贴底跟随”，用户上滑查看历史时不再被强制拉回底部
+- 阶段 5 增量：`rag-kb-governance-lite` 首版后端接口已落地（按用户列出知识库、清空知识库、删除知识库，并输出来源采样统计）
 - 协同修复：任务取消/超时后即使后端追加 `error(task_cancelled/task_timeout)`，前端也不会误判为 fatal 失败态并展示“重试上次发送”
 - 协同修复：流结束后的 `trace/delta` 自动补拉已改为静默，避免底部状态提示被“暂无新的轨迹增量”覆盖
 - 协同修复：待发送用户消息去重改为按 `task_id`，取消后再次发送相同文案可即时显示，不再被上一条同文案误隐藏
@@ -93,7 +94,7 @@
 - `app/services/chat_execution_service.py`：SSE 任务流（mock 四步 trace）
 - 流式阶段已支持最终 `observation` 的批次增量持久化（`seq` 递增，默认每 8 个 chunk 落库一次 + 结束兜底）
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
-- `app/services/chroma_rag_service.py`：用户级 RAG collection 命名、ingest/query/status
+- `app/services/chroma_rag_service.py`：用户级 RAG collection 命名、ingest/query/status、knowledge base list/clear/delete
 - `app/services/settings_service.py`：用户级模型设置读取/保存与 `api_key` 加密解密
 - `app/services/auth_service.py` / `auth_session_service.py`：用户认证、access token、refresh token 轮换与会话撤销
 - `app/services/audit_service.py`：审计事件写入、分页查询与筛选
@@ -133,6 +134,9 @@
 - `GET /api/rag/status`
 - `POST /api/rag/ingest`
 - `POST /api/rag/query`
+- `GET /api/rag/knowledge-bases`
+- `POST /api/rag/knowledge-bases/{knowledge_base_id}/clear`
+- `DELETE /api/rag/knowledge-bases/{knowledge_base_id}`
 - `GET /api/tasks/{task_id}`
 - `POST /api/tasks/{task_id}/cancel`
 - `GET /api/tasks/{task_id}/export/json`
@@ -313,8 +317,7 @@ docker compose up -d chroma
 5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）并接入后端 CI；后续补失败快照留档。
 6. `task-cancel-timeout`：首版已落地（取消接口 + 超时中断 + SSE 事件），并新增 cancel/timeout e2e 脚本；后续补细粒度状态反馈。
 7. `running-task-recovery`：前端恢复链路已接入，后续可补失败快照与恢复可观测字段。
-8. `rag-kb-governance-lite`：知识库列表、清空/删除 collection、来源展示。
-9. `usage-dashboard-lite` / `audit-event-expansion`：补用户/会话/任务维度统计与关键事件审计。
+8. `usage-dashboard-lite` / `audit-event-expansion`：补用户/会话/任务维度统计与关键事件审计。
 
 ### 暂不做
 
