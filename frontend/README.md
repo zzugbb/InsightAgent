@@ -35,6 +35,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 修复：聊天区滚动体验已修复；流式输出期间用户主动上滑阅读历史消息时，不再被强制拉回底部
 - 阶段 5 修复：任务取消/超时后即使收到 `error(task_cancelled/task_timeout)`，也不再误判为失败态并显示“重试上次发送”
 - 阶段 5 修复：流结束后的 `trace/delta` 自动补拉改为静默，不再覆盖底部状态为“暂无新的轨迹增量”
+- 阶段 5 修复：待发送用户消息去重改为按 `task_id`，取消后再次发送相同文案会即时显示，不再被上一条同文案误隐藏
+- 阶段 5 修复：发送后立即刷新 `tasks/messages`，并在任务列表回刷前用流式任务兜底展示“当前任务”取消按钮
 
 ## 当前已有内容
 
@@ -64,6 +66,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 会话隔离增强：`sseTask/sseTrace/ssePhase/sseUsage` 在 UI 展示层按当前会话过滤；跨会话后台流不会污染当前会话面板
 - 恢复链路增强：同任务不重复触发自动恢复；`/stream` 返回 409（已非 pending/running）时按无害收敛处理，不再触发失败提示
 - 流式滚动增强：自动跟随输出仅在“当前已贴底”时生效；离底阅读状态下保留当前位置，可通过“回到底部”按钮恢复跟随
+- 待发送消息增强：pending user 仅对同 `task_id` 做去重，连续同文案发送可正确展示多条用户消息
+- 当前任务增强：当 `tasks` 查询尚未刷新到新任务时，Inspector 使用流式任务兜底，取消按钮可即时点击
 - 会话命名体验：空会话在首条消息发送后会自动改名为消息前缀（后端规则驱动）
 - 会话：创建、切换、分页加载、重命名、删除
 - 轨迹：时间线与流程图双视图（thought/action/observation/tool/rag 区分）

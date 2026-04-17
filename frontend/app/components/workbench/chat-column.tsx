@@ -46,6 +46,7 @@ type ChatColumnProps = {
   onDismissBanner: () => void;
   sessionMessages: SessionMessage[];
   pendingUserInput: string;
+  pendingUserTaskId: string | null;
   messagesLoading: boolean;
   messagesMessage: string;
   sseTokens: string;
@@ -89,6 +90,7 @@ export function ChatColumn({
   onDismissBanner,
   sessionMessages,
   pendingUserInput,
+  pendingUserTaskId,
   messagesLoading,
   messagesMessage,
   sseTokens,
@@ -139,11 +141,18 @@ export function ChatColumn({
     if (!pending) {
       return false;
     }
+    const pendingTaskId = pendingUserTaskId?.trim() ?? "";
     const last = sessionMessages.at(-1);
     if (!last) {
       return true;
     }
-    return !(last.role === "user" && last.content.trim() === pending);
+    if (last.role !== "user" || last.content.trim() !== pending) {
+      return true;
+    }
+    if (!pendingTaskId) {
+      return true;
+    }
+    return (last.task_id?.trim() ?? "") !== pendingTaskId;
   })();
 
   const stageRef = useRef<HTMLElement>(null);

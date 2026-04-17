@@ -64,6 +64,14 @@ const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
 const TRACE_DELTA_FAST_DRAIN_MS = 180;
 const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
 const RUNNING_TASK_STATUSES = new Set(["pending", "running"]);
+const RUNNING_STREAM_PHASES = new Set([
+  "pending",
+  "running",
+  "thinking",
+  "tool_running",
+  "tool_retry",
+  "streaming",
+]);
 
 type WorkbenchProps = {
   currentUser?: {
@@ -955,7 +963,17 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         apiBaseUrl: API_BASE_URL,
         prompt: text,
         sessionId,
-        onSessionResolved: setActiveSessionId,
+        onSessionResolved: (resolvedSessionId) => {
+          setActiveSessionId(resolvedSessionId);
+          void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          void queryClient.invalidateQueries({
+            queryKey: ["messages", resolvedSessionId],
+          });
+        },
+      });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["messages", sessionId],
       });
     } catch (error) {
       const u = toUserFacingError(error, t.errors);
@@ -1058,7 +1076,45 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const activeSession = recentSessions.find((s) => s.id === activeSessionId);
   const activeTaskIdScoped = scopedSseTaskId;
-  const activeTask = recentTasksScoped.find((t) => t.id === activeTaskIdScoped);
+  const activeTaskFromList = recentTasksScoped.find(
+    (task) => task.id === activeTaskIdScoped,
+  );
+  const activeTask = useMemo(() => {
+    if (activeTaskFromList) {
+      return activeTaskFromList;
+    }
+    const taskId = activeTaskIdScoped?.trim() ?? "";
+    const sessionId = activeSessionId?.trim() ?? "";
+    if (!taskId || !sessionId) {
+      return undefined;
+    }
+    const phase = (scopedSsePhase ?? "").trim().toLowerCase();
+    const runningLike = scopedIsStreaming || RUNNING_STREAM_PHASES.has(phase);
+    if (!runningLike) {
+      return undefined;
+    }
+    const nowIso = new Date().toISOString();
+    const prompt = lastSentPromptRef.current.trim();
+    return {
+      id: taskId,
+      session_id: sessionId,
+      prompt,
+      status: "running",
+      status_normalized: "running",
+      status_label: "running",
+      status_rank: 30,
+      trace_json: null,
+      usage_json: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    } satisfies TaskSummary;
+  }, [
+    activeTaskFromList,
+    activeTaskIdScoped,
+    activeSessionId,
+    scopedIsStreaming,
+    scopedSsePhase,
+  ]);
   const latestTaskForSession = recentTasksScoped.find(
     (t) => t.session_id === activeSessionId,
   );
@@ -1221,6 +1277,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         onDismissBanner={() => setBannerError(null)}
         sessionMessages={sessionMessages}
         pendingUserInput={scopedIsStreaming ? lastSentPromptRef.current : ""}
+        pendingUserTaskId={scopedSseTaskId}
         messagesLoading={messagesLoading}
         messagesMessage={messagesMessage}
         sseTokens={scopedSseTokens}
