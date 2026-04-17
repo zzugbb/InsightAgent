@@ -177,7 +177,7 @@ export function ChatColumn({
   useEffect(() => {
     const el = stageRef.current;
     if (!el || messagesLoading) return;
-    if (pinnedToBottom || isStreaming) {
+    if (pinnedToBottom) {
       requestAnimationFrame(() => {
         el.scrollTop = el.scrollHeight;
       });
@@ -185,7 +185,6 @@ export function ChatColumn({
   }, [
     sessionMessages,
     sseTokens,
-    isStreaming,
     messagesLoading,
     pinnedToBottom,
     useMsgVirtual,

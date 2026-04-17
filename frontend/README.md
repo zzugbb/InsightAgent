@@ -30,6 +30,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 增量：`task-cancel-timeout` 前端首版已落地；Inspector「当前任务」支持取消运行中任务，流式状态接入 `cancelled/timeout` 事件提示
 - 阶段 5 协同：后端已补齐 `task-cancel-timeout` e2e 脚本并接入后端 CI（baseline/main-path/cancel/timeout；CI 已升级 `checkout`/`setup-python` 以适配 GitHub Actions Node 24；后端 Python 与 compose/`.python-version` 统一为 3.14）；前端 Node 与 compose/`.nvmrc`/engines 统一为 **24.x**，可继续专注可视化回归与状态细化
 - 阶段 5 增量：`running-task-recovery` 前端首版已落地；刷新页面或切回会话时会自动接管该会话下 `pending/running` 任务流，并展示恢复中/成功/失败提示
+- 阶段 5 修复：会话切换时的任务串台已修复；流式状态按 `session_id` 绑定并按当前会话隔离渲染，避免短暂显示其他会话任务
+- 阶段 5 修复：恢复提示误报已修复；任务结束瞬间若列表状态滞后，自动恢复不再错误提示“任务流恢复失败”
+- 阶段 5 修复：聊天区滚动体验已修复；流式输出期间用户主动上滑阅读历史消息时，不再被强制拉回底部
+- 阶段 5 修复：任务取消/超时后即使收到 `error(task_cancelled/task_timeout)`，也不再误判为失败态并显示“重试上次发送”
+- 阶段 5 修复：流结束后的 `trace/delta` 自动补拉改为静默，不再覆盖底部状态为“暂无新的轨迹增量”
 
 ## 当前已有内容
 
@@ -56,6 +61,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
 - 侧栏账户展示收口：用户信息已融合到左下角“设置”弹窗顶部，并采用与“主题/主题色/语言”同款行样式（图标 + 标题 + 值）展示，便于确认当前登录身份
 - running task 恢复：持久化当前会话 ID，刷新后自动回到上次会话；若该会话存在 `pending/running` 任务，会自动复用 `/api/tasks/{task_id}/stream` 重连流继续展示，并在聊天区显示恢复状态提示条
+- 会话隔离增强：`sseTask/sseTrace/ssePhase/sseUsage` 在 UI 展示层按当前会话过滤；跨会话后台流不会污染当前会话面板
+- 恢复链路增强：同任务不重复触发自动恢复；`/stream` 返回 409（已非 pending/running）时按无害收敛处理，不再触发失败提示
+- 流式滚动增强：自动跟随输出仅在“当前已贴底”时生效；离底阅读状态下保留当前位置，可通过“回到底部”按钮恢复跟随
 - 会话命名体验：空会话在首条消息发送后会自动改名为消息前缀（后端规则驱动）
 - 会话：创建、切换、分页加载、重命名、删除
 - 轨迹：时间线与流程图双视图（thought/action/observation/tool/rag 区分）

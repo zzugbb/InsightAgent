@@ -38,6 +38,11 @@
 - 阶段 5 增量：`task-cancel-timeout` e2e 已补齐；新增 `scripts/e2e_task_cancel_timeout.py`，覆盖取消链路与超时链路（低 `TASK_TIMEOUT_SEC` 环境）
 - 工程化增量：后端 e2e CI 首版已接入（`.github/workflows/backend-e2e.yml`，已升级 `checkout`/`setup-python` 主版本以适配 GitHub Actions Node 24 运行时；Python **3.14** 与 `compose.full.yml`、根目录 `.python-version` 对齐）
 - 协同进展：前端已接入 `running-task-recovery` 首版（刷新/切回会话自动接管 running/pending 任务流），并补齐恢复中/成功/失败可视化提示，复用现有 running reconnect SSE 能力
+- 协同修复：前端流式展示已按 `session_id` 做会话隔离，切换会话时不再短暂串出其他会话任务
+- 协同修复：针对任务完成瞬间的状态滞后场景，前端恢复链路已避免误报“恢复失败”（同任务去重 + stream 409 无害收敛）
+- 协同修复：前端聊天区流式自动滚动已改为“仅贴底跟随”，用户上滑查看历史时不再被强制拉回底部
+- 协同修复：任务取消/超时后即使后端追加 `error(task_cancelled/task_timeout)`，前端也不会误判为 fatal 失败态并展示“重试上次发送”
+- 协同修复：流结束后的 `trace/delta` 自动补拉已改为静默，避免底部状态提示被“暂无新的轨迹增量”覆盖
 - 协同进展：前端左侧与中栏已完成风格收口（导航层级、runtime strip、输入区动效与密度），继续复用现有接口与字段
 - 协同进展：前端已按最新交互要求收敛头部占位（移除会话状态胶囊与输入计数提示），继续复用现有接口与字段
 - 协同进展：前端侧栏账户展示已收口到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的设置行风格（图标 + 标题 + 值）

@@ -64,14 +64,6 @@ const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
 const TRACE_DELTA_FAST_DRAIN_MS = 180;
 const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
 const RUNNING_TASK_STATUSES = new Set(["pending", "running"]);
-const STREAMING_LIKE_PHASES = new Set([
-  "pending",
-  "running",
-  "thinking",
-  "tool_running",
-  "tool_retry",
-  "streaming",
-]);
 
 type WorkbenchProps = {
   currentUser?: {
@@ -169,6 +161,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   );
   const ssePhase = useChatStreamStore((s: ChatStreamStore) => s.ssePhase);
   const sseTaskId = useChatStreamStore((s: ChatStreamStore) => s.sseTaskId);
+  const sseSessionId = useChatStreamStore(
+    (s: ChatStreamStore) => s.sseSessionId,
+  );
   const sseMessage = useChatStreamStore((s: ChatStreamStore) => s.sseMessage);
   const traceCursor = useChatStreamStore((s: ChatStreamStore) => s.traceCursor);
   const sseTaskUsage = useChatStreamStore((s: ChatStreamStore) => s.sseTaskUsage);
@@ -486,6 +481,13 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     () => tasksQuery.data?.pages.flatMap((p) => p.items) ?? [],
     [tasksQuery.data],
   );
+  const recentTasksScoped = useMemo(
+    () =>
+      activeSessionId
+        ? recentTasks.filter((task) => task.session_id === activeSessionId)
+        : recentTasks,
+    [activeSessionId, recentTasks],
+  );
   const tasksFetchNextBusy = tasksQuery.isFetchingNextPage;
   const tasksCanLoadMore = Boolean(tasksQuery.hasNextPage);
   const settingsSummary = settingsQuery.data ?? null;
@@ -530,6 +532,21 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }, [activeSessionId]);
 
   const messagesLoading = Boolean(activeSessionId) && messagesQuery.isLoading;
+
+  const streamSessionMatchesActive =
+    !activeSessionId ||
+    !sseSessionId ||
+    sseSessionId.trim() === activeSessionId.trim();
+  const scopedIsStreaming = streamSessionMatchesActive ? isStreaming : false;
+  const scopedSseTokens = streamSessionMatchesActive ? sseTokens : "";
+  const scopedSseTraceSteps = streamSessionMatchesActive ? sseTraceSteps : [];
+  const scopedSsePhase = streamSessionMatchesActive ? ssePhase : null;
+  const scopedSseTaskId = streamSessionMatchesActive ? sseTaskId : null;
+  const scopedSseMessage = streamSessionMatchesActive
+    ? sseMessage
+    : t.stream.idleHint;
+  const scopedTraceCursor = streamSessionMatchesActive ? traceCursor : 0;
+  const scopedSseTaskUsage = streamSessionMatchesActive ? sseTaskUsage : null;
   let messagesMessage: string = t.workbench.selectSessionForHistory;
   if (activeSessionId) {
     if (messagesQuery.isError) {
@@ -753,7 +770,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (was && !isStreaming) {
       const taskId = sseTaskId?.trim() ?? "";
       if (taskId) {
-        void syncTraceDelta(taskId).then((result) => {
+        void syncTraceDelta(taskId, { silent: true }).then((result) => {
           if (result.ok) {
             setTraceDeltaSyncStatus("ok");
             setTraceDeltaLastOkAt(Date.now());
@@ -825,16 +842,12 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       return;
     }
 
-    const currentTaskId = sseTaskId?.trim() ?? "";
-    if (isStreaming && currentTaskId === runningTaskId) {
+    if (isStreaming && !streamSessionMatchesActive) {
       return;
     }
-    if (
-      !isStreaming &&
-      currentTaskId === runningTaskId &&
-      typeof ssePhase === "string" &&
-      STREAMING_LIKE_PHASES.has(ssePhase)
-    ) {
+
+    const currentTaskId = streamSessionMatchesActive ? (sseTaskId?.trim() ?? "") : "";
+    if (currentTaskId && currentTaskId === runningTaskId) {
       return;
     }
 
@@ -848,6 +861,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       apiBaseUrl: API_BASE_URL,
       taskId: runningTaskId,
       onSessionResolved: setActiveSessionId,
+      sessionId: activeSessionId,
     })
       .then((ok) => {
         if (!ok) {
@@ -874,6 +888,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     isStreaming,
     recentTasks,
     resumeTaskStream,
+    streamSessionMatchesActive,
     ssePhase,
     sseTaskId,
     t.stream,
@@ -967,7 +982,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   function handleLoadPersistedTrace() {
-    const taskId = sseTaskId?.trim() ?? "";
+    const taskId = scopedSseTaskId?.trim() ?? "";
     setInspectorTab("trace");
     if (isNarrow) {
       openInspectorDrawer();
@@ -976,7 +991,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   function handleLoadTraceDelta() {
-    const taskId = sseTaskId?.trim() ?? "";
+    const taskId = scopedSseTaskId?.trim() ?? "";
     setInspectorTab("trace");
     if (isNarrow) {
       openInspectorDrawer();
@@ -1041,10 +1056,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     });
   }
 
-  const activeTaskId = sseTaskId;
   const activeSession = recentSessions.find((s) => s.id === activeSessionId);
-  const activeTask = recentTasks.find((t) => t.id === activeTaskId);
-  const latestTaskForSession = recentTasks.find(
+  const activeTaskIdScoped = scopedSseTaskId;
+  const activeTask = recentTasksScoped.find((t) => t.id === activeTaskIdScoped);
+  const latestTaskForSession = recentTasksScoped.find(
     (t) => t.session_id === activeSessionId,
   );
 
@@ -1061,9 +1076,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     tool_running: t.workbench.phaseRunning,
     tool_retry: t.workbench.phaseRunning,
   };
-  const phaseLabel = ssePhase
-    ? (phaseLabelMap[ssePhase] ?? ssePhase)
-    : isStreaming
+  const phaseLabel = scopedSsePhase
+    ? (phaseLabelMap[scopedSsePhase] ?? scopedSsePhase)
+    : scopedIsStreaming
       ? t.workbench.phaseRunning
       : t.workbench.phaseIdle;
   const cancellingTaskId = cancelTaskMutation.isPending
@@ -1072,11 +1087,11 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   let composerHint = t.workbench.composerEnterSend;
   let composerHintVariant: "default" | "error" = "default";
-  if (isStreaming) {
+  if (scopedIsStreaming) {
     composerHint = t.workbench.composerGenerating;
   }
-  if (ssePhase === "error") {
-    composerHint = sseMessage;
+  if (scopedSsePhase === "error") {
+    composerHint = scopedSseMessage;
     composerHintVariant = "error";
   }
 
@@ -1201,19 +1216,19 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         activeSession={activeSession}
         activeSessionId={activeSessionId}
         settingsSummary={settingsSummary}
-        isStreaming={isStreaming}
+        isStreaming={scopedIsStreaming}
         apiBanner={bannerError}
         onDismissBanner={() => setBannerError(null)}
         sessionMessages={sessionMessages}
-        pendingUserInput={isStreaming ? lastSentPromptRef.current : ""}
+        pendingUserInput={scopedIsStreaming ? lastSentPromptRef.current : ""}
         messagesLoading={messagesLoading}
         messagesMessage={messagesMessage}
-        sseTokens={sseTokens}
-        ssePhase={ssePhase}
+        sseTokens={scopedSseTokens}
+        ssePhase={scopedSsePhase}
         prompt={prompt}
         onPromptChange={setPrompt}
         onSend={handleSend}
-        sendDisabled={isStreaming || !prompt.trim()}
+        sendDisabled={scopedIsStreaming || !prompt.trim()}
         composerHint={composerHint}
         composerHintVariant={composerHintVariant}
         showSessionDrawerTrigger={isNarrow}
@@ -1226,7 +1241,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         }}
         inspectorDrawerTriggerRef={inspectorOpenButtonRef}
         showNarrowLayoutHint={isNarrow}
-        showStreamRetry={ssePhase === "error" && !isStreaming}
+        showStreamRetry={scopedSsePhase === "error" && !scopedIsStreaming}
         onRetryStream={handleRetryStream}
         composerRef={composerRef}
         liveRegionText={liveRegionText}
@@ -1264,24 +1279,24 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           setInspectorCollapsed((c) => !c)
         }
         onInspectorResizeStart={onInspectorResizeStart}
-        isStreaming={isStreaming}
-        sseTraceSteps={sseTraceSteps}
-        sseMessage={sseMessage}
-        sseTaskId={sseTaskId}
+        isStreaming={scopedIsStreaming}
+        sseTraceSteps={scopedSseTraceSteps}
+        sseMessage={scopedSseMessage}
+        sseTaskId={scopedSseTaskId}
         phaseLabel={phaseLabel}
-        traceCursor={traceCursor}
+        traceCursor={scopedTraceCursor}
         traceDeltaSyncStatus={traceDeltaSyncStatus}
         traceDeltaRetryCount={traceDeltaRetryCount}
         traceDeltaLastOkAt={traceDeltaLastOkAt}
         traceDeltaLastError={traceDeltaLastError}
         traceDeltaNextRetryAt={traceDeltaNextRetryAt}
         traceDeltaRecoveredAt={traceDeltaRecoveredAt}
-        sseTaskUsage={sseTaskUsage}
+        sseTaskUsage={scopedSseTaskUsage}
         activeSessionId={activeSessionId}
-        activeTaskId={activeTaskId}
+        activeTaskId={activeTaskIdScoped}
         activeTask={activeTask}
         latestTaskForSession={latestTaskForSession}
-        recentTasks={recentTasks}
+        recentTasks={recentTasksScoped}
         tasksFetchNextBusy={tasksFetchNextBusy}
         tasksCanLoadMore={tasksCanLoadMore}
         onLoadMoreTasks={() => void tasksQuery.fetchNextPage()}
