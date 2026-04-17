@@ -197,6 +197,12 @@ export const en: Messages = {
     taskCreateFailed: "Task creation failed.",
     streamClosed: "Task stream closed.",
     failedReadStream: "Failed to read task stream.",
+    streamRecoveryStart: (taskId: string) =>
+      `Recovering task stream (${taskId.slice(0, 8)}...).`,
+    streamRecoveryDone: (taskId: string) =>
+      `Task stream resumed (${taskId.slice(0, 8)}...).`,
+    streamRecoveryFailed: (taskId: string) =>
+      `Failed to resume task stream (${taskId.slice(0, 8)}...).`,
   },
   sidebar: {
     ariaLabel: "Session list",

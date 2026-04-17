@@ -194,6 +194,12 @@ export const zh: Messages = {
     taskCreateFailed: "创建任务失败。",
     streamClosed: "任务流已关闭。",
     failedReadStream: "读取任务流失败。",
+    streamRecoveryStart: (taskId: string) =>
+      `正在恢复任务流（${taskId.slice(0, 8)}…）。`,
+    streamRecoveryDone: (taskId: string) =>
+      `已恢复任务流（${taskId.slice(0, 8)}…）。`,
+    streamRecoveryFailed: (taskId: string) =>
+      `任务流恢复失败（${taskId.slice(0, 8)}…）。`,
   },
   sidebar: {
     ariaLabel: "会话列表",

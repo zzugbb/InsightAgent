@@ -71,6 +71,11 @@ type ChatColumnProps = {
   runtimeNotice: string | null;
   onOpenModelSettings: () => void;
   onDismissRuntimeNotice: () => void;
+  recoveryNotice: {
+    type: "info" | "success" | "error";
+    text: string;
+  } | null;
+  onDismissRecoveryNotice: () => void;
 };
 
 const SCROLL_BOTTOM_THRESHOLD = 96;
@@ -108,6 +113,8 @@ export function ChatColumn({
   runtimeNotice,
   onOpenModelSettings,
   onDismissRuntimeNotice,
+  recoveryNotice,
+  onDismissRecoveryNotice,
 }: ChatColumnProps) {
   const t = useMessages();
   const { localeTag } = usePreferences();
@@ -270,6 +277,16 @@ export function ChatColumn({
               {t.chat.goConfigureModel}
             </Button>
           }
+        />
+      ) : null}
+      {!apiBanner && !runtimeNotice && recoveryNotice ? (
+        <Alert
+          className="chat-api-alert"
+          type={recoveryNotice.type}
+          showIcon
+          closable
+          onClose={onDismissRecoveryNotice}
+          title={recoveryNotice.text}
         />
       ) : null}
 

@@ -127,6 +127,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [traceDeltaRecoveredAt, setTraceDeltaRecoveredAt] = useState<number | null>(
     null,
   );
+  const [recoveryNotice, setRecoveryNotice] = useState<{
+    type: "info" | "success" | "error";
+    text: string;
+  } | null>(null);
   const [isPageVisible, setIsPageVisible] = useState(
     typeof document === "undefined"
       ? true
@@ -836,6 +840,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
     recoveringTaskIdRef.current = runningTaskId;
     setInspectorTab("trace");
+    setRecoveryNotice({
+      type: "info",
+      text: t.stream.streamRecoveryStart(runningTaskId),
+    });
     void resumeTaskStream({
       apiBaseUrl: API_BASE_URL,
       taskId: runningTaskId,
@@ -844,6 +852,15 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       .then((ok) => {
         if (!ok) {
           blockedRecoveryTaskIdsRef.current.add(runningTaskId);
+          setRecoveryNotice({
+            type: "error",
+            text: t.stream.streamRecoveryFailed(runningTaskId),
+          });
+        } else {
+          setRecoveryNotice({
+            type: "success",
+            text: t.stream.streamRecoveryDone(runningTaskId),
+          });
         }
       })
       .finally(() => {
@@ -859,6 +876,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     resumeTaskStream,
     ssePhase,
     sseTaskId,
+    t.stream,
   ]);
 
   async function ensureSessionForSend(): Promise<string> {
@@ -900,6 +918,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (!text) {
       return;
     }
+    setRecoveryNotice(null);
     if (
       settingsSummary?.mode === "remote" &&
       !settingsSummary.api_key_configured
@@ -987,6 +1006,17 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }, TRACE_DELTA_RECOVER_HINT_MS);
     return () => window.clearTimeout(timer);
   }, [traceDeltaRecoveredAt]);
+
+  useEffect(() => {
+    if (!recoveryNotice) {
+      return;
+    }
+    const timeoutMs = recoveryNotice.type === "error" ? 7000 : 4500;
+    const timer = window.setTimeout(() => {
+      setRecoveryNotice(null);
+    }, timeoutMs);
+    return () => window.clearTimeout(timer);
+  }, [recoveryNotice]);
 
   function handleSelectTask(task: TaskSummary) {
     setActiveSessionId(task.session_id);
@@ -1203,6 +1233,8 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         runtimeNotice={runtimeNoticeDismissed ? null : runtimeNotice}
         onOpenModelSettings={openModelSettings}
         onDismissRuntimeNotice={() => setRuntimeNoticeDismissed(true)}
+        recoveryNotice={recoveryNotice}
+        onDismissRecoveryNotice={() => setRecoveryNotice(null)}
       />
 
       {isNarrow ? (

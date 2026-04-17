@@ -136,6 +136,9 @@ export type Messages = {
     taskCreateFailed: string;
     streamClosed: string;
     failedReadStream: string;
+    streamRecoveryStart: (taskId: string) => string;
+    streamRecoveryDone: (taskId: string) => string;
+    streamRecoveryFailed: (taskId: string) => string;
   };
   sidebar: {
     ariaLabel: string;
