@@ -193,12 +193,15 @@ export type Messages = {
       statusDisconnected: string;
       kbCount: (n: number) => string;
       refresh: string;
+      refreshAria: string;
       sourceSampleHint: (n: number) => string;
+      sourceSampleExplain: (n: number) => string;
       noKnowledgeBases: string;
       tableKbId: string;
       tableCollection: string;
       tableDocuments: string;
       tableSources: string;
+      tableActions: string;
       noSource: string;
       sourceUnknown: (n: number) => string;
       actionClear: string;

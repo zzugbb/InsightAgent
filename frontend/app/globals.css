@@ -2792,10 +2792,21 @@ code {
   color: var(--muted);
 }
 
+.kb-governance-sample-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .kb-governance-table-wrap {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
+}
+
+.kb-governance-table-wrap .ant-table-thead > tr > th {
+  text-align: left !important;
 }
 
 .kb-id-cell {
@@ -2828,6 +2839,7 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: help;
 }
 
 .kb-source-tag--muted {
@@ -2841,7 +2853,17 @@ code {
 }
 
 .kb-row-actions {
-  justify-content: flex-end;
+  justify-content: flex-start;
+}
+
+.kb-action-btn {
+  min-width: 64px;
+}
+
+.kb-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media (max-width: 780px) {

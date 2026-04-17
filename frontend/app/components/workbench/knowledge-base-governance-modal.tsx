@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Modal, Popconfirm, Space, Table, Tag, Typography } from "antd";
+import { App, Button, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { apiDeleteJson, apiJson, apiPostJson } from "../../../lib/api-client";
@@ -35,9 +36,15 @@ function formatSourceTags(
   if (known.length > 0) {
     known.slice(0, 4).forEach((source) => {
       tags.push(
-        <Tag key={`${row.collection}-${source.source}`} className="kb-source-tag">
-          {source.source} ({source.sampled_count})
-        </Tag>,
+        <Tooltip
+          key={`${row.collection}-${source.source}`}
+          title={source.source}
+          placement="topLeft"
+        >
+          <Tag className="kb-source-tag">
+            {source.source} ({source.sampled_count})
+          </Tag>
+        </Tooltip>,
       );
     });
   }
@@ -135,7 +142,6 @@ export function KnowledgeBaseGovernanceModal({
       title: t.sidebar.knowledgeBase.tableDocuments,
       dataIndex: "document_count",
       width: 120,
-      align: "right",
       render: (value: number) => (
         <span className="kb-count-cell">{value.toLocaleString()}</span>
       ),
@@ -150,9 +156,8 @@ export function KnowledgeBaseGovernanceModal({
         }),
     },
     {
-      title: "",
+      title: t.sidebar.knowledgeBase.tableActions,
       width: 150,
-      align: "right",
       render: (_, row) => {
         const clearBusy =
           clearMutation.isPending && clearMutation.variables === row.knowledge_base_id;
@@ -169,7 +174,12 @@ export function KnowledgeBaseGovernanceModal({
               placement="left"
               onConfirm={() => clearMutation.mutate(row.knowledge_base_id)}
             >
-              <Button size="small" loading={clearBusy} disabled={disabled}>
+              <Button
+                size="small"
+                loading={clearBusy}
+                disabled={disabled}
+                className="kb-action-btn"
+              >
                 {clearBusy
                   ? t.sidebar.knowledgeBase.actioning
                   : t.sidebar.knowledgeBase.actionClear}
@@ -187,7 +197,7 @@ export function KnowledgeBaseGovernanceModal({
               <Button
                 size="small"
                 danger
-                type="text"
+                className="kb-action-btn"
                 loading={deleteBusy}
                 disabled={disabled}
               >
@@ -236,16 +246,24 @@ export function KnowledgeBaseGovernanceModal({
           ) : null}
         </Space>
 
-        <Button
-          size="small"
-          onClick={() => {
-            void listQuery.refetch();
-          }}
-          loading={listQuery.isFetching}
-        >
-          {t.sidebar.knowledgeBase.refresh}
-        </Button>
+        <Tooltip title={t.sidebar.knowledgeBase.refresh}>
+          <Button
+            size="small"
+            className="kb-refresh-btn"
+            onClick={() => {
+              void listQuery.refetch();
+            }}
+            loading={listQuery.isFetching}
+            icon={<RefreshCw size={14} aria-hidden />}
+            aria-label={t.sidebar.knowledgeBase.refreshAria}
+          />
+        </Tooltip>
       </div>
+      {sampleSize > 0 ? (
+        <p className="kb-governance-sample-note">
+          {t.sidebar.knowledgeBase.sourceSampleExplain(sampleSize)}
+        </p>
+      ) : null}
 
       <div className="kb-governance-table-wrap">
         <Table<RagKnowledgeBaseSummary>
