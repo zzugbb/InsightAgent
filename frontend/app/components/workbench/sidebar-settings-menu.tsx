@@ -10,6 +10,7 @@ import {
   Monitor,
   Moon,
   Palette,
+  PanelTop,
   Settings2,
   ShieldCheck,
   Sun,
@@ -33,6 +34,7 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 import { ModelSettingsModal } from "./model-settings-modal";
 import { AuditLogsModal } from "./audit-logs-modal";
 import { KnowledgeBaseGovernanceModal } from "./knowledge-base-governance-modal";
+import { UsageDashboardModal } from "./usage-dashboard-modal";
 
 type SectionId = "theme" | "accent" | "language";
 
@@ -40,6 +42,7 @@ type PopoverPos = { left: number; bottom: number; width: number };
 const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
 
 type SidebarSettingsMenuProps = {
+  activeSessionId?: string | null;
   currentUser?: {
     id: string;
     email: string;
@@ -47,7 +50,10 @@ type SidebarSettingsMenuProps = {
   } | null;
 };
 
-export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
+export function SidebarSettingsMenu({
+  activeSessionId = null,
+  currentUser,
+}: SidebarSettingsMenuProps) {
   const t = useMessages();
   const { theme, setTheme, primaryColor, setPrimaryColor, locale, setLocale } =
     usePreferences();
@@ -56,6 +62,7 @@ export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
   const [modelOpen, setModelOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [popoverPos, setPopoverPos] = useState<PopoverPos | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -161,6 +168,12 @@ export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
     setOpen(false);
     setExpanded(null);
     setKnowledgeBaseOpen(true);
+  }
+
+  function openUsageDashboard() {
+    setOpen(false);
+    setExpanded(null);
+    setUsageOpen(true);
   }
 
   const themeLabel =
@@ -424,6 +437,22 @@ export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
           type="button"
           role="menuitem"
           className="settings-menu-row settings-menu-row--footer"
+          onClick={openUsageDashboard}
+        >
+          <PanelTop size={18} strokeWidth={1.75} aria-hidden />
+          <span className="settings-menu-row-label">{t.sidebar.menuUsage}</span>
+          <ChevronRight
+            size={18}
+            strokeWidth={1.75}
+            aria-hidden
+            className="settings-menu-chevron"
+          />
+        </button>
+
+        <button
+          type="button"
+          role="menuitem"
+          className="settings-menu-row settings-menu-row--footer"
           onClick={openModel}
         >
           <Monitor size={18} strokeWidth={1.75} aria-hidden />
@@ -464,6 +493,11 @@ export function SidebarSettingsMenu({ currentUser }: SidebarSettingsMenuProps) {
       <KnowledgeBaseGovernanceModal
         open={knowledgeBaseOpen}
         onClose={() => setKnowledgeBaseOpen(false)}
+      />
+      <UsageDashboardModal
+        open={usageOpen}
+        onClose={() => setUsageOpen(false)}
+        activeSessionId={activeSessionId}
       />
     </div>
   );

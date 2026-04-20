@@ -102,6 +102,41 @@ export type UsageSummary = {
 
 export type SessionUsageSummary = UsageSummary;
 
+export type UsageDashboardTrendPoint = {
+  day: string;
+  tasks_with_usage: number;
+  total_tokens: number;
+  cost_estimate: number;
+};
+
+export type UsageDashboardSessionRow = {
+  session_id: string;
+  session_title: string | null;
+  tasks_with_usage: number;
+  total_tokens: number;
+  cost_estimate: number;
+  last_task_at: string | null;
+};
+
+export type UsageDashboardTaskRow = {
+  task_id: string;
+  session_id: string;
+  session_title: string | null;
+  prompt_excerpt: string;
+  total_tokens: number;
+  cost_estimate: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UsageDashboardResponse = {
+  window_days: number;
+  summary: UsageSummary;
+  trend: UsageDashboardTrendPoint[];
+  by_session: UsageDashboardSessionRow[];
+  top_tasks: UsageDashboardTaskRow[];
+};
+
 export type RagStatus = {
   knowledge_base_id: string;
   collection: string;

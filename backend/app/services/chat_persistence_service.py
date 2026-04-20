@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 from app.db import get_db_connection
@@ -597,3 +597,245 @@ def get_session_usage_summary(
 ) -> dict[str, int | float | None]:
     """兼容保留：按会话聚合 usage。"""
     return get_tasks_usage_summary(user_id, session_id)
+
+
+def _parse_usage_float(v: object) -> float | None:
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        raw = v.strip()
+        if not raw:
+            return None
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+    return None
+
+
+def _extract_iso_day(value: object) -> date | None:
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if len(raw) < 10:
+        return None
+    prefix = raw[:10]
+    try:
+        return date.fromisoformat(prefix)
+    except ValueError:
+        return None
+
+
+def _excerpt_prompt(value: object, limit: int = 90) -> str:
+    if not isinstance(value, str):
+        return ""
+    normalized = " ".join(value.strip().split())
+    if not normalized:
+        return ""
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[:limit].rstrip()}..."
+
+
+def get_tasks_usage_dashboard(
+    user_id: str,
+    *,
+    session_id: str | None = None,
+    window_days: int = 14,
+    top_sessions: int = 8,
+    top_tasks: int = 12,
+) -> dict[str, object]:
+    """按用户聚合 usage 仪表盘：汇总、趋势、会话榜、任务榜。"""
+    safe_window_days = max(1, min(int(window_days), 90))
+    safe_top_sessions = max(1, min(int(top_sessions), 30))
+    safe_top_tasks = max(1, min(int(top_tasks), 50))
+
+    with get_db_connection() as connection:
+        if session_id:
+            rows = connection.execute(
+                """
+                SELECT
+                    t.id,
+                    t.session_id,
+                    t.prompt,
+                    t.usage_json,
+                    t.created_at,
+                    t.updated_at,
+                    s.title AS session_title
+                FROM tasks AS t
+                LEFT JOIN sessions AS s
+                  ON s.id = t.session_id AND s.user_id = t.user_id
+                WHERE t.user_id = ? AND t.session_id = ?
+                ORDER BY t.updated_at DESC
+                """,
+                (user_id, session_id),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """
+                SELECT
+                    t.id,
+                    t.session_id,
+                    t.prompt,
+                    t.usage_json,
+                    t.created_at,
+                    t.updated_at,
+                    s.title AS session_title
+                FROM tasks AS t
+                LEFT JOIN sessions AS s
+                  ON s.id = t.session_id AND s.user_id = t.user_id
+                WHERE t.user_id = ?
+                ORDER BY t.updated_at DESC
+                """,
+                (user_id,),
+            ).fetchall()
+
+    tasks_total = len(rows)
+    tasks_with_usage = 0
+    prompt_sum = 0.0
+    completion_sum = 0.0
+    cost_sum = 0.0
+    token_task_count = 0
+    cost_task_count = 0
+
+    today = datetime.now().date()
+    trend_start = today - timedelta(days=safe_window_days - 1)
+    trend_map: dict[str, dict[str, int | float]] = {}
+    for idx in range(safe_window_days):
+        key = (trend_start + timedelta(days=idx)).isoformat()
+        trend_map[key] = {
+            "tasks_with_usage": 0,
+            "total_tokens": 0,
+            "cost_estimate": 0.0,
+        }
+
+    session_map: dict[str, dict[str, object]] = {}
+    top_task_rows: list[dict[str, object]] = []
+
+    for row in rows:
+        usage_json = row["usage_json"]
+        if not usage_json or not str(usage_json).strip():
+            continue
+        try:
+            payload = json.loads(usage_json)
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(payload, dict):
+            continue
+
+        tasks_with_usage += 1
+        prompt_num = _parse_usage_float(payload.get("prompt_tokens"))
+        completion_num = _parse_usage_float(payload.get("completion_tokens"))
+        cost_num = _parse_usage_float(payload.get("cost_estimate"))
+        total_tokens_num = (prompt_num or 0.0) + (completion_num or 0.0)
+        total_tokens_int = int(total_tokens_num) if total_tokens_num > 0 else 0
+        cost_value = cost_num if cost_num is not None and cost_num > 0 else 0.0
+
+        has_token = False
+        if prompt_num is not None:
+            prompt_sum += prompt_num
+            has_token = True
+        if completion_num is not None:
+            completion_sum += completion_num
+            has_token = True
+        if has_token:
+            token_task_count += 1
+        if cost_num is not None:
+            cost_sum += cost_num
+            cost_task_count += 1
+
+        created_day = _extract_iso_day(row["created_at"])
+        if created_day is not None and trend_start <= created_day <= today:
+            bucket = trend_map[created_day.isoformat()]
+            bucket["tasks_with_usage"] = int(bucket["tasks_with_usage"]) + 1
+            bucket["total_tokens"] = int(bucket["total_tokens"]) + total_tokens_int
+            bucket["cost_estimate"] = float(bucket["cost_estimate"]) + cost_value
+
+        sid = str(row["session_id"])
+        bucket = session_map.get(sid)
+        if bucket is None:
+            bucket = {
+                "session_id": sid,
+                "session_title": row["session_title"],
+                "tasks_with_usage": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "last_task_at": row["updated_at"],
+            }
+            session_map[sid] = bucket
+        bucket["tasks_with_usage"] = int(bucket["tasks_with_usage"]) + 1
+        bucket["total_tokens"] = int(bucket["total_tokens"]) + total_tokens_int
+        bucket["cost_estimate"] = float(bucket["cost_estimate"]) + cost_value
+        last_task_at = bucket.get("last_task_at")
+        if isinstance(row["updated_at"], str) and (
+            not isinstance(last_task_at, str) or row["updated_at"] > last_task_at
+        ):
+            bucket["last_task_at"] = row["updated_at"]
+
+        top_task_rows.append(
+            {
+                "task_id": str(row["id"]),
+                "session_id": sid,
+                "session_title": row["session_title"],
+                "prompt_excerpt": _excerpt_prompt(row["prompt"]),
+                "total_tokens": total_tokens_int,
+                "cost_estimate": cost_value,
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            },
+        )
+
+    total_tokens = prompt_sum + completion_sum
+    avg_total_tokens = total_tokens / token_task_count if token_task_count > 0 else None
+    avg_cost_estimate = cost_sum / cost_task_count if cost_task_count > 0 else None
+
+    trend = [
+        {
+            "day": day,
+            "tasks_with_usage": int(item["tasks_with_usage"]),
+            "total_tokens": int(item["total_tokens"]),
+            "cost_estimate": float(item["cost_estimate"]),
+        }
+        for day, item in sorted(trend_map.items(), key=lambda kv: kv[0])
+    ]
+
+    by_session = sorted(
+        session_map.values(),
+        key=lambda item: (
+            int(item["total_tokens"]),
+            float(item["cost_estimate"]),
+            str(item["last_task_at"] or ""),
+        ),
+        reverse=True,
+    )[:safe_top_sessions]
+
+    top_tasks_sorted = sorted(
+        top_task_rows,
+        key=lambda item: (
+            int(item["total_tokens"]),
+            float(item["cost_estimate"]),
+            str(item["updated_at"] or ""),
+        ),
+        reverse=True,
+    )[:safe_top_tasks]
+
+    summary: dict[str, int | float | None] = {
+        "tasks_total": tasks_total,
+        "tasks_with_usage": tasks_with_usage,
+        "prompt_tokens": int(prompt_sum) if prompt_sum > 0 else 0,
+        "completion_tokens": int(completion_sum) if completion_sum > 0 else 0,
+        "total_tokens": int(total_tokens) if total_tokens > 0 else 0,
+        "cost_estimate": cost_sum if cost_sum > 0 else 0.0,
+        "avg_total_tokens": avg_total_tokens,
+        "avg_cost_estimate": avg_cost_estimate,
+    }
+
+    return {
+        "window_days": safe_window_days,
+        "summary": summary,
+        "trend": trend,
+        "by_session": by_session,
+        "top_tasks": top_tasks_sorted,
+    }

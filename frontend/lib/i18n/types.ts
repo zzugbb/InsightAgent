@@ -164,6 +164,7 @@ export type Messages = {
     menuLanguage: string;
     menuModel: string;
     menuAudit: string;
+    menuUsage: string;
     menuKnowledgeBase: string;
     subviewBack: string;
     themeCurrentDark: string;
@@ -186,6 +187,40 @@ export type Messages = {
     collapseSidebarAria: string;
     expandSidebarAria: string;
     loadMoreSessions: string;
+    usage: {
+      title: string;
+      lead: string;
+      scopeGlobal: string;
+      scopeSession: string;
+      scopeSessionFallback: string;
+      windowLabel: (n: number) => string;
+      refresh: string;
+      refreshAria: string;
+      loading: string;
+      loadFailed: (reason: string) => string;
+      summaryTasksTotal: string;
+      summaryTasksWithUsage: string;
+      summaryTotalTokens: string;
+      summaryTotalCost: string;
+      summaryAvgTokens: string;
+      summaryAvgCost: string;
+      coverage: (withUsage: number, total: number) => string;
+      trendTitle: string;
+      metricTokens: string;
+      metricCost: string;
+      trendEmpty: string;
+      sessionsTitle: string;
+      tasksTitle: string;
+      tableSession: string;
+      tableTasksWithUsage: string;
+      tableTotalTokens: string;
+      tableCost: string;
+      tableLastTaskAt: string;
+      tablePrompt: string;
+      tableUpdatedAt: string;
+      tableNoData: string;
+      promptEmpty: string;
+    };
     knowledgeBase: {
       title: string;
       lead: string;

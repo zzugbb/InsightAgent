@@ -24,6 +24,7 @@ from app.services.chat_persistence_service import (
     ensure_session,
     get_session,
     get_task_messages,
+    get_tasks_usage_dashboard,
     get_tasks_usage_summary,
     get_task,
     get_task_trace,
@@ -299,6 +300,41 @@ class TaskUsageSummaryResponse(BaseModel):
     cost_estimate: float
     avg_total_tokens: float | None = None
     avg_cost_estimate: float | None = None
+
+
+class TaskUsageTrendPoint(BaseModel):
+    day: str
+    tasks_with_usage: int
+    total_tokens: int
+    cost_estimate: float
+
+
+class TaskUsageBySessionRow(BaseModel):
+    session_id: str
+    session_title: str | None = None
+    tasks_with_usage: int
+    total_tokens: int
+    cost_estimate: float
+    last_task_at: str | None = None
+
+
+class TaskUsageTopTaskRow(BaseModel):
+    task_id: str
+    session_id: str
+    session_title: str | None = None
+    prompt_excerpt: str
+    total_tokens: int
+    cost_estimate: float
+    created_at: str
+    updated_at: str
+
+
+class TaskUsageDashboardResponse(BaseModel):
+    window_days: int
+    summary: TaskUsageSummaryResponse
+    trend: list[TaskUsageTrendPoint]
+    by_session: list[TaskUsageBySessionRow]
+    top_tasks: list[TaskUsageTopTaskRow]
 
 
 class TaskExportMessage(BaseModel):
@@ -620,6 +656,52 @@ def get_tasks_usage_summary_route(
         raise HTTPException(status_code=404, detail="Session not found")
     raw = get_tasks_usage_summary(user_id, sid)
     return TaskUsageSummaryResponse(**raw)
+
+
+@router.get("/usage/dashboard", response_model=TaskUsageDashboardResponse)
+def get_tasks_usage_dashboard_route(
+    session_id: str | None = Query(
+        default=None,
+        description="可选：按会话聚合；会话不存在时返回 404",
+    ),
+    window_days: int = Query(
+        default=14,
+        ge=1,
+        le=90,
+        description="趋势窗口天数（含今天）",
+    ),
+    top_sessions: int = Query(
+        default=8,
+        ge=1,
+        le=30,
+        description="会话榜返回条数",
+    ),
+    top_tasks: int = Query(
+        default=12,
+        ge=1,
+        le=50,
+        description="任务榜返回条数",
+    ),
+    current_user: dict = Depends(get_current_user),
+) -> TaskUsageDashboardResponse:
+    user_id = str(current_user["id"])
+    sid = session_id.strip() if session_id else None
+    if sid and get_session(sid, user_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    payload = get_tasks_usage_dashboard(
+        user_id,
+        session_id=sid,
+        window_days=window_days,
+        top_sessions=top_sessions,
+        top_tasks=top_tasks,
+    )
+    return TaskUsageDashboardResponse(
+        window_days=int(payload["window_days"]),
+        summary=TaskUsageSummaryResponse(**payload["summary"]),
+        trend=[TaskUsageTrendPoint(**row) for row in payload["trend"]],
+        by_session=[TaskUsageBySessionRow(**row) for row in payload["by_session"]],
+        top_tasks=[TaskUsageTopTaskRow(**row) for row in payload["top_tasks"]],
+    )
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

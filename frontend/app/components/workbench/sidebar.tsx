@@ -323,7 +323,10 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
                 <span>{t.sidebar.logout}</span>
               </button>
             ) : null}
-            <SidebarSettingsMenu currentUser={currentUser} />
+            <SidebarSettingsMenu
+              currentUser={currentUser}
+              activeSessionId={activeSessionId}
+            />
           </div>
         </>
       )}
