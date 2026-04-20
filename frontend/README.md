@@ -49,6 +49,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同：用量统计弹窗新增来源筛选（全部/官方/估算/混合/旧数据），按来源拉取并展示 dashboard 数据
 - 阶段 5 协同：用量统计弹窗新增“来源趋势”分区，按天展示 provider/estimated/mixed/legacy 任务数，便于排查来源结构变化
 - 阶段 5 增量：前端可视化回归 CI 首版已接入（Playwright），新增 `usage-dashboard` 主路径 smoke 用例，并接入 `.github/workflows/frontend-e2e.yml`
+- 阶段 5 修复：Playwright 登录态注入修正为显式透传 `localStorage` key，避免浏览器上下文无法访问测试常量导致未登录态误失败
+- 阶段 5 修复（补充）：`usage-dashboard` 用例新增 Workbench 检测与 UI 登录兜底，CI 中即使未命中登录态注入也可稳定继续执行
 
 ## 当前已有内容
 

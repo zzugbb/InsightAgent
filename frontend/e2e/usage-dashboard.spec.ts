@@ -1,11 +1,11 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-const API_BASE_URL = process.env.PLAYWRIGHT_API_BASE_URL ?? "http://127.0.0.1:8000";
-const AUTH_TOKEN_STORAGE_KEY = "insightagent.authToken";
-const REFRESH_TOKEN_STORAGE_KEY = "insightagent.refreshToken";
-const AUTH_SESSION_ID_STORAGE_KEY = "insightagent.authSessionId";
+const API_BASE_URL =
+  process.env.PLAYWRIGHT_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 type AuthBootstrapResponse = {
+  email: string;
+  password: string;
   access_token: string;
   refresh_token: string;
   session_id: string;
@@ -20,15 +20,25 @@ async function registerViaApi(
   request: APIRequestContext,
 ): Promise<AuthBootstrapResponse> {
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+  const email = `pw-e2e-${stamp}@example.com`;
+  const password = "playwright-e2e-123";
   const response = await request.post(`${API_BASE_URL}/api/auth/register`, {
     data: {
-      email: `pw-e2e-${stamp}@example.com`,
-      password: "playwright-e2e-123",
+      email,
+      password,
       display_name: "Playwright E2E",
     },
   });
   expect(response.ok()).toBeTruthy();
-  return (await response.json()) as AuthBootstrapResponse;
+  const payload = (await response.json()) as Omit<
+    AuthBootstrapResponse,
+    "email" | "password"
+  >;
+  return {
+    email,
+    password,
+    ...payload,
+  };
 }
 
 async function runTaskToDone(
@@ -86,22 +96,38 @@ async function waitUsageReady(
     .toBeGreaterThan(0);
 }
 
+async function ensureWorkbenchReady(
+  page: Page,
+  creds: Pick<AuthBootstrapResponse, "email" | "password">,
+): Promise<void> {
+  const settingsTrigger = page.getByTestId("sidebar-settings-trigger");
+  const alreadyReady = await settingsTrigger
+    .isVisible({ timeout: 4_000 })
+    .catch(() => false);
+  if (alreadyReady) {
+    return;
+  }
+
+  const emailInput = page.locator("#auth-email");
+  const passwordInput = page.locator("#auth-password");
+  await expect(emailInput).toBeVisible({ timeout: 15_000 });
+  await expect(passwordInput).toBeVisible({ timeout: 15_000 });
+  await emailInput.fill(creds.email);
+  await passwordInput.fill(creds.password);
+
+  const submitButton = page.locator("button.ant-btn-primary.ant-btn-block");
+  await expect(submitButton).toBeVisible({ timeout: 10_000 });
+  await submitButton.click();
+  await expect(settingsTrigger).toBeVisible({ timeout: 20_000 });
+}
+
 test("usage dashboard source trend is visible", async ({ page, request }) => {
   const auth = await registerViaApi(request);
   await runTaskToDone(request, auth.access_token);
   await waitUsageReady(request, auth.access_token);
 
-  await page.addInitScript((state) => {
-    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, state.accessToken);
-    window.localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, state.refreshToken);
-    window.localStorage.setItem(AUTH_SESSION_ID_STORAGE_KEY, state.sessionId);
-  }, {
-    accessToken: auth.access_token,
-    refreshToken: auth.refresh_token,
-    sessionId: auth.session_id,
-  });
-
   await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
   const settingsTrigger = page.getByTestId("sidebar-settings-trigger");
   await expect(settingsTrigger).toBeVisible();
   await settingsTrigger.click();
