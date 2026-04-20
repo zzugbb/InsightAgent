@@ -438,6 +438,7 @@ export function SidebarSettingsMenu({
           role="menuitem"
           className="settings-menu-row settings-menu-row--footer"
           onClick={openUsageDashboard}
+          data-testid="settings-menu-usage"
         >
           <PanelTop size={18} strokeWidth={1.75} aria-hidden />
           <span className="settings-menu-row-label">{t.sidebar.menuUsage}</span>
@@ -477,6 +478,7 @@ export function SidebarSettingsMenu({
         aria-haspopup="menu"
         aria-label={t.sidebar.settingsButton}
         onClick={() => setOpen((v) => !v)}
+        data-testid="sidebar-settings-trigger"
       >
         <Settings2 size={18} strokeWidth={1.75} aria-hidden />
         <span>{t.sidebar.settingsButton}</span>

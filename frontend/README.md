@@ -48,6 +48,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同：用量统计弹窗已补“来源分布”展示（provider/estimated/mixed/legacy），并对历史无来源字段数据标记为 legacy
 - 阶段 5 协同：用量统计弹窗新增来源筛选（全部/官方/估算/混合/旧数据），按来源拉取并展示 dashboard 数据
 - 阶段 5 协同：用量统计弹窗新增“来源趋势”分区，按天展示 provider/estimated/mixed/legacy 任务数，便于排查来源结构变化
+- 阶段 5 增量：前端可视化回归 CI 首版已接入（Playwright），新增 `usage-dashboard` 主路径 smoke 用例，并接入 `.github/workflows/frontend-e2e.yml`
 
 ## 当前已有内容
 
@@ -254,5 +255,5 @@ npm run dev
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦前端可视化回归（CI）与导出稳定性回归校验。
+- 下一步聚焦导出稳定性回归校验与用例扩展（会话导出/任务导出/取消恢复交互）。
 - `rag-kb-governance-lite`、`usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 首版已完成。
