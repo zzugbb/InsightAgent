@@ -44,6 +44,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 增量：`usage-dashboard-lite` 首版已落地；设置弹窗新增“用量统计”入口，支持全局/当前会话切换、趋势条形图、会话榜与任务榜
 - 阶段 5 增量：`audit-event-expansion` 首版已落地；审计页支持筛选与展示新增事件（设置校验、任务创建/取消/超时/失败、知识库 ingest/清空/删除）
 - 阶段 5 协同：`provider-usage-alignment` 后端首版已落地；任务 `done.usage` 改为 provider 官方 usage 优先，缺失字段自动回退估算并带来源标记
+- 阶段 5 协同：Inspector 已补 usage 来源可视化（当前任务/任务快照/任务索引展示 provider/estimated）
+- 阶段 5 协同：用量统计弹窗已补“来源分布”展示（provider/estimated/mixed/legacy），并对历史无来源字段数据标记为 legacy
 
 ## 当前已有内容
 
@@ -250,5 +252,5 @@ npm run dev
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦前端可视化回归（CI）与 usage 来源可视化/回归校验。
+- 下一步聚焦前端可视化回归（CI）与 usage dashboard 来源维度回归校验。
 - `rag-kb-governance-lite`、`usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 首版已完成。

@@ -203,6 +203,23 @@ export function UsageDashboardModal({
   ];
 
   const summary = usageQuery.data?.summary;
+  const sourceProviderCount = Math.max(
+    0,
+    Math.trunc(summary?.source_tasks_provider ?? 0),
+  );
+  const sourceEstimatedCount = Math.max(
+    0,
+    Math.trunc(summary?.source_tasks_estimated ?? 0),
+  );
+  const sourceMixedCount = Math.max(
+    0,
+    Math.trunc(summary?.source_tasks_mixed ?? 0),
+  );
+  const sourceLegacyCount = Math.max(
+    0,
+    Math.trunc(summary?.source_tasks_legacy ?? 0),
+  );
+  const sourceLabeledCount = sourceProviderCount + sourceEstimatedCount + sourceMixedCount;
 
   return (
     <Modal
@@ -301,6 +318,38 @@ export function UsageDashboardModal({
         <p className="usage-dashboard-coverage">
           {t.sidebar.usage.coverage(summary.tasks_with_usage, summary.tasks_total)}
         </p>
+      ) : null}
+
+      {summary && summary.tasks_with_usage > 0 ? (
+        <>
+          <div className="usage-source-strip">
+            <span className="usage-source-title">{t.sidebar.usage.sourceTitle}</span>
+            <Tag>
+              {t.sidebar.usage.sourceProvider}:{" "}
+              {tokenFmt.format(sourceProviderCount)}
+            </Tag>
+            <Tag>
+              {t.sidebar.usage.sourceEstimated}:{" "}
+              {tokenFmt.format(sourceEstimatedCount)}
+            </Tag>
+            <Tag>
+              {t.sidebar.usage.sourceMixed}:{" "}
+              {tokenFmt.format(sourceMixedCount)}
+            </Tag>
+            <Tag>
+              {t.sidebar.usage.sourceLegacy}:{" "}
+              {tokenFmt.format(sourceLegacyCount)}
+            </Tag>
+          </div>
+          <p className="usage-dashboard-note">
+            {t.sidebar.usage.sourceCoverage(sourceLabeledCount, summary.tasks_with_usage)}
+          </p>
+          {sourceLegacyCount > 0 ? (
+            <p className="usage-dashboard-note">
+              {t.sidebar.usage.sourceLegacyHint(sourceLegacyCount)}
+            </p>
+          ) : null}
+        </>
       ) : null}
 
       <div className="usage-trend-block">

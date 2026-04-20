@@ -2945,6 +2945,25 @@ code {
   font-size: 0.8rem;
 }
 
+.usage-source-strip {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.usage-source-title {
+  font-size: 0.76rem;
+  color: var(--muted-strong);
+  margin-inline-end: 2px;
+}
+
+.usage-source-strip .ant-tag {
+  margin-inline-end: 0;
+  font-size: 0.74rem;
+}
+
 .usage-trend-block {
   margin-top: 12px;
   padding: 10px;

@@ -92,6 +92,10 @@ export type SessionMemoryStatus = {
 export type UsageSummary = {
   tasks_total: number;
   tasks_with_usage: number;
+  source_tasks_provider: number;
+  source_tasks_estimated: number;
+  source_tasks_mixed: number;
+  source_tasks_legacy: number;
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;

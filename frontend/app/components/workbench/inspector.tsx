@@ -45,6 +45,7 @@ import {
   resolveInspectorTaskUsage,
   resolveTaskUsageFromTask,
   shortenId,
+  type InspectorUsageRow,
 } from "./utils";
 
 const TRACE_PREVIEW = 6;
@@ -517,6 +518,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       ),
       total: tokenFmt.format(Math.trunc(usageSummary.total_tokens)),
       cost: costFmt(usageSummary.cost_estimate),
+      promptSource: null,
+      completionSource: null,
+      usageSource: null,
       avgTotal:
         usageSummary.avg_total_tokens === null
           ? null
@@ -525,6 +529,42 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       taskCount: usageSummary.tasks_with_usage,
     };
   }, [localeTag, usageSummary]);
+
+  const usageSourceValueLabel = (
+    source: InspectorUsageRow["usageSource"],
+  ): string | null => {
+    if (source === "provider") {
+      return t.inspector.usageSourceProvider;
+    }
+    if (source === "estimated") {
+      return t.inspector.usageSourceEstimated;
+    }
+    if (source === "legacy") {
+      return t.inspector.usageSourceLegacy;
+    }
+    return null;
+  };
+
+  const getUsageSourceText = (usage: InspectorUsageRow | null): string | null => {
+    if (!usage) {
+      return null;
+    }
+    const overall = usageSourceValueLabel(usage.usageSource);
+    const prompt = usageSourceValueLabel(usage.promptSource);
+    const completion = usageSourceValueLabel(usage.completionSource);
+    if (!overall && !prompt && !completion) {
+      return null;
+    }
+    if (prompt || completion) {
+      const promptText = prompt ?? overall ?? "—";
+      const completionText = completion ?? overall ?? "—";
+      const detail = `${t.inspector.usagePrompt}: ${promptText} · ${t.inspector.usageCompletion}: ${completionText}`;
+      return overall ? `${overall} (${detail})` : detail;
+    }
+    return overall;
+  };
+
+  const inspectorTaskUsageSourceText = getUsageSourceText(inspectorTaskUsage);
 
   const traceDeltaSyncStatusLabel =
     traceDeltaSyncStatus === "syncing"
@@ -902,6 +942,12 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             <strong>{inspectorTaskUsage.total ?? "—"}</strong>
             <span>{t.inspector.usageCost}</span>
             <strong>{inspectorTaskUsage.cost ?? "—"}</strong>
+            {inspectorTaskUsageSourceText ? (
+              <>
+                <span>{t.inspector.usageSource}</span>
+                <strong>{inspectorTaskUsageSourceText}</strong>
+              </>
+            ) : null}
           </div>
         ) : (
           <p className="panel-note panel-note--muted">{t.inspector.usageSummaryEmpty}</p>
@@ -985,6 +1031,12 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                 <strong>{inspectorTaskUsage.total ?? "—"}</strong>
                 <span>{t.inspector.usageCost}</span>
                 <strong>{inspectorTaskUsage.cost ?? "—"}</strong>
+                {inspectorTaskUsageSourceText ? (
+                  <>
+                    <span>{t.inspector.usageSource}</span>
+                    <strong>{inspectorTaskUsageSourceText}</strong>
+                  </>
+                ) : null}
               </div>
             ) : null}
 
@@ -1559,6 +1611,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               const isActive = task.id === activeTaskId;
               const failedHint = extractTaskFailureHint(task);
               const usage = resolveTaskUsageFromTask(task);
+              const usageSourceText = getUsageSourceText(usage);
               const usageLine = usage
                 ? [
                     usage.completion
@@ -1569,6 +1622,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                       : null,
                     usage.cost
                       ? `${t.inspector.usageCost}: ${usage.cost}`
+                      : null,
+                    usageSourceText
+                      ? `${t.inspector.usageSource}: ${usageSourceText}`
                       : null,
                   ]
                     .filter(Boolean)

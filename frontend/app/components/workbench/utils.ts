@@ -10,6 +10,9 @@ export type InspectorUsageRow = {
   completion: string | null;
   total: string | null;
   cost: string | null;
+  promptSource: "provider" | "estimated" | null;
+  completionSource: "provider" | "estimated" | null;
+  usageSource: "provider" | "estimated" | "legacy" | null;
 };
 
 export type UsageAggregateRow = InspectorUsageRow & {
@@ -62,6 +65,19 @@ function formatCost(v: unknown): string | null {
   return `$${n.toFixed(6)}`;
 }
 
+function parseUsageSource(
+  v: unknown,
+): "provider" | "estimated" | null {
+  if (typeof v !== "string") {
+    return null;
+  }
+  const normalized = v.trim().toLowerCase();
+  if (normalized === "provider" || normalized === "estimated") {
+    return normalized;
+  }
+  return null;
+}
+
 function normalizeUsageObject(
   raw: Record<string, unknown>,
 ): InspectorUsageRow | null {
@@ -74,10 +90,29 @@ function normalizeUsageObject(
       ? formatTokenCount((promptRaw ?? 0) + (completionRaw ?? 0))
       : null;
   const cost = formatCost(raw["cost_estimate"]);
+  const promptSource = parseUsageSource(raw["prompt_tokens_source"]);
+  const completionSource = parseUsageSource(raw["completion_tokens_source"]);
+  const usageSource =
+    parseUsageSource(raw["usage_source"]) ??
+    (promptSource === "provider" || completionSource === "provider"
+      ? "provider"
+      : promptSource === "estimated" || completionSource === "estimated"
+        ? "estimated"
+        : prompt !== null || completion !== null || total !== null || cost !== null
+          ? "legacy"
+          : null);
   if (prompt === null && completion === null && total === null && cost === null) {
     return null;
   }
-  return { prompt, completion, total, cost };
+  return {
+    prompt,
+    completion,
+    total,
+    cost,
+    promptSource,
+    completionSource,
+    usageSource,
+  };
 }
 
 function parseUsageJson(
@@ -183,7 +218,18 @@ export function resolveTasksUsageAggregate(
   if (!prompt && !completion && !total && !cost && !avgTotal && !avgCost) {
     return null;
   }
-  return { prompt, completion, total, cost, taskCount, avgTotal, avgCost };
+  return {
+    prompt,
+    completion,
+    total,
+    cost,
+    promptSource: null,
+    completionSource: null,
+    usageSource: null,
+    taskCount,
+    avgTotal,
+    avgCost,
+  };
 }
 
 /** 上下文面板：当前任务用量（流式 `done` 优先，否则用任务列表中的 usage_json） */

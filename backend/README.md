@@ -46,6 +46,8 @@
 - 协同优化：治理接口列表响应补充样本片段（`sample_chunks`）与采样文档标识统计（`top_document_ids`），前端可直接展示“真实内容预览”
 - 阶段 5 增量：`usage-dashboard-lite` 首版后端接口已落地（`GET /api/tasks/usage/dashboard`，提供汇总、近 14 天趋势、会话榜与任务榜，支持按 `session_id` 聚合）
 - 阶段 5 增量：`provider-usage-alignment` 首版已落地（`done.usage` 优先写入 provider 官方 token 用量，缺失字段自动回退估算，并输出 usage 来源字段）
+- 阶段 5 增量：`e2e-main-path` 已补 usage 来源断言（校验 `done.usage` 的 token 数值与 `prompt_tokens_source/completion_tokens_source/usage_source`）
+- 阶段 5 增量：usage 聚合接口已补来源统计（`source_tasks_provider/source_tasks_estimated/source_tasks_mixed/source_tasks_legacy`），用于前端来源分布展示与历史数据识别
 - 协同修复：任务取消/超时后即使后端追加 `error(task_cancelled/task_timeout)`，前端也不会误判为 fatal 失败态并展示“重试上次发送”
 - 协同修复：流结束后的 `trace/delta` 自动补拉已改为静默，避免底部状态提示被“暂无新的轨迹增量”覆盖
 - 协同修复：待发送用户消息去重改为按 `task_id`，取消后再次发送相同文案可即时显示，不再被上一条同文案误隐藏
@@ -137,6 +139,7 @@
 - `GET /api/tasks*` 相关响应包含状态派生字段：`status_normalized`、`status_label`、`status_rank`
 - `GET /api/tasks/usage/summary`（可选 `session_id`）
 - `GET /api/tasks/usage/dashboard`（可选 `session_id`，含趋势/会话榜/任务榜）
+  - 两个 usage 聚合接口均包含来源统计字段：`source_tasks_provider/source_tasks_estimated/source_tasks_mixed/source_tasks_legacy`
 - `GET /api/rag/status`
 - `POST /api/rag/ingest`
 - `POST /api/rag/query`
@@ -323,7 +326,7 @@ docker compose up -d chroma
 5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）并接入后端 CI；后续补失败快照留档。
 6. `task-cancel-timeout`：首版已落地（取消接口 + 超时中断 + SSE 事件），并新增 cancel/timeout e2e 脚本；后续补细粒度状态反馈。
 7. `running-task-recovery`：前端恢复链路已接入，后续可补失败快照与恢复可观测字段。
-8. `usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 已完成首版；下一步推进前端可视化回归与 usage 来源可视化/校验。
+8. `usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 已完成首版；下一步推进前端可视化回归与 usage 来源维度回归校验。
 
 ### 暂不做
 

@@ -268,6 +268,15 @@ export const en: Messages = {
       summaryAvgCost: "Avg cost / task",
       coverage: (withUsage: number, total: number) =>
         `Coverage ${withUsage} / ${total}`,
+      sourceTitle: "Source breakdown",
+      sourceProvider: "Provider",
+      sourceEstimated: "Estimated",
+      sourceMixed: "Mixed",
+      sourceLegacy: "Legacy",
+      sourceCoverage: (labeled: number, total: number) =>
+        `Source labeled ${labeled} / ${total}`,
+      sourceLegacyHint: (n: number) =>
+        `${n} historical task(s) have no source field and are treated as legacy.`,
       trendTitle: "Trend",
       metricTokens: "Tokens",
       metricCost: "Cost",
@@ -467,6 +476,10 @@ export const en: Messages = {
     usageCompletion: "Completion tokens",
     usageTotal: "Total tokens",
     usageCost: "Cost estimate",
+    usageSource: "Source",
+    usageSourceProvider: "Provider",
+    usageSourceEstimated: "Estimated",
+    usageSourceLegacy: "Legacy (unlabeled)",
     usageAvgTotal: "Avg total/task",
     usageAvgCost: "Avg cost/task",
     usageSummaryTitle: "Usage summary",

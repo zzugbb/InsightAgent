@@ -536,6 +536,10 @@ def get_tasks_usage_summary(
 
     tasks_total = len(rows)
     tasks_with_usage = 0
+    source_provider_tasks = 0
+    source_estimated_tasks = 0
+    source_mixed_tasks = 0
+    source_legacy_tasks = 0
     prompt_sum = 0.0
     completion_sum = 0.0
     cost_sum = 0.0
@@ -554,6 +558,15 @@ def get_tasks_usage_summary(
             continue
 
         tasks_with_usage += 1
+        source_kind = _classify_usage_source(payload)
+        if source_kind == "provider":
+            source_provider_tasks += 1
+        elif source_kind == "estimated":
+            source_estimated_tasks += 1
+        elif source_kind == "mixed":
+            source_mixed_tasks += 1
+        else:
+            source_legacy_tasks += 1
         prompt_raw = payload.get("prompt_tokens")
         completion_raw = payload.get("completion_tokens")
         cost_raw = payload.get("cost_estimate")
@@ -582,6 +595,10 @@ def get_tasks_usage_summary(
     return {
         "tasks_total": tasks_total,
         "tasks_with_usage": tasks_with_usage,
+        "source_tasks_provider": source_provider_tasks,
+        "source_tasks_estimated": source_estimated_tasks,
+        "source_tasks_mixed": source_mixed_tasks,
+        "source_tasks_legacy": source_legacy_tasks,
         "prompt_tokens": int(prompt_sum) if prompt_sum > 0 else 0,
         "completion_tokens": int(completion_sum) if completion_sum > 0 else 0,
         "total_tokens": int(total_tokens) if total_tokens > 0 else 0,
@@ -613,6 +630,34 @@ def _parse_usage_float(v: object) -> float | None:
         except ValueError:
             return None
     return None
+
+
+def _parse_usage_source(v: object) -> str | None:
+    if not isinstance(v, str):
+        return None
+    raw = v.strip().lower()
+    if raw in {"provider", "estimated"}:
+        return raw
+    return None
+
+
+def _classify_usage_source(payload: dict[str, object]) -> str:
+    """Classify per-task usage source for summary/dashboard statistics."""
+    usage_source = _parse_usage_source(payload.get("usage_source"))
+    prompt_source = _parse_usage_source(payload.get("prompt_tokens_source"))
+    completion_source = _parse_usage_source(payload.get("completion_tokens_source"))
+
+    if (
+        prompt_source is not None
+        and completion_source is not None
+        and prompt_source != completion_source
+    ):
+        return "mixed"
+
+    for source in (usage_source, prompt_source, completion_source):
+        if source is not None:
+            return source
+    return "legacy"
 
 
 def _extract_iso_day(value: object) -> date | None:
@@ -694,6 +739,10 @@ def get_tasks_usage_dashboard(
 
     tasks_total = len(rows)
     tasks_with_usage = 0
+    source_provider_tasks = 0
+    source_estimated_tasks = 0
+    source_mixed_tasks = 0
+    source_legacy_tasks = 0
     prompt_sum = 0.0
     completion_sum = 0.0
     cost_sum = 0.0
@@ -726,6 +775,15 @@ def get_tasks_usage_dashboard(
             continue
 
         tasks_with_usage += 1
+        source_kind = _classify_usage_source(payload)
+        if source_kind == "provider":
+            source_provider_tasks += 1
+        elif source_kind == "estimated":
+            source_estimated_tasks += 1
+        elif source_kind == "mixed":
+            source_mixed_tasks += 1
+        else:
+            source_legacy_tasks += 1
         prompt_num = _parse_usage_float(payload.get("prompt_tokens"))
         completion_num = _parse_usage_float(payload.get("completion_tokens"))
         cost_num = _parse_usage_float(payload.get("cost_estimate"))
@@ -824,6 +882,10 @@ def get_tasks_usage_dashboard(
     summary: dict[str, int | float | None] = {
         "tasks_total": tasks_total,
         "tasks_with_usage": tasks_with_usage,
+        "source_tasks_provider": source_provider_tasks,
+        "source_tasks_estimated": source_estimated_tasks,
+        "source_tasks_mixed": source_mixed_tasks,
+        "source_tasks_legacy": source_legacy_tasks,
         "prompt_tokens": int(prompt_sum) if prompt_sum > 0 else 0,
         "completion_tokens": int(completion_sum) if completion_sum > 0 else 0,
         "total_tokens": int(total_tokens) if total_tokens > 0 else 0,

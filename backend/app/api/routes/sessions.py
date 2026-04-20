@@ -85,6 +85,10 @@ class SessionMemoryStatusResponse(BaseModel):
 class SessionUsageSummaryResponse(BaseModel):
     tasks_total: int
     tasks_with_usage: int
+    source_tasks_provider: int = 0
+    source_tasks_estimated: int = 0
+    source_tasks_mixed: int = 0
+    source_tasks_legacy: int = 0
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int

@@ -132,6 +132,28 @@ def _extract_sse_error_codes(raw: str) -> list[str]:
     return codes
 
 
+def _extract_sse_done_payload(raw: str) -> dict[str, Any] | None:
+    lines = raw.splitlines()
+    last_event: str | None = None
+    done_payload: dict[str, Any] | None = None
+    for line in lines:
+        if line.startswith("event:"):
+            last_event = line[6:].strip()
+            continue
+        if last_event != "done":
+            continue
+        if not line.startswith("data:"):
+            continue
+        payload_raw = line[5:].strip()
+        try:
+            payload = json.loads(payload_raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            done_payload = payload
+    return done_payload
+
+
 def main() -> None:
     args = parse_args()
     base_url = args.base_url.rstrip("/")
@@ -209,6 +231,36 @@ def main() -> None:
     _assert("done" in event_names, "task stream missing done event")
     error_codes = _extract_sse_error_codes(stream_task.text)
     _assert(not error_codes, f"task stream has error events: {error_codes}")
+    done_payload = _extract_sse_done_payload(stream_task.text)
+    _assert(done_payload is not None, "task stream missing done payload body")
+    usage_payload = done_payload.get("usage") if isinstance(done_payload, dict) else None
+    _assert(isinstance(usage_payload, dict), "done payload missing usage object")
+    prompt_tokens = usage_payload.get("prompt_tokens")
+    completion_tokens = usage_payload.get("completion_tokens")
+    _assert(
+        isinstance(prompt_tokens, int | float) and float(prompt_tokens) >= 0,
+        f"done usage prompt_tokens invalid: {usage_payload}",
+    )
+    _assert(
+        isinstance(completion_tokens, int | float) and float(completion_tokens) >= 0,
+        f"done usage completion_tokens invalid: {usage_payload}",
+    )
+    prompt_source = usage_payload.get("prompt_tokens_source")
+    completion_source = usage_payload.get("completion_tokens_source")
+    usage_source = usage_payload.get("usage_source")
+    allowed_sources = {"provider", "estimated"}
+    _assert(
+        isinstance(prompt_source, str) and prompt_source in allowed_sources,
+        f"prompt_tokens_source invalid: {usage_payload}",
+    )
+    _assert(
+        isinstance(completion_source, str) and completion_source in allowed_sources,
+        f"completion_tokens_source invalid: {usage_payload}",
+    )
+    _assert(
+        isinstance(usage_source, str) and usage_source in allowed_sources,
+        f"usage_source invalid: {usage_payload}",
+    )
 
     trace = _request(
         method="GET",
@@ -340,6 +392,41 @@ def main() -> None:
         token=access_token,
     )
     _assert(usage_session.status == 200, "session usage summary failed")
+    _assert(isinstance(usage_global.json_body, dict), "global usage summary must be object")
+    _assert(isinstance(usage_session.json_body, dict), "session usage summary must be object")
+    for name, payload in (
+        ("global", usage_global.json_body),
+        ("session", usage_session.json_body),
+    ):
+        provider_count = payload.get("source_tasks_provider")
+        estimated_count = payload.get("source_tasks_estimated")
+        mixed_count = payload.get("source_tasks_mixed")
+        legacy_count = payload.get("source_tasks_legacy")
+        tasks_with_usage = payload.get("tasks_with_usage")
+        _assert(
+            isinstance(provider_count, int) and provider_count >= 0,
+            f"{name} usage summary source_tasks_provider invalid: {payload}",
+        )
+        _assert(
+            isinstance(estimated_count, int) and estimated_count >= 0,
+            f"{name} usage summary source_tasks_estimated invalid: {payload}",
+        )
+        _assert(
+            isinstance(mixed_count, int) and mixed_count >= 0,
+            f"{name} usage summary source_tasks_mixed invalid: {payload}",
+        )
+        _assert(
+            isinstance(legacy_count, int) and legacy_count >= 0,
+            f"{name} usage summary source_tasks_legacy invalid: {payload}",
+        )
+        _assert(
+            isinstance(tasks_with_usage, int) and tasks_with_usage >= 0,
+            f"{name} usage summary tasks_with_usage invalid: {payload}",
+        )
+        _assert(
+            provider_count + estimated_count + mixed_count + legacy_count == tasks_with_usage,
+            f"{name} usage summary source counts mismatch: {payload}",
+        )
     print("  - OK: usage summaries")
 
     print("")

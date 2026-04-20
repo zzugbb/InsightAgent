@@ -263,6 +263,15 @@ export const zh: Messages = {
       summaryAvgCost: "平均成本/任务",
       coverage: (withUsage: number, total: number) =>
         `覆盖率 ${withUsage} / ${total}`,
+      sourceTitle: "来源分布",
+      sourceProvider: "官方",
+      sourceEstimated: "估算",
+      sourceMixed: "混合",
+      sourceLegacy: "旧数据",
+      sourceCoverage: (labeled: number, total: number) =>
+        `来源已标注 ${labeled} / ${total}`,
+      sourceLegacyHint: (n: number) =>
+        `有 ${n} 条历史任务未带来源字段（已归类为旧数据）。`,
       trendTitle: "趋势",
       metricTokens: "Tokens",
       metricCost: "成本",
@@ -458,6 +467,10 @@ export const zh: Messages = {
     usageCompletion: "补全 tokens",
     usageTotal: "总 tokens",
     usageCost: "预估费用",
+    usageSource: "来源",
+    usageSourceProvider: "官方",
+    usageSourceEstimated: "估算",
+    usageSourceLegacy: "旧数据未标注",
     usageAvgTotal: "平均总 tokens/任务",
     usageAvgCost: "平均费用/任务",
     usageSummaryTitle: "用量汇总",
