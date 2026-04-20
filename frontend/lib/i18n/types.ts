@@ -206,6 +206,7 @@ export type Messages = {
       summaryAvgCost: string;
       coverage: (withUsage: number, total: number) => string;
       sourceTitle: string;
+      sourceFilterAll: string;
       sourceProvider: string;
       sourceEstimated: string;
       sourceMixed: string;
@@ -213,6 +214,7 @@ export type Messages = {
       sourceCoverage: (labeled: number, total: number) => string;
       sourceLegacyHint: (n: number) => string;
       trendTitle: string;
+      sourceTrendTitle: string;
       metricTokens: string;
       metricCost: string;
       trendEmpty: string;

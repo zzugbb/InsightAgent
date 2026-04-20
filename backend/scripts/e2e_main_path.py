@@ -427,6 +427,154 @@ def main() -> None:
             provider_count + estimated_count + mixed_count + legacy_count == tasks_with_usage,
             f"{name} usage summary source counts mismatch: {payload}",
         )
+
+    session_payload = usage_session.json_body
+    session_provider = int(session_payload.get("source_tasks_provider", 0) or 0)
+    session_estimated = int(session_payload.get("source_tasks_estimated", 0) or 0)
+    session_mixed = int(session_payload.get("source_tasks_mixed", 0) or 0)
+    session_legacy = int(session_payload.get("source_tasks_legacy", 0) or 0)
+    selected_source = "provider"
+    selected_count = session_provider
+    if selected_count <= 0 and session_estimated > 0:
+        selected_source = "estimated"
+        selected_count = session_estimated
+    if selected_count <= 0 and session_mixed > 0:
+        selected_source = "mixed"
+        selected_count = session_mixed
+    if selected_count <= 0 and session_legacy > 0:
+        selected_source = "legacy"
+        selected_count = session_legacy
+    _assert(
+        selected_count > 0,
+        f"session usage summary has no source counts to validate: {session_payload}",
+    )
+
+    usage_dashboard_filtered = _request(
+        method="GET",
+        url=(
+            f"{base_url}/api/tasks/usage/dashboard?source_kind={selected_source}"
+            f"&session_id={session_id}"
+        ),
+        token=access_token,
+    )
+    _assert(
+        usage_dashboard_filtered.status == 200,
+        f"usage dashboard {selected_source} filter failed",
+    )
+    _assert(
+        isinstance(usage_dashboard_filtered.json_body, dict),
+        f"usage dashboard {selected_source} payload must be object",
+    )
+    dashboard_summary = usage_dashboard_filtered.json_body.get("summary")
+    _assert(
+        isinstance(dashboard_summary, dict),
+        f"usage dashboard {selected_source} summary missing",
+    )
+    filtered_tasks_with_usage = dashboard_summary.get("tasks_with_usage")
+    _assert(
+        isinstance(filtered_tasks_with_usage, int) and filtered_tasks_with_usage >= 1,
+        f"usage dashboard {selected_source} should include at least one task: {dashboard_summary}",
+    )
+    key_map = {
+        "provider": "source_tasks_provider",
+        "estimated": "source_tasks_estimated",
+        "mixed": "source_tasks_mixed",
+        "legacy": "source_tasks_legacy",
+    }
+    selected_key = key_map[selected_source]
+    selected_count_filtered = int(dashboard_summary.get(selected_key, 0) or 0)
+    _assert(
+        selected_count_filtered == filtered_tasks_with_usage,
+        (
+            f"usage dashboard {selected_source} filter mismatch: "
+            f"summary={dashboard_summary}"
+        ),
+    )
+    for key in (
+        "source_tasks_provider",
+        "source_tasks_estimated",
+        "source_tasks_mixed",
+        "source_tasks_legacy",
+    ):
+        if key == selected_key:
+            continue
+        _assert(
+            int(dashboard_summary.get(key, 0) or 0) == 0,
+            (
+                f"usage dashboard {selected_source} filter should exclude {key}: "
+                f"summary={dashboard_summary}"
+            ),
+        )
+    _assert(
+        dashboard_summary.get("tasks_total") == session_payload.get("tasks_total"),
+        (
+                f"usage dashboard {selected_source} should keep same tasks_total "
+            f"within session scope: summary={dashboard_summary}, session={session_payload}"
+        ),
+    )
+    dashboard_trend = usage_dashboard_filtered.json_body.get("trend")
+    _assert(
+        isinstance(dashboard_trend, list),
+        f"usage dashboard {selected_source} trend missing",
+    )
+    for point in dashboard_trend:
+        _assert(
+            isinstance(point, dict),
+            f"usage dashboard {selected_source} trend point invalid: {point}",
+        )
+        day_tasks_with_usage = point.get("tasks_with_usage")
+        _assert(
+            isinstance(day_tasks_with_usage, int) and day_tasks_with_usage >= 0,
+            (
+                f"usage dashboard {selected_source} trend tasks_with_usage invalid: "
+                f"{point}"
+            ),
+        )
+        day_source_sum = 0
+        for key in (
+            "source_tasks_provider",
+            "source_tasks_estimated",
+            "source_tasks_mixed",
+            "source_tasks_legacy",
+        ):
+            value = point.get(key)
+            _assert(
+                isinstance(value, int) and value >= 0,
+                (
+                    f"usage dashboard {selected_source} trend {key} invalid: "
+                    f"{point}"
+                ),
+            )
+            day_source_sum += value
+        _assert(
+            day_source_sum == day_tasks_with_usage,
+            (
+                f"usage dashboard {selected_source} trend source sum mismatch: "
+                f"{point}"
+            ),
+        )
+        _assert(
+            int(point.get(selected_key, 0) or 0) == day_tasks_with_usage,
+            (
+                f"usage dashboard {selected_source} trend selected source mismatch: "
+                f"{point}"
+            ),
+        )
+        for key in (
+            "source_tasks_provider",
+            "source_tasks_estimated",
+            "source_tasks_mixed",
+            "source_tasks_legacy",
+        ):
+            if key == selected_key:
+                continue
+            _assert(
+                int(point.get(key, 0) or 0) == 0,
+                (
+                    f"usage dashboard {selected_source} trend should exclude {key}: "
+                    f"{point}"
+                ),
+            )
     print("  - OK: usage summaries")
 
     print("")

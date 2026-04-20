@@ -26,14 +26,22 @@ type UsageDashboardModalProps = {
 type UsageScope = "global" | "session";
 type UsageMetric = "tokens" | "cost";
 type UsageView = "sessions" | "tasks";
+type UsageSourceFilter = "all" | "provider" | "estimated" | "mixed" | "legacy";
 
-function buildDashboardUrl(args: { scope: UsageScope; sessionId: string | null }): string {
+function buildDashboardUrl(args: {
+  scope: UsageScope;
+  sessionId: string | null;
+  sourceFilter: UsageSourceFilter;
+}): string {
   const params = new URLSearchParams();
   params.set("window_days", "14");
   params.set("top_sessions", "10");
   params.set("top_tasks", "14");
   if (args.scope === "session" && args.sessionId) {
     params.set("session_id", args.sessionId);
+  }
+  if (args.sourceFilter !== "all") {
+    params.set("source_kind", args.sourceFilter);
   }
   return `${API_BASE_URL}/api/tasks/usage/dashboard?${params.toString()}`;
 }
@@ -74,6 +82,7 @@ export function UsageDashboardModal({
   );
   const [metric, setMetric] = useState<UsageMetric>("tokens");
   const [view, setView] = useState<UsageView>("sessions");
+  const [sourceFilter, setSourceFilter] = useState<UsageSourceFilter>("all");
 
   useEffect(() => {
     if (!open) {
@@ -82,18 +91,23 @@ export function UsageDashboardModal({
     setScope(activeSessionId ? "session" : "global");
     setMetric("tokens");
     setView("sessions");
+    setSourceFilter("all");
   }, [open, activeSessionId]);
 
   const resolvedScope: UsageScope =
     scope === "session" && activeSessionId ? "session" : "global";
 
   const usageQuery = useQuery({
-    queryKey: ["usage-dashboard", open, resolvedScope, activeSessionId],
+    queryKey: ["usage-dashboard", open, resolvedScope, activeSessionId, sourceFilter],
     enabled: open,
     staleTime: 8_000,
     queryFn: () =>
       apiJson<UsageDashboardResponse>(
-        buildDashboardUrl({ scope: resolvedScope, sessionId: activeSessionId }),
+        buildDashboardUrl({
+          scope: resolvedScope,
+          sessionId: activeSessionId,
+          sourceFilter,
+        }),
       ),
   });
 
@@ -120,6 +134,7 @@ export function UsageDashboardModal({
   };
 
   const trendRows = usageQuery.data?.trend ?? [];
+  const sourceTrendRows = trendRows.filter((row) => row.tasks_with_usage > 0);
   const trendMax = trendRows.reduce((acc, row) => {
     const current = metric === "tokens" ? row.total_tokens : row.cost_estimate;
     return current > acc ? current : acc;
@@ -275,6 +290,20 @@ export function UsageDashboardModal({
           </Tooltip>
         </Space>
       </div>
+      <div className="usage-source-filter-row">
+        <Segmented<UsageSourceFilter>
+          size="small"
+          value={sourceFilter}
+          onChange={(value) => setSourceFilter(value)}
+          options={[
+            { label: t.sidebar.usage.sourceFilterAll, value: "all" },
+            { label: t.sidebar.usage.sourceProvider, value: "provider" },
+            { label: t.sidebar.usage.sourceEstimated, value: "estimated" },
+            { label: t.sidebar.usage.sourceMixed, value: "mixed" },
+            { label: t.sidebar.usage.sourceLegacy, value: "legacy" },
+          ]}
+        />
+      </div>
 
       {usageQuery.isLoading ? (
         <p className="usage-dashboard-note">{t.sidebar.usage.loading}</p>
@@ -391,6 +420,38 @@ export function UsageDashboardModal({
             })
           )}
         </div>
+      </div>
+      <div className="usage-source-trend-block">
+        <p className="usage-trend-title">{t.sidebar.usage.sourceTrendTitle}</p>
+        {sourceTrendRows.length === 0 ? (
+          <p className="usage-dashboard-note">{t.sidebar.usage.trendEmpty}</p>
+        ) : (
+          <div className="usage-source-trend-list">
+            {sourceTrendRows.map((row) => (
+              <div key={`source-${row.day}`} className="usage-source-trend-row">
+                <span className="usage-trend-day">{formatDateDay(row.day, localeTag)}</span>
+                <div className="usage-source-trend-tags">
+                  <Tag>
+                    {t.sidebar.usage.sourceProvider}:{" "}
+                    {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_provider)))}
+                  </Tag>
+                  <Tag>
+                    {t.sidebar.usage.sourceEstimated}:{" "}
+                    {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_estimated)))}
+                  </Tag>
+                  <Tag>
+                    {t.sidebar.usage.sourceMixed}:{" "}
+                    {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_mixed)))}
+                  </Tag>
+                  <Tag>
+                    {t.sidebar.usage.sourceLegacy}:{" "}
+                    {tokenFmt.format(Math.max(0, Math.trunc(row.source_tasks_legacy)))}
+                  </Tag>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="usage-bottom-head">

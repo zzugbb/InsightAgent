@@ -688,11 +688,18 @@ def get_tasks_usage_dashboard(
     user_id: str,
     *,
     session_id: str | None = None,
+    source_filter: str | None = None,
     window_days: int = 14,
     top_sessions: int = 8,
     top_tasks: int = 12,
 ) -> dict[str, object]:
     """按用户聚合 usage 仪表盘：汇总、趋势、会话榜、任务榜。"""
+    safe_source_filter = source_filter if source_filter in {
+        "provider",
+        "estimated",
+        "mixed",
+        "legacy",
+    } else None
     safe_window_days = max(1, min(int(window_days), 90))
     safe_top_sessions = max(1, min(int(top_sessions), 30))
     safe_top_tasks = max(1, min(int(top_tasks), 50))
@@ -756,6 +763,10 @@ def get_tasks_usage_dashboard(
         key = (trend_start + timedelta(days=idx)).isoformat()
         trend_map[key] = {
             "tasks_with_usage": 0,
+            "source_tasks_provider": 0,
+            "source_tasks_estimated": 0,
+            "source_tasks_mixed": 0,
+            "source_tasks_legacy": 0,
             "total_tokens": 0,
             "cost_estimate": 0.0,
         }
@@ -774,8 +785,11 @@ def get_tasks_usage_dashboard(
         if not isinstance(payload, dict):
             continue
 
-        tasks_with_usage += 1
         source_kind = _classify_usage_source(payload)
+        if safe_source_filter is not None and source_kind != safe_source_filter:
+            continue
+
+        tasks_with_usage += 1
         if source_kind == "provider":
             source_provider_tasks += 1
         elif source_kind == "estimated":
@@ -808,6 +822,14 @@ def get_tasks_usage_dashboard(
         if created_day is not None and trend_start <= created_day <= today:
             bucket = trend_map[created_day.isoformat()]
             bucket["tasks_with_usage"] = int(bucket["tasks_with_usage"]) + 1
+            if source_kind == "provider":
+                bucket["source_tasks_provider"] = int(bucket["source_tasks_provider"]) + 1
+            elif source_kind == "estimated":
+                bucket["source_tasks_estimated"] = int(bucket["source_tasks_estimated"]) + 1
+            elif source_kind == "mixed":
+                bucket["source_tasks_mixed"] = int(bucket["source_tasks_mixed"]) + 1
+            else:
+                bucket["source_tasks_legacy"] = int(bucket["source_tasks_legacy"]) + 1
             bucket["total_tokens"] = int(bucket["total_tokens"]) + total_tokens_int
             bucket["cost_estimate"] = float(bucket["cost_estimate"]) + cost_value
 
@@ -853,6 +875,10 @@ def get_tasks_usage_dashboard(
         {
             "day": day,
             "tasks_with_usage": int(item["tasks_with_usage"]),
+            "source_tasks_provider": int(item["source_tasks_provider"]),
+            "source_tasks_estimated": int(item["source_tasks_estimated"]),
+            "source_tasks_mixed": int(item["source_tasks_mixed"]),
+            "source_tasks_legacy": int(item["source_tasks_legacy"]),
             "total_tokens": int(item["total_tokens"]),
             "cost_estimate": float(item["cost_estimate"]),
         }

@@ -109,6 +109,10 @@ export type SessionUsageSummary = UsageSummary;
 export type UsageDashboardTrendPoint = {
   day: string;
   tasks_with_usage: number;
+  source_tasks_provider: number;
+  source_tasks_estimated: number;
+  source_tasks_mixed: number;
+  source_tasks_legacy: number;
   total_tokens: number;
   cost_estimate: number;
 };

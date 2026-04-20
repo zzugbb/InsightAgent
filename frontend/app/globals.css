@@ -2888,6 +2888,10 @@ code {
   margin-bottom: 10px;
 }
 
+.usage-source-filter-row {
+  margin-bottom: 8px;
+}
+
 .usage-dashboard-tag {
   margin-inline-end: 0;
 }
@@ -2972,6 +2976,14 @@ code {
   background: var(--msg-card-bg);
 }
 
+.usage-source-trend-block {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--msg-card-bg) 70%, transparent);
+}
+
 .usage-trend-head,
 .usage-bottom-head {
   display: flex;
@@ -3028,6 +3040,30 @@ code {
   font-size: 0.76rem;
   color: var(--muted-strong);
   font-variant-numeric: tabular-nums;
+}
+
+.usage-source-trend-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.usage-source-trend-row {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.usage-source-trend-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.usage-source-trend-tags .ant-tag {
+  margin-inline-end: 0;
+  font-size: 0.74rem;
 }
 
 .usage-bottom-head {
@@ -3093,6 +3129,10 @@ code {
 
   .usage-trend-row {
     grid-template-columns: 54px minmax(0, 1fr) 82px;
+  }
+
+  .usage-source-trend-row {
+    grid-template-columns: 54px minmax(0, 1fr);
   }
 }
 

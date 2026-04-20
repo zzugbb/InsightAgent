@@ -264,6 +264,7 @@ export const zh: Messages = {
       coverage: (withUsage: number, total: number) =>
         `覆盖率 ${withUsage} / ${total}`,
       sourceTitle: "来源分布",
+      sourceFilterAll: "全部来源",
       sourceProvider: "官方",
       sourceEstimated: "估算",
       sourceMixed: "混合",
@@ -273,6 +274,7 @@ export const zh: Messages = {
       sourceLegacyHint: (n: number) =>
         `有 ${n} 条历史任务未带来源字段（已归类为旧数据）。`,
       trendTitle: "趋势",
+      sourceTrendTitle: "来源趋势",
       metricTokens: "Tokens",
       metricCost: "成本",
       trendEmpty: "暂无趋势数据。",

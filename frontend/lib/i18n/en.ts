@@ -269,6 +269,7 @@ export const en: Messages = {
       coverage: (withUsage: number, total: number) =>
         `Coverage ${withUsage} / ${total}`,
       sourceTitle: "Source breakdown",
+      sourceFilterAll: "All sources",
       sourceProvider: "Provider",
       sourceEstimated: "Estimated",
       sourceMixed: "Mixed",
@@ -278,6 +279,7 @@ export const en: Messages = {
       sourceLegacyHint: (n: number) =>
         `${n} historical task(s) have no source field and are treated as legacy.`,
       trendTitle: "Trend",
+      sourceTrendTitle: "Source trend",
       metricTokens: "Tokens",
       metricCost: "Cost",
       trendEmpty: "No trend data yet.",

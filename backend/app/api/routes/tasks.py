@@ -310,6 +310,10 @@ class TaskUsageSummaryResponse(BaseModel):
 class TaskUsageTrendPoint(BaseModel):
     day: str
     tasks_with_usage: int
+    source_tasks_provider: int = 0
+    source_tasks_estimated: int = 0
+    source_tasks_mixed: int = 0
+    source_tasks_legacy: int = 0
     total_tokens: int
     cost_estimate: float
 
@@ -696,15 +700,26 @@ def get_tasks_usage_dashboard_route(
         le=50,
         description="任务榜返回条数",
     ),
+    source_kind: str = Query(
+        default="all",
+        description="来源筛选：all/provider/estimated/mixed/legacy",
+    ),
     current_user: dict = Depends(get_current_user),
 ) -> TaskUsageDashboardResponse:
     user_id = str(current_user["id"])
     sid = session_id.strip() if session_id else None
     if sid and get_session(sid, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    source_normalized = source_kind.strip().lower()
+    if source_normalized not in {"all", "provider", "estimated", "mixed", "legacy"}:
+        raise HTTPException(
+            status_code=422,
+            detail="source_kind must be one of: all, provider, estimated, mixed, legacy",
+        )
     payload = get_tasks_usage_dashboard(
         user_id,
         session_id=sid,
+        source_filter=None if source_normalized == "all" else source_normalized,
         window_days=window_days,
         top_sessions=top_sessions,
         top_tasks=top_tasks,
