@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from app.config import get_settings
 from app.providers.base import ProviderCallError
+from app.services.audit_service import safe_record_audit_event
 from app.services.chat_persistence_service import (
     complete_task,
     create_message,
@@ -308,6 +309,27 @@ def stream_task_execution(
     cached_task_status = "pending"
     stream_started_ts = monotonic()
 
+    def record_failure_event(
+        *,
+        event_type: str,
+        code: str,
+        message: str,
+        detail: dict[str, object] | None = None,
+    ) -> None:
+        payload: dict[str, object] = {
+            "task_id": task_id,
+            "session_id": session_id,
+            "code": code,
+            "message": message[:400],
+        }
+        if detail:
+            payload.update(detail)
+        safe_record_audit_event(
+            user_id=user_id,
+            event_type=event_type,
+            detail=payload,
+        )
+
     def persist_trace(*, force: bool = False) -> None:
         nonlocal last_trace_persist_ts
         if not trace_steps:
@@ -594,6 +616,12 @@ def stream_task_execution(
                         user_id=user_id,
                         status="failed",
                     )
+                    record_failure_event(
+                        event_type="task_failed",
+                        code="tool_execution_error",
+                        message=last_error,
+                        detail={"step_id": action_step_id, "retry_count": attempt + 1},
+                    )
                     yield sse_event("state", {"task_id": task_id, "phase": "error"})
                     return
 
@@ -799,6 +827,18 @@ def stream_task_execution(
             user_id=user_id,
             status=exc.status,
         )
+        if exc.event == "timeout":
+            record_failure_event(
+                event_type="task_timeout",
+                code=exc.code,
+                message=exc.user_message,
+            )
+        elif exc.event not in {"cancelled"}:
+            record_failure_event(
+                event_type="task_failed",
+                code=exc.code,
+                message=exc.user_message,
+            )
         phase = exc.event if exc.event in {"cancelled", "timeout"} else "error"
         yield sse_event("state", {"task_id": task_id, "phase": phase})
         if exc.event in {"cancelled", "timeout"}:
@@ -828,6 +868,11 @@ def stream_task_execution(
             user_id=user_id,
             status="failed",
         )
+        record_failure_event(
+            event_type="task_failed",
+            code=exc.code,
+            message=exc.user_message,
+        )
         yield sse_event("state", {"task_id": task_id, "phase": "error"})
         yield sse_event(
             "error",
@@ -845,6 +890,15 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
+        )
+        record_failure_event(
+            event_type="task_failed",
+            code=exc.code,
+            message=exc.user_message,
+            detail={
+                "status_code": exc.status_code,
+                "retryable": exc.retryable,
+            },
         )
         yield sse_event("state", {"task_id": task_id, "phase": "error"})
         yield sse_event(
@@ -865,6 +919,11 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
+        )
+        record_failure_event(
+            event_type="task_failed",
+            code="task_stream_failure",
+            message=str(exc),
         )
         yield sse_event("state", {"task_id": task_id, "phase": "error"})
         yield sse_event(

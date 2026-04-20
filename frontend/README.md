@@ -42,13 +42,14 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 交互升级：消息区“回到底部”按钮锚定在聊天区右下角（不随消息内容滚动）；上滑阅读期间若有新增输出，会显示数字徽标与轻脉冲提示
 - 阶段 5 交互微调：回底按钮进一步上移+右移，减少对底部消息气泡与输入区的视觉遮挡
 - 阶段 5 增量：`usage-dashboard-lite` 首版已落地；设置弹窗新增“用量统计”入口，支持全局/当前会话切换、趋势条形图、会话榜与任务榜
+- 阶段 5 增量：`audit-event-expansion` 首版已落地；审计页支持筛选与展示新增事件（设置校验、任务创建/取消/超时/失败、知识库 ingest/清空/删除）
 
 ## 当前已有内容
 
 - 三栏布局：会话、消息、轨迹/上下文
 - Auth Gate：登录/注册、登录态校验、401 优先 refresh token 轮换并重试；刷新失败后自动回登录；退出入口融合到侧栏左下角设置区
 - 登录后默认策略：直接进入 Workbench；运行模式由设置决定，`remote` 配置不完整会被前端阻断并提示
-- 审计入口迁移到左下角设置菜单（独立子页）：查看 `login/logout/refresh/settings_update` 事件，支持事件类型/时间范围/`session_id`/`task_id` 筛选、详情展开与 JSON/CSV 导出（可选“当前页/全部筛选结果”）
+- 审计入口迁移到左下角设置菜单（独立子页）：查看 `login/logout/refresh/settings_update/settings_validate/task_create/task_cancel/task_timeout/task_failed/rag_ingest/rag_kb_clear/rag_kb_delete` 事件，支持事件类型/时间范围/`session_id`/`task_id` 筛选、详情展开与 JSON/CSV 导出（可选“当前页/全部筛选结果”）
 - 设置菜单新增“知识库治理”子页：查看当前账号知识库列表、来源采样与文档条数，并支持行级清空/删除
 - 设置菜单新增“用量统计”子页：查看 token/成本汇总、趋势、会话榜与任务榜（可切换全局或当前会话）
 - 知识库治理页优化：列表表头统一左对齐并补“操作”列、刷新改为图标按钮、清空/删除统一为同类按钮样式；来源标签支持悬浮查看完整值，并新增采样含义说明
@@ -248,5 +249,5 @@ npm run dev
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦前端可视化回归（CI）与审计事件统计增强。
-- `rag-kb-governance-lite` 与 `usage-dashboard-lite` 首版已完成，后续按计划补 `audit-event-expansion`。
+- 下一步聚焦前端可视化回归（CI）与 provider 官方 usage 对齐联调。
+- `rag-kb-governance-lite`、`usage-dashboard-lite` 与 `audit-event-expansion` 首版已完成。

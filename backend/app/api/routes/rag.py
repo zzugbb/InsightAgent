@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from app.api.deps import get_current_user
+from app.services.audit_service import safe_record_audit_event
 from app.services.chroma_rag_service import (
     clear_knowledge_base,
     delete_knowledge_base,
@@ -132,9 +133,10 @@ def post_rag_clear_knowledge_base(
     knowledge_base_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> RagKnowledgeBaseMutateResponse:
+    user_id = str(current_user["id"])
     try:
         raw = clear_knowledge_base(
-            user_id=str(current_user["id"]),
+            user_id=user_id,
             knowledge_base_id=knowledge_base_id,
         )
     except ValueError as exc:
@@ -142,6 +144,16 @@ def post_rag_clear_knowledge_base(
     except Exception as exc:  # noqa: BLE001
         msg = str(exc).strip() or type(exc).__name__
         raise HTTPException(status_code=503, detail=msg[:400]) from exc
+    safe_record_audit_event(
+        user_id=user_id,
+        event_type="rag_kb_clear",
+        detail={
+            "knowledge_base_id": raw.get("knowledge_base_id"),
+            "collection": raw.get("collection"),
+            "deleted_chunks": raw.get("deleted_chunks"),
+            "existed": raw.get("existed"),
+        },
+    )
     return RagKnowledgeBaseMutateResponse(**raw)
 
 
@@ -153,9 +165,10 @@ def delete_rag_knowledge_base(
     knowledge_base_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> RagKnowledgeBaseMutateResponse:
+    user_id = str(current_user["id"])
     try:
         raw = delete_knowledge_base(
-            user_id=str(current_user["id"]),
+            user_id=user_id,
             knowledge_base_id=knowledge_base_id,
         )
     except ValueError as exc:
@@ -163,6 +176,16 @@ def delete_rag_knowledge_base(
     except Exception as exc:  # noqa: BLE001
         msg = str(exc).strip() or type(exc).__name__
         raise HTTPException(status_code=503, detail=msg[:400]) from exc
+    safe_record_audit_event(
+        user_id=user_id,
+        event_type="rag_kb_delete",
+        detail={
+            "knowledge_base_id": raw.get("knowledge_base_id"),
+            "collection": raw.get("collection"),
+            "deleted_chunks": raw.get("deleted_chunks"),
+            "existed": raw.get("existed"),
+        },
+    )
     return RagKnowledgeBaseMutateResponse(**raw)
 
 
@@ -171,10 +194,11 @@ def post_rag_ingest(
     payload: RagIngestRequest,
     current_user: dict = Depends(get_current_user),
 ) -> RagIngestResponse:
+    user_id = str(current_user["id"])
     docs = [x.model_dump(exclude_none=True) for x in payload.documents]
     try:
         raw = ingest_knowledge_documents(
-            user_id=str(current_user["id"]),
+            user_id=user_id,
             knowledge_base_id=payload.knowledge_base_id,
             documents=docs,
             chunk_size=payload.chunk_size,
@@ -185,6 +209,19 @@ def post_rag_ingest(
     except Exception as exc:  # noqa: BLE001
         msg = str(exc).strip() or type(exc).__name__
         raise HTTPException(status_code=503, detail=msg[:400]) from exc
+    safe_record_audit_event(
+        user_id=user_id,
+        event_type="rag_ingest",
+        detail={
+            "knowledge_base_id": raw.get("knowledge_base_id"),
+            "collection": raw.get("collection"),
+            "documents_ingested": raw.get("documents_ingested"),
+            "chunks_added": raw.get("chunks_added"),
+            "document_count": raw.get("document_count"),
+            "chunk_size": payload.chunk_size,
+            "chunk_overlap": payload.chunk_overlap,
+        },
+    )
     return RagIngestResponse(**raw)
 
 

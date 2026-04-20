@@ -6,9 +6,39 @@ from uuid import uuid4
 
 from app.db import get_db_connection
 
+SUPPORTED_AUDIT_EVENT_TYPES = frozenset(
+    {
+        "login",
+        "logout",
+        "refresh",
+        "settings_update",
+        "settings_validate",
+        "task_create",
+        "task_cancel",
+        "task_timeout",
+        "task_failed",
+        "rag_ingest",
+        "rag_kb_clear",
+        "rag_kb_delete",
+    }
+)
+
 
 def _now_iso() -> str:
     return datetime.now().isoformat()
+
+
+def normalize_audit_event_type(event_type: str) -> str:
+    normalized = event_type.strip().lower()
+    if not normalized:
+        raise ValueError("event_type is required")
+    if len(normalized) > 80:
+        raise ValueError("event_type is too long (max 80)")
+    return normalized
+
+
+def is_supported_audit_event_type(event_type: str) -> bool:
+    return normalize_audit_event_type(event_type) in SUPPORTED_AUDIT_EVENT_TYPES
 
 
 def record_audit_event(
@@ -17,11 +47,7 @@ def record_audit_event(
     event_type: str,
     detail: dict[str, object] | None = None,
 ) -> None:
-    normalized_event_type = event_type.strip().lower()
-    if not normalized_event_type:
-        raise ValueError("event_type is required")
-    if len(normalized_event_type) > 80:
-        raise ValueError("event_type is too long (max 80)")
+    normalized_event_type = normalize_audit_event_type(event_type)
 
     detail_json: str | None = None
     if detail:
@@ -42,6 +68,19 @@ def record_audit_event(
             ),
         )
         connection.commit()
+
+
+def safe_record_audit_event(
+    *,
+    user_id: str | None,
+    event_type: str,
+    detail: dict[str, object] | None = None,
+) -> None:
+    try:
+        record_audit_event(user_id=user_id, event_type=event_type, detail=detail)
+    except Exception:
+        # 审计日志采用 best-effort，不影响主流程
+        return
 
 
 def list_audit_logs(

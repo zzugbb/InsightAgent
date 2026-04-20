@@ -10,7 +10,7 @@
 - W4：已完成（RAG + Token/Cost + compose.full）
 - 阶段 5 增量：`full-data-auth` 首版已落地（JWT、用户隔离、用户级设置与密钥加密存储）
 - 阶段 5 增量：最小会话管理已落地（refresh token 轮换、会话查询/撤销、退出当前/全部会话）
-- 阶段 5 增量：最小审计已落地（`login/logout/refresh/settings_update` 事件写入 `audit_logs`）
+- 阶段 5 增量：审计事件扩展已落地（`login/logout/refresh/settings_update/settings_validate/task_create/task_cancel/task_timeout/task_failed/rag_ingest/rag_kb_clear/rag_kb_delete` 写入 `audit_logs`）
 - 阶段 5 增量：PostgreSQL 迁移主线已完成运行时收敛（后端运行时使用 PostgreSQL + 保留平迁脚本）
 - 阶段 5 排查修复（2026-04-14）：修复 PostgreSQL 下 `POST /api/tasks` 的 `CASE WHEN` 参数类型错误（smallint -> boolean），恢复消息发送链路
 - 阶段 5 排查补充：已复核 `sessions/tasks/messages/settings/rag` 查询与写入路径，核心数据均按 `user_id` 隔离
@@ -113,7 +113,7 @@
 - `POST /api/auth/logout-all`
 - `GET /api/auth/sessions`
 - `DELETE /api/auth/sessions/{session_id}`
-- 最小审计事件：`login`、`logout`、`refresh`、`settings_update`
+- 审计事件：`login`、`logout`、`refresh`、`settings_update`、`settings_validate`、`task_create`、`task_cancel`、`task_timeout`、`task_failed`、`rag_ingest`、`rag_kb_clear`、`rag_kb_delete`
 - 审计查询：`GET /api/audit/logs?event_type=&session_id=&task_id=&start_at=&end_at=&limit=&offset=`（前端可按当前页/全量筛选结果导出）
 - `GET /api/auth/me`
 - `GET /api/settings`
@@ -321,7 +321,7 @@ docker compose up -d chroma
 5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）并接入后端 CI；后续补失败快照留档。
 6. `task-cancel-timeout`：首版已落地（取消接口 + 超时中断 + SSE 事件），并新增 cancel/timeout e2e 脚本；后续补细粒度状态反馈。
 7. `running-task-recovery`：前端恢复链路已接入，后续可补失败快照与恢复可观测字段。
-8. `usage-dashboard-lite` 已完成首版；下一步推进 `audit-event-expansion`，补关键事件审计覆盖。
+8. `usage-dashboard-lite` 与 `audit-event-expansion` 已完成首版；下一步推进前端可视化回归与 provider 官方 usage 对齐。
 
 ### 暂不做
 

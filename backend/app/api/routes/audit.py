@@ -8,7 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user
-from app.services.audit_service import count_audit_logs, list_audit_logs
+from app.services.audit_service import (
+    SUPPORTED_AUDIT_EVENT_TYPES,
+    count_audit_logs,
+    list_audit_logs,
+    normalize_audit_event_type,
+)
 
 
 router = APIRouter()
@@ -65,7 +70,11 @@ def get_audit_logs(
     offset: int = Query(default=0, ge=0, le=50_000),
     event_type: str | None = Query(
         default=None,
-        description="可选：按事件类型过滤（login/logout/refresh/settings_update）",
+        description=(
+            "可选：按事件类型过滤（login/logout/refresh/settings_update/"
+            "settings_validate/task_create/task_cancel/task_timeout/task_failed/"
+            "rag_ingest/rag_kb_clear/rag_kb_delete）"
+        ),
     ),
     session_id: str | None = Query(default=None, description="可选：按会话 ID 过滤"),
     task_id: str | None = Query(default=None, description="可选：按任务 ID 过滤"),
@@ -73,14 +82,16 @@ def get_audit_logs(
     end_at: str | None = Query(default=None, description="可选：结束时间（ISO8601）"),
     current_user: dict = Depends(get_current_user),
 ) -> AuditLogListResponse:
-    normalized_event_type = event_type.strip().lower() if isinstance(event_type, str) else None
-    if normalized_event_type and normalized_event_type not in {
-        "login",
-        "logout",
-        "refresh",
-        "settings_update",
-    }:
-        raise HTTPException(status_code=422, detail="unsupported event_type")
+    normalized_event_type: str | None = None
+    if isinstance(event_type, str):
+        raw = event_type.strip()
+        if raw:
+            try:
+                normalized_event_type = normalize_audit_event_type(raw)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            if normalized_event_type not in SUPPORTED_AUDIT_EVENT_TYPES:
+                raise HTTPException(status_code=422, detail="unsupported event_type")
 
     start_iso = _validate_iso8601("start_at", start_at)
     end_iso = _validate_iso8601("end_at", end_at)

@@ -19,7 +19,20 @@ type AuditLogsModalProps = {
   onClose: () => void;
 };
 
-type EventFilter = "all" | "login" | "logout" | "refresh" | "settings_update";
+type EventFilter =
+  | "all"
+  | "login"
+  | "logout"
+  | "refresh"
+  | "settings_update"
+  | "settings_validate"
+  | "task_create"
+  | "task_cancel"
+  | "task_timeout"
+  | "task_failed"
+  | "rag_ingest"
+  | "rag_kb_clear"
+  | "rag_kb_delete";
 type TimeFilter = "all" | "7d" | "30d";
 type ExportScope = "current" | "all";
 type DetailEntry = { key: string; label: string; value: string };
@@ -172,6 +185,30 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     if (normalized === "settings_update") {
       return t.sidebar.audit.eventLabelSettingsUpdate;
     }
+    if (normalized === "settings_validate") {
+      return t.sidebar.audit.eventLabelSettingsValidate;
+    }
+    if (normalized === "task_create") {
+      return t.sidebar.audit.eventLabelTaskCreate;
+    }
+    if (normalized === "task_cancel") {
+      return t.sidebar.audit.eventLabelTaskCancel;
+    }
+    if (normalized === "task_timeout") {
+      return t.sidebar.audit.eventLabelTaskTimeout;
+    }
+    if (normalized === "task_failed") {
+      return t.sidebar.audit.eventLabelTaskFailed;
+    }
+    if (normalized === "rag_ingest") {
+      return t.sidebar.audit.eventLabelRagIngest;
+    }
+    if (normalized === "rag_kb_clear") {
+      return t.sidebar.audit.eventLabelRagKbClear;
+    }
+    if (normalized === "rag_kb_delete") {
+      return t.sidebar.audit.eventLabelRagKbDelete;
+    }
     return t.sidebar.audit.eventLabelUnknown;
   };
 
@@ -188,6 +225,27 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     }
     if (normalized === "settings_update") {
       return "purple";
+    }
+    if (normalized === "settings_validate") {
+      return "magenta";
+    }
+    if (normalized === "task_create") {
+      return "geekblue";
+    }
+    if (normalized === "task_cancel") {
+      return "orange";
+    }
+    if (normalized === "task_timeout") {
+      return "gold";
+    }
+    if (normalized === "task_failed") {
+      return "red";
+    }
+    if (normalized === "rag_ingest") {
+      return "cyan";
+    }
+    if (normalized === "rag_kb_clear" || normalized === "rag_kb_delete") {
+      return "volcano";
     }
     return "default";
   };
@@ -223,6 +281,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
 
   const resolveSummaryText = (item: AuditLogItem): string => {
     const eventLabel = resolveEventLabel(item.event_type);
+    const normalizedEventType = item.event_type.trim().toLowerCase();
     const detail = asDetailMap(item.event_detail);
     if (!detail) {
       return eventLabel;
@@ -235,10 +294,10 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     const provider = asString(detail.provider);
     const model = asString(detail.model);
 
-    if (item.event_type === "login" && reason) {
+    if (normalizedEventType === "login" && reason) {
       return `${eventLabel} · ${reason}`;
     }
-    if (item.event_type === "logout") {
+    if (normalizedEventType === "logout") {
       const parts: string[] = [];
       if (scope) {
         parts.push(scope);
@@ -252,9 +311,42 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
       }
       return parts.length > 0 ? `${eventLabel} · ${parts.join(" · ")}` : eventLabel;
     }
-    if (item.event_type === "settings_update") {
+    if (normalizedEventType === "settings_update") {
       const triplet = [mode, provider, model].filter(Boolean).join(" / ");
       return triplet ? `${eventLabel} · ${triplet}` : eventLabel;
+    }
+    if (normalizedEventType === "settings_validate") {
+      const parts: string[] = [];
+      if (mode || provider || model) {
+        parts.push([mode, provider, model].filter(Boolean).join(" / "));
+      }
+      const code = asString(detail.error_code);
+      if (code) {
+        parts.push(`${t.sidebar.audit.fieldCode}: ${code}`);
+      }
+      return parts.length > 0 ? `${eventLabel} · ${parts.join(" · ")}` : eventLabel;
+    }
+    if (normalizedEventType === "task_create") {
+      const promptLength = detail.prompt_length;
+      if (typeof promptLength === "number" && Number.isFinite(promptLength)) {
+        return `${eventLabel} · ${t.sidebar.audit.fieldPromptLength} ${Math.trunc(promptLength)}`;
+      }
+    }
+    if (normalizedEventType === "task_failed" || normalizedEventType === "task_timeout") {
+      const code = asString(detail.code);
+      return code ? `${eventLabel} · ${code}` : eventLabel;
+    }
+    if (normalizedEventType === "rag_ingest") {
+      const docs = detail.documents_ingested;
+      const chunks = detail.chunks_added;
+      const parts: string[] = [];
+      if (typeof docs === "number" && Number.isFinite(docs)) {
+        parts.push(`${t.sidebar.audit.fieldDocumentsIngested} ${Math.trunc(docs)}`);
+      }
+      if (typeof chunks === "number" && Number.isFinite(chunks)) {
+        parts.push(`${t.sidebar.audit.fieldChunksAdded} ${Math.trunc(chunks)}`);
+      }
+      return parts.length > 0 ? `${eventLabel} · ${parts.join(" · ")}` : eventLabel;
     }
     return eventLabel;
   };
@@ -296,6 +388,74 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     pushIfPresent("mode", t.sidebar.audit.fieldMode, detail.mode);
     pushIfPresent("provider", t.sidebar.audit.fieldProvider, detail.provider);
     pushIfPresent("model", t.sidebar.audit.fieldModel, detail.model);
+    pushIfPresent("code", t.sidebar.audit.fieldCode, detail.code);
+    pushIfPresent("message", t.sidebar.audit.fieldMessage, detail.message);
+    pushIfPresent(
+      "prompt_length",
+      t.sidebar.audit.fieldPromptLength,
+      detail.prompt_length,
+      (raw) => {
+        if (typeof raw === "number" && Number.isFinite(raw)) {
+          return String(Math.trunc(raw));
+        }
+        return asString(raw);
+      },
+    );
+    pushIfPresent(
+      "documents_ingested",
+      t.sidebar.audit.fieldDocumentsIngested,
+      detail.documents_ingested,
+      (raw) => {
+        if (typeof raw === "number" && Number.isFinite(raw)) {
+          return String(Math.trunc(raw));
+        }
+        return asString(raw);
+      },
+    );
+    pushIfPresent(
+      "chunks_added",
+      t.sidebar.audit.fieldChunksAdded,
+      detail.chunks_added,
+      (raw) => {
+        if (typeof raw === "number" && Number.isFinite(raw)) {
+          return String(Math.trunc(raw));
+        }
+        return asString(raw);
+      },
+    );
+    pushIfPresent(
+      "document_count",
+      t.sidebar.audit.fieldDocumentCount,
+      detail.document_count,
+      (raw) => {
+        if (typeof raw === "number" && Number.isFinite(raw)) {
+          return String(Math.trunc(raw));
+        }
+        return asString(raw);
+      },
+    );
+    pushIfPresent(
+      "chunk_size",
+      t.sidebar.audit.fieldChunkSize,
+      detail.chunk_size,
+      (raw) => {
+        if (typeof raw === "number" && Number.isFinite(raw)) {
+          return String(Math.trunc(raw));
+        }
+        return asString(raw);
+      },
+    );
+    pushIfPresent(
+      "chunk_overlap",
+      t.sidebar.audit.fieldChunkOverlap,
+      detail.chunk_overlap,
+      (raw) => {
+        if (typeof raw === "number" && Number.isFinite(raw)) {
+          return String(Math.trunc(raw));
+        }
+        return asString(raw);
+      },
+    );
     pushIfPresent(
       "revoked",
       t.sidebar.audit.fieldRevoked,
@@ -493,6 +653,38 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
               {
                 label: t.sidebar.audit.filterEventSettingsUpdate,
                 value: "settings_update",
+              },
+              {
+                label: t.sidebar.audit.filterEventSettingsValidate,
+                value: "settings_validate",
+              },
+              {
+                label: t.sidebar.audit.filterEventTaskCreate,
+                value: "task_create",
+              },
+              {
+                label: t.sidebar.audit.filterEventTaskCancel,
+                value: "task_cancel",
+              },
+              {
+                label: t.sidebar.audit.filterEventTaskTimeout,
+                value: "task_timeout",
+              },
+              {
+                label: t.sidebar.audit.filterEventTaskFailed,
+                value: "task_failed",
+              },
+              {
+                label: t.sidebar.audit.filterEventRagIngest,
+                value: "rag_ingest",
+              },
+              {
+                label: t.sidebar.audit.filterEventRagKbClear,
+                value: "rag_kb_clear",
+              },
+              {
+                label: t.sidebar.audit.filterEventRagKbDelete,
+                value: "rag_kb_delete",
               },
             ]}
             optionFilterProp="label"

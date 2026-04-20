@@ -12,6 +12,7 @@ from starlette.responses import PlainTextResponse, StreamingResponse
 from app.api.deps import get_current_user
 from app.config import get_settings
 from app.schemas.trace import TraceStep, parse_trace_steps
+from app.services.audit_service import safe_record_audit_event
 from app.services.chat_execution_service import (
     sse_error_payload,
     sse_event,
@@ -597,6 +598,15 @@ def create_task_entry(
         role="user",
         content=payload.user_input,
     )
+    safe_record_audit_event(
+        user_id=user_id,
+        event_type="task_create",
+        detail={
+            "session_id": resolved_session_id,
+            "task_id": task_id,
+            "prompt_length": len(payload.user_input.strip()),
+        },
+    )
     return TaskCreateResponse(
         task_id=task_id,
         session_id=resolved_session_id,
@@ -734,6 +744,17 @@ def cancel_task(
         task = get_task(task_id, user_id) or {**task, "status": "cancelled"}
 
     current_status = str(task.get("status", ""))
+    safe_record_audit_event(
+        user_id=user_id,
+        event_type="task_cancel",
+        detail={
+            "task_id": task_id,
+            "session_id": str(task.get("session_id", "")) or None,
+            "previous_status": previous_status,
+            "status": current_status,
+            "already_terminal": already_terminal,
+        },
+    )
     return TaskCancelResponse(
         task_id=task_id,
         previous_status=previous_status,
