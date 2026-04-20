@@ -3,10 +3,18 @@ from typing import Iterator, Protocol
 
 
 @dataclass
+class ProviderUsage:
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+@dataclass
 class ProviderResponse:
     content: str
     model: str
     provider: str
+    usage: ProviderUsage | None = None
 
 
 class ProviderCallError(RuntimeError):
@@ -33,3 +41,6 @@ class LLMProvider(Protocol):
 
     def stream_generate(self, prompt: str) -> Iterator[str]:
         """Yield response chunks for SSE-style streaming."""
+
+    def get_last_usage(self) -> ProviderUsage | None:
+        """Return usage captured from the latest provider call."""

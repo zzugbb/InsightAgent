@@ -7,7 +7,7 @@ from time import monotonic
 from uuid import uuid4
 
 from app.config import get_settings
-from app.providers.base import ProviderCallError
+from app.providers.base import ProviderCallError, ProviderUsage
 from app.services.audit_service import safe_record_audit_event
 from app.services.chat_persistence_service import (
     complete_task,
@@ -146,6 +146,14 @@ def _estimate_usage_cost(*, prompt_tokens: int, completion_tokens: int) -> float
         completion_tokens / 1000.0
     ) * completion_unit
     return round(cost, 8)
+
+
+def _normalize_usage_token_count(value: int | None) -> int | None:
+    if value is None:
+        return None
+    if value < 0:
+        return None
+    return int(value)
 
 
 def _extract_knowledge_base_id(prompt: str) -> str | None:
@@ -719,6 +727,8 @@ def stream_task_execution(
             )
         prompt_tokens_estimated = _estimate_token_count(provider_prompt)
         stream_chunk_count = 0
+        provider_usage: ProviderUsage | None = None
+        get_last_usage = getattr(provider, "get_last_usage", None)
 
         streamed_content = ""
         final_step_seq = int(final_step_streaming.get("seq", seq_cursor))
@@ -756,16 +766,57 @@ def stream_task_execution(
                 persist_trace()
 
         final_content = streamed_content
+        if callable(get_last_usage):
+            latest_usage = get_last_usage()
+            if isinstance(latest_usage, ProviderUsage):
+                provider_usage = latest_usage
         if not final_content:
             raise_if_should_abort(force_status_probe=True)
             fallback = provider.generate(provider_prompt)
             final_content = fallback.content
+            if isinstance(getattr(fallback, "usage", None), ProviderUsage):
+                provider_usage = fallback.usage
+            elif callable(get_last_usage):
+                latest_usage = get_last_usage()
+                if isinstance(latest_usage, ProviderUsage):
+                    provider_usage = latest_usage
         else:
             final_step_seq += 1
         completion_tokens_estimated = _estimate_token_count(final_content)
+        prompt_tokens_provider = _normalize_usage_token_count(
+            provider_usage.prompt_tokens if provider_usage else None
+        )
+        completion_tokens_provider = _normalize_usage_token_count(
+            provider_usage.completion_tokens if provider_usage else None
+        )
+        provider_total_tokens = _normalize_usage_token_count(
+            provider_usage.total_tokens if provider_usage else None
+        )
+        prompt_tokens_final = (
+            prompt_tokens_provider
+            if prompt_tokens_provider is not None
+            else prompt_tokens_estimated
+        )
+        completion_tokens_final = (
+            completion_tokens_provider
+            if completion_tokens_provider is not None
+            else completion_tokens_estimated
+        )
+        prompt_tokens_source = (
+            "provider" if prompt_tokens_provider is not None else "estimated"
+        )
+        completion_tokens_source = (
+            "provider" if completion_tokens_provider is not None else "estimated"
+        )
+        usage_source = (
+            "provider"
+            if prompt_tokens_source == "provider"
+            or completion_tokens_source == "provider"
+            else "estimated"
+        )
         usage_cost_estimate = _estimate_usage_cost(
-            prompt_tokens=prompt_tokens_estimated,
-            completion_tokens=completion_tokens_estimated,
+            prompt_tokens=prompt_tokens_final,
+            completion_tokens=completion_tokens_final,
         )
         trace_steps[-1] = {
             **final_step_streaming,
@@ -773,7 +824,7 @@ def stream_task_execution(
             "seq": final_step_seq,
             "meta": {
                 **dict(final_step_streaming.get("meta", {})),
-                "tokens": completion_tokens_estimated,
+                "tokens": completion_tokens_final,
                 "cost_estimate": usage_cost_estimate,
             },
         }
@@ -788,13 +839,18 @@ def stream_task_execution(
         )
 
         usage_payload: dict[str, object] = {
-            "prompt_tokens": prompt_tokens_estimated,
-            "completion_tokens": completion_tokens_estimated,
-            "completion_tokens_source": "estimated",
+            "prompt_tokens": prompt_tokens_final,
+            "completion_tokens": completion_tokens_final,
+            "total_tokens": prompt_tokens_final + completion_tokens_final,
+            "prompt_tokens_source": prompt_tokens_source,
+            "completion_tokens_source": completion_tokens_source,
+            "usage_source": usage_source,
             "cost_estimate": usage_cost_estimate,
             "prompt_token_price_per_1k": get_settings().usage_prompt_token_price_per_1k,
             "completion_token_price_per_1k": get_settings().usage_completion_token_price_per_1k,
         }
+        if provider_total_tokens is not None:
+            usage_payload["provider_total_tokens"] = provider_total_tokens
 
         complete_task(
             task_id=task_id,

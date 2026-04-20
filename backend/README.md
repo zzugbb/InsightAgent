@@ -45,6 +45,7 @@
 - 协同优化：前端知识库治理页已完成可读性收口（表头左对齐与“操作”列、图标刷新、统一动作按钮、来源采样说明与完整来源悬浮查看），继续复用现有治理接口
 - 协同优化：治理接口列表响应补充样本片段（`sample_chunks`）与采样文档标识统计（`top_document_ids`），前端可直接展示“真实内容预览”
 - 阶段 5 增量：`usage-dashboard-lite` 首版后端接口已落地（`GET /api/tasks/usage/dashboard`，提供汇总、近 14 天趋势、会话榜与任务榜，支持按 `session_id` 聚合）
+- 阶段 5 增量：`provider-usage-alignment` 首版已落地（`done.usage` 优先写入 provider 官方 token 用量，缺失字段自动回退估算，并输出 usage 来源字段）
 - 协同修复：任务取消/超时后即使后端追加 `error(task_cancelled/task_timeout)`，前端也不会误判为 fatal 失败态并展示“重试上次发送”
 - 协同修复：流结束后的 `trace/delta` 自动补拉已改为静默，避免底部状态提示被“暂无新的轨迹增量”覆盖
 - 协同修复：待发送用户消息去重改为按 `task_id`，取消后再次发送相同文案可即时显示，不再被上一条同文案误隐藏
@@ -84,6 +85,7 @@
 - W1 可调优优化：trace 写入节流间隔支持环境变量 `TRACE_PERSIST_MIN_INTERVAL_SEC`
 - W1/W2 可调优优化：running 重连流轮询与 heartbeat 参数支持环境变量（`STREAM_RECONNECT_POLL_FAST_SEC` / `STREAM_RECONNECT_POLL_MAX_SEC` / `STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC`）
 - W1 usage 语义优化：`completion_tokens` 改为基于最终输出文本估算（覆盖流式与 fallback 场景）
+- P2 usage 对齐进展：OpenAI-compatible provider 已支持提取官方 usage（含流式优先尝试 `stream_options.include_usage`，不支持时自动回退）
 
 ## 当前已有内容
 
@@ -321,7 +323,7 @@ docker compose up -d chroma
 5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）并接入后端 CI；后续补失败快照留档。
 6. `task-cancel-timeout`：首版已落地（取消接口 + 超时中断 + SSE 事件），并新增 cancel/timeout e2e 脚本；后续补细粒度状态反馈。
 7. `running-task-recovery`：前端恢复链路已接入，后续可补失败快照与恢复可观测字段。
-8. `usage-dashboard-lite` 与 `audit-event-expansion` 已完成首版；下一步推进前端可视化回归与 provider 官方 usage 对齐。
+8. `usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 已完成首版；下一步推进前端可视化回归与 usage 来源可视化/校验。
 
 ### 暂不做
 
@@ -334,5 +336,5 @@ docker compose up -d chroma
 
 - PostgreSQL 已成为默认且唯一运行后端，仍需完成真实环境平迁与回滚演练
 - 真实工具调用循环仍以 mock 工具编排为主（RAG 检索已真实接入）
-- token 仍为估算值（非 provider 官方 usage 回传）
+- token 现为“provider 官方 usage 优先，估算值兜底”（并在 `done.usage` 标注来源字段）
 - `trace/delta` 当前链路已稳定，后续仅做参数级调优（不影响 W2 已收口）
