@@ -38,7 +38,7 @@
 - 阶段 5 增量：`task-cancel-timeout` e2e 已补齐；新增 `scripts/e2e_task_cancel_timeout.py`，覆盖取消链路与超时链路（低 `TASK_TIMEOUT_SEC` 环境）
 - 工程化增量：后端 e2e CI 首版已接入（`.github/workflows/backend-e2e.yml`，已升级 `checkout`/`setup-python` 主版本以适配 GitHub Actions Node 24 运行时；Python **3.14** 与 `compose.full.yml`、根目录 `.python-version` 对齐）
 - 协同进展：前端可视化回归 CI 首版已接入（`.github/workflows/frontend-e2e.yml` + Playwright 用量统计主路径 smoke），复用后端 `:8000` mock 主链路运行环境
-- 协同进展：`frontend-e2e` 工作流已升级 `actions/setup-node@v5`、`actions/upload-artifact@v5`，并设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` 以对齐 GitHub Actions Node 24 策略
+- 协同进展：`frontend-e2e` 工作流已升级 `actions/setup-node@v5`、`actions/upload-artifact@v7`，并设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` 以对齐 GitHub Actions Node 24 策略
 - 协同修复：Playwright 用例登录态注入从“浏览器上下文直接引用常量”改为“显式透传 storage key”，避免前端回归在未登录页误失败（后端接口无需改动）
 - 协同修复（补充）：`usage-dashboard` Playwright 用例新增 UI 登录兜底（发现未进入 Workbench 时自动登录），降低 CI 冷启动状态差异对回归稳定性的影响
 - 协同进展：前端已接入 `running-task-recovery` 首版（刷新/切回会话自动接管 running/pending 任务流），并补齐恢复中/成功/失败可视化提示，复用现有 running reconnect SSE 能力
