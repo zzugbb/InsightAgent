@@ -8,9 +8,6 @@ on:
       - "backend/**"
       - ".github/workflows/frontend-e2e.yml"
       - "compose.full.yml"
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   push:
     branches:
       - main
@@ -19,6 +16,9 @@ env:
       - "backend/**"
       - ".github/workflows/frontend-e2e.yml"
       - "compose.full.yml"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   e2e:
