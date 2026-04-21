@@ -36,7 +36,8 @@
 - 阶段 5 增量：`remote-provider-hardening` 首轮已完成；Provider 运行时统一输出结构化错误码（401/403、429、5xx、网络、无效 JSON、空响应、SSE 中断），任务流 SSE `error` 事件透传 `code/fatal/retryable/detail/status_code`
 - 阶段 5 增量：`task-cancel-timeout` 首版已落地；新增取消接口与超时中断，任务流支持 `cancelled/timeout` 事件
 - 阶段 5 增量：`task-cancel-timeout` e2e 已补齐；新增 `scripts/e2e_task_cancel_timeout.py`，覆盖取消链路与超时链路（低 `TASK_TIMEOUT_SEC` 环境）
-- 工程化增量：后端 e2e CI 首版已接入（`.github/workflows/backend-e2e.yml`，已升级 `checkout`/`setup-python` 主版本以适配 GitHub Actions Node 24 运行时；Python **3.14** 与 `compose.full.yml`、根目录 `.python-version` 对齐）
+- 阶段 5 增量：导出稳定性 e2e 已补齐；新增 `scripts/e2e_export_consistency.py`，覆盖任务/会话导出 JSON+Markdown 一致性、下载附件头与不存在资源 404
+- 工程化增量：后端 e2e CI 已扩展（`.github/workflows/backend-e2e.yml` 覆盖 `baseline/main-path/export-consistency/cancel-timeout`，已升级 `checkout`/`setup-python` 主版本以适配 GitHub Actions Node 24 运行时；Python **3.14** 与 `compose.full.yml`、根目录 `.python-version` 对齐）；并补失败快照归档（e2e 脚本输出落盘 + health/诊断采集 + artifact 上传）
 - 协同进展：前端可视化回归 CI 首版已接入（`.github/workflows/frontend-e2e.yml` + Playwright 用量统计主路径 smoke），复用后端 `:8000` mock 主链路运行环境
 - 协同进展：`frontend-e2e` 工作流已升级 `actions/setup-node@v5`、`actions/upload-artifact@v7`，并设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` 以对齐 GitHub Actions Node 24 策略
 - 协同修复：Playwright 用例登录态注入从“浏览器上下文直接引用常量”改为“显式透传 storage key”，避免前端回归在未登录页误失败（后端接口无需改动）
@@ -304,6 +305,12 @@ python scripts/e2e_baseline.py --base-url http://127.0.0.1:8000
 
 ```bash
 python scripts/e2e_main_path.py --base-url http://127.0.0.1:8000
+
+导出稳定性 e2e（任务/会话导出一致性 + 下载头 + 404 语义）可执行：
+
+```bash
+python scripts/e2e_export_consistency.py --base-url http://127.0.0.1:8000
+```
 ```
 
 取消/超时链路 e2e 可执行（默认先跑取消；超时链路建议在低超时后端实例验证）：
@@ -328,13 +335,13 @@ docker compose up -d chroma
 ### 优先做
 
 1. `full-trace-session-lite`：任务详情快照与导出入口已接入；后续补详情视图增强与导出 e2e。
-2. `trace-export-json-md`：单任务 JSON/Markdown 导出接口已落地；后续补字段稳定性与导出 e2e 校验。
-3. `session-export-lite`：会话级 JSON/Markdown 导出接口已落地；后续补字段稳定性与导出 e2e 校验。
+2. `trace-export-json-md`：单任务 JSON/Markdown 导出接口已落地；字段稳定性与导出 e2e 校验首版已补齐（`e2e_export_consistency`），后续补失败快照归档。
+3. `session-export-lite`：会话级 JSON/Markdown 导出接口已落地；字段稳定性与导出 e2e 校验首版已补齐（`e2e_export_consistency`），后续补失败快照归档。
 4. `remote-provider-hardening`：已完成首轮（错误码归一 + SSE 透传 + 前端映射联动）。
 5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）并接入后端 CI；后续补失败快照留档。
 6. `task-cancel-timeout`：首版已落地（取消接口 + 超时中断 + SSE 事件），并新增 cancel/timeout e2e 脚本；后续补细粒度状态反馈。
 7. `running-task-recovery`：前端恢复链路已接入，后续可补失败快照与恢复可观测字段。
-8. `usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 已完成首版并补齐来源趋势联动；前端可视化回归 CI 首版已接入，下一步推进导出稳定性回归校验。
+8. `usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 已完成首版并补齐来源趋势联动；前端可视化回归 CI、后端导出稳定性回归与后端 e2e 失败快照归档均已接入，下一步推进交互场景扩展与失败快照内容细化。
 
 ### 暂不做
 

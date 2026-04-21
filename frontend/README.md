@@ -52,6 +52,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 对齐：`frontend-e2e` 工作流中的 `actions/setup-node` 与 `actions/upload-artifact` 已分别升级到 `v5` 与 `v7`，并启用 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`，避免 Node 20 action 弃用告警
 - 阶段 5 修复：Playwright 登录态注入修正为显式透传 `localStorage` key，避免浏览器上下文无法访问测试常量导致未登录态误失败
 - 阶段 5 修复（补充）：`usage-dashboard` 用例新增 Workbench 检测与 UI 登录兜底，CI 中即使未命中登录态注入也可稳定继续执行
+- 阶段 5 协同：后端新增 `e2e_export_consistency` 并接入 `backend-e2e`，导出稳定性（任务/会话 JSON+Markdown 一致性）已有自动回归兜底
+- 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
 
 ## 当前已有内容
 
@@ -258,5 +260,5 @@ npm run dev
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦导出稳定性回归校验与用例扩展（会话导出/任务导出/取消恢复交互）。
+- 下一步聚焦前端交互场景扩展回归（会话导出入口可见性、取消恢复与切会话稳定性）。
 - `rag-kb-governance-lite`、`usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 首版已完成。

@@ -77,11 +77,17 @@ jobs:
           cat /tmp/backend-8000.log || true
           exit 1
 
-      - name: Run baseline/main-path/cancel e2e on :8000
+      - name: Run baseline/main-path/export/cancel e2e on :8000
         run: |
-          python3 backend/scripts/e2e_baseline.py --base-url http://127.0.0.1:8000
-          python3 backend/scripts/e2e_main_path.py --base-url http://127.0.0.1:8000
-          python3 backend/scripts/e2e_task_cancel_timeout.py --base-url http://127.0.0.1:8000 --skip-timeout
+          set -o pipefail
+          python3 backend/scripts/e2e_baseline.py --base-url http://127.0.0.1:8000 \
+            | tee /tmp/e2e-baseline-8000.log
+          python3 backend/scripts/e2e_main_path.py --base-url http://127.0.0.1:8000 \
+            | tee /tmp/e2e-main-path-8000.log
+          python3 backend/scripts/e2e_export_consistency.py --base-url http://127.0.0.1:8000 \
+            | tee /tmp/e2e-export-consistency-8000.log
+          python3 backend/scripts/e2e_task_cancel_timeout.py --base-url http://127.0.0.1:8000 --skip-timeout \
+            | tee /tmp/e2e-cancel-8000.log
 
       - name: Start backend on :8010 (timeout=1s)
         env:
@@ -109,10 +115,29 @@ jobs:
 
       - name: Run timeout e2e on :8010
         run: |
+          set -o pipefail
           python3 backend/scripts/e2e_task_cancel_timeout.py \
             --base-url http://127.0.0.1:8010 \
             --cancel-prompt-words 180000 \
-            --timeout-prompt-words 250000
+            --timeout-prompt-words 250000 \
+            | tee /tmp/e2e-timeout-8010.log
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          {
+            echo "===== date ====="
+            date -u
+            echo ""
+            echo "===== ps -ef (python/uvicorn) ====="
+            ps -ef | grep -E "python|uvicorn" || true
+            echo ""
+            echo "===== health :8000 ====="
+            curl -i -m 5 http://127.0.0.1:8000/health || true
+            echo ""
+            echo "===== health :8010 ====="
+            curl -i -m 5 http://127.0.0.1:8010/health || true
+          } > /tmp/backend-e2e-diagnostics.txt
 
       - name: Show backend logs on failure
         if: failure()
@@ -121,3 +146,21 @@ jobs:
           cat /tmp/backend-8000.log || true
           echo "===== backend-8010.log ====="
           cat /tmp/backend-8010.log || true
+
+      - name: Upload backend e2e artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-e2e-artifacts
+          path: |
+            /tmp/backend-8000.log
+            /tmp/backend-8010.log
+            /tmp/health-8000.json
+            /tmp/health-8010.json
+            /tmp/e2e-main-path-8000.log
+            /tmp/e2e-baseline-8000.log
+            /tmp/e2e-export-consistency-8000.log
+            /tmp/e2e-cancel-8000.log
+            /tmp/e2e-timeout-8010.log
+            /tmp/backend-e2e-diagnostics.txt
+          if-no-files-found: ignore
