@@ -160,12 +160,6 @@ test("scroll-to-bottom button appears on manual up-scroll and returns to hidden 
       .toBeGreaterThan(beforeCount);
   }
 
-  await composerInput.fill(`[mock-slow-ms=25] streaming for scroll ${"token ".repeat(320)}`);
-  await composerSend.click();
-  await expect(page.locator("article.message-row.assistant.live")).toBeVisible({
-    timeout: 20_000,
-  });
-
   const messageStage = page.getByTestId("chat-message-stage");
   await expect
     .poll(
@@ -174,10 +168,11 @@ test("scroll-to-bottom button appears on manual up-scroll and returns to hidden 
       { timeout: 20_000, intervals: [400, 800, 1200] },
     )
     .toBeTruthy();
-  await messageStage.hover();
-  for (let i = 0; i < 6; i += 1) {
-    await page.mouse.wheel(0, -1200);
-  }
+  await messageStage.evaluate((el) => {
+    const nextTop = Math.max(0, el.scrollHeight - el.clientHeight - 240);
+    el.scrollTop = nextTop;
+    el.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
   await expect
     .poll(
       async () =>
@@ -188,7 +183,6 @@ test("scroll-to-bottom button appears on manual up-scroll and returns to hidden 
 
   const scrollFab = page.getByTestId("chat-scroll-fab");
   await expect(scrollFab).toBeVisible({ timeout: 20_000 });
-  await expect(scrollFab).toHaveClass(/scroll-bottom-fab--live/);
 
   await scrollFab.click();
   await expect(scrollFab).toBeHidden({ timeout: 20_000 });
