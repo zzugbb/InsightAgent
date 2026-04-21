@@ -92,14 +92,21 @@ jobs:
         run: npm --prefix frontend ci
 
       - name: Install Playwright browser
-        run: cd frontend && npx playwright install --with-deps chromium
+        run: cd frontend && npx playwright install --with-deps chromium firefox webkit
 
-      - name: Run frontend e2e
+      - name: Run frontend smoke e2e matrix
         run: |
           cd frontend
           PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 \
           PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 \
-          npm run test:e2e -- --project=chromium
+          npm run test:e2e:smoke:matrix
+
+      - name: Run frontend full e2e on chromium
+        run: |
+          cd frontend
+          PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 \
+          PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 \
+          npm run test:e2e
 
       - name: Show backend logs on failure
         if: failure()

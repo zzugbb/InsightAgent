@@ -43,7 +43,9 @@
 - 协同修复：Playwright 用例登录态注入从“浏览器上下文直接引用常量”改为“显式透传 storage key”，避免前端回归在未登录页误失败（后端接口无需改动）
 - 协同修复（补充）：`usage-dashboard` Playwright 用例新增 UI 登录兜底（发现未进入 Workbench 时自动登录），降低 CI 冷启动状态差异对回归稳定性的影响
 - 协同进展（补充）：前端 Playwright 回归已扩展覆盖设置治理入口（审计日志/知识库治理弹窗可见性），并为设置菜单项补充稳定 `data-testid`，后端接口契约无需改动
-- 协同进展（补充二次）：前端 Playwright 回归新增 `workbench-main-path` 场景并跑通（对话发送、Trace、RAG ingest/query、任务/会话导出、运行中任务刷新恢复与取消后重发），当前本地回归 `4/4` 全通过
+- 协同进展（补充二次）：前端 Playwright 回归新增 `workbench-main-path` 场景并跑通（对话发送、Trace、RAG ingest/query、任务/会话导出、运行中任务刷新恢复与取消后重发）
+- 协同进展（补充三次）：前端 Playwright 回归新增 `workbench-edge-cases` 场景（RAG 空命中可见性 + 缺失任务/会话导出 `404` 语义断言），并抽出 e2e 公共 helper（鉴权注入/Workbench 就绪）；本地回归已验证 chromium 全量 `6/6` 与 smoke 矩阵 `12/12`
+- 协同进展（矩阵）：`frontend-e2e` 工作流新增 smoke 三浏览器（chromium/firefox/webkit）+ chromium 全量分层执行，兼顾反馈速度与兼容性覆盖
 - 协同稳定性补丁：`mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现 running-task-recovery 场景，默认请求行为不变
 - 协同进展：前端已接入 `running-task-recovery` 首版（刷新/切回会话自动接管 running/pending 任务流），并补齐恢复中/成功/失败可视化提示，复用现有 running reconnect SSE 能力
 - 协同修复：前端流式展示已按 `session_id` 做会话隔离，切换会话时不再短暂串出其他会话任务
@@ -344,7 +346,7 @@ docker compose up -d chroma
 5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）并接入后端 CI；后续补失败快照留档。
 6. `task-cancel-timeout`：首版已落地（取消接口 + 超时中断 + SSE 事件），并新增 cancel/timeout e2e 脚本；后续补细粒度状态反馈。
 7. `running-task-recovery`：前端恢复链路已接入，后续可补失败快照与恢复可观测字段。
-8. `usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 已完成首版并补齐来源趋势联动；前端可视化回归 CI 已扩展至主链路导出与取消恢复场景，后端导出稳定性回归与后端 e2e 失败快照归档均已接入，下一步可按需细化失败快照内容与跨浏览器矩阵。
+8. `usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 已完成首版并补齐来源趋势联动；前端可视化回归 CI 已扩展至主链路导出、取消恢复与边界异常场景，并接入 smoke 跨浏览器矩阵；后端导出稳定性回归与后端 e2e 失败快照归档均已接入，下一步可细化失败快照内容与视觉断言。
 
 ### 暂不做
 
