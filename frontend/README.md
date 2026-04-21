@@ -56,7 +56,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 回归扩展（二次）：新增 `workbench-main-path` 用例，覆盖发送消息、Trace 可见、RAG ingest/query、任务与会话导出（JSON/Markdown）、运行中任务刷新恢复与取消后重发
 - 阶段 5 回归扩展（三次）：新增 `workbench-edge-cases` 用例，覆盖 RAG 空命中可见性与导出接口缺失资源 `404` 语义
 - 阶段 5 回归工程化：抽取 `e2e/helpers/workbench.ts` 统一鉴权注入与 Workbench 就绪逻辑，降低多 spec 重复代码
-- 阶段 5 回归矩阵：Playwright 新增 `firefox/webkit` 项目；CI 改为 smoke 三浏览器 + chromium 全量；并新增 remote 错误码映射回归；本地回归已验证 chromium 全量 `22/22` 与 smoke 矩阵 `15/15`
+- 阶段 5 回归矩阵：Playwright 新增 `firefox/webkit` 项目；CI 改为 smoke 三浏览器 + chromium 全量；并新增 remote 错误码映射回归；本地回归已验证 chromium 全量 `25/25` 与 smoke 矩阵 `15/15`
 - 阶段 5 回归深化：为 usage dashboard / 知识库治理 / 聊天回底按钮补充稳定测试锚点（`data-testid`），并新增细粒度断言（来源筛选请求参数、表头左对齐、治理动作无边框文本按钮、上滑阅读时回底按钮显隐与回底）
 - 阶段 5 回归深化（二次）：`workbench-remote-errors` 新增 remote `503` 错误码映射与“取消后发送冷却恢复”回归（冷却期阻断重复发送、冷却结束恢复发送），并使用本地 mock OpenAI-compatible 流服务稳定复现
 - 阶段 5 回归深化（三次）：新增模型设置弹窗 `settings/validate` 异常态回归（`remote_api_key_unauthorized`、`remote_preflight_network_error`），并为模型设置控件补稳定 `data-testid`（`model-settings-*`）以降低多语言文案依赖导致的波动
@@ -64,6 +64,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 回归深化（五次）：`workbench-edge-cases` 补齐导出异常态语义（空会话导出 JSON/Markdown、跨用户 task/session 导出隔离 404），覆盖空数据与权限边界
 - 阶段 5 回归深化（六次）：导出错误提示统一走 `ApiError` 映射（避免直接暴露后端原始 detail）；新增 UI 回归验证“切换 token 后导出 404 提示 + 按钮恢复”
 - 阶段 5 回归深化（七次）：`workbench-main-path` 恢复取消链路稳态加固，新增“发送后先确认后端 running/pending 再刷新”与“等待取消按钮期间持续维持 Context 激活”断言，修复自动恢复切回 Trace 导致的偶发失败；本地 chromium 全量回归更新为 `22/22`
+- 阶段 5 回归深化（八次）：`workbench-edge-cases` 一次性补齐 3 条会话与取消交互回归（取消后同文案即时重发不丢消息、跨会话切换时流式状态不串台且切回可取消、mock 取消后不出现重试入口并可快速恢复发送）；本地 chromium 全量回归更新为 `25/25`
 - 阶段 5 稳定性补丁：后端 `mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现取消恢复场景，普通请求无行为变化
 - 阶段 5 协同：后端新增 `e2e_export_consistency` 并接入 `backend-e2e`，导出稳定性（任务/会话 JSON+Markdown 一致性）已有自动回归兜底
 - 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
@@ -286,5 +287,5 @@ npm run test:e2e:smoke:matrix
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦异常态覆盖深化与更细节的视觉一致性回归（当前本地已验证 Chromium 全量 22/22 与 smoke 跨浏览器矩阵 15/15）。
+- 下一步聚焦异常态覆盖深化与更细节的视觉一致性回归（当前本地已验证 Chromium 全量 25/25 与 smoke 跨浏览器矩阵 15/15）。
 - `rag-kb-governance-lite`、`usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 首版已完成。

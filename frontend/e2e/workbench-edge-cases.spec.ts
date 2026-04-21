@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import {
   ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
@@ -88,6 +88,14 @@ async function selectSessionByTitle(page: Page, title: string): Promise<void> {
       return titleText.includes(title);
     }, { timeout: 20_000, intervals: [300, 600, 1200] })
     .toBeTruthy();
+}
+
+async function waitForContextCancelButton(page: Page): Promise<Locator> {
+  const cancelButton = page
+    .locator('[data-testid="inspector-task-cancel"]:visible')
+    .first();
+  await expect(cancelButton).toBeVisible({ timeout: 20_000 });
+  return cancelButton;
 }
 
 test("rag query empty state is visible @smoke", async ({ page, request }) => {
@@ -313,4 +321,121 @@ test("cross-session switch keeps cancel and export scoped to active session", as
   });
   await composerInput.fill("session b still can send");
   await expect(composerSend).toBeEnabled({ timeout: 20_000 });
+});
+
+test("cancel allows immediate resend with identical prompt without dedupe loss", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  const samePrompt = `[mock-slow-ms=80] duplicate-visible ${"stream ".repeat(240)}`;
+
+  await composerInput.fill(samePrompt);
+  await composerSend.click();
+
+  await openInspectorContextTab(page);
+  const firstCancel = await waitForContextCancelButton(page);
+  await firstCancel.click();
+
+  await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
+    timeout: 4_000,
+  });
+  await composerInput.fill(samePrompt);
+  await expect(composerSend).toBeEnabled({ timeout: 8_000 });
+  await composerSend.click();
+  const duplicatedUserRows = page
+    .locator("article.message-row.user")
+    .filter({ hasText: samePrompt });
+  await expect
+    .poll(async () => duplicatedUserRows.count(), {
+      timeout: 10_000,
+      intervals: [300, 600, 1000],
+    })
+    .toBeGreaterThanOrEqual(2);
+
+  await openInspectorContextTab(page);
+  const secondCancel = await waitForContextCancelButton(page);
+  await secondCancel.click();
+  await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
+    timeout: 8_000,
+  });
+});
+
+test("streaming state stays scoped when switching sessions and resumes on return", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  const sessionATitle = `pw-stream-a-${Date.now()}`;
+  const sessionBTitle = `pw-stream-b-${Date.now()}`;
+  await createSessionWithTitle(request, auth.access_token, sessionATitle);
+  await createSessionWithTitle(request, auth.access_token, sessionBTitle);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await selectSessionByTitle(page, sessionATitle);
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  await composerInput.fill(`[mock-slow-ms=95] scoped-stream ${"stream ".repeat(480)}`);
+  await composerSend.click();
+
+  await expect(page.locator("article.message-row.assistant.live")).toBeVisible({
+    timeout: 20_000,
+  });
+
+  await selectSessionByTitle(page, sessionBTitle);
+  await expect(page.locator("article.message-row.assistant.live")).toHaveCount(0);
+  await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
+    timeout: 10_000,
+  });
+  await composerInput.fill("session b still can send while other session streams");
+  await expect(composerSend).toBeEnabled({ timeout: 10_000 });
+
+  await selectSessionByTitle(page, sessionATitle);
+  await openInspectorContextTab(page);
+  const recoveredCancel = await waitForContextCancelButton(page);
+  await recoveredCancel.click();
+  await expect(composerSend).toBeEnabled({ timeout: 10_000 });
+});
+
+test("mock cancel does not show retry affordance and send recovers quickly", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  await composerInput.fill(`[mock-slow-ms=75] cancel-no-retry ${"stream ".repeat(260)}`);
+  await composerSend.click();
+
+  await openInspectorContextTab(page);
+  const cancelButton = await waitForContextCancelButton(page);
+  await cancelButton.click();
+
+  await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
+    timeout: 4_000,
+  });
+  await expect(page.locator(".composer-retry")).toHaveCount(0);
+  await expect(page.getByTestId("composer-hint")).not.toHaveClass(
+    /composer-hint--error/,
+  );
+
+  await composerInput.fill("post-cancel still sends in mock mode");
+  await expect(composerSend).toBeEnabled({ timeout: 8_000 });
+  await composerSend.click();
+  await expect(page.locator(".trace-card").first()).toBeVisible({ timeout: 20_000 });
 });
