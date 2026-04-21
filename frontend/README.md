@@ -52,6 +52,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 对齐：`frontend-e2e` 工作流中的 `actions/setup-node` 与 `actions/upload-artifact` 已分别升级到 `v5` 与 `v7`，并启用 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`，避免 Node 20 action 弃用告警
 - 阶段 5 修复：Playwright 登录态注入修正为显式透传 `localStorage` key，避免浏览器上下文无法访问测试常量导致未登录态误失败
 - 阶段 5 修复（补充）：`usage-dashboard` 用例新增 Workbench 检测与 UI 登录兜底，CI 中即使未命中登录态注入也可稳定继续执行
+- 阶段 5 回归扩展：Playwright 用量统计回归升级为双场景（来源趋势可见 + 设置治理入口可见性），并为设置菜单项补充稳定测试标识 `settings-menu-audit/settings-menu-knowledge-base/settings-menu-model`
+- 阶段 5 回归扩展（二次）：新增 `workbench-main-path` 用例，覆盖发送消息、Trace 可见、RAG ingest/query、任务与会话导出（JSON/Markdown）、运行中任务刷新恢复与取消后重发；当前本地 Playwright `4/4` 通过
+- 阶段 5 稳定性补丁：后端 `mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现取消恢复场景，普通请求无行为变化
 - 阶段 5 协同：后端新增 `e2e_export_consistency` 并接入 `backend-e2e`，导出稳定性（任务/会话 JSON+Markdown 一致性）已有自动回归兜底
 - 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
 
@@ -237,14 +240,14 @@ npm run dev
 
 ### 优先做
 
-1. `full-trace-session-lite`：任务详情抽屉/页面（任务快照 + 回放）已接入；后续补详情视图增强与导出 e2e。
-2. `trace-export-json-md`：单任务 JSON/Markdown 导出入口已接入；后续补导出 e2e。
-3. `session-export-lite`：当前会话 JSON/Markdown 导出入口已接入；后续补导出 e2e。
+1. `full-trace-session-lite`：任务详情抽屉/页面（任务快照 + 回放）已接入；后续补详情视图增强与更细粒度回放断言。
+2. `trace-export-json-md`：单任务 JSON/Markdown 导出入口与 Playwright 回归已接入；后续补异常态断言（空数据/404/权限）。
+3. `session-export-lite`：当前会话 JSON/Markdown 导出入口与 Playwright 回归已接入；后续补异常态断言（空会话/跨会话切换）。
 4. `remote-provider-hardening`：真实模型错误提示、重试建议与设置入口联动。
-5. `e2e-main-path`：后端主链路 e2e 脚本已落地（登录、模型设置、发送消息、Trace 回放、RAG 检索、导出），前端后续接入 CI 与可视化回归。
-6. `task-cancel-timeout`：首版已落地（取消按钮 + 状态提示）；后端 e2e/CI 已补齐，前端后续补更细粒度反馈与可视化回归。
+5. `e2e-main-path`：后端主链路 e2e 脚本已落地；前端 Playwright 现已覆盖主链路（登录态注入 + Workbench 兜底、任务流、Trace、RAG、导出）。
+6. `task-cancel-timeout`：首版已落地（取消按钮 + 状态提示）；后端 e2e/CI 已补齐，前端 Playwright 已补刷新恢复 + 取消后重发闭环。
 7. `running-task-recovery`：前端首版与恢复状态提示已落地（刷新/切回会话自动恢复 running 任务流）；后续补失败快照与可观测指标。
-7. `usage-dashboard-lite`：用户/会话/任务维度成本统计增强。
+8. `usage-dashboard-lite`：用户/会话/任务维度成本统计增强。
 
 ### 暂不做
 
@@ -260,5 +263,5 @@ npm run dev
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦前端交互场景扩展回归（会话导出入口可见性、取消恢复与切会话稳定性）。
+- 下一步聚焦跨浏览器矩阵与更细粒度视觉断言（当前 Chromium 主链路 4/4 已通过）。
 - `rag-kb-governance-lite`、`usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 首版已完成。

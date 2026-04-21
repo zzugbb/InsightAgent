@@ -78,6 +78,7 @@ export const Composer = forwardRef(function Composer(
         autoSize={{ minRows, maxRows }}
         aria-label={t.composer.inputAria}
         className="composer-textarea"
+        data-testid="composer-input"
       />
       <div className="composer-footer">
         <div className="composer-footer-main">
@@ -101,6 +102,7 @@ export const Composer = forwardRef(function Composer(
               htmlType="submit"
               disabled={sendDisabled}
               loading={sending}
+              data-testid="composer-send"
             >
               {sending ? t.composer.sending : t.composer.send}
             </Button>

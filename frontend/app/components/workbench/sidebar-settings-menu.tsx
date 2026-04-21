@@ -404,6 +404,7 @@ export function SidebarSettingsMenu({
           role="menuitem"
           className="settings-menu-row settings-menu-row--footer"
           onClick={openKnowledgeBase}
+          data-testid="settings-menu-knowledge-base"
         >
           <Database size={18} strokeWidth={1.75} aria-hidden />
           <span className="settings-menu-row-label">
@@ -422,6 +423,7 @@ export function SidebarSettingsMenu({
           role="menuitem"
           className="settings-menu-row settings-menu-row--footer"
           onClick={openAudit}
+          data-testid="settings-menu-audit"
         >
           <ShieldCheck size={18} strokeWidth={1.75} aria-hidden />
           <span className="settings-menu-row-label">{t.sidebar.menuAudit}</span>
@@ -455,6 +457,7 @@ export function SidebarSettingsMenu({
           role="menuitem"
           className="settings-menu-row settings-menu-row--footer"
           onClick={openModel}
+          data-testid="settings-menu-model"
         >
           <Monitor size={18} strokeWidth={1.75} aria-hidden />
           <span className="settings-menu-row-label">{t.sidebar.menuModel}</span>

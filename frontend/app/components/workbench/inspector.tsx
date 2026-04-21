@@ -1080,6 +1080,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               <Button
                 size="small"
                 loading={taskExporting === "json"}
+                data-testid="inspector-task-export-json"
                 onClick={() => {
                   void handleExportTask("json");
                 }}
@@ -1089,6 +1090,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               <Button
                 size="small"
                 loading={taskExporting === "markdown"}
+                data-testid="inspector-task-export-markdown"
                 onClick={() => {
                   void handleExportTask("markdown");
                 }}
@@ -1116,6 +1118,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             size="small"
             loading={sessionExporting === "json"}
             disabled={!activeSessionId}
+            data-testid="inspector-session-export-json"
             onClick={() => {
               void handleExportSession("json");
             }}
@@ -1126,6 +1129,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             size="small"
             loading={sessionExporting === "markdown"}
             disabled={!activeSessionId}
+            data-testid="inspector-session-export-markdown"
             onClick={() => {
               void handleExportSession("markdown");
             }}
@@ -1356,8 +1360,13 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               onPressEnter={applyRagKnowledgeBase}
               placeholder={t.inspector.rag.kbIdPlaceholder}
               className="rag-kb-input"
+              data-testid="inspector-rag-kb-input"
             />
-            <Button size="small" onClick={applyRagKnowledgeBase}>
+            <Button
+              size="small"
+              onClick={applyRagKnowledgeBase}
+              data-testid="inspector-rag-kb-apply"
+            >
               {t.inspector.rag.applyKb}
             </Button>
           </Space.Compact>
@@ -1415,6 +1424,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             placeholder={t.inspector.rag.ingestPlaceholder}
             rows={3}
             disabled={ragIngestMutation.isPending}
+            data-testid="inspector-rag-ingest-input"
           />
           <Input
             size="small"
@@ -1422,12 +1432,14 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             onChange={(e) => setRagIngestSource(e.target.value)}
             placeholder={t.inspector.rag.ingestSourcePlaceholder}
             disabled={ragIngestMutation.isPending}
+            data-testid="inspector-rag-ingest-source"
           />
           <div className="memory-debug-actions">
             <Button
               type="primary"
               size="small"
               loading={ragIngestMutation.isPending}
+              data-testid="inspector-rag-ingest-submit"
               onClick={() => {
                 const text = ragIngestDraft.trim();
                 if (!text) {
@@ -1460,11 +1472,13 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             placeholder={t.inspector.rag.queryPlaceholder}
             rows={2}
             disabled={ragQueryMutation.isPending}
+            data-testid="inspector-rag-query-input"
           />
           <div className="memory-debug-actions">
             <Button
               size="small"
               loading={ragQueryMutation.isPending}
+              data-testid="inspector-rag-query-submit"
               onClick={() => {
                 const text = ragQueryDraft.trim();
                 if (!text) {
@@ -1489,7 +1503,11 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             </p>
           ) : null}
           {ragQueryMutation.isSuccess && ragQueryMutation.data ? (
-            <div className="memory-query-results" aria-live="polite">
+            <div
+              className="memory-query-results"
+              aria-live="polite"
+              data-testid="inspector-rag-query-results"
+            >
               <p className="memory-query-hits-label">
                 {t.inspector.rag.queryHits(ragQueryMutation.data.hit_count)}
               </p>
@@ -1537,6 +1555,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                 size="small"
                 danger
                 loading={cancellingTaskId === activeTask.id}
+                data-testid="inspector-task-cancel"
                 onClick={() => onCancelTask(activeTask)}
               >
                 {t.inspector.taskCancel}
@@ -1737,12 +1756,20 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             items={[
               {
                 key: "trace",
-                label: t.inspector.tabTrace,
+                label: (
+                  <span data-testid="inspector-tab-trace">
+                    {t.inspector.tabTrace}
+                  </span>
+                ),
                 children: tracePanel,
               },
               {
                 key: "context",
-                label: t.inspector.tabContext,
+                label: (
+                  <span data-testid="inspector-tab-context">
+                    {t.inspector.tabContext}
+                  </span>
+                ),
                 children: contextPanel,
               },
             ]}
