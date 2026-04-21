@@ -256,6 +256,7 @@ export function ModelSettingsModal({
         >
           <Form.Item label={t.settings.fieldMode}>
             <Select
+              data-testid="model-settings-mode"
               value={form.mode}
               onChange={handleModeChange}
               options={[
@@ -271,11 +272,12 @@ export function ModelSettingsModal({
                 name="model-provider"
                 data-1p-ignore="true"
                 data-lpignore="true"
+                data-testid="model-settings-provider"
                 value={form.provider}
                 onChange={(e) => setRemoteField("provider", e.target.value)}
               />
             ) : (
-              <Input value="mock" disabled />
+              <Input value="mock" disabled data-testid="model-settings-provider" />
             )}
           </Form.Item>
           <Form.Item label={t.settings.fieldModel}>
@@ -285,11 +287,12 @@ export function ModelSettingsModal({
                 name="model-name"
                 data-1p-ignore="true"
                 data-lpignore="true"
+                data-testid="model-settings-model"
                 value={form.model}
                 onChange={(e) => setRemoteField("model", e.target.value)}
               />
             ) : (
-              <Input value="mock-gpt" disabled />
+              <Input value="mock-gpt" disabled data-testid="model-settings-model" />
             )}
           </Form.Item>
           {isRemoteMode ? (
@@ -300,6 +303,7 @@ export function ModelSettingsModal({
                   name="model-base-url"
                   data-1p-ignore="true"
                   data-lpignore="true"
+                  data-testid="model-settings-base-url"
                   value={form.base_url}
                   onChange={(e) => setRemoteField("base_url", e.target.value)}
                 />
@@ -310,6 +314,7 @@ export function ModelSettingsModal({
                   name="model-api-key"
                   data-1p-ignore="true"
                   data-lpignore="true"
+                  data-testid="model-settings-api-key"
                   value={form.api_key}
                   onChange={(e) => setRemoteField("api_key", e.target.value)}
                   placeholder={
@@ -327,12 +332,14 @@ export function ModelSettingsModal({
                 type="primary"
                 htmlType="submit"
                 loading={saveMutation.isPending}
+                data-testid="model-settings-save"
               >
                 {saveMutation.isPending ? t.settings.saving : t.settings.save}
               </Button>
               <Button
                 onClick={validateForm}
                 loading={validateMutation.isPending}
+                data-testid="model-settings-validate"
               >
                 {validateMutation.isPending
                   ? t.settings.validating

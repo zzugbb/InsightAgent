@@ -12,12 +12,17 @@ import {
 } from "./helpers/workbench";
 
 async function openInspectorContextTab(page: Page): Promise<void> {
-  const contextTab = page
-    .locator(".ant-tabs-tab")
-    .filter({ has: page.getByTestId("inspector-tab-context") });
+  const contextTab = page.getByTestId("inspector-tab-context");
+  const contextPanel = page.locator("#inspector-panel-context");
   await expect(contextTab).toBeVisible();
-  await contextTab.click();
-  await expect(page.locator("#inspector-panel-context")).toBeVisible();
+  for (let i = 0; i < 4; i += 1) {
+    await contextTab.click();
+    if (await contextPanel.isVisible().catch(() => false)) {
+      return;
+    }
+    await page.waitForTimeout(120);
+  }
+  await expect(contextPanel).toBeVisible({ timeout: 10_000 });
 }
 
 async function triggerDownloadAndAssertName(
