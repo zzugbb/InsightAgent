@@ -82,7 +82,10 @@ export const Composer = forwardRef(function Composer(
       />
       <div className="composer-footer">
         <div className="composer-footer-main">
-          <p className={`composer-hint composer-hint--${hintVariant}`}>
+          <p
+            className={`composer-hint composer-hint--${hintVariant}`}
+            data-testid="composer-hint"
+          >
             {hint}
           </p>
           {showRetry && onRetry ? (
