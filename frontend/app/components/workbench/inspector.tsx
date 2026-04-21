@@ -11,7 +11,7 @@ import {
   type MouseEvent,
 } from "react";
 
-import { apiJson, apiPostJson, authFetch } from "../../../lib/api-client";
+import { ApiError, apiJson, apiPostJson, authFetch } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
 import type { TraceStepPayload } from "../../../lib/types/trace";
 import {
@@ -220,6 +220,30 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     URL.revokeObjectURL(url);
   };
 
+  const fetchExportResponse = async (url: string): Promise<Response> => {
+    let response: Response;
+    try {
+      response = await authFetch(url, { cache: "no-store" });
+    } catch (cause) {
+      throw new ApiError(
+        0,
+        cause instanceof TypeError ? "NETWORK" : "UNKNOWN",
+        url,
+        cause instanceof Error ? cause.message : String(cause),
+      );
+    }
+    if (response.ok) {
+      return response;
+    }
+    const detail = await response.text();
+    throw new ApiError(
+      response.status,
+      `HTTP ${response.status}`,
+      url,
+      detail.slice(0, 280),
+    );
+  };
+
   const handleExportTask = async (format: "json" | "markdown") => {
     if (!activeTask?.id) {
       message.warning(t.inspector.taskSnapshotNoSelection);
@@ -232,15 +256,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       format === "json"
         ? `insightagent-task-${activeTask.id}.json`
         : `insightagent-task-${activeTask.id}.md`;
+    const requestUrl = `${apiBaseUrl}/api/tasks/${taskId}/export/${route}?download=1`;
     try {
-      const response = await authFetch(
-        `${apiBaseUrl}/api/tasks/${taskId}/export/${route}?download=1`,
-        { cache: "no-store" },
-      );
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(detail || `${response.status}`);
-      }
+      const response = await fetchExportResponse(requestUrl);
       const filename = parseAttachmentFilename(
         response.headers.get("content-disposition"),
         fallbackFilename,
@@ -273,15 +291,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       format === "json"
         ? `insightagent-session-${sessionId}.json`
         : `insightagent-session-${sessionId}.md`;
+    const requestUrl =
+      `${apiBaseUrl}/api/sessions/${encodedSessionId}/export/${route}?download=1`;
     try {
-      const response = await authFetch(
-        `${apiBaseUrl}/api/sessions/${encodedSessionId}/export/${route}?download=1`,
-        { cache: "no-store" },
-      );
-      if (!response.ok) {
-        const detail = await response.text();
-        throw new Error(detail || `${response.status}`);
-      }
+      const response = await fetchExportResponse(requestUrl);
       const filename = parseAttachmentFilename(
         response.headers.get("content-disposition"),
         fallbackFilename,

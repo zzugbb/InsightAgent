@@ -1,8 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import {
+  ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
   API_BASE_URL,
+  AUTH_SESSION_ID_STORAGE_KEY,
+  AUTH_TOKEN_STORAGE_KEY,
   ensureWorkbenchReady,
+  REFRESH_TOKEN_STORAGE_KEY,
   registerViaApi,
   runTaskToDone,
   seedBrowserAuth,
@@ -20,6 +24,14 @@ async function openInspectorContextTab(page: Page): Promise<void> {
     await page.waitForTimeout(120);
   }
   await expect(contextPanel).toBeVisible({ timeout: 10_000 });
+}
+
+async function expectToastContains(page: Page, text: string): Promise<void> {
+  const toast = page
+    .locator(".ant-message-notice-content")
+    .filter({ hasText: text })
+    .last();
+  await expect(toast).toBeVisible({ timeout: 20_000 });
 }
 
 test("rag query empty state is visible @smoke", async ({ page, request }) => {
@@ -140,4 +152,62 @@ test("export endpoints are isolated across users", async ({ request }) => {
   );
   expect(outsiderSessionMd.status()).toBe(404);
   expect(await outsiderSessionMd.text()).toContain("Session not found");
+});
+
+test("task export keeps localized 404 hint when token ownership changes", async ({
+  page,
+  request,
+}) => {
+  const owner = await registerViaApi(request);
+  const outsider = await registerViaApi(request);
+  await seedBrowserAuth(page, owner);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, owner);
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  await composerInput.fill("playwright export toast 404 mapping");
+  await composerSend.click();
+
+  await expect(page.locator(".trace-card").first()).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.locator("article.message-row.assistant").filter({
+      hasText: "This is a mock response from InsightAgent",
+    }).first(),
+  ).toBeVisible({ timeout: 20_000 });
+
+  await openInspectorContextTab(page);
+  await page.evaluate(
+    ({
+      accessToken,
+      refreshToken,
+      authSessionId,
+      tokenKey,
+      refreshKey,
+      authSessionKey,
+      activeSessionKey,
+    }) => {
+      localStorage.setItem(tokenKey, accessToken);
+      localStorage.setItem(refreshKey, refreshToken);
+      localStorage.setItem(authSessionKey, authSessionId);
+      localStorage.removeItem(activeSessionKey);
+    },
+    {
+      accessToken: outsider.access_token,
+      refreshToken: outsider.refresh_token,
+      authSessionId: outsider.session_id,
+      tokenKey: AUTH_TOKEN_STORAGE_KEY,
+      refreshKey: REFRESH_TOKEN_STORAGE_KEY,
+      authSessionKey: AUTH_SESSION_ID_STORAGE_KEY,
+      activeSessionKey: ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
+    },
+  );
+
+  const exportJsonButton = page.getByTestId("inspector-task-export-json");
+  await exportJsonButton.click();
+  await expectToastContains(page, "404");
+  await expect(exportJsonButton).not.toHaveClass(/ant-btn-loading/, {
+    timeout: 10_000,
+  });
 });

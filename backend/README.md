@@ -44,12 +44,13 @@
 - 协同修复（补充）：`usage-dashboard` Playwright 用例新增 UI 登录兜底（发现未进入 Workbench 时自动登录），降低 CI 冷启动状态差异对回归稳定性的影响
 - 协同进展（补充）：前端 Playwright 回归已扩展覆盖设置治理入口（审计日志/知识库治理弹窗可见性），并为设置菜单项补充稳定 `data-testid`，后端接口契约无需改动
 - 协同进展（补充二次）：前端 Playwright 回归新增 `workbench-main-path` 场景并跑通（对话发送、Trace、RAG ingest/query、任务/会话导出、运行中任务刷新恢复与取消后重发）
-- 协同进展（补充三次）：前端 Playwright 回归新增 `workbench-edge-cases` 场景（RAG 空命中可见性 + 缺失任务/会话导出 `404` 语义断言），并抽出 e2e 公共 helper（鉴权注入/Workbench 就绪）；随后新增 remote 错误映射场景并完成本地回归：chromium 全量 `20/20`、smoke 矩阵 `15/15`
+- 协同进展（补充三次）：前端 Playwright 回归新增 `workbench-edge-cases` 场景（RAG 空命中可见性 + 缺失任务/会话导出 `404` 语义断言），并抽出 e2e 公共 helper（鉴权注入/Workbench 就绪）；随后新增 remote 错误映射场景并完成本地回归：chromium 全量 `21/21`、smoke 矩阵 `15/15`
 - 协同进展（细粒度断言）：前端 usage/知识库治理/回底按钮回归已补稳定测试锚点（`data-testid`），并覆盖来源筛选请求参数、表头左对齐、治理动作无边框文本按钮、滚动交互显隐等高频回归点
 - 协同进展（异常态深化）：前端 `workbench-remote-errors` 已补 remote `503` 错误码映射与“取消后发送冷却恢复”回归；通过本地 mock OpenAI-compatible 流服务验证冷却期阻断重发、冷却结束恢复发送，后端接口契约无需变更
 - 协同进展（设置校验异常态）：前端 Playwright 已新增 `settings/validate` 回归，覆盖 `remote_api_key_unauthorized` 与 `remote_preflight_network_error`；并通过 `model-settings-*` 稳定测试标识降低跨语言/提示时序抖动，后端设置接口契约保持不变
 - 协同进展（流式异常态）：前端 Playwright 已新增 `remote_provider_stream_invalid_json` 与 `remote_provider_stream_interrupted` 回归，并完成 Context tab 断言稳态修复（重试点击直到 Context 面板可见）；后端 remote 错误码契约保持不变
 - 协同进展（导出异常态补齐）：前端 Playwright 已补齐“空会话导出 JSON/Markdown”与“跨用户导出隔离 404（task/session）”回归，后端导出权限隔离与空数据语义已有自动化兜底
+- 协同进展（导出错误提示一致性）：前端导出链路已统一走 `ApiError` 映射，导出 404 不再直接暴露后端原始 detail；并新增 UI 回归断言提示与按钮恢复，后端接口契约无需变更
 - 协同进展（矩阵）：`frontend-e2e` 工作流新增 smoke 三浏览器（chromium/firefox/webkit）+ chromium 全量分层执行，兼顾反馈速度与兼容性覆盖
 - 协同稳定性补丁：`mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现 running-task-recovery 场景，默认请求行为不变
 - 协同进展：前端已接入 `running-task-recovery` 首版（刷新/切回会话自动接管 running/pending 任务流），并补齐恢复中/成功/失败可视化提示，复用现有 running reconnect SSE 能力

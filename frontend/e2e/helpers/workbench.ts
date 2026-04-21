@@ -5,6 +5,8 @@ export const API_BASE_URL =
 export const AUTH_TOKEN_STORAGE_KEY = "insightagent.authToken";
 export const REFRESH_TOKEN_STORAGE_KEY = "insightagent.refreshToken";
 export const AUTH_SESSION_ID_STORAGE_KEY = "insightagent.authSessionId";
+export const ACTIVE_WORKBENCH_SESSION_STORAGE_KEY =
+  "insightagent.activeWorkbenchSessionId";
 
 export type AuthBootstrapResponse = {
   email: string;
