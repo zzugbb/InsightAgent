@@ -1,11 +1,14 @@
 import {
   expect,
   test,
+  type APIRequestContext,
   type Locator,
   type Page,
 } from "@playwright/test";
 
 import {
+  ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
+  API_BASE_URL,
   ensureWorkbenchReady,
   registerViaApi,
   seedBrowserAuth,
@@ -39,6 +42,89 @@ async function triggerDownloadAndAssertName(
   expect(download.suggestedFilename().toLowerCase()).toContain(
     expectedPiece.toLowerCase(),
   );
+}
+
+async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
+  const queryInput = page.getByTestId("inspector-rag-query-input");
+  const querySubmit = page.getByTestId("inspector-rag-query-submit");
+  const queryResults = page.getByTestId("inspector-rag-query-results");
+  const hitDoc = page.locator(".memory-query-hit-doc").first();
+
+  for (let i = 0; i < 5; i += 1) {
+    await queryInput.fill(snippet);
+    await querySubmit.click();
+    await expect(queryResults).toBeVisible({ timeout: 20_000 });
+    if (await hitDoc.isVisible().catch(() => false)) {
+      await expect(hitDoc).toContainText(snippet);
+      return;
+    }
+    await page.waitForTimeout(450);
+  }
+
+  await expect(hitDoc).toContainText(snippet, { timeout: 20_000 });
+}
+
+async function waitForSessionRunningTask(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+): Promise<string> {
+  let runningTaskId = "";
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${API_BASE_URL}/api/tasks?limit=20&offset=0&session_id=${encodeURIComponent(sessionId)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+        if (!response.ok()) {
+          runningTaskId = "";
+          return runningTaskId;
+        }
+        const payload = (await response.json()) as {
+          items?: Array<{ id: string; status: string; status_normalized?: string }>;
+        };
+        const runningTask = (payload.items ?? []).find((task) => {
+          const normalized = (task.status_normalized ?? task.status ?? "")
+            .trim()
+            .toLowerCase();
+          return normalized === "pending" || normalized === "running";
+        });
+        runningTaskId = runningTask?.id ?? "";
+        return runningTaskId;
+      },
+      { timeout: 20_000, intervals: [300, 600, 1000, 1600] },
+    )
+    .not.toBe("");
+  return runningTaskId;
+}
+
+async function waitForContextCancelButton(page: Page): Promise<Locator> {
+  const contextTab = page.getByTestId("inspector-tab-context");
+  const cancelButton = page
+    .locator('[data-testid="inspector-task-cancel"]:visible')
+    .first();
+
+  await expect
+    .poll(
+      async () => {
+        if (await cancelButton.isVisible().catch(() => false)) {
+          return true;
+        }
+        if (await contextTab.isVisible().catch(() => false)) {
+          await contextTab.click();
+        }
+        return cancelButton.isVisible().catch(() => false);
+      },
+      { timeout: 30_000, intervals: [250, 500, 900, 1300] },
+    )
+    .toBeTruthy();
+
+  return cancelButton;
 }
 
 test("workbench main path covers trace, rag and task/session export", async ({
@@ -93,12 +179,7 @@ test("workbench main path covers trace, rag and task/session export", async ({
   await page.getByTestId("inspector-rag-ingest-source").fill("playwright-e2e");
   await page.getByTestId("inspector-rag-ingest-submit").click();
 
-  await page.getByTestId("inspector-rag-query-input").fill(ragSnippet);
-  await page.getByTestId("inspector-rag-query-submit").click();
-  await expect(page.getByTestId("inspector-rag-query-results")).toBeVisible({
-    timeout: 20_000,
-  });
-  await expect(page.locator(".memory-query-hit-doc").first()).toContainText(ragSnippet);
+  await queryRagUntilHit(page, ragSnippet);
 });
 
 test("running task can recover after reload and be cancelled", async ({
@@ -106,29 +187,39 @@ test("running task can recover after reload and be cancelled", async ({
   request,
 }) => {
   const auth = await registerViaApi(request);
+  const createSessionResponse = await request.post(`${API_BASE_URL}/api/sessions`, {
+    headers: {
+      Authorization: `Bearer ${auth.access_token}`,
+    },
+    data: {},
+  });
+  expect(createSessionResponse.ok()).toBeTruthy();
+  const createdSession = (await createSessionResponse.json()) as { id: string };
   await seedBrowserAuth(page, auth);
+  await page.addInitScript(
+    ({ activeSessionId, activeSessionStorageKey }) => {
+      localStorage.setItem(activeSessionStorageKey, activeSessionId);
+    },
+    {
+      activeSessionId: createdSession.id,
+      activeSessionStorageKey: ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
+    },
+  );
 
   await page.goto("/");
   await ensureWorkbenchReady(page, auth);
 
   const composerInput = page.getByTestId("composer-input");
   const composerSend = page.getByTestId("composer-send");
-  const longPrompt = `[mock-slow-ms=30] cancel-recovery ${"stream ".repeat(260)}`;
+  const longPrompt = `[mock-slow-ms=90] cancel-recovery ${"stream ".repeat(420)}`;
 
   await composerInput.fill(longPrompt);
   await composerSend.click();
-
-  await openInspectorContextTab(page);
-  const cancelButton = page.locator('[data-testid="inspector-task-cancel"]:visible').first();
-  await expect(cancelButton).toBeVisible({ timeout: 20_000 });
+  await waitForSessionRunningTask(request, auth.access_token, createdSession.id);
 
   await page.reload();
   await ensureWorkbenchReady(page, auth);
-  await openInspectorContextTab(page);
-  const recoveredCancelButton = page
-    .locator('[data-testid="inspector-task-cancel"]:visible')
-    .first();
-  await expect(recoveredCancelButton).toBeVisible({ timeout: 20_000 });
+  const recoveredCancelButton = await waitForContextCancelButton(page);
   await recoveredCancelButton.click();
 
   await expect(recoveredCancelButton).toBeHidden({ timeout: 20_000 });

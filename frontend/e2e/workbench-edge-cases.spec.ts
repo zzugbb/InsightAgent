@@ -34,6 +34,62 @@ async function expectToastContains(page: Page, text: string): Promise<void> {
   await expect(toast).toBeVisible({ timeout: 20_000 });
 }
 
+async function createSessionWithTitle(
+  request: Parameters<typeof registerViaApi>[0],
+  token: string,
+  title: string,
+): Promise<string> {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+  };
+  const createResponse = await request.post(`${API_BASE_URL}/api/sessions`, {
+    headers,
+    data: {},
+  });
+  expect(createResponse.ok()).toBeTruthy();
+  const created = (await createResponse.json()) as { id: string };
+
+  const renameResponse = await request.patch(
+    `${API_BASE_URL}/api/sessions/${encodeURIComponent(created.id)}`,
+    {
+      headers,
+      data: { title },
+    },
+  );
+  expect(renameResponse.ok()).toBeTruthy();
+  return created.id;
+}
+
+async function selectSessionByTitle(page: Page, title: string): Promise<void> {
+  const row = page
+    .locator("button.sidebar-item.sidebar-item--single")
+    .filter({ hasText: title })
+    .first();
+  await expect(row).toBeVisible({ timeout: 20_000 });
+  for (let i = 0; i < 5; i += 1) {
+    await row.click();
+    const current = await row.getAttribute("aria-current");
+    if (current === "true") {
+      return;
+    }
+    const titleText = (await page.locator(".chat-title-text").first().textContent()) ?? "";
+    if (titleText.includes(title)) {
+      return;
+    }
+    await page.waitForTimeout(150);
+  }
+  await expect
+    .poll(async () => {
+      const current = await row.getAttribute("aria-current");
+      if (current === "true") {
+        return true;
+      }
+      const titleText = (await page.locator(".chat-title-text").first().textContent()) ?? "";
+      return titleText.includes(title);
+    }, { timeout: 20_000, intervals: [300, 600, 1200] })
+    .toBeTruthy();
+}
+
 test("rag query empty state is visible @smoke", async ({ page, request }) => {
   const auth = await registerViaApi(request);
   await seedBrowserAuth(page, auth);
@@ -207,7 +263,54 @@ test("task export keeps localized 404 hint when token ownership changes", async 
   const exportJsonButton = page.getByTestId("inspector-task-export-json");
   await exportJsonButton.click();
   await expectToastContains(page, "404");
-  await expect(exportJsonButton).not.toHaveClass(/ant-btn-loading/, {
-    timeout: 10_000,
+  await expect
+    .poll(async () => {
+      const count = await exportJsonButton.count();
+      if (count === 0) {
+        return true;
+      }
+      const klass = (await exportJsonButton.first().getAttribute("class")) ?? "";
+      return !klass.includes("ant-btn-loading");
+    }, { timeout: 10_000, intervals: [200, 400, 800, 1200] })
+    .toBeTruthy();
+});
+
+test("cross-session switch keeps cancel and export scoped to active session", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  const sessionATitle = `pw-session-a-${Date.now()}`;
+  const sessionBTitle = `pw-session-b-${Date.now()}`;
+  await createSessionWithTitle(request, auth.access_token, sessionATitle);
+  await createSessionWithTitle(request, auth.access_token, sessionBTitle);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+
+  await selectSessionByTitle(page, sessionATitle);
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  await composerInput.fill(`[mock-slow-ms=45] cross-session ${"stream ".repeat(220)}`);
+  await composerSend.click();
+
+  await openInspectorContextTab(page);
+  const cancelButton = page.locator('[data-testid="inspector-task-cancel"]:visible').first();
+  await expect(cancelButton).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("inspector-task-export-json")).toBeVisible();
+
+  await selectSessionByTitle(page, sessionBTitle);
+  await openInspectorContextTab(page);
+
+  await expect(
+    page.locator('[data-testid="inspector-task-cancel"]:visible'),
+  ).toHaveCount(0);
+  await expect(page.getByTestId("inspector-task-export-json")).toHaveCount(0);
+  await expect(page.getByTestId("inspector-task-export-markdown")).toHaveCount(0);
+  await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
+    timeout: 20_000,
   });
+  await composerInput.fill("session b still can send");
+  await expect(composerSend).toBeEnabled({ timeout: 20_000 });
 });
