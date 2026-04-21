@@ -130,6 +130,7 @@ export function KnowledgeBaseGovernanceModal({
                 loading={clearBusy}
                 disabled={disabled}
                 className="kb-action-btn"
+                data-testid="kb-governance-action-clear"
               >
                 {clearBusy
                   ? t.sidebar.knowledgeBase.actioning
@@ -152,6 +153,7 @@ export function KnowledgeBaseGovernanceModal({
                 className="kb-action-btn"
                 loading={deleteBusy}
                 disabled={disabled}
+                data-testid="kb-governance-action-delete"
               >
                 {deleteBusy
                   ? t.sidebar.knowledgeBase.actioning
@@ -178,7 +180,7 @@ export function KnowledgeBaseGovernanceModal({
         {t.sidebar.knowledgeBase.lead}
       </Typography.Paragraph>
 
-      <div className="kb-governance-topline">
+      <div className="kb-governance-topline" data-testid="kb-governance-topline">
         <Space size={10} wrap>
           <Tag
             color={listQuery.data?.chroma_reachable ? "green" : "default"}
@@ -197,6 +199,7 @@ export function KnowledgeBaseGovernanceModal({
             size="small"
             type="text"
             className="kb-refresh-btn"
+            data-testid="kb-governance-refresh"
             onClick={() => {
               void listQuery.refetch();
             }}
@@ -207,7 +210,7 @@ export function KnowledgeBaseGovernanceModal({
         </Tooltip>
       </div>
 
-      <div className="kb-governance-table-wrap">
+      <div className="kb-governance-table-wrap" data-testid="kb-governance-table-wrap">
         <Table<RagKnowledgeBaseSummary>
           size="small"
           rowKey={(row) => row.collection}

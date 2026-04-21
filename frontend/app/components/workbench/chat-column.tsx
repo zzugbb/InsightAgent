@@ -403,6 +403,7 @@ export function ChatColumn({
       <section
         ref={stageRef}
         className="message-stage"
+        data-testid="chat-message-stage"
         onScroll={updatePinnedFromScroll}
         aria-labelledby="chat-main-title"
       >
@@ -514,19 +515,20 @@ export function ChatColumn({
       </section>
 
       {showScrollFab ? (
-        <div className="scroll-bottom-fab-wrap">
+        <div className="scroll-bottom-fab-wrap" data-testid="chat-scroll-fab-wrap">
           <Button
             type="primary"
             shape="circle"
             size="large"
             className={`scroll-bottom-fab${scrollFabLive ? " scroll-bottom-fab--live" : ""}`}
+            data-testid="chat-scroll-fab"
             onClick={scrollToBottom}
             aria-label={t.chat.scrollToBottomAria}
             title={t.chat.scrollToBottom}
           >
             <ArrowDown size={20} aria-hidden />
             {pendingJumpCount > 0 ? (
-              <span className="scroll-bottom-fab-badge">
+              <span className="scroll-bottom-fab-badge" data-testid="chat-scroll-fab-badge">
                 {pendingJumpCount >= 99 ? "99+" : pendingJumpCount}
               </span>
             ) : null}

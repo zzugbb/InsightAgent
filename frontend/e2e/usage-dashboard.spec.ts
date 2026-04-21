@@ -1,75 +1,26 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 
 import {
-  API_BASE_URL,
   ensureWorkbenchReady,
+  ingestKnowledgeSnippet,
   registerViaApi,
+  runTaskToDone,
   seedBrowserAuth,
+  waitUsageReady,
 } from "./helpers/workbench";
 
-type TaskCreateResponse = {
-  task_id: string;
-  session_id: string;
-};
-
-async function runTaskToDone(
-  request: APIRequestContext,
-  token: string,
-): Promise<void> {
-  const createResponse = await request.post(`${API_BASE_URL}/api/tasks`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    data: {
-      user_input: "playwright usage dashboard visual smoke",
-    },
-  });
-  expect(createResponse.ok()).toBeTruthy();
-  const created = (await createResponse.json()) as TaskCreateResponse;
-  expect(typeof created.task_id).toBe("string");
-  expect(created.task_id.trim().length).toBeGreaterThan(0);
-
-  const streamResponse = await request.get(
-    `${API_BASE_URL}/api/tasks/${encodeURIComponent(created.task_id)}/stream`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
-  expect(streamResponse.ok()).toBeTruthy();
-  const streamText = await streamResponse.text();
-  expect(streamText).toContain("event: done");
-}
-
-async function waitUsageReady(
-  request: APIRequestContext,
-  token: string,
-): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const response = await request.get(`${API_BASE_URL}/api/tasks/usage/dashboard`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (!response.ok()) {
-          return -1;
-        }
-        const payload = (await response.json()) as {
-          summary?: { tasks_with_usage?: number };
-        };
-        return Number(payload.summary?.tasks_with_usage ?? 0);
-      },
-      { timeout: 20_000, intervals: [500, 1000, 1500, 2000] },
-    )
-    .toBeGreaterThan(0);
+async function assertHeadersLeftAligned(headers: Locator): Promise<void> {
+  const count = await headers.count();
+  expect(count).toBeGreaterThan(0);
+  for (let i = 0; i < count; i += 1) {
+    const align = await headers.nth(i).evaluate((el) => getComputedStyle(el).textAlign);
+    expect(["left", "start"]).toContain(align);
+  }
 }
 
 test("usage dashboard source trend is visible @smoke", async ({ page, request }) => {
   const auth = await registerViaApi(request);
-  await runTaskToDone(request, auth.access_token);
+  await runTaskToDone(request, auth.access_token, "playwright usage dashboard visual smoke");
   await waitUsageReady(request, auth.access_token);
   await seedBrowserAuth(page, auth);
 
@@ -86,6 +37,49 @@ test("usage dashboard source trend is visible @smoke", async ({ page, request })
   await expect(page.locator(".usage-dashboard-ant-modal")).toBeVisible();
   await expect(page.locator(".usage-source-trend-block")).toBeVisible();
   await expect(page.locator(".usage-source-trend-row").first()).toBeVisible();
+});
+
+test("usage dashboard source filter request and table alignments are stable", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await runTaskToDone(request, auth.access_token, "playwright usage dashboard filter assertions");
+  await waitUsageReady(request, auth.access_token);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-usage").click();
+
+  const usageModal = page.locator(".usage-dashboard-ant-modal");
+  await expect(usageModal).toBeVisible();
+  await assertHeadersLeftAligned(
+    page.locator('[data-testid="usage-dashboard-table-wrap"] .ant-table-thead > tr > th'),
+  );
+
+  const estimatedResponse = page.waitForResponse((response) => {
+    if (!response.url().includes("/api/tasks/usage/dashboard")) {
+      return false;
+    }
+    const url = new URL(response.url());
+    return url.searchParams.get("source_kind") === "estimated";
+  });
+  await page.getByTestId("usage-source-filter-estimated").click();
+  await estimatedResponse;
+  await expect(page.getByTestId("usage-source-trend-block")).toBeVisible();
+
+  const providerResponse = page.waitForResponse((response) => {
+    if (!response.url().includes("/api/tasks/usage/dashboard")) {
+      return false;
+    }
+    const url = new URL(response.url());
+    return url.searchParams.get("source_kind") === "provider";
+  });
+  await page.getByTestId("usage-source-filter-provider").click();
+  await providerResponse;
+  await expect(page.getByTestId("usage-source-trend-block")).toBeVisible();
 });
 
 test("settings menu governance entries open expected modals @smoke", async ({
@@ -114,6 +108,10 @@ test("settings menu governance entries open expected modals @smoke", async ({
   await expect(knowledgeBaseEntry).toBeVisible();
   await knowledgeBaseEntry.click();
   await expect(page.locator(".knowledge-base-governance-ant-modal")).toBeVisible();
+  await assertHeadersLeftAligned(
+    page.locator('[data-testid="kb-governance-table-wrap"] .ant-table-thead > tr > th'),
+  );
+  await expect(page.getByTestId("kb-governance-refresh")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".knowledge-base-governance-ant-modal")).toBeHidden();
 
@@ -122,4 +120,38 @@ test("settings menu governance entries open expected modals @smoke", async ({
   await expect(modelEntry).toBeVisible();
   await modelEntry.click();
   await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
+});
+
+test("knowledge governance action buttons keep text style without borders", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  const kbId = `kb-governance-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
+  await ingestKnowledgeSnippet(request, auth.access_token, {
+    knowledgeBaseId: kbId,
+    snippet: `governance sample ${Date.now()}`,
+    source: "playwright-governance",
+  });
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-knowledge-base").click();
+
+  await expect(page.locator(".knowledge-base-governance-ant-modal")).toBeVisible();
+  const clearButton = page.getByTestId("kb-governance-action-clear").first();
+  const deleteButton = page.getByTestId("kb-governance-action-delete").first();
+  await expect(clearButton).toBeVisible();
+  await expect(deleteButton).toBeVisible();
+
+  const clearBorderTop = await clearButton.evaluate(
+    (el) => getComputedStyle(el).borderTopWidth,
+  );
+  const deleteBorderTop = await deleteButton.evaluate(
+    (el) => getComputedStyle(el).borderTopWidth,
+  );
+  expect(clearBorderTop).toBe("0px");
+  expect(deleteBorderTop).toBe("0px");
 });

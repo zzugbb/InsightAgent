@@ -44,7 +44,8 @@
 - 协同修复（补充）：`usage-dashboard` Playwright 用例新增 UI 登录兜底（发现未进入 Workbench 时自动登录），降低 CI 冷启动状态差异对回归稳定性的影响
 - 协同进展（补充）：前端 Playwright 回归已扩展覆盖设置治理入口（审计日志/知识库治理弹窗可见性），并为设置菜单项补充稳定 `data-testid`，后端接口契约无需改动
 - 协同进展（补充二次）：前端 Playwright 回归新增 `workbench-main-path` 场景并跑通（对话发送、Trace、RAG ingest/query、任务/会话导出、运行中任务刷新恢复与取消后重发）
-- 协同进展（补充三次）：前端 Playwright 回归新增 `workbench-edge-cases` 场景（RAG 空命中可见性 + 缺失任务/会话导出 `404` 语义断言），并抽出 e2e 公共 helper（鉴权注入/Workbench 就绪）；随后新增 remote 错误映射场景并完成本地回归：chromium 全量 `7/7`、smoke 矩阵 `15/15`
+- 协同进展（补充三次）：前端 Playwright 回归新增 `workbench-edge-cases` 场景（RAG 空命中可见性 + 缺失任务/会话导出 `404` 语义断言），并抽出 e2e 公共 helper（鉴权注入/Workbench 就绪）；随后新增 remote 错误映射场景并完成本地回归：chromium 全量 `10/10`、smoke 矩阵 `15/15`
+- 协同进展（细粒度断言）：前端 usage/知识库治理/回底按钮回归已补稳定测试锚点（`data-testid`），并覆盖来源筛选请求参数、表头左对齐、治理动作无边框文本按钮、滚动交互显隐等高频回归点
 - 协同进展（矩阵）：`frontend-e2e` 工作流新增 smoke 三浏览器（chromium/firefox/webkit）+ chromium 全量分层执行，兼顾反馈速度与兼容性覆盖
 - 协同稳定性补丁：`mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现 running-task-recovery 场景，默认请求行为不变
 - 协同进展：前端已接入 `running-task-recovery` 首版（刷新/切回会话自动接管 running/pending 任务流），并补齐恢复中/成功/失败可视化提示，复用现有 running reconnect SSE 能力

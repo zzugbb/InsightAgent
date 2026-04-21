@@ -56,7 +56,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 回归扩展（二次）：新增 `workbench-main-path` 用例，覆盖发送消息、Trace 可见、RAG ingest/query、任务与会话导出（JSON/Markdown）、运行中任务刷新恢复与取消后重发
 - 阶段 5 回归扩展（三次）：新增 `workbench-edge-cases` 用例，覆盖 RAG 空命中可见性与导出接口缺失资源 `404` 语义
 - 阶段 5 回归工程化：抽取 `e2e/helpers/workbench.ts` 统一鉴权注入与 Workbench 就绪逻辑，降低多 spec 重复代码
-- 阶段 5 回归矩阵：Playwright 新增 `firefox/webkit` 项目；CI 改为 smoke 三浏览器 + chromium 全量；并新增 remote 错误码映射回归；本地回归已验证 chromium 全量 `7/7` 与 smoke 矩阵 `15/15`
+- 阶段 5 回归矩阵：Playwright 新增 `firefox/webkit` 项目；CI 改为 smoke 三浏览器 + chromium 全量；并新增 remote 错误码映射回归；本地回归已验证 chromium 全量 `10/10` 与 smoke 矩阵 `15/15`
+- 阶段 5 回归深化：为 usage dashboard / 知识库治理 / 聊天回底按钮补充稳定测试锚点（`data-testid`），并新增细粒度断言（来源筛选请求参数、表头左对齐、治理动作无边框文本按钮、上滑阅读时回底按钮显隐与回底）
 - 阶段 5 稳定性补丁：后端 `mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现取消恢复场景，普通请求无行为变化
 - 阶段 5 协同：后端新增 `e2e_export_consistency` 并接入 `backend-e2e`，导出稳定性（任务/会话 JSON+Markdown 一致性）已有自动回归兜底
 - 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
@@ -279,5 +280,5 @@ npm run test:e2e:smoke:matrix
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦更细粒度视觉断言与异常态覆盖深化（当前本地已验证 Chromium 全量 7/7 与 smoke 跨浏览器矩阵 15/15）。
+- 下一步聚焦异常态覆盖深化与更细节的视觉一致性回归（当前本地已验证 Chromium 全量 10/10 与 smoke 跨浏览器矩阵 15/15）。
 - `rag-kb-governance-lite`、`usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 首版已完成。

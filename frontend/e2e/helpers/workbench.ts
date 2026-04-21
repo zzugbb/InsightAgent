@@ -14,6 +14,11 @@ export type AuthBootstrapResponse = {
   session_id: string;
 };
 
+export type TaskCreateResponse = {
+  task_id: string;
+  session_id: string;
+};
+
 export async function registerViaApi(
   request: APIRequestContext,
 ): Promise<AuthBootstrapResponse> {
@@ -108,4 +113,88 @@ export async function ensureWorkbenchReady(
   }
 
   await expect(settingsTrigger).toBeVisible({ timeout: 20_000 });
+}
+
+export async function runTaskToDone(
+  request: APIRequestContext,
+  token: string,
+  userInput = "playwright task main path",
+): Promise<TaskCreateResponse> {
+  const createResponse = await request.post(`${API_BASE_URL}/api/tasks`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      user_input: userInput,
+    },
+  });
+  expect(createResponse.ok()).toBeTruthy();
+  const created = (await createResponse.json()) as TaskCreateResponse;
+  expect(typeof created.task_id).toBe("string");
+  expect(created.task_id.trim().length).toBeGreaterThan(0);
+
+  const streamResponse = await request.get(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(created.task_id)}/stream`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+  expect(streamResponse.ok()).toBeTruthy();
+  const streamText = await streamResponse.text();
+  expect(streamText).toContain("event: done");
+  return created;
+}
+
+export async function waitUsageReady(
+  request: APIRequestContext,
+  token: string,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(`${API_BASE_URL}/api/tasks/usage/dashboard`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response.ok()) {
+          return -1;
+        }
+        const payload = (await response.json()) as {
+          summary?: { tasks_with_usage?: number };
+        };
+        return Number(payload.summary?.tasks_with_usage ?? 0);
+      },
+      { timeout: 20_000, intervals: [500, 1000, 1500, 2000] },
+    )
+    .toBeGreaterThan(0);
+}
+
+export async function ingestKnowledgeSnippet(
+  request: APIRequestContext,
+  token: string,
+  args: {
+    knowledgeBaseId: string;
+    snippet: string;
+    source: string;
+  },
+): Promise<void> {
+  const ingestResponse = await request.post(`${API_BASE_URL}/api/rag/ingest`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      knowledge_base_id: args.knowledgeBaseId,
+      documents: [
+        {
+          text: args.snippet,
+          source: args.source,
+          document_id: `doc-${Date.now()}-${Math.floor(Math.random() * 10_000)}`,
+        },
+      ],
+    },
+  });
+  expect(ingestResponse.ok()).toBeTruthy();
 }

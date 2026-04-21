@@ -132,3 +132,64 @@ test("running task can recover after reload and be cancelled", async ({
   await composerSend.click();
   await expect(page.locator(".trace-card").first()).toBeVisible({ timeout: 20_000 });
 });
+
+test("scroll-to-bottom button appears on manual up-scroll and returns to hidden after jump", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+  await page.setViewportSize({ width: 1280, height: 560 });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  const assistantMessages = page.locator("article.message-row.assistant:not(.live)");
+
+  for (let i = 0; i < 3; i += 1) {
+    const beforeCount = await assistantMessages.count();
+    await composerInput.fill(`seed history ${i} ${"history ".repeat(220)}`);
+    await composerSend.click();
+    await expect
+      .poll(async () => assistantMessages.count(), {
+        timeout: 20_000,
+        intervals: [500, 1000, 1500, 2000],
+      })
+      .toBeGreaterThan(beforeCount);
+  }
+
+  await composerInput.fill(`[mock-slow-ms=25] streaming for scroll ${"token ".repeat(320)}`);
+  await composerSend.click();
+  await expect(page.locator("article.message-row.assistant.live")).toBeVisible({
+    timeout: 20_000,
+  });
+
+  const messageStage = page.getByTestId("chat-message-stage");
+  await expect
+    .poll(
+      async () =>
+        messageStage.evaluate((el) => el.scrollHeight > el.clientHeight + 40),
+      { timeout: 20_000, intervals: [400, 800, 1200] },
+    )
+    .toBeTruthy();
+  await messageStage.hover();
+  for (let i = 0; i < 6; i += 1) {
+    await page.mouse.wheel(0, -1200);
+  }
+  await expect
+    .poll(
+      async () =>
+        messageStage.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight),
+      { timeout: 20_000, intervals: [200, 500, 1000] },
+    )
+    .toBeGreaterThan(120);
+
+  const scrollFab = page.getByTestId("chat-scroll-fab");
+  await expect(scrollFab).toBeVisible({ timeout: 20_000 });
+  await expect(scrollFab).toHaveClass(/scroll-bottom-fab--live/);
+
+  await scrollFab.click();
+  await expect(scrollFab).toBeHidden({ timeout: 20_000 });
+});

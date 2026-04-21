@@ -250,7 +250,7 @@ export function UsageDashboardModal({
         {t.sidebar.usage.lead}
       </Typography.Paragraph>
 
-      <div className="usage-dashboard-topline">
+      <div className="usage-dashboard-topline" data-testid="usage-dashboard-topline">
         <Space size={10} wrap>
           <Tag className="usage-dashboard-tag">
             {resolvedScope === "session"
@@ -280,6 +280,7 @@ export function UsageDashboardModal({
               size="small"
               type="text"
               className="usage-dashboard-refresh-btn"
+              data-testid="usage-dashboard-refresh"
               onClick={() => {
                 void usageQuery.refetch();
               }}
@@ -290,17 +291,52 @@ export function UsageDashboardModal({
           </Tooltip>
         </Space>
       </div>
-      <div className="usage-source-filter-row">
+      <div className="usage-source-filter-row" data-testid="usage-source-filter-row">
         <Segmented<UsageSourceFilter>
           size="small"
           value={sourceFilter}
           onChange={(value) => setSourceFilter(value)}
           options={[
-            { label: t.sidebar.usage.sourceFilterAll, value: "all" },
-            { label: t.sidebar.usage.sourceProvider, value: "provider" },
-            { label: t.sidebar.usage.sourceEstimated, value: "estimated" },
-            { label: t.sidebar.usage.sourceMixed, value: "mixed" },
-            { label: t.sidebar.usage.sourceLegacy, value: "legacy" },
+            {
+              label: (
+                <span data-testid="usage-source-filter-all">
+                  {t.sidebar.usage.sourceFilterAll}
+                </span>
+              ),
+              value: "all",
+            },
+            {
+              label: (
+                <span data-testid="usage-source-filter-provider">
+                  {t.sidebar.usage.sourceProvider}
+                </span>
+              ),
+              value: "provider",
+            },
+            {
+              label: (
+                <span data-testid="usage-source-filter-estimated">
+                  {t.sidebar.usage.sourceEstimated}
+                </span>
+              ),
+              value: "estimated",
+            },
+            {
+              label: (
+                <span data-testid="usage-source-filter-mixed">
+                  {t.sidebar.usage.sourceMixed}
+                </span>
+              ),
+              value: "mixed",
+            },
+            {
+              label: (
+                <span data-testid="usage-source-filter-legacy">
+                  {t.sidebar.usage.sourceLegacy}
+                </span>
+              ),
+              value: "legacy",
+            },
           ]}
         />
       </div>
@@ -351,21 +387,21 @@ export function UsageDashboardModal({
 
       {summary && summary.tasks_with_usage > 0 ? (
         <>
-          <div className="usage-source-strip">
+          <div className="usage-source-strip" data-testid="usage-source-strip">
             <span className="usage-source-title">{t.sidebar.usage.sourceTitle}</span>
-            <Tag>
+            <Tag data-testid="usage-source-count-provider">
               {t.sidebar.usage.sourceProvider}:{" "}
               {tokenFmt.format(sourceProviderCount)}
             </Tag>
-            <Tag>
+            <Tag data-testid="usage-source-count-estimated">
               {t.sidebar.usage.sourceEstimated}:{" "}
               {tokenFmt.format(sourceEstimatedCount)}
             </Tag>
-            <Tag>
+            <Tag data-testid="usage-source-count-mixed">
               {t.sidebar.usage.sourceMixed}:{" "}
               {tokenFmt.format(sourceMixedCount)}
             </Tag>
-            <Tag>
+            <Tag data-testid="usage-source-count-legacy">
               {t.sidebar.usage.sourceLegacy}:{" "}
               {tokenFmt.format(sourceLegacyCount)}
             </Tag>
@@ -421,14 +457,18 @@ export function UsageDashboardModal({
           )}
         </div>
       </div>
-      <div className="usage-source-trend-block">
+      <div className="usage-source-trend-block" data-testid="usage-source-trend-block">
         <p className="usage-trend-title">{t.sidebar.usage.sourceTrendTitle}</p>
         {sourceTrendRows.length === 0 ? (
           <p className="usage-dashboard-note">{t.sidebar.usage.trendEmpty}</p>
         ) : (
-          <div className="usage-source-trend-list">
+          <div className="usage-source-trend-list" data-testid="usage-source-trend-list">
             {sourceTrendRows.map((row) => (
-              <div key={`source-${row.day}`} className="usage-source-trend-row">
+              <div
+                key={`source-${row.day}`}
+                className="usage-source-trend-row"
+                data-testid="usage-source-trend-row"
+              >
                 <span className="usage-trend-day">{formatDateDay(row.day, localeTag)}</span>
                 <div className="usage-source-trend-tags">
                   <Tag>
@@ -469,7 +509,7 @@ export function UsageDashboardModal({
         />
       </div>
 
-      <div className="usage-dashboard-table-wrap">
+      <div className="usage-dashboard-table-wrap" data-testid="usage-dashboard-table-wrap">
         {view === "sessions" ? (
           <Table<UsageDashboardSessionRow>
             size="small"
