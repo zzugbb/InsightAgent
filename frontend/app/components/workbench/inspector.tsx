@@ -901,7 +901,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         </div>
         <div className="inspector-kpi-item">
           <span>{t.inspector.traceSyncStatus}</span>
-          <strong>{traceDeltaSyncStatusLabel}</strong>
+          <strong data-testid="inspector-trace-sync-status">
+            {traceDeltaSyncStatusLabel}
+          </strong>
         </div>
         <div className="inspector-kpi-item">
           <span>{t.inspector.session}</span>
@@ -914,29 +916,35 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         <p className="inspector-section-lead">{t.inspector.traceSyncLead}</p>
         <div className="context-grid context-grid--stats compact">
           <span>{t.inspector.traceSyncRetries}</span>
-          <strong>{traceDeltaRetryCount}</strong>
+          <strong data-testid="inspector-trace-sync-retries">
+            {traceDeltaRetryCount}
+          </strong>
           <span>{t.inspector.traceSyncLastOk}</span>
-          <strong>{traceDeltaLastOkLabel}</strong>
+          <strong data-testid="inspector-trace-sync-last-ok">
+            {traceDeltaLastOkLabel}
+          </strong>
           <span>{t.inspector.traceSyncNextRetry}</span>
-          <strong>{traceDeltaNextRetryLabel}</strong>
+          <strong data-testid="inspector-trace-sync-next-retry">
+            {traceDeltaNextRetryLabel}
+          </strong>
         </div>
         {showTraceDeltaWarning ? (
-          <p className="panel-note panel-note--muted">
+          <p className="panel-note panel-note--muted" data-testid="inspector-trace-sync-warning">
             {t.inspector.traceSyncWarning(traceDeltaRetryCount)}
           </p>
         ) : null}
         {traceDeltaSyncStatus === "retrying" && traceDeltaLastError ? (
-          <p className="panel-note panel-note--muted">
+          <p className="panel-note panel-note--muted" data-testid="inspector-trace-sync-last-error">
             {t.inspector.traceSyncLastError(traceDeltaLastError)}
           </p>
         ) : null}
         {traceDeltaSyncStatus === "retrying" && retryCountdownSec !== null ? (
-          <p className="panel-note panel-note--muted">
+          <p className="panel-note panel-note--muted" data-testid="inspector-trace-sync-retry-eta">
             {t.inspector.traceSyncRetryEta(retryCountdownSec)}
           </p>
         ) : null}
         {traceDeltaRecoveredLabel ? (
-          <p className="panel-note panel-note--muted">
+          <p className="panel-note panel-note--muted" data-testid="inspector-trace-sync-recovered">
             {t.inspector.traceSyncRecovered(traceDeltaRecoveredLabel)}
           </p>
         ) : null}

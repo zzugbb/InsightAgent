@@ -735,6 +735,27 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }, []);
 
   useEffect(() => {
+    function onTestVisibility(event: Event) {
+      const custom = event as CustomEvent<{ visible?: unknown }>;
+      const visible = custom.detail?.visible;
+      if (typeof visible !== "boolean") {
+        return;
+      }
+      setIsPageVisible(visible);
+    }
+    window.addEventListener(
+      "insightagent:test-page-visibility",
+      onTestVisibility as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        "insightagent:test-page-visibility",
+        onTestVisibility as EventListener,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isStreaming) {
       traceDeltaRetryCountRef.current = 0;
       setTraceDeltaRetryCount(0);

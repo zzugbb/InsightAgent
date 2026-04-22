@@ -303,7 +303,18 @@ export function ChatColumn({
           role="alert"
         />
       ) : null}
-      {!apiBanner && runtimeNotice ? (
+      {!apiBanner && recoveryNotice ? (
+        <Alert
+          className="chat-api-alert"
+          type={recoveryNotice.type}
+          showIcon
+          closable
+          onClose={onDismissRecoveryNotice}
+          title={recoveryNotice.text}
+          data-testid="chat-recovery-notice"
+        />
+      ) : null}
+      {!apiBanner && !recoveryNotice && runtimeNotice ? (
         <Alert
           className="chat-api-alert"
           type="warning"
@@ -316,16 +327,6 @@ export function ChatColumn({
               {t.chat.goConfigureModel}
             </Button>
           }
-        />
-      ) : null}
-      {!apiBanner && !runtimeNotice && recoveryNotice ? (
-        <Alert
-          className="chat-api-alert"
-          type={recoveryNotice.type}
-          showIcon
-          closable
-          onClose={onDismissRecoveryNotice}
-          title={recoveryNotice.text}
         />
       ) : null}
 

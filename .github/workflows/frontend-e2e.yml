@@ -17,6 +17,10 @@ on:
       - ".github/workflows/frontend-e2e.yml"
       - "compose.full.yml"
 
+concurrency:
+  group: frontend-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -108,18 +112,49 @@ jobs:
           PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 \
           npm run test:e2e
 
+      - name: Rerun failed chromium tests for diagnostics
+        if: failure()
+        continue-on-error: true
+        run: |
+          cd frontend
+          PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 \
+          PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 \
+          npm run test:e2e -- --last-failed --output=test-results/last-failed
+
       - name: Show backend logs on failure
         if: failure()
         run: |
           echo "===== frontend-e2e-backend.log ====="
           cat /tmp/frontend-e2e-backend.log || true
 
+      - name: Build Playwright failure index
+        if: always()
+        run: |
+          {
+            echo "# frontend-e2e failure index"
+            echo
+            echo "- generated_at_utc: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "- run_id: ${{ github.run_id }}"
+            echo "- run_attempt: ${{ github.run_attempt }}"
+            echo
+            if [ -d frontend/test-results ]; then
+              echo "## error-context.md"
+              find frontend/test-results -name "error-context.md" | sort | sed 's#^#- #'
+              echo
+              echo "## trace.zip"
+              find frontend/test-results -name "trace.zip" | sort | sed 's#^#- #'
+            else
+              echo "No frontend/test-results directory found."
+            fi
+          } > /tmp/frontend-e2e-failure-index.md
+
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
+          name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             frontend/playwright-report
             frontend/test-results
+            /tmp/frontend-e2e-failure-index.md
           if-no-files-found: ignore

@@ -264,6 +264,7 @@ export function UsageDashboardModal({
         <Space size={8}>
           <Segmented<UsageScope>
             size="small"
+            data-testid="usage-scope-segmented"
             value={scope}
             onChange={(value) => setScope(value)}
             options={[
@@ -294,6 +295,7 @@ export function UsageDashboardModal({
       <div className="usage-source-filter-row" data-testid="usage-source-filter-row">
         <Segmented<UsageSourceFilter>
           size="small"
+          data-testid="usage-source-filter-segmented"
           value={sourceFilter}
           onChange={(value) => setSourceFilter(value)}
           options={[

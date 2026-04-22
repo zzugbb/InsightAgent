@@ -194,6 +194,7 @@ export function SidebarSettingsMenu({
       <div
         ref={popoverRef}
         className="settings-menu-popover settings-menu-popover--accordion"
+        data-testid="sidebar-settings-menu-popover"
         style={{
           position: "fixed",
           left: popoverPos.left,
@@ -225,6 +226,7 @@ export function SidebarSettingsMenu({
             <button
               type="button"
               className="settings-accordion-trigger"
+              data-testid="settings-section-trigger-theme"
               aria-expanded={expanded === "theme"}
               aria-controls="settings-section-theme"
               id="settings-heading-theme"
@@ -249,6 +251,7 @@ export function SidebarSettingsMenu({
             {expanded === "theme" ? (
               <div
                 className="settings-accordion-panel"
+                data-testid="settings-section-panel-theme"
                 id="settings-section-theme"
                 role="region"
                 aria-labelledby="settings-heading-theme"
@@ -277,6 +280,7 @@ export function SidebarSettingsMenu({
             <button
               type="button"
               className="settings-accordion-trigger"
+              data-testid="settings-section-trigger-accent"
               aria-expanded={expanded === "accent"}
               aria-controls="settings-section-accent"
               id="settings-heading-accent"
@@ -299,6 +303,7 @@ export function SidebarSettingsMenu({
             {expanded === "accent" ? (
               <div
                 className="settings-accordion-panel settings-accordion-panel--accent"
+                data-testid="settings-section-panel-accent"
                 id="settings-section-accent"
                 role="region"
                 aria-labelledby="settings-heading-accent"
@@ -352,6 +357,7 @@ export function SidebarSettingsMenu({
             <button
               type="button"
               className="settings-accordion-trigger"
+              data-testid="settings-section-trigger-language"
               aria-expanded={expanded === "language"}
               aria-controls="settings-section-language"
               id="settings-heading-language"
@@ -372,6 +378,7 @@ export function SidebarSettingsMenu({
             {expanded === "language" ? (
               <div
                 className="settings-accordion-panel"
+                data-testid="settings-section-panel-language"
                 id="settings-section-language"
                 role="region"
                 aria-labelledby="settings-heading-language"

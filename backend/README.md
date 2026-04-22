@@ -54,6 +54,9 @@
 - 协同进展（矩阵）：`frontend-e2e` 工作流新增 smoke 三浏览器（chromium/firefox/webkit）+ chromium 全量分层执行，兼顾反馈速度与兼容性覆盖
 - 协同进展（恢复稳态补丁）：前端 `workbench-main-path` 已加固“先确认后端任务进入 running/pending 再刷新”与“等待取消按钮时持续保持 Context 激活”两层断言，规避恢复链路切回 Trace 的时序抖动
 - 协同进展（一次性补齐）：前端 `workbench-edge-cases` 新增“取消后同文案立即重发不丢消息”“跨会话流式状态严格隔离且切回可取消”“mock 取消后无重试入口且可快速恢复发送”三条回归；本地全量回归最新为 chromium `25/25`
+- 协同进展（六项补齐）：前端一次性补齐“恢复提示三态、trace delta 重试与后台暂停恢复、auth refresh+logout-all、设置弹窗重开状态重置”回归；最新本地结果为 chromium 全量 `30/30`、smoke 矩阵 `15/15`。
+- 协同进展（CI 稳定性）：`frontend-e2e` 已新增失败后 `--last-failed` 诊断重跑、`error-context/trace.zip` 失败索引文件与带 `run_id/run_attempt` 的 artifact 命名，便于排障追踪。
+- 协同进展（回归稳态收口，2026-04-22）：前端 `workbench-edge-cases` 对“取消后同文案重发”场景改为基于后端 `POST /api/tasks/{task_id}/cancel` 契约进行稳定验证，并将 Context tab 定位收敛到 Inspector 顶部导航，消除并发运行下的时序抖动；本地 chromium 全量回归复测 `30/30` 通过。
 - 协同稳定性补丁：`mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现 running-task-recovery 场景，默认请求行为不变
 - 协同进展：前端已接入 `running-task-recovery` 首版（刷新/切回会话自动接管 running/pending 任务流），并补齐恢复中/成功/失败可视化提示，复用现有 running reconnect SSE 能力
 - 协同修复：前端流式展示已按 `session_id` 做会话隔离，切换会话时不再短暂串出其他会话任务

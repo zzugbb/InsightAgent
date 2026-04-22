@@ -65,6 +65,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 回归深化（六次）：导出错误提示统一走 `ApiError` 映射（避免直接暴露后端原始 detail）；新增 UI 回归验证“切换 token 后导出 404 提示 + 按钮恢复”
 - 阶段 5 回归深化（七次）：`workbench-main-path` 恢复取消链路稳态加固，新增“发送后先确认后端 running/pending 再刷新”与“等待取消按钮期间持续维持 Context 激活”断言，修复自动恢复切回 Trace 导致的偶发失败；本地 chromium 全量回归更新为 `22/22`
 - 阶段 5 回归深化（八次）：`workbench-edge-cases` 一次性补齐 3 条会话与取消交互回归（取消后同文案即时重发不丢消息、跨会话切换时流式状态不串台且切回可取消、mock 取消后不出现重试入口并可快速恢复发送）；本地 chromium 全量回归更新为 `25/25`
+- 阶段 5 回归深化（九次）：一次性补齐剩余 6 项回归覆盖：恢复提示三态（恢复中/成功/失败）、trace delta 重试与后台暂停/前台恢复、auth refresh 自动续期与 `logout-all` 后强制重登、设置弹窗/治理子弹窗重开状态重置；本地 chromium 全量回归更新为 `30/30`。
+- 阶段 5 CI 稳定性增强：`frontend-e2e` 新增同分支并发互斥（取消旧运行）、失败后 `--last-failed` 诊断重跑、失败索引文件（`error-context.md`/`trace.zip` 列表）和带 `run_id/run_attempt` 的 artifact 命名，提升失败排查效率。
+- 阶段 5 回归稳态收口（十次，2026-04-22）：修复 `workbench-edge-cases` 并发回归下的偶发失败，Context tab helper 改为仅命中 Inspector 顶部导航；“取消后同文案重发”用例改为“API cancel + UI 去重可见性断言”以规避流式 tab 抢占时序，chromium 全量回归再次验证 `30/30` 通过。
 - 阶段 5 稳定性补丁：后端 `mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现取消恢复场景，普通请求无行为变化
 - 阶段 5 协同：后端新增 `e2e_export_consistency` 并接入 `backend-e2e`，导出稳定性（任务/会话 JSON+Markdown 一致性）已有自动回归兜底
 - 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
@@ -287,5 +290,5 @@ npm run test:e2e:smoke:matrix
 ## 下一步（W4+）
 
 - 历史任务详情/Trace 回放已进入开发：任务快照、单任务导出、会话导出已完成。
-- 下一步聚焦异常态覆盖深化与更细节的视觉一致性回归（当前本地已验证 Chromium 全量 25/25 与 smoke 跨浏览器矩阵 15/15）。
+- 下一步聚焦异常态覆盖深化与更细节的视觉一致性回归（当前本地已验证 Chromium 全量 30/30 与 smoke 跨浏览器矩阵 15/15）。
 - `rag-kb-governance-lite`、`usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 首版已完成。

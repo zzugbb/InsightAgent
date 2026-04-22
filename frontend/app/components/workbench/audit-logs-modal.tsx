@@ -639,6 +639,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
       <div className="audit-modal-toolbar">
         <div className="audit-modal-filter-row audit-modal-filter-row--primary">
           <Select
+            data-testid="audit-event-filter"
             showSearch
             value={eventFilter}
             onChange={(value) => {
@@ -691,6 +692,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
             placeholder={t.sidebar.audit.filterEventLabel}
           />
           <Select
+            data-testid="audit-time-filter"
             showSearch
             value={timeFilter}
             onChange={(value) => {
@@ -706,6 +708,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
             placeholder={t.sidebar.audit.filterRangeLabel}
           />
           <Input
+            data-testid="audit-keyword-filter"
             allowClear
             value={keyword}
             onChange={(event) => {
@@ -717,6 +720,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
         </div>
         <div className="audit-modal-filter-row audit-modal-filter-row--secondary">
           <Input
+            data-testid="audit-session-filter"
             allowClear
             value={sessionIdFilter}
             onChange={(event) => {
@@ -726,6 +730,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
             placeholder={t.sidebar.audit.filterSessionPlaceholder}
           />
           <Input
+            data-testid="audit-task-filter"
             allowClear
             value={taskIdFilter}
             onChange={(event) => {
@@ -736,6 +741,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
           />
           <Button
             className="audit-modal-reset-btn"
+            data-testid="audit-filter-reset"
             onClick={() => {
               setEventFilter("all");
               setTimeFilter("7d");
@@ -755,6 +761,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
           <span className="audit-modal-label">{t.sidebar.audit.exportScopeLabel}</span>
           <Segmented
             size="small"
+            data-testid="audit-export-scope"
             value={exportScope}
             onChange={(value) => setExportScope(value as ExportScope)}
             options={[
@@ -764,6 +771,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
           />
           <Button
             size="small"
+            data-testid="audit-export-json"
             onClick={() => void handleExportJson()}
             loading={exporting === "json"}
             disabled={Boolean(exporting)}
@@ -772,6 +780,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
           </Button>
           <Button
             size="small"
+            data-testid="audit-export-csv"
             onClick={() => void handleExportCsv()}
             loading={exporting === "csv"}
             disabled={Boolean(exporting)}

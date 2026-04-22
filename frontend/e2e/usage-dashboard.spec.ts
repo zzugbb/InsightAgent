@@ -18,6 +18,13 @@ async function assertHeadersLeftAligned(headers: Locator): Promise<void> {
   }
 }
 
+async function openSettingsMenu(page: Parameters<typeof ensureWorkbenchReady>[0]): Promise<void> {
+  const settingsTrigger = page.getByTestId("sidebar-settings-trigger");
+  await expect(settingsTrigger).toBeVisible();
+  await settingsTrigger.click();
+  await expect(page.getByTestId("sidebar-settings-menu-popover")).toBeVisible();
+}
+
 test("usage dashboard source trend is visible @smoke", async ({ page, request }) => {
   const auth = await registerViaApi(request);
   await runTaskToDone(request, auth.access_token, "playwright usage dashboard visual smoke");
@@ -154,4 +161,65 @@ test("knowledge governance action buttons keep text style without borders", asyn
   );
   expect(clearBorderTop).toBe("0px");
   expect(deleteBorderTop).toBe("0px");
+});
+
+test("settings popover and modal state reset on reopen", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await runTaskToDone(request, auth.access_token, "playwright settings reopen state reset");
+  await waitUsageReady(request, auth.access_token);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+
+  await openSettingsMenu(page);
+  const themeTrigger = page.getByTestId("settings-section-trigger-theme");
+  await themeTrigger.click();
+  await expect(themeTrigger).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("sidebar-settings-menu-popover")).toHaveCount(0);
+
+  await openSettingsMenu(page);
+  await expect(themeTrigger).toHaveAttribute("aria-expanded", "false");
+
+  const usageEntry = page.getByTestId("settings-menu-usage");
+  await usageEntry.click();
+  await expect(page.locator(".usage-dashboard-ant-modal")).toBeVisible();
+
+  const providerResponse = page.waitForResponse((response) => {
+    if (!response.url().includes("/api/tasks/usage/dashboard")) {
+      return false;
+    }
+    const url = new URL(response.url());
+    return url.searchParams.get("source_kind") === "provider";
+  });
+  await page.getByTestId("usage-source-filter-provider").click();
+  await providerResponse;
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".usage-dashboard-ant-modal")).toBeHidden();
+
+  await openSettingsMenu(page);
+  await page.getByTestId("settings-menu-usage").click();
+  const selectedSource = page.locator(
+    ".usage-source-filter-row .ant-segmented-item-selected [data-testid]",
+  );
+  await expect(selectedSource).toHaveAttribute("data-testid", "usage-source-filter-all");
+  await page.keyboard.press("Escape");
+
+  await openSettingsMenu(page);
+  await page.getByTestId("settings-menu-audit").click();
+  await expect(page.locator(".audit-modal")).toBeVisible();
+  const auditKeyword = page.getByTestId("audit-keyword-filter");
+  await auditKeyword.fill("playwright audit reset probe");
+  await expect(auditKeyword).toHaveValue("playwright audit reset probe");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".audit-modal")).toBeHidden();
+
+  await openSettingsMenu(page);
+  await page.getByTestId("settings-menu-audit").click();
+  await expect(page.locator(".audit-modal")).toBeVisible();
+  await expect(page.getByTestId("audit-keyword-filter")).toHaveValue("");
 });
