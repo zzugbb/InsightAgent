@@ -1,8 +1,8 @@
 "use client";
 
-import { Alert, Button, Dropdown, Flex, Space, Tag, type MenuProps } from "antd";
+import { Alert, Button, Flex, Space, Tag } from "antd";
 import type { TextAreaRef } from "antd/es/input/TextArea";
-import { ArrowDown, MoreHorizontal } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   useCallback,
@@ -68,9 +68,6 @@ type ChatColumnProps = {
   showStreamRetry: boolean;
   onRetryStream: () => void;
   onOpenTaskCenter: () => void;
-  onExportSession: (format: "json" | "markdown") => void | Promise<void>;
-  sessionExportDisabled: boolean;
-  sessionExporting: "json" | "markdown" | null;
   composerRef: RefObject<TextAreaRef | null>;
   liveRegionText: string;
   runtimeNotice: string | null;
@@ -115,9 +112,6 @@ export function ChatColumn({
   showStreamRetry,
   onRetryStream,
   onOpenTaskCenter,
-  onExportSession,
-  sessionExportDisabled,
-  sessionExporting,
   composerRef,
   liveRegionText,
   runtimeNotice,
@@ -250,36 +244,6 @@ export function ChatColumn({
     !showSessionLoading && (hasHistory || showPendingUser || showLiveAssistant);
   const showScrollFab = hasScrollableFeed && !pinnedToBottom;
   const scrollFabLive = isStreaming || pendingJumpCount > 0;
-  const sessionActionMenu = useMemo<MenuProps["items"]>(
-    () => [
-      {
-        key: "session-export-json",
-        disabled: sessionExportDisabled || sessionExporting !== null,
-        label: (
-          <span data-testid="chat-session-export-json">
-            {t.inspector.sessionExportJson}
-          </span>
-        ),
-        onClick: () => {
-          void onExportSession("json");
-        },
-      },
-      {
-        key: "session-export-markdown",
-        disabled: sessionExportDisabled || sessionExporting !== null,
-        label: (
-          <span data-testid="chat-session-export-markdown">
-            {t.inspector.sessionExportMarkdown}
-          </span>
-        ),
-        onClick: () => {
-          void onExportSession("markdown");
-        },
-      },
-    ],
-    [onExportSession, sessionExportDisabled, sessionExporting, t.inspector],
-  );
-
   function renderMessageRow(message: SessionMessage, index: number) {
     const prev = index > 0 ? sessionMessages[index - 1] : undefined;
     const showTaskRef =
@@ -419,17 +383,6 @@ export function ChatColumn({
             >
               {t.chat.openTaskCenter}
             </Button>
-            <Dropdown menu={{ items: sessionActionMenu }} trigger={["click"]}>
-              <Button
-                type="default"
-                icon={<MoreHorizontal size={16} strokeWidth={2} aria-hidden />}
-                data-testid="chat-session-actions"
-                loading={sessionExporting !== null}
-                disabled={sessionExportDisabled}
-              >
-                {t.chat.moreActions}
-              </Button>
-            </Dropdown>
           </Space>
           <div className="chat-runtime-badges" aria-label="runtime">
             <Tag variant="filled" className="header-badge-tag header-badge-tag--mode">

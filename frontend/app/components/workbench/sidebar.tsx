@@ -20,6 +20,11 @@ type SidebarProps = {
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, title: string) => Promise<unknown>;
+  onExportSession: (
+    sessionId: string,
+    format: "json" | "markdown",
+  ) => void | Promise<void>;
+  sessionExporting: "json" | "markdown" | null;
   deletingSessionId: string | null;
   renamingSessionId: string | null;
   sessionsLoading: boolean;
@@ -49,6 +54,8 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
     onSelectSession,
     onDeleteSession,
     onRenameSession,
+    onExportSession,
+    sessionExporting,
     deletingSessionId,
     renamingSessionId,
     sessionsLoading,
@@ -111,6 +118,32 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
         },
       },
       {
+        key: "session-export-json",
+        disabled: sessionExporting !== null,
+        label: (
+          <span data-testid="sidebar-session-export-json">
+            {t.inspector.sessionExportJson}
+          </span>
+        ),
+        onClick: ({ domEvent }) => {
+          domEvent.stopPropagation();
+          void onExportSession(session.id, "json");
+        },
+      },
+      {
+        key: "session-export-markdown",
+        disabled: sessionExporting !== null,
+        label: (
+          <span data-testid="sidebar-session-export-markdown">
+            {t.inspector.sessionExportMarkdown}
+          </span>
+        ),
+        onClick: ({ domEvent }) => {
+          domEvent.stopPropagation();
+          void onExportSession(session.id, "markdown");
+        },
+      },
+      {
         type: "divider",
       },
       {
@@ -123,7 +156,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
         },
       },
     ],
-    [onDeleteSession, openRename, t.sidebar],
+    [onDeleteSession, onExportSession, openRename, sessionExporting, t.inspector, t.sidebar],
   );
 
   function renderSessionRow(session: SessionSummary) {
@@ -154,6 +187,7 @@ export const Sidebar = forwardRef<HTMLElement, SidebarProps>(function Sidebar(
             type="text"
             size="small"
             className="sidebar-session-more"
+            data-testid="sidebar-session-more"
             aria-label={t.sidebar.sessionMoreAria}
             disabled={sessionsLoading || deleting}
             loading={deleting}

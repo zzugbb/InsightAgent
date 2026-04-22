@@ -67,11 +67,15 @@ async function triggerSessionExportAndAssertName(
   page: Page,
   format: "json" | "markdown",
 ): Promise<void> {
-  const actionsButton = page.getByTestId("chat-session-actions");
+  const activeSessionRow = page.locator(".sidebar-session-row.is-active").first();
+  await expect(activeSessionRow).toBeVisible({ timeout: 10_000 });
+  const actionsButton = activeSessionRow.getByTestId("sidebar-session-more");
   await expect(actionsButton).toBeVisible({ timeout: 10_000 });
   await actionsButton.click();
   const trigger = page.getByTestId(
-    format === "json" ? "chat-session-export-json" : "chat-session-export-markdown",
+    format === "json"
+      ? "sidebar-session-export-json"
+      : "sidebar-session-export-markdown",
   );
   await triggerDownloadAndAssertName(page, trigger, "session");
 }

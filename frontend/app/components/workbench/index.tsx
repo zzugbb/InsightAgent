@@ -578,8 +578,8 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }, []);
 
   const handleExportSession = useCallback(
-    async (format: "json" | "markdown") => {
-      const sessionId = activeSessionId?.trim();
+    async (sessionIdInput: string, format: "json" | "markdown") => {
+      const sessionId = sessionIdInput.trim();
       if (!sessionId) {
         message.warning(t.inspector.sessionExportNoSelection);
         return;
@@ -614,7 +614,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       }
     },
     [
-      activeSessionId,
       fetchExportResponse,
       message,
       parseAttachmentFilename,
@@ -1436,6 +1435,8 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         onRenameSession={(sessionId, title) =>
           renameSessionMutation.mutateAsync({ sessionId, title })
         }
+        onExportSession={handleExportSession}
+        sessionExporting={sessionExporting}
         sessionsLoading={sessionsLoading}
         sessionsFetchNextBusy={sessionsFetchNextBusy}
         sessionsCanLoadMore={sessionsCanLoadMore}
@@ -1492,9 +1493,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             }
             setCenterView("tasks");
           }}
-          onExportSession={handleExportSession}
-          sessionExportDisabled={!activeSessionId}
-          sessionExporting={sessionExporting}
           composerRef={composerRef}
           liveRegionText={liveRegionText}
           runtimeNotice={runtimeNoticeDismissed ? null : runtimeNotice}
@@ -1526,9 +1524,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           }}
           inspectorDrawerTriggerRef={inspectorOpenButtonRef}
           onBackToChat={() => setCenterView("chat")}
-          onExportSession={handleExportSession}
-          sessionExportDisabled={!activeSessionId}
-          sessionExporting={sessionExporting}
           scopeMode={taskCenterScope}
           onScopeModeChange={setTaskCenterScope}
         />

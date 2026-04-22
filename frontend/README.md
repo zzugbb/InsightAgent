@@ -25,7 +25,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 体验补齐：登录页新增轻量设置模块（语言/主题/主题色），并完成登录页样式对深浅主题与主题色的联动适配
 - 阶段 5 鉴权增强：接入 refresh token 持久化与自动刷新；401 优先尝试 `/api/auth/refresh` 轮换后重试，失败再回登录
 - 阶段 5 账户可见性收口：当前登录用户展示已融合到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的“图标 + 标题 + 值”行样式
-- 阶段 5 布局重排（2026-04-22）：会话导出迁移到中栏头部“更多”菜单；Memory/RAG 调试迁移到设置弹窗“运行调试”；右侧 Inspector 收敛为运行态核心（概览/同步/当前任务）
+- 阶段 5 布局重排（2026-04-22）：会话导出迁移到左侧会话行“...”菜单（方案 1）；Memory/RAG 调试迁移到设置弹窗“运行调试”；右侧 Inspector 收敛为运行态核心（概览/同步/当前任务）
 - 阶段 5 交互收口（2026-04-22）：运行调试弹窗样式与项目主视觉对齐；任务中心“任务详情”按钮提升可见性；右侧“当前任务”仅保留取消操作（移除“打开任务中心/任务详情”）
 - 阶段 5 样式微调（2026-04-22）：运行调试弹窗改为上下单列结构，并移除分区高亮底色，回归主界面统一底色风格
 - 阶段 5 聊天显示修复：发送后立即展示用户临时消息；assistant 流式卡片仅在生成中/失败态显示，避免切回会话前看到重复回复
@@ -130,7 +130,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `full-trace-session` 清理收口：Inspector 中已移除旧任务块代码（任务用量/任务快照/任务索引），不再通过样式隐藏保留；任务分析统一走“任务中心 + 任务详情页”
 - `full-trace-session` 回归对齐：Playwright 主链路与边界用例已迁移至新入口（`chat-open-task-center` / `task-center-open-task-detail` / `task-detail-export-*`），不再依赖已删除的 Inspector 任务导出控件
 - `trace-export-json-md` 首版已落地：任务导出入口统一在任务详情页（JSON / Markdown），可一键导出当前任务（task-linked 消息、TraceStep、RAG chunks、usage、元信息）
-- `session-export-lite` 首版已落地：会话导出入口迁移到中栏头部“更多”菜单（chat/tasks 双视图一致），支持导出当前会话 JSON / Markdown（消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage）
+- `session-export-lite` 首版已落地：会话导出入口迁移到左侧会话行“...”菜单（方案 1，按会话行触发），支持导出当前会话 JSON / Markdown（消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage）
 - 任务索引增强：支持状态筛选（全部/运行中/已完成/失败）、时间排序（最新/最早）与失败置顶
 - 任务索引增强：支持按任务标题/ID 搜索，并在失败任务上展示失败摘要提示
 - Trace 面板增强：支持步骤类型筛选（全部/思考/行动/观察/工具/RAG/其他）、关键词检索、类型计数统计，且在时间线与流程图视图一致生效
@@ -170,7 +170,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `app/components/workbench/index.tsx`：工作台主编排
 - `app/components/workbench/inspector.tsx`：轨迹与上下文面板
 - `app/tasks/[taskId]/page.tsx`：任务详情页与任务导出入口（JSON/Markdown）
-- `app/components/workbench/chat-column.tsx` / `app/components/workbench/task-center.tsx`：会话导出入口（中栏头部“更多”菜单，Session JSON/Markdown）
+- `app/components/workbench/sidebar.tsx`：会话导出入口（左侧会话行“...”菜单，Session JSON/Markdown）
 - `app/components/workbench/trace-flow-view.tsx`：轨迹流程图节点渲染
 - `app/components/workbench/chat-column.tsx`：消息历史、用户临时消息与流式 assistant 展示
 - `app/components/workbench/sidebar.tsx`：会话列表、折叠侧栏与设置入口
