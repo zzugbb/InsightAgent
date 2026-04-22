@@ -31,6 +31,7 @@
 - 协同进展：前端 Trace 面板已支持步骤类型筛选/关键词检索/类型计数，复用现有 TraceStep 字段，无需新增后端接口
 - 协同进展：前端右侧 Inspector 已完成一体化收口（Trace 密度、Context 快速跳转、状态徽标），均基于现有字段推导，无需新增后端接口
 - 协同进展：`full-trace-session-lite` 首个前端切片已接入（任务快照：prompt/最终回答摘要/最终观察/RAG 命中/状态与失败提示），复用现有 `GET /api/tasks` + `GET /api/tasks/{task_id}/trace` 契约，无需新增后端接口
+- 协同进展：`full-trace-session` 首步收口已接入任务详情独立页（前端 `/tasks/[taskId]`），复用 `GET /api/tasks/{task_id}`、`GET /api/tasks/{task_id}/trace` 与既有导出接口，无需新增后端接口
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage
 - 协同进展：`session-export-lite` 首版已接入；新增 `GET /api/sessions/{session_id}/export/json` 与 `GET /api/sessions/{session_id}/export/markdown`，导出包含会话消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage 汇总
 - 阶段 5 增量：`remote-provider-hardening` 首轮已完成；Provider 运行时统一输出结构化错误码（401/403、429、5xx、网络、无效 JSON、空响应、SSE 中断），任务流 SSE `error` 事件透传 `code/fatal/retryable/detail/status_code`

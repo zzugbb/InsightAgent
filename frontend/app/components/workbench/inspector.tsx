@@ -1100,6 +1100,13 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             <div className="task-export-actions">
               <Button
                 size="small"
+                data-testid="inspector-task-open-detail"
+                href={`/tasks/${encodeURIComponent(activeTask.id)}`}
+              >
+                {t.inspector.taskOpenDetail}
+              </Button>
+              <Button
+                size="small"
                 loading={taskExporting === "json"}
                 data-testid="inspector-task-export-json"
                 onClick={() => {
@@ -1570,13 +1577,19 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             {t.inspector.statusPrefix}
             {activeTask.status}
           </span>
-          {isTaskCancelable(activeTask.status) ? (
-            <div className="task-export-actions">
-              <Button
-                size="small"
-                danger
-                loading={cancellingTaskId === activeTask.id}
-                data-testid="inspector-task-cancel"
+            {isTaskCancelable(activeTask.status) ? (
+              <div className="task-export-actions">
+                <Button
+                  size="small"
+                  href={`/tasks/${encodeURIComponent(activeTask.id)}`}
+                >
+                  {t.inspector.taskOpenDetail}
+                </Button>
+                <Button
+                  size="small"
+                  danger
+                  loading={cancellingTaskId === activeTask.id}
+                  data-testid="inspector-task-cancel"
                 onClick={() => onCancelTask(activeTask)}
               >
                 {t.inspector.taskCancel}
@@ -1671,11 +1684,18 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                     .join(" · ")
                 : "";
               return (
-                <button
+                <div
                   key={task.id}
                   className={`task-summary-item${isActive ? " is-active" : ""}${isTaskFailedStatus(task.status) ? " task-summary-item--failed" : ""}`}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelectTask(task)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectTask(task);
+                    }
+                  }}
                 >
                   <strong>{getTaskLabel(task, t.workbench)}</strong>
                   <div className="task-summary-meta">
@@ -1694,7 +1714,21 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                       {t.inspector.taskFailureHint}: {failedHint}
                     </span>
                   ) : null}
-                </button>
+                  <div className="task-summary-actions">
+                    <Button
+                      size="small"
+                      type="text"
+                      className="task-summary-open-detail"
+                      data-testid="inspector-task-open-detail-inline"
+                      href={`/tasks/${encodeURIComponent(task.id)}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                      }}
+                    >
+                      {t.inspector.taskOpenDetail}
+                    </Button>
+                  </div>
+                </div>
               );
             })}
           </div>

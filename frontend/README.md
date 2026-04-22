@@ -122,6 +122,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 告警：delta 连续失败时显示轻提示并持续自动重试
 - 右侧 Inspector（Context）信息架构已优化为分区式布局：概览 KPI、同步诊断、用量统计、Memory、任务索引；便于后续追加更多运维/分析模块
 - `full-trace-session-lite` 首个切片已落地：Context 新增「任务快照」分区，支持展示选中任务的 prompt、最终回答摘要、最终观察、RAG 命中、步骤数、状态/时间与失败提示，并接入快速跳转
+- `full-trace-session` 首步收口：新增任务详情独立页 `/tasks/[taskId]`，复用现有视觉体系展示任务快照、Trace 时间线/流程图回放、任务导出；并在 Inspector「任务快照」「任务索引」新增“任务详情”入口
 - `trace-export-json-md` 首版已落地：任务快照分区新增“导出 JSON / 导出 Markdown”按钮，可一键导出当前任务（task-linked 消息、TraceStep、RAG chunks、usage、元信息）
 - `session-export-lite` 首版已落地：Context 新增“会话导出”分区，支持导出当前会话 JSON / Markdown（消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage）
 - 任务索引增强：支持状态筛选（全部/运行中/已完成/失败）、时间排序（最新/最早）与失败置顶
