@@ -19,7 +19,6 @@ import {
   usePreferences,
 } from "../../../lib/preferences-context";
 
-import type { SseTaskUsage } from "../../../lib/stores/chat-stream-store";
 import type {
   InspectorTab,
   MemoryAddResponse,
@@ -29,23 +28,16 @@ import type {
   RagStatus,
   SessionMemoryStatus,
   TaskSummary,
-  UsageSummary,
 } from "./types";
 import { TraceFlowView } from "./trace-flow-view";
 import {
-  extractTaskFailureHint,
   formatTimestamp,
   formatTraceStepMetaSubtitle,
   getStepTitle,
   getTaskLabel,
-  isTaskFailedStatus,
   normalizeTraceStepKind,
   parseMemoryMetadataJson,
-  resolveTaskSnapshotSummary,
-  resolveInspectorTaskUsage,
-  resolveTaskUsageFromTask,
   shortenId,
-  type InspectorUsageRow,
 } from "./utils";
 
 const TRACE_PREVIEW = 6;
@@ -70,18 +62,12 @@ type InspectorProps = {
   traceDeltaLastError: string | null;
   traceDeltaNextRetryAt: number | null;
   traceDeltaRecoveredAt: number | null;
-  sseTaskUsage: SseTaskUsage | null;
   activeSessionId: string | null;
   activeTaskId: string | null;
   activeTask: TaskSummary | undefined;
   latestTaskForSession: TaskSummary | undefined;
-  recentTasks: TaskSummary[];
-  tasksFetchNextBusy: boolean;
-  tasksCanLoadMore: boolean;
-  onLoadMoreTasks: () => void;
   onReplayTrace: () => void;
   onLoadDelta: () => void;
-  onSelectTask: (task: TaskSummary) => void;
   onOpenTaskCenter: () => void;
   onCancelTask: (task: TaskSummary) => void;
   cancellingTaskId: string | null;
@@ -89,10 +75,6 @@ type InspectorProps = {
   sessionMemoryStatus: SessionMemoryStatus | undefined;
   sessionMemoryLoading: boolean;
   sessionMemoryError: string | null;
-  usageSummary: UsageSummary | undefined;
-  usageSummaryLoading: boolean;
-  usageSummaryError: string | null;
-  usageSummaryScope: "session" | "global";
 };
 
 export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspector(
@@ -115,18 +97,12 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     traceDeltaLastError,
     traceDeltaNextRetryAt,
     traceDeltaRecoveredAt,
-    sseTaskUsage,
     activeSessionId,
     activeTaskId,
     activeTask,
     latestTaskForSession,
-    recentTasks,
-    tasksFetchNextBusy,
-    tasksCanLoadMore,
-    onLoadMoreTasks,
     onReplayTrace,
     onLoadDelta,
-    onSelectTask,
     onOpenTaskCenter,
     onCancelTask,
     cancellingTaskId,
@@ -134,10 +110,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     sessionMemoryStatus,
     sessionMemoryLoading,
     sessionMemoryError,
-    usageSummary,
-    usageSummaryLoading,
-    usageSummaryError,
-    usageSummaryScope,
   },
   ref,
 ) {
@@ -164,18 +136,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const [ragIngestDraft, setRagIngestDraft] = useState("");
   const [ragIngestSource, setRagIngestSource] = useState("");
   const [ragQueryDraft, setRagQueryDraft] = useState("");
-  const [taskStatusFilter, setTaskStatusFilter] = useState<
-    "all" | "running" | "completed" | "failed"
-  >("all");
-  const [taskSortOrder, setTaskSortOrder] = useState<"latest" | "oldest">(
-    "latest",
-  );
-  const [taskPrioritizeFailed, setTaskPrioritizeFailed] = useState(true);
-  const [taskSearchQuery, setTaskSearchQuery] = useState("");
   const [retryCountdownSec, setRetryCountdownSec] = useState<number | null>(null);
-  const [taskExporting, setTaskExporting] = useState<"json" | "markdown" | null>(
-    null,
-  );
   const [sessionExporting, setSessionExporting] = useState<
     "json" | "markdown" | null
   >(null);
@@ -244,40 +205,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       url,
       detail.slice(0, 280),
     );
-  };
-
-  const handleExportTask = async (format: "json" | "markdown") => {
-    if (!activeTask?.id) {
-      message.warning(t.inspector.taskSnapshotNoSelection);
-      return;
-    }
-    setTaskExporting(format);
-    const taskId = encodeURIComponent(activeTask.id);
-    const route = format === "json" ? "json" : "markdown";
-    const fallbackFilename =
-      format === "json"
-        ? `insightagent-task-${activeTask.id}.json`
-        : `insightagent-task-${activeTask.id}.md`;
-    const requestUrl = `${apiBaseUrl}/api/tasks/${taskId}/export/${route}?download=1`;
-    try {
-      const response = await fetchExportResponse(requestUrl);
-      const filename = parseAttachmentFilename(
-        response.headers.get("content-disposition"),
-        fallbackFilename,
-      );
-      const blob = await response.blob();
-      triggerDownload(filename, blob);
-      message.success(
-        format === "json"
-          ? t.inspector.taskExportJsonDone
-          : t.inspector.taskExportMarkdownDone,
-      );
-    } catch (error) {
-      const u = toUserFacingError(error, t.errors);
-      message.error(u.hint ? `${u.banner} ${u.hint}` : u.banner);
-    } finally {
-      setTaskExporting(null);
-    }
   };
 
   const handleExportSession = async (format: "json" | "markdown") => {
@@ -487,100 +414,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     };
   }, [filteredTraceSteps, expandAllTrace]);
 
-  const inspectorTaskUsage = useMemo(
-    () =>
-      resolveInspectorTaskUsage({
-        taskId: activeTaskId,
-        activeTask,
-        sseTaskUsage,
-      }),
-    [activeTaskId, activeTask, sseTaskUsage],
-  );
-
-  const activeTaskSnapshot = useMemo(() => {
-    if (!activeTask) {
-      return null;
-    }
-    const traceSteps =
-      activeTask.id === sseTaskId && sseTraceSteps.length > 0
-        ? sseTraceSteps
-        : undefined;
-    return resolveTaskSnapshotSummary({
-      task: activeTask,
-      traceSteps,
-    });
-  }, [activeTask, sseTaskId, sseTraceSteps]);
-
-  const activeTaskFailureHint = useMemo(
-    () => (activeTask ? extractTaskFailureHint(activeTask) : null),
-    [activeTask],
-  );
-
-  const sessionUsageAggregate = useMemo(() => {
-    if (!usageSummary) {
-      return null;
-    }
-    const tokenFmt = new Intl.NumberFormat(localeTag, {
-      maximumFractionDigits: 0,
-    });
-    const costFmt = (n: number | null | undefined) =>
-      n === null || n === undefined ? null : `$${n.toFixed(6)}`;
-
-    return {
-      prompt: tokenFmt.format(Math.trunc(usageSummary.prompt_tokens)),
-      completion: tokenFmt.format(
-        Math.trunc(usageSummary.completion_tokens),
-      ),
-      total: tokenFmt.format(Math.trunc(usageSummary.total_tokens)),
-      cost: costFmt(usageSummary.cost_estimate),
-      promptSource: null,
-      completionSource: null,
-      usageSource: null,
-      avgTotal:
-        usageSummary.avg_total_tokens === null
-          ? null
-          : tokenFmt.format(Math.trunc(usageSummary.avg_total_tokens)),
-      avgCost: costFmt(usageSummary.avg_cost_estimate),
-      taskCount: usageSummary.tasks_with_usage,
-    };
-  }, [localeTag, usageSummary]);
-
-  const usageSourceValueLabel = (
-    source: InspectorUsageRow["usageSource"],
-  ): string | null => {
-    if (source === "provider") {
-      return t.inspector.usageSourceProvider;
-    }
-    if (source === "estimated") {
-      return t.inspector.usageSourceEstimated;
-    }
-    if (source === "legacy") {
-      return t.inspector.usageSourceLegacy;
-    }
-    return null;
-  };
-
-  const getUsageSourceText = (usage: InspectorUsageRow | null): string | null => {
-    if (!usage) {
-      return null;
-    }
-    const overall = usageSourceValueLabel(usage.usageSource);
-    const prompt = usageSourceValueLabel(usage.promptSource);
-    const completion = usageSourceValueLabel(usage.completionSource);
-    if (!overall && !prompt && !completion) {
-      return null;
-    }
-    if (prompt || completion) {
-      const promptText = prompt ?? overall ?? "—";
-      const completionText = completion ?? overall ?? "—";
-      const detail = `${t.inspector.usagePrompt}: ${promptText} · ${t.inspector.usageCompletion}: ${completionText}`;
-      return overall ? `${overall} (${detail})` : detail;
-    }
-    return overall;
-  };
-
-  const inspectorTaskUsageSourceText = getUsageSourceText(inspectorTaskUsage);
-
   const traceDeltaSyncStatusLabel =
     traceDeltaSyncStatus === "syncing"
       ? t.inspector.traceSyncStateSyncing
@@ -626,62 +459,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     isStreaming &&
     traceDeltaSyncStatus === "retrying" &&
     traceDeltaRetryCount >= 2;
-
-  const filteredTasks = useMemo(() => {
-    const q = taskSearchQuery.trim().toLowerCase();
-    const statusMatched = recentTasks.filter((task) => {
-      if (taskStatusFilter === "all") {
-        return true;
-      }
-      const status = task.status.trim().toLowerCase();
-      if (taskStatusFilter === "running") {
-        return status === "running" || status === "pending";
-      }
-      if (taskStatusFilter === "completed") {
-        return status === "completed" || status === "done" || status === "success";
-      }
-      return status === "failed" || status === "error";
-    });
-    const queryMatched =
-      q.length === 0
-        ? statusMatched
-        : statusMatched.filter((task) => {
-            const prompt = task.prompt.trim().toLowerCase();
-            const id = task.id.toLowerCase();
-            return prompt.includes(q) || id.includes(q);
-          });
-    const sorted = [...queryMatched].sort((a, b) => {
-      const at = new Date(a.updated_at).getTime();
-      const bt = new Date(b.updated_at).getTime();
-      return taskSortOrder === "latest" ? bt - at : at - bt;
-    });
-    if (!taskPrioritizeFailed) {
-      return sorted;
-    }
-    return sorted.sort((a, b) => {
-      const af = isTaskFailedStatus(a.status) ? 1 : 0;
-      const bf = isTaskFailedStatus(b.status) ? 1 : 0;
-      return bf - af;
-    });
-  }, [recentTasks, taskStatusFilter, taskSortOrder, taskPrioritizeFailed, taskSearchQuery]);
-
-  const resolveTaskStatusTone = (status: string): "running" | "completed" | "failed" | "other" => {
-    const normalized = status.trim().toLowerCase();
-    if (normalized === "running" || normalized === "pending") {
-      return "running";
-    }
-    if (
-      normalized === "completed" ||
-      normalized === "done" ||
-      normalized === "success"
-    ) {
-      return "completed";
-    }
-    if (normalized === "failed" || normalized === "error") {
-      return "failed";
-    }
-    return "other";
-  };
 
   const isTaskCancelable = (status: string): boolean => {
     const normalized = status.trim().toLowerCase();
@@ -944,190 +721,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             {t.inspector.traceSyncRecovered(traceDeltaRecoveredLabel)}
           </p>
         ) : null}
-      </div>
-
-      <div className="inspector-block inspector-block--moved" id="ctx-usage">
-        <p className="summary-label inspector-usage-kicker">{t.inspector.usageTitle}</p>
-        <p className="inspector-section-lead">{t.inspector.usageLead}</p>
-        {inspectorTaskUsage ? (
-          <div className="context-grid context-grid--stats">
-            <span>{t.inspector.usagePrompt}</span>
-            <strong>{inspectorTaskUsage.prompt ?? "—"}</strong>
-            <span>{t.inspector.usageCompletion}</span>
-            <strong>{inspectorTaskUsage.completion ?? "—"}</strong>
-            <span>{t.inspector.usageTotal}</span>
-            <strong>{inspectorTaskUsage.total ?? "—"}</strong>
-            <span>{t.inspector.usageCost}</span>
-            <strong>{inspectorTaskUsage.cost ?? "—"}</strong>
-            {inspectorTaskUsageSourceText ? (
-              <>
-                <span>{t.inspector.usageSource}</span>
-                <strong>{inspectorTaskUsageSourceText}</strong>
-              </>
-            ) : null}
-          </div>
-        ) : (
-          <p className="panel-note panel-note--muted">{t.inspector.usageSummaryEmpty}</p>
-        )}
-
-        {usageSummaryLoading ? (
-          <p className="panel-note panel-note--muted">{t.inspector.usageSummaryLoading}</p>
-        ) : null}
-        {usageSummaryError ? (
-          <p className="panel-note panel-note--muted">{t.inspector.usageSummaryError}</p>
-        ) : null}
-
-        {sessionUsageAggregate ? (
-          <div className="inspector-subblock">
-            <p className="summary-label inspector-usage-kicker">
-              {t.inspector.usageSummaryTitle}
-            </p>
-            <span>
-              {usageSummaryScope === "session"
-                ? t.inspector.usageScopeSession
-                : t.inspector.usageScopeGlobal}
-            </span>
-            <div className="context-grid context-grid--stats compact">
-              <span>{t.inspector.usagePrompt}</span>
-              <strong>{sessionUsageAggregate.prompt ?? "—"}</strong>
-              <span>{t.inspector.usageCompletion}</span>
-              <strong>{sessionUsageAggregate.completion ?? "—"}</strong>
-              <span>{t.inspector.usageTotal}</span>
-              <strong>{sessionUsageAggregate.total ?? "—"}</strong>
-              <span>{t.inspector.usageCost}</span>
-              <strong>{sessionUsageAggregate.cost ?? "—"}</strong>
-              <span>{t.inspector.usageAvgTotal}</span>
-              <strong>{sessionUsageAggregate.avgTotal ?? "—"}</strong>
-              <span>{t.inspector.usageAvgCost}</span>
-              <strong>{sessionUsageAggregate.avgCost ?? "—"}</strong>
-            </div>
-            <span>{t.inspector.usageTaskCount(sessionUsageAggregate.taskCount)}</span>
-            <span>
-              {t.inspector.usageTaskCoverage(
-                usageSummary?.tasks_with_usage ?? sessionUsageAggregate.taskCount,
-                usageSummary?.tasks_total ?? sessionUsageAggregate.taskCount,
-              )}
-            </span>
-          </div>
-        ) : null}
-
-        {!usageSummaryLoading &&
-        !usageSummaryError &&
-        usageSummary &&
-        usageSummary.tasks_with_usage === 0 ? (
-          <p className="panel-note panel-note--muted">{t.inspector.usageSummaryEmpty}</p>
-        ) : null}
-      </div>
-
-      <div className="inspector-block inspector-block--moved" id="ctx-task-snapshot">
-        <p className="summary-label">{t.inspector.taskSnapshotTitle}</p>
-        <p className="inspector-section-lead">{t.inspector.taskSnapshotLead}</p>
-        {activeTask ? (
-          <>
-            <strong>{getTaskLabel(activeTask, t.workbench)}</strong>
-            <div className="context-grid context-grid--stats compact">
-              <span>{t.inspector.taskSnapshotStatus}</span>
-              <strong>{activeTask.status}</strong>
-              <span>{t.inspector.taskSnapshotCreatedAt}</span>
-              <strong>{formatTimestamp(activeTask.created_at, localeTag)}</strong>
-              <span>{t.inspector.taskSnapshotUpdatedAt}</span>
-              <strong>{formatTimestamp(activeTask.updated_at, localeTag)}</strong>
-              <span>{t.inspector.taskSnapshotStepCount}</span>
-              <strong>{activeTaskSnapshot?.stepCount ?? 0}</strong>
-              <span>{t.inspector.taskSnapshotRagHits}</span>
-              <strong>{activeTaskSnapshot?.ragHitCount ?? 0}</strong>
-            </div>
-
-            {inspectorTaskUsage ? (
-              <div className="context-grid context-grid--stats compact">
-                <span>{t.inspector.usagePrompt}</span>
-                <strong>{inspectorTaskUsage.prompt ?? "—"}</strong>
-                <span>{t.inspector.usageCompletion}</span>
-                <strong>{inspectorTaskUsage.completion ?? "—"}</strong>
-                <span>{t.inspector.usageTotal}</span>
-                <strong>{inspectorTaskUsage.total ?? "—"}</strong>
-                <span>{t.inspector.usageCost}</span>
-                <strong>{inspectorTaskUsage.cost ?? "—"}</strong>
-                {inspectorTaskUsageSourceText ? (
-                  <>
-                    <span>{t.inspector.usageSource}</span>
-                    <strong>{inspectorTaskUsageSourceText}</strong>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-
-            {activeTaskSnapshot &&
-            activeTaskSnapshot.ragKnowledgeBaseIds.length > 0 ? (
-              <p className="panel-note panel-note--muted">
-                {t.inspector.taskSnapshotRagKnowledgeBases(
-                  activeTaskSnapshot.ragKnowledgeBaseIds.join(", "),
-                )}
-              </p>
-            ) : null}
-
-            <p className="task-snapshot-subtitle">{t.inspector.taskSnapshotPrompt}</p>
-            <pre className="task-snapshot-body">
-              {activeTask.prompt.trim() || "—"}
-            </pre>
-
-            <p className="task-snapshot-subtitle">{t.inspector.taskSnapshotFinalAnswer}</p>
-            <pre className="task-snapshot-body">
-              {activeTaskSnapshot?.finalAnswer ?? t.inspector.taskSnapshotFinalAnswerEmpty}
-            </pre>
-
-            {activeTaskSnapshot?.lastObservation &&
-            activeTaskSnapshot.lastObservation !== activeTaskSnapshot.finalAnswer ? (
-              <>
-                <p className="task-snapshot-subtitle">
-                  {t.inspector.taskSnapshotLastObservation}
-                </p>
-                <pre className="task-snapshot-body">
-                  {activeTaskSnapshot.lastObservation}
-                </pre>
-              </>
-            ) : null}
-
-            {activeTaskFailureHint ? (
-              <p className="task-snapshot-failure">
-                {t.inspector.taskFailureHint}: {activeTaskFailureHint}
-              </p>
-            ) : null}
-            <div className="task-export-actions">
-              <Button
-                size="small"
-                data-testid="inspector-task-open-detail"
-                href={`/tasks/${encodeURIComponent(activeTask.id)}`}
-              >
-                {t.inspector.taskOpenDetail}
-              </Button>
-              <Button
-                size="small"
-                loading={taskExporting === "json"}
-                data-testid="inspector-task-export-json"
-                onClick={() => {
-                  void handleExportTask("json");
-                }}
-              >
-                {t.inspector.taskExportJson}
-              </Button>
-              <Button
-                size="small"
-                loading={taskExporting === "markdown"}
-                data-testid="inspector-task-export-markdown"
-                onClick={() => {
-                  void handleExportTask("markdown");
-                }}
-              >
-                {t.inspector.taskExportMarkdown}
-              </Button>
-            </div>
-          </>
-        ) : (
-          <p className="panel-note panel-note--muted">
-            {t.inspector.taskSnapshotNoSelection}
-          </p>
-        )}
       </div>
 
       <div className="inspector-block" id="ctx-session-export">
@@ -1602,148 +1195,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <span>
             {formatTimestamp(latestTaskForSession.updated_at, localeTag)}
           </span>
-        </div>
-      ) : null}
-
-      {recentTasks.length > 0 ? (
-        <div className="inspector-block inspector-block--moved" id="ctx-tasks">
-          <p className="summary-label">
-            {activeSessionId
-              ? t.inspector.sessionTasks
-              : t.inspector.recentTasks}
-          </p>
-          <p className="inspector-section-lead">{t.inspector.taskIndexLead}</p>
-          <div className="task-index-toolbar">
-            <span className="task-index-toolbar-label">{t.inspector.taskViewLabel}</span>
-            <Segmented
-              size="small"
-              value={taskStatusFilter}
-              onChange={(v) =>
-                setTaskStatusFilter(v as "all" | "running" | "completed" | "failed")
-              }
-              options={[
-                { label: t.inspector.taskFilterAll, value: "all" },
-                { label: t.inspector.taskFilterRunning, value: "running" },
-                { label: t.inspector.taskFilterDone, value: "completed" },
-                { label: t.inspector.taskFilterError, value: "failed" },
-              ]}
-            />
-            <Input
-              size="small"
-              allowClear
-              value={taskSearchQuery}
-              onChange={(e) => setTaskSearchQuery(e.target.value)}
-              placeholder={t.inspector.taskSearchPlaceholder}
-            />
-            <Segmented
-              size="small"
-              value={taskSortOrder}
-              onChange={(v) => setTaskSortOrder(v as "latest" | "oldest")}
-              options={[
-                { label: t.inspector.taskSortLatest, value: "latest" },
-                { label: t.inspector.taskSortOldest, value: "oldest" },
-              ]}
-            />
-            <Button
-              type={taskPrioritizeFailed ? "primary" : "default"}
-              size="small"
-              onClick={() => setTaskPrioritizeFailed((v) => !v)}
-            >
-              {t.inspector.taskPinFailed}
-            </Button>
-          </div>
-          <p className="task-index-summary">
-            {t.inspector.taskVisibleCount(filteredTasks.length, recentTasks.length)}
-          </p>
-          <div className="task-summary-list">
-            {filteredTasks.map((task) => {
-              const isActive = task.id === activeTaskId;
-              const failedHint = extractTaskFailureHint(task);
-              const usage = resolveTaskUsageFromTask(task);
-              const usageSourceText = getUsageSourceText(usage);
-              const usageLine = usage
-                ? [
-                    usage.completion
-                      ? `${t.inspector.usageCompletion}: ${usage.completion}`
-                      : null,
-                    usage.total
-                      ? `${t.inspector.usageTotal}: ${usage.total}`
-                      : null,
-                    usage.cost
-                      ? `${t.inspector.usageCost}: ${usage.cost}`
-                      : null,
-                    usageSourceText
-                      ? `${t.inspector.usageSource}: ${usageSourceText}`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")
-                : "";
-              return (
-                <div
-                  key={task.id}
-                  className={`task-summary-item${isActive ? " is-active" : ""}${isTaskFailedStatus(task.status) ? " task-summary-item--failed" : ""}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSelectTask(task)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onSelectTask(task);
-                    }
-                  }}
-                >
-                  <strong>{getTaskLabel(task, t.workbench)}</strong>
-                  <div className="task-summary-meta">
-                    <span
-                      className={`task-status-badge task-status-badge--${resolveTaskStatusTone(task.status)}`}
-                    >
-                      {task.status}
-                    </span>
-                    <span>{formatTimestamp(task.updated_at, localeTag)}</span>
-                  </div>
-                  {usageLine ? (
-                    <span className="task-summary-usage">{usageLine}</span>
-                  ) : null}
-                  {failedHint ? (
-                    <span className="task-summary-failed-hint">
-                      {t.inspector.taskFailureHint}: {failedHint}
-                    </span>
-                  ) : null}
-                  <div className="task-summary-actions">
-                    <Button
-                      size="small"
-                      type="text"
-                      className="task-summary-open-detail"
-                      data-testid="inspector-task-open-detail-inline"
-                      href={`/tasks/${encodeURIComponent(task.id)}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                      }}
-                    >
-                      {t.inspector.taskOpenDetail}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {filteredTasks.length === 0 ? (
-            <p className="panel-note panel-note--muted">{t.inspector.taskEmpty}</p>
-          ) : null}
-          {tasksCanLoadMore ? (
-            <div className="inspector-task-load-more">
-              <Button
-                type="default"
-                size="small"
-                block
-                loading={tasksFetchNextBusy}
-                onClick={() => onLoadMoreTasks()}
-              >
-                {t.inspector.loadMoreTasks}
-              </Button>
-            </div>
-          ) : null}
         </div>
       ) : null}
 

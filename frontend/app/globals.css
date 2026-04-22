@@ -2026,10 +2026,6 @@ code {
   gap: 7px;
 }
 
-.inspector-block--moved {
-  display: none !important;
-}
-
 .inspector-subblock {
   margin-top: 8px;
   display: flex;

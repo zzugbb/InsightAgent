@@ -38,7 +38,6 @@ import type {
   SettingsSummary,
   TaskCancelResponse,
   TaskSummary,
-  UsageSummary,
 } from "./types";
 import {
   ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
@@ -184,7 +183,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   );
   const sseMessage = useChatStreamStore((s: ChatStreamStore) => s.sseMessage);
   const traceCursor = useChatStreamStore((s: ChatStreamStore) => s.traceCursor);
-  const sseTaskUsage = useChatStreamStore((s: ChatStreamStore) => s.sseTaskUsage);
   const resetStreamUi = useChatStreamStore(
     (s: ChatStreamStore) => s.resetStreamUi,
   );
@@ -288,22 +286,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     enabled: Boolean(activeSessionId),
     staleTime: 20_000,
   });
-
-  const usageSummaryQuery = useQuery({
-    queryKey: ["tasks-usage-summary", activeSessionId ?? "__global__"],
-    queryFn: () =>
-      apiJson<UsageSummary>(
-        activeSessionId
-          ? `${API_BASE_URL}/api/tasks/usage/summary?session_id=${encodeURIComponent(activeSessionId)}`
-          : `${API_BASE_URL}/api/tasks/usage/summary`,
-      ),
-    staleTime: 20_000,
-  });
-
-  const usageSummaryErrorBanner =
-    usageSummaryQuery.isError && usageSummaryQuery.error
-      ? toUserFacingError(usageSummaryQuery.error, t.errors).banner
-      : null;
 
   const sessionMemoryErrorBanner =
     sessionMemoryQuery.isError && sessionMemoryQuery.error
@@ -623,7 +605,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     ? sseMessage
     : t.stream.idleHint;
   const scopedTraceCursor = streamSessionMatchesActive ? traceCursor : 0;
-  const scopedSseTaskUsage = streamSessionMatchesActive ? sseTaskUsage : null;
   let messagesMessage: string = t.workbench.selectSessionForHistory;
   if (activeSessionId) {
     if (messagesQuery.isError) {
@@ -1491,18 +1472,12 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         traceDeltaLastError={traceDeltaLastError}
         traceDeltaNextRetryAt={traceDeltaNextRetryAt}
         traceDeltaRecoveredAt={traceDeltaRecoveredAt}
-        sseTaskUsage={scopedSseTaskUsage}
         activeSessionId={activeSessionId}
         activeTaskId={activeTaskIdScoped}
         activeTask={activeTask}
         latestTaskForSession={latestTaskForSession}
-        recentTasks={recentTasksScoped}
-        tasksFetchNextBusy={tasksFetchNextBusy}
-        tasksCanLoadMore={tasksCanLoadMore}
-        onLoadMoreTasks={() => void tasksQuery.fetchNextPage()}
         onReplayTrace={handleLoadPersistedTrace}
         onLoadDelta={handleLoadTraceDelta}
-        onSelectTask={handleSelectTask}
         onCancelTask={(task) => {
           cancelTaskMutation.mutate(task.id);
         }}
@@ -1511,10 +1486,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         sessionMemoryStatus={sessionMemoryQuery.data}
         sessionMemoryLoading={sessionMemoryQuery.isLoading}
         sessionMemoryError={sessionMemoryErrorBanner}
-        usageSummary={usageSummaryQuery.data}
-        usageSummaryLoading={usageSummaryQuery.isLoading}
-        usageSummaryError={usageSummaryErrorBanner}
-        usageSummaryScope={activeSessionId ? "session" : "global"}
         onOpenTaskCenter={() => {
           if (activeSessionId) {
             setTaskCenterScope("session");
