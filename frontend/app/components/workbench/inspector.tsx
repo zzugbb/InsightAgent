@@ -1170,7 +1170,11 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             <Button size="small" type="default" onClick={onOpenTaskCenter}>
               {t.inspector.openTaskCenter}
             </Button>
-            <Button size="small" href={`/tasks/${encodeURIComponent(activeTask.id)}`}>
+            <Button
+              size="small"
+              data-testid="inspector-task-open-detail"
+              href={`/tasks/${encodeURIComponent(activeTask.id)}`}
+            >
               {t.inspector.taskOpenDetail}
             </Button>
             {isTaskCancelable(activeTask.status) ? (

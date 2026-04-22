@@ -268,6 +268,7 @@ export default function TaskDetailPage() {
           <div className="task-detail-actions">
             <Button
               size="small"
+              data-testid="task-detail-export-json"
               loading={taskExporting === "json"}
               disabled={!task}
               onClick={() => {
@@ -278,6 +279,7 @@ export default function TaskDetailPage() {
             </Button>
             <Button
               size="small"
+              data-testid="task-detail-export-markdown"
               loading={taskExporting === "markdown"}
               disabled={!task}
               onClick={() => {

@@ -115,6 +115,21 @@ async function waitForContextCancelButton(page: Page): Promise<Locator> {
   return cancelButton;
 }
 
+async function openTaskDetailFromTaskCenter(page: Page): Promise<void> {
+  const openTaskCenter = page.getByTestId("chat-open-task-center");
+  await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
+  await openTaskCenter.click();
+  await expect(page.getByTestId("task-center-shell")).toBeVisible({
+    timeout: 20_000,
+  });
+  const openDetail = page.getByTestId("task-center-open-task-detail").first();
+  await expect(openDetail).toBeVisible({ timeout: 20_000 });
+  await openDetail.click();
+  await expect(page.getByTestId("task-detail-page")).toBeVisible({
+    timeout: 20_000,
+  });
+}
+
 async function waitForRunningTaskIdInSession(args: {
   request: Parameters<typeof registerViaApi>[0];
   token: string;
@@ -362,7 +377,7 @@ test("task export keeps localized 404 hint when token ownership changes", async 
     }).first(),
   ).toBeVisible({ timeout: 20_000 });
 
-  await openInspectorContextTab(page);
+  await openTaskDetailFromTaskCenter(page);
   await page.evaluate(
     ({
       accessToken,
@@ -389,7 +404,7 @@ test("task export keeps localized 404 hint when token ownership changes", async 
     },
   );
 
-  const exportJsonButton = page.getByTestId("inspector-task-export-json");
+  const exportJsonButton = page.getByTestId("task-detail-export-json");
   await exportJsonButton.click();
   await expectToastContains(page, "404");
   await expect
@@ -427,7 +442,7 @@ test("cross-session switch keeps cancel and export scoped to active session", as
   await openInspectorContextTab(page);
   const cancelButton = page.locator('[data-testid="inspector-task-cancel"]:visible').first();
   await expect(cancelButton).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId("inspector-task-export-json")).toBeVisible();
+  await expect(page.getByTestId("inspector-task-open-detail")).toBeVisible();
 
   await selectSessionByTitle(page, sessionBTitle);
   await openInspectorContextTab(page);
@@ -435,8 +450,7 @@ test("cross-session switch keeps cancel and export scoped to active session", as
   await expect(
     page.locator('[data-testid="inspector-task-cancel"]:visible'),
   ).toHaveCount(0);
-  await expect(page.getByTestId("inspector-task-export-json")).toHaveCount(0);
-  await expect(page.getByTestId("inspector-task-export-markdown")).toHaveCount(0);
+  await expect(page.getByTestId("inspector-task-open-detail")).toHaveCount(0);
   await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
     timeout: 20_000,
   });

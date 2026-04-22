@@ -124,6 +124,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `full-trace-session` 首步收口：新增任务详情独立页 `/tasks/[taskId]`，复用现有视觉体系展示任务快照、Trace 时间线/流程图回放、任务导出
 - `full-trace-session` 重排收口：中间主区域新增 `chat | tasks` 双视图切换；任务索引能力（筛选/排序/搜索/失败置顶/分页）迁移到中间“任务中心”；右侧保留运行态观察
 - `full-trace-session` 清理收口：Inspector 中已移除旧任务块代码（任务用量/任务快照/任务索引），不再通过样式隐藏保留；任务分析统一走“任务中心 + 任务详情页”
+- `full-trace-session` 回归对齐：Playwright 主链路与边界用例已迁移至新入口（`chat-open-task-center` / `task-center-open-task-detail` / `task-detail-export-*`），不再依赖已删除的 Inspector 任务导出控件
 - `trace-export-json-md` 首版已落地：任务导出入口统一在任务详情页（JSON / Markdown），可一键导出当前任务（task-linked 消息、TraceStep、RAG chunks、usage、元信息）
 - `session-export-lite` 首版已落地：Context 新增“会话导出”分区，支持导出当前会话 JSON / Markdown（消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage）
 - 任务索引增强：支持状态筛选（全部/运行中/已完成/失败）、时间排序（最新/最早）与失败置顶

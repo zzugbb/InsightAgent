@@ -64,6 +64,24 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   await expect(hitDoc).toContainText(snippet, { timeout: 20_000 });
 }
 
+async function openTaskCenterAndDetail(page: Page): Promise<void> {
+  const openTaskCenter = page.getByTestId("chat-open-task-center");
+  await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
+  await openTaskCenter.click();
+  await expect(page.getByTestId("task-center-shell")).toBeVisible({
+    timeout: 20_000,
+  });
+
+  const openDetailButton = page
+    .getByTestId("task-center-open-task-detail")
+    .first();
+  await expect(openDetailButton).toBeVisible({ timeout: 20_000 });
+  await openDetailButton.click();
+  await expect(page.getByTestId("task-detail-page")).toBeVisible({
+    timeout: 20_000,
+  });
+}
+
 async function waitForSessionRunningTask(
   request: APIRequestContext,
   token: string,
@@ -150,17 +168,6 @@ test("workbench main path covers trace, rag and task/session export", async ({
   ).toBeVisible({ timeout: 20_000 });
 
   await openInspectorContextTab(page);
-
-  await triggerDownloadAndAssertName(
-    page,
-    page.getByTestId("inspector-task-export-json"),
-    "task",
-  );
-  await triggerDownloadAndAssertName(
-    page,
-    page.getByTestId("inspector-task-export-markdown"),
-    "task",
-  );
   await triggerDownloadAndAssertName(
     page,
     page.getByTestId("inspector-session-export-json"),
@@ -180,6 +187,18 @@ test("workbench main path covers trace, rag and task/session export", async ({
   await page.getByTestId("inspector-rag-ingest-submit").click();
 
   await queryRagUntilHit(page, ragSnippet);
+
+  await openTaskCenterAndDetail(page);
+  await triggerDownloadAndAssertName(
+    page,
+    page.getByTestId("task-detail-export-json"),
+    "task",
+  );
+  await triggerDownloadAndAssertName(
+    page,
+    page.getByTestId("task-detail-export-markdown"),
+    "task",
+  );
 });
 
 test("running task can recover after reload and be cancelled", async ({
