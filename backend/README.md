@@ -36,6 +36,7 @@
 - 协同进展：`full-trace-session` 清理收口已完成；前端 Inspector 旧任务块代码已物理删除，任务分析入口统一为任务中心与任务详情页，后端接口契约保持不变
 - 协同进展：`full-trace-session` 二次迁移已完成；会话导出入口迁移至左侧会话行“...”菜单（方案 1），Memory/RAG 调试迁移至设置弹窗“运行调试”，后端接口契约保持不变
 - 协同进展：`full-trace-session` 交互细化已完成；运行调试弹窗样式与全站风格统一，任务中心“任务详情”按钮增强，Inspector 当前任务仅保留取消操作；后端接口契约保持不变
+- 协同进展：任务中心抽屉头部已移除模式/模型展示，仅保留右侧关闭按钮；属前端展示层收口，后端接口契约保持不变
 - 协同进展：`full-trace-session` 样式微调已完成；运行调试弹窗改为上下单列并移除分区高亮底色，后端接口契约保持不变
 - 协同进展：前端 Playwright 回归已对齐新入口（任务中心抽屉 + 新标签任务详情导出），旧的 Inspector 任务导出断言已替换；后端导出接口契约保持不变
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage

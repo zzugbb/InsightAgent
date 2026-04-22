@@ -2284,6 +2284,14 @@ code {
   gap: 8px;
 }
 
+.task-center-header-actions {
+  margin-left: auto;
+}
+
+.task-center-close-btn.ant-btn {
+  margin-left: auto;
+}
+
 .task-center-list {
   margin-top: 8px;
 }

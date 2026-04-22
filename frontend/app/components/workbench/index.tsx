@@ -1525,7 +1525,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           activeSession={activeSession}
           activeSessionId={activeSessionId}
           activeTaskId={activeTaskIdScoped}
-          settingsSummary={settingsSummary}
           recentTasks={recentTasks}
           tasksLoading={tasksQuery.isLoading}
           tasksFetchNextBusy={tasksFetchNextBusy}

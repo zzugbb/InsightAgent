@@ -6,7 +6,6 @@ import {
   Input,
   Segmented,
   Space,
-  Tag,
 } from "antd";
 import type { RefObject } from "react";
 import { useMemo, useState } from "react";
@@ -22,17 +21,10 @@ import {
   resolveTaskUsageFromTask,
 } from "./utils";
 
-type SettingsSummaryLite = {
-  mode: string;
-  provider: string;
-  model: string;
-} | null;
-
 type TaskCenterProps = {
   activeSession: SessionSummary | undefined;
   activeSessionId: string | null;
   activeTaskId: string | null;
-  settingsSummary: SettingsSummaryLite;
   recentTasks: TaskSummary[];
   tasksLoading: boolean;
   tasksFetchNextBusy: boolean;
@@ -69,7 +61,6 @@ export function TaskCenter({
   activeSession,
   activeSessionId,
   activeTaskId,
-  settingsSummary,
   recentTasks,
   tasksLoading,
   tasksFetchNextBusy,
@@ -161,34 +152,18 @@ export function TaskCenter({
           </h2>
           <p className="chat-subtitle">{t.taskCenter.lead}</p>
         </div>
-        <Flex wrap="wrap" gap="small" align="center" justify="flex-end" className="chat-header-actions">
+        <Flex wrap="wrap" gap="small" align="center" justify="flex-end" className="chat-header-actions task-center-header-actions">
           <Space wrap size="small">
             <Button
               ref={closeButtonRef}
               type="default"
               onClick={onClose}
+              className="task-center-close-btn"
               data-testid="task-center-close"
             >
               {t.settings.close}
             </Button>
           </Space>
-          <div className="chat-runtime-badges" aria-label="runtime">
-            <Tag variant="filled" className="header-badge-tag header-badge-tag--mode">
-              <span className="header-badge-label">{t.chat.modeLabel}</span>
-              <span className="header-badge-value">{settingsSummary?.mode ?? "—"}</span>
-            </Tag>
-            <Tag variant="filled" className="header-badge-tag header-badge-tag--stack">
-              <span className="header-badge-value header-badge-value--mono">
-                {settingsSummary?.provider ?? "—"}
-              </span>
-              <span className="header-badge-sep" aria-hidden>
-                /
-              </span>
-              <span className="header-badge-value header-badge-value--mono header-badge-value--model">
-                {settingsSummary?.model ?? "—"}
-              </span>
-            </Tag>
-          </div>
         </Flex>
       </header>
 
