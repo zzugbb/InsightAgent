@@ -106,6 +106,7 @@ export const zh: Messages = {
       "直接输入并发送即可；未选会话时会自动创建。轨迹与上下文在右侧面板（窄屏用顶部按钮打开）。",
     openTaskCenter: "任务中心",
     backToChat: "返回对话",
+    moreActions: "更多",
   },
   taskCenter: {
     title: "任务中心",
@@ -235,6 +236,7 @@ export const zh: Messages = {
     menuAudit: "审计日志",
     menuUsage: "用量统计",
     menuKnowledgeBase: "知识库治理",
+    menuRuntimeDebug: "运行调试",
     subviewBack: "返回",
     themeCurrentDark: "深色",
     themeCurrentLight: "浅色",
@@ -756,6 +758,7 @@ export const zh: Messages = {
     metaProvider: "提供方",
     metaModel: "模型",
     metaBaseUrl: "基础地址",
+    metaApiBase: "API 地址",
     metaApiKey: "API 密钥",
     metaConfigured: "已配置",
     metaNotConfigured: "未配置",

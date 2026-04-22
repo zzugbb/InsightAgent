@@ -44,6 +44,38 @@ async function triggerDownloadAndAssertName(
   );
 }
 
+async function openRuntimeDebugModal(page: Page): Promise<void> {
+  const settingsTrigger = page.getByTestId("sidebar-settings-trigger");
+  await expect(settingsTrigger).toBeVisible({ timeout: 20_000 });
+  await settingsTrigger.click();
+  const runtimeEntry = page.getByTestId("settings-menu-runtime-debug");
+  await expect(runtimeEntry).toBeVisible({ timeout: 10_000 });
+  await runtimeEntry.click();
+  await expect(page.getByRole("dialog", { name: /Runtime debug|运行调试/ })).toBeVisible({
+    timeout: 20_000,
+  });
+}
+
+async function closeRuntimeDebugModal(page: Page): Promise<void> {
+  const dialog = page.getByRole("dialog", { name: /Runtime debug|运行调试/ });
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  await dialog.locator("button.ant-modal-close").first().click();
+  await expect(dialog).toBeHidden({ timeout: 20_000 });
+}
+
+async function triggerSessionExportAndAssertName(
+  page: Page,
+  format: "json" | "markdown",
+): Promise<void> {
+  const actionsButton = page.getByTestId("chat-session-actions");
+  await expect(actionsButton).toBeVisible({ timeout: 10_000 });
+  await actionsButton.click();
+  const trigger = page.getByTestId(
+    format === "json" ? "chat-session-export-json" : "chat-session-export-markdown",
+  );
+  await triggerDownloadAndAssertName(page, trigger, "session");
+}
+
 async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   const queryInput = page.getByTestId("inspector-rag-query-input");
   const querySubmit = page.getByTestId("inspector-rag-query-submit");
@@ -167,17 +199,10 @@ test("workbench main path covers trace, rag and task/session export", async ({
     }).first(),
   ).toBeVisible({ timeout: 20_000 });
 
-  await openInspectorContextTab(page);
-  await triggerDownloadAndAssertName(
-    page,
-    page.getByTestId("inspector-session-export-json"),
-    "session",
-  );
-  await triggerDownloadAndAssertName(
-    page,
-    page.getByTestId("inspector-session-export-markdown"),
-    "session",
-  );
+  await triggerSessionExportAndAssertName(page, "json");
+  await triggerSessionExportAndAssertName(page, "markdown");
+
+  await openRuntimeDebugModal(page);
 
   const ragSnippet = `insightagent-rag-e2e-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
   await page.getByTestId("inspector-rag-ingest-input").fill(
@@ -187,6 +212,7 @@ test("workbench main path covers trace, rag and task/session export", async ({
   await page.getByTestId("inspector-rag-ingest-submit").click();
 
   await queryRagUntilHit(page, ragSnippet);
+  await closeRuntimeDebugModal(page);
 
   await openTaskCenterAndDetail(page);
   await triggerDownloadAndAssertName(

@@ -34,6 +34,7 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 import { ModelSettingsModal } from "./model-settings-modal";
 import { AuditLogsModal } from "./audit-logs-modal";
 import { KnowledgeBaseGovernanceModal } from "./knowledge-base-governance-modal";
+import { RuntimeDebugModal } from "./runtime-debug-modal";
 import { UsageDashboardModal } from "./usage-dashboard-modal";
 
 type SectionId = "theme" | "accent" | "language";
@@ -63,6 +64,7 @@ export function SidebarSettingsMenu({
   const [auditOpen, setAuditOpen] = useState(false);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
+  const [runtimeDebugOpen, setRuntimeDebugOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [popoverPos, setPopoverPos] = useState<PopoverPos | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -174,6 +176,12 @@ export function SidebarSettingsMenu({
     setOpen(false);
     setExpanded(null);
     setUsageOpen(true);
+  }
+
+  function openRuntimeDebug() {
+    setOpen(false);
+    setExpanded(null);
+    setRuntimeDebugOpen(true);
   }
 
   const themeLabel =
@@ -463,6 +471,25 @@ export function SidebarSettingsMenu({
           type="button"
           role="menuitem"
           className="settings-menu-row settings-menu-row--footer"
+          onClick={openRuntimeDebug}
+          data-testid="settings-menu-runtime-debug"
+        >
+          <Settings2 size={18} strokeWidth={1.75} aria-hidden />
+          <span className="settings-menu-row-label">
+            {t.sidebar.menuRuntimeDebug}
+          </span>
+          <ChevronRight
+            size={18}
+            strokeWidth={1.75}
+            aria-hidden
+            className="settings-menu-chevron"
+          />
+        </button>
+
+        <button
+          type="button"
+          role="menuitem"
+          className="settings-menu-row settings-menu-row--footer"
           onClick={openModel}
           data-testid="settings-menu-model"
         >
@@ -505,6 +532,11 @@ export function SidebarSettingsMenu({
       <KnowledgeBaseGovernanceModal
         open={knowledgeBaseOpen}
         onClose={() => setKnowledgeBaseOpen(false)}
+      />
+      <RuntimeDebugModal
+        open={runtimeDebugOpen}
+        onClose={() => setRuntimeDebugOpen(false)}
+        activeSessionId={activeSessionId}
       />
       <UsageDashboardModal
         open={usageOpen}

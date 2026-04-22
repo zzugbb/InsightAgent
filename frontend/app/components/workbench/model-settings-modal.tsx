@@ -376,6 +376,9 @@ export function ModelSettingsModal({
               </Descriptions.Item>
             </>
           ) : null}
+          <Descriptions.Item label={t.settings.metaApiBase}>
+            <code>{API_BASE_URL}</code>
+          </Descriptions.Item>
           <Descriptions.Item label={t.settings.metaDatabase}>
             {data.database_locator}
           </Descriptions.Item>

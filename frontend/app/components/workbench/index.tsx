@@ -17,6 +17,7 @@ import {
   apiJson,
   apiPatchJson,
   apiPostJson,
+  authFetch,
 } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
 import { useFocusTrap } from "../../../lib/hooks/use-focus-trap";
@@ -32,7 +33,6 @@ import { TaskCenter } from "./task-center";
 import type {
   InspectorTab,
   PaginatedList,
-  SessionMemoryStatus,
   SessionMessage,
   SessionSummary,
   SettingsSummary,
@@ -112,6 +112,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   );
   const [prompt, setPrompt] = useState("");
   const [liveRegionText, setLiveRegionText] = useState("");
+  const [sessionExporting, setSessionExporting] = useState<
+    "json" | "markdown" | null
+  >(null);
   const [sidebarWidthPx, setSidebarWidthPx] = useState(SIDEBAR_W_DEFAULT);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [inspectorWidthPx, setInspectorWidthPx] = useState(INSPECTOR_W_DEFAULT);
@@ -276,21 +279,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       return failureCount < 2;
     },
   });
-
-  const sessionMemoryQuery = useQuery({
-    queryKey: ["session-memory-status", activeSessionId],
-    queryFn: () =>
-      apiJson<SessionMemoryStatus>(
-        `${API_BASE_URL}/api/sessions/${encodeURIComponent(activeSessionId!)}/memory/status`,
-      ),
-    enabled: Boolean(activeSessionId),
-    staleTime: 20_000,
-  });
-
-  const sessionMemoryErrorBanner =
-    sessionMemoryQuery.isError && sessionMemoryQuery.error
-      ? toUserFacingError(sessionMemoryQuery.error, t.errors).banner
-      : null;
 
   useEffect(() => {
     if (taskCenterScope !== "session") {
@@ -530,6 +518,113 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const openModelSettings = useCallback(() => {
     window.dispatchEvent(new CustomEvent(OPEN_MODEL_SETTINGS_EVENT));
   }, []);
+
+  const parseAttachmentFilename = useCallback(
+    (value: string | null, fallback: string): string => {
+      if (!value) {
+        return fallback;
+      }
+      const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+      if (utf8Match?.[1]) {
+        try {
+          return decodeURIComponent(utf8Match[1]).trim() || fallback;
+        } catch {
+          return utf8Match[1].trim() || fallback;
+        }
+      }
+      const plainMatch = value.match(/filename=\"?([^\";]+)\"?/i);
+      if (!plainMatch?.[1]) {
+        return fallback;
+      }
+      const normalized = plainMatch[1].trim();
+      return normalized || fallback;
+    },
+    [],
+  );
+
+  const triggerDownload = useCallback((filename: string, blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const fetchExportResponse = useCallback(async (url: string): Promise<Response> => {
+    let response: Response;
+    try {
+      response = await authFetch(url, { cache: "no-store" });
+    } catch (cause) {
+      throw new ApiError(
+        0,
+        cause instanceof TypeError ? "NETWORK" : "UNKNOWN",
+        url,
+        cause instanceof Error ? cause.message : String(cause),
+      );
+    }
+    if (response.ok) {
+      return response;
+    }
+    const detail = await response.text();
+    throw new ApiError(
+      response.status,
+      `HTTP ${response.status}`,
+      url,
+      detail.slice(0, 280),
+    );
+  }, []);
+
+  const handleExportSession = useCallback(
+    async (format: "json" | "markdown") => {
+      const sessionId = activeSessionId?.trim();
+      if (!sessionId) {
+        message.warning(t.inspector.sessionExportNoSelection);
+        return;
+      }
+      setSessionExporting(format);
+      const encodedSessionId = encodeURIComponent(sessionId);
+      const route = format === "json" ? "json" : "markdown";
+      const fallbackFilename =
+        format === "json"
+          ? `insightagent-session-${sessionId}.json`
+          : `insightagent-session-${sessionId}.md`;
+      const requestUrl =
+        `${API_BASE_URL}/api/sessions/${encodedSessionId}/export/${route}?download=1`;
+      try {
+        const response = await fetchExportResponse(requestUrl);
+        const filename = parseAttachmentFilename(
+          response.headers.get("content-disposition"),
+          fallbackFilename,
+        );
+        const blob = await response.blob();
+        triggerDownload(filename, blob);
+        message.success(
+          format === "json"
+            ? t.inspector.sessionExportJsonDone
+            : t.inspector.sessionExportMarkdownDone,
+        );
+      } catch (error) {
+        const u = toUserFacingError(error, t.errors);
+        message.error(u.hint ? `${u.banner} ${u.hint}` : u.banner);
+      } finally {
+        setSessionExporting(null);
+      }
+    },
+    [
+      activeSessionId,
+      fetchExportResponse,
+      message,
+      parseAttachmentFilename,
+      t.errors,
+      t.inspector.sessionExportJsonDone,
+      t.inspector.sessionExportMarkdownDone,
+      t.inspector.sessionExportNoSelection,
+      triggerDownload,
+    ],
+  );
 
   const startCancelSendCooldown = useCallback(() => {
     if (cancelSendCooldownTimerRef.current !== null) {
@@ -1397,6 +1492,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             }
             setCenterView("tasks");
           }}
+          onExportSession={handleExportSession}
+          sessionExportDisabled={!activeSessionId}
+          sessionExporting={sessionExporting}
           composerRef={composerRef}
           liveRegionText={liveRegionText}
           runtimeNotice={runtimeNoticeDismissed ? null : runtimeNotice}
@@ -1428,6 +1526,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           }}
           inspectorDrawerTriggerRef={inspectorOpenButtonRef}
           onBackToChat={() => setCenterView("chat")}
+          onExportSession={handleExportSession}
+          sessionExportDisabled={!activeSessionId}
+          sessionExporting={sessionExporting}
           scopeMode={taskCenterScope}
           onScopeModeChange={setTaskCenterScope}
         />
@@ -1482,10 +1583,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           cancelTaskMutation.mutate(task.id);
         }}
         cancellingTaskId={cancellingTaskId}
-        apiBaseUrl={API_BASE_URL}
-        sessionMemoryStatus={sessionMemoryQuery.data}
-        sessionMemoryLoading={sessionMemoryQuery.isLoading}
-        sessionMemoryError={sessionMemoryErrorBanner}
         onOpenTaskCenter={() => {
           if (activeSessionId) {
             setTaskCenterScope("session");

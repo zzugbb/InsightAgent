@@ -25,6 +25,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 体验补齐：登录页新增轻量设置模块（语言/主题/主题色），并完成登录页样式对深浅主题与主题色的联动适配
 - 阶段 5 鉴权增强：接入 refresh token 持久化与自动刷新；401 优先尝试 `/api/auth/refresh` 轮换后重试，失败再回登录
 - 阶段 5 账户可见性收口：当前登录用户展示已融合到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的“图标 + 标题 + 值”行样式
+- 阶段 5 布局重排（2026-04-22）：会话导出迁移到中栏头部“更多”菜单；Memory/RAG 调试迁移到设置弹窗“运行调试”；右侧 Inspector 收敛为运行态核心（概览/同步/当前任务）
 - 阶段 5 聊天显示修复：发送后立即展示用户临时消息；assistant 流式卡片仅在生成中/失败态显示，避免切回会话前看到重复回复
 - 阶段 5 增量：`remote-provider-hardening` 前端收口已完成首轮；流式 `error` 与设置校验失败已按 `error_code` 做本地化提示映射，并保留错误码用于排障
 - 阶段 5 增量：`task-cancel-timeout` 前端首版已落地；Inspector「当前任务」支持取消运行中任务，流式状态接入 `cancelled/timeout` 事件提示
@@ -68,6 +69,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 回归深化（九次）：一次性补齐剩余 6 项回归覆盖：恢复提示三态（恢复中/成功/失败）、trace delta 重试与后台暂停/前台恢复、auth refresh 自动续期与 `logout-all` 后强制重登、设置弹窗/治理子弹窗重开状态重置；本地 chromium 全量回归更新为 `30/30`。
 - 阶段 5 CI 稳定性增强：`frontend-e2e` 新增同分支并发互斥（取消旧运行）、失败后 `--last-failed` 诊断重跑、失败索引文件（`error-context.md`/`trace.zip` 列表）和带 `run_id/run_attempt` 的 artifact 命名，提升失败排查效率。
 - 阶段 5 回归稳态收口（十次，2026-04-22）：修复 `workbench-edge-cases` 并发回归下的偶发失败，Context tab helper 改为仅命中 Inspector 顶部导航；“取消后同文案重发”用例改为“API cancel + UI 去重可见性断言”以规避流式 tab 抢占时序，chromium 全量回归再次验证 `30/30` 通过。
+- 阶段 5 回归稳态收口（十一次，2026-04-22）：修复 `workbench-edge-cases` “切换 token 后导出 404”竞态（切 token 前先等待任务详情导出按钮可用），并按 CI 同口径串行回归（`--workers=1`）复测 chromium 全量 `30/30` 通过。
 - 阶段 5 稳定性补丁：后端 `mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现取消恢复场景，普通请求无行为变化
 - 阶段 5 协同：后端新增 `e2e_export_consistency` 并接入 `backend-e2e`，导出稳定性（任务/会话 JSON+Markdown 一致性）已有自动回归兜底
 - 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
@@ -120,17 +122,17 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 调度：页面在后台时暂停自动 delta 同步，前台自动恢复
 - 观测：Context 摘要展示 delta 自动同步状态、重试次数、最近成功时间、下次重试时间、最近错误与恢复提示（恢复提示短时展示后自动消退）；重试中显示秒级倒计时
 - 告警：delta 连续失败时显示轻提示并持续自动重试
-- 右侧 Inspector（Context）信息架构已优化为运行态分区：概览 KPI、同步诊断、Memory、当前任务与会话导出；用于专注运行态观测与排障
+- 右侧 Inspector（Context）信息架构已优化为运行态分区：概览 KPI、同步诊断、当前任务与最近任务；用于专注运行态观测与排障
 - `full-trace-session` 首步收口：新增任务详情独立页 `/tasks/[taskId]`，复用现有视觉体系展示任务快照、Trace 时间线/流程图回放、任务导出
 - `full-trace-session` 重排收口：中间主区域新增 `chat | tasks` 双视图切换；任务索引能力（筛选/排序/搜索/失败置顶/分页）迁移到中间“任务中心”；右侧保留运行态观察
 - `full-trace-session` 清理收口：Inspector 中已移除旧任务块代码（任务用量/任务快照/任务索引），不再通过样式隐藏保留；任务分析统一走“任务中心 + 任务详情页”
 - `full-trace-session` 回归对齐：Playwright 主链路与边界用例已迁移至新入口（`chat-open-task-center` / `task-center-open-task-detail` / `task-detail-export-*`），不再依赖已删除的 Inspector 任务导出控件
 - `trace-export-json-md` 首版已落地：任务导出入口统一在任务详情页（JSON / Markdown），可一键导出当前任务（task-linked 消息、TraceStep、RAG chunks、usage、元信息）
-- `session-export-lite` 首版已落地：Context 新增“会话导出”分区，支持导出当前会话 JSON / Markdown（消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage）
+- `session-export-lite` 首版已落地：会话导出入口迁移到中栏头部“更多”菜单（chat/tasks 双视图一致），支持导出当前会话 JSON / Markdown（消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage）
 - 任务索引增强：支持状态筛选（全部/运行中/已完成/失败）、时间排序（最新/最早）与失败置顶
 - 任务索引增强：支持按任务标题/ID 搜索，并在失败任务上展示失败摘要提示
 - Trace 面板增强：支持步骤类型筛选（全部/思考/行动/观察/工具/RAG/其他）、关键词检索、类型计数统计，且在时间线与流程图视图一致生效
-- 右侧面板（Inspector）完成一体化优化：Trace 支持舒适/紧凑密度切换；Context 支持分区快速跳转（概览/同步/记忆/会话导出）；任务状态使用语义徽标统一展示
+- 右侧面板（Inspector）完成一体化优化：Trace 支持舒适/紧凑密度切换；Context 支持分区快速跳转（概览/同步）；任务状态使用语义徽标统一展示
 - 左侧/中栏优化：侧栏会话区强化激活层级；聊天头部改为统一 runtime strip；消息流与输入区补充克制动效并统一节奏
 - 交互收敛：已移除会话状态胶囊与输入计数提示，模式/提供方/模型恢复为头部紧凑标签展示，减少纵向占用
 - 后端任务接口已提供 `status_normalized/status_label/status_rank`，前端可继续按需切换到后端统一状态语义
@@ -153,8 +155,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - W4+ 稳定性优化：流式 `error` 事件已读取 `code/detail/status_code`，优先展示按错误码映射后的本地化提示，并在消息中附带错误码
 - W2 协同优化：后端 `running` 重连流的 `done/error` 事件已补齐关键字段（`session_id/step_id/resumed`），前端消费契约更稳定
 - usage 展示：支持当前任务、任务列表摘要；汇总由后端 `GET /api/tasks/usage/summary` 驱动（全局/会话自动切换），并具备 loading/error/empty 状态与统计覆盖率展示
-- Memory：状态展示 + add/query 调试（含 metadata）
-- RAG：知识库状态展示 + 文本 ingest + 语义检索命中展示（`/api/rag/*`）
+- Memory/RAG 调试：迁移到设置弹窗“运行调试”子页（状态展示 + add/query + ingest/query）
 - RAG 治理（设置弹窗）：知识库列表、来源采样、清空/删除（`/api/rag/knowledge-bases*`）
 - RAG 交互优化：知识库 ID 采用“输入后应用”模式，避免输入期间频繁触发状态请求
 - Trace 元信息：支持展示步骤级 `cost_estimate`
@@ -167,7 +168,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `app/components/workbench/index.tsx`：工作台主编排
 - `app/components/workbench/inspector.tsx`：轨迹与上下文面板
 - `app/tasks/[taskId]/page.tsx`：任务详情页与任务导出入口（JSON/Markdown）
-- `app/components/workbench/inspector.tsx`：会话导出入口（Session JSON/Markdown）
+- `app/components/workbench/chat-column.tsx` / `app/components/workbench/task-center.tsx`：会话导出入口（中栏头部“更多”菜单，Session JSON/Markdown）
 - `app/components/workbench/trace-flow-view.tsx`：轨迹流程图节点渲染
 - `app/components/workbench/chat-column.tsx`：消息历史、用户临时消息与流式 assistant 展示
 - `app/components/workbench/sidebar.tsx`：会话列表、折叠侧栏与设置入口
@@ -176,6 +177,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `app/components/workbench/model-settings-modal.tsx`：mock/remote 模型设置、校验与保存
 - `app/components/workbench/audit-logs-modal.tsx`：审计日志筛选、分页、展开与导出
 - `app/components/workbench/knowledge-base-governance-modal.tsx`：知识库列表、来源采样与清空/删除治理
+- `app/components/workbench/runtime-debug-modal.tsx`：Memory/RAG 调试子页（设置弹窗入口）
 - `e2e/helpers/workbench.ts`：Playwright 公共 helper（注册、登录态注入、Workbench 就绪兜底）
 - `lib/stores/chat-stream-store.ts`：SSE 事件分发与 trace 状态
 - `lib/types/trace.ts`：前端 TraceStep 类型

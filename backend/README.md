@@ -25,7 +25,7 @@
 - 协同进展：前端审计页已升级为分页表格可读视图（双行下拉+输入检索且控件尺寸统一、操作区右对齐、表格下方总数展示、事件标签区分、会话/任务 ID 展示、行展开明细，分页默认每页 10 条），继续复用现有 `GET /api/audit/logs` 契约
 - 协同进展：前端已收口弹窗状态管理（审计日志/模型设置每次打开重置状态），避免旧筛选与旧提示跨次污染
 - 协同进展：模型设置弹窗已改为“打开按后端配置回显 + 禁用浏览器自动填充”，避免浏览器凭证误填并保留可读回显
-- 协同进展：前端右侧 Inspector（Context）已按可观测运维场景完成分区重排（概览/同步诊断/用量/Memory/任务索引），后端现有字段可直接支撑后续模块扩展
+- 协同进展：前端右侧 Inspector（Context）已收敛为运行态核心分区（概览/同步诊断/当前任务），后端现有字段可直接支撑后续模块扩展
 - 协同进展：前端任务索引已支持本地状态筛选/时间排序/失败置顶，不新增后端接口负担
 - 协同进展：前端任务索引已支持标题/ID 快速检索与失败摘要提示（由现有任务字段推导），无需新增后端接口
 - 协同进展：前端 Trace 面板已支持步骤类型筛选/关键词检索/类型计数，复用现有 TraceStep 字段，无需新增后端接口
@@ -34,6 +34,7 @@
 - 协同进展：`full-trace-session` 首步收口已接入任务详情独立页（前端 `/tasks/[taskId]`），复用 `GET /api/tasks/{task_id}`、`GET /api/tasks/{task_id}/trace` 与既有导出接口，无需新增后端接口
 - 协同进展：`full-trace-session` 重排收口已接入（前端中栏 `chat | tasks` 双视图 + 任务中心）；右侧 Inspector 聚焦运行态，任务索引/筛选/搜索迁入中栏，继续复用 `GET /api/tasks` 既有契约，无需新增后端接口
 - 协同进展：`full-trace-session` 清理收口已完成；前端 Inspector 旧任务块代码已物理删除，任务分析入口统一为任务中心与任务详情页，后端接口契约保持不变
+- 协同进展：`full-trace-session` 二次迁移已完成；会话导出入口迁移至中栏头部“更多”菜单，Memory/RAG 调试迁移至设置弹窗“运行调试”，后端接口契约保持不变
 - 协同进展：前端 Playwright 回归已对齐新入口（任务中心 + 任务详情导出），旧的 Inspector 任务导出断言已替换；后端导出接口契约保持不变
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage
 - 协同进展：`session-export-lite` 首版已接入；新增 `GET /api/sessions/{session_id}/export/json` 与 `GET /api/sessions/{session_id}/export/markdown`，导出包含会话消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage 汇总
@@ -61,6 +62,7 @@
 - 协同进展（六项补齐）：前端一次性补齐“恢复提示三态、trace delta 重试与后台暂停恢复、auth refresh+logout-all、设置弹窗重开状态重置”回归；最新本地结果为 chromium 全量 `30/30`、smoke 矩阵 `15/15`。
 - 协同进展（CI 稳定性）：`frontend-e2e` 已新增失败后 `--last-failed` 诊断重跑、`error-context/trace.zip` 失败索引文件与带 `run_id/run_attempt` 的 artifact 命名，便于排障追踪。
 - 协同进展（回归稳态收口，2026-04-22）：前端 `workbench-edge-cases` 对“取消后同文案重发”场景改为基于后端 `POST /api/tasks/{task_id}/cancel` 契约进行稳定验证，并将 Context tab 定位收敛到 Inspector 顶部导航，消除并发运行下的时序抖动；本地 chromium 全量回归复测 `30/30` 通过。
+- 协同进展（回归稳态补充，2026-04-22）：前端修复 `workbench-edge-cases` “token 切换后导出 404”用例竞态（切 token 前等待任务详情导出按钮可用），并按 CI 同口径串行回归（`--workers=1`）复测 chromium `30/30` 通过；后端导出契约保持不变。
 - 协同稳定性补丁：`mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现 running-task-recovery 场景，默认请求行为不变
 - 协同进展：前端已接入 `running-task-recovery` 首版（刷新/切回会话自动接管 running/pending 任务流），并补齐恢复中/成功/失败可视化提示，复用现有 running reconnect SSE 能力
 - 协同修复：前端流式展示已按 `session_id` 做会话隔离，切换会话时不再短暂串出其他会话任务

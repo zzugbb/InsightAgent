@@ -102,6 +102,7 @@ export type Messages = {
     onboardingLead: string;
     openTaskCenter: string;
     backToChat: string;
+    moreActions: string;
   };
   taskCenter: {
     title: string;
@@ -178,6 +179,7 @@ export type Messages = {
     menuAudit: string;
     menuUsage: string;
     menuKnowledgeBase: string;
+    menuRuntimeDebug: string;
     subviewBack: string;
     themeCurrentDark: string;
     themeCurrentLight: string;
@@ -662,6 +664,7 @@ export type Messages = {
     metaProvider: string;
     metaModel: string;
     metaBaseUrl: string;
+    metaApiBase: string;
     metaApiKey: string;
     metaConfigured: string;
     metaNotConfigured: string;

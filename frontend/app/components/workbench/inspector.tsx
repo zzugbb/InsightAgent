@@ -1,7 +1,6 @@
 "use client";
 
-import { App, Button, Input, Segmented, Space, Tabs } from "antd";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button, Input, Segmented, Space, Tabs } from "antd";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import {
   forwardRef,
@@ -10,9 +9,6 @@ import {
   useState,
   type MouseEvent,
 } from "react";
-
-import { ApiError, apiJson, apiPostJson, authFetch } from "../../../lib/api-client";
-import { toUserFacingError } from "../../../lib/errors";
 import type { TraceStepPayload } from "../../../lib/types/trace";
 import {
   useMessages,
@@ -21,12 +17,6 @@ import {
 
 import type {
   InspectorTab,
-  MemoryAddResponse,
-  MemoryQueryResponse,
-  RagIngestResponse,
-  RagQueryResponse,
-  RagStatus,
-  SessionMemoryStatus,
   TaskSummary,
 } from "./types";
 import { TraceFlowView } from "./trace-flow-view";
@@ -36,12 +26,10 @@ import {
   getStepTitle,
   getTaskLabel,
   normalizeTraceStepKind,
-  parseMemoryMetadataJson,
   shortenId,
 } from "./utils";
 
 const TRACE_PREVIEW = 6;
-const { TextArea } = Input;
 
 type InspectorProps = {
   tab: InspectorTab;
@@ -71,10 +59,6 @@ type InspectorProps = {
   onOpenTaskCenter: () => void;
   onCancelTask: (task: TaskSummary) => void;
   cancellingTaskId: string | null;
-  apiBaseUrl: string;
-  sessionMemoryStatus: SessionMemoryStatus | undefined;
-  sessionMemoryLoading: boolean;
-  sessionMemoryError: string | null;
 };
 
 export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspector(
@@ -106,10 +90,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     onOpenTaskCenter,
     onCancelTask,
     cancellingTaskId,
-    apiBaseUrl,
-    sessionMemoryStatus,
-    sessionMemoryLoading,
-    sessionMemoryError,
   },
   ref,
 ) {
@@ -125,21 +105,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     "all" | "thought" | "action" | "observation" | "tool" | "rag" | "other"
   >("all");
   const [traceSearchQuery, setTraceSearchQuery] = useState("");
-  const queryClient = useQueryClient();
-  const { message } = App.useApp();
-  const [memoryAddDraft, setMemoryAddDraft] = useState("");
-  const [memoryMetaDraft, setMemoryMetaDraft] = useState("");
-  const [memoryQueryDraft, setMemoryQueryDraft] = useState("");
-  const [ragKnowledgeBaseId, setRagKnowledgeBaseId] = useState("default");
-  const [ragAppliedKnowledgeBaseId, setRagAppliedKnowledgeBaseId] =
-    useState("default");
-  const [ragIngestDraft, setRagIngestDraft] = useState("");
-  const [ragIngestSource, setRagIngestSource] = useState("");
-  const [ragQueryDraft, setRagQueryDraft] = useState("");
   const [retryCountdownSec, setRetryCountdownSec] = useState<number | null>(null);
-  const [sessionExporting, setSessionExporting] = useState<
-    "json" | "markdown" | null
-  >(null);
 
   const scrollToContextSection = (id: string) => {
     const el = document.getElementById(id);
@@ -148,206 +114,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     }
     el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-
-  const parseAttachmentFilename = (
-    value: string | null,
-    fallback: string,
-  ): string => {
-    if (!value) {
-      return fallback;
-    }
-    const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
-    if (utf8Match?.[1]) {
-      try {
-        return decodeURIComponent(utf8Match[1]).trim() || fallback;
-      } catch {
-        return utf8Match[1].trim() || fallback;
-      }
-    }
-    const plainMatch = value.match(/filename="?([^";]+)"?/i);
-    if (!plainMatch?.[1]) {
-      return fallback;
-    }
-    const normalized = plainMatch[1].trim();
-    return normalized || fallback;
-  };
-
-  const triggerDownload = (filename: string, blob: Blob) => {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const fetchExportResponse = async (url: string): Promise<Response> => {
-    let response: Response;
-    try {
-      response = await authFetch(url, { cache: "no-store" });
-    } catch (cause) {
-      throw new ApiError(
-        0,
-        cause instanceof TypeError ? "NETWORK" : "UNKNOWN",
-        url,
-        cause instanceof Error ? cause.message : String(cause),
-      );
-    }
-    if (response.ok) {
-      return response;
-    }
-    const detail = await response.text();
-    throw new ApiError(
-      response.status,
-      `HTTP ${response.status}`,
-      url,
-      detail.slice(0, 280),
-    );
-  };
-
-  const handleExportSession = async (format: "json" | "markdown") => {
-    const sessionId = activeSessionId?.trim();
-    if (!sessionId) {
-      message.warning(t.inspector.sessionExportNoSelection);
-      return;
-    }
-    setSessionExporting(format);
-    const encodedSessionId = encodeURIComponent(sessionId);
-    const route = format === "json" ? "json" : "markdown";
-    const fallbackFilename =
-      format === "json"
-        ? `insightagent-session-${sessionId}.json`
-        : `insightagent-session-${sessionId}.md`;
-    const requestUrl =
-      `${apiBaseUrl}/api/sessions/${encodedSessionId}/export/${route}?download=1`;
-    try {
-      const response = await fetchExportResponse(requestUrl);
-      const filename = parseAttachmentFilename(
-        response.headers.get("content-disposition"),
-        fallbackFilename,
-      );
-      const blob = await response.blob();
-      triggerDownload(filename, blob);
-      message.success(
-        format === "json"
-          ? t.inspector.sessionExportJsonDone
-          : t.inspector.sessionExportMarkdownDone,
-      );
-    } catch (error) {
-      const u = toUserFacingError(error, t.errors);
-      message.error(u.hint ? `${u.banner} ${u.hint}` : u.banner);
-    } finally {
-      setSessionExporting(null);
-    }
-  };
-
-  const memoryAddMutation = useMutation({
-    mutationFn: async (payload: {
-      text: string;
-      metadata: Record<string, string> | null;
-    }) => {
-      if (!activeSessionId?.trim()) {
-        throw new Error("NO_SESSION");
-      }
-      const body: { text: string; metadata?: Record<string, string> } = {
-        text: payload.text,
-      };
-      if (payload.metadata && Object.keys(payload.metadata).length > 0) {
-        body.metadata = payload.metadata;
-      }
-      return apiPostJson<MemoryAddResponse>(
-        `${apiBaseUrl}/api/sessions/${encodeURIComponent(activeSessionId)}/memory/add`,
-        body,
-      );
-    },
-    onSuccess: (data) => {
-      if (activeSessionId) {
-        void queryClient.invalidateQueries({
-          queryKey: ["session-memory-status", activeSessionId],
-        });
-      }
-      message.success(t.inspector.memory.addSuccess(data.document_count));
-    },
-  });
-
-  const memoryQueryMutation = useMutation({
-    mutationFn: async (text: string) => {
-      if (!activeSessionId?.trim()) {
-        throw new Error("NO_SESSION");
-      }
-      return apiPostJson<MemoryQueryResponse>(
-        `${apiBaseUrl}/api/sessions/${encodeURIComponent(activeSessionId)}/memory/query`,
-        { text, n_results: 8 },
-      );
-    },
-  });
-
-  const ragIngestMutation = useMutation({
-    mutationFn: async (payload: { knowledgeBaseId: string; text: string; source: string }) =>
-      apiPostJson<RagIngestResponse>(`${apiBaseUrl}/api/rag/ingest`, {
-        knowledge_base_id: payload.knowledgeBaseId,
-        documents: [
-          {
-            text: payload.text,
-            source: payload.source || "manual",
-          },
-        ],
-      }),
-    onSuccess: (data) => {
-      void queryClient.invalidateQueries({
-        queryKey: ["rag-status"],
-      });
-      message.success(
-        t.inspector.rag.ingestSuccess(data.chunks_added, data.document_count),
-      );
-    },
-  });
-
-  const ragQueryMutation = useMutation({
-    mutationFn: async (payload: { knowledgeBaseId: string; query: string }) =>
-      apiPostJson<RagQueryResponse>(`${apiBaseUrl}/api/rag/query`, {
-        knowledge_base_id: payload.knowledgeBaseId,
-        query: payload.query,
-        top_k: 6,
-      }),
-  });
-
-  const ragStatusQuery = useQuery({
-    queryKey: ["rag-status", ragAppliedKnowledgeBaseId.trim() || "default"],
-    queryFn: () =>
-      apiJson<RagStatus>(
-        `${apiBaseUrl}/api/rag/status?knowledge_base_id=${encodeURIComponent(
-          ragAppliedKnowledgeBaseId.trim() || "default",
-        )}`,
-      ),
-    staleTime: 10_000,
-  });
-  const ragStatus = ragStatusQuery.data;
-  const ragStatusLoading = ragStatusQuery.isLoading;
-  const ragStatusError =
-    ragStatusQuery.isError && ragStatusQuery.error
-      ? toUserFacingError(ragStatusQuery.error, t.errors).banner
-      : null;
-
-
-  const applyRagKnowledgeBase = () => {
-    const next = ragKnowledgeBaseId.trim() || "default";
-    setRagKnowledgeBaseId(next);
-    setRagAppliedKnowledgeBaseId(next);
-  };
-
-  useEffect(() => {
-    setMemoryAddDraft("");
-    setMemoryMetaDraft("");
-    setMemoryQueryDraft("");
-    memoryAddMutation.reset();
-    memoryQueryMutation.reset();
-    // 仅在切换会话时清空调试区
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId]);
-
 
   const collapsedRail =
     desktopInspectorChrome && inspectorCollapsed;
@@ -644,15 +410,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <Button size="small" onClick={() => scrollToContextSection("ctx-sync")}>
             {t.inspector.contextJumpSync}
           </Button>
-          <Button size="small" onClick={() => scrollToContextSection("ctx-session-export")}>
-            {t.inspector.contextJumpSessionExport}
-          </Button>
-          <Button size="small" onClick={() => scrollToContextSection("ctx-memory")}>
-            {t.inspector.contextJumpMemory}
-          </Button>
-          <Button size="small" onClick={() => scrollToContextSection("ctx-rag")}>
-            {t.inspector.contextJumpRag}
-          </Button>
           <Button size="small" onClick={onOpenTaskCenter}>
             {t.inspector.openTaskCenter}
           </Button>
@@ -723,441 +480,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         ) : null}
       </div>
 
-      <div className="inspector-block" id="ctx-session-export">
-        <p className="summary-label">{t.inspector.sessionExportTitle}</p>
-        <p className="inspector-section-lead">{t.inspector.sessionExportLead}</p>
-        <div className="context-grid context-grid--stats compact">
-          <span>{t.inspector.session}</span>
-          <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
-        </div>
-        <div className="session-export-actions">
-          <Button
-            size="small"
-            loading={sessionExporting === "json"}
-            disabled={!activeSessionId}
-            data-testid="inspector-session-export-json"
-            onClick={() => {
-              void handleExportSession("json");
-            }}
-          >
-            {t.inspector.sessionExportJson}
-          </Button>
-          <Button
-            size="small"
-            loading={sessionExporting === "markdown"}
-            disabled={!activeSessionId}
-            data-testid="inspector-session-export-markdown"
-            onClick={() => {
-              void handleExportSession("markdown");
-            }}
-          >
-            {t.inspector.sessionExportMarkdown}
-          </Button>
-        </div>
-      </div>
-
-      <div className="inspector-block memory-placeholder-card" id="ctx-memory">
-        <p className="summary-label">{t.inspector.memory.kicker}</p>
-        <strong className="memory-placeholder-title">{t.inspector.memory.title}</strong>
-        <p className="panel-note panel-note--muted memory-placeholder-lead">
-          {t.inspector.memory.lead}
-        </p>
-        <div className="memory-collection-row">
-          <span className="memory-collection-label">
-            {t.inspector.memory.collectionLabel}
-          </span>
-          <code className="memory-collection-code">
-            {activeSessionId
-              ? `memory_${activeSessionId}`
-              : "—"}
-          </code>
-        </div>
-        <div className="memory-status-block" aria-live="polite">
-          {!activeSessionId ? (
-            <p className="panel-note panel-note--muted memory-pick-session">
-              {t.inspector.memory.pickSession}
-            </p>
-          ) : sessionMemoryLoading ? (
-            <p className="memory-status-loading">{t.inspector.memory.statusLoading}</p>
-          ) : sessionMemoryError ? (
-            <p className="memory-status-err">{sessionMemoryError}</p>
-          ) : sessionMemoryStatus ? (
-            <>
-              <div className="memory-status-line">
-                <span className="memory-status-key">Chroma</span>
-                <span
-                  className={
-                    sessionMemoryStatus.chroma_reachable
-                      ? "memory-status-val memory-status-val--ok"
-                      : "memory-status-val memory-status-val--bad"
-                  }
-                >
-                  {sessionMemoryStatus.chroma_reachable
-                    ? t.inspector.memory.chromaConnected
-                    : t.inspector.memory.chromaDisconnected}
-                </span>
-              </div>
-              {sessionMemoryStatus.chroma_reachable ? (
-                <>
-                  <div className="memory-status-line">
-                    <span className="memory-status-key"> </span>
-                    <span className="memory-status-val">
-                      {sessionMemoryStatus.collection_exists
-                        ? t.inspector.memory.collectionExists
-                        : t.inspector.memory.collectionMissing}
-                    </span>
-                  </div>
-                  <div className="memory-status-line">
-                    <span className="memory-status-key"> </span>
-                    <span className="memory-status-val">
-                      {t.inspector.memory.docCount(
-                        sessionMemoryStatus.document_count,
-                      )}
-                    </span>
-                  </div>
-                </>
-              ) : null}
-              {sessionMemoryStatus.error ? (
-                <p className="panel-note panel-note--muted memory-chroma-err">
-                  {sessionMemoryStatus.error}
-                </p>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-        {activeSessionId ? (
-          <div className="memory-debug-block">
-            <p className="memory-debug-kicker">{t.inspector.memory.debugKicker}</p>
-            <TextArea
-              className="memory-debug-textarea"
-              value={memoryAddDraft}
-              onChange={(e) => setMemoryAddDraft(e.target.value)}
-              placeholder={t.inspector.memory.addPlaceholder}
-              rows={2}
-              disabled={memoryAddMutation.isPending}
-            />
-            <TextArea
-              className="memory-debug-textarea memory-debug-textarea--meta"
-              value={memoryMetaDraft}
-              onChange={(e) => setMemoryMetaDraft(e.target.value)}
-              placeholder={t.inspector.memory.metadataPlaceholder}
-              rows={2}
-              disabled={memoryAddMutation.isPending}
-            />
-            <div className="memory-debug-actions">
-              <Button
-                type="primary"
-                size="small"
-                loading={memoryAddMutation.isPending}
-                onClick={() => {
-                  const text = memoryAddDraft.trim();
-                  if (!text) {
-                    message.warning(t.inspector.memory.addEmpty);
-                    return;
-                  }
-                  const parsed = parseMemoryMetadataJson(memoryMetaDraft);
-                  if (!parsed.ok) {
-                    message.warning(t.inspector.memory.metadataInvalid);
-                    return;
-                  }
-                  memoryAddMutation.mutate({
-                    text,
-                    metadata: parsed.metadata,
-                  });
-                }}
-              >
-                {t.inspector.memory.addButton}
-              </Button>
-            </div>
-            {memoryAddMutation.isError && memoryAddMutation.error ? (
-              <p className="memory-debug-err">
-                {(() => {
-                  const u = toUserFacingError(memoryAddMutation.error, t.errors);
-                  return u.hint ? `${u.banner} ${u.hint}` : u.banner;
-                })()}
-              </p>
-            ) : null}
-            <TextArea
-              className="memory-debug-textarea memory-debug-textarea--query"
-              value={memoryQueryDraft}
-              onChange={(e) => setMemoryQueryDraft(e.target.value)}
-              placeholder={t.inspector.memory.queryPlaceholder}
-              rows={2}
-              disabled={memoryQueryMutation.isPending}
-            />
-            <div className="memory-debug-actions">
-              <Button
-                size="small"
-                loading={memoryQueryMutation.isPending}
-                onClick={() => {
-                  const text = memoryQueryDraft.trim();
-                  if (!text) {
-                    message.warning(t.inspector.memory.queryInputEmpty);
-                    return;
-                  }
-                  memoryQueryMutation.mutate(text);
-                }}
-              >
-                {t.inspector.memory.queryButton}
-              </Button>
-            </div>
-            {memoryQueryMutation.isError && memoryQueryMutation.error ? (
-              <p className="memory-debug-err">
-                {(() => {
-                  const u = toUserFacingError(memoryQueryMutation.error, t.errors);
-                  return u.hint ? `${u.banner} ${u.hint}` : u.banner;
-                })()}
-              </p>
-            ) : null}
-            {memoryQueryMutation.isSuccess && memoryQueryMutation.data ? (
-              <div className="memory-query-results" aria-live="polite">
-                <p className="memory-query-hits-label">
-                  {t.inspector.memory.queryHits(
-                    memoryQueryMutation.data.documents[0]?.length ?? 0,
-                  )}
-                </p>
-                {(memoryQueryMutation.data.documents[0]?.length ?? 0) === 0 ? (
-                  <p className="panel-note panel-note--muted">{t.inspector.memory.queryEmpty}</p>
-                ) : (
-                  <ul className="memory-query-hit-list">
-                    {memoryQueryMutation.data.documents[0]?.map((doc, i) => {
-                      const id =
-                        memoryQueryMutation.data?.ids[0]?.[i] ?? String(i);
-                      const dist = memoryQueryMutation.data?.distances?.[0]?.[i];
-                      const hitMeta =
-                        memoryQueryMutation.data?.metadatas?.[0]?.[i];
-                      const metaKeys =
-                        hitMeta && typeof hitMeta === "object" && hitMeta !== null
-                          ? Object.keys(hitMeta as Record<string, unknown>)
-                          : [];
-                      return (
-                        <li key={id} className="memory-query-hit-item">
-                          <pre className="memory-query-hit-doc">{doc}</pre>
-                          {metaKeys.length > 0 ? (
-                            <pre className="memory-query-hit-meta">
-                              {t.inspector.memory.hitMetadataLabel}:{"\n"}
-                              {JSON.stringify(
-                                hitMeta as Record<string, unknown>,
-                                null,
-                                2,
-                              )}
-                            </pre>
-                          ) : null}
-                          {typeof dist === "number" && Number.isFinite(dist) ? (
-                            <span className="memory-query-hit-dist">
-                              {t.inspector.memory.distanceLabel}:{" "}
-                              {dist.toFixed(4)}
-                            </span>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="inspector-block memory-placeholder-card" id="ctx-rag">
-        <p className="summary-label">{t.inspector.rag.kicker}</p>
-        <strong className="memory-placeholder-title">{t.inspector.rag.title}</strong>
-        <p className="panel-note panel-note--muted memory-placeholder-lead">
-          {t.inspector.rag.lead}
-        </p>
-
-        <div className="memory-collection-row">
-          <span className="memory-collection-label">{t.inspector.rag.kbIdLabel}</span>
-          <Space.Compact size="small" className="rag-kb-compact">
-            <Input
-              size="small"
-              value={ragKnowledgeBaseId}
-              onChange={(e) => setRagKnowledgeBaseId(e.target.value)}
-              onPressEnter={applyRagKnowledgeBase}
-              placeholder={t.inspector.rag.kbIdPlaceholder}
-              className="rag-kb-input"
-              data-testid="inspector-rag-kb-input"
-            />
-            <Button
-              size="small"
-              onClick={applyRagKnowledgeBase}
-              data-testid="inspector-rag-kb-apply"
-            >
-              {t.inspector.rag.applyKb}
-            </Button>
-          </Space.Compact>
-        </div>
-
-        <div className="memory-status-block" aria-live="polite">
-          {ragStatusLoading ? (
-            <p className="memory-status-loading">{t.inspector.rag.statusLoading}</p>
-          ) : ragStatusError ? (
-            <p className="memory-status-err">{ragStatusError}</p>
-          ) : ragStatus ? (
-            <>
-              <div className="memory-status-line">
-                <span className="memory-status-key">Chroma</span>
-                <span
-                  className={
-                    ragStatus.chroma_reachable
-                      ? "memory-status-val memory-status-val--ok"
-                      : "memory-status-val memory-status-val--bad"
-                  }
-                >
-                  {ragStatus.chroma_reachable
-                    ? t.inspector.rag.chromaConnected
-                    : t.inspector.rag.chromaDisconnected}
-                </span>
-              </div>
-              <div className="memory-status-line">
-                <span className="memory-status-key"> </span>
-                <span className="memory-status-val">
-                  {ragStatus.collection_exists
-                    ? t.inspector.rag.collectionExists
-                    : t.inspector.rag.collectionMissing}
-                </span>
-              </div>
-              <div className="memory-status-line">
-                <span className="memory-status-key"> </span>
-                <span className="memory-status-val">
-                  {t.inspector.rag.docCount(ragStatus.document_count)}
-                </span>
-              </div>
-              {ragStatus.error ? (
-                <p className="panel-note panel-note--muted memory-chroma-err">
-                  {ragStatus.error}
-                </p>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-
-        <div className="memory-debug-block">
-          <TextArea
-            className="memory-debug-textarea"
-            value={ragIngestDraft}
-            onChange={(e) => setRagIngestDraft(e.target.value)}
-            placeholder={t.inspector.rag.ingestPlaceholder}
-            rows={3}
-            disabled={ragIngestMutation.isPending}
-            data-testid="inspector-rag-ingest-input"
-          />
-          <Input
-            size="small"
-            value={ragIngestSource}
-            onChange={(e) => setRagIngestSource(e.target.value)}
-            placeholder={t.inspector.rag.ingestSourcePlaceholder}
-            disabled={ragIngestMutation.isPending}
-            data-testid="inspector-rag-ingest-source"
-          />
-          <div className="memory-debug-actions">
-            <Button
-              type="primary"
-              size="small"
-              loading={ragIngestMutation.isPending}
-              data-testid="inspector-rag-ingest-submit"
-              onClick={() => {
-                const text = ragIngestDraft.trim();
-                if (!text) {
-                  message.warning(t.inspector.rag.ingestEmpty);
-                  return;
-                }
-                ragIngestMutation.mutate({
-                  knowledgeBaseId: ragAppliedKnowledgeBaseId.trim() || "default",
-                  text,
-                  source: ragIngestSource.trim(),
-                });
-              }}
-            >
-              {t.inspector.rag.ingestButton}
-            </Button>
-          </div>
-          {ragIngestMutation.isError && ragIngestMutation.error ? (
-            <p className="memory-debug-err">
-              {(() => {
-                const u = toUserFacingError(ragIngestMutation.error, t.errors);
-                return u.hint ? `${u.banner} ${u.hint}` : u.banner;
-              })()}
-            </p>
-          ) : null}
-
-          <TextArea
-            className="memory-debug-textarea memory-debug-textarea--query"
-            value={ragQueryDraft}
-            onChange={(e) => setRagQueryDraft(e.target.value)}
-            placeholder={t.inspector.rag.queryPlaceholder}
-            rows={2}
-            disabled={ragQueryMutation.isPending}
-            data-testid="inspector-rag-query-input"
-          />
-          <div className="memory-debug-actions">
-            <Button
-              size="small"
-              loading={ragQueryMutation.isPending}
-              data-testid="inspector-rag-query-submit"
-              onClick={() => {
-                const text = ragQueryDraft.trim();
-                if (!text) {
-                  message.warning(t.inspector.rag.queryEmptyInput);
-                  return;
-                }
-                ragQueryMutation.mutate({
-                  knowledgeBaseId: ragAppliedKnowledgeBaseId.trim() || "default",
-                  query: text,
-                });
-              }}
-            >
-              {t.inspector.rag.queryButton}
-            </Button>
-          </div>
-          {ragQueryMutation.isError && ragQueryMutation.error ? (
-            <p className="memory-debug-err">
-              {(() => {
-                const u = toUserFacingError(ragQueryMutation.error, t.errors);
-                return u.hint ? `${u.banner} ${u.hint}` : u.banner;
-              })()}
-            </p>
-          ) : null}
-          {ragQueryMutation.isSuccess && ragQueryMutation.data ? (
-            <div
-              className="memory-query-results"
-              aria-live="polite"
-              data-testid="inspector-rag-query-results"
-            >
-              <p className="memory-query-hits-label">
-                {t.inspector.rag.queryHits(ragQueryMutation.data.hit_count)}
-              </p>
-              {ragQueryMutation.data.hit_count <= 0 ? (
-                <p className="panel-note panel-note--muted">{t.inspector.rag.queryEmpty}</p>
-              ) : (
-                <ul className="memory-query-hit-list">
-                  {ragQueryMutation.data.hits.map((hit) => {
-                    const metaKeys = Object.keys(hit.metadata || {});
-                    return (
-                      <li key={hit.id} className="memory-query-hit-item">
-                        <pre className="memory-query-hit-doc">{hit.content}</pre>
-                        {metaKeys.length > 0 ? (
-                          <pre className="memory-query-hit-meta">
-                            {t.inspector.rag.hitMetadataLabel}:{"\n"}
-                            {JSON.stringify(hit.metadata, null, 2)}
-                          </pre>
-                        ) : null}
-                        {typeof hit.distance === "number" && Number.isFinite(hit.distance) ? (
-                          <span className="memory-query-hit-dist">
-                            {t.inspector.rag.distanceLabel}: {hit.distance.toFixed(4)}
-                          </span>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          ) : null}
-        </div>
-      </div>
-
       {activeTask ? (
         <div className="inspector-block">
           <p className="summary-label">{t.inspector.currentTaskCard}</p>
@@ -1201,11 +523,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           </span>
         </div>
       ) : null}
-
-      <p className="panel-note panel-note--muted">
-        {t.inspector.backendUrl}
-        <code>{apiBaseUrl}</code>
-      </p>
     </section>
   );
 

@@ -41,6 +41,18 @@ async function openInspectorContextTab(page: Page): Promise<void> {
     .toBeTruthy();
 }
 
+async function openRuntimeDebugModal(page: Page): Promise<void> {
+  const settingsTrigger = page.getByTestId("sidebar-settings-trigger");
+  await expect(settingsTrigger).toBeVisible({ timeout: 20_000 });
+  await settingsTrigger.click();
+  const runtimeEntry = page.getByTestId("settings-menu-runtime-debug");
+  await expect(runtimeEntry).toBeVisible({ timeout: 10_000 });
+  await runtimeEntry.click();
+  await expect(page.getByRole("dialog", { name: /Runtime debug|运行调试/ })).toBeVisible({
+    timeout: 20_000,
+  });
+}
+
 async function expectToastContains(page: Page, text: string): Promise<void> {
   const toast = page
     .locator(".ant-message-notice-content")
@@ -240,7 +252,7 @@ test("rag query empty state is visible @smoke", async ({ page, request }) => {
 
   await page.goto("/");
   await ensureWorkbenchReady(page, auth);
-  await openInspectorContextTab(page);
+  await openRuntimeDebugModal(page);
 
   const uniqueKb = `kb-empty-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
   await page.getByTestId("inspector-rag-kb-input").fill(uniqueKb);
@@ -378,6 +390,9 @@ test("task export keeps localized 404 hint when token ownership changes", async 
   ).toBeVisible({ timeout: 20_000 });
 
   await openTaskDetailFromTaskCenter(page);
+  await expect(page.getByTestId("task-detail-export-json")).toBeEnabled({
+    timeout: 20_000,
+  });
   await page.evaluate(
     ({
       accessToken,

@@ -1,6 +1,16 @@
 "use client";
 
-import { Button, Flex, Input, Segmented, Space, Tag } from "antd";
+import {
+  Button,
+  Dropdown,
+  Flex,
+  Input,
+  Segmented,
+  Space,
+  Tag,
+  type MenuProps,
+} from "antd";
+import { MoreHorizontal } from "lucide-react";
 import type { RefObject } from "react";
 import { useMemo, useState } from "react";
 
@@ -39,6 +49,9 @@ type TaskCenterProps = {
   onOpenInspector: () => void;
   inspectorDrawerTriggerRef?: RefObject<HTMLButtonElement | null>;
   onBackToChat: () => void;
+  onExportSession: (format: "json" | "markdown") => void | Promise<void>;
+  sessionExportDisabled: boolean;
+  sessionExporting: "json" | "markdown" | null;
   scopeMode: "session" | "global";
   onScopeModeChange: (mode: "session" | "global") => void;
 };
@@ -81,6 +94,9 @@ export function TaskCenter({
   onOpenInspector,
   inspectorDrawerTriggerRef,
   onBackToChat,
+  onExportSession,
+  sessionExportDisabled,
+  sessionExporting,
   scopeMode,
   onScopeModeChange,
 }: TaskCenterProps) {
@@ -144,6 +160,35 @@ export function TaskCenter({
   }, [scopedTasks, taskSearchQuery, taskSortOrder, taskStatusFilter, taskPrioritizeFailed]);
 
   const scopeDisabledSession = !activeSessionId;
+  const sessionActionMenu = useMemo<MenuProps["items"]>(
+    () => [
+      {
+        key: "session-export-json",
+        disabled: sessionExportDisabled || sessionExporting !== null,
+        label: (
+          <span data-testid="task-center-session-export-json">
+            {t.inspector.sessionExportJson}
+          </span>
+        ),
+        onClick: () => {
+          void onExportSession("json");
+        },
+      },
+      {
+        key: "session-export-markdown",
+        disabled: sessionExportDisabled || sessionExporting !== null,
+        label: (
+          <span data-testid="task-center-session-export-markdown">
+            {t.inspector.sessionExportMarkdown}
+          </span>
+        ),
+        onClick: () => {
+          void onExportSession("markdown");
+        },
+      },
+    ],
+    [onExportSession, sessionExportDisabled, sessionExporting, t.inspector],
+  );
 
   return (
     <section className="chat-shell task-center-shell" data-testid="task-center-shell">
@@ -189,6 +234,17 @@ export function TaskCenter({
             <Button type="default" onClick={onBackToChat} data-testid="task-center-back-chat">
               {t.chat.backToChat}
             </Button>
+            <Dropdown menu={{ items: sessionActionMenu }} trigger={["click"]}>
+              <Button
+                type="default"
+                icon={<MoreHorizontal size={16} strokeWidth={2} aria-hidden />}
+                data-testid="task-center-session-actions"
+                loading={sessionExporting !== null}
+                disabled={sessionExportDisabled}
+              >
+                {t.chat.moreActions}
+              </Button>
+            </Dropdown>
           </Space>
           <div className="chat-runtime-badges" aria-label="runtime">
             <Tag variant="filled" className="header-badge-tag header-badge-tag--mode">

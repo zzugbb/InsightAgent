@@ -108,6 +108,7 @@ export const en: Messages = {
       "Type and send to begin; a session is created if none is selected. Trace and context live in the right panel (use the top buttons on small screens).",
     openTaskCenter: "Task Center",
     backToChat: "Back to Chat",
+    moreActions: "More",
   },
   taskCenter: {
     title: "Task Center",
@@ -239,6 +240,7 @@ export const en: Messages = {
     menuAudit: "Audit logs",
     menuUsage: "Usage dashboard",
     menuKnowledgeBase: "Knowledge bases",
+    menuRuntimeDebug: "Runtime debug",
     subviewBack: "Back",
     themeCurrentDark: "Dark",
     themeCurrentLight: "Light",
@@ -773,6 +775,7 @@ export const en: Messages = {
     metaProvider: "Provider",
     metaModel: "Model",
     metaBaseUrl: "Base URL",
+    metaApiBase: "API base",
     metaApiKey: "API key",
     metaConfigured: "Configured",
     metaNotConfigured: "Not set",
