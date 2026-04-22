@@ -2543,14 +2543,21 @@ code {
 }
 
 .task-summary-open-detail.ant-btn {
-  padding-inline: 2px;
-  height: auto;
+  height: 28px;
+  padding-inline: 12px;
+  border-radius: 999px;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line)) !important;
+  background: color-mix(in srgb, var(--accent-soft) 88%, var(--msg-card-bg)) !important;
+  color: color-mix(in srgb, var(--accent) 64%, var(--text)) !important;
   font-size: 0.75rem;
-  color: var(--muted);
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 12%, transparent);
 }
 
 .task-summary-open-detail.ant-btn:hover {
-  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line)) !important;
+  background: color-mix(in srgb, var(--accent-soft) 96%, var(--msg-card-bg)) !important;
+  color: color-mix(in srgb, var(--accent) 78%, var(--text)) !important;
 }
 
 .task-detail-page {
@@ -3092,6 +3099,60 @@ code {
   justify-content: center;
   border: none !important;
   box-shadow: none !important;
+}
+
+.runtime-debug-ant-modal .ant-modal-body {
+  padding-top: 8px;
+}
+
+.runtime-debug-lead {
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+
+.runtime-debug-topline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.runtime-debug-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--badge-bg);
+  color: var(--muted-strong);
+  font-size: 0.75rem;
+}
+
+.runtime-debug-chip code {
+  font-size: 0.72rem;
+  color: var(--text);
+}
+
+.runtime-debug-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.runtime-debug-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--msg-card-bg);
+}
+
+.runtime-debug-section .summary-label {
+  color: var(--muted);
 }
 
 .usage-dashboard-note {

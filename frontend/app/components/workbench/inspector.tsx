@@ -488,18 +488,8 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             {t.inspector.statusPrefix}
             {activeTask.status}
           </span>
-          <div className="task-export-actions">
-            <Button size="small" type="default" onClick={onOpenTaskCenter}>
-              {t.inspector.openTaskCenter}
-            </Button>
-            <Button
-              size="small"
-              data-testid="inspector-task-open-detail"
-              href={`/tasks/${encodeURIComponent(activeTask.id)}`}
-            >
-              {t.inspector.taskOpenDetail}
-            </Button>
-            {isTaskCancelable(activeTask.status) ? (
+          {isTaskCancelable(activeTask.status) ? (
+            <div className="task-export-actions">
                 <Button
                   size="small"
                   danger
@@ -509,8 +499,8 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                 >
                   {t.inspector.taskCancel}
                 </Button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

@@ -17,7 +17,7 @@ import type {
   SessionMemoryStatus,
 } from "./types";
 import { API_BASE_URL } from "./utils";
-import { parseMemoryMetadataJson } from "./utils";
+import { parseMemoryMetadataJson, shortenId } from "./utils";
 
 const { TextArea } = Input;
 
@@ -179,11 +179,26 @@ export function RuntimeDebugModal({
       className="runtime-debug-ant-modal"
       data-testid="runtime-debug-modal"
     >
-      <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
+      <Typography.Paragraph
+        type="secondary"
+        className="runtime-debug-lead"
+        style={{ marginTop: 0 }}
+      >
         {t.inspector.contextKicker}
       </Typography.Paragraph>
+      <div className="runtime-debug-topline">
+        <span className="runtime-debug-chip">
+          {t.inspector.session}
+          <code>{activeSessionId ? shortenId(activeSessionId) : "—"}</code>
+        </span>
+        <span className="runtime-debug-chip">
+          KB
+          <code>{ragAppliedKnowledgeBaseId || "default"}</code>
+        </span>
+      </div>
+      <div className="runtime-debug-shell">
 
-      <div className="inspector-block memory-placeholder-card">
+      <div className="runtime-debug-section">
         <p className="summary-label">{t.inspector.memory.kicker}</p>
         <strong className="memory-placeholder-title">{t.inspector.memory.title}</strong>
         <p className="panel-note panel-note--muted memory-placeholder-lead">
@@ -378,7 +393,7 @@ export function RuntimeDebugModal({
         ) : null}
       </div>
 
-      <div className="inspector-block memory-placeholder-card">
+      <div className="runtime-debug-section">
         <p className="summary-label">{t.inspector.rag.kicker}</p>
         <strong className="memory-placeholder-title">{t.inspector.rag.title}</strong>
         <p className="panel-note panel-note--muted memory-placeholder-lead">
@@ -574,6 +589,7 @@ export function RuntimeDebugModal({
             </div>
           ) : null}
         </div>
+      </div>
       </div>
     </Modal>
   );

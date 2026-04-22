@@ -457,7 +457,6 @@ test("cross-session switch keeps cancel and export scoped to active session", as
   await openInspectorContextTab(page);
   const cancelButton = page.locator('[data-testid="inspector-task-cancel"]:visible').first();
   await expect(cancelButton).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId("inspector-task-open-detail")).toBeVisible();
 
   await selectSessionByTitle(page, sessionBTitle);
   await openInspectorContextTab(page);
@@ -465,7 +464,6 @@ test("cross-session switch keeps cancel and export scoped to active session", as
   await expect(
     page.locator('[data-testid="inspector-task-cancel"]:visible'),
   ).toHaveCount(0);
-  await expect(page.getByTestId("inspector-task-open-detail")).toHaveCount(0);
   await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
     timeout: 20_000,
   });

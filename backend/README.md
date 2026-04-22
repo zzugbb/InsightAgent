@@ -35,6 +35,8 @@
 - 协同进展：`full-trace-session` 重排收口已接入（前端中栏 `chat | tasks` 双视图 + 任务中心）；右侧 Inspector 聚焦运行态，任务索引/筛选/搜索迁入中栏，继续复用 `GET /api/tasks` 既有契约，无需新增后端接口
 - 协同进展：`full-trace-session` 清理收口已完成；前端 Inspector 旧任务块代码已物理删除，任务分析入口统一为任务中心与任务详情页，后端接口契约保持不变
 - 协同进展：`full-trace-session` 二次迁移已完成；会话导出入口迁移至中栏头部“更多”菜单，Memory/RAG 调试迁移至设置弹窗“运行调试”，后端接口契约保持不变
+- 协同进展：`full-trace-session` 交互细化已完成；运行调试弹窗样式与全站风格统一，任务中心“任务详情”按钮增强，Inspector 当前任务仅保留取消操作；后端接口契约保持不变
+- 协同进展：`full-trace-session` 样式微调已完成；运行调试弹窗改为上下单列并移除分区高亮底色，后端接口契约保持不变
 - 协同进展：前端 Playwright 回归已对齐新入口（任务中心 + 任务详情导出），旧的 Inspector 任务导出断言已替换；后端导出接口契约保持不变
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage
 - 协同进展：`session-export-lite` 首版已接入；新增 `GET /api/sessions/{session_id}/export/json` 与 `GET /api/sessions/{session_id}/export/markdown`，导出包含会话消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage 汇总

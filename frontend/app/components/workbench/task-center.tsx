@@ -403,7 +403,7 @@ export function TaskCenter({
                   <div className="task-summary-actions">
                     <Button
                       size="small"
-                      type="text"
+                      type="default"
                       className="task-summary-open-detail"
                       data-testid="task-center-open-task-detail"
                       aria-label={t.taskCenter.openTaskDetailAria}
