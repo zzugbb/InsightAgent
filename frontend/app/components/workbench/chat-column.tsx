@@ -67,6 +67,7 @@ type ChatColumnProps = {
   showNarrowLayoutHint: boolean;
   showStreamRetry: boolean;
   onRetryStream: () => void;
+  onOpenTaskCenter: () => void;
   composerRef: RefObject<TextAreaRef | null>;
   liveRegionText: string;
   runtimeNotice: string | null;
@@ -110,6 +111,7 @@ export function ChatColumn({
   showNarrowLayoutHint,
   showStreamRetry,
   onRetryStream,
+  onOpenTaskCenter,
   composerRef,
   liveRegionText,
   runtimeNotice,
@@ -374,6 +376,14 @@ export function ChatColumn({
                 {t.chat.traceAndContext}
               </Button>
             ) : null}
+            <Button
+              type="default"
+              onClick={onOpenTaskCenter}
+              data-testid="chat-open-task-center"
+              className="chat-open-task-center"
+            >
+              {t.chat.openTaskCenter}
+            </Button>
           </Space>
           <div className="chat-runtime-badges" aria-label="runtime">
             <Tag variant="filled" className="header-badge-tag header-badge-tag--mode">

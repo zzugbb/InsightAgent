@@ -100,6 +100,18 @@ export type Messages = {
     sessionEmptyLead: string;
     onboardingTitle: string;
     onboardingLead: string;
+    openTaskCenter: string;
+    backToChat: string;
+  };
+  taskCenter: {
+    title: string;
+    lead: string;
+    scopeLabel: string;
+    scopeSession: string;
+    scopeGlobal: string;
+    sessionRequired: string;
+    openTaskDetail: string;
+    openTaskDetailAria: string;
   };
   composer: {
     placeholder: string;
@@ -436,6 +448,7 @@ export type Messages = {
     taskSnapshotLastObservation: string;
     taskSnapshotNoSelection: string;
     taskOpenDetail: string;
+    openTaskCenter: string;
     taskExportJson: string;
     taskExportMarkdown: string;
     taskExportJsonDone: string;

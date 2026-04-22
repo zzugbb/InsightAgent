@@ -44,7 +44,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 增量：`usage-dashboard-lite` 首版已落地；设置弹窗新增“用量统计”入口，支持全局/当前会话切换、趋势条形图、会话榜与任务榜
 - 阶段 5 增量：`audit-event-expansion` 首版已落地；审计页支持筛选与展示新增事件（设置校验、任务创建/取消/超时/失败、知识库 ingest/清空/删除）
 - 阶段 5 协同：`provider-usage-alignment` 后端首版已落地；任务 `done.usage` 改为 provider 官方 usage 优先，缺失字段自动回退估算并带来源标记
-- 阶段 5 协同：Inspector 已补 usage 来源可视化（当前任务/任务快照/任务索引展示 provider/estimated）
+- 阶段 5 协同：usage 来源可视化已补齐（当前任务 + 任务中心/任务详情展示 provider/estimated）
 - 阶段 5 协同：用量统计弹窗已补“来源分布”展示（provider/estimated/mixed/legacy），并对历史无来源字段数据标记为 legacy
 - 阶段 5 协同：用量统计弹窗新增来源筛选（全部/官方/估算/混合/旧数据），按来源拉取并展示 dashboard 数据
 - 阶段 5 协同：用量统计弹窗新增“来源趋势”分区，按天展示 provider/estimated/mixed/legacy 任务数，便于排查来源结构变化
@@ -120,15 +120,15 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 调度：页面在后台时暂停自动 delta 同步，前台自动恢复
 - 观测：Context 摘要展示 delta 自动同步状态、重试次数、最近成功时间、下次重试时间、最近错误与恢复提示（恢复提示短时展示后自动消退）；重试中显示秒级倒计时
 - 告警：delta 连续失败时显示轻提示并持续自动重试
-- 右侧 Inspector（Context）信息架构已优化为分区式布局：概览 KPI、同步诊断、用量统计、Memory、任务索引；便于后续追加更多运维/分析模块
-- `full-trace-session-lite` 首个切片已落地：Context 新增「任务快照」分区，支持展示选中任务的 prompt、最终回答摘要、最终观察、RAG 命中、步骤数、状态/时间与失败提示，并接入快速跳转
-- `full-trace-session` 首步收口：新增任务详情独立页 `/tasks/[taskId]`，复用现有视觉体系展示任务快照、Trace 时间线/流程图回放、任务导出；并在 Inspector「任务快照」「任务索引」新增“任务详情”入口
-- `trace-export-json-md` 首版已落地：任务快照分区新增“导出 JSON / 导出 Markdown”按钮，可一键导出当前任务（task-linked 消息、TraceStep、RAG chunks、usage、元信息）
+- 右侧 Inspector（Context）信息架构已优化为运行态分区：概览 KPI、同步诊断、Memory、当前任务与会话导出；用于专注运行态观测与排障
+- `full-trace-session` 首步收口：新增任务详情独立页 `/tasks/[taskId]`，复用现有视觉体系展示任务快照、Trace 时间线/流程图回放、任务导出
+- `full-trace-session` 重排收口：中间主区域新增 `chat | tasks` 双视图切换；任务索引能力（筛选/排序/搜索/失败置顶/分页）迁移到中间“任务中心”；右侧保留运行态观察
+- `trace-export-json-md` 首版已落地：任务导出入口统一在任务详情页（JSON / Markdown），可一键导出当前任务（task-linked 消息、TraceStep、RAG chunks、usage、元信息）
 - `session-export-lite` 首版已落地：Context 新增“会话导出”分区，支持导出当前会话 JSON / Markdown（消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage）
 - 任务索引增强：支持状态筛选（全部/运行中/已完成/失败）、时间排序（最新/最早）与失败置顶
 - 任务索引增强：支持按任务标题/ID 搜索，并在失败任务上展示失败摘要提示
 - Trace 面板增强：支持步骤类型筛选（全部/思考/行动/观察/工具/RAG/其他）、关键词检索、类型计数统计，且在时间线与流程图视图一致生效
-- 右侧面板（Inspector）完成一体化优化：Trace 支持舒适/紧凑密度切换；Context 支持分区快速跳转（概览/同步/用量/记忆/任务）；任务状态使用语义徽标统一展示
+- 右侧面板（Inspector）完成一体化优化：Trace 支持舒适/紧凑密度切换；Context 支持分区快速跳转（概览/同步/记忆/会话导出）；任务状态使用语义徽标统一展示
 - 左侧/中栏优化：侧栏会话区强化激活层级；聊天头部改为统一 runtime strip；消息流与输入区补充克制动效并统一节奏
 - 交互收敛：已移除会话状态胶囊与输入计数提示，模式/提供方/模型恢复为头部紧凑标签展示，减少纵向占用
 - 后端任务接口已提供 `status_normalized/status_label/status_rank`，前端可继续按需切换到后端统一状态语义
@@ -164,7 +164,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - `app/components/workbench/index.tsx`：工作台主编排
 - `app/components/workbench/inspector.tsx`：轨迹与上下文面板
-- `app/components/workbench/inspector.tsx`：任务快照导出入口（JSON/Markdown）
+- `app/tasks/[taskId]/page.tsx`：任务详情页与任务导出入口（JSON/Markdown）
 - `app/components/workbench/inspector.tsx`：会话导出入口（Session JSON/Markdown）
 - `app/components/workbench/trace-flow-view.tsx`：轨迹流程图节点渲染
 - `app/components/workbench/chat-column.tsx`：消息历史、用户临时消息与流式 assistant 展示

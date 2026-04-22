@@ -82,6 +82,7 @@ type InspectorProps = {
   onReplayTrace: () => void;
   onLoadDelta: () => void;
   onSelectTask: (task: TaskSummary) => void;
+  onOpenTaskCenter: () => void;
   onCancelTask: (task: TaskSummary) => void;
   cancellingTaskId: string | null;
   apiBaseUrl: string;
@@ -126,6 +127,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     onReplayTrace,
     onLoadDelta,
     onSelectTask,
+    onOpenTaskCenter,
     onCancelTask,
     cancellingTaskId,
     apiBaseUrl,
@@ -865,12 +867,6 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <Button size="small" onClick={() => scrollToContextSection("ctx-sync")}>
             {t.inspector.contextJumpSync}
           </Button>
-          <Button size="small" onClick={() => scrollToContextSection("ctx-usage")}>
-            {t.inspector.contextJumpUsage}
-          </Button>
-          <Button size="small" onClick={() => scrollToContextSection("ctx-task-snapshot")}>
-            {t.inspector.contextJumpTaskSnapshot}
-          </Button>
           <Button size="small" onClick={() => scrollToContextSection("ctx-session-export")}>
             {t.inspector.contextJumpSessionExport}
           </Button>
@@ -880,8 +876,8 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <Button size="small" onClick={() => scrollToContextSection("ctx-rag")}>
             {t.inspector.contextJumpRag}
           </Button>
-          <Button size="small" onClick={() => scrollToContextSection("ctx-tasks")}>
-            {t.inspector.contextJumpTasks}
+          <Button size="small" onClick={onOpenTaskCenter}>
+            {t.inspector.openTaskCenter}
           </Button>
         </div>
       </div>
@@ -950,7 +946,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         ) : null}
       </div>
 
-      <div className="inspector-block" id="ctx-usage">
+      <div className="inspector-block inspector-block--moved" id="ctx-usage">
         <p className="summary-label inspector-usage-kicker">{t.inspector.usageTitle}</p>
         <p className="inspector-section-lead">{t.inspector.usageLead}</p>
         {inspectorTaskUsage ? (
@@ -1023,7 +1019,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         ) : null}
       </div>
 
-      <div className="inspector-block" id="ctx-task-snapshot">
+      <div className="inspector-block inspector-block--moved" id="ctx-task-snapshot">
         <p className="summary-label">{t.inspector.taskSnapshotTitle}</p>
         <p className="inspector-section-lead">{t.inspector.taskSnapshotLead}</p>
         {activeTask ? (
@@ -1577,25 +1573,25 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             {t.inspector.statusPrefix}
             {activeTask.status}
           </span>
+          <div className="task-export-actions">
+            <Button size="small" type="default" onClick={onOpenTaskCenter}>
+              {t.inspector.openTaskCenter}
+            </Button>
+            <Button size="small" href={`/tasks/${encodeURIComponent(activeTask.id)}`}>
+              {t.inspector.taskOpenDetail}
+            </Button>
             {isTaskCancelable(activeTask.status) ? (
-              <div className="task-export-actions">
-                <Button
-                  size="small"
-                  href={`/tasks/${encodeURIComponent(activeTask.id)}`}
-                >
-                  {t.inspector.taskOpenDetail}
-                </Button>
                 <Button
                   size="small"
                   danger
                   loading={cancellingTaskId === activeTask.id}
                   data-testid="inspector-task-cancel"
-                onClick={() => onCancelTask(activeTask)}
-              >
-                {t.inspector.taskCancel}
-              </Button>
-            </div>
-          ) : null}
+                  onClick={() => onCancelTask(activeTask)}
+                >
+                  {t.inspector.taskCancel}
+                </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -1610,7 +1606,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       ) : null}
 
       {recentTasks.length > 0 ? (
-        <div className="inspector-block" id="ctx-tasks">
+        <div className="inspector-block inspector-block--moved" id="ctx-tasks">
           <p className="summary-label">
             {activeSessionId
               ? t.inspector.sessionTasks

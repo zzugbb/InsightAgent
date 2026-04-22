@@ -104,6 +104,18 @@ export const zh: Messages = {
     onboardingTitle: "开始对话",
     onboardingLead:
       "直接输入并发送即可；未选会话时会自动创建。轨迹与上下文在右侧面板（窄屏用顶部按钮打开）。",
+    openTaskCenter: "任务中心",
+    backToChat: "返回对话",
+  },
+  taskCenter: {
+    title: "任务中心",
+    lead: "用于筛选、检索与定位任务，并快速跳转到任务详情复盘。",
+    scopeLabel: "范围",
+    scopeSession: "当前会话",
+    scopeGlobal: "全局任务",
+    sessionRequired: "请先选择会话，或切换到全局任务。",
+    openTaskDetail: "任务详情",
+    openTaskDetailAria: "打开任务详情",
   },
   composer: {
     placeholder: "输入问题或任务目标…",
@@ -504,6 +516,7 @@ export const zh: Messages = {
     taskSnapshotLastObservation: "最终观察",
     taskSnapshotNoSelection: "请先从任务列表选择一个任务。",
     taskOpenDetail: "任务详情",
+    openTaskCenter: "打开任务中心",
     taskExportJson: "导出 JSON",
     taskExportMarkdown: "导出 Markdown",
     taskExportJsonDone: "任务 JSON 已导出。",

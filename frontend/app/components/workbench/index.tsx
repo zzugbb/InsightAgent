@@ -28,6 +28,7 @@ import {
 import { ChatColumn } from "./chat-column";
 import { Inspector } from "./inspector";
 import { Sidebar } from "./sidebar";
+import { TaskCenter } from "./task-center";
 import type {
   InspectorTab,
   PaginatedList,
@@ -106,6 +107,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
   const [newSessionBusy, setNewSessionBusy] = useState(false);
+  const [centerView, setCenterView] = useState<"chat" | "tasks">("chat");
+  const [taskCenterScope, setTaskCenterScope] = useState<"session" | "global">(
+    "session",
+  );
   const [prompt, setPrompt] = useState("");
   const [liveRegionText, setLiveRegionText] = useState("");
   const [sidebarWidthPx, setSidebarWidthPx] = useState(SIDEBAR_W_DEFAULT);
@@ -243,15 +248,24 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const TASK_PAGE_SESSION = 12;
   const TASK_PAGE_GLOBAL = 8;
+  const taskScopeSessionId =
+    taskCenterScope === "session" ? activeSessionId : null;
 
   const tasksQuery = useInfiniteQuery({
-    queryKey: ["tasks", "paged", activeSessionId ?? "__global__"],
+    queryKey: [
+      "tasks",
+      "paged",
+      taskCenterScope,
+      taskScopeSessionId ?? "__global__",
+    ],
     initialPageParam: 0,
+    enabled: taskCenterScope === "global" || Boolean(taskScopeSessionId),
     queryFn: ({ pageParam }) => {
-      const limit = activeSessionId ? TASK_PAGE_SESSION : TASK_PAGE_GLOBAL;
+      const limit =
+        taskCenterScope === "session" ? TASK_PAGE_SESSION : TASK_PAGE_GLOBAL;
       const base = `${API_BASE_URL}/api/tasks?limit=${limit}&offset=${pageParam}`;
-      const url = activeSessionId
-        ? `${base}&session_id=${encodeURIComponent(activeSessionId)}`
+      const url = taskScopeSessionId
+        ? `${base}&session_id=${encodeURIComponent(taskScopeSessionId)}`
         : base;
       return apiJson<PaginatedList<TaskSummary>>(url);
     },
@@ -297,6 +311,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       : null;
 
   useEffect(() => {
+    if (taskCenterScope !== "session") {
+      tasksSession404HandledRef.current = false;
+      return;
+    }
     if (!activeSessionId) {
       tasksSession404HandledRef.current = false;
       return;
@@ -317,6 +335,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     void queryClient.invalidateQueries({ queryKey: ["sessions"] });
   }, [
     activeSessionId,
+    taskCenterScope,
     tasksQuery.isError,
     tasksQuery.error,
     message,
@@ -869,6 +888,13 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }, [isStreaming, sseTaskId, syncTraceDelta]);
 
   useEffect(() => {
+    if (activeSessionId) {
+      return;
+    }
+    setTaskCenterScope("global");
+  }, [activeSessionId]);
+
+  useEffect(() => {
     if (activeSessionId == null) {
       return;
     }
@@ -1350,46 +1376,81 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         onLogout={onLogout}
       />
 
-      <ChatColumn
-        activeSession={activeSession}
-        activeSessionId={activeSessionId}
-        settingsSummary={settingsSummary}
-        isStreaming={scopedIsStreaming}
-        apiBanner={bannerError}
-        onDismissBanner={() => setBannerError(null)}
-        sessionMessages={sessionMessages}
-        pendingUserInput={scopedIsStreaming ? lastSentPromptRef.current : ""}
-        pendingUserTaskId={scopedSseTaskId}
-        messagesLoading={messagesLoading}
-        messagesMessage={messagesMessage}
-        sseTokens={scopedSseTokens}
-        ssePhase={scopedSsePhase}
-        prompt={prompt}
-        onPromptChange={setPrompt}
-        onSend={handleSend}
-        sendDisabled={scopedIsStreaming || remoteSendCoolingDown || !prompt.trim()}
-        composerHint={composerHint}
-        composerHintVariant={composerHintVariant}
-        showSessionDrawerTrigger={isNarrow}
-        onOpenSessionDrawer={openSessionDrawer}
-        sessionDrawerTriggerRef={sessionOpenButtonRef}
-        showInspectorTrigger={isNarrow}
-        onOpenInspector={() => {
-          setInspectorTab("trace");
-          openInspectorDrawer();
-        }}
-        inspectorDrawerTriggerRef={inspectorOpenButtonRef}
-        showNarrowLayoutHint={isNarrow}
-        showStreamRetry={scopedSsePhase === "error" && !scopedIsStreaming}
-        onRetryStream={handleRetryStream}
-        composerRef={composerRef}
-        liveRegionText={liveRegionText}
-        runtimeNotice={runtimeNoticeDismissed ? null : runtimeNotice}
-        onOpenModelSettings={openModelSettings}
-        onDismissRuntimeNotice={() => setRuntimeNoticeDismissed(true)}
-        recoveryNotice={recoveryNotice}
-        onDismissRecoveryNotice={() => setRecoveryNotice(null)}
-      />
+      {centerView === "chat" ? (
+        <ChatColumn
+          key="chat-view"
+          activeSession={activeSession}
+          activeSessionId={activeSessionId}
+          settingsSummary={settingsSummary}
+          isStreaming={scopedIsStreaming}
+          apiBanner={bannerError}
+          onDismissBanner={() => setBannerError(null)}
+          sessionMessages={sessionMessages}
+          pendingUserInput={scopedIsStreaming ? lastSentPromptRef.current : ""}
+          pendingUserTaskId={scopedSseTaskId}
+          messagesLoading={messagesLoading}
+          messagesMessage={messagesMessage}
+          sseTokens={scopedSseTokens}
+          ssePhase={scopedSsePhase}
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSend={handleSend}
+          sendDisabled={scopedIsStreaming || remoteSendCoolingDown || !prompt.trim()}
+          composerHint={composerHint}
+          composerHintVariant={composerHintVariant}
+          showSessionDrawerTrigger={isNarrow}
+          onOpenSessionDrawer={openSessionDrawer}
+          sessionDrawerTriggerRef={sessionOpenButtonRef}
+          showInspectorTrigger={isNarrow}
+          onOpenInspector={() => {
+            setInspectorTab("trace");
+            openInspectorDrawer();
+          }}
+          inspectorDrawerTriggerRef={inspectorOpenButtonRef}
+          showNarrowLayoutHint={isNarrow}
+          showStreamRetry={scopedSsePhase === "error" && !scopedIsStreaming}
+          onRetryStream={handleRetryStream}
+          onOpenTaskCenter={() => {
+            if (activeSessionId) {
+              setTaskCenterScope("session");
+            }
+            setCenterView("tasks");
+          }}
+          composerRef={composerRef}
+          liveRegionText={liveRegionText}
+          runtimeNotice={runtimeNoticeDismissed ? null : runtimeNotice}
+          onOpenModelSettings={openModelSettings}
+          onDismissRuntimeNotice={() => setRuntimeNoticeDismissed(true)}
+          recoveryNotice={recoveryNotice}
+          onDismissRecoveryNotice={() => setRecoveryNotice(null)}
+        />
+      ) : (
+        <TaskCenter
+          key="tasks-view"
+          activeSession={activeSession}
+          activeSessionId={activeSessionId}
+          activeTaskId={activeTaskIdScoped}
+          settingsSummary={settingsSummary}
+          recentTasks={recentTasks}
+          tasksLoading={tasksQuery.isLoading}
+          tasksFetchNextBusy={tasksFetchNextBusy}
+          tasksCanLoadMore={tasksCanLoadMore}
+          onLoadMoreTasks={() => void tasksQuery.fetchNextPage()}
+          onSelectTask={handleSelectTask}
+          showSessionDrawerTrigger={isNarrow}
+          onOpenSessionDrawer={openSessionDrawer}
+          sessionDrawerTriggerRef={sessionOpenButtonRef}
+          showInspectorTrigger={isNarrow}
+          onOpenInspector={() => {
+            setInspectorTab("trace");
+            openInspectorDrawer();
+          }}
+          inspectorDrawerTriggerRef={inspectorOpenButtonRef}
+          onBackToChat={() => setCenterView("chat")}
+          scopeMode={taskCenterScope}
+          onScopeModeChange={setTaskCenterScope}
+        />
+      )}
 
       {isNarrow ? (
         <>
@@ -1454,6 +1515,12 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         usageSummaryLoading={usageSummaryQuery.isLoading}
         usageSummaryError={usageSummaryErrorBanner}
         usageSummaryScope={activeSessionId ? "session" : "global"}
+        onOpenTaskCenter={() => {
+          if (activeSessionId) {
+            setTaskCenterScope("session");
+          }
+          setCenterView("tasks");
+        }}
       />
     </main>
   );

@@ -106,6 +106,19 @@ export const en: Messages = {
     onboardingTitle: "Start a conversation",
     onboardingLead:
       "Type and send to begin; a session is created if none is selected. Trace and context live in the right panel (use the top buttons on small screens).",
+    openTaskCenter: "Task Center",
+    backToChat: "Back to Chat",
+  },
+  taskCenter: {
+    title: "Task Center",
+    lead:
+      "Filter, search, and locate task runs quickly, then jump into task detail for deep replay.",
+    scopeLabel: "Scope",
+    scopeSession: "Current session",
+    scopeGlobal: "All tasks",
+    sessionRequired: "Select a session first, or switch to all tasks.",
+    openTaskDetail: "Task details",
+    openTaskDetailAria: "Open task detail",
   },
   composer: {
     placeholder: "Ask a question or describe a task…",
@@ -514,6 +527,7 @@ export const en: Messages = {
     taskSnapshotLastObservation: "Last observation",
     taskSnapshotNoSelection: "Select a task from the task list first.",
     taskOpenDetail: "Task details",
+    openTaskCenter: "Open task center",
     taskExportJson: "Export JSON",
     taskExportMarkdown: "Export Markdown",
     taskExportJsonDone: "Task JSON exported.",

@@ -745,6 +745,10 @@ code {
   flex-shrink: 0;
 }
 
+.chat-open-task-center.ant-btn {
+  border-radius: 999px;
+}
+
 .mobile-inspector-trigger {
   width: auto;
 }
@@ -2022,6 +2026,10 @@ code {
   gap: 7px;
 }
 
+.inspector-block--moved {
+  display: none !important;
+}
+
 .inspector-subblock {
   margin-top: 8px;
   display: flex;
@@ -2246,6 +2254,35 @@ code {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+
+.task-center-shell {
+  animation: trace-card-in 0.26s ease-out both;
+}
+
+.task-center-main {
+  padding: 6px clamp(14px, 2.6vw, 44px) 14px;
+  overflow: auto;
+}
+
+.task-center-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-center-list {
+  margin-top: 8px;
+}
+
+.task-center-loading {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.task-center-session-note {
+  margin: 8px 0 0;
 }
 
 .task-index-toolbar {
