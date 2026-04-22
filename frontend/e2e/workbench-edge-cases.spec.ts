@@ -127,7 +127,7 @@ async function waitForContextCancelButton(page: Page): Promise<Locator> {
   return cancelButton;
 }
 
-async function openTaskDetailFromTaskCenter(page: Page): Promise<void> {
+async function openTaskDetailFromTaskCenter(page: Page): Promise<Page> {
   const openTaskCenter = page.getByTestId("chat-open-task-center");
   await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
   await openTaskCenter.click();
@@ -136,10 +136,15 @@ async function openTaskDetailFromTaskCenter(page: Page): Promise<void> {
   });
   const openDetail = page.getByTestId("task-center-open-task-detail").first();
   await expect(openDetail).toBeVisible({ timeout: 20_000 });
-  await openDetail.click();
-  await expect(page.getByTestId("task-detail-page")).toBeVisible({
+  const [detailPage] = await Promise.all([
+    page.waitForEvent("popup"),
+    openDetail.click(),
+  ]);
+  await detailPage.waitForLoadState("domcontentloaded");
+  await expect(detailPage.getByTestId("task-detail-page")).toBeVisible({
     timeout: 20_000,
   });
+  return detailPage;
 }
 
 async function waitForRunningTaskIdInSession(args: {
@@ -389,11 +394,11 @@ test("task export keeps localized 404 hint when token ownership changes", async 
     }).first(),
   ).toBeVisible({ timeout: 20_000 });
 
-  await openTaskDetailFromTaskCenter(page);
-  await expect(page.getByTestId("task-detail-export-json")).toBeEnabled({
+  const detailPage = await openTaskDetailFromTaskCenter(page);
+  await expect(detailPage.getByTestId("task-detail-export-json")).toBeEnabled({
     timeout: 20_000,
   });
-  await page.evaluate(
+  await detailPage.evaluate(
     ({
       accessToken,
       refreshToken,
@@ -419,9 +424,9 @@ test("task export keeps localized 404 hint when token ownership changes", async 
     },
   );
 
-  const exportJsonButton = page.getByTestId("task-detail-export-json");
+  const exportJsonButton = detailPage.getByTestId("task-detail-export-json");
   await exportJsonButton.click();
-  await expectToastContains(page, "404");
+  await expectToastContains(detailPage, "404");
   await expect
     .poll(async () => {
       const count = await exportJsonButton.count();

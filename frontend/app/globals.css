@@ -2256,6 +2256,23 @@ code {
   animation: trace-card-in 0.26s ease-out both;
 }
 
+.task-center-drawer .ant-drawer-content {
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+
+.task-center-drawer .ant-drawer-body {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-center-drawer .task-center-shell {
+  height: 100%;
+  max-height: 100%;
+  background: transparent;
+}
+
 .task-center-main {
   padding: 6px clamp(14px, 2.6vw, 44px) 14px;
   overflow: auto;

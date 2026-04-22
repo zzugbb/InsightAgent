@@ -100,7 +100,7 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   await expect(hitDoc).toContainText(snippet, { timeout: 20_000 });
 }
 
-async function openTaskCenterAndDetail(page: Page): Promise<void> {
+async function openTaskCenterAndDetail(page: Page): Promise<Page> {
   const openTaskCenter = page.getByTestId("chat-open-task-center");
   await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
   await openTaskCenter.click();
@@ -112,10 +112,15 @@ async function openTaskCenterAndDetail(page: Page): Promise<void> {
     .getByTestId("task-center-open-task-detail")
     .first();
   await expect(openDetailButton).toBeVisible({ timeout: 20_000 });
-  await openDetailButton.click();
-  await expect(page.getByTestId("task-detail-page")).toBeVisible({
+  const [detailPage] = await Promise.all([
+    page.waitForEvent("popup"),
+    openDetailButton.click(),
+  ]);
+  await detailPage.waitForLoadState("domcontentloaded");
+  await expect(detailPage.getByTestId("task-detail-page")).toBeVisible({
     timeout: 20_000,
   });
+  return detailPage;
 }
 
 async function waitForSessionRunningTask(
@@ -218,15 +223,15 @@ test("workbench main path covers trace, rag and task/session export", async ({
   await queryRagUntilHit(page, ragSnippet);
   await closeRuntimeDebugModal(page);
 
-  await openTaskCenterAndDetail(page);
+  const detailPage = await openTaskCenterAndDetail(page);
   await triggerDownloadAndAssertName(
-    page,
-    page.getByTestId("task-detail-export-json"),
+    detailPage,
+    detailPage.getByTestId("task-detail-export-json"),
     "task",
   );
   await triggerDownloadAndAssertName(
-    page,
-    page.getByTestId("task-detail-export-markdown"),
+    detailPage,
+    detailPage.getByTestId("task-detail-export-markdown"),
     "task",
   );
 });

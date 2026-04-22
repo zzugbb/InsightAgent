@@ -1,7 +1,7 @@
 "use client";
 
 import type { TextAreaRef } from "antd/es/input/TextArea";
-import { App } from "antd";
+import { App, Drawer } from "antd";
 import {
   useInfiniteQuery,
   useMutation,
@@ -105,8 +105,8 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [runtimeNoticeDismissed, setRuntimeNoticeDismissed] = useState(false);
   const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
+  const [taskCenterDrawerOpen, setTaskCenterDrawerOpen] = useState(false);
   const [newSessionBusy, setNewSessionBusy] = useState(false);
-  const [centerView, setCenterView] = useState<"chat" | "tasks">("chat");
   const [taskCenterScope, setTaskCenterScope] = useState<"session" | "global">(
     "session",
   );
@@ -1178,6 +1178,19 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setSessionDrawerOpen(false);
   }
 
+  const openTaskCenterDrawer = useCallback(() => {
+    if (activeSessionId) {
+      setTaskCenterScope("session");
+    } else {
+      setTaskCenterScope("global");
+    }
+    setTaskCenterDrawerOpen(true);
+    if (isNarrow) {
+      setInspectorDrawerOpen(false);
+      setSessionDrawerOpen(false);
+    }
+  }, [activeSessionId, isNarrow]);
+
   function handleLoadPersistedTrace() {
     const taskId = scopedSseTaskId?.trim() ?? "";
     setInspectorTab("trace");
@@ -1231,6 +1244,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }, [recoveryNotice]);
 
   function handleSelectTask(task: TaskSummary) {
+    setTaskCenterDrawerOpen(false);
     setActiveSessionId(task.session_id);
     setInspectorTab("trace");
     if (isNarrow) {
@@ -1453,57 +1467,61 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         onLogout={onLogout}
       />
 
-      {centerView === "chat" ? (
-        <ChatColumn
-          key="chat-view"
-          activeSession={activeSession}
-          activeSessionId={activeSessionId}
-          settingsSummary={settingsSummary}
-          isStreaming={scopedIsStreaming}
-          apiBanner={bannerError}
-          onDismissBanner={() => setBannerError(null)}
-          sessionMessages={sessionMessages}
-          pendingUserInput={scopedIsStreaming ? lastSentPromptRef.current : ""}
-          pendingUserTaskId={scopedSseTaskId}
-          messagesLoading={messagesLoading}
-          messagesMessage={messagesMessage}
-          sseTokens={scopedSseTokens}
-          ssePhase={scopedSsePhase}
-          prompt={prompt}
-          onPromptChange={setPrompt}
-          onSend={handleSend}
-          sendDisabled={scopedIsStreaming || remoteSendCoolingDown || !prompt.trim()}
-          composerHint={composerHint}
-          composerHintVariant={composerHintVariant}
-          showSessionDrawerTrigger={isNarrow}
-          onOpenSessionDrawer={openSessionDrawer}
-          sessionDrawerTriggerRef={sessionOpenButtonRef}
-          showInspectorTrigger={isNarrow}
-          onOpenInspector={() => {
-            setInspectorTab("trace");
-            openInspectorDrawer();
-          }}
-          inspectorDrawerTriggerRef={inspectorOpenButtonRef}
-          showNarrowLayoutHint={isNarrow}
-          showStreamRetry={scopedSsePhase === "error" && !scopedIsStreaming}
-          onRetryStream={handleRetryStream}
-          onOpenTaskCenter={() => {
-            if (activeSessionId) {
-              setTaskCenterScope("session");
-            }
-            setCenterView("tasks");
-          }}
-          composerRef={composerRef}
-          liveRegionText={liveRegionText}
-          runtimeNotice={runtimeNoticeDismissed ? null : runtimeNotice}
-          onOpenModelSettings={openModelSettings}
-          onDismissRuntimeNotice={() => setRuntimeNoticeDismissed(true)}
-          recoveryNotice={recoveryNotice}
-          onDismissRecoveryNotice={() => setRecoveryNotice(null)}
-        />
-      ) : (
+      <ChatColumn
+        key="chat-view"
+        activeSession={activeSession}
+        activeSessionId={activeSessionId}
+        settingsSummary={settingsSummary}
+        isStreaming={scopedIsStreaming}
+        apiBanner={bannerError}
+        onDismissBanner={() => setBannerError(null)}
+        sessionMessages={sessionMessages}
+        pendingUserInput={scopedIsStreaming ? lastSentPromptRef.current : ""}
+        pendingUserTaskId={scopedSseTaskId}
+        messagesLoading={messagesLoading}
+        messagesMessage={messagesMessage}
+        sseTokens={scopedSseTokens}
+        ssePhase={scopedSsePhase}
+        prompt={prompt}
+        onPromptChange={setPrompt}
+        onSend={handleSend}
+        sendDisabled={scopedIsStreaming || remoteSendCoolingDown || !prompt.trim()}
+        composerHint={composerHint}
+        composerHintVariant={composerHintVariant}
+        showSessionDrawerTrigger={isNarrow}
+        onOpenSessionDrawer={openSessionDrawer}
+        sessionDrawerTriggerRef={sessionOpenButtonRef}
+        showInspectorTrigger={isNarrow}
+        onOpenInspector={() => {
+          setInspectorTab("trace");
+          openInspectorDrawer();
+        }}
+        inspectorDrawerTriggerRef={inspectorOpenButtonRef}
+        showNarrowLayoutHint={isNarrow}
+        showStreamRetry={scopedSsePhase === "error" && !scopedIsStreaming}
+        onRetryStream={handleRetryStream}
+        onOpenTaskCenter={openTaskCenterDrawer}
+        composerRef={composerRef}
+        liveRegionText={liveRegionText}
+        runtimeNotice={runtimeNoticeDismissed ? null : runtimeNotice}
+        onOpenModelSettings={openModelSettings}
+        onDismissRuntimeNotice={() => setRuntimeNoticeDismissed(true)}
+        recoveryNotice={recoveryNotice}
+        onDismissRecoveryNotice={() => setRecoveryNotice(null)}
+      />
+
+      <Drawer
+        open={taskCenterDrawerOpen}
+        onClose={() => setTaskCenterDrawerOpen(false)}
+        placement="right"
+        width={isNarrow ? "100vw" : "min(680px, 92vw)"}
+        closable={false}
+        destroyOnClose={false}
+        maskClosable
+        className="task-center-drawer"
+        styles={{ body: { padding: 0 } }}
+      >
         <TaskCenter
-          key="tasks-view"
           activeSession={activeSession}
           activeSessionId={activeSessionId}
           activeTaskId={activeTaskIdScoped}
@@ -1514,20 +1532,11 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           tasksCanLoadMore={tasksCanLoadMore}
           onLoadMoreTasks={() => void tasksQuery.fetchNextPage()}
           onSelectTask={handleSelectTask}
-          showSessionDrawerTrigger={isNarrow}
-          onOpenSessionDrawer={openSessionDrawer}
-          sessionDrawerTriggerRef={sessionOpenButtonRef}
-          showInspectorTrigger={isNarrow}
-          onOpenInspector={() => {
-            setInspectorTab("trace");
-            openInspectorDrawer();
-          }}
-          inspectorDrawerTriggerRef={inspectorOpenButtonRef}
-          onBackToChat={() => setCenterView("chat")}
+          onClose={() => setTaskCenterDrawerOpen(false)}
           scopeMode={taskCenterScope}
           onScopeModeChange={setTaskCenterScope}
         />
-      )}
+      </Drawer>
 
       {isNarrow ? (
         <>
@@ -1578,12 +1587,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           cancelTaskMutation.mutate(task.id);
         }}
         cancellingTaskId={cancellingTaskId}
-        onOpenTaskCenter={() => {
-          if (activeSessionId) {
-            setTaskCenterScope("session");
-          }
-          setCenterView("tasks");
-        }}
+        onOpenTaskCenter={openTaskCenterDrawer}
       />
     </main>
   );

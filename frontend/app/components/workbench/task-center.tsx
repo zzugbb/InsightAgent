@@ -39,13 +39,8 @@ type TaskCenterProps = {
   tasksCanLoadMore: boolean;
   onLoadMoreTasks: () => void;
   onSelectTask: (task: TaskSummary) => void;
-  showSessionDrawerTrigger: boolean;
-  onOpenSessionDrawer: () => void;
-  sessionDrawerTriggerRef?: RefObject<HTMLButtonElement | null>;
-  showInspectorTrigger: boolean;
-  onOpenInspector: () => void;
-  inspectorDrawerTriggerRef?: RefObject<HTMLButtonElement | null>;
-  onBackToChat: () => void;
+  onClose: () => void;
+  closeButtonRef?: RefObject<HTMLButtonElement | null>;
   scopeMode: "session" | "global";
   onScopeModeChange: (mode: "session" | "global") => void;
 };
@@ -81,13 +76,8 @@ export function TaskCenter({
   tasksCanLoadMore,
   onLoadMoreTasks,
   onSelectTask,
-  showSessionDrawerTrigger,
-  onOpenSessionDrawer,
-  sessionDrawerTriggerRef,
-  showInspectorTrigger,
-  onOpenInspector,
-  inspectorDrawerTriggerRef,
-  onBackToChat,
+  onClose,
+  closeButtonRef,
   scopeMode,
   onScopeModeChange,
 }: TaskCenterProps) {
@@ -173,28 +163,13 @@ export function TaskCenter({
         </div>
         <Flex wrap="wrap" gap="small" align="center" justify="flex-end" className="chat-header-actions">
           <Space wrap size="small">
-            {showSessionDrawerTrigger ? (
-              <Button
-                ref={sessionDrawerTriggerRef}
-                type="default"
-                className="mobile-inspector-trigger"
-                onClick={onOpenSessionDrawer}
-              >
-                {t.chat.sessionList}
-              </Button>
-            ) : null}
-            {showInspectorTrigger ? (
-              <Button
-                ref={inspectorDrawerTriggerRef}
-                type="default"
-                className="mobile-inspector-trigger"
-                onClick={onOpenInspector}
-              >
-                {t.chat.traceAndContext}
-              </Button>
-            ) : null}
-            <Button type="default" onClick={onBackToChat} data-testid="task-center-back-chat">
-              {t.chat.backToChat}
+            <Button
+              ref={closeButtonRef}
+              type="default"
+              onClick={onClose}
+              data-testid="task-center-close"
+            >
+              {t.settings.close}
             </Button>
           </Space>
           <div className="chat-runtime-badges" aria-label="runtime">
@@ -359,6 +334,8 @@ export function TaskCenter({
                       data-testid="task-center-open-task-detail"
                       aria-label={t.taskCenter.openTaskDetailAria}
                       href={`/tasks/${encodeURIComponent(task.id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       onClick={(event) => {
                         event.stopPropagation();
                       }}

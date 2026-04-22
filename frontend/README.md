@@ -27,6 +27,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 账户可见性收口：当前登录用户展示已融合到左下角“设置”弹窗顶部，并采用与主题/主题色/语言一致的“图标 + 标题 + 值”行样式
 - 阶段 5 布局重排（2026-04-22）：会话导出迁移到左侧会话行“...”菜单（方案 1）；Memory/RAG 调试迁移到设置弹窗“运行调试”；右侧 Inspector 收敛为运行态核心（概览/同步/当前任务）
 - 阶段 5 交互收口（2026-04-22）：运行调试弹窗样式与项目主视觉对齐；任务中心“任务详情”按钮提升可见性；右侧“当前任务”仅保留取消操作（移除“打开任务中心/任务详情”）
+- 阶段 5 交互收口（2026-04-22，方案 1）：任务中心从中栏替换模式改为右侧抽屉，聊天中栏保持连续；任务详情入口改为新标签打开 `/tasks/[taskId]`，减少上下文中断
 - 阶段 5 样式微调（2026-04-22）：运行调试弹窗改为上下单列结构，并移除分区高亮底色，回归主界面统一底色风格
 - 阶段 5 聊天显示修复：发送后立即展示用户临时消息；assistant 流式卡片仅在生成中/失败态显示，避免切回会话前看到重复回复
 - 阶段 5 增量：`remote-provider-hardening` 前端收口已完成首轮；流式 `error` 与设置校验失败已按 `error_code` 做本地化提示映射，并保留错误码用于排障
@@ -126,9 +127,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 告警：delta 连续失败时显示轻提示并持续自动重试
 - 右侧 Inspector（Context）信息架构已优化为运行态分区：概览 KPI、同步诊断、当前任务与最近任务；用于专注运行态观测与排障
 - `full-trace-session` 首步收口：新增任务详情独立页 `/tasks/[taskId]`，复用现有视觉体系展示任务快照、Trace 时间线/流程图回放、任务导出
-- `full-trace-session` 重排收口：中间主区域新增 `chat | tasks` 双视图切换；任务索引能力（筛选/排序/搜索/失败置顶/分页）迁移到中间“任务中心”；右侧保留运行态观察
+- `full-trace-session` 重排收口：中间主区域恢复为聊天主视图；任务索引能力（筛选/排序/搜索/失败置顶/分页）迁移到右侧任务中心抽屉；右侧 Inspector 保留运行态观察
 - `full-trace-session` 清理收口：Inspector 中已移除旧任务块代码（任务用量/任务快照/任务索引），不再通过样式隐藏保留；任务分析统一走“任务中心 + 任务详情页”
-- `full-trace-session` 回归对齐：Playwright 主链路与边界用例已迁移至新入口（`chat-open-task-center` / `task-center-open-task-detail` / `task-detail-export-*`），不再依赖已删除的 Inspector 任务导出控件
+- `full-trace-session` 回归对齐：Playwright 主链路与边界用例已迁移至新入口（`chat-open-task-center` / `task-center-open-task-detail` popup / `task-detail-export-*`），不再依赖已删除的 Inspector 任务导出控件
 - `trace-export-json-md` 首版已落地：任务导出入口统一在任务详情页（JSON / Markdown），可一键导出当前任务（task-linked 消息、TraceStep、RAG chunks、usage、元信息）
 - `session-export-lite` 首版已落地：会话导出入口迁移到左侧会话行“...”菜单（方案 1，按会话行触发），支持导出当前会话 JSON / Markdown（消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage）
 - 任务索引增强：支持状态筛选（全部/运行中/已完成/失败）、时间排序（最新/最早）与失败置顶

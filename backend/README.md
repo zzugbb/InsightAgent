@@ -32,12 +32,12 @@
 - 协同进展：前端右侧 Inspector 已完成一体化收口（Trace 密度、Context 快速跳转、状态徽标），均基于现有字段推导，无需新增后端接口
 - 协同进展：`full-trace-session-lite` 首个前端切片已接入（任务快照：prompt/最终回答摘要/最终观察/RAG 命中/状态与失败提示），复用现有 `GET /api/tasks` + `GET /api/tasks/{task_id}/trace` 契约，无需新增后端接口
 - 协同进展：`full-trace-session` 首步收口已接入任务详情独立页（前端 `/tasks/[taskId]`），复用 `GET /api/tasks/{task_id}`、`GET /api/tasks/{task_id}/trace` 与既有导出接口，无需新增后端接口
-- 协同进展：`full-trace-session` 重排收口已接入（前端中栏 `chat | tasks` 双视图 + 任务中心）；右侧 Inspector 聚焦运行态，任务索引/筛选/搜索迁入中栏，继续复用 `GET /api/tasks` 既有契约，无需新增后端接口
+- 协同进展：`full-trace-session` 重排收口已接入（前端中栏恢复聊天主视图 + 右侧任务中心抽屉）；右侧 Inspector 聚焦运行态，任务索引/筛选/搜索由抽屉承载，继续复用 `GET /api/tasks` 既有契约，无需新增后端接口
 - 协同进展：`full-trace-session` 清理收口已完成；前端 Inspector 旧任务块代码已物理删除，任务分析入口统一为任务中心与任务详情页，后端接口契约保持不变
 - 协同进展：`full-trace-session` 二次迁移已完成；会话导出入口迁移至左侧会话行“...”菜单（方案 1），Memory/RAG 调试迁移至设置弹窗“运行调试”，后端接口契约保持不变
 - 协同进展：`full-trace-session` 交互细化已完成；运行调试弹窗样式与全站风格统一，任务中心“任务详情”按钮增强，Inspector 当前任务仅保留取消操作；后端接口契约保持不变
 - 协同进展：`full-trace-session` 样式微调已完成；运行调试弹窗改为上下单列并移除分区高亮底色，后端接口契约保持不变
-- 协同进展：前端 Playwright 回归已对齐新入口（任务中心 + 任务详情导出），旧的 Inspector 任务导出断言已替换；后端导出接口契约保持不变
+- 协同进展：前端 Playwright 回归已对齐新入口（任务中心抽屉 + 新标签任务详情导出），旧的 Inspector 任务导出断言已替换；后端导出接口契约保持不变
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage
 - 协同进展：`session-export-lite` 首版已接入；新增 `GET /api/sessions/{session_id}/export/json` 与 `GET /api/sessions/{session_id}/export/markdown`，导出包含会话消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage 汇总
 - 阶段 5 增量：`remote-provider-hardening` 首轮已完成；Provider 运行时统一输出结构化错误码（401/403、429、5xx、网络、无效 JSON、空响应、SSE 中断），任务流 SSE `error` 事件透传 `code/fatal/retryable/detail/status_code`
