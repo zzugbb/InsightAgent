@@ -247,8 +247,8 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
   });
 
-  const TASK_PAGE_SESSION = 12;
-  const TASK_PAGE_GLOBAL = 8;
+const TASK_PAGE_SESSION = 50;
+const TASK_PAGE_GLOBAL = 50;
   const taskScopeSessionId =
     taskCenterScope === "session" ? activeSessionId : null;
 
@@ -279,6 +279,16 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       return failureCount < 2;
     },
   });
+  const tasksHasNextPage = Boolean(tasksQuery.hasNextPage);
+  const tasksFetchingNextPage = tasksQuery.isFetchingNextPage;
+  const fetchNextTasksPage = tasksQuery.fetchNextPage;
+
+  useEffect(() => {
+    if (!tasksHasNextPage || tasksFetchingNextPage) {
+      return;
+    }
+    void fetchNextTasksPage();
+  }, [fetchNextTasksPage, tasksFetchingNextPage, tasksHasNextPage]);
 
   useEffect(() => {
     if (taskCenterScope !== "session") {
@@ -499,8 +509,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         : recentTasks,
     [activeSessionId, recentTasks],
   );
-  const tasksFetchNextBusy = tasksQuery.isFetchingNextPage;
-  const tasksCanLoadMore = Boolean(tasksQuery.hasNextPage);
   const settingsSummary = settingsQuery.data ?? null;
   const runtimeNotice =
     settingsSummary?.mode === "remote"
@@ -1527,9 +1535,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           activeTaskId={activeTaskIdScoped}
           recentTasks={recentTasks}
           tasksLoading={tasksQuery.isLoading}
-          tasksFetchNextBusy={tasksFetchNextBusy}
-          tasksCanLoadMore={tasksCanLoadMore}
-          onLoadMoreTasks={() => void tasksQuery.fetchNextPage()}
           onSelectTask={handleSelectTask}
           onClose={() => setTaskCenterDrawerOpen(false)}
           scopeMode={taskCenterScope}

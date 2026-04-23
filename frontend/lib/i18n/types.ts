@@ -111,6 +111,11 @@ export type Messages = {
     scopeSession: string;
     scopeGlobal: string;
     sessionRequired: string;
+    tableTask: string;
+    tableStatus: string;
+    tableUsageSource: string;
+    tableUpdatedAt: string;
+    tableActions: string;
     openTaskDetail: string;
     openTaskDetailAria: string;
   };
