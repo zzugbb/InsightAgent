@@ -157,6 +157,16 @@ jobs:
             echo
             echo "- generated_at_utc: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
             echo
+            warning_count=0
+            p0_warning_count=0
+            p1_warning_count=0
+            warning_messages=""
+            UI_HINT_REGEX="waitForEvent\\(\"download\"\\)|suggestedFilename|task-detail-export|sidebar-session-export|download event"
+            HEADER_HINT_REGEX="content-type|content-disposition|application/json|text/markdown|attachment;"
+            API_EXPORT_REGEX="/api/(tasks|sessions)/[^ ]*/export/(json|markdown)"
+            EDGE_SEMANTIC_REGEX="404|not found|task not found|session not found|cross-user|ownership|isolat"
+            MAIN_KEY_LINES_REGEX="download|suggestedfilename|content-type|content-disposition|application/json|text/markdown|${API_EXPORT_REGEX}"
+            EDGE_KEY_LINES_REGEX="${MAIN_KEY_LINES_REGEX}|${EDGE_SEMANTIC_REGEX}"
 
             if [ ! -d frontend/test-results ]; then
               echo "No frontend/test-results directory found."
@@ -177,10 +187,11 @@ jobs:
               main_ui_hint_count=0
               main_header_hint_count=0
               main_api_hint_count=0
+              main_context_count=${#main_contexts[@]}
               for file in "${main_contexts[@]}"; do
-                ui_hits=$(grep -Eci "waitForEvent\\(\"download\"\\)|suggestedFilename|task-detail-export|sidebar-session-export|download event" "$file" || true)
-                header_hits=$(grep -Eci "content-type|content-disposition|application/json|text/markdown|attachment;" "$file" || true)
-                api_hits=$(grep -Eci "/api/(tasks|sessions)/[^ ]*/export/(json|markdown)" "$file" || true)
+                ui_hits=$(grep -Eci "${UI_HINT_REGEX}" "$file" || true)
+                header_hits=$(grep -Eci "${HEADER_HINT_REGEX}" "$file" || true)
+                api_hits=$(grep -Eci "${API_EXPORT_REGEX}" "$file" || true)
                 main_ui_hint_count=$((main_ui_hint_count + ui_hits))
                 main_header_hint_count=$((main_header_hint_count + header_hits))
                 main_api_hint_count=$((main_api_hint_count + api_hits))
@@ -190,11 +201,36 @@ jobs:
               echo "- ui_download_layer_hints: ${main_ui_hint_count}"
               echo "- response_header_layer_hints: ${main_header_hint_count}"
               echo "- export_api_path_hints: ${main_api_hint_count}"
+              if [ "${main_context_count}" -gt 0 ] && [ "${main_api_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p0_warning_count=$((p0_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P0][workbench-main-path] export_api_path_hints expected >=1 when error-context exists, got ${main_api_hint_count}"
+              fi
+              if [ "${main_context_count}" -gt 0 ] && [ "${main_ui_hint_count}" -lt 1 ] && [ "${main_header_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p0_warning_count=$((p0_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P0][workbench-main-path] both ui_download_layer_hints and response_header_layer_hints are 0 with existing error-context"
+              fi
+              if [ "${main_ui_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][workbench-main-path] ui_download_layer_hints expected >=1, got ${main_ui_hint_count}"
+              fi
+              if [ "${main_header_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][workbench-main-path] response_header_layer_hints expected >=1, got ${main_header_hint_count}"
+              fi
+              if [ "${main_api_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][workbench-main-path] export_api_path_hints expected >=1, got ${main_api_hint_count}"
+              fi
               echo
 
               echo "### key lines"
               for file in "${main_contexts[@]}"; do
-                grep -Ein "download|suggestedfilename|content-type|content-disposition|application/json|text/markdown|/api/(tasks|sessions)/.*export/(json|markdown)" "$file" || true
+                grep -Ein "${MAIN_KEY_LINES_REGEX}" "$file" || true
               done | head -n 120
             fi
             echo
@@ -214,11 +250,12 @@ jobs:
               edge_header_hint_count=0
               edge_api_hint_count=0
               edge_404_semantic_hints=0
+              edge_context_count=${#edge_contexts[@]}
               for file in "${edge_contexts[@]}"; do
-                ui_hits=$(grep -Eci "waitForEvent\\(\"download\"\\)|suggestedFilename|task-detail-export|sidebar-session-export|download event" "$file" || true)
-                header_hits=$(grep -Eci "content-type|content-disposition|application/json|text/markdown|attachment;" "$file" || true)
-                api_hits=$(grep -Eci "/api/(tasks|sessions)/[^ ]*/export/(json|markdown)" "$file" || true)
-                semantic_hits=$(grep -Eci "404|not found|task not found|session not found|cross-user|ownership|isolat" "$file" || true)
+                ui_hits=$(grep -Eci "${UI_HINT_REGEX}" "$file" || true)
+                header_hits=$(grep -Eci "${HEADER_HINT_REGEX}" "$file" || true)
+                api_hits=$(grep -Eci "${API_EXPORT_REGEX}" "$file" || true)
+                semantic_hits=$(grep -Eci "${EDGE_SEMANTIC_REGEX}" "$file" || true)
                 edge_ui_hint_count=$((edge_ui_hint_count + ui_hits))
                 edge_header_hint_count=$((edge_header_hint_count + header_hits))
                 edge_api_hint_count=$((edge_api_hint_count + api_hits))
@@ -230,12 +267,59 @@ jobs:
               echo "- response_header_layer_hints: ${edge_header_hint_count}"
               echo "- export_api_path_hints: ${edge_api_hint_count}"
               echo "- export_404_semantic_hints: ${edge_404_semantic_hints}"
+              if [ "${edge_context_count}" -gt 0 ] && [ "${edge_api_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p0_warning_count=$((p0_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P0][workbench-edge-cases] export_api_path_hints expected >=1 when error-context exists, got ${edge_api_hint_count}"
+              fi
+              if [ "${edge_context_count}" -gt 0 ] && [ "${edge_404_semantic_hints}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p0_warning_count=$((p0_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P0][workbench-edge-cases] export_404_semantic_hints expected >=1 when error-context exists, got ${edge_404_semantic_hints}"
+              fi
+              if [ "${edge_context_count}" -gt 0 ] && [ "${edge_ui_hint_count}" -lt 1 ] && [ "${edge_header_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p0_warning_count=$((p0_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P0][workbench-edge-cases] both ui_download_layer_hints and response_header_layer_hints are 0 with existing error-context"
+              fi
+              if [ "${edge_ui_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][workbench-edge-cases] ui_download_layer_hints expected >=1, got ${edge_ui_hint_count}"
+              fi
+              if [ "${edge_header_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][workbench-edge-cases] response_header_layer_hints expected >=1, got ${edge_header_hint_count}"
+              fi
+              if [ "${edge_api_hint_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][workbench-edge-cases] export_api_path_hints expected >=1, got ${edge_api_hint_count}"
+              fi
+              if [ "${edge_404_semantic_hints}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][workbench-edge-cases] export_404_semantic_hints expected >=1, got ${edge_404_semantic_hints}"
+              fi
               echo
 
               echo "### key lines"
               for file in "${edge_contexts[@]}"; do
-                grep -Ein "download|suggestedfilename|content-type|content-disposition|application/json|text/markdown|/api/(tasks|sessions)/.*export/(json|markdown)|404|not found|cross-user|ownership|isolat" "$file" || true
+                grep -Ein "${EDGE_KEY_LINES_REGEX}" "$file" || true
               done | head -n 120
+            fi
+
+            echo
+            if [ "${warning_count}" -gt 0 ]; then
+              echo "## threshold alerts"
+              echo "- total_alerts: ${warning_count}"
+              echo "- severity: P0=${p0_warning_count}, P1=${p1_warning_count}"
+              printf '%b\n' "${warning_messages}"
+            else
+              echo "## threshold alerts"
+              echo "- total_alerts: 0 (all counters within expected range)"
+              echo "- severity: P0=0, P1=0"
             fi
           } | tee "${summary_file}"
 

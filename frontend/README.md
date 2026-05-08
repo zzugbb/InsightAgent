@@ -80,6 +80,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 回归深化（九次）：一次性补齐剩余 6 项回归覆盖：恢复提示三态（恢复中/成功/失败）、trace delta 重试与后台暂停/前台恢复、auth refresh 自动续期与 `logout-all` 后强制重登、设置弹窗/治理子弹窗重开状态重置；本地 chromium 全量回归更新为 `30/30`。
 - 阶段 5 CI 稳定性增强：`frontend-e2e` 新增同分支并发互斥（取消旧运行）、失败后 `--last-failed` 诊断重跑、失败索引文件（`error-context.md`/`trace.zip` 列表）和带 `run_id/run_attempt` 的 artifact 命名，提升失败排查效率。
 - 阶段 5 CI 诊断增强（2026-05-08）：`frontend-e2e` 导出断言摘要已扩展覆盖 `workbench-main-path` 与 `workbench-edge-cases`，自动提取 UI 下载层/响应头层/API 路径/404 语义提示计数及关键行，输出到 `GITHUB_STEP_SUMMARY` 与 `/tmp/frontend-e2e-export-summary.md` artifact
+- 阶段 5 CI 告警增强（2026-05-08）：`frontend-e2e` 导出摘要新增 `threshold alerts` 阈值告警；若主链路或边界链路计数低于预期，会直接输出 expected vs actual，便于快速定位“下载层 / 响应头层 / 404 语义层”回归
+- 阶段 5 CI 告警分级（2026-05-08）：`frontend-e2e` 导出阈值告警已补严重级别标签（当前为 `[P1]`）与 `severity` 计数，并与 `backend-e2e` 告警视图对齐，便于跨端统一判读
+- 阶段 5 CI 告警分级补强（2026-05-08）：`frontend-e2e` 已新增 `P0` 判定规则：若存在 `error-context` 但 `export_api_path_hints=0`，或 UI 下载层/响应头层提示同时为 0（edge-cases 还包含 `export_404_semantic_hints=0`），则升级为 `P0` 告警
+- 阶段 5 CI 告警模板统一（2026-05-08）：`frontend-e2e` 与 `backend-e2e` 导出摘要字段顺序已统一为 `total_alerts -> severity -> 分级明细`，并保持一致的分级标签格式，方便跨工作流横向比对
+- 阶段 5 CI 规则收口（2026-05-08）：`frontend-e2e` 导出摘要中的 UI/响应头/API/404 语义计数与 `key lines` 提取规则已集中为变量块；并补齐 `total_alerts=0` 时的 `severity: P0=0, P1=0` 输出
 - 阶段 5 回归稳态收口（十次，2026-04-22）：修复 `workbench-edge-cases` 并发回归下的偶发失败，Context tab helper 改为仅命中 Inspector 顶部导航；“取消后同文案重发”用例改为“API cancel + UI 去重可见性断言”以规避流式 tab 抢占时序，chromium 全量回归再次验证 `30/30` 通过。
 - 阶段 5 回归稳态收口（十一次，2026-04-22）：修复 `workbench-edge-cases` “切换 token 后导出 404”竞态（切 token 前先等待任务详情导出按钮可用），并按 CI 同口径串行回归（`--workers=1`）复测 chromium 全量 `30/30` 通过。
 - 阶段 5 稳定性补丁：后端 `mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现取消恢复场景，普通请求无行为变化
@@ -87,6 +92,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同（2026-05-08）：后端 `e2e_export_consistency` 已补导出 `Content-Type` 断言（JSON/Markdown + 下载场景），前端导出链路可更早发现 MIME 类型回归
 - 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
 - 阶段 5 协同（2026-05-08）：后端 `backend-e2e` 已新增 export consistency CI Summary 快照与摘要 artifact（`/tmp/e2e-export-consistency-summary.txt`），并补充断言计数统计（steps/ok/pass/task-export/session-export/cross-user/not-found）；失败诊断追加导出一致性日志 tail，便于快速核对导出链路回归
+- 阶段 5 协同（2026-05-08 补充）：后端 `backend-e2e` export summary 已新增 `Threshold alerts` 阈值告警行；当导出检查计数偏离预期时，CI Summary 会直接给出异常计数项明细，便于前端联调快速判断是否为导出协议/权限语义回归
 
 ## 当前已有内容
 

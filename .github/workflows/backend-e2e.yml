@@ -128,13 +128,62 @@ jobs:
           {
             echo "## Export Consistency Snapshot"
             if [ -f /tmp/e2e-export-consistency-8000.log ]; then
-              step_count=$(grep -Ec "^\[[0-9]+/[0-9]+\]" /tmp/e2e-export-consistency-8000.log || true)
-              ok_count=$(grep -Ec "^  - OK:" /tmp/e2e-export-consistency-8000.log || true)
-              passed_count=$(grep -Ec "^E2E export consistency passed:" /tmp/e2e-export-consistency-8000.log || true)
-              task_export_ok=$(grep -Ec "task export json/markdown consistency \+ download" /tmp/e2e-export-consistency-8000.log || true)
-              session_export_ok=$(grep -Ec "session export json/markdown consistency \+ download" /tmp/e2e-export-consistency-8000.log || true)
-              cross_user_ok=$(grep -Ec "cross-user export isolation checks" /tmp/e2e-export-consistency-8000.log || true)
-              not_found_ok=$(grep -Ec "export not-found responses" /tmp/e2e-export-consistency-8000.log || true)
+              STEP_REGEX="^\[[0-9]+/[0-9]+\]"
+              OK_LINE_REGEX="^  - OK:"
+              PASS_BANNER_REGEX="^E2E export consistency passed:"
+              TASK_EXPORT_REGEX="task export json/markdown consistency \+ download"
+              SESSION_EXPORT_REGEX="session export json/markdown consistency \+ download"
+              CROSS_USER_REGEX="cross-user export isolation checks"
+              NOT_FOUND_REGEX="export not-found responses"
+              KEY_LINES_REGEX="^\\[[0-9]+/[0-9]+\\]|^  - OK:|^E2E export consistency passed:|^- "
+
+              step_count=$(grep -Ec "${STEP_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
+              ok_count=$(grep -Ec "${OK_LINE_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
+              passed_count=$(grep -Ec "${PASS_BANNER_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
+              task_export_ok=$(grep -Ec "${TASK_EXPORT_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
+              session_export_ok=$(grep -Ec "${SESSION_EXPORT_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
+              cross_user_ok=$(grep -Ec "${CROSS_USER_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
+              not_found_ok=$(grep -Ec "${NOT_FOUND_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
+              warning_count=0
+              p0_warning_count=0
+              p1_warning_count=0
+              warning_messages=""
+
+              if [ "${step_count}" -ne 6 ]; then
+                warning_count=$((warning_count + 1))
+                p0_warning_count=$((p0_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] steps_detected expected 6, got ${step_count}"
+              fi
+              if [ "${ok_count}" -ne 6 ]; then
+                warning_count=$((warning_count + 1))
+                p0_warning_count=$((p0_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] ok_lines_detected expected 6, got ${ok_count}"
+              fi
+              if [ "${passed_count}" -ne 1 ]; then
+                warning_count=$((warning_count + 1))
+                p0_warning_count=$((p0_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] pass_banner_detected expected 1, got ${passed_count}"
+              fi
+              if [ "${task_export_ok}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] task_export_consistency_ok expected >=1, got ${task_export_ok}"
+              fi
+              if [ "${session_export_ok}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] session_export_consistency_ok expected >=1, got ${session_export_ok}"
+              fi
+              if [ "${cross_user_ok}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] cross_user_isolation_ok expected >=1, got ${cross_user_ok}"
+              fi
+              if [ "${not_found_ok}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] not_found_semantics_ok expected >=1, got ${not_found_ok}"
+              fi
 
               echo ""
               echo "- Script log: /tmp/e2e-export-consistency-8000.log"
@@ -146,8 +195,17 @@ jobs:
               echo "  - session_export_consistency_ok: ${session_export_ok} (expected: >=1)"
               echo "  - cross_user_isolation_ok: ${cross_user_ok} (expected: >=1)"
               echo "  - not_found_semantics_ok: ${not_found_ok} (expected: >=1)"
-              echo "- Key checkpoints:"
-              grep -E "^\[[0-9]+/[0-9]+\]|^  - OK:|^E2E export consistency passed:|^- " /tmp/e2e-export-consistency-8000.log || true
+              echo "## threshold alerts"
+              if [ "${warning_count}" -gt 0 ]; then
+                echo "- total_alerts: ${warning_count}"
+                echo "- severity: P0=${p0_warning_count}, P1=${p1_warning_count}"
+                printf '%b\n' "${warning_messages}"
+              else
+                echo "- total_alerts: 0 (all counters within expected range)"
+                echo "- severity: P0=0, P1=0"
+              fi
+              echo "## key lines"
+              grep -E "${KEY_LINES_REGEX}" /tmp/e2e-export-consistency-8000.log || true
             else
               echo ""
               echo "- Export consistency log is missing."
