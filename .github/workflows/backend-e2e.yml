@@ -122,6 +122,43 @@ jobs:
             --timeout-prompt-words 250000 \
             | tee /tmp/e2e-timeout-8010.log
 
+      - name: Summarize export consistency checks
+        if: always()
+        run: |
+          {
+            echo "## Export Consistency Snapshot"
+            if [ -f /tmp/e2e-export-consistency-8000.log ]; then
+              step_count=$(grep -Ec "^\[[0-9]+/[0-9]+\]" /tmp/e2e-export-consistency-8000.log || true)
+              ok_count=$(grep -Ec "^  - OK:" /tmp/e2e-export-consistency-8000.log || true)
+              passed_count=$(grep -Ec "^E2E export consistency passed:" /tmp/e2e-export-consistency-8000.log || true)
+              task_export_ok=$(grep -Ec "task export json/markdown consistency \+ download" /tmp/e2e-export-consistency-8000.log || true)
+              session_export_ok=$(grep -Ec "session export json/markdown consistency \+ download" /tmp/e2e-export-consistency-8000.log || true)
+              cross_user_ok=$(grep -Ec "cross-user export isolation checks" /tmp/e2e-export-consistency-8000.log || true)
+              not_found_ok=$(grep -Ec "export not-found responses" /tmp/e2e-export-consistency-8000.log || true)
+
+              echo ""
+              echo "- Script log: /tmp/e2e-export-consistency-8000.log"
+              echo "- Assertion counters:"
+              echo "  - steps_detected: ${step_count} (expected: 6)"
+              echo "  - ok_lines_detected: ${ok_count} (expected: 6)"
+              echo "  - pass_banner_detected: ${passed_count} (expected: 1)"
+              echo "  - task_export_consistency_ok: ${task_export_ok} (expected: >=1)"
+              echo "  - session_export_consistency_ok: ${session_export_ok} (expected: >=1)"
+              echo "  - cross_user_isolation_ok: ${cross_user_ok} (expected: >=1)"
+              echo "  - not_found_semantics_ok: ${not_found_ok} (expected: >=1)"
+              echo "- Key checkpoints:"
+              grep -E "^\[[0-9]+/[0-9]+\]|^  - OK:|^E2E export consistency passed:|^- " /tmp/e2e-export-consistency-8000.log || true
+            else
+              echo ""
+              echo "- Export consistency log is missing."
+            fi
+          } | tee /tmp/e2e-export-consistency-summary.txt
+
+          {
+            echo "### backend-e2e export consistency"
+            cat /tmp/e2e-export-consistency-summary.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Collect diagnostics on failure
         if: failure()
         run: |
@@ -137,6 +174,9 @@ jobs:
             echo ""
             echo "===== health :8010 ====="
             curl -i -m 5 http://127.0.0.1:8010/health || true
+            echo ""
+            echo "===== export consistency tail ====="
+            tail -n 80 /tmp/e2e-export-consistency-8000.log || true
           } > /tmp/backend-e2e-diagnostics.txt
 
       - name: Show backend logs on failure
@@ -160,6 +200,7 @@ jobs:
             /tmp/e2e-main-path-8000.log
             /tmp/e2e-baseline-8000.log
             /tmp/e2e-export-consistency-8000.log
+            /tmp/e2e-export-consistency-summary.txt
             /tmp/e2e-cancel-8000.log
             /tmp/e2e-timeout-8010.log
             /tmp/backend-e2e-diagnostics.txt

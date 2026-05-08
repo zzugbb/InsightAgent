@@ -33,6 +33,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 交互收口（2026-04-23 补充）：任务中心顶部筛选/搜索区改为审计日志同款双行布局（主筛选行 + 次筛选行），统一控件高度、间距与重置动作风格
 - 阶段 5 交互收口（2026-04-23 再补充）：修复“全局任务条数小于当前会话”问题（改为自动拉取完整分页后本地筛选）；任务中心表格移除“用量来源”列；“任务详情”按钮改为轻量操作样式
 - 阶段 5 样式微调（2026-04-22）：运行调试弹窗改为上下单列结构，并移除分区高亮底色，回归主界面统一底色风格
+- 阶段 5 兼容性修复（2026-05-08）：`Workbench` 任务中心抽屉已将 Ant Design `Drawer` 的 `width` 属性替换为 `size`，消除 `[antd: Drawer] width is deprecated` 警告且保持原有响应式宽度行为
+- 阶段 5 工程收口（2026-05-08）：任务详情页与会话导出入口的下载链路已统一抽取到 `frontend/lib/export-download.ts`，复用鉴权下载、附件文件名解析与 `ApiError` 映射语义，减少导出逻辑重复与回归分叉
 - 阶段 5 聊天显示修复：发送后立即展示用户临时消息；assistant 流式卡片仅在生成中/失败态显示，避免切回会话前看到重复回复
 - 阶段 5 增量：`remote-provider-hardening` 前端收口已完成首轮；流式 `error` 与设置校验失败已按 `error_code` 做本地化提示映射，并保留错误码用于排障
 - 阶段 5 增量：`task-cancel-timeout` 前端首版已落地；Inspector「当前任务」支持取消运行中任务，流式状态接入 `cancelled/timeout` 事件提示
@@ -70,16 +72,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 回归深化（三次）：新增模型设置弹窗 `settings/validate` 异常态回归（`remote_api_key_unauthorized`、`remote_preflight_network_error`），并为模型设置控件补稳定 `data-testid`（`model-settings-*`）以降低多语言文案依赖导致的波动
 - 阶段 5 回归深化（四次）：新增流式异常态回归（`remote_provider_stream_invalid_json`、`remote_provider_stream_interrupted`）并将 Context tab 打开逻辑收敛为“重试点击直到 `#inspector-panel-context` 可见”，降低恢复流与 Tabs 自动切换并发导致的抖动
 - 阶段 5 回归深化（五次）：`workbench-edge-cases` 补齐导出异常态语义（空会话导出 JSON/Markdown、跨用户 task/session 导出隔离 404），覆盖空数据与权限边界
+- 阶段 5 回归深化（2026-05-08）：`workbench-edge-cases` 新增“导出下载响应头一致性”回归，覆盖 task/session JSON/Markdown `download=true` 的 `Content-Type` 与 `Content-Disposition` 扩展名匹配
+- 阶段 5 回归深化（2026-05-08 补充）：`workbench-main-path` 导出断言升级为“UI 下载事件 + 同路径 API 响应头”双重校验，覆盖 task/session JSON/Markdown 的 `Content-Type` 与附件扩展名一致性
 - 阶段 5 回归深化（六次）：导出错误提示统一走 `ApiError` 映射（避免直接暴露后端原始 detail）；新增 UI 回归验证“切换 token 后导出 404 提示 + 按钮恢复”
 - 阶段 5 回归深化（七次）：`workbench-main-path` 恢复取消链路稳态加固，新增“发送后先确认后端 running/pending 再刷新”与“等待取消按钮期间持续维持 Context 激活”断言，修复自动恢复切回 Trace 导致的偶发失败；本地 chromium 全量回归更新为 `22/22`
 - 阶段 5 回归深化（八次）：`workbench-edge-cases` 一次性补齐 3 条会话与取消交互回归（取消后同文案即时重发不丢消息、跨会话切换时流式状态不串台且切回可取消、mock 取消后不出现重试入口并可快速恢复发送）；本地 chromium 全量回归更新为 `25/25`
 - 阶段 5 回归深化（九次）：一次性补齐剩余 6 项回归覆盖：恢复提示三态（恢复中/成功/失败）、trace delta 重试与后台暂停/前台恢复、auth refresh 自动续期与 `logout-all` 后强制重登、设置弹窗/治理子弹窗重开状态重置；本地 chromium 全量回归更新为 `30/30`。
 - 阶段 5 CI 稳定性增强：`frontend-e2e` 新增同分支并发互斥（取消旧运行）、失败后 `--last-failed` 诊断重跑、失败索引文件（`error-context.md`/`trace.zip` 列表）和带 `run_id/run_attempt` 的 artifact 命名，提升失败排查效率。
+- 阶段 5 CI 诊断增强（2026-05-08）：`frontend-e2e` 导出断言摘要已扩展覆盖 `workbench-main-path` 与 `workbench-edge-cases`，自动提取 UI 下载层/响应头层/API 路径/404 语义提示计数及关键行，输出到 `GITHUB_STEP_SUMMARY` 与 `/tmp/frontend-e2e-export-summary.md` artifact
 - 阶段 5 回归稳态收口（十次，2026-04-22）：修复 `workbench-edge-cases` 并发回归下的偶发失败，Context tab helper 改为仅命中 Inspector 顶部导航；“取消后同文案重发”用例改为“API cancel + UI 去重可见性断言”以规避流式 tab 抢占时序，chromium 全量回归再次验证 `30/30` 通过。
 - 阶段 5 回归稳态收口（十一次，2026-04-22）：修复 `workbench-edge-cases` “切换 token 后导出 404”竞态（切 token 前先等待任务详情导出按钮可用），并按 CI 同口径串行回归（`--workers=1`）复测 chromium 全量 `30/30` 通过。
 - 阶段 5 稳定性补丁：后端 `mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现取消恢复场景，普通请求无行为变化
-- 阶段 5 协同：后端新增 `e2e_export_consistency` 并接入 `backend-e2e`，导出稳定性（任务/会话 JSON+Markdown 一致性）已有自动回归兜底
+- 阶段 5 协同：后端 `e2e_export_consistency` 已扩展覆盖跨用户导出隔离 404（task/session），导出稳定性（任务/会话 JSON+Markdown 一致性 + 下载头 + 权限边界）已有自动回归兜底
+- 阶段 5 协同（2026-05-08）：后端 `e2e_export_consistency` 已补导出 `Content-Type` 断言（JSON/Markdown + 下载场景），前端导出链路可更早发现 MIME 类型回归
 - 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
+- 阶段 5 协同（2026-05-08）：后端 `backend-e2e` 已新增 export consistency CI Summary 快照与摘要 artifact（`/tmp/e2e-export-consistency-summary.txt`），并补充断言计数统计（steps/ok/pass/task-export/session-export/cross-user/not-found）；失败诊断追加导出一致性日志 tail，便于快速核对导出链路回归
 
 ## 当前已有内容
 

@@ -133,6 +133,14 @@ def _require_attachment_header(result: HttpResult, expected_ext: str) -> None:
     )
 
 
+def _require_content_type(result: HttpResult, expected_prefix: str) -> None:
+    content_type = result.headers.get("content-type", "").lower()
+    _assert(
+        content_type.startswith(expected_prefix.lower()),
+        f"unexpected content-type, expected {expected_prefix}: {content_type or result.headers}",
+    )
+
+
 def main() -> None:
     args = parse_args()
     base_url = args.base_url.rstrip("/")
@@ -140,10 +148,13 @@ def main() -> None:
 
     suffix = secrets.token_hex(4)
     email = f"e2e_export_{suffix}@example.com"
+    outsider_email = f"e2e_export_outsider_{suffix}@example.com"
 
-    print("[1/5] 注册并保存 mock 设置")
+    print("[1/6] 注册并保存 mock 设置")
     register = _register(base_url, email, password)
     access_token = str(register["access_token"])
+    outsider_register = _register(base_url, outsider_email, password)
+    outsider_access_token = str(outsider_register["access_token"])
 
     mock_payload = {
         "mode": "mock",
@@ -161,7 +172,7 @@ def main() -> None:
     _assert(save_mock.status == 200, f"save mock settings failed: {save_mock.text}")
     print("  - OK: auth + settings")
 
-    print("[2/5] 创建任务并跑完整流")
+    print("[2/6] 创建任务并跑完整流")
     create_task = _request(
         method="POST",
         url=f"{base_url}/api/tasks",
@@ -186,7 +197,7 @@ def main() -> None:
     _assert("done" in _extract_sse_event_names(stream.text), "task stream missing done")
     print("  - OK: task stream done")
 
-    print("[3/5] 任务导出一致性")
+    print("[3/6] 任务导出一致性")
     task_export_json = _request(
         method="GET",
         url=f"{base_url}/api/tasks/{task_id}/export/json",
@@ -196,6 +207,7 @@ def main() -> None:
         task_export_json.status == 200 and isinstance(task_export_json.json_body, dict),
         f"task export json failed: {task_export_json.status} {task_export_json.text}",
     )
+    _require_content_type(task_export_json, "application/json")
     task_payload = task_export_json.json_body
     task_obj = task_payload.get("task")
     trace_obj = task_payload.get("trace")
@@ -225,6 +237,7 @@ def main() -> None:
         token=access_token,
     )
     _assert(task_export_md.status == 200, "task export markdown failed")
+    _require_content_type(task_export_md, "text/markdown")
     _assert("# InsightAgent Task Export" in task_export_md.text, "task export markdown header missing")
     _assert("## Trace Summary" in task_export_md.text, "task export markdown summary missing")
     _assert(
@@ -238,6 +251,7 @@ def main() -> None:
         token=access_token,
     )
     _assert(task_export_json_download.status == 200, "task export json download failed")
+    _require_content_type(task_export_json_download, "application/json")
     _require_attachment_header(task_export_json_download, ".json")
 
     task_export_md_download = _request(
@@ -246,10 +260,11 @@ def main() -> None:
         token=access_token,
     )
     _assert(task_export_md_download.status == 200, "task export markdown download failed")
+    _require_content_type(task_export_md_download, "text/markdown")
     _require_attachment_header(task_export_md_download, ".md")
     print("  - OK: task export json/markdown consistency + download")
 
-    print("[4/5] 会话导出一致性")
+    print("[4/6] 会话导出一致性")
     session_export_json = _request(
         method="GET",
         url=f"{base_url}/api/sessions/{session_id}/export/json",
@@ -259,6 +274,7 @@ def main() -> None:
         session_export_json.status == 200 and isinstance(session_export_json.json_body, dict),
         f"session export json failed: {session_export_json.status} {session_export_json.text}",
     )
+    _require_content_type(session_export_json, "application/json")
     session_payload = session_export_json.json_body
     session_obj = session_payload.get("session")
     stats_obj = session_payload.get("stats")
@@ -311,6 +327,7 @@ def main() -> None:
         token=access_token,
     )
     _assert(session_export_md.status == 200, "session export markdown failed")
+    _require_content_type(session_export_md, "text/markdown")
     _assert(
         "# InsightAgent Session Export" in session_export_md.text,
         "session export markdown header missing",
@@ -328,6 +345,7 @@ def main() -> None:
         token=access_token,
     )
     _assert(session_export_json_download.status == 200, "session export json download failed")
+    _require_content_type(session_export_json_download, "application/json")
     _require_attachment_header(session_export_json_download, ".json")
 
     session_export_md_download = _request(
@@ -336,10 +354,30 @@ def main() -> None:
         token=access_token,
     )
     _assert(session_export_md_download.status == 200, "session export markdown download failed")
+    _require_content_type(session_export_md_download, "text/markdown")
     _require_attachment_header(session_export_md_download, ".md")
     print("  - OK: session export json/markdown consistency + download")
 
-    print("[5/5] 负例：跨资源不存在检查")
+    print("[5/6] 负例：跨用户导出隔离")
+    task_cross_user = _request(
+        method="GET",
+        url=f"{base_url}/api/tasks/{task_id}/export/json",
+        token=outsider_access_token,
+    )
+    _assert(task_cross_user.status == 404, "cross-user task export should return 404")
+
+    session_cross_user = _request(
+        method="GET",
+        url=f"{base_url}/api/sessions/{session_id}/export/json",
+        token=outsider_access_token,
+    )
+    _assert(
+        session_cross_user.status == 404,
+        "cross-user session export should return 404",
+    )
+    print("  - OK: cross-user export isolation checks")
+
+    print("[6/6] 负例：跨资源不存在检查")
     task_not_found = _request(
         method="GET",
         url=f"{base_url}/api/tasks/not-exists/export/json",
@@ -359,6 +397,7 @@ def main() -> None:
     print("- task export json/markdown schema and summary consistency")
     print("- session export json/markdown stats consistency")
     print("- download=true content-disposition headers")
+    print("- cross-user export isolation responses")
     print("- export not-found responses")
 
 

@@ -61,6 +61,18 @@ async function expectToastContains(page: Page, text: string): Promise<void> {
   await expect(toast).toBeVisible({ timeout: 20_000 });
 }
 
+function expectExportResponseHeaders(args: {
+  headers: Record<string, string>;
+  contentTypePrefix: string;
+  expectedExtension: ".json" | ".md";
+}): void {
+  const contentType = args.headers["content-type"] ?? "";
+  expect(contentType.toLowerCase()).toContain(args.contentTypePrefix.toLowerCase());
+  const contentDisposition = args.headers["content-disposition"] ?? "";
+  expect(contentDisposition.toLowerCase()).toContain("attachment;");
+  expect(contentDisposition.toLowerCase()).toContain(args.expectedExtension);
+}
+
 async function createSessionWithTitle(
   request: Parameters<typeof registerViaApi>[0],
   token: string,
@@ -342,6 +354,64 @@ test("session export supports empty-session payloads", async ({ request }) => {
   const markdownText = await sessionMarkdown.text();
   expect(markdownText).toContain("## Tasks");
   expect(markdownText).toContain("_No tasks_");
+});
+
+test("export download responses keep content-type and filename extension aligned", async ({
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  const headers = {
+    Authorization: `Bearer ${auth.access_token}`,
+  };
+  const created = await runTaskToDone(
+    request,
+    auth.access_token,
+    "playwright export headers alignment",
+  );
+
+  const taskJsonDownload = await request.get(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(created.task_id)}/export/json?download=1`,
+    { headers },
+  );
+  expect(taskJsonDownload.ok()).toBeTruthy();
+  expectExportResponseHeaders({
+    headers: taskJsonDownload.headers(),
+    contentTypePrefix: "application/json",
+    expectedExtension: ".json",
+  });
+
+  const taskMarkdownDownload = await request.get(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(created.task_id)}/export/markdown?download=1`,
+    { headers },
+  );
+  expect(taskMarkdownDownload.ok()).toBeTruthy();
+  expectExportResponseHeaders({
+    headers: taskMarkdownDownload.headers(),
+    contentTypePrefix: "text/markdown",
+    expectedExtension: ".md",
+  });
+
+  const sessionJsonDownload = await request.get(
+    `${API_BASE_URL}/api/sessions/${encodeURIComponent(created.session_id)}/export/json?download=1`,
+    { headers },
+  );
+  expect(sessionJsonDownload.ok()).toBeTruthy();
+  expectExportResponseHeaders({
+    headers: sessionJsonDownload.headers(),
+    contentTypePrefix: "application/json",
+    expectedExtension: ".json",
+  });
+
+  const sessionMarkdownDownload = await request.get(
+    `${API_BASE_URL}/api/sessions/${encodeURIComponent(created.session_id)}/export/markdown?download=1`,
+    { headers },
+  );
+  expect(sessionMarkdownDownload.ok()).toBeTruthy();
+  expectExportResponseHeaders({
+    headers: sessionMarkdownDownload.headers(),
+    contentTypePrefix: "text/markdown",
+    expectedExtension: ".md",
+  });
 });
 
 test("export endpoints are isolated across users", async ({ request }) => {

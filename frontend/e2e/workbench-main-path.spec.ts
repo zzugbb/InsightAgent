@@ -28,20 +28,64 @@ async function openInspectorContextTab(page: Page): Promise<void> {
   await expect(contextPanel).toBeVisible({ timeout: 10_000 });
 }
 
+function expectExportResponseHeaders(args: {
+  headers: Record<string, string>;
+  contentTypePrefix: string;
+  expectedExtension: ".json" | ".md";
+}): void {
+  const contentType = args.headers["content-type"] ?? "";
+  expect(contentType.toLowerCase()).toContain(args.contentTypePrefix.toLowerCase());
+  const contentDisposition = args.headers["content-disposition"] ?? "";
+  expect(contentDisposition.toLowerCase()).toContain("attachment;");
+  expect(contentDisposition.toLowerCase()).toContain(args.expectedExtension);
+}
+
 async function triggerDownloadAndAssertName(
   page: Page,
   trigger: Locator,
   expectedPiece: string,
-): Promise<void> {
+  expectedExtension: ".json" | ".md",
+): Promise<string> {
   await expect(trigger).toBeVisible();
   await expect(trigger).toBeEnabled();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     trigger.click(),
   ]);
-  expect(download.suggestedFilename().toLowerCase()).toContain(
-    expectedPiece.toLowerCase(),
+  const suggestedFilename = download.suggestedFilename().toLowerCase();
+  expect(suggestedFilename).toContain(expectedPiece.toLowerCase());
+  expect(suggestedFilename).toContain(expectedExtension);
+  return suggestedFilename;
+}
+
+async function triggerDownloadAndAssertHeaders(args: {
+  page: Page;
+  trigger: Locator;
+  expectedPiece: string;
+  expectedExtension: ".json" | ".md";
+  request: APIRequestContext;
+  token: string;
+  requestUrl: string;
+  contentTypePrefix: string;
+}): Promise<void> {
+  await triggerDownloadAndAssertName(
+    args.page,
+    args.trigger,
+    args.expectedPiece,
+    args.expectedExtension,
   );
+
+  const response = await args.request.get(args.requestUrl, {
+    headers: {
+      Authorization: `Bearer ${args.token}`,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  expectExportResponseHeaders({
+    headers: response.headers(),
+    contentTypePrefix: args.contentTypePrefix,
+    expectedExtension: args.expectedExtension,
+  });
 }
 
 async function openRuntimeDebugModal(page: Page): Promise<void> {
@@ -66,18 +110,17 @@ async function closeRuntimeDebugModal(page: Page): Promise<void> {
 async function triggerSessionExportAndAssertName(
   page: Page,
   format: "json" | "markdown",
-): Promise<void> {
+): Promise<Locator> {
   const activeSessionRow = page.locator(".sidebar-session-row.is-active").first();
   await expect(activeSessionRow).toBeVisible({ timeout: 10_000 });
   const actionsButton = activeSessionRow.getByTestId("sidebar-session-more");
   await expect(actionsButton).toBeVisible({ timeout: 10_000 });
   await actionsButton.click();
-  const trigger = page.getByTestId(
+  return page.getByTestId(
     format === "json"
       ? "sidebar-session-export-json"
       : "sidebar-session-export-markdown",
   );
-  await triggerDownloadAndAssertName(page, trigger, "session");
 }
 
 async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
@@ -208,8 +251,34 @@ test("workbench main path covers trace, rag and task/session export", async ({
     }).first(),
   ).toBeVisible({ timeout: 20_000 });
 
-  await triggerSessionExportAndAssertName(page, "json");
-  await triggerSessionExportAndAssertName(page, "markdown");
+  const activeSessionId = await page.evaluate((activeSessionStorageKey) => {
+    return localStorage.getItem(activeSessionStorageKey) ?? "";
+  }, ACTIVE_WORKBENCH_SESSION_STORAGE_KEY);
+  expect(activeSessionId).not.toBe("");
+
+  const sessionJsonTrigger = await triggerSessionExportAndAssertName(page, "json");
+  await triggerDownloadAndAssertHeaders({
+    page,
+    trigger: sessionJsonTrigger,
+    expectedPiece: "session",
+    expectedExtension: ".json",
+    request,
+    token: auth.access_token,
+    requestUrl: `${API_BASE_URL}/api/sessions/${encodeURIComponent(activeSessionId)}/export/json?download=1`,
+    contentTypePrefix: "application/json",
+  });
+
+  const sessionMarkdownTrigger = await triggerSessionExportAndAssertName(page, "markdown");
+  await triggerDownloadAndAssertHeaders({
+    page,
+    trigger: sessionMarkdownTrigger,
+    expectedPiece: "session",
+    expectedExtension: ".md",
+    request,
+    token: auth.access_token,
+    requestUrl: `${API_BASE_URL}/api/sessions/${encodeURIComponent(activeSessionId)}/export/markdown?download=1`,
+    contentTypePrefix: "text/markdown",
+  });
 
   await openRuntimeDebugModal(page);
 
@@ -224,16 +293,30 @@ test("workbench main path covers trace, rag and task/session export", async ({
   await closeRuntimeDebugModal(page);
 
   const detailPage = await openTaskCenterAndDetail(page);
-  await triggerDownloadAndAssertName(
-    detailPage,
-    detailPage.getByTestId("task-detail-export-json"),
-    "task",
-  );
-  await triggerDownloadAndAssertName(
-    detailPage,
-    detailPage.getByTestId("task-detail-export-markdown"),
-    "task",
-  );
+  const taskDetailUrl = new URL(detailPage.url());
+  const taskId = taskDetailUrl.pathname.split("/").filter(Boolean).at(-1) ?? "";
+  expect(taskId).not.toBe("");
+
+  await triggerDownloadAndAssertHeaders({
+    page: detailPage,
+    trigger: detailPage.getByTestId("task-detail-export-json"),
+    expectedPiece: "task",
+    expectedExtension: ".json",
+    request,
+    token: auth.access_token,
+    requestUrl: `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/json?download=1`,
+    contentTypePrefix: "application/json",
+  });
+  await triggerDownloadAndAssertHeaders({
+    page: detailPage,
+    trigger: detailPage.getByTestId("task-detail-export-markdown"),
+    expectedPiece: "task",
+    expectedExtension: ".md",
+    request,
+    token: auth.access_token,
+    requestUrl: `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/markdown?download=1`,
+    contentTypePrefix: "text/markdown",
+  });
 });
 
 test("running task can recover after reload and be cancelled", async ({

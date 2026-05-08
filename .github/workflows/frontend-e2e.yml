@@ -148,6 +148,102 @@ jobs:
             fi
           } > /tmp/frontend-e2e-failure-index.md
 
+      - name: Summarize export assertion diagnostics
+        if: always()
+        run: |
+          summary_file=/tmp/frontend-e2e-export-summary.md
+          {
+            echo "# frontend-e2e export diagnostics"
+            echo
+            echo "- generated_at_utc: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo
+
+            if [ ! -d frontend/test-results ]; then
+              echo "No frontend/test-results directory found."
+              exit 0
+            fi
+
+            mapfile -t main_contexts < <(find frontend/test-results -name "error-context.md" | sort | grep "workbench-main-path" || true)
+            echo "## workbench-main-path"
+            if [ ${#main_contexts[@]} -eq 0 ]; then
+              echo "No workbench-main-path error-context files found."
+            else
+              echo "### matched error-context files"
+              for file in "${main_contexts[@]}"; do
+                echo "- ${file}"
+              done
+              echo
+
+              main_ui_hint_count=0
+              main_header_hint_count=0
+              main_api_hint_count=0
+              for file in "${main_contexts[@]}"; do
+                ui_hits=$(grep -Eci "waitForEvent\\(\"download\"\\)|suggestedFilename|task-detail-export|sidebar-session-export|download event" "$file" || true)
+                header_hits=$(grep -Eci "content-type|content-disposition|application/json|text/markdown|attachment;" "$file" || true)
+                api_hits=$(grep -Eci "/api/(tasks|sessions)/[^ ]*/export/(json|markdown)" "$file" || true)
+                main_ui_hint_count=$((main_ui_hint_count + ui_hits))
+                main_header_hint_count=$((main_header_hint_count + header_hits))
+                main_api_hint_count=$((main_api_hint_count + api_hits))
+              done
+
+              echo "### assertion hint counters"
+              echo "- ui_download_layer_hints: ${main_ui_hint_count}"
+              echo "- response_header_layer_hints: ${main_header_hint_count}"
+              echo "- export_api_path_hints: ${main_api_hint_count}"
+              echo
+
+              echo "### key lines"
+              for file in "${main_contexts[@]}"; do
+                grep -Ein "download|suggestedfilename|content-type|content-disposition|application/json|text/markdown|/api/(tasks|sessions)/.*export/(json|markdown)" "$file" || true
+              done | head -n 120
+            fi
+            echo
+
+            mapfile -t edge_contexts < <(find frontend/test-results -name "error-context.md" | sort | grep "workbench-edge-cases" || true)
+            echo "## workbench-edge-cases"
+            if [ ${#edge_contexts[@]} -eq 0 ]; then
+              echo "No workbench-edge-cases error-context files found."
+            else
+              echo "### matched error-context files"
+              for file in "${edge_contexts[@]}"; do
+                echo "- ${file}"
+              done
+              echo
+
+              edge_ui_hint_count=0
+              edge_header_hint_count=0
+              edge_api_hint_count=0
+              edge_404_semantic_hints=0
+              for file in "${edge_contexts[@]}"; do
+                ui_hits=$(grep -Eci "waitForEvent\\(\"download\"\\)|suggestedFilename|task-detail-export|sidebar-session-export|download event" "$file" || true)
+                header_hits=$(grep -Eci "content-type|content-disposition|application/json|text/markdown|attachment;" "$file" || true)
+                api_hits=$(grep -Eci "/api/(tasks|sessions)/[^ ]*/export/(json|markdown)" "$file" || true)
+                semantic_hits=$(grep -Eci "404|not found|task not found|session not found|cross-user|ownership|isolat" "$file" || true)
+                edge_ui_hint_count=$((edge_ui_hint_count + ui_hits))
+                edge_header_hint_count=$((edge_header_hint_count + header_hits))
+                edge_api_hint_count=$((edge_api_hint_count + api_hits))
+                edge_404_semantic_hints=$((edge_404_semantic_hints + semantic_hits))
+              done
+
+              echo "### assertion hint counters"
+              echo "- ui_download_layer_hints: ${edge_ui_hint_count}"
+              echo "- response_header_layer_hints: ${edge_header_hint_count}"
+              echo "- export_api_path_hints: ${edge_api_hint_count}"
+              echo "- export_404_semantic_hints: ${edge_404_semantic_hints}"
+              echo
+
+              echo "### key lines"
+              for file in "${edge_contexts[@]}"; do
+                grep -Ein "download|suggestedfilename|content-type|content-disposition|application/json|text/markdown|/api/(tasks|sessions)/.*export/(json|markdown)|404|not found|cross-user|ownership|isolat" "$file" || true
+              done | head -n 120
+            fi
+          } | tee "${summary_file}"
+
+          {
+            echo "### frontend-e2e export diagnostics"
+            cat "${summary_file}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v7
@@ -157,4 +253,5 @@ jobs:
             frontend/playwright-report
             frontend/test-results
             /tmp/frontend-e2e-failure-index.md
+            /tmp/frontend-e2e-export-summary.md
           if-no-files-found: ignore

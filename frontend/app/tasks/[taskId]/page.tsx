@@ -7,7 +7,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { ApiError, apiJson, authFetch } from "../../../lib/api-client";
+import { ApiError, apiJson } from "../../../lib/api-client";
+import { downloadAuthenticatedExport } from "../../../lib/export-download";
 import { toUserFacingError } from "../../../lib/errors";
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 import type { TraceStepPayload } from "../../../lib/types/trace";
@@ -62,61 +63,6 @@ function resolveTaskStatusTone(
     return "failed";
   }
   return "other";
-}
-
-function parseAttachmentFilename(value: string | null, fallback: string): string {
-  if (!value) {
-    return fallback;
-  }
-  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
-  if (utf8Match?.[1]) {
-    try {
-      return decodeURIComponent(utf8Match[1]).trim() || fallback;
-    } catch {
-      return utf8Match[1].trim() || fallback;
-    }
-  }
-  const plainMatch = value.match(/filename="?([^";]+)"?/i);
-  if (!plainMatch?.[1]) {
-    return fallback;
-  }
-  const normalized = plainMatch[1].trim();
-  return normalized || fallback;
-}
-
-function triggerDownload(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
-async function fetchExportResponse(url: string): Promise<Response> {
-  let response: Response;
-  try {
-    response = await authFetch(url, { cache: "no-store" });
-  } catch (cause) {
-    throw new ApiError(
-      0,
-      cause instanceof TypeError ? "NETWORK" : "UNKNOWN",
-      url,
-      cause instanceof Error ? cause.message : String(cause),
-    );
-  }
-  if (response.ok) {
-    return response;
-  }
-  const detail = await response.text();
-  throw new ApiError(
-    response.status,
-    `HTTP ${response.status}`,
-    url,
-    detail.slice(0, 280),
-  );
 }
 
 export default function TaskDetailPage() {
@@ -226,13 +172,10 @@ export default function TaskDetailPage() {
     const requestUrl =
       `${API_BASE_URL}/api/tasks/${encodedTaskId}/export/${route}?download=1`;
     try {
-      const response = await fetchExportResponse(requestUrl);
-      const filename = parseAttachmentFilename(
-        response.headers.get("content-disposition"),
+      await downloadAuthenticatedExport(
+        requestUrl,
         fallbackFilename,
       );
-      const blob = await response.blob();
-      triggerDownload(filename, blob);
       message.success(
         format === "json"
           ? t.taskDetail.exportJsonDone

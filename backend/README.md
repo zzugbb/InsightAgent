@@ -41,14 +41,18 @@
 - 协同进展：任务中心顶部筛选/搜索区已进一步对齐审计日志双行布局与控件风格；仅前端展示层调整，后端接口契约保持不变
 - 协同进展：任务中心“全局任务”条数对齐已通过前端完整分页拉取修复（避免首屏截断造成数量偏小）；“用量来源”列与任务详情按钮样式属前端呈现调整，后端接口契约保持不变
 - 协同进展：`full-trace-session` 样式微调已完成；运行调试弹窗改为上下单列并移除分区高亮底色，后端接口契约保持不变
+- 协同进展（2026-05-08）：前端 `Workbench` 任务中心抽屉已将 Ant Design `Drawer` 的 `width` 属性迁移为 `size`，消除 antd 6 废弃警告；后端接口契约保持不变
+- 协同进展（2026-05-08）：前端已将任务详情导出与会话导出的下载实现收口到共享工具（`frontend/lib/export-download.ts`），统一鉴权下载错误语义与附件文件名解析；后端导出接口契约保持不变
 - 协同进展：前端 Playwright 回归已对齐新入口（任务中心抽屉 + 新标签任务详情导出），旧的 Inspector 任务导出断言已替换；后端导出接口契约保持不变
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage
 - 协同进展：`session-export-lite` 首版已接入；新增 `GET /api/sessions/{session_id}/export/json` 与 `GET /api/sessions/{session_id}/export/markdown`，导出包含会话消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage 汇总
 - 阶段 5 增量：`remote-provider-hardening` 首轮已完成；Provider 运行时统一输出结构化错误码（401/403、429、5xx、网络、无效 JSON、空响应、SSE 中断），任务流 SSE `error` 事件透传 `code/fatal/retryable/detail/status_code`
 - 阶段 5 增量：`task-cancel-timeout` 首版已落地；新增取消接口与超时中断，任务流支持 `cancelled/timeout` 事件
 - 阶段 5 增量：`task-cancel-timeout` e2e 已补齐；新增 `scripts/e2e_task_cancel_timeout.py`，覆盖取消链路与超时链路（低 `TASK_TIMEOUT_SEC` 环境）
-- 阶段 5 增量：导出稳定性 e2e 已补齐；新增 `scripts/e2e_export_consistency.py`，覆盖任务/会话导出 JSON+Markdown 一致性、下载附件头与不存在资源 404
+- 阶段 5 增量：导出稳定性 e2e 已补齐；新增 `scripts/e2e_export_consistency.py`，覆盖任务/会话导出 JSON+Markdown 一致性、下载附件头、跨用户导出隔离 404 与不存在资源 404
+- 阶段 5 增量（2026-05-08）：`e2e_export_consistency` 新增导出 `Content-Type` 断言（JSON=`application/json`、Markdown=`text/markdown`，含 `download=true`），补强导出响应协议回归覆盖
 - 工程化增量：后端 e2e CI 已扩展（`.github/workflows/backend-e2e.yml` 覆盖 `baseline/main-path/export-consistency/cancel-timeout`，已升级 `checkout`/`setup-python` 主版本以适配 GitHub Actions Node 24 运行时；Python **3.14** 与 `compose.full.yml`、根目录 `.python-version` 对齐）；并补失败快照归档（e2e 脚本输出落盘 + health/诊断采集 + artifact 上传）
+- 工程化增量（2026-05-08）：`backend-e2e` 新增 export consistency 摘要步骤，CI Summary 会输出关键检查点快照并归档 `/tmp/e2e-export-consistency-summary.txt`；并新增断言计数统计（steps/ok/pass/task-export/session-export/cross-user/not-found）用于快速定位回归类别；失败诊断中同步输出导出一致性日志 tail，便于回归定位
 - 协同进展：前端可视化回归 CI 首版已接入（`.github/workflows/frontend-e2e.yml` + Playwright 用量统计主路径 smoke），复用后端 `:8000` mock 主链路运行环境
 - 协同进展：`frontend-e2e` 工作流已升级 `actions/setup-node@v5`、`actions/upload-artifact@v7`，并设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` 以对齐 GitHub Actions Node 24 策略
 - 协同修复：Playwright 用例登录态注入从“浏览器上下文直接引用常量”改为“显式透传 storage key”，避免前端回归在未登录页误失败（后端接口无需改动）
@@ -56,6 +60,8 @@
 - 协同进展（补充）：前端 Playwright 回归已扩展覆盖设置治理入口（审计日志/知识库治理弹窗可见性），并为设置菜单项补充稳定 `data-testid`，后端接口契约无需改动
 - 协同进展（补充二次）：前端 Playwright 回归新增 `workbench-main-path` 场景并跑通（对话发送、Trace、RAG ingest/query、任务/会话导出、运行中任务刷新恢复与取消后重发）
 - 协同进展（补充三次）：前端 Playwright 回归新增 `workbench-edge-cases` 场景（RAG 空命中可见性 + 缺失任务/会话导出 `404` 语义断言），并抽出 e2e 公共 helper（鉴权注入/Workbench 就绪）；随后新增 remote 错误映射场景并完成本地回归：chromium 全量 `25/25`、smoke 矩阵 `15/15`
+- 协同进展（2026-05-08）：前端 `workbench-edge-cases` 新增“导出下载响应头一致性”回归，覆盖 task/session JSON/Markdown `download=true` 的 `Content-Type` 与 `Content-Disposition` 扩展名匹配
+- 协同进展（2026-05-08）：前端 `workbench-main-path` 已补“UI 下载 + 同路径 API 响应头”双重断言，主链路导出覆盖 task/session JSON/Markdown 的 `Content-Type` 与附件扩展名一致性
 - 协同进展（细粒度断言）：前端 usage/知识库治理/回底按钮回归已补稳定测试锚点（`data-testid`），并覆盖来源筛选请求参数、表头左对齐、治理动作无边框文本按钮、滚动交互显隐等高频回归点
 - 协同进展（异常态深化）：前端 `workbench-remote-errors` 已补 remote `503` 错误码映射与“取消后发送冷却恢复”回归；通过本地 mock OpenAI-compatible 流服务验证冷却期阻断重发、冷却结束恢复发送，后端接口契约无需变更
 - 协同进展（设置校验异常态）：前端 Playwright 已新增 `settings/validate` 回归，覆盖 `remote_api_key_unauthorized` 与 `remote_preflight_network_error`；并通过 `model-settings-*` 稳定测试标识降低跨语言/提示时序抖动，后端设置接口契约保持不变
@@ -67,6 +73,7 @@
 - 协同进展（一次性补齐）：前端 `workbench-edge-cases` 新增“取消后同文案立即重发不丢消息”“跨会话流式状态严格隔离且切回可取消”“mock 取消后无重试入口且可快速恢复发送”三条回归；本地全量回归最新为 chromium `25/25`
 - 协同进展（六项补齐）：前端一次性补齐“恢复提示三态、trace delta 重试与后台暂停恢复、auth refresh+logout-all、设置弹窗重开状态重置”回归；最新本地结果为 chromium 全量 `30/30`、smoke 矩阵 `15/15`。
 - 协同进展（CI 稳定性）：`frontend-e2e` 已新增失败后 `--last-failed` 诊断重跑、`error-context/trace.zip` 失败索引文件与带 `run_id/run_attempt` 的 artifact 命名，便于排障追踪。
+- 协同进展（2026-05-08）：`frontend-e2e` 导出断言诊断摘要已扩展覆盖 `workbench-main-path` + `workbench-edge-cases`，按 `error-context` 统计 UI 下载层/响应头层/API 路径/404 语义提示计数并提取关键行，写入 `GITHUB_STEP_SUMMARY` 与 `/tmp/frontend-e2e-export-summary.md` artifact，便于快速定位导出回归类别
 - 协同进展（回归稳态收口，2026-04-22）：前端 `workbench-edge-cases` 对“取消后同文案重发”场景改为基于后端 `POST /api/tasks/{task_id}/cancel` 契约进行稳定验证，并将 Context tab 定位收敛到 Inspector 顶部导航，消除并发运行下的时序抖动；本地 chromium 全量回归复测 `30/30` 通过。
 - 协同进展（回归稳态补充，2026-04-22）：前端修复 `workbench-edge-cases` “token 切换后导出 404”用例竞态（切 token 前等待任务详情导出按钮可用），并按 CI 同口径串行回归（`--workers=1`）复测 chromium `30/30` 通过；后端导出契约保持不变。
 - 协同稳定性补丁：`mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现 running-task-recovery 场景，默认请求行为不变
