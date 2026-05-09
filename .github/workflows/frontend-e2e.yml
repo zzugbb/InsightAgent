@@ -89,19 +89,10 @@ jobs:
           CHROMA_HOST: 127.0.0.1
           CHROMA_PORT: "8001"
         run: |
-          bash scripts/ci_start_bg_process.sh \
+          bash scripts/ci_boot_backend_instance.sh \
+            --port 8000 \
             --log-file /tmp/frontend-e2e-backend.log \
-            -- uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
-
-      - name: Wait backend health
-        run: |
-          bash scripts/ci_wait_http_status.sh \
-            --url http://127.0.0.1:8000/health \
-            --output-file /tmp/frontend-e2e-health.json \
-            --attempts 60 \
-            --interval-sec 1 \
-            --failure-message "backend failed to become healthy" \
-            --failure-log-file /tmp/frontend-e2e-backend.log
+            --failure-message "backend failed to become healthy"
 
       - name: Install frontend dependencies
         run: npm --prefix frontend ci

@@ -75,20 +75,11 @@ jobs:
           CHROMA_HOST: 127.0.0.1
           CHROMA_PORT: "8001"
         run: |
-          bash scripts/ci_start_bg_process.sh \
+          bash scripts/ci_boot_backend_instance.sh \
+            --port 8000 \
             --log-file /tmp/backend-8000.log \
             --pid-file /tmp/backend-8000.pid \
-            -- uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
-
-      - name: Wait backend :8000 health
-        run: |
-          bash scripts/ci_wait_http_status.sh \
-            --url http://127.0.0.1:8000/health \
-            --output-file /tmp/health-8000.json \
-            --attempts 60 \
-            --interval-sec 1 \
-            --failure-message "backend :8000 failed to become healthy" \
-            --failure-log-file /tmp/backend-8000.log
+            --failure-message "backend :8000 failed to become healthy"
 
       - name: Run baseline/main-path/export/cancel e2e on :8000
         run: |
@@ -104,20 +95,11 @@ jobs:
           CHROMA_PORT: "8001"
           TASK_TIMEOUT_SEC: "1"
         run: |
-          bash scripts/ci_start_bg_process.sh \
+          bash scripts/ci_boot_backend_instance.sh \
+            --port 8010 \
             --log-file /tmp/backend-8010.log \
             --pid-file /tmp/backend-8010.pid \
-            -- uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8010
-
-      - name: Wait backend :8010 health
-        run: |
-          bash scripts/ci_wait_http_status.sh \
-            --url http://127.0.0.1:8010/health \
-            --output-file /tmp/health-8010.json \
-            --attempts 60 \
-            --interval-sec 1 \
-            --failure-message "backend :8010 failed to become healthy" \
-            --failure-log-file /tmp/backend-8010.log
+            --failure-message "backend :8010 failed to become healthy"
 
       - name: Run timeout e2e on :8010
         run: |
