@@ -133,6 +133,7 @@ jobs:
               PASS_BANNER_REGEX="^E2E export consistency passed:"
               TASK_EXPORT_REGEX="task export json/markdown consistency \+ download"
               SESSION_EXPORT_REGEX="session export json/markdown consistency \+ download"
+              SHARED_RAG_REGEX="shared-rag role semantics remain compatible with export flow"
               CROSS_USER_REGEX="cross-user export isolation checks"
               NOT_FOUND_REGEX="export not-found responses"
               KEY_LINES_REGEX="^\\[[0-9]+/[0-9]+\\]|^  - OK:|^E2E export consistency passed:|^- "
@@ -142,6 +143,7 @@ jobs:
               passed_count=$(grep -Ec "${PASS_BANNER_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
               task_export_ok=$(grep -Ec "${TASK_EXPORT_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
               session_export_ok=$(grep -Ec "${SESSION_EXPORT_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
+              shared_rag_ok=$(grep -Ec "${SHARED_RAG_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
               cross_user_ok=$(grep -Ec "${CROSS_USER_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
               not_found_ok=$(grep -Ec "${NOT_FOUND_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
               warning_count=0
@@ -149,15 +151,15 @@ jobs:
               p1_warning_count=0
               warning_messages=""
 
-              if [ "${step_count}" -ne 6 ]; then
+              if [ "${step_count}" -ne 7 ]; then
                 warning_count=$((warning_count + 1))
                 p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] steps_detected expected 6, got ${step_count}"
+                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] steps_detected expected 7, got ${step_count}"
               fi
-              if [ "${ok_count}" -ne 6 ]; then
+              if [ "${ok_count}" -ne 7 ]; then
                 warning_count=$((warning_count + 1))
                 p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] ok_lines_detected expected 6, got ${ok_count}"
+                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] ok_lines_detected expected 7, got ${ok_count}"
               fi
               if [ "${passed_count}" -ne 1 ]; then
                 warning_count=$((warning_count + 1))
@@ -174,6 +176,11 @@ jobs:
                 p1_warning_count=$((p1_warning_count + 1))
                 warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] session_export_consistency_ok expected >=1, got ${session_export_ok}"
               fi
+              if [ "${shared_rag_ok}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] shared_rag_semantics_ok expected >=1, got ${shared_rag_ok}"
+              fi
               if [ "${cross_user_ok}" -lt 1 ]; then
                 warning_count=$((warning_count + 1))
                 p1_warning_count=$((p1_warning_count + 1))
@@ -188,11 +195,12 @@ jobs:
               echo ""
               echo "- Script log: /tmp/e2e-export-consistency-8000.log"
               echo "- Assertion counters:"
-              echo "  - steps_detected: ${step_count} (expected: 6)"
-              echo "  - ok_lines_detected: ${ok_count} (expected: 6)"
+              echo "  - steps_detected: ${step_count} (expected: 7)"
+              echo "  - ok_lines_detected: ${ok_count} (expected: 7)"
               echo "  - pass_banner_detected: ${passed_count} (expected: 1)"
               echo "  - task_export_consistency_ok: ${task_export_ok} (expected: >=1)"
               echo "  - session_export_consistency_ok: ${session_export_ok} (expected: >=1)"
+              echo "  - shared_rag_semantics_ok: ${shared_rag_ok} (expected: >=1)"
               echo "  - cross_user_isolation_ok: ${cross_user_ok} (expected: >=1)"
               echo "  - not_found_semantics_ok: ${not_found_ok} (expected: >=1)"
               echo "## threshold alerts"

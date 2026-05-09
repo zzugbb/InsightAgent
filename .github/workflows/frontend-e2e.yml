@@ -161,12 +161,17 @@ jobs:
             p0_warning_count=0
             p1_warning_count=0
             warning_messages=""
+            shared_context_count=0
+            shared_semantic_ok_count=0
+            shared_expected_label="0 (no shared-kb error-context files)"
             UI_HINT_REGEX="waitForEvent\\(\"download\"\\)|suggestedFilename|task-detail-export|sidebar-session-export|download event"
             HEADER_HINT_REGEX="content-type|content-disposition|application/json|text/markdown|attachment;"
             API_EXPORT_REGEX="/api/(tasks|sessions)/[^ ]*/export/(json|markdown)"
             EDGE_SEMANTIC_REGEX="404|not found|task not found|session not found|cross-user|ownership|isolat"
+            SHARED_SEMANTIC_REGEX="shared-|kb-governance-action-clear|kb-governance-action-delete|non-admin|toBeDisabled"
             MAIN_KEY_LINES_REGEX="download|suggestedfilename|content-type|content-disposition|application/json|text/markdown|${API_EXPORT_REGEX}"
             EDGE_KEY_LINES_REGEX="${MAIN_KEY_LINES_REGEX}|${EDGE_SEMANTIC_REGEX}"
+            SHARED_KEY_LINES_REGEX="shared-|kb-governance-action-(clear|delete)|toBeDisabled|role|/api/auth/me|/api/rag/knowledge-bases"
 
             if [ ! -d frontend/test-results ]; then
               echo "No frontend/test-results directory found."
@@ -231,6 +236,48 @@ jobs:
               echo "### key lines"
               for file in "${main_contexts[@]}"; do
                 grep -Ein "${MAIN_KEY_LINES_REGEX}" "$file" || true
+              done | head -n 120
+            fi
+            echo
+
+            mapfile -t shared_contexts < <(find frontend/test-results -name "error-context.md" | sort | grep "workbench-main-path" | grep "shared-kb-actions-disabled" || true)
+            echo "## workbench-main-path-shared-kb"
+            if [ ${#shared_contexts[@]} -eq 0 ]; then
+              echo "No workbench-main-path shared-kb error-context files found."
+              echo
+              echo "### assertion hint counters"
+              echo "- shared_permission_semantic_ok: ${shared_semantic_ok_count} (expected: ${shared_expected_label})"
+            else
+              echo "### matched error-context files"
+              for file in "${shared_contexts[@]}"; do
+                echo "- ${file}"
+              done
+              echo
+
+              shared_context_count=${#shared_contexts[@]}
+              shared_expected_label=">=1 (when shared-kb error-context files exist)"
+              for file in "${shared_contexts[@]}"; do
+                semantic_hits=$(grep -Eci "${SHARED_SEMANTIC_REGEX}" "$file" || true)
+                shared_semantic_ok_count=$((shared_semantic_ok_count + semantic_hits))
+              done
+
+              echo "### assertion hint counters"
+              echo "- shared_permission_semantic_ok: ${shared_semantic_ok_count} (expected: ${shared_expected_label})"
+              if [ "${shared_context_count}" -gt 0 ] && [ "${shared_semantic_ok_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p0_warning_count=$((p0_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P0][workbench-main-path-shared-kb] shared_permission_semantic_ok expected >=1 when error-context exists, got ${shared_semantic_ok_count}"
+              fi
+              if [ "${shared_semantic_ok_count}" -lt 1 ]; then
+                warning_count=$((warning_count + 1))
+                p1_warning_count=$((p1_warning_count + 1))
+                warning_messages="${warning_messages}\n  - [P1][workbench-main-path-shared-kb] shared_permission_semantic_ok expected >=1, got ${shared_semantic_ok_count}"
+              fi
+              echo
+
+              echo "### key lines"
+              for file in "${shared_contexts[@]}"; do
+                grep -Ein "${SHARED_KEY_LINES_REGEX}" "$file" || true
               done | head -n 120
             fi
             echo
@@ -315,11 +362,13 @@ jobs:
               echo "## threshold alerts"
               echo "- total_alerts: ${warning_count}"
               echo "- severity: P0=${p0_warning_count}, P1=${p1_warning_count}"
+              echo "- shared_scope: workbench-main-path-shared-kb contexts=${shared_context_count}, shared_permission_semantic_ok=${shared_semantic_ok_count} (expected: ${shared_expected_label})"
               printf '%b\n' "${warning_messages}"
             else
               echo "## threshold alerts"
               echo "- total_alerts: 0 (all counters within expected range)"
               echo "- severity: P0=0, P1=0"
+              echo "- shared_scope: workbench-main-path-shared-kb contexts=${shared_context_count}, shared_permission_semantic_ok=${shared_semantic_ok_count} (expected: ${shared_expected_label})"
             fi
           } | tee "${summary_file}"
 
