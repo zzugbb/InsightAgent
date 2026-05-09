@@ -77,6 +77,7 @@
 - 工程化增量（2026-05-09 流水线收口）：新增 `scripts/ci_export_diag_pipeline.sh` 与 `scripts/test_ci_export_diag_pipeline.sh`，统一执行 strict-level 解析、guard 判定、overview 生成与 summary 拼接；`backend-e2e` 已切换为单步骤 `Run export diagnostics pipeline`
 - 工程化增量（2026-05-09 日志降噪补充）：`scripts/ci_diag_guard.sh` 增加 `--quiet`，并在 guard/resolver fixture 中收敛预期失败输出，减少 CI fixture 日志噪音
 - 工程化增量（2026-05-09 启动验活收口）：新增 `scripts/ci_start_bg_process.sh` 与 `scripts/ci_wait_http_status.sh`（配套 `scripts/test_ci_service_bootstrap.sh`），`backend-e2e` 的 `:8000/:8010` 后端启动与健康等待已统一为脚本调用，减少 workflow 重复 shell 片段
+- 工程化增量（2026-05-09 诊断流程再收口）：新增 `scripts/ci_export_diag_flow.sh` 与 `scripts/test_ci_export_diag_flow.sh`，将 `export consistency` 摘要生成与后续 guard/overview pipeline 合并为单入口；`backend-e2e` 已切换为 `Run export diagnostics flow`
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 阈值告警已增加严重级别标签（`[P0]/[P1]`）与 `severity` 计数，便于团队按优先级分流处理导出回归
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 告警模板已与 `frontend-e2e` 对齐为 `total_alerts -> severity -> 分级明细`，并采用作用域标签格式（`[P*][backend-export-consistency]`）

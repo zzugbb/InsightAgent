@@ -162,24 +162,15 @@ jobs:
       - name: Validate e2e tooling fixtures (frontend scope)
         run: bash scripts/test_ci_e2e_tooling.sh frontend
 
-      - name: Summarize export assertion diagnostics
-        if: always()
-        run: |
-          summary_file=/tmp/frontend-e2e-export-summary.md
-          bash frontend/scripts/ci_export_diagnostics.sh frontend/test-results /tmp/frontend-e2e-export-summary.json | tee "${summary_file}"
-
-          {
-            echo "### frontend-e2e export diagnostics"
-            cat "${summary_file}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Run export diagnostics pipeline
+      - name: Run export diagnostics flow
         if: always()
         run: |
           dispatch_override="${{ github.event.inputs.export_diag_strict_level || '' }}"
-          bash scripts/ci_export_diag_pipeline.sh \
+          bash scripts/ci_export_diag_flow.sh \
             --scope frontend \
-            --diagnostics-json /tmp/frontend-e2e-export-summary.json \
+            --source-path frontend/test-results \
+            --diagnostics-markdown-out /tmp/frontend-e2e-export-summary.md \
+            --diagnostics-json-out /tmp/frontend-e2e-export-summary.json \
             --guard-markdown-out /tmp/frontend-e2e-export-guard-summary.md \
             --guard-json-out /tmp/frontend-e2e-export-guard-summary.json \
             --overview-markdown-out /tmp/frontend-e2e-export-overview.md \

@@ -11,6 +11,7 @@ run_common() {
   bash "${ROOT_DIR}/scripts/test_ci_diag_guard.sh"
   bash "${ROOT_DIR}/scripts/test_ci_export_diagnostics_overview.sh"
   bash "${ROOT_DIR}/scripts/test_ci_export_diag_pipeline.sh"
+  bash "${ROOT_DIR}/scripts/test_ci_export_diag_flow.sh"
 }
 
 run_backend() {

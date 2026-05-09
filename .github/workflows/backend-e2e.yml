@@ -136,24 +136,15 @@ jobs:
       - name: Validate e2e tooling fixtures (backend scope)
         run: bash scripts/test_ci_e2e_tooling.sh backend
 
-      - name: Summarize export consistency checks
-        if: always()
-        run: |
-          bash backend/scripts/ci_export_consistency_summary.sh /tmp/e2e-export-consistency-8000.log /tmp/e2e-export-consistency-summary.json \
-            | tee /tmp/e2e-export-consistency-summary.txt
-
-          {
-            echo "### backend-e2e export consistency"
-            cat /tmp/e2e-export-consistency-summary.txt
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Run export diagnostics pipeline
+      - name: Run export diagnostics flow
         if: always()
         run: |
           dispatch_override="${{ github.event.inputs.export_diag_strict_level || '' }}"
-          bash scripts/ci_export_diag_pipeline.sh \
+          bash scripts/ci_export_diag_flow.sh \
             --scope backend \
-            --diagnostics-json /tmp/e2e-export-consistency-summary.json \
+            --source-path /tmp/e2e-export-consistency-8000.log \
+            --diagnostics-markdown-out /tmp/e2e-export-consistency-summary.txt \
+            --diagnostics-json-out /tmp/e2e-export-consistency-summary.json \
             --guard-markdown-out /tmp/backend-e2e-export-guard-summary.md \
             --guard-json-out /tmp/backend-e2e-export-guard-summary.json \
             --overview-markdown-out /tmp/backend-e2e-export-overview.md \
