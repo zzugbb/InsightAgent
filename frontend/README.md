@@ -83,6 +83,13 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 诊断增强（2026-05-09）：导出断言摘要新增 `workbench-main-path-shared-kb` 分区；当 shared 权限主链路用例出现失败上下文时，会单独统计 `shared_permission_semantic_ok` 并输出关键行，便于快速定位 `shared-*` 权限语义回归
 - 阶段 5 CI 告警汇总补齐（2026-05-09）：`threshold alerts` 新增 shared 分区汇总行（`shared_scope: ... contexts=..., shared_permission_semantic_ok=...`），无告警时也可确认 shared 权限诊断覆盖情况
 - 阶段 5 CI 摘要语义收口（2026-05-09）：shared 分区新增 `expected` 文案（shared 失败上下文存在时期望 `>=1`，不存在时期望 `0`），并在无上下文场景也输出 `shared_permission_semantic_ok`，降低诊断歧义
+- 阶段 5 CI 稳态补充（2026-05-09）：shared 分区的 error-context 归类规则改为正则匹配（`workbench-main-path.*shared.*kb`），降低测试命名微调导致的诊断漏命中
+- 阶段 5 CI 稳态补充（2026-05-09 再补充）：shared 分区路径匹配已变量化并收紧为 `SHARED_CONTEXT_PATH_REGEX=workbench-main-path.*(shared-kb-actions-disabled|shared.*kb.*disabled)`，减少主链路其他失败上下文被误归类到 shared 分区
+- 阶段 5 CI 维护性补充（2026-05-09）：导出摘要对 `error-context.md` 的扫描已收敛为单次 `find` 后分组（main/shared/edge），减少重复扫描并提升分区计数口径一致性
+- 阶段 5 CI 维护性补充（2026-05-09 再补充）：导出摘要新增 `add_warning` 统一告警函数，集中维护 `P0/P1` 计数与提示文案拼装，降低阈值规则扩展的重复改动
+- 阶段 5 CI 准确性补充（2026-05-09）：`workbench-main-path` 分区已排除 shared 专项上下文（基于 `SHARED_CONTEXT_PATH_REGEX` 反向过滤），避免 shared 用例失败时把噪音计入主链路导出告警
+- 阶段 5 CI 规则收口补充（2026-05-09）：新增 `MAIN_CONTEXT_PATH_REGEX` / `EDGE_CONTEXT_PATH_REGEX`，main/edge/shared 三分区匹配统一改为变量化入口，降低后续规则调整时的改动分散度
+- 阶段 5 CI 维护性补充（2026-05-09 三次）：导出摘要新增 `print_matched_files` / `print_key_lines` 统一输出函数，收敛 main/shared/edge 分区的重复打印逻辑并提升一致性
 - 阶段 5 CI 告警增强（2026-05-08）：`frontend-e2e` 导出摘要新增 `threshold alerts` 阈值告警；若主链路或边界链路计数低于预期，会直接输出 expected vs actual，便于快速定位“下载层 / 响应头层 / 404 语义层”回归
 - 阶段 5 CI 告警分级（2026-05-08）：`frontend-e2e` 导出阈值告警已补严重级别标签（当前为 `[P1]`）与 `severity` 计数，并与 `backend-e2e` 告警视图对齐，便于跨端统一判读
 - 阶段 5 CI 告警分级补强（2026-05-08）：`frontend-e2e` 已新增 `P0` 判定规则：若存在 `error-context` 但 `export_api_path_hints=0`，或 UI 下载层/响应头层提示同时为 0（edge-cases 还包含 `export_404_semantic_hints=0`），则升级为 `P0` 告警
@@ -97,6 +104,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
 - 阶段 5 协同（2026-05-08）：后端 `backend-e2e` 已新增 export consistency CI Summary 快照与摘要 artifact（`/tmp/e2e-export-consistency-summary.txt`），并补充断言计数统计（steps/ok/pass/task-export/session-export/shared-rag/cross-user/not-found）；失败诊断追加导出一致性日志 tail，便于快速核对导出链路回归
 - 阶段 5 协同（2026-05-09）：后端 `backend-e2e` export consistency 摘要阈值已对齐 7 步脚本输出（`steps/ok` 期望值同步更新）并补充 `shared_rag_semantics_ok` 计数，前端联调时可更早识别共享知识库权限语义回归
+- 阶段 5 协同（2026-05-09 补充）：后端 `backend-e2e` export consistency 步数阈值已改为动态解析（从日志首条 `[x/N]` 自动提取 `N`），后续脚本步骤调整时前端联调无需再关注硬编码步数漂移
+- 阶段 5 协同（2026-05-09 维护性补充）：后端 `backend-e2e` export consistency 摘要已补 `add_warning` 统一告警函数，前后端 CI 告警拼装逻辑风格进一步对齐
 - 阶段 5 协同（2026-05-08 补充）：后端 `backend-e2e` export summary 已新增 `Threshold alerts` 阈值告警行；当导出检查计数偏离预期时，CI Summary 会直接给出异常计数项明细，便于前端联调快速判断是否为导出协议/权限语义回归
 
 ## 当前已有内容

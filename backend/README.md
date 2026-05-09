@@ -61,6 +61,8 @@
 - 工程化增量：后端 e2e CI 已扩展（`.github/workflows/backend-e2e.yml` 覆盖 `baseline/main-path/export-consistency/cancel-timeout`，已升级 `checkout`/`setup-python` 主版本以适配 GitHub Actions Node 24 运行时；Python **3.14** 与 `compose.full.yml`、根目录 `.python-version` 对齐）；并补失败快照归档（e2e 脚本输出落盘 + health/诊断采集 + artifact 上传）
 - 工程化增量（2026-05-08）：`backend-e2e` 新增 export consistency 摘要步骤，CI Summary 会输出关键检查点快照并归档 `/tmp/e2e-export-consistency-summary.txt`；并新增断言计数统计（steps/ok/pass/task-export/session-export/shared-rag/cross-user/not-found）用于快速定位回归类别；失败诊断中同步输出导出一致性日志 tail，便于回归定位
 - 工程化增量（2026-05-09）：`backend-e2e` export consistency 摘要阈值已与脚本 7 步输出对齐（`steps/ok` 期望从 6 调整为 7），并新增 `shared_rag_semantics_ok` 计数项，覆盖 `shared-*` 权限语义回归
+- 工程化增量（2026-05-09 再补充）：`backend-e2e` export consistency 的步数阈值已改为动态解析（从首条 `[x/N]` 自动提取 `N`），避免脚本增减步骤时 workflow 需要手工同步硬编码
+- 工程化增量（2026-05-09 维护性补充）：`backend-e2e` export consistency 摘要新增 `add_warning` 统一告警函数，集中处理 `P0/P1` 计数与告警消息拼装，降低后续阈值项扩展的重复改动成本
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 阈值告警已增加严重级别标签（`[P0]/[P1]`）与 `severity` 计数，便于团队按优先级分流处理导出回归
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 告警模板已与 `frontend-e2e` 对齐为 `total_alerts -> severity -> 分级明细`，并采用作用域标签格式（`[P*][backend-export-consistency]`）
@@ -89,6 +91,13 @@
 - 协同进展（2026-05-09）：`frontend-e2e` 导出诊断摘要新增 `workbench-main-path-shared-kb` 分区，仅对 shared 权限主链路失败上下文统计 `shared_permission_semantic_ok`，用于更快识别 `shared-*` 权限语义回归
 - 协同进展（2026-05-09 补充）：`frontend-e2e` 的 `threshold alerts` 已补 shared 分区汇总行（`shared_scope`），即使无告警也能在摘要中直接确认 shared 权限诊断覆盖是否生效
 - 协同进展（2026-05-09 再补充）：`frontend-e2e` shared 分区已补 `expected` 语义（有 shared 失败上下文时期望 `>=1`，无上下文时期望 `0`），并在无上下文场景持续输出 shared 计数，便于跨端摘要判读一致
+- 协同进展（2026-05-09 稳态补充）：`frontend-e2e` shared 分区的 error-context 匹配已改为正则模式（`workbench-main-path.*shared.*kb`），降低前端测试标题轻微调整引发的诊断漏命中
+- 协同进展（2026-05-09 稳态再补充）：`frontend-e2e` shared 分区匹配规则已变量化并收紧为 `SHARED_CONTEXT_PATH_REGEX=workbench-main-path.*(shared-kb-actions-disabled|shared.*kb.*disabled)`，减少无关 main-path 用例误归类
+- 协同进展（2026-05-09 维护性补充）：`frontend-e2e` 导出摘要已将 `error-context.md` 扫描收敛为单次 `find` 后分组（main/shared/edge），降低分区统计口径漂移并减少重复扫描开销
+- 协同进展（2026-05-09 维护性再补充）：`frontend-e2e` 导出摘要新增 `add_warning` 统一告警函数，集中处理 `P0/P1` 计数与告警消息拼装，后续扩展 shared/main/edge 阈值时变更点更集中
+- 协同进展（2026-05-09 准确性补充）：`frontend-e2e` 已将 `workbench-main-path` 分区对 shared 专项上下文做反向过滤（`grep -Ev "${SHARED_CONTEXT_PATH_REGEX}"`），降低 shared 失败导致主链路告警噪音
+- 协同进展（2026-05-09 规则收口补充）：`frontend-e2e` 已新增 `MAIN_CONTEXT_PATH_REGEX` / `EDGE_CONTEXT_PATH_REGEX`，并将 main/edge/shared 分区匹配统一为变量化规则，减少 workflow 规则维护分叉
+- 协同进展（2026-05-09 维护性三次补充）：`frontend-e2e` 导出摘要已新增 `print_matched_files` / `print_key_lines` 统一输出函数，减少分区内重复 shell 循环并提升展示逻辑一致性
 - 协同进展（2026-05-08 补充）：`frontend-e2e` 导出摘要新增阈值告警（`threshold alerts`），当关键计数低于预期时输出 expected vs actual 异常项，便于后端与前端在 PR Summary 快速分流导出回归层级
 - 协同进展（2026-05-08 再补充）：`frontend-e2e` 阈值告警已增加严重级别标签（当前以 `[P1]` 标注导出诊断缺口）与 `severity` 计数，便于与后端告警视图保持一致
 - 协同进展（2026-05-08 再补充）：`frontend-e2e` 已补 `P0` 诊断失真判定（存在 `error-context` 但导出 API 路径提示为 0、或 UI/响应头双计数为 0；edge-cases 额外覆盖 404 语义提示为 0），用于优先暴露高风险诊断盲区

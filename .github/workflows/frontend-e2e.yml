@@ -164,11 +164,48 @@ jobs:
             shared_context_count=0
             shared_semantic_ok_count=0
             shared_expected_label="0 (no shared-kb error-context files)"
+            add_warning() {
+              local severity="$1"
+              local scope="$2"
+              local detail="$3"
+              warning_count=$((warning_count + 1))
+              if [ "${severity}" = "P0" ]; then
+                p0_warning_count=$((p0_warning_count + 1))
+              else
+                p1_warning_count=$((p1_warning_count + 1))
+              fi
+              warning_messages="${warning_messages}\n  - [${severity}][${scope}] ${detail}"
+            }
+            print_matched_files() {
+              local label="$1"
+              shift
+              local files=("$@")
+              echo "### matched error-context files"
+              if [ ${#files[@]} -eq 0 ]; then
+                echo "No ${label} error-context files found."
+                return
+              fi
+              for file in "${files[@]}"; do
+                echo "- ${file}"
+              done
+            }
+            print_key_lines() {
+              local regex="$1"
+              shift
+              local files=("$@")
+              echo "### key lines"
+              for file in "${files[@]}"; do
+                grep -Ein "${regex}" "$file" || true
+              done | head -n 120
+            }
             UI_HINT_REGEX="waitForEvent\\(\"download\"\\)|suggestedFilename|task-detail-export|sidebar-session-export|download event"
             HEADER_HINT_REGEX="content-type|content-disposition|application/json|text/markdown|attachment;"
             API_EXPORT_REGEX="/api/(tasks|sessions)/[^ ]*/export/(json|markdown)"
             EDGE_SEMANTIC_REGEX="404|not found|task not found|session not found|cross-user|ownership|isolat"
             SHARED_SEMANTIC_REGEX="shared-|kb-governance-action-clear|kb-governance-action-delete|non-admin|toBeDisabled"
+            MAIN_CONTEXT_PATH_REGEX="workbench-main-path"
+            EDGE_CONTEXT_PATH_REGEX="workbench-edge-cases"
+            SHARED_CONTEXT_PATH_REGEX="workbench-main-path.*(shared-kb-actions-disabled|shared.*kb.*disabled)"
             MAIN_KEY_LINES_REGEX="download|suggestedfilename|content-type|content-disposition|application/json|text/markdown|${API_EXPORT_REGEX}"
             EDGE_KEY_LINES_REGEX="${MAIN_KEY_LINES_REGEX}|${EDGE_SEMANTIC_REGEX}"
             SHARED_KEY_LINES_REGEX="shared-|kb-governance-action-(clear|delete)|toBeDisabled|role|/api/auth/me|/api/rag/knowledge-bases"
@@ -178,15 +215,14 @@ jobs:
               exit 0
             fi
 
-            mapfile -t main_contexts < <(find frontend/test-results -name "error-context.md" | sort | grep "workbench-main-path" || true)
+            mapfile -t all_error_contexts < <(find frontend/test-results -name "error-context.md" | sort || true)
+
+            mapfile -t main_contexts < <(printf '%s\n' "${all_error_contexts[@]}" | grep -E "${MAIN_CONTEXT_PATH_REGEX}" | grep -Ev "${SHARED_CONTEXT_PATH_REGEX}" || true)
             echo "## workbench-main-path"
             if [ ${#main_contexts[@]} -eq 0 ]; then
               echo "No workbench-main-path error-context files found."
             else
-              echo "### matched error-context files"
-              for file in "${main_contexts[@]}"; do
-                echo "- ${file}"
-              done
+              print_matched_files "workbench-main-path" "${main_contexts[@]}"
               echo
 
               main_ui_hint_count=0
@@ -207,40 +243,27 @@ jobs:
               echo "- response_header_layer_hints: ${main_header_hint_count}"
               echo "- export_api_path_hints: ${main_api_hint_count}"
               if [ "${main_context_count}" -gt 0 ] && [ "${main_api_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][workbench-main-path] export_api_path_hints expected >=1 when error-context exists, got ${main_api_hint_count}"
+                add_warning "P0" "workbench-main-path" "export_api_path_hints expected >=1 when error-context exists, got ${main_api_hint_count}"
               fi
               if [ "${main_context_count}" -gt 0 ] && [ "${main_ui_hint_count}" -lt 1 ] && [ "${main_header_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][workbench-main-path] both ui_download_layer_hints and response_header_layer_hints are 0 with existing error-context"
+                add_warning "P0" "workbench-main-path" "both ui_download_layer_hints and response_header_layer_hints are 0 with existing error-context"
               fi
               if [ "${main_ui_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][workbench-main-path] ui_download_layer_hints expected >=1, got ${main_ui_hint_count}"
+                add_warning "P1" "workbench-main-path" "ui_download_layer_hints expected >=1, got ${main_ui_hint_count}"
               fi
               if [ "${main_header_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][workbench-main-path] response_header_layer_hints expected >=1, got ${main_header_hint_count}"
+                add_warning "P1" "workbench-main-path" "response_header_layer_hints expected >=1, got ${main_header_hint_count}"
               fi
               if [ "${main_api_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][workbench-main-path] export_api_path_hints expected >=1, got ${main_api_hint_count}"
+                add_warning "P1" "workbench-main-path" "export_api_path_hints expected >=1, got ${main_api_hint_count}"
               fi
               echo
 
-              echo "### key lines"
-              for file in "${main_contexts[@]}"; do
-                grep -Ein "${MAIN_KEY_LINES_REGEX}" "$file" || true
-              done | head -n 120
+              print_key_lines "${MAIN_KEY_LINES_REGEX}" "${main_contexts[@]}"
             fi
             echo
 
-            mapfile -t shared_contexts < <(find frontend/test-results -name "error-context.md" | sort | grep "workbench-main-path" | grep "shared-kb-actions-disabled" || true)
+            mapfile -t shared_contexts < <(printf '%s\n' "${all_error_contexts[@]}" | grep -E "${SHARED_CONTEXT_PATH_REGEX}" || true)
             echo "## workbench-main-path-shared-kb"
             if [ ${#shared_contexts[@]} -eq 0 ]; then
               echo "No workbench-main-path shared-kb error-context files found."
@@ -248,10 +271,7 @@ jobs:
               echo "### assertion hint counters"
               echo "- shared_permission_semantic_ok: ${shared_semantic_ok_count} (expected: ${shared_expected_label})"
             else
-              echo "### matched error-context files"
-              for file in "${shared_contexts[@]}"; do
-                echo "- ${file}"
-              done
+              print_matched_files "workbench-main-path-shared-kb" "${shared_contexts[@]}"
               echo
 
               shared_context_count=${#shared_contexts[@]}
@@ -264,33 +284,23 @@ jobs:
               echo "### assertion hint counters"
               echo "- shared_permission_semantic_ok: ${shared_semantic_ok_count} (expected: ${shared_expected_label})"
               if [ "${shared_context_count}" -gt 0 ] && [ "${shared_semantic_ok_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][workbench-main-path-shared-kb] shared_permission_semantic_ok expected >=1 when error-context exists, got ${shared_semantic_ok_count}"
+                add_warning "P0" "workbench-main-path-shared-kb" "shared_permission_semantic_ok expected >=1 when error-context exists, got ${shared_semantic_ok_count}"
               fi
               if [ "${shared_semantic_ok_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][workbench-main-path-shared-kb] shared_permission_semantic_ok expected >=1, got ${shared_semantic_ok_count}"
+                add_warning "P1" "workbench-main-path-shared-kb" "shared_permission_semantic_ok expected >=1, got ${shared_semantic_ok_count}"
               fi
               echo
 
-              echo "### key lines"
-              for file in "${shared_contexts[@]}"; do
-                grep -Ein "${SHARED_KEY_LINES_REGEX}" "$file" || true
-              done | head -n 120
+              print_key_lines "${SHARED_KEY_LINES_REGEX}" "${shared_contexts[@]}"
             fi
             echo
 
-            mapfile -t edge_contexts < <(find frontend/test-results -name "error-context.md" | sort | grep "workbench-edge-cases" || true)
+            mapfile -t edge_contexts < <(printf '%s\n' "${all_error_contexts[@]}" | grep -E "${EDGE_CONTEXT_PATH_REGEX}" || true)
             echo "## workbench-edge-cases"
             if [ ${#edge_contexts[@]} -eq 0 ]; then
               echo "No workbench-edge-cases error-context files found."
             else
-              echo "### matched error-context files"
-              for file in "${edge_contexts[@]}"; do
-                echo "- ${file}"
-              done
+              print_matched_files "workbench-edge-cases" "${edge_contexts[@]}"
               echo
 
               edge_ui_hint_count=0
@@ -315,46 +325,29 @@ jobs:
               echo "- export_api_path_hints: ${edge_api_hint_count}"
               echo "- export_404_semantic_hints: ${edge_404_semantic_hints}"
               if [ "${edge_context_count}" -gt 0 ] && [ "${edge_api_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][workbench-edge-cases] export_api_path_hints expected >=1 when error-context exists, got ${edge_api_hint_count}"
+                add_warning "P0" "workbench-edge-cases" "export_api_path_hints expected >=1 when error-context exists, got ${edge_api_hint_count}"
               fi
               if [ "${edge_context_count}" -gt 0 ] && [ "${edge_404_semantic_hints}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][workbench-edge-cases] export_404_semantic_hints expected >=1 when error-context exists, got ${edge_404_semantic_hints}"
+                add_warning "P0" "workbench-edge-cases" "export_404_semantic_hints expected >=1 when error-context exists, got ${edge_404_semantic_hints}"
               fi
               if [ "${edge_context_count}" -gt 0 ] && [ "${edge_ui_hint_count}" -lt 1 ] && [ "${edge_header_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][workbench-edge-cases] both ui_download_layer_hints and response_header_layer_hints are 0 with existing error-context"
+                add_warning "P0" "workbench-edge-cases" "both ui_download_layer_hints and response_header_layer_hints are 0 with existing error-context"
               fi
               if [ "${edge_ui_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][workbench-edge-cases] ui_download_layer_hints expected >=1, got ${edge_ui_hint_count}"
+                add_warning "P1" "workbench-edge-cases" "ui_download_layer_hints expected >=1, got ${edge_ui_hint_count}"
               fi
               if [ "${edge_header_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][workbench-edge-cases] response_header_layer_hints expected >=1, got ${edge_header_hint_count}"
+                add_warning "P1" "workbench-edge-cases" "response_header_layer_hints expected >=1, got ${edge_header_hint_count}"
               fi
               if [ "${edge_api_hint_count}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][workbench-edge-cases] export_api_path_hints expected >=1, got ${edge_api_hint_count}"
+                add_warning "P1" "workbench-edge-cases" "export_api_path_hints expected >=1, got ${edge_api_hint_count}"
               fi
               if [ "${edge_404_semantic_hints}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][workbench-edge-cases] export_404_semantic_hints expected >=1, got ${edge_404_semantic_hints}"
+                add_warning "P1" "workbench-edge-cases" "export_404_semantic_hints expected >=1, got ${edge_404_semantic_hints}"
               fi
               echo
 
-              echo "### key lines"
-              for file in "${edge_contexts[@]}"; do
-                grep -Ein "${EDGE_KEY_LINES_REGEX}" "$file" || true
-              done | head -n 120
+              print_key_lines "${EDGE_KEY_LINES_REGEX}" "${edge_contexts[@]}"
             fi
 
             echo

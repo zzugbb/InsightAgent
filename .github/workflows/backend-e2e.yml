@@ -140,6 +140,7 @@ jobs:
 
               step_count=$(grep -Ec "${STEP_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
               ok_count=$(grep -Ec "${OK_LINE_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
+              step_total_expected=$(grep -Eo "${STEP_REGEX}" /tmp/e2e-export-consistency-8000.log | head -n 1 | sed -E 's#^\[[0-9]+/([0-9]+)\]#\1#' || true)
               passed_count=$(grep -Ec "${PASS_BANNER_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
               task_export_ok=$(grep -Ec "${TASK_EXPORT_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
               session_export_ok=$(grep -Ec "${SESSION_EXPORT_REGEX}" /tmp/e2e-export-consistency-8000.log || true)
@@ -150,53 +151,54 @@ jobs:
               p0_warning_count=0
               p1_warning_count=0
               warning_messages=""
+              add_warning() {
+                local severity="$1"
+                local scope="$2"
+                local detail="$3"
+                warning_count=$((warning_count + 1))
+                if [ "${severity}" = "P0" ]; then
+                  p0_warning_count=$((p0_warning_count + 1))
+                else
+                  p1_warning_count=$((p1_warning_count + 1))
+                fi
+                warning_messages="${warning_messages}\n  - [${severity}][${scope}] ${detail}"
+              }
 
-              if [ "${step_count}" -ne 7 ]; then
-                warning_count=$((warning_count + 1))
-                p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] steps_detected expected 7, got ${step_count}"
+              if ! [[ "${step_total_expected}" =~ ^[0-9]+$ ]] || [ "${step_total_expected}" -lt 1 ]; then
+                add_warning "P0" "backend-export-consistency" "step_total_expected parse failed, got ${step_total_expected:-<empty>}"
+                step_total_expected=0
               fi
-              if [ "${ok_count}" -ne 7 ]; then
-                warning_count=$((warning_count + 1))
-                p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] ok_lines_detected expected 7, got ${ok_count}"
+              if [ "${step_total_expected}" -gt 0 ] && [ "${step_count}" -ne "${step_total_expected}" ]; then
+                add_warning "P0" "backend-export-consistency" "steps_detected expected ${step_total_expected}, got ${step_count}"
+              fi
+              if [ "${step_total_expected}" -gt 0 ] && [ "${ok_count}" -ne "${step_total_expected}" ]; then
+                add_warning "P0" "backend-export-consistency" "ok_lines_detected expected ${step_total_expected}, got ${ok_count}"
               fi
               if [ "${passed_count}" -ne 1 ]; then
-                warning_count=$((warning_count + 1))
-                p0_warning_count=$((p0_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P0][backend-export-consistency] pass_banner_detected expected 1, got ${passed_count}"
+                add_warning "P0" "backend-export-consistency" "pass_banner_detected expected 1, got ${passed_count}"
               fi
               if [ "${task_export_ok}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] task_export_consistency_ok expected >=1, got ${task_export_ok}"
+                add_warning "P1" "backend-export-consistency" "task_export_consistency_ok expected >=1, got ${task_export_ok}"
               fi
               if [ "${session_export_ok}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] session_export_consistency_ok expected >=1, got ${session_export_ok}"
+                add_warning "P1" "backend-export-consistency" "session_export_consistency_ok expected >=1, got ${session_export_ok}"
               fi
               if [ "${shared_rag_ok}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] shared_rag_semantics_ok expected >=1, got ${shared_rag_ok}"
+                add_warning "P1" "backend-export-consistency" "shared_rag_semantics_ok expected >=1, got ${shared_rag_ok}"
               fi
               if [ "${cross_user_ok}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] cross_user_isolation_ok expected >=1, got ${cross_user_ok}"
+                add_warning "P1" "backend-export-consistency" "cross_user_isolation_ok expected >=1, got ${cross_user_ok}"
               fi
               if [ "${not_found_ok}" -lt 1 ]; then
-                warning_count=$((warning_count + 1))
-                p1_warning_count=$((p1_warning_count + 1))
-                warning_messages="${warning_messages}\n  - [P1][backend-export-consistency] not_found_semantics_ok expected >=1, got ${not_found_ok}"
+                add_warning "P1" "backend-export-consistency" "not_found_semantics_ok expected >=1, got ${not_found_ok}"
               fi
 
               echo ""
               echo "- Script log: /tmp/e2e-export-consistency-8000.log"
               echo "- Assertion counters:"
-              echo "  - steps_detected: ${step_count} (expected: 7)"
-              echo "  - ok_lines_detected: ${ok_count} (expected: 7)"
+              echo "  - step_total_expected: ${step_total_expected} (parsed from first [x/N] line)"
+              echo "  - steps_detected: ${step_count} (expected: ${step_total_expected})"
+              echo "  - ok_lines_detected: ${ok_count} (expected: ${step_total_expected})"
               echo "  - pass_banner_detected: ${passed_count} (expected: 1)"
               echo "  - task_export_consistency_ok: ${task_export_ok} (expected: >=1)"
               echo "  - session_export_consistency_ok: ${session_export_ok} (expected: >=1)"
