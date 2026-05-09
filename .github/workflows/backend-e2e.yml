@@ -2,6 +2,17 @@ name: backend-e2e
 
 on:
   workflow_dispatch:
+    inputs:
+      export_diag_strict_level:
+        description: "Override export diagnostics strict level (auto/none/p0/any)"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - none
+          - p0
+          - any
   pull_request:
     paths:
       - "backend/**"
@@ -14,6 +25,10 @@ on:
       - "backend/**"
       - ".github/workflows/backend-e2e.yml"
       - "compose.full.yml"
+
+env:
+  BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT: "p0"
+  BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH: "any"
 
 jobs:
   e2e:
@@ -125,6 +140,9 @@ jobs:
       - name: Validate export consistency summary fixture tests
         run: bash backend/scripts/test_ci_export_consistency_summary.sh
 
+      - name: Validate diagnostics overview fixture tests
+        run: bash scripts/test_ci_export_diagnostics_overview.sh
+
       - name: Summarize export consistency checks
         if: always()
         run: |
@@ -134,6 +152,58 @@ jobs:
           {
             echo "### backend-e2e export consistency"
             cat /tmp/e2e-export-consistency-summary.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Evaluate export diagnostics guard
+        if: always()
+        id: backend_diag_guard
+        run: |
+          dispatch_override="${{ github.event.inputs.export_diag_strict_level || '' }}"
+          strict_level="${BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}"
+          policy_source="default"
+
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            strict_level="${BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}"
+            policy_source="main_push"
+          fi
+          if [ -n "${dispatch_override}" ] && [ "${dispatch_override}" != "auto" ]; then
+            strict_level="${dispatch_override}"
+            policy_source="workflow_dispatch_input"
+          fi
+
+          bash scripts/ci_diag_guard.sh \
+            --json /tmp/e2e-export-consistency-summary.json \
+            --scope backend \
+            --strict-level "${strict_level}" \
+            --label backend-e2e-export \
+            --summary-file /tmp/backend-e2e-export-guard-summary.md \
+            --json-summary-file /tmp/backend-e2e-export-guard-summary.json
+
+          echo "strict_level=${strict_level}" >> "$GITHUB_OUTPUT"
+          echo "policy_source=${policy_source}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### backend-e2e export diagnostics guard"
+            echo "- policy: default=${BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}, main_push=${BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}"
+            echo "- dispatch_override: ${dispatch_override:-<none>}"
+            echo "- policy_source: ${policy_source}"
+            echo "- selected_strict_level: ${strict_level}"
+            cat /tmp/backend-e2e-export-guard-summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build export diagnostics overview
+        if: always()
+        run: |
+          bash scripts/ci_export_diagnostics_overview.sh \
+            --backend-diagnostics-json /tmp/e2e-export-consistency-summary.json \
+            --backend-guard-json /tmp/backend-e2e-export-guard-summary.json \
+            --markdown-out /tmp/backend-e2e-export-overview.md \
+            --json-out /tmp/backend-e2e-export-overview.json \
+            --label backend-e2e
+
+          {
+            echo "### backend-e2e export diagnostics overview"
+            cat /tmp/backend-e2e-export-overview.md
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect diagnostics on failure
@@ -179,6 +249,10 @@ jobs:
             /tmp/e2e-export-consistency-8000.log
             /tmp/e2e-export-consistency-summary.txt
             /tmp/e2e-export-consistency-summary.json
+            /tmp/backend-e2e-export-guard-summary.md
+            /tmp/backend-e2e-export-guard-summary.json
+            /tmp/backend-e2e-export-overview.md
+            /tmp/backend-e2e-export-overview.json
             /tmp/e2e-cancel-8000.log
             /tmp/e2e-timeout-8010.log
             /tmp/backend-e2e-diagnostics.txt

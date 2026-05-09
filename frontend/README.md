@@ -94,6 +94,12 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 工程化重构（2026-05-09）：导出诊断逻辑已从 `.github/workflows/frontend-e2e.yml` 内联 Bash 抽离为 `frontend/scripts/ci_export_diagnostics.sh`，并补齐 Bash 3 兼容（去除 `mapfile`），支持本地与 CI 共用同一套诊断脚本
 - 阶段 5 CI 回归护栏补齐（2026-05-09）：新增 `frontend/scripts/test_ci_export_diagnostics.sh` fixture 自测脚本，并在 workflow 增加 `Validate export diagnostics fixture tests` 步骤，保障导出诊断脚本 counters/alerts 语义在主回归前先被校验
 - 阶段 5 CI 机器可读补充（2026-05-09）：`frontend/scripts/ci_export_diagnostics.sh` 新增可选 JSON 输出参数，`frontend-e2e` 已产出 `/tmp/frontend-e2e-export-summary.json` 并随 artifact 上传，便于后续趋势分析与自动告警消费
+- 阶段 5 CI 统一门禁补充（2026-05-09）：新增仓库级 `scripts/ci_diag_guard.sh` 并在 `frontend-e2e` 接入 `Evaluate export diagnostics guard`；可通过 `FRONTEND_EXPORT_DIAG_STRICT_LEVEL=none|p0|any` 控制门禁严格度（默认 `none`）
+- 阶段 5 CI 统一门禁再补充（2026-05-09）：`frontend-e2e` 默认门禁级别已提升为 `p0`，并将 guard 判定摘要追加到 `GITHUB_STEP_SUMMARY`（同时归档 `/tmp/frontend-e2e-export-guard-summary.md`），便于直接判断门禁失败原因
+- 阶段 5 CI 门禁策略化补充（2026-05-09）：`frontend-e2e` 门禁级别已改为按事件自动决策（`push@main=any`、其余场景 `p0`），并在 summary 输出 `policy + selected_strict_level`，提升诊断判读一致性
+- 阶段 5 CI 门禁 JSON 补充（2026-05-09）：`ci_diag_guard` 已支持 `--json-summary-file`，`frontend-e2e` 现产出 `/tmp/frontend-e2e-export-guard-summary.json` 并上传 artifact，便于后续自动汇总门禁结果
+- 阶段 5 CI 触发覆盖补充（2026-05-09）：`frontend-e2e` 的 `workflow_dispatch` 新增 `export_diag_strict_level=auto/none/p0/any`，支持手动触发覆盖自动策略；summary 已输出 `dispatch_override` 与 `policy_source`
+- 阶段 5 CI 总览聚合补充（2026-05-09）：新增 `scripts/ci_export_diagnostics_overview.sh`（配套 `scripts/test_ci_export_diagnostics_overview.sh`），workflow 已接入 `Build export diagnostics overview` 并产出 `/tmp/frontend-e2e-export-overview.md/.json`
 - 阶段 5 CI 告警增强（2026-05-08）：`frontend-e2e` 导出摘要新增 `threshold alerts` 阈值告警；若主链路或边界链路计数低于预期，会直接输出 expected vs actual，便于快速定位“下载层 / 响应头层 / 404 语义层”回归
 - 阶段 5 CI 告警分级（2026-05-08）：`frontend-e2e` 导出阈值告警已补严重级别标签（当前为 `[P1]`）与 `severity` 计数，并与 `backend-e2e` 告警视图对齐，便于跨端统一判读
 - 阶段 5 CI 告警分级补强（2026-05-08）：`frontend-e2e` 已新增 `P0` 判定规则：若存在 `error-context` 但 `export_api_path_hints=0`，或 UI 下载层/响应头层提示同时为 0（edge-cases 还包含 `export_404_semantic_hints=0`），则升级为 `P0` 告警
@@ -113,6 +119,12 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同（2026-05-09 工程化补充）：后端 `backend-e2e` export consistency 摘要已抽离为 `backend/scripts/ci_export_consistency_summary.sh` 并接入 workflow 脚本调用，前后端导出诊断均已完成“workflow 轻量化 + 脚本单点维护”收口
 - 阶段 5 协同（2026-05-09 回归护栏补充）：后端已新增 `backend/scripts/test_ci_export_consistency_summary.sh` fixture 自测并接入 `backend-e2e`，前后端导出诊断脚本均具备 workflow 前置语义校验
 - 阶段 5 协同（2026-05-09 机器可读补充）：后端 `ci_export_consistency_summary.sh` 已支持 JSON 输出并在 CI 产出 `/tmp/e2e-export-consistency-summary.json`，可与前端 JSON 摘要对齐做跨端诊断汇总
+- 阶段 5 协同（2026-05-09 统一门禁补充）：后端 `backend-e2e` 已接入同一 `scripts/ci_diag_guard.sh` 门禁步骤（`BACKEND_EXPORT_DIAG_STRICT_LEVEL`），前后端门禁策略统一到 `none|p0|any` 三档
+- 阶段 5 协同（2026-05-09 统一门禁再补充）：后端默认门禁级别同步提升为 `p0`，并在 summary 输出同结构 guard 小节，前后端门禁默认值与输出格式保持一致
+- 阶段 5 协同（2026-05-09 门禁策略化补充）：后端同步采用 `push@main=any / 其他=p0` 自动策略并输出 `selected_strict_level`，前后端门禁选择逻辑与展示项对齐
+- 阶段 5 协同（2026-05-09 门禁 JSON 补充）：后端同步产出 `/tmp/backend-e2e-export-guard-summary.json`，前后端 guard 摘要均支持 Markdown + JSON 双格式消费
+- 阶段 5 协同（2026-05-09 触发覆盖补充）：后端同步接入 `workflow_dispatch` 的 `export_diag_strict_level` 覆盖能力，并输出 `dispatch_override/policy_source`，前后端触发策略一致
+- 阶段 5 协同（2026-05-09 总览聚合补充）：后端同步接入 overview 聚合并产出 `/tmp/backend-e2e-export-overview.md/.json`，支持跨端统一判读诊断与门禁状态
 - 阶段 5 协同（2026-05-08 补充）：后端 `backend-e2e` export summary 已新增 `Threshold alerts` 阈值告警行；当导出检查计数偏离预期时，CI Summary 会直接给出异常计数项明细，便于前端联调快速判断是否为导出协议/权限语义回归
 
 ## 当前已有内容

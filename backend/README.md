@@ -66,6 +66,12 @@
 - 工程化增量（2026-05-09 工程化重构）：`backend-e2e` export consistency 摘要已从 workflow 内联脚本抽离到 `backend/scripts/ci_export_consistency_summary.sh`，workflow 仅保留脚本调用与 `GITHUB_STEP_SUMMARY` 拼接，提升可维护性与本地复跑便利性
 - 工程化增量（2026-05-09 回归护栏补充）：新增 `backend/scripts/test_ci_export_consistency_summary.sh` fixture 自测并接入 `backend-e2e`（`Validate export consistency summary fixture tests`），覆盖成功/缺陷/日志缺失三类诊断语义
 - 工程化增量（2026-05-09 机器可读补充）：`backend/scripts/ci_export_consistency_summary.sh` 新增可选 JSON 输出参数，workflow 已产出 `/tmp/e2e-export-consistency-summary.json` 并随 artifact 上传
+- 工程化增量（2026-05-09 统一门禁补充）：新增仓库级 `scripts/ci_diag_guard.sh`（含 `scripts/test_ci_diag_guard.sh`），`backend-e2e` 已接入 `Evaluate export diagnostics guard` 步骤；可通过 `BACKEND_EXPORT_DIAG_STRICT_LEVEL=none|p0|any` 控制门禁严格度（默认 `none`）
+- 工程化增量（2026-05-09 统一门禁再补充）：`backend-e2e` 默认门禁级别已提升为 `p0`，并在 `GITHUB_STEP_SUMMARY` 追加 `backend-e2e export diagnostics guard` 小节（含 scope/strict/warnings/gate_result），同时归档 `/tmp/backend-e2e-export-guard-summary.md`
+- 工程化增量（2026-05-09 门禁策略化补充）：`backend-e2e` 的门禁级别已改为按事件自动决策（`push@main=any`，其余场景 `p0`），并在 summary 输出 `policy + selected_strict_level`，减少“当前门禁为什么生效”为何值的排查成本
+- 工程化增量（2026-05-09 门禁 JSON 补充）：`ci_diag_guard` 已支持 `--json-summary-file`，`backend-e2e` 现产出 `/tmp/backend-e2e-export-guard-summary.json` 并上传 artifact，便于后续机器汇总门禁结果
+- 工程化增量（2026-05-09 触发覆盖补充）：`backend-e2e` 的 `workflow_dispatch` 新增 `export_diag_strict_level=auto/none/p0/any`，手动触发可覆盖门禁策略；summary 额外输出 `dispatch_override` 与 `policy_source`
+- 工程化增量（2026-05-09 总览聚合补充）：新增 `scripts/ci_export_diagnostics_overview.sh` 与 `scripts/test_ci_export_diagnostics_overview.sh`，`backend-e2e` 已接入 overview 生成步骤并产出 `/tmp/backend-e2e-export-overview.md/.json`
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 阈值告警已增加严重级别标签（`[P0]/[P1]`）与 `severity` 计数，便于团队按优先级分流处理导出回归
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 告警模板已与 `frontend-e2e` 对齐为 `total_alerts -> severity -> 分级明细`，并采用作用域标签格式（`[P*][backend-export-consistency]`）
@@ -105,6 +111,12 @@
 - 协同进展（2026-05-09 工程化补充）：`frontend-e2e` 导出诊断逻辑已从 workflow 内联脚本抽离至 `frontend/scripts/ci_export_diagnostics.sh`，并补齐 Bash 3 兼容（去除 `mapfile` 依赖），方便本地与 CI 共享同一诊断实现
 - 协同进展（2026-05-09 回归护栏补充）：`frontend-e2e` 已新增 `frontend/scripts/test_ci_export_diagnostics.sh` fixture 自测步骤（workflow: `Validate export diagnostics fixture tests`），用于在执行主回归前验证导出诊断脚本关键告警语义
 - 协同进展（2026-05-09 机器可读补充）：`frontend/scripts/ci_export_diagnostics.sh` 新增可选 JSON 输出参数，`frontend-e2e` 已产出 `/tmp/frontend-e2e-export-summary.json` 并随 artifact 上传
+- 协同进展（2026-05-09 统一门禁补充）：`frontend-e2e` 已接入同一 `scripts/ci_diag_guard.sh` 门禁步骤（`FRONTEND_EXPORT_DIAG_STRICT_LEVEL`），前后端导出诊断门禁策略已对齐
+- 协同进展（2026-05-09 统一门禁再补充）：`frontend-e2e` 默认门禁级别同样提升为 `p0`，并在 step summary 追加 guard 小节；前后端门禁默认策略与展示格式保持一致
+- 协同进展（2026-05-09 门禁策略化补充）：`frontend-e2e` 同步采用 `push@main=any / 其他=p0` 的自动策略并输出 `selected_strict_level`，前后端门禁选择逻辑保持一致
+- 协同进展（2026-05-09 门禁 JSON 补充）：`frontend-e2e` 同步产出 `/tmp/frontend-e2e-export-guard-summary.json`，前后端 guard 摘要现同时具备 Markdown + JSON 两种消费形态
+- 协同进展（2026-05-09 触发覆盖补充）：`frontend-e2e` 同步接入 `workflow_dispatch` 的 `export_diag_strict_level` 覆盖能力，并在 summary 输出 `dispatch_override/policy_source`，前后端触发策略保持一致
+- 协同进展（2026-05-09 总览聚合补充）：`frontend-e2e` 同步接入 overview 聚合并产出 `/tmp/frontend-e2e-export-overview.md/.json`，前后端均支持“诊断 + 门禁”一页总览
 - 协同进展（2026-05-08 补充）：`frontend-e2e` 导出摘要新增阈值告警（`threshold alerts`），当关键计数低于预期时输出 expected vs actual 异常项，便于后端与前端在 PR Summary 快速分流导出回归层级
 - 协同进展（2026-05-08 再补充）：`frontend-e2e` 阈值告警已增加严重级别标签（当前以 `[P1]` 标注导出诊断缺口）与 `severity` 计数，便于与后端告警视图保持一致
 - 协同进展（2026-05-08 再补充）：`frontend-e2e` 已补 `P0` 诊断失真判定（存在 `error-context` 但导出 API 路径提示为 0、或 UI/响应头双计数为 0；edge-cases 额外覆盖 404 语义提示为 0），用于优先暴露高风险诊断盲区
