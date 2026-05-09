@@ -111,26 +111,26 @@ jobs:
 
       - name: Run frontend smoke e2e matrix
         run: |
-          cd frontend
-          PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 \
-          PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 \
-          npm run test:e2e:smoke:matrix
+          bash scripts/ci_run_frontend_e2e.sh \
+            --phase smoke \
+            --api-base-url http://127.0.0.1:8000 \
+            --frontend-base-url http://127.0.0.1:3001
 
       - name: Run frontend full e2e on chromium
         run: |
-          cd frontend
-          PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 \
-          PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 \
-          npm run test:e2e
+          bash scripts/ci_run_frontend_e2e.sh \
+            --phase full \
+            --api-base-url http://127.0.0.1:8000 \
+            --frontend-base-url http://127.0.0.1:3001
 
       - name: Rerun failed chromium tests for diagnostics
         if: failure()
         continue-on-error: true
         run: |
-          cd frontend
-          PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 \
-          PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 \
-          npm run test:e2e -- --last-failed --output=test-results/last-failed
+          bash scripts/ci_run_frontend_e2e.sh \
+            --phase rerun-last-failed \
+            --api-base-url http://127.0.0.1:8000 \
+            --frontend-base-url http://127.0.0.1:3001
 
       - name: Show backend logs on failure
         if: failure()

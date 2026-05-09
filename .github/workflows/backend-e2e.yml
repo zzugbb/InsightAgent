@@ -92,15 +92,10 @@ jobs:
 
       - name: Run baseline/main-path/export/cancel e2e on :8000
         run: |
-          set -o pipefail
-          python3 backend/scripts/e2e_baseline.py --base-url http://127.0.0.1:8000 \
-            | tee /tmp/e2e-baseline-8000.log
-          python3 backend/scripts/e2e_main_path.py --base-url http://127.0.0.1:8000 \
-            | tee /tmp/e2e-main-path-8000.log
-          python3 backend/scripts/e2e_export_consistency.py --base-url http://127.0.0.1:8000 \
-            | tee /tmp/e2e-export-consistency-8000.log
-          python3 backend/scripts/e2e_task_cancel_timeout.py --base-url http://127.0.0.1:8000 --skip-timeout \
-            | tee /tmp/e2e-cancel-8000.log
+          bash scripts/ci_run_backend_e2e.sh \
+            --phase main \
+            --base-url http://127.0.0.1:8000 \
+            --log-dir /tmp
 
       - name: Start backend on :8010 (timeout=1s)
         env:
@@ -126,12 +121,10 @@ jobs:
 
       - name: Run timeout e2e on :8010
         run: |
-          set -o pipefail
-          python3 backend/scripts/e2e_task_cancel_timeout.py \
+          bash scripts/ci_run_backend_e2e.sh \
+            --phase timeout \
             --base-url http://127.0.0.1:8010 \
-            --cancel-prompt-words 180000 \
-            --timeout-prompt-words 250000 \
-            | tee /tmp/e2e-timeout-8010.log
+            --log-dir /tmp
 
       - name: Validate e2e tooling fixtures (backend scope)
         run: bash scripts/test_ci_e2e_tooling.sh backend

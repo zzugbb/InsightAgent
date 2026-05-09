@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCOPE="${1:-all}"
 
 run_common() {
+  bash "${ROOT_DIR}/scripts/test_ci_run_backend_e2e.sh"
+  bash "${ROOT_DIR}/scripts/test_ci_run_frontend_e2e.sh"
   bash "${ROOT_DIR}/scripts/test_ci_collect_backend_failure_diagnostics.sh"
   bash "${ROOT_DIR}/scripts/test_ci_build_frontend_failure_index.sh"
   bash "${ROOT_DIR}/scripts/test_ci_service_bootstrap.sh"
