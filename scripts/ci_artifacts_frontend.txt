@@ -1,0 +1,9 @@
+frontend/playwright-report
+frontend/test-results
+/tmp/frontend-e2e-failure-index.md
+/tmp/frontend-e2e-export-summary.md
+/tmp/frontend-e2e-export-summary.json
+/tmp/frontend-e2e-export-guard-summary.md
+/tmp/frontend-e2e-export-guard-summary.json
+/tmp/frontend-e2e-export-overview.md
+/tmp/frontend-e2e-export-overview.json

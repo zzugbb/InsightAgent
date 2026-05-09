@@ -141,23 +141,11 @@ jobs:
       - name: Build Playwright failure index
         if: always()
         run: |
-          {
-            echo "# frontend-e2e failure index"
-            echo
-            echo "- generated_at_utc: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-            echo "- run_id: ${{ github.run_id }}"
-            echo "- run_attempt: ${{ github.run_attempt }}"
-            echo
-            if [ -d frontend/test-results ]; then
-              echo "## error-context.md"
-              find frontend/test-results -name "error-context.md" | sort | sed 's#^#- #'
-              echo
-              echo "## trace.zip"
-              find frontend/test-results -name "trace.zip" | sort | sed 's#^#- #'
-            else
-              echo "No frontend/test-results directory found."
-            fi
-          } > /tmp/frontend-e2e-failure-index.md
+          bash scripts/ci_build_frontend_failure_index.sh \
+            --results-dir frontend/test-results \
+            --output-file /tmp/frontend-e2e-failure-index.md \
+            --run-id "${{ github.run_id }}" \
+            --run-attempt "${{ github.run_attempt }}"
 
       - name: Validate e2e tooling fixtures (frontend scope)
         run: bash scripts/test_ci_e2e_tooling.sh frontend
@@ -184,19 +172,17 @@ jobs:
             --overview-label frontend-e2e \
             --summary-file "$GITHUB_STEP_SUMMARY"
 
+      - name: Stage frontend e2e artifacts
+        if: always()
+        run: |
+          bash scripts/ci_stage_artifacts.sh \
+            --list-file scripts/ci_artifacts_frontend.txt \
+            --output-dir /tmp/frontend-e2e-artifacts-stage
+
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            frontend/playwright-report
-            frontend/test-results
-            /tmp/frontend-e2e-failure-index.md
-            /tmp/frontend-e2e-export-summary.md
-            /tmp/frontend-e2e-export-summary.json
-            /tmp/frontend-e2e-export-guard-summary.md
-            /tmp/frontend-e2e-export-guard-summary.json
-            /tmp/frontend-e2e-export-overview.md
-            /tmp/frontend-e2e-export-overview.json
+          path: /tmp/frontend-e2e-artifacts-stage
           if-no-files-found: ignore

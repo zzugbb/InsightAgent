@@ -106,6 +106,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 输出降噪（2026-05-09）：`ci_diag_guard` 新增 `--quiet`，并在 guard/resolver fixture 脚本中抑制预期失败分支输出，降低 fixture 校验步骤日志噪音
 - 阶段 5 CI 启动验活收口（2026-05-09）：新增 `scripts/ci_start_bg_process.sh` 与 `scripts/ci_wait_http_status.sh`（配套 `scripts/test_ci_service_bootstrap.sh`），`frontend-e2e` 的后端启动与健康等待已切换到统一脚本调用，减少 workflow 内重复 shell 逻辑
 - 阶段 5 CI 诊断流程再收口（2026-05-09）：新增 `scripts/ci_export_diag_flow.sh`（配套 `scripts/test_ci_export_diag_flow.sh`），把导出诊断摘要生成与 guard/overview pipeline 合并为单步骤入口；`frontend-e2e` 已切换为 `Run export diagnostics flow`
+- 阶段 5 CI artifact 收口（2026-05-09）：新增 `scripts/ci_artifacts_frontend.txt` 与统一归集脚本 `scripts/ci_stage_artifacts.sh`（配套 `scripts/test_ci_stage_artifacts.sh`）；`frontend-e2e` 新增 `Stage frontend e2e artifacts`，上传动作改为 staging 目录，降低 YAML 路径清单维护复杂度
+- 阶段 5 CI 失败索引脚本化（2026-05-09）：新增 `scripts/ci_build_frontend_failure_index.sh`（配套 `scripts/test_ci_build_frontend_failure_index.sh`），`frontend-e2e` 的 Playwright 失败索引生成已改为脚本调用，统一输出结构并减少 workflow 内联 shell 体积
 - 阶段 5 CI 告警增强（2026-05-08）：`frontend-e2e` 导出摘要新增 `threshold alerts` 阈值告警；若主链路或边界链路计数低于预期，会直接输出 expected vs actual，便于快速定位“下载层 / 响应头层 / 404 语义层”回归
 - 阶段 5 CI 告警分级（2026-05-08）：`frontend-e2e` 导出阈值告警已补严重级别标签（当前为 `[P1]`）与 `severity` 计数，并与 `backend-e2e` 告警视图对齐，便于跨端统一判读
 - 阶段 5 CI 告警分级补强（2026-05-08）：`frontend-e2e` 已新增 `P0` 判定规则：若存在 `error-context` 但 `export_api_path_hints=0`，或 UI 下载层/响应头层提示同时为 0（edge-cases 还包含 `export_404_semantic_hints=0`），则升级为 `P0` 告警

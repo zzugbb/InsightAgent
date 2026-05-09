@@ -161,22 +161,12 @@ jobs:
       - name: Collect diagnostics on failure
         if: failure()
         run: |
-          {
-            echo "===== date ====="
-            date -u
-            echo ""
-            echo "===== ps -ef (python/uvicorn) ====="
-            ps -ef | grep -E "python|uvicorn" || true
-            echo ""
-            echo "===== health :8000 ====="
-            curl -i -m 5 http://127.0.0.1:8000/health || true
-            echo ""
-            echo "===== health :8010 ====="
-            curl -i -m 5 http://127.0.0.1:8010/health || true
-            echo ""
-            echo "===== export consistency tail ====="
-            tail -n 80 /tmp/e2e-export-consistency-8000.log || true
-          } > /tmp/backend-e2e-diagnostics.txt
+          bash scripts/ci_collect_backend_failure_diagnostics.sh \
+            --output-file /tmp/backend-e2e-diagnostics.txt \
+            --primary-health-url http://127.0.0.1:8000/health \
+            --secondary-health-url http://127.0.0.1:8010/health \
+            --export-log-file /tmp/e2e-export-consistency-8000.log \
+            --export-log-tail-lines 80
 
       - name: Show backend logs on failure
         if: failure()
@@ -186,26 +176,17 @@ jobs:
           echo "===== backend-8010.log ====="
           cat /tmp/backend-8010.log || true
 
+      - name: Stage backend e2e artifacts
+        if: always()
+        run: |
+          bash scripts/ci_stage_artifacts.sh \
+            --list-file scripts/ci_artifacts_backend.txt \
+            --output-dir /tmp/backend-e2e-artifacts-stage
+
       - name: Upload backend e2e artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: backend-e2e-artifacts
-          path: |
-            /tmp/backend-8000.log
-            /tmp/backend-8010.log
-            /tmp/health-8000.json
-            /tmp/health-8010.json
-            /tmp/e2e-main-path-8000.log
-            /tmp/e2e-baseline-8000.log
-            /tmp/e2e-export-consistency-8000.log
-            /tmp/e2e-export-consistency-summary.txt
-            /tmp/e2e-export-consistency-summary.json
-            /tmp/backend-e2e-export-guard-summary.md
-            /tmp/backend-e2e-export-guard-summary.json
-            /tmp/backend-e2e-export-overview.md
-            /tmp/backend-e2e-export-overview.json
-            /tmp/e2e-cancel-8000.log
-            /tmp/e2e-timeout-8010.log
-            /tmp/backend-e2e-diagnostics.txt
+          path: /tmp/backend-e2e-artifacts-stage
           if-no-files-found: ignore
