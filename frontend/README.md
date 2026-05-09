@@ -90,6 +90,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 准确性补充（2026-05-09）：`workbench-main-path` 分区已排除 shared 专项上下文（基于 `SHARED_CONTEXT_PATH_REGEX` 反向过滤），避免 shared 用例失败时把噪音计入主链路导出告警
 - 阶段 5 CI 规则收口补充（2026-05-09）：新增 `MAIN_CONTEXT_PATH_REGEX` / `EDGE_CONTEXT_PATH_REGEX`，main/edge/shared 三分区匹配统一改为变量化入口，降低后续规则调整时的改动分散度
 - 阶段 5 CI 维护性补充（2026-05-09 三次）：导出摘要新增 `print_matched_files` / `print_key_lines` 统一输出函数，收敛 main/shared/edge 分区的重复打印逻辑并提升一致性
+- 阶段 5 CI 可见性补充（2026-05-09）：main/shared/edge 三分区断言计数均新增 `context_files_detected`，便于直接比对该分区当前计数是否具备对应失败上下文样本
+- 阶段 5 CI 工程化重构（2026-05-09）：导出诊断逻辑已从 `.github/workflows/frontend-e2e.yml` 内联 Bash 抽离为 `frontend/scripts/ci_export_diagnostics.sh`，并补齐 Bash 3 兼容（去除 `mapfile`），支持本地与 CI 共用同一套诊断脚本
+- 阶段 5 CI 回归护栏补齐（2026-05-09）：新增 `frontend/scripts/test_ci_export_diagnostics.sh` fixture 自测脚本，并在 workflow 增加 `Validate export diagnostics fixture tests` 步骤，保障导出诊断脚本 counters/alerts 语义在主回归前先被校验
 - 阶段 5 CI 告警增强（2026-05-08）：`frontend-e2e` 导出摘要新增 `threshold alerts` 阈值告警；若主链路或边界链路计数低于预期，会直接输出 expected vs actual，便于快速定位“下载层 / 响应头层 / 404 语义层”回归
 - 阶段 5 CI 告警分级（2026-05-08）：`frontend-e2e` 导出阈值告警已补严重级别标签（当前为 `[P1]`）与 `severity` 计数，并与 `backend-e2e` 告警视图对齐，便于跨端统一判读
 - 阶段 5 CI 告警分级补强（2026-05-08）：`frontend-e2e` 已新增 `P0` 判定规则：若存在 `error-context` 但 `export_api_path_hints=0`，或 UI 下载层/响应头层提示同时为 0（edge-cases 还包含 `export_404_semantic_hints=0`），则升级为 `P0` 告警
@@ -106,6 +109,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同（2026-05-09）：后端 `backend-e2e` export consistency 摘要阈值已对齐 7 步脚本输出（`steps/ok` 期望值同步更新）并补充 `shared_rag_semantics_ok` 计数，前端联调时可更早识别共享知识库权限语义回归
 - 阶段 5 协同（2026-05-09 补充）：后端 `backend-e2e` export consistency 步数阈值已改为动态解析（从日志首条 `[x/N]` 自动提取 `N`），后续脚本步骤调整时前端联调无需再关注硬编码步数漂移
 - 阶段 5 协同（2026-05-09 维护性补充）：后端 `backend-e2e` export consistency 摘要已补 `add_warning` 统一告警函数，前后端 CI 告警拼装逻辑风格进一步对齐
+- 阶段 5 协同（2026-05-09 工程化补充）：后端 `backend-e2e` export consistency 摘要已抽离为 `backend/scripts/ci_export_consistency_summary.sh` 并接入 workflow 脚本调用，前后端导出诊断均已完成“workflow 轻量化 + 脚本单点维护”收口
 - 阶段 5 协同（2026-05-08 补充）：后端 `backend-e2e` export summary 已新增 `Threshold alerts` 阈值告警行；当导出检查计数偏离预期时，CI Summary 会直接给出异常计数项明细，便于前端联调快速判断是否为导出协议/权限语义回归
 
 ## 当前已有内容
