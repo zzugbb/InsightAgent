@@ -75,22 +75,20 @@ jobs:
           CHROMA_HOST: 127.0.0.1
           CHROMA_PORT: "8001"
         run: |
-          nohup uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 >/tmp/backend-8000.log 2>&1 &
-          echo $! > /tmp/backend-8000.pid
+          bash scripts/ci_start_bg_process.sh \
+            --log-file /tmp/backend-8000.log \
+            --pid-file /tmp/backend-8000.pid \
+            -- uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 
       - name: Wait backend :8000 health
         run: |
-          for i in {1..60}; do
-            code=$(curl -s -o /tmp/health-8000.json -w "%{http_code}" http://127.0.0.1:8000/health || true)
-            if [ "$code" = "200" ]; then
-              cat /tmp/health-8000.json
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "backend :8000 failed to become healthy"
-          cat /tmp/backend-8000.log || true
-          exit 1
+          bash scripts/ci_wait_http_status.sh \
+            --url http://127.0.0.1:8000/health \
+            --output-file /tmp/health-8000.json \
+            --attempts 60 \
+            --interval-sec 1 \
+            --failure-message "backend :8000 failed to become healthy" \
+            --failure-log-file /tmp/backend-8000.log
 
       - name: Run baseline/main-path/export/cancel e2e on :8000
         run: |
@@ -111,22 +109,20 @@ jobs:
           CHROMA_PORT: "8001"
           TASK_TIMEOUT_SEC: "1"
         run: |
-          nohup uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8010 >/tmp/backend-8010.log 2>&1 &
-          echo $! > /tmp/backend-8010.pid
+          bash scripts/ci_start_bg_process.sh \
+            --log-file /tmp/backend-8010.log \
+            --pid-file /tmp/backend-8010.pid \
+            -- uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8010
 
       - name: Wait backend :8010 health
         run: |
-          for i in {1..60}; do
-            code=$(curl -s -o /tmp/health-8010.json -w "%{http_code}" http://127.0.0.1:8010/health || true)
-            if [ "$code" = "200" ]; then
-              cat /tmp/health-8010.json
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "backend :8010 failed to become healthy"
-          cat /tmp/backend-8010.log || true
-          exit 1
+          bash scripts/ci_wait_http_status.sh \
+            --url http://127.0.0.1:8010/health \
+            --output-file /tmp/health-8010.json \
+            --attempts 60 \
+            --interval-sec 1 \
+            --failure-message "backend :8010 failed to become healthy" \
+            --failure-log-file /tmp/backend-8010.log
 
       - name: Run timeout e2e on :8010
         run: |
@@ -151,54 +147,25 @@ jobs:
             cat /tmp/e2e-export-consistency-summary.txt
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Evaluate export diagnostics guard
+      - name: Run export diagnostics pipeline
         if: always()
-        id: backend_diag_guard
         run: |
           dispatch_override="${{ github.event.inputs.export_diag_strict_level || '' }}"
-          resolved=$(bash scripts/ci_resolve_diag_strict_level.sh \
+          bash scripts/ci_export_diag_pipeline.sh \
+            --scope backend \
+            --diagnostics-json /tmp/e2e-export-consistency-summary.json \
+            --guard-markdown-out /tmp/backend-e2e-export-guard-summary.md \
+            --guard-json-out /tmp/backend-e2e-export-guard-summary.json \
+            --overview-markdown-out /tmp/backend-e2e-export-overview.md \
+            --overview-json-out /tmp/backend-e2e-export-overview.json \
             --event-name "${GITHUB_EVENT_NAME}" \
             --ref "${GITHUB_REF}" \
             --default-level "${BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}" \
             --main-push-level "${BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}" \
-            --dispatch-override "${dispatch_override:-auto}")
-          strict_level=$(printf '%s\n' "${resolved}" | sed -n 's/^strict_level=//p')
-          policy_source=$(printf '%s\n' "${resolved}" | sed -n 's/^policy_source=//p')
-
-          bash scripts/ci_diag_guard.sh \
-            --json /tmp/e2e-export-consistency-summary.json \
-            --scope backend \
-            --strict-level "${strict_level}" \
+            --dispatch-override "${dispatch_override:-auto}" \
             --label backend-e2e-export \
-            --summary-file /tmp/backend-e2e-export-guard-summary.md \
-            --json-summary-file /tmp/backend-e2e-export-guard-summary.json
-
-          echo "strict_level=${strict_level}" >> "$GITHUB_OUTPUT"
-          echo "policy_source=${policy_source}" >> "$GITHUB_OUTPUT"
-
-          {
-            echo "### backend-e2e export diagnostics guard"
-            echo "- policy: default=${BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}, main_push=${BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}"
-            echo "- dispatch_override: ${dispatch_override:-<none>}"
-            echo "- policy_source: ${policy_source}"
-            echo "- selected_strict_level: ${strict_level}"
-            cat /tmp/backend-e2e-export-guard-summary.md
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Build export diagnostics overview
-        if: always()
-        run: |
-          bash scripts/ci_export_diagnostics_overview.sh \
-            --backend-diagnostics-json /tmp/e2e-export-consistency-summary.json \
-            --backend-guard-json /tmp/backend-e2e-export-guard-summary.json \
-            --markdown-out /tmp/backend-e2e-export-overview.md \
-            --json-out /tmp/backend-e2e-export-overview.json \
-            --label backend-e2e
-
-          {
-            echo "### backend-e2e export diagnostics overview"
-            cat /tmp/backend-e2e-export-overview.md
-          } >> "$GITHUB_STEP_SUMMARY"
+            --overview-label backend-e2e \
+            --summary-file "$GITHUB_STEP_SUMMARY"
 
       - name: Collect diagnostics on failure
         if: failure()

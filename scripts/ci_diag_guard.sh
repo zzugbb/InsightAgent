@@ -20,6 +20,7 @@ strict_level="none"
 label=""
 summary_file=""
 json_summary_file=""
+quiet="0"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -46,6 +47,10 @@ while [ "$#" -gt 0 ]; do
     --json-summary-file)
       json_summary_file="${2:-}"
       shift 2
+      ;;
+    --quiet)
+      quiet="1"
+      shift
       ;;
     -h|--help)
       usage
@@ -120,7 +125,9 @@ warning_p0="${parsed[1]:-0}"
 warning_p1="${parsed[2]:-0}"
 status="${parsed[3]:-unknown}"
 
-echo "[diag-guard][${label}] strict_level=${strict_level} status=${status} warnings(total=${warning_total}, p0=${warning_p0}, p1=${warning_p1})"
+if [ "${quiet}" != "1" ]; then
+  echo "[diag-guard][${label}] strict_level=${strict_level} status=${status} warnings(total=${warning_total}, p0=${warning_p0}, p1=${warning_p1})"
+fi
 
 gate_result="PASS"
 gate_reason="within threshold"

@@ -16,7 +16,7 @@ assert_contains() {
 }
 
 expect_fail() {
-  if "$@"; then
+  if "$@" >/dev/null 2>&1; then
     echo "expected fail but passed: $*" >&2
     exit 1
   fi
