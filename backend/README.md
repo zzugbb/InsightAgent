@@ -64,6 +64,8 @@
 - 工程化增量（2026-05-09 再补充）：`backend-e2e` export consistency 的步数阈值已改为动态解析（从首条 `[x/N]` 自动提取 `N`），避免脚本增减步骤时 workflow 需要手工同步硬编码
 - 工程化增量（2026-05-09 维护性补充）：`backend-e2e` export consistency 摘要新增 `add_warning` 统一告警函数，集中处理 `P0/P1` 计数与告警消息拼装，降低后续阈值项扩展的重复改动成本
 - 工程化增量（2026-05-09 工程化重构）：`backend-e2e` export consistency 摘要已从 workflow 内联脚本抽离到 `backend/scripts/ci_export_consistency_summary.sh`，workflow 仅保留脚本调用与 `GITHUB_STEP_SUMMARY` 拼接，提升可维护性与本地复跑便利性
+- 工程化增量（2026-05-09 回归护栏补充）：新增 `backend/scripts/test_ci_export_consistency_summary.sh` fixture 自测并接入 `backend-e2e`（`Validate export consistency summary fixture tests`），覆盖成功/缺陷/日志缺失三类诊断语义
+- 工程化增量（2026-05-09 机器可读补充）：`backend/scripts/ci_export_consistency_summary.sh` 新增可选 JSON 输出参数，workflow 已产出 `/tmp/e2e-export-consistency-summary.json` 并随 artifact 上传
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 阈值告警已增加严重级别标签（`[P0]/[P1]`）与 `severity` 计数，便于团队按优先级分流处理导出回归
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 告警模板已与 `frontend-e2e` 对齐为 `total_alerts -> severity -> 分级明细`，并采用作用域标签格式（`[P*][backend-export-consistency]`）
@@ -102,6 +104,7 @@
 - 协同进展（2026-05-09 可见性补充）：`frontend-e2e` 的 main/shared/edge 导出分区断言计数已补 `context_files_detected` 字段，可在 CI Summary 直接核对“当前计数是否由对应分区上下文样本驱动”
 - 协同进展（2026-05-09 工程化补充）：`frontend-e2e` 导出诊断逻辑已从 workflow 内联脚本抽离至 `frontend/scripts/ci_export_diagnostics.sh`，并补齐 Bash 3 兼容（去除 `mapfile` 依赖），方便本地与 CI 共享同一诊断实现
 - 协同进展（2026-05-09 回归护栏补充）：`frontend-e2e` 已新增 `frontend/scripts/test_ci_export_diagnostics.sh` fixture 自测步骤（workflow: `Validate export diagnostics fixture tests`），用于在执行主回归前验证导出诊断脚本关键告警语义
+- 协同进展（2026-05-09 机器可读补充）：`frontend/scripts/ci_export_diagnostics.sh` 新增可选 JSON 输出参数，`frontend-e2e` 已产出 `/tmp/frontend-e2e-export-summary.json` 并随 artifact 上传
 - 协同进展（2026-05-08 补充）：`frontend-e2e` 导出摘要新增阈值告警（`threshold alerts`），当关键计数低于预期时输出 expected vs actual 异常项，便于后端与前端在 PR Summary 快速分流导出回归层级
 - 协同进展（2026-05-08 再补充）：`frontend-e2e` 阈值告警已增加严重级别标签（当前以 `[P1]` 标注导出诊断缺口）与 `severity` 计数，便于与后端告警视图保持一致
 - 协同进展（2026-05-08 再补充）：`frontend-e2e` 已补 `P0` 诊断失真判定（存在 `error-context` 但导出 API 路径提示为 0、或 UI/响应头双计数为 0；edge-cases 额外覆盖 404 语义提示为 0），用于优先暴露高风险诊断盲区

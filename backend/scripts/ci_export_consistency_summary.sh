@@ -3,12 +3,74 @@
 set -euo pipefail
 
 log_file="${1:-/tmp/e2e-export-consistency-8000.log}"
+json_out="${2:-}"
+
+status="ok"
+
+step_total_expected=0
+step_count=0
+ok_count=0
+passed_count=0
+task_export_ok=0
+session_export_ok=0
+shared_rag_ok=0
+cross_user_ok=0
+not_found_ok=0
+
+warning_count=0
+p0_warning_count=0
+p1_warning_count=0
+warning_messages=""
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+write_json_summary() {
+  local out_path="$1"
+  mkdir -p "$(dirname "${out_path}")"
+  cat > "${out_path}" <<JSON
+{
+  "status": "$(json_escape "${status}")",
+  "log_file": "$(json_escape "${log_file}")",
+  "step_total_expected": ${step_total_expected},
+  "steps_detected": ${step_count},
+  "ok_lines_detected": ${ok_count},
+  "pass_banner_detected": ${passed_count},
+  "task_export_consistency_ok": ${task_export_ok},
+  "session_export_consistency_ok": ${session_export_ok},
+  "shared_rag_semantics_ok": ${shared_rag_ok},
+  "cross_user_isolation_ok": ${cross_user_ok},
+  "not_found_semantics_ok": ${not_found_ok},
+  "warning_total": ${warning_count},
+  "warning_p0": ${p0_warning_count},
+  "warning_p1": ${p1_warning_count}
+}
+JSON
+}
+
+add_warning() {
+  local severity="$1"
+  local scope="$2"
+  local detail="$3"
+  warning_count=$((warning_count + 1))
+  if [ "${severity}" = "P0" ]; then
+    p0_warning_count=$((p0_warning_count + 1))
+  else
+    p1_warning_count=$((p1_warning_count + 1))
+  fi
+  warning_messages="${warning_messages}\n  - [${severity}][${scope}] ${detail}"
+}
 
 echo "## Export Consistency Snapshot"
 
 if [ ! -f "${log_file}" ]; then
+  status="log_missing"
   echo
   echo "- Export consistency log is missing."
+  if [ -n "${json_out}" ]; then
+    write_json_summary "${json_out}"
+  fi
   exit 0
 fi
 
@@ -31,24 +93,6 @@ session_export_ok=$(grep -Ec "${SESSION_EXPORT_REGEX}" "${log_file}" || true)
 shared_rag_ok=$(grep -Ec "${SHARED_RAG_REGEX}" "${log_file}" || true)
 cross_user_ok=$(grep -Ec "${CROSS_USER_REGEX}" "${log_file}" || true)
 not_found_ok=$(grep -Ec "${NOT_FOUND_REGEX}" "${log_file}" || true)
-
-warning_count=0
-p0_warning_count=0
-p1_warning_count=0
-warning_messages=""
-
-add_warning() {
-  local severity="$1"
-  local scope="$2"
-  local detail="$3"
-  warning_count=$((warning_count + 1))
-  if [ "${severity}" = "P0" ]; then
-    p0_warning_count=$((p0_warning_count + 1))
-  else
-    p1_warning_count=$((p1_warning_count + 1))
-  fi
-  warning_messages="${warning_messages}\n  - [${severity}][${scope}] ${detail}"
-}
 
 if ! [[ "${step_total_expected}" =~ ^[0-9]+$ ]] || [ "${step_total_expected}" -lt 1 ]; then
   add_warning "P0" "backend-export-consistency" "step_total_expected parse failed, got ${step_total_expected:-<empty>}"
@@ -102,3 +146,7 @@ else
 fi
 echo "## key lines"
 grep -E "${KEY_LINES_REGEX}" "${log_file}" || true
+
+if [ -n "${json_out}" ]; then
+  write_json_summary "${json_out}"
+fi

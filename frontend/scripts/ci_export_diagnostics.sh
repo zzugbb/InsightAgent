@@ -3,6 +3,7 @@
 set -euo pipefail
 
 results_dir="${1:-frontend/test-results}"
+json_out="${2:-}"
 
 echo "# frontend-e2e export diagnostics"
 echo
@@ -14,9 +15,20 @@ p0_warning_count=0
 p1_warning_count=0
 warning_messages=""
 
+main_context_count=0
+main_ui_hint_count=0
+main_header_hint_count=0
+main_api_hint_count=0
+
 shared_context_count=0
 shared_semantic_ok_count=0
 shared_expected_label="0 (no shared-kb error-context files)"
+
+edge_context_count=0
+edge_ui_hint_count=0
+edge_header_hint_count=0
+edge_api_hint_count=0
+edge_404_semantic_hints=0
 
 add_warning() {
   local severity="$1"
@@ -29,6 +41,43 @@ add_warning() {
     p1_warning_count=$((p1_warning_count + 1))
   fi
   warning_messages="${warning_messages}\n  - [${severity}][${scope}] ${detail}"
+}
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+write_json_summary() {
+  local out_path="$1"
+  mkdir -p "$(dirname "${out_path}")"
+  cat > "${out_path}" <<JSON
+{
+  "results_dir": "$(json_escape "${results_dir}")",
+  "main": {
+    "context_files_detected": ${main_context_count},
+    "ui_download_layer_hints": ${main_ui_hint_count},
+    "response_header_layer_hints": ${main_header_hint_count},
+    "export_api_path_hints": ${main_api_hint_count}
+  },
+  "shared": {
+    "context_files_detected": ${shared_context_count},
+    "shared_permission_semantic_ok": ${shared_semantic_ok_count},
+    "expected_label": "$(json_escape "${shared_expected_label}")"
+  },
+  "edge": {
+    "context_files_detected": ${edge_context_count},
+    "ui_download_layer_hints": ${edge_ui_hint_count},
+    "response_header_layer_hints": ${edge_header_hint_count},
+    "export_api_path_hints": ${edge_api_hint_count},
+    "export_404_semantic_hints": ${edge_404_semantic_hints}
+  },
+  "warnings": {
+    "total": ${warning_count},
+    "p0": ${p0_warning_count},
+    "p1": ${p1_warning_count}
+  }
+}
+JSON
 }
 
 print_matched_files() {
@@ -84,6 +133,9 @@ SHARED_KEY_LINES_REGEX='shared-|kb-governance-action-(clear|delete)|toBeDisabled
 
 if [ ! -d "${results_dir}" ]; then
   echo "No ${results_dir} directory found."
+  if [ -n "${json_out}" ]; then
+    write_json_summary "${json_out}"
+  fi
   exit 0
 fi
 
@@ -238,4 +290,8 @@ else
   echo "- total_alerts: 0 (all counters within expected range)"
   echo "- severity: P0=0, P1=0"
   echo "- shared_scope: workbench-main-path-shared-kb contexts=${shared_context_count}, shared_permission_semantic_ok=${shared_semantic_ok_count} (expected: ${shared_expected_label})"
+fi
+
+if [ -n "${json_out}" ]; then
+  write_json_summary "${json_out}"
 fi

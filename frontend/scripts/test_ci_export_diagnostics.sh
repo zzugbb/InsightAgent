@@ -63,11 +63,14 @@ main() {
   setup_fixture_success "${ok_dir}"
 
   local ok_out="${TMP_ROOT}/ok.out"
-  bash "${DIAG_SCRIPT}" "${ok_dir}" > "${ok_out}"
+  local ok_json="${TMP_ROOT}/ok.json"
+  bash "${DIAG_SCRIPT}" "${ok_dir}" "${ok_json}" > "${ok_out}"
 
   assert_contains "${ok_out}" "- total_alerts: 0 (all counters within expected range)"
   assert_contains "${ok_out}" "- context_files_detected: 1"
   assert_contains "${ok_out}" "- shared_scope: workbench-main-path-shared-kb contexts=1, shared_permission_semantic_ok=3 (expected: >=1 (when shared-kb error-context files exist))"
+  assert_contains "${ok_json}" "\"total\": 0"
+  assert_contains "${ok_json}" "\"shared_permission_semantic_ok\": 3"
 
   # scenario 2: missing API hint in main-path, expect P0/P1 alerts
   local bad_dir="${TMP_ROOT}/bad-results"
@@ -75,11 +78,15 @@ main() {
   setup_fixture_failure "${bad_dir}"
 
   local bad_out="${TMP_ROOT}/bad.out"
-  bash "${DIAG_SCRIPT}" "${bad_dir}" > "${bad_out}"
+  local bad_json="${TMP_ROOT}/bad.json"
+  bash "${DIAG_SCRIPT}" "${bad_dir}" "${bad_json}" > "${bad_out}"
 
   assert_contains "${bad_out}" "- total_alerts: 2"
   assert_contains "${bad_out}" "- [P0][workbench-main-path] export_api_path_hints expected >=1 when error-context exists, got 0"
   assert_contains "${bad_out}" "- [P1][workbench-main-path] export_api_path_hints expected >=1, got 0"
+  assert_contains "${bad_json}" "\"total\": 2"
+  assert_contains "${bad_json}" "\"p0\": 1"
+  assert_contains "${bad_json}" "\"p1\": 1"
 
   echo "ci_export_diagnostics fixture tests passed"
 }

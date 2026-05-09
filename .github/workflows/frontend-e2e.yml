@@ -155,7 +155,7 @@ jobs:
         if: always()
         run: |
           summary_file=/tmp/frontend-e2e-export-summary.md
-          bash frontend/scripts/ci_export_diagnostics.sh frontend/test-results | tee "${summary_file}"
+          bash frontend/scripts/ci_export_diagnostics.sh frontend/test-results /tmp/frontend-e2e-export-summary.json | tee "${summary_file}"
 
           {
             echo "### frontend-e2e export diagnostics"
@@ -172,4 +172,5 @@ jobs:
             frontend/test-results
             /tmp/frontend-e2e-failure-index.md
             /tmp/frontend-e2e-export-summary.md
+            /tmp/frontend-e2e-export-summary.json
           if-no-files-found: ignore

@@ -122,10 +122,13 @@ jobs:
             --timeout-prompt-words 250000 \
             | tee /tmp/e2e-timeout-8010.log
 
+      - name: Validate export consistency summary fixture tests
+        run: bash backend/scripts/test_ci_export_consistency_summary.sh
+
       - name: Summarize export consistency checks
         if: always()
         run: |
-          bash backend/scripts/ci_export_consistency_summary.sh /tmp/e2e-export-consistency-8000.log \
+          bash backend/scripts/ci_export_consistency_summary.sh /tmp/e2e-export-consistency-8000.log /tmp/e2e-export-consistency-summary.json \
             | tee /tmp/e2e-export-consistency-summary.txt
 
           {
@@ -175,6 +178,7 @@ jobs:
             /tmp/e2e-baseline-8000.log
             /tmp/e2e-export-consistency-8000.log
             /tmp/e2e-export-consistency-summary.txt
+            /tmp/e2e-export-consistency-summary.json
             /tmp/e2e-cancel-8000.log
             /tmp/e2e-timeout-8010.log
             /tmp/backend-e2e-diagnostics.txt
