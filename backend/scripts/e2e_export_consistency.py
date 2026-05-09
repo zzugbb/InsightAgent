@@ -113,6 +113,19 @@ def _register(base_url: str, email: str, password: str) -> dict[str, Any]:
     return response.json_body
 
 
+def _is_admin_token(base_url: str, token: str) -> bool:
+    response = _request(
+        method="GET",
+        url=f"{base_url}/api/auth/users?limit=1&offset=0",
+        token=token,
+    )
+    if response.status == 200:
+        return True
+    if response.status == 403:
+        return False
+    raise RuntimeError(f"unexpected /api/auth/users status: {response.status} {response.text}")
+
+
 def _extract_sse_event_names(raw: str) -> list[str]:
     names: list[str] = []
     for line in raw.splitlines():
@@ -150,11 +163,12 @@ def main() -> None:
     email = f"e2e_export_{suffix}@example.com"
     outsider_email = f"e2e_export_outsider_{suffix}@example.com"
 
-    print("[1/6] 注册并保存 mock 设置")
+    print("[1/7] 注册并保存 mock 设置")
     register = _register(base_url, email, password)
     access_token = str(register["access_token"])
     outsider_register = _register(base_url, outsider_email, password)
     outsider_access_token = str(outsider_register["access_token"])
+    is_admin = _is_admin_token(base_url, access_token)
 
     mock_payload = {
         "mode": "mock",
@@ -172,7 +186,7 @@ def main() -> None:
     _assert(save_mock.status == 200, f"save mock settings failed: {save_mock.text}")
     print("  - OK: auth + settings")
 
-    print("[2/6] 创建任务并跑完整流")
+    print("[2/7] 创建任务并跑完整流")
     create_task = _request(
         method="POST",
         url=f"{base_url}/api/tasks",
@@ -197,7 +211,82 @@ def main() -> None:
     _assert("done" in _extract_sse_event_names(stream.text), "task stream missing done")
     print("  - OK: task stream done")
 
-    print("[3/6] 任务导出一致性")
+    print("[3/7] shared-* 知识库跨角色语义与导出并存")
+    shared_kb_id = f"shared-e2e-export-{suffix}"
+    non_admin_write_shared = _request(
+        method="POST",
+        url=f"{base_url}/api/rag/ingest",
+        token=outsider_access_token,
+        payload={
+            "knowledge_base_id": shared_kb_id,
+            "documents": [
+                {
+                    "text": "non-admin should be forbidden to write shared kb",
+                    "source": "e2e_export_consistency_shared_non_admin",
+                },
+            ],
+            "chunk_size": 180,
+            "chunk_overlap": 40,
+        },
+    )
+    _assert(
+        non_admin_write_shared.status == 403,
+        (
+            "non-admin shared ingest should be forbidden: "
+            f"{non_admin_write_shared.status} {non_admin_write_shared.text}"
+        ),
+    )
+    if is_admin:
+        admin_write_shared = _request(
+            method="POST",
+            url=f"{base_url}/api/rag/ingest",
+            token=access_token,
+            payload={
+                "knowledge_base_id": shared_kb_id,
+                "documents": [
+                    {
+                        "text": "admin shared content for export-consistency e2e",
+                        "source": "e2e_export_consistency_shared_admin",
+                    },
+                ],
+                "chunk_size": 180,
+                "chunk_overlap": 40,
+            },
+        )
+        _assert(
+            admin_write_shared.status == 200,
+            (
+                "admin shared ingest should pass: "
+                f"{admin_write_shared.status} {admin_write_shared.text}"
+            ),
+        )
+        non_admin_query_shared = _request(
+            method="POST",
+            url=f"{base_url}/api/rag/query",
+            token=outsider_access_token,
+            payload={
+                "knowledge_base_id": shared_kb_id,
+                "query": "shared content",
+                "top_k": 3,
+            },
+        )
+        _assert(
+            non_admin_query_shared.status == 200 and isinstance(non_admin_query_shared.json_body, dict),
+            (
+                "non-admin shared query should pass after admin ingest: "
+                f"{non_admin_query_shared.status} {non_admin_query_shared.text}"
+            ),
+        )
+        _assert(
+            int(non_admin_query_shared.json_body.get("hit_count", 0) or 0) >= 1,
+            (
+                "non-admin shared query should return hit after admin ingest: "
+                f"{non_admin_query_shared.json_body}"
+            ),
+        )
+    print("  - OK: shared kb role semantics stay compatible with export checks")
+
+    print("[4/7] 任务导出一致性")
     task_export_json = _request(
         method="GET",
         url=f"{base_url}/api/tasks/{task_id}/export/json",
@@ -264,7 +353,7 @@ def main() -> None:
     _require_attachment_header(task_export_md_download, ".md")
     print("  - OK: task export json/markdown consistency + download")
 
-    print("[4/6] 会话导出一致性")
+    print("[5/7] 会话导出一致性")
     session_export_json = _request(
         method="GET",
         url=f"{base_url}/api/sessions/{session_id}/export/json",
@@ -358,7 +447,7 @@ def main() -> None:
     _require_attachment_header(session_export_md_download, ".md")
     print("  - OK: session export json/markdown consistency + download")
 
-    print("[5/6] 负例：跨用户导出隔离")
+    print("[6/7] 负例：跨用户导出隔离")
     task_cross_user = _request(
         method="GET",
         url=f"{base_url}/api/tasks/{task_id}/export/json",
@@ -377,7 +466,7 @@ def main() -> None:
     )
     print("  - OK: cross-user export isolation checks")
 
-    print("[6/6] 负例：跨资源不存在检查")
+    print("[7/7] 负例：跨资源不存在检查")
     task_not_found = _request(
         method="GET",
         url=f"{base_url}/api/tasks/not-exists/export/json",
@@ -397,6 +486,7 @@ def main() -> None:
     print("- task export json/markdown schema and summary consistency")
     print("- session export json/markdown stats consistency")
     print("- download=true content-disposition headers")
+    print("- shared-rag role semantics remain compatible with export flow")
     print("- cross-user export isolation responses")
     print("- export not-found responses")
 

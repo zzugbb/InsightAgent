@@ -319,6 +319,71 @@ test("workbench main path covers trace, rag and task/session export", async ({
   });
 });
 
+test("workbench main path keeps shared kb actions disabled for non-admin", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  const sharedKbId = `shared-main-path-${Date.now()}`;
+  const privateKbId = `kb-main-path-${Date.now()}`;
+  await page.route("**/api/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "pw-main-path-user",
+        email: auth.email,
+        display_name: "Playwright Main Path Non Admin",
+        role: "user",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  });
+  await page.route("**/api/rag/knowledge-bases", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_bases: [
+          {
+            knowledge_base_id: sharedKbId,
+            collection: "kb_shared_main_path_mock",
+            document_count: 2,
+          },
+          {
+            knowledge_base_id: privateKbId,
+            collection: "kb_private_main_path_mock",
+            document_count: 1,
+          },
+        ],
+        knowledge_base_count: 2,
+        chroma_url: "http://127.0.0.1:8001",
+        chroma_reachable: true,
+        error: null,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-knowledge-base").click();
+  await expect(page.locator(".knowledge-base-governance-ant-modal")).toBeVisible();
+
+  const sharedRow = page.locator("tr", { hasText: sharedKbId });
+  await expect(sharedRow).toBeVisible();
+  await expect(sharedRow.getByTestId("kb-governance-action-clear")).toBeDisabled();
+  await expect(sharedRow.getByTestId("kb-governance-action-delete")).toBeDisabled();
+
+  const privateRow = page.locator("tr", { hasText: privateKbId });
+  await expect(privateRow).toBeVisible();
+  await expect(privateRow.getByTestId("kb-governance-action-clear")).toBeEnabled();
+  await expect(privateRow.getByTestId("kb-governance-action-delete")).toBeEnabled();
+});
+
 test("running task can recover after reload and be cancelled", async ({
   page,
   request,

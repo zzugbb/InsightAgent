@@ -46,14 +46,18 @@
 - 协同进展（2026-05-08）：前端 `Workbench` 任务中心抽屉已将 Ant Design `Drawer` 的 `width` 属性迁移为 `size`，消除 antd 6 废弃警告；后端接口契约保持不变
 - 协同进展（2026-05-08）：前端已将任务详情导出与会话导出的下载实现收口到共享工具（`frontend/lib/export-download.ts`），统一鉴权下载错误语义与附件文件名解析；后端导出接口契约保持不变
 - 协同进展（2026-05-09）：前端知识库治理弹窗已接入 `currentUser.role`，普通用户对 `shared-*` 知识库清空/删除按钮禁用，并通过统一权限提示与后端 `403` 语义对齐
+- 协同进展（2026-05-09 补充）：前端 Playwright 已新增“非 admin 用户在 `shared-*` 知识库行上 clear/delete 按钮禁用”回归用例，验证 UI 权限态与后端角色化规则一致
+- 协同进展（2026-05-09 再补充）：前端 `workbench-main-path` 主链路也已补同语义断言（非 admin 共享库 clear/delete 禁用，私有库按钮保持可用），避免仅在单独 spec 覆盖而主链路遗漏
 - 协同进展：前端 Playwright 回归已对齐新入口（任务中心抽屉 + 新标签任务详情导出），旧的 Inspector 任务导出断言已替换；后端导出接口契约保持不变
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage
 - 协同进展：`session-export-lite` 首版已接入；新增 `GET /api/sessions/{session_id}/export/json` 与 `GET /api/sessions/{session_id}/export/markdown`，导出包含会话消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage 汇总
 - 阶段 5 增量：`remote-provider-hardening` 首轮已完成；Provider 运行时统一输出结构化错误码（401/403、429、5xx、网络、无效 JSON、空响应、SSE 中断），任务流 SSE `error` 事件透传 `code/fatal/retryable/detail/status_code`
 - 阶段 5 增量：`task-cancel-timeout` 首版已落地；新增取消接口与超时中断，任务流支持 `cancelled/timeout` 事件
 - 阶段 5 增量：`task-cancel-timeout` e2e 已补齐；新增 `scripts/e2e_task_cancel_timeout.py`，覆盖取消链路与超时链路（低 `TASK_TIMEOUT_SEC` 环境）
+- 阶段 5 增量（2026-05-09）：`e2e_main_path` 已补共享知识库权限回归（`shared-*` 普通用户写操作 `403`、共享库读能力稳定；若当前 e2e 账号具备 admin 权限则追加 admin 写共享库成功断言）
 - 阶段 5 增量：导出稳定性 e2e 已补齐；新增 `scripts/e2e_export_consistency.py`，覆盖任务/会话导出 JSON+Markdown 一致性、下载附件头、跨用户导出隔离 404 与不存在资源 404
 - 阶段 5 增量（2026-05-08）：`e2e_export_consistency` 新增导出 `Content-Type` 断言（JSON=`application/json`、Markdown=`text/markdown`，含 `download=true`），补强导出响应协议回归覆盖
+- 阶段 5 增量（2026-05-09 补充）：`e2e_export_consistency` 新增 `shared-*` 跨角色断言（非 admin 写共享库 `403`；当前账号为 admin 时补充“admin 写后普通用户可 query 命中”），确保共享库权限变更与导出回归脚本协同稳定
 - 工程化增量：后端 e2e CI 已扩展（`.github/workflows/backend-e2e.yml` 覆盖 `baseline/main-path/export-consistency/cancel-timeout`，已升级 `checkout`/`setup-python` 主版本以适配 GitHub Actions Node 24 运行时；Python **3.14** 与 `compose.full.yml`、根目录 `.python-version` 对齐）；并补失败快照归档（e2e 脚本输出落盘 + health/诊断采集 + artifact 上传）
 - 工程化增量（2026-05-08）：`backend-e2e` 新增 export consistency 摘要步骤，CI Summary 会输出关键检查点快照并归档 `/tmp/e2e-export-consistency-summary.txt`；并新增断言计数统计（steps/ok/pass/task-export/session-export/cross-user/not-found）用于快速定位回归类别；失败诊断中同步输出导出一致性日志 tail，便于回归定位
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级

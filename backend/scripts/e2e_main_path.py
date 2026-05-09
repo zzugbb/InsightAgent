@@ -21,7 +21,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Run InsightAgent main-path e2e checks: "
-            "auth -> settings validate/save -> task stream/trace -> RAG ingest/query -> exports."
+            "auth -> settings validate/save -> task stream/trace -> "
+            "RAG ingest/query -> shared-rag permissions -> exports."
         ),
     )
     parser.add_argument(
@@ -100,6 +101,19 @@ def _register(base_url: str, email: str, password: str) -> dict[str, Any]:
     return res.json_body
 
 
+def _is_admin_token(base_url: str, token: str) -> bool:
+    response = _request(
+        method="GET",
+        url=f"{base_url}/api/auth/users?limit=1&offset=0",
+        token=token,
+    )
+    if response.status == 200:
+        return True
+    if response.status == 403:
+        return False
+    raise RuntimeError(f"unexpected /api/auth/users status: {response.status} {response.text}")
+
+
 def _extract_sse_event_names(raw: str) -> list[str]:
     names: list[str] = []
     for line in raw.splitlines():
@@ -163,13 +177,14 @@ def main() -> None:
     email = f"e2e_main_{suffix}@example.com"
     kb_id = f"kb-main-{suffix}"
 
-    print("[1/7] 登录")
+    print("[1/8] 登录")
     register = _register(base_url, email, password)
     _assert("access_token" in register, "register missing access_token")
     access_token = str(register["access_token"])
+    is_admin = _is_admin_token(base_url, access_token)
     print("  - OK: register + access token")
 
-    print("[2/7] 模型配置校验与保存（mock）")
+    print("[2/8] 模型配置校验与保存（mock）")
     mock_payload = {
         "mode": "mock",
         "provider": "mock",
@@ -203,7 +218,7 @@ def main() -> None:
     )
     print("  - OK: validate + save mock mode")
 
-    print("[3/7] 发送消息并校验任务流/Trace")
+    print("[3/8] 发送消息并校验任务流/Trace")
     create_task = _request(
         method="POST",
         url=f"{base_url}/api/tasks",
@@ -282,7 +297,7 @@ def main() -> None:
     )
     print("  - OK: task stream done + trace/trace-delta available")
 
-    print("[4/7] RAG ingest/query")
+    print("[4/8] RAG ingest/query")
     ingest = _request(
         method="POST",
         url=f"{base_url}/api/rag/ingest",
@@ -321,7 +336,120 @@ def main() -> None:
     _assert(hit_count >= 1, f"rag query should return at least 1 hit, got {hit_count}")
     print("  - OK: rag ingest + rag query")
 
-    print("[5/7] 任务导出（JSON/Markdown）")
+    print("[5/8] shared-* 知识库权限语义")
+    shared_kb_id = f"shared-e2e-main-{suffix}"
+    shared_query = _request(
+        method="POST",
+        url=f"{base_url}/api/rag/query",
+        token=access_token,
+        payload={
+            "knowledge_base_id": shared_kb_id,
+            "query": "shared visibility check",
+            "top_k": 1,
+        },
+    )
+    _assert(
+        shared_query.status == 200 and isinstance(shared_query.json_body, dict),
+        f"shared rag query should be readable: {shared_query.status} {shared_query.text}",
+    )
+
+    non_admin_email = f"e2e_main_user_{suffix}@example.com"
+    non_admin_register = _register(base_url, non_admin_email, password)
+    non_admin_token = str(non_admin_register["access_token"])
+    non_admin_ingest_shared = _request(
+        method="POST",
+        url=f"{base_url}/api/rag/ingest",
+        token=non_admin_token,
+        payload={
+            "knowledge_base_id": shared_kb_id,
+            "documents": [
+                {
+                    "text": "non admin should not write shared kb",
+                    "source": "e2e_main_path_shared_guard",
+                },
+            ],
+            "chunk_size": 180,
+            "chunk_overlap": 40,
+        },
+    )
+    _assert(
+        non_admin_ingest_shared.status == 403,
+        (
+            "non-admin ingest shared kb should be forbidden: "
+            f"{non_admin_ingest_shared.status} {non_admin_ingest_shared.text}"
+        ),
+    )
+    non_admin_clear_shared = _request(
+        method="POST",
+        url=f"{base_url}/api/rag/knowledge-bases/{shared_kb_id}/clear",
+        token=non_admin_token,
+        payload={},
+    )
+    _assert(
+        non_admin_clear_shared.status == 403,
+        (
+            "non-admin clear shared kb should be forbidden: "
+            f"{non_admin_clear_shared.status} {non_admin_clear_shared.text}"
+        ),
+    )
+    non_admin_list = _request(
+        method="GET",
+        url=f"{base_url}/api/rag/knowledge-bases",
+        token=non_admin_token,
+    )
+    _assert(
+        non_admin_list.status == 200 and isinstance(non_admin_list.json_body, dict),
+        f"non-admin rag knowledge-bases list failed: {non_admin_list.status} {non_admin_list.text}",
+    )
+    if is_admin:
+        admin_ingest_shared = _request(
+            method="POST",
+            url=f"{base_url}/api/rag/ingest",
+            token=access_token,
+            payload={
+                "knowledge_base_id": shared_kb_id,
+                "documents": [
+                    {
+                        "text": "admin shared kb write probe",
+                        "source": "e2e_main_path_shared_admin",
+                    },
+                ],
+                "chunk_size": 180,
+                "chunk_overlap": 40,
+            },
+        )
+        _assert(
+            admin_ingest_shared.status == 200,
+            f"admin ingest shared kb should pass: {admin_ingest_shared.status} {admin_ingest_shared.text}",
+        )
+        non_admin_list_after_admin_write = _request(
+            method="GET",
+            url=f"{base_url}/api/rag/knowledge-bases",
+            token=non_admin_token,
+        )
+        _assert(
+            non_admin_list_after_admin_write.status == 200
+            and isinstance(non_admin_list_after_admin_write.json_body, dict),
+            (
+                "non-admin rag knowledge-bases list after admin write failed: "
+                f"{non_admin_list_after_admin_write.status} {non_admin_list_after_admin_write.text}"
+            ),
+        )
+        non_admin_list_items = non_admin_list_after_admin_write.json_body.get("knowledge_bases")
+        _assert(isinstance(non_admin_list_items, list), "rag knowledge_bases should be list")
+        _assert(
+            any(
+                isinstance(item, dict) and str(item.get("knowledge_base_id", "")) == shared_kb_id
+                for item in non_admin_list_items
+            ),
+            (
+                "non-admin should see admin-written shared kb in list: "
+                f"{non_admin_list_after_admin_write.json_body}"
+            ),
+        )
+    print("  - OK: shared kb read/write permissions")
+
+    print("[6/8] 任务导出（JSON/Markdown）")
     export_task_json = _request(
         method="GET",
         url=f"{base_url}/api/tasks/{task_id}/export/json",
@@ -350,7 +478,7 @@ def main() -> None:
     )
     print("  - OK: task exports")
 
-    print("[6/7] 会话导出（JSON/Markdown）")
+    print("[7/8] 会话导出（JSON/Markdown）")
     export_session_json = _request(
         method="GET",
         url=f"{base_url}/api/sessions/{session_id}/export/json",
@@ -379,7 +507,7 @@ def main() -> None:
     )
     print("  - OK: session exports")
 
-    print("[7/7] usage 汇总检查")
+    print("[8/8] usage 汇总检查")
     usage_global = _request(
         method="GET",
         url=f"{base_url}/api/tasks/usage/summary",
@@ -583,6 +711,7 @@ def main() -> None:
     print("- settings validate/save (mock)")
     print("- task stream + trace + delta")
     print("- rag ingest/query")
+    print("- shared rag permissions")
     print("- task export json/markdown")
     print("- session export json/markdown")
     print("- usage summaries")

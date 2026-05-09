@@ -90,6 +90,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 稳定性补丁：后端 `mock` provider 新增测试触发慢流标记（`[mock-slow]` / `[mock-slow-ms=30]`），用于稳定复现取消恢复场景，普通请求无行为变化
 - 阶段 5 协同：后端 `e2e_export_consistency` 已扩展覆盖跨用户导出隔离 404（task/session），导出稳定性（任务/会话 JSON+Markdown 一致性 + 下载头 + 权限边界）已有自动回归兜底
 - 阶段 5 协同（2026-05-08）：后端 `e2e_export_consistency` 已补导出 `Content-Type` 断言（JSON/Markdown + 下载场景），前端导出链路可更早发现 MIME 类型回归
+- 阶段 5 协同（2026-05-09）：后端 `e2e_export_consistency` 已补 `shared-*` 跨角色断言（非 admin 写共享库 `403`；admin 写后普通用户可读），可更早发现“共享权限改动影响导出主链路”的回归
 - 阶段 5 协同：后端 `backend-e2e` 已新增失败快照归档（日志/health/诊断 artifact），前端联调排障可直接下载复盘
 - 阶段 5 协同（2026-05-08）：后端 `backend-e2e` 已新增 export consistency CI Summary 快照与摘要 artifact（`/tmp/e2e-export-consistency-summary.txt`），并补充断言计数统计（steps/ok/pass/task-export/session-export/cross-user/not-found）；失败诊断追加导出一致性日志 tail，便于快速核对导出链路回归
 - 阶段 5 协同（2026-05-08 补充）：后端 `backend-e2e` export summary 已新增 `Threshold alerts` 阈值告警行；当导出检查计数偏离预期时，CI Summary 会直接给出异常计数项明细，便于前端联调快速判断是否为导出协议/权限语义回归
@@ -123,6 +124,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 协同进展（2026-05-09）：后端 `auth` 用户摘要已补 `role`（`admin/user`）并新增 admin-only `GET /api/auth/users`，为后续前端角色化入口治理提供契约基础
 - 协同进展（2026-05-09）：后端 RAG 已接入 `shared-*` 共享知识库权限语义（admin 可写共享库，普通用户只读），前端后续可按 `role` 补治理入口显隐
 - 阶段 5 收口（2026-05-09）：知识库治理弹窗已接入 `currentUser.role`；当知识库 ID 命中 `shared-*` 且当前用户非 admin 时，清空/删除按钮禁用并显示权限提示，避免无效写操作
+- 阶段 5 回归补齐（2026-05-09）：Playwright 新增“非 admin 用户在 `shared-*` 知识库行上 clear/delete 按钮禁用”用例，确保前端权限态与后端 `403` 语义一致
+- 阶段 5 回归补齐（2026-05-09 补充）：`workbench-main-path` 主链路已补 `shared-*` 权限断言（非 admin 共享库按钮禁用 + 私有库按钮可用），避免权限语义仅在单独治理 spec 覆盖
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
 - 侧栏账户展示收口：用户信息已融合到左下角“设置”弹窗顶部，并采用与“主题/主题色/语言”同款行样式（图标 + 标题 + 值）展示，便于确认当前登录身份
 - running task 恢复：持久化当前会话 ID，刷新后自动回到上次会话；若该会话存在 `pending/running` 任务，会自动复用 `/api/tasks/{task_id}/stream` 重连流继续展示，并在聊天区显示恢复状态提示条
