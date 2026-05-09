@@ -100,6 +100,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 门禁 JSON 补充（2026-05-09）：`ci_diag_guard` 已支持 `--json-summary-file`，`frontend-e2e` 现产出 `/tmp/frontend-e2e-export-guard-summary.json` 并上传 artifact，便于后续自动汇总门禁结果
 - 阶段 5 CI 触发覆盖补充（2026-05-09）：`frontend-e2e` 的 `workflow_dispatch` 新增 `export_diag_strict_level=auto/none/p0/any`，支持手动触发覆盖自动策略；summary 已输出 `dispatch_override` 与 `policy_source`
 - 阶段 5 CI 总览聚合补充（2026-05-09）：新增 `scripts/ci_export_diagnostics_overview.sh`（配套 `scripts/test_ci_export_diagnostics_overview.sh`），workflow 已接入 `Build export diagnostics overview` 并产出 `/tmp/frontend-e2e-export-overview.md/.json`
+- 阶段 5 CI 策略解析收口（2026-05-09）：新增 `scripts/ci_resolve_diag_strict_level.sh`（配套 `scripts/test_ci_resolve_diag_strict_level.sh`），`frontend-e2e` 的 strict-level 选择逻辑改为脚本解析，统一 `event/ref/default/main_push/dispatch_override` 决策口径
+- 阶段 5 CI fixture 入口收口（2026-05-09）：新增 `scripts/test_ci_e2e_tooling.sh` 聚合测试入口，`frontend-e2e` 已改为单步骤 `Validate e2e tooling fixtures (frontend scope)`，统一执行 common + frontend 相关 fixture 测试
 - 阶段 5 CI 告警增强（2026-05-08）：`frontend-e2e` 导出摘要新增 `threshold alerts` 阈值告警；若主链路或边界链路计数低于预期，会直接输出 expected vs actual，便于快速定位“下载层 / 响应头层 / 404 语义层”回归
 - 阶段 5 CI 告警分级（2026-05-08）：`frontend-e2e` 导出阈值告警已补严重级别标签（当前为 `[P1]`）与 `severity` 计数，并与 `backend-e2e` 告警视图对齐，便于跨端统一判读
 - 阶段 5 CI 告警分级补强（2026-05-08）：`frontend-e2e` 已新增 `P0` 判定规则：若存在 `error-context` 但 `export_api_path_hints=0`，或 UI 下载层/响应头层提示同时为 0（edge-cases 还包含 `export_404_semantic_hints=0`），则升级为 `P0` 告警
@@ -125,6 +127,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同（2026-05-09 门禁 JSON 补充）：后端同步产出 `/tmp/backend-e2e-export-guard-summary.json`，前后端 guard 摘要均支持 Markdown + JSON 双格式消费
 - 阶段 5 协同（2026-05-09 触发覆盖补充）：后端同步接入 `workflow_dispatch` 的 `export_diag_strict_level` 覆盖能力，并输出 `dispatch_override/policy_source`，前后端触发策略一致
 - 阶段 5 协同（2026-05-09 总览聚合补充）：后端同步接入 overview 聚合并产出 `/tmp/backend-e2e-export-overview.md/.json`，支持跨端统一判读诊断与门禁状态
+- 阶段 5 协同（2026-05-09 策略解析收口）：后端同步改为调用 `ci_resolve_diag_strict_level.sh` 并接入解析 fixture 测试，前后端门禁策略解析逻辑保持一致
+- 阶段 5 协同（2026-05-09 fixture 入口收口）：后端同步改为 `Validate e2e tooling fixtures (backend scope)` 并由 `test_ci_e2e_tooling.sh` 聚合执行 common + backend 相关测试，前后端 workflow fixture 校验入口一致
 - 阶段 5 协同（2026-05-08 补充）：后端 `backend-e2e` export summary 已新增 `Threshold alerts` 阈值告警行；当导出检查计数偏离预期时，CI Summary 会直接给出异常计数项明细，便于前端联调快速判断是否为导出协议/权限语义回归
 
 ## 当前已有内容

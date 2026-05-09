@@ -161,11 +161,8 @@ jobs:
             fi
           } > /tmp/frontend-e2e-failure-index.md
 
-      - name: Validate export diagnostics fixture tests
-        run: bash frontend/scripts/test_ci_export_diagnostics.sh
-
-      - name: Validate diagnostics overview fixture tests
-        run: bash scripts/test_ci_export_diagnostics_overview.sh
+      - name: Validate e2e tooling fixtures (frontend scope)
+        run: bash scripts/test_ci_e2e_tooling.sh frontend
 
       - name: Summarize export assertion diagnostics
         if: always()
@@ -183,17 +180,14 @@ jobs:
         id: frontend_diag_guard
         run: |
           dispatch_override="${{ github.event.inputs.export_diag_strict_level || '' }}"
-          strict_level="${FRONTEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}"
-          policy_source="default"
-
-          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            strict_level="${FRONTEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}"
-            policy_source="main_push"
-          fi
-          if [ -n "${dispatch_override}" ] && [ "${dispatch_override}" != "auto" ]; then
-            strict_level="${dispatch_override}"
-            policy_source="workflow_dispatch_input"
-          fi
+          resolved=$(bash scripts/ci_resolve_diag_strict_level.sh \
+            --event-name "${GITHUB_EVENT_NAME}" \
+            --ref "${GITHUB_REF}" \
+            --default-level "${FRONTEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}" \
+            --main-push-level "${FRONTEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}" \
+            --dispatch-override "${dispatch_override:-auto}")
+          strict_level=$(printf '%s\n' "${resolved}" | sed -n 's/^strict_level=//p')
+          policy_source=$(printf '%s\n' "${resolved}" | sed -n 's/^policy_source=//p')
 
           bash scripts/ci_diag_guard.sh \
             --json /tmp/frontend-e2e-export-summary.json \

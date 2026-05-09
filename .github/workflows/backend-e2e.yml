@@ -137,11 +137,8 @@ jobs:
             --timeout-prompt-words 250000 \
             | tee /tmp/e2e-timeout-8010.log
 
-      - name: Validate export consistency summary fixture tests
-        run: bash backend/scripts/test_ci_export_consistency_summary.sh
-
-      - name: Validate diagnostics overview fixture tests
-        run: bash scripts/test_ci_export_diagnostics_overview.sh
+      - name: Validate e2e tooling fixtures (backend scope)
+        run: bash scripts/test_ci_e2e_tooling.sh backend
 
       - name: Summarize export consistency checks
         if: always()
@@ -159,17 +156,14 @@ jobs:
         id: backend_diag_guard
         run: |
           dispatch_override="${{ github.event.inputs.export_diag_strict_level || '' }}"
-          strict_level="${BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}"
-          policy_source="default"
-
-          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            strict_level="${BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}"
-            policy_source="main_push"
-          fi
-          if [ -n "${dispatch_override}" ] && [ "${dispatch_override}" != "auto" ]; then
-            strict_level="${dispatch_override}"
-            policy_source="workflow_dispatch_input"
-          fi
+          resolved=$(bash scripts/ci_resolve_diag_strict_level.sh \
+            --event-name "${GITHUB_EVENT_NAME}" \
+            --ref "${GITHUB_REF}" \
+            --default-level "${BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}" \
+            --main-push-level "${BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}" \
+            --dispatch-override "${dispatch_override:-auto}")
+          strict_level=$(printf '%s\n' "${resolved}" | sed -n 's/^strict_level=//p')
+          policy_source=$(printf '%s\n' "${resolved}" | sed -n 's/^policy_source=//p')
 
           bash scripts/ci_diag_guard.sh \
             --json /tmp/e2e-export-consistency-summary.json \

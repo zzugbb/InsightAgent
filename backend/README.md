@@ -72,6 +72,8 @@
 - 工程化增量（2026-05-09 门禁 JSON 补充）：`ci_diag_guard` 已支持 `--json-summary-file`，`backend-e2e` 现产出 `/tmp/backend-e2e-export-guard-summary.json` 并上传 artifact，便于后续机器汇总门禁结果
 - 工程化增量（2026-05-09 触发覆盖补充）：`backend-e2e` 的 `workflow_dispatch` 新增 `export_diag_strict_level=auto/none/p0/any`，手动触发可覆盖门禁策略；summary 额外输出 `dispatch_override` 与 `policy_source`
 - 工程化增量（2026-05-09 总览聚合补充）：新增 `scripts/ci_export_diagnostics_overview.sh` 与 `scripts/test_ci_export_diagnostics_overview.sh`，`backend-e2e` 已接入 overview 生成步骤并产出 `/tmp/backend-e2e-export-overview.md/.json`
+- 工程化增量（2026-05-09 策略解析收口）：新增 `scripts/ci_resolve_diag_strict_level.sh` 与 `scripts/test_ci_resolve_diag_strict_level.sh`，`backend-e2e` 的 strict-level 选择逻辑改为调用脚本解析，统一 `event/ref/default/main_push/dispatch_override` 决策口径
+- 工程化增量（2026-05-09 fixture 入口收口）：新增 `scripts/test_ci_e2e_tooling.sh` 聚合测试入口，`backend-e2e` 已改为单步骤 `Validate e2e tooling fixtures (backend scope)`，统一执行 common + backend 相关 fixture 测试
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 阈值告警已增加严重级别标签（`[P0]/[P1]`）与 `severity` 计数，便于团队按优先级分流处理导出回归
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 告警模板已与 `frontend-e2e` 对齐为 `total_alerts -> severity -> 分级明细`，并采用作用域标签格式（`[P*][backend-export-consistency]`）
@@ -117,6 +119,8 @@
 - 协同进展（2026-05-09 门禁 JSON 补充）：`frontend-e2e` 同步产出 `/tmp/frontend-e2e-export-guard-summary.json`，前后端 guard 摘要现同时具备 Markdown + JSON 两种消费形态
 - 协同进展（2026-05-09 触发覆盖补充）：`frontend-e2e` 同步接入 `workflow_dispatch` 的 `export_diag_strict_level` 覆盖能力，并在 summary 输出 `dispatch_override/policy_source`，前后端触发策略保持一致
 - 协同进展（2026-05-09 总览聚合补充）：`frontend-e2e` 同步接入 overview 聚合并产出 `/tmp/frontend-e2e-export-overview.md/.json`，前后端均支持“诊断 + 门禁”一页总览
+- 协同进展（2026-05-09 策略解析收口）：`frontend-e2e` 同步改为调用 `ci_resolve_diag_strict_level.sh` 解析 strict-level，并接入同名 fixture 测试步骤，前后端门禁策略解析逻辑完全一致
+- 协同进展（2026-05-09 fixture 入口收口）：`frontend-e2e` 同步改为 `Validate e2e tooling fixtures (frontend scope)`，由 `test_ci_e2e_tooling.sh` 统一调度 common + frontend 相关 fixture 测试，前后端 workflow 测试入口形态一致
 - 协同进展（2026-05-08 补充）：`frontend-e2e` 导出摘要新增阈值告警（`threshold alerts`），当关键计数低于预期时输出 expected vs actual 异常项，便于后端与前端在 PR Summary 快速分流导出回归层级
 - 协同进展（2026-05-08 再补充）：`frontend-e2e` 阈值告警已增加严重级别标签（当前以 `[P1]` 标注导出诊断缺口）与 `severity` 计数，便于与后端告警视图保持一致
 - 协同进展（2026-05-08 再补充）：`frontend-e2e` 已补 `P0` 诊断失真判定（存在 `error-context` 但导出 API 路径提示为 0、或 UI/响应头双计数为 0；edge-cases 额外覆盖 404 语义提示为 0），用于优先暴露高风险诊断盲区
