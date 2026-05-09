@@ -43,6 +43,7 @@ type SidebarProps = {
     id: string;
     email: string;
     display_name?: string | null;
+    role?: string;
   } | null;
   onLogout?: () => void;
 };

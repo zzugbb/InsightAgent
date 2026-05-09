@@ -6,16 +6,38 @@ from pydantic import BaseModel, Field, field_validator
 from app.api.deps import get_current_user
 from app.services.audit_service import safe_record_audit_event
 from app.services.chroma_rag_service import (
+    SHARED_RAG_SCOPE_USER_ID,
     clear_knowledge_base,
     delete_knowledge_base,
     get_knowledge_base_status,
     ingest_knowledge_documents,
-    list_knowledge_bases,
+    is_shared_knowledge_base_id,
+    list_knowledge_bases_with_shared,
     query_knowledge_base,
 )
 
 
 router = APIRouter()
+
+
+def _is_admin_user(current_user: dict) -> bool:
+    return str(current_user.get("role") or "").strip().lower() == "admin"
+
+
+def _resolve_rag_owner_user_id(
+    *,
+    current_user: dict,
+    knowledge_base_id: str,
+    mutate: bool,
+) -> str:
+    if not is_shared_knowledge_base_id(knowledge_base_id):
+        return str(current_user["id"])
+    if mutate and not _is_admin_user(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="shared knowledge base is admin-only for write operations",
+        )
+    return SHARED_RAG_SCOPE_USER_ID
 
 
 class RagDocumentInput(BaseModel):
@@ -110,8 +132,13 @@ def get_rag_status(
     knowledge_base_id: str = Query(default="default", max_length=64),
     current_user: dict = Depends(get_current_user),
 ) -> RagStatusResponse:
+    owner_user_id = _resolve_rag_owner_user_id(
+        current_user=current_user,
+        knowledge_base_id=knowledge_base_id,
+        mutate=False,
+    )
     raw = get_knowledge_base_status(
-        user_id=str(current_user["id"]),
+        user_id=owner_user_id,
         knowledge_base_id=knowledge_base_id,
     )
     return RagStatusResponse(**raw)
@@ -121,7 +148,10 @@ def get_rag_status(
 def get_rag_knowledge_bases(
     current_user: dict = Depends(get_current_user),
 ) -> RagKnowledgeBaseListResponse:
-    raw = list_knowledge_bases(user_id=str(current_user["id"]))
+    raw = list_knowledge_bases_with_shared(
+        user_id=str(current_user["id"]),
+        include_shared=True,
+    )
     return RagKnowledgeBaseListResponse(**raw)
 
 
@@ -134,9 +164,14 @@ def post_rag_clear_knowledge_base(
     current_user: dict = Depends(get_current_user),
 ) -> RagKnowledgeBaseMutateResponse:
     user_id = str(current_user["id"])
+    owner_user_id = _resolve_rag_owner_user_id(
+        current_user=current_user,
+        knowledge_base_id=knowledge_base_id,
+        mutate=True,
+    )
     try:
         raw = clear_knowledge_base(
-            user_id=user_id,
+            user_id=owner_user_id,
             knowledge_base_id=knowledge_base_id,
         )
     except ValueError as exc:
@@ -152,6 +187,7 @@ def post_rag_clear_knowledge_base(
             "collection": raw.get("collection"),
             "deleted_chunks": raw.get("deleted_chunks"),
             "existed": raw.get("existed"),
+            "scope": "shared" if owner_user_id == SHARED_RAG_SCOPE_USER_ID else "private",
         },
     )
     return RagKnowledgeBaseMutateResponse(**raw)
@@ -166,9 +202,14 @@ def delete_rag_knowledge_base(
     current_user: dict = Depends(get_current_user),
 ) -> RagKnowledgeBaseMutateResponse:
     user_id = str(current_user["id"])
+    owner_user_id = _resolve_rag_owner_user_id(
+        current_user=current_user,
+        knowledge_base_id=knowledge_base_id,
+        mutate=True,
+    )
     try:
         raw = delete_knowledge_base(
-            user_id=user_id,
+            user_id=owner_user_id,
             knowledge_base_id=knowledge_base_id,
         )
     except ValueError as exc:
@@ -184,6 +225,7 @@ def delete_rag_knowledge_base(
             "collection": raw.get("collection"),
             "deleted_chunks": raw.get("deleted_chunks"),
             "existed": raw.get("existed"),
+            "scope": "shared" if owner_user_id == SHARED_RAG_SCOPE_USER_ID else "private",
         },
     )
     return RagKnowledgeBaseMutateResponse(**raw)
@@ -195,10 +237,15 @@ def post_rag_ingest(
     current_user: dict = Depends(get_current_user),
 ) -> RagIngestResponse:
     user_id = str(current_user["id"])
+    owner_user_id = _resolve_rag_owner_user_id(
+        current_user=current_user,
+        knowledge_base_id=payload.knowledge_base_id,
+        mutate=True,
+    )
     docs = [x.model_dump(exclude_none=True) for x in payload.documents]
     try:
         raw = ingest_knowledge_documents(
-            user_id=user_id,
+            user_id=owner_user_id,
             knowledge_base_id=payload.knowledge_base_id,
             documents=docs,
             chunk_size=payload.chunk_size,
@@ -220,6 +267,7 @@ def post_rag_ingest(
             "document_count": raw.get("document_count"),
             "chunk_size": payload.chunk_size,
             "chunk_overlap": payload.chunk_overlap,
+            "scope": "shared" if owner_user_id == SHARED_RAG_SCOPE_USER_ID else "private",
         },
     )
     return RagIngestResponse(**raw)
@@ -230,9 +278,14 @@ def post_rag_query(
     payload: RagQueryRequest,
     current_user: dict = Depends(get_current_user),
 ) -> RagQueryResponse:
+    owner_user_id = _resolve_rag_owner_user_id(
+        current_user=current_user,
+        knowledge_base_id=payload.knowledge_base_id,
+        mutate=False,
+    )
     try:
         raw = query_knowledge_base(
-            user_id=str(current_user["id"]),
+            user_id=owner_user_id,
             knowledge_base_id=payload.knowledge_base_id,
             query_text=payload.query,
             top_k=payload.top_k,

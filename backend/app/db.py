@@ -148,6 +148,7 @@ def initialize_postgres_database() -> None:
                 id TEXT PRIMARY KEY,
                 email TEXT NOT NULL UNIQUE,
                 display_name TEXT,
+                role TEXT NOT NULL DEFAULT 'user',
                 password_salt TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
                 created_at TEXT NOT NULL,
@@ -248,6 +249,14 @@ def initialize_postgres_database() -> None:
         _ensure_postgres_column(connection, "sessions", "user_id", "TEXT")
         _ensure_postgres_column(connection, "tasks", "user_id", "TEXT")
         _ensure_postgres_column(connection, "messages", "user_id", "TEXT")
+        _ensure_postgres_column(connection, "users", "role", "TEXT NOT NULL DEFAULT 'user'")
+        connection.execute(
+            """
+            UPDATE users
+            SET role = 'user'
+            WHERE role IS NULL OR TRIM(role) = ''
+            """
+        )
         _ensure_common_indexes(connection)
         connection.commit()
 

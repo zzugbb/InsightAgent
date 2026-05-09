@@ -10,6 +10,9 @@ import chromadb
 
 from app.config import get_settings
 
+SHARED_RAG_SCOPE_USER_ID = "__shared__"
+SHARED_RAG_KB_PREFIX = "shared-"
+
 
 def _http_client() -> chromadb.HttpClient:
     settings = get_settings()
@@ -29,6 +32,11 @@ def normalize_knowledge_base_id(value: str | None) -> str:
     if not normalized:
         return "default"
     return normalized[:48]
+
+
+def is_shared_knowledge_base_id(value: str | None) -> bool:
+    kb_id = normalize_knowledge_base_id(value)
+    return kb_id.startswith(SHARED_RAG_KB_PREFIX)
 
 
 def _normalize_user_scope(user_id: str) -> str:
@@ -324,6 +332,34 @@ def list_knowledge_bases(*, user_id: str) -> dict[str, object]:
     rows.sort(key=lambda item: str(item["knowledge_base_id"]))
     result["knowledge_bases"] = rows
     result["knowledge_base_count"] = len(rows)
+    return result
+
+
+def list_knowledge_bases_with_shared(
+    *,
+    user_id: str,
+    include_shared: bool,
+) -> dict[str, object]:
+    result = list_knowledge_bases(user_id=user_id)
+    if not include_shared:
+        return result
+    if user_id == SHARED_RAG_SCOPE_USER_ID:
+        return result
+    shared = list_knowledge_bases(user_id=SHARED_RAG_SCOPE_USER_ID)
+    own_rows = result.get("knowledge_bases")
+    shared_rows = shared.get("knowledge_bases")
+    if not isinstance(own_rows, list):
+        own_rows = []
+    if not isinstance(shared_rows, list):
+        shared_rows = []
+    merged = own_rows + shared_rows
+    merged.sort(key=lambda item: str(item.get("knowledge_base_id") or ""))
+    result["knowledge_bases"] = merged
+    result["knowledge_base_count"] = len(merged)
+    if not result.get("error") and shared.get("error"):
+        result["error"] = shared.get("error")
+    if shared.get("chroma_reachable") is False:
+        result["chroma_reachable"] = False
     return result
 
 

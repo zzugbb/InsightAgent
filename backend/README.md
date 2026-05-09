@@ -9,6 +9,8 @@
 - W3：已完成（mock 范围）
 - W4：已完成（RAG + Token/Cost + compose.full）
 - 阶段 5 增量：`full-data-auth` 首版已落地（JWT、用户隔离、用户级设置与密钥加密存储）
+- 阶段 5 增量（2026-05-09）：`RBAC-lite` 基础已落地（`users.role` 字段、首个注册用户自动 admin、`require_user_roles` 依赖、admin-only `GET /api/auth/users`）
+- 阶段 5 增量（2026-05-09）：`rag-rbac-lite` 已落地：`shared-*` 共享知识库命名空间 + 角色化权限（admin 可写共享库，普通用户对共享库只读；个人知识库继续按 `user_id` 隔离可读写）
 - 阶段 5 增量：最小会话管理已落地（refresh token 轮换、会话查询/撤销、退出当前/全部会话）
 - 阶段 5 增量：审计事件扩展已落地（`login/logout/refresh/settings_update/settings_validate/task_create/task_cancel/task_timeout/task_failed/rag_ingest/rag_kb_clear/rag_kb_delete` 写入 `audit_logs`）
 - 阶段 5 增量：PostgreSQL 迁移主线已完成运行时收敛（后端运行时使用 PostgreSQL + 保留平迁脚本）
@@ -43,6 +45,7 @@
 - 协同进展：`full-trace-session` 样式微调已完成；运行调试弹窗改为上下单列并移除分区高亮底色，后端接口契约保持不变
 - 协同进展（2026-05-08）：前端 `Workbench` 任务中心抽屉已将 Ant Design `Drawer` 的 `width` 属性迁移为 `size`，消除 antd 6 废弃警告；后端接口契约保持不变
 - 协同进展（2026-05-08）：前端已将任务详情导出与会话导出的下载实现收口到共享工具（`frontend/lib/export-download.ts`），统一鉴权下载错误语义与附件文件名解析；后端导出接口契约保持不变
+- 协同进展（2026-05-09）：前端知识库治理弹窗已接入 `currentUser.role`，普通用户对 `shared-*` 知识库清空/删除按钮禁用，并通过统一权限提示与后端 `403` 语义对齐
 - 协同进展：前端 Playwright 回归已对齐新入口（任务中心抽屉 + 新标签任务详情导出），旧的 Inspector 任务导出断言已替换；后端导出接口契约保持不变
 - 协同进展：`trace-export-json-md` 首版已接入；新增 `GET /api/tasks/{task_id}/export/json` 与 `GET /api/tasks/{task_id}/export/markdown`，导出包含任务元信息、task-linked 消息、TraceStep、RAG chunks、usage
 - 协同进展：`session-export-lite` 首版已接入；新增 `GET /api/sessions/{session_id}/export/json` 与 `GET /api/sessions/{session_id}/export/markdown`，导出包含会话消息、任务摘要、Trace 预览、RAG 命中统计、会话级 usage 汇总
@@ -166,6 +169,7 @@
 - `POST /api/auth/logout-all`
 - `GET /api/auth/sessions`
 - `DELETE /api/auth/sessions/{session_id}`
+- `GET /api/auth/users`（admin only）
 - 审计事件：`login`、`logout`、`refresh`、`settings_update`、`settings_validate`、`task_create`、`task_cancel`、`task_timeout`、`task_failed`、`rag_ingest`、`rag_kb_clear`、`rag_kb_delete`
 - 审计查询：`GET /api/audit/logs?event_type=&session_id=&task_id=&start_at=&end_at=&limit=&offset=`（前端可按当前页/全量筛选结果导出）
 - `GET /api/auth/me`
@@ -197,6 +201,7 @@
 - `GET /api/rag/knowledge-bases`
 - `POST /api/rag/knowledge-bases/{knowledge_base_id}/clear`
 - `DELETE /api/rag/knowledge-bases/{knowledge_base_id}`
+- RAG 权限语义（2026-05-09）：`knowledge_base_id` 命中 `shared-*` 前缀时进入共享命名空间；`admin` 可执行 ingest/clear/delete，非 admin 仅允许 status/query/list
 - `GET /api/tasks/{task_id}`
 - `POST /api/tasks/{task_id}/cancel`
 - `GET /api/tasks/{task_id}/export/json`

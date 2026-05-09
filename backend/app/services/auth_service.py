@@ -9,6 +9,9 @@ from app.security import hash_password, verify_password
 
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+USER_ROLE_ADMIN = "admin"
+USER_ROLE_USER = "user"
+ALLOWED_USER_ROLES = {USER_ROLE_ADMIN, USER_ROLE_USER}
 
 
 def _now_iso() -> str:
@@ -23,7 +26,20 @@ def is_valid_email(email: str) -> bool:
     return bool(EMAIL_RE.match(email))
 
 
-def create_user(*, email: str, password: str, display_name: str | None = None) -> dict:
+def normalize_user_role(role: str | None) -> str:
+    value = (role or USER_ROLE_USER).strip().lower()
+    if value not in ALLOWED_USER_ROLES:
+        return USER_ROLE_USER
+    return value
+
+
+def create_user(
+    *,
+    email: str,
+    password: str,
+    display_name: str | None = None,
+    role: str | None = None,
+) -> dict:
     normalized = normalize_email(email)
     if not is_valid_email(normalized):
         raise ValueError("invalid email format")
@@ -42,13 +58,19 @@ def create_user(*, email: str, password: str, display_name: str | None = None) -
         ).fetchone()
         if exists is not None:
             raise ValueError("email already exists")
+        count_row = connection.execute("SELECT COUNT(*) AS cnt FROM users").fetchone()
+        user_count = int((count_row or {}).get("cnt") or 0)
+        resolved_role = normalize_user_role(role)
+        # 首个注册用户自动授予 admin，作为最小 RBAC 引导入口。
+        if user_count == 0:
+            resolved_role = USER_ROLE_ADMIN
 
         connection.execute(
             """
-            INSERT INTO users(id, email, display_name, password_salt, password_hash, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users(id, email, display_name, role, password_salt, password_hash, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (user_id, normalized, name, salt, digest, now, now),
+            (user_id, normalized, name, resolved_role, salt, digest, now, now),
         )
         connection.commit()
 
@@ -62,13 +84,17 @@ def get_user_by_id(user_id: str) -> dict | None:
     with get_db_connection() as connection:
         row = connection.execute(
             """
-            SELECT id, email, display_name, created_at, updated_at
+            SELECT id, email, display_name, role, created_at, updated_at
             FROM users
             WHERE id = ?
             """,
             (user_id,),
         ).fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    record = dict(row)
+    record["role"] = normalize_user_role(record.get("role"))
+    return record
 
 
 def get_user_auth_row_by_email(email: str) -> dict | None:
@@ -76,13 +102,17 @@ def get_user_auth_row_by_email(email: str) -> dict | None:
     with get_db_connection() as connection:
         row = connection.execute(
             """
-            SELECT id, email, display_name, password_salt, password_hash, created_at, updated_at
+            SELECT id, email, display_name, role, password_salt, password_hash, created_at, updated_at
             FROM users
             WHERE email = ?
             """,
             (normalized,),
         ).fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    record = dict(row)
+    record["role"] = normalize_user_role(record.get("role"))
+    return record
 
 
 def authenticate_user(*, email: str, password: str) -> dict | None:
@@ -99,6 +129,29 @@ def authenticate_user(*, email: str, password: str) -> dict | None:
         "id": str(row["id"]),
         "email": str(row["email"]),
         "display_name": row["display_name"],
+        "role": normalize_user_role(row.get("role")),
         "created_at": str(row["created_at"]),
         "updated_at": str(row["updated_at"]),
     }
+
+
+def list_users(*, limit: int, offset: int) -> tuple[list[dict], int]:
+    with get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, email, display_name, role, created_at, updated_at
+            FROM users
+            ORDER BY created_at DESC
+            LIMIT ?
+            OFFSET ?
+            """,
+            (limit, offset),
+        ).fetchall()
+        total_row = connection.execute("SELECT COUNT(*) AS cnt FROM users").fetchone() or {}
+    total = int(total_row.get("cnt") or 0)
+    items: list[dict] = []
+    for row in rows:
+        record = dict(row)
+        record["role"] = normalize_user_role(record.get("role"))
+        items.append(record)
+    return items, total

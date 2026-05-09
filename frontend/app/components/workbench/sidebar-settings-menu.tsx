@@ -48,6 +48,7 @@ type SidebarSettingsMenuProps = {
     id: string;
     email: string;
     display_name?: string | null;
+    role?: string;
   } | null;
 };
 
@@ -532,6 +533,7 @@ export function SidebarSettingsMenu({
       <KnowledgeBaseGovernanceModal
         open={knowledgeBaseOpen}
         onClose={() => setKnowledgeBaseOpen(false)}
+        currentUser={currentUser}
       />
       <RuntimeDebugModal
         open={runtimeDebugOpen}

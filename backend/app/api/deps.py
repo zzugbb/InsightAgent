@@ -49,3 +49,21 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+def require_user_roles(*roles: str):
+    allowed = {role.strip().lower() for role in roles if role and role.strip()}
+    if not allowed:
+        raise RuntimeError("require_user_roles needs at least one role")
+
+    def _dependency(current_user: dict = Depends(get_current_user)) -> dict:
+        role = str(current_user.get("role") or "user").strip().lower()
+        if role not in allowed:
+            raise HTTPException(status_code=403, detail="insufficient role")
+        return current_user
+
+    return _dependency
+
+
+def get_current_admin(current_user: dict = Depends(require_user_roles("admin"))) -> dict:
+    return current_user

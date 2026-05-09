@@ -120,6 +120,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 模型设置回显修复：若后端当前已保存为 `remote`，切换回 `remote` 时会回显已保存 `provider/model/base_url`
 - 聊天消息显示修复：发送后立即显示用户临时消息；assistant 流式消息仅在生成中/失败态显示，避免与落库历史消息重复
 - 会话鉴权：登录返回 `access_token + refresh_token + session_id`；退出时调用后端 `/api/auth/logout` 撤销当前会话 refresh token
+- 协同进展（2026-05-09）：后端 `auth` 用户摘要已补 `role`（`admin/user`）并新增 admin-only `GET /api/auth/users`，为后续前端角色化入口治理提供契约基础
+- 协同进展（2026-05-09）：后端 RAG 已接入 `shared-*` 共享知识库权限语义（admin 可写共享库，普通用户只读），前端后续可按 `role` 补治理入口显隐
+- 阶段 5 收口（2026-05-09）：知识库治理弹窗已接入 `currentUser.role`；当知识库 ID 命中 `shared-*` 且当前用户非 admin 时，清空/删除按钮禁用并显示权限提示，避免无效写操作
 - 账号切换防串：退出/401/重新登录时会清空 React Query 与流式轨迹状态，避免跨账号显示残留
 - 侧栏账户展示收口：用户信息已融合到左下角“设置”弹窗顶部，并采用与“主题/主题色/语言”同款行样式（图标 + 标题 + 值）展示，便于确认当前登录身份
 - running task 恢复：持久化当前会话 ID，刷新后自动回到上次会话；若该会话存在 `pending/running` 任务，会自动复用 `/api/tasks/{task_id}/stream` 重连流继续展示，并在聊天区显示恢复状态提示条

@@ -21,11 +21,18 @@ const API_BASE_URL =
 type KnowledgeBaseGovernanceModalProps = {
   open: boolean;
   onClose: () => void;
+  currentUser?: {
+    id: string;
+    email: string;
+    display_name?: string | null;
+    role?: string;
+  } | null;
 };
 
 export function KnowledgeBaseGovernanceModal({
   open,
   onClose,
+  currentUser,
 }: KnowledgeBaseGovernanceModalProps) {
   const { message } = App.useApp();
   const t = useMessages();
@@ -79,6 +86,10 @@ export function KnowledgeBaseGovernanceModal({
   });
 
   const rows = listQuery.data?.knowledge_bases ?? [];
+  const isAdmin =
+    String(currentUser?.role ?? "")
+      .trim()
+      .toLowerCase() === "admin";
 
   const columns: ColumnsType<RagKnowledgeBaseSummary> = [
     {
@@ -109,11 +120,13 @@ export function KnowledgeBaseGovernanceModal({
       className: "kb-actions-col",
       width: 118,
       render: (_, row) => {
+        const isSharedKb = row.knowledge_base_id.startsWith("shared-");
         const clearBusy =
           clearMutation.isPending && clearMutation.variables === row.knowledge_base_id;
         const deleteBusy =
           deleteMutation.isPending && deleteMutation.variables === row.knowledge_base_id;
-        const disabled = clearBusy || deleteBusy;
+        const roleRestricted = isSharedKb && !isAdmin;
+        const disabled = clearBusy || deleteBusy || roleRestricted;
         return (
           <div className="kb-row-actions">
             <Popconfirm
@@ -129,6 +142,7 @@ export function KnowledgeBaseGovernanceModal({
                 type="text"
                 loading={clearBusy}
                 disabled={disabled}
+                title={roleRestricted ? t.errors.auth : undefined}
                 className="kb-action-btn"
                 data-testid="kb-governance-action-clear"
               >
@@ -153,6 +167,7 @@ export function KnowledgeBaseGovernanceModal({
                 className="kb-action-btn"
                 loading={deleteBusy}
                 disabled={disabled}
+                title={roleRestricted ? t.errors.auth : undefined}
                 data-testid="kb-governance-action-delete"
               >
                 {deleteBusy

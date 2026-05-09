@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_admin, get_current_user
 from app.services.auth_session_service import (
     issue_auth_tokens,
     list_auth_sessions,
@@ -12,7 +12,7 @@ from app.services.auth_session_service import (
     revoke_auth_session_by_id,
     revoke_auth_session_by_refresh_token,
 )
-from app.services.auth_service import authenticate_user, create_user, is_valid_email
+from app.services.auth_service import authenticate_user, create_user, is_valid_email, list_users
 from app.services.audit_service import record_audit_event
 
 
@@ -23,8 +23,17 @@ class UserSummary(BaseModel):
     id: str
     email: str
     display_name: str | None = None
+    role: str = "user"
     created_at: str
     updated_at: str
+
+
+class UserListResponse(BaseModel):
+    items: list[UserSummary]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 
 class RegisterRequest(BaseModel):
@@ -278,3 +287,20 @@ def delete_auth_session(
 @router.get("/me", response_model=UserSummary)
 def me(current_user: dict = Depends(get_current_user)) -> UserSummary:
     return UserSummary(**current_user)
+
+
+@router.get("/users", response_model=UserListResponse)
+def get_users(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10_000),
+    _current_admin: dict = Depends(get_current_admin),
+) -> UserListResponse:
+    rows, total = list_users(limit=limit, offset=offset)
+    items = [UserSummary(**row) for row in rows]
+    return UserListResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + len(items) < total,
+    )
