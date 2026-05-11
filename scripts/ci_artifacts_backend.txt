@@ -11,6 +11,8 @@
 /tmp/backend-e2e-export-guard-summary.json
 /tmp/backend-e2e-export-overview.md
 /tmp/backend-e2e-export-overview.json
+/tmp/backend-e2e-artifact-guard-summary.md
+/tmp/backend-e2e-artifact-guard-summary.json
 /tmp/e2e-cancel-8000.log
 /tmp/e2e-timeout-8010.log
 /tmp/backend-e2e-diagnostics.txt

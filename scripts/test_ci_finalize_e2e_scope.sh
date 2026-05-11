@@ -79,15 +79,27 @@ LIST
     --overview-json-out "${TMP_DIR}/backend-overview.json" \
     --artifacts-list-file "${TMP_DIR}/artifacts.list" \
     --artifacts-stage-dir "${TMP_DIR}/backend-stage" \
+    --artifact-name "backend-custom-artifact" \
     --github-output-file "${TMP_DIR}/backend.ghout" \
     --quiet > "${TMP_DIR}/backend.out"
 
   assert_file "${TMP_DIR}/backend-stage/_manifest.txt"
+  assert_contains "artifact_name=backend-custom-artifact" "${TMP_DIR}/backend.out"
   assert_contains "artifacts_stage_dir=${TMP_DIR}/backend-stage" "${TMP_DIR}/backend.out"
+  assert_contains "artifact_included_count=1" "${TMP_DIR}/backend.out"
+  assert_contains "artifact_missing_count=1" "${TMP_DIR}/backend.out"
+  assert_contains "artifact_manifest=${TMP_DIR}/backend-stage/_manifest.txt" "${TMP_DIR}/backend.out"
+  assert_contains "artifact_name=backend-custom-artifact" "${TMP_DIR}/backend.ghout"
   assert_contains "artifacts_stage_dir=${TMP_DIR}/backend-stage" "${TMP_DIR}/backend.ghout"
   assert_contains "scope=backend" "${TMP_DIR}/backend.ghout"
+  assert_contains "artifact_included_count=1" "${TMP_DIR}/backend.ghout"
+  assert_contains "artifact_missing_count=1" "${TMP_DIR}/backend.ghout"
+  assert_contains "artifact_manifest=${TMP_DIR}/backend-stage/_manifest.txt" "${TMP_DIR}/backend.ghout"
   assert_contains "### backend-e2e export consistency" "${TMP_DIR}/backend-summary.md"
   assert_contains "### backend-e2e export diagnostics guard" "${TMP_DIR}/backend-summary.md"
+  assert_contains "### backend-e2e artifact stage" "${TMP_DIR}/backend-summary.md"
+  assert_contains "- included_count: 1" "${TMP_DIR}/backend-summary.md"
+  assert_contains "- missing_count: 1" "${TMP_DIR}/backend-summary.md"
 
   expect_pass bash "${SCRIPT_PATH}" \
     --scope frontend \
@@ -106,15 +118,27 @@ LIST
     --overview-json-out "${TMP_DIR}/frontend-overview.json" \
     --artifacts-list-file "${TMP_DIR}/artifacts.list" \
     --artifacts-stage-dir "${TMP_DIR}/frontend-stage" \
+    --artifact-name "frontend-custom-artifact" \
     --github-output-file "${TMP_DIR}/frontend.ghout" \
     --quiet > "${TMP_DIR}/frontend.out"
 
   assert_file "${TMP_DIR}/frontend-stage/_manifest.txt"
+  assert_contains "artifact_name=frontend-custom-artifact" "${TMP_DIR}/frontend.out"
   assert_contains "artifacts_stage_dir=${TMP_DIR}/frontend-stage" "${TMP_DIR}/frontend.out"
+  assert_contains "artifact_included_count=1" "${TMP_DIR}/frontend.out"
+  assert_contains "artifact_missing_count=1" "${TMP_DIR}/frontend.out"
+  assert_contains "artifact_manifest=${TMP_DIR}/frontend-stage/_manifest.txt" "${TMP_DIR}/frontend.out"
+  assert_contains "artifact_name=frontend-custom-artifact" "${TMP_DIR}/frontend.ghout"
   assert_contains "artifacts_stage_dir=${TMP_DIR}/frontend-stage" "${TMP_DIR}/frontend.ghout"
   assert_contains "scope=frontend" "${TMP_DIR}/frontend.ghout"
+  assert_contains "artifact_included_count=1" "${TMP_DIR}/frontend.ghout"
+  assert_contains "artifact_missing_count=1" "${TMP_DIR}/frontend.ghout"
+  assert_contains "artifact_manifest=${TMP_DIR}/frontend-stage/_manifest.txt" "${TMP_DIR}/frontend.ghout"
   assert_contains "### frontend-e2e export diagnostics" "${TMP_DIR}/frontend-summary.md"
   assert_contains "### frontend-e2e export diagnostics guard" "${TMP_DIR}/frontend-summary.md"
+  assert_contains "### frontend-e2e artifact stage" "${TMP_DIR}/frontend-summary.md"
+  assert_contains "- included_count: 1" "${TMP_DIR}/frontend-summary.md"
+  assert_contains "- missing_count: 1" "${TMP_DIR}/frontend-summary.md"
 
   expect_pass bash "${SCRIPT_PATH}" \
     --scope frontend \
@@ -126,6 +150,8 @@ LIST
     --dry-run > "${TMP_DIR}/dry.out"
   assert_contains "[dry-run] bash scripts/ci_export_diag_flow.sh --scope frontend" "${TMP_DIR}/dry.out"
   assert_contains "[dry-run] bash scripts/ci_stage_artifacts.sh --list-file scripts/ci_artifacts_frontend.txt" "${TMP_DIR}/dry.out"
+  assert_contains "[dry-run] artifact_name=playwright-report" "${TMP_DIR}/dry.out"
+  assert_contains "[dry-run] artifacts_stage_dir=/tmp/frontend-e2e-artifacts-stage" "${TMP_DIR}/dry.out"
 
   echo "ci_finalize_e2e_scope tests passed"
 }

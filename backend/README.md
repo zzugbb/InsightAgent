@@ -85,6 +85,11 @@
 - 工程化增量（2026-05-09 finalize 编排收口）：新增 `scripts/ci_finalize_e2e_scope.sh`（配套 `scripts/test_ci_finalize_e2e_scope.sh`），将 `backend-e2e` 的 diagnostics flow 与 artifact stage 合并为单步骤调用，降低收尾阶段参数分叉风险
 - 工程化增量（2026-05-09 失败日志展示收口）：新增 `scripts/ci_print_log_files.sh`（配套 `scripts/test_ci_print_log_files.sh`），`backend-e2e` 的失败日志展示步骤已改为脚本调用，统一文件缺失兜底与输出格式
 - 工程化增量（2026-05-09 upload 路径解耦）：`ci_finalize_e2e_scope.sh` 新增 `--github-output-file` 输出，`backend-e2e` 的 upload path 改为读取 `finalize_backend.outputs.artifacts_stage_dir`，减少 YAML 中 stage 目录硬编码
+- 工程化增量（2026-05-09 upload 命名解耦）：`backend-e2e` 的 upload `name` 字段改为读取 `finalize_backend.outputs.artifact_name`；artifact 命名与 staging 路径现统一由 finalize 输出驱动
+- 工程化增量（2026-05-11 finalize workflow 入口收口）：新增 `scripts/ci_finalize_e2e_for_workflow.sh`（配套 `scripts/test_ci_finalize_e2e_for_workflow.sh`），`backend-e2e` 的 finalize 步骤已改为单入口脚本调用，统一 strict-level 默认值、事件上下文与 artifact 命名参数解析
+- 工程化增量（2026-05-11 artifact stage 指标补齐）：`ci_finalize_e2e_scope.sh` 现在会输出 `artifact_included_count/artifact_missing_count/artifact_manifest`，并在 summary 追加 `backend-e2e artifact stage` 小节，便于快速判断 artifact 缺失来源于 staging 还是 upload 阶段
+- 工程化增量（2026-05-11 artifact stage 门禁补齐）：新增 `scripts/ci_assert_artifact_stage_health.sh`（配套 `scripts/test_ci_assert_artifact_stage_health.sh`），`backend-e2e` 新增 `Evaluate backend artifact stage guard` 步骤并产出 `/tmp/backend-e2e-artifact-guard-summary.md/.json`，默认 `strict-level=warn` 可在后续按需升级
+- 工程化增量（2026-05-11 artifact stage 策略解析收口）：新增 `scripts/ci_resolve_artifact_stage_strict_level.sh`（配套 `scripts/test_ci_resolve_artifact_stage_strict_level.sh`），`backend-e2e` 的 artifact guard strict-level 已改为脚本按事件自动解析，并支持 `workflow_dispatch` 输入覆盖（`auto/none/warn/fail-on-empty/fail-on-missing`）；当前策略为 `push@main=fail-on-empty`、其余 `warn`
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 阈值告警已增加严重级别标签（`[P0]/[P1]`）与 `severity` 计数，便于团队按优先级分流处理导出回归
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 告警模板已与 `frontend-e2e` 对齐为 `total_alerts -> severity -> 分级明细`，并采用作用域标签格式（`[P*][backend-export-consistency]`）

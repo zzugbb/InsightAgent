@@ -8,3 +8,5 @@ frontend/test-results
 /tmp/frontend-e2e-export-guard-summary.json
 /tmp/frontend-e2e-export-overview.md
 /tmp/frontend-e2e-export-overview.json
+/tmp/frontend-e2e-artifact-guard-summary.md
+/tmp/frontend-e2e-artifact-guard-summary.json

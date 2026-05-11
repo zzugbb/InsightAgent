@@ -13,6 +13,17 @@ on:
           - none
           - p0
           - any
+      artifact_stage_strict_level:
+        description: "Override artifact stage strict level (auto/none/warn/fail-on-empty/fail-on-missing)"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - none
+          - warn
+          - fail-on-empty
+          - fail-on-missing
   pull_request:
     paths:
       - "backend/**"
@@ -29,6 +40,8 @@ on:
 env:
   BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT: "p0"
   BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH: "any"
+  BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT: "warn"
+  BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "fail-on-empty"
 
 jobs:
   e2e:
@@ -116,15 +129,49 @@ jobs:
         if: always()
         run: |
           dispatch_override="${{ github.event.inputs.export_diag_strict_level || '' }}"
-          bash scripts/ci_finalize_e2e_scope.sh \
+          bash scripts/ci_finalize_e2e_for_workflow.sh \
             --scope backend \
+            --dispatch-override "${dispatch_override:-auto}" \
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --github-output-file "$GITHUB_OUTPUT" \
+            --quiet
+
+      - name: Evaluate backend artifact stage guard
+        if: always()
+        run: |
+          artifact_dispatch_override="${{ github.event.inputs.artifact_stage_strict_level || '' }}"
+          artifact_level_out=$(bash scripts/ci_resolve_artifact_stage_strict_level.sh \
             --event-name "${GITHUB_EVENT_NAME}" \
             --ref "${GITHUB_REF}" \
-            --default-level "${BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}" \
-            --main-push-level "${BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}" \
-            --dispatch-override "${dispatch_override:-auto}" \
-            --github-output-file "$GITHUB_OUTPUT" \
-            --summary-file "$GITHUB_STEP_SUMMARY"
+            --default-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}" \
+            --main-push-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH}" \
+            --dispatch-override "${artifact_dispatch_override:-auto}")
+          artifact_strict_level=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="strict_level"{print $2}')
+          artifact_policy_source=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="policy_source"{print $2}')
+          if [ -z "${artifact_strict_level}" ] || [ -z "${artifact_policy_source}" ]; then
+            echo "failed to parse artifact strict-level resolver output" >&2
+            echo "${artifact_level_out}" >&2
+            exit 2
+          fi
+          bash scripts/ci_assert_artifact_stage_health.sh \
+            --scope backend \
+            --included-count "${{ steps.finalize_backend.outputs.artifact_included_count }}" \
+            --missing-count "${{ steps.finalize_backend.outputs.artifact_missing_count }}" \
+            --stage-dir "${{ steps.finalize_backend.outputs.artifacts_stage_dir }}" \
+            --manifest "${{ steps.finalize_backend.outputs.artifact_manifest }}" \
+            --strict-level "${artifact_strict_level}" \
+            --label "backend-e2e-artifact-stage" \
+            --summary-file /tmp/backend-e2e-artifact-guard-summary.md \
+            --json-summary-file /tmp/backend-e2e-artifact-guard-summary.json \
+            --quiet
+          {
+            echo "### backend-e2e artifact strict policy"
+            echo "- policy: default=${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}, main_push=${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH}"
+            echo "- dispatch_override: ${artifact_dispatch_override:-auto}"
+            echo "- policy_source: ${artifact_policy_source}"
+            echo "- selected_strict_level: ${artifact_strict_level}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/backend-e2e-artifact-guard-summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect diagnostics on failure
         if: failure()
@@ -148,6 +195,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: backend-e2e-artifacts
+          name: ${{ steps.finalize_backend.outputs.artifact_name }}
           path: ${{ steps.finalize_backend.outputs.artifacts_stage_dir }}
           if-no-files-found: ignore
