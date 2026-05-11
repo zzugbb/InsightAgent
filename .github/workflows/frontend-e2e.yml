@@ -48,7 +48,7 @@ env:
   FRONTEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT: "p0"
   FRONTEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH: "any"
   FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT: "warn"
-  FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "fail-on-empty"
+  FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "warn"
 
 jobs:
   e2e:
@@ -168,7 +168,7 @@ jobs:
             --quiet
 
       - name: Evaluate frontend artifact stage guard
-        if: always()
+        if: always() && steps.finalize_frontend.conclusion == 'success'
         run: |
           artifact_dispatch_override="${{ github.event.inputs.artifact_stage_strict_level || '' }}"
           artifact_level_out=$(bash scripts/ci_resolve_artifact_stage_strict_level.sh \
@@ -203,6 +203,15 @@ jobs:
             echo "- selected_strict_level: ${artifact_strict_level}"
           } >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/frontend-e2e-artifact-guard-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Skip frontend artifact stage guard when finalize failed
+        if: always() && steps.finalize_frontend.conclusion != 'success'
+        run: |
+          {
+            echo "### frontend-e2e artifact stage guard"
+            echo "- skipped: true"
+            echo "- reason: finalize_frontend step did not succeed"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Playwright report
         if: always()

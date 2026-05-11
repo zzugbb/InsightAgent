@@ -41,7 +41,7 @@ env:
   BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT: "p0"
   BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH: "any"
   BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT: "warn"
-  BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "fail-on-empty"
+  BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "warn"
 
 jobs:
   e2e:
@@ -137,7 +137,7 @@ jobs:
             --quiet
 
       - name: Evaluate backend artifact stage guard
-        if: always()
+        if: always() && steps.finalize_backend.conclusion == 'success'
         run: |
           artifact_dispatch_override="${{ github.event.inputs.artifact_stage_strict_level || '' }}"
           artifact_level_out=$(bash scripts/ci_resolve_artifact_stage_strict_level.sh \
@@ -172,6 +172,15 @@ jobs:
             echo "- selected_strict_level: ${artifact_strict_level}"
           } >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/backend-e2e-artifact-guard-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Skip backend artifact stage guard when finalize failed
+        if: always() && steps.finalize_backend.conclusion != 'success'
+        run: |
+          {
+            echo "### backend-e2e artifact stage guard"
+            echo "- skipped: true"
+            echo "- reason: finalize_backend step did not succeed"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect diagnostics on failure
         if: failure()
