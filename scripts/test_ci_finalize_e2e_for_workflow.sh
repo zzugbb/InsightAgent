@@ -35,7 +35,8 @@ run_tests() {
   trap 'rm -rf "${TMP_DIR}"' EXIT
 
   expect_fail bash "${SCRIPT_PATH}"
-  expect_fail bash "${SCRIPT_PATH}" --scope backend --summary-file "${TMP_DIR}/missing-event.md"
+  expect_fail env -u GITHUB_EVENT_NAME -u GITHUB_REF \
+    bash "${SCRIPT_PATH}" --scope backend --summary-file "${TMP_DIR}/missing-event.md"
 
   expect_pass env \
     GITHUB_EVENT_NAME=workflow_dispatch \

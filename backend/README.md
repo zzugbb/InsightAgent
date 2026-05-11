@@ -91,6 +91,7 @@
 - 工程化增量（2026-05-11 artifact stage 门禁补齐）：新增 `scripts/ci_assert_artifact_stage_health.sh`（配套 `scripts/test_ci_assert_artifact_stage_health.sh`），`backend-e2e` 新增 `Evaluate backend artifact stage guard` 步骤并产出 `/tmp/backend-e2e-artifact-guard-summary.md/.json`，默认 `strict-level=warn` 可在后续按需升级
 - 工程化增量（2026-05-11 artifact stage 策略解析收口）：新增 `scripts/ci_resolve_artifact_stage_strict_level.sh`（配套 `scripts/test_ci_resolve_artifact_stage_strict_level.sh`），`backend-e2e` 的 artifact guard strict-level 已改为脚本按事件自动解析，并支持 `workflow_dispatch` 输入覆盖（`auto/none/warn/fail-on-empty/fail-on-missing`）；当前策略为 `push@main=warn`、其余 `warn`
 - 工程化增量（2026-05-11 artifact stage 防误伤补丁）：`backend-e2e` 的 artifact guard 改为仅在 `finalize_backend` 成功时执行；当 finalize 失败时写入 `skipped` 摘要而不追加二次失败，便于聚焦首个根因
+- 工程化增量（2026-05-11 fixture 稳定性修复）：`scripts/test_ci_finalize_e2e_for_workflow.sh` 的缺失事件上下文断言改为显式清空 `GITHUB_EVENT_NAME/GITHUB_REF` 后执行，修复 CI 环境默认变量导致的 `expected fail but passed` 假阳性
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 阈值告警已增加严重级别标签（`[P0]/[P1]`）与 `severity` 计数，便于团队按优先级分流处理导出回归
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 告警模板已与 `frontend-e2e` 对齐为 `total_alerts -> severity -> 分级明细`，并采用作用域标签格式（`[P*][backend-export-consistency]`）
