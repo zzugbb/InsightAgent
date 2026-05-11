@@ -1,5 +1,6 @@
 frontend/playwright-report
 frontend/test-results
+/tmp/frontend-e2e-backend.log
 /tmp/frontend-e2e-failure-index.md
 /tmp/frontend-e2e-export-summary.md
 /tmp/frontend-e2e-export-summary.json

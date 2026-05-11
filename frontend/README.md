@@ -110,6 +110,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 失败索引脚本化（2026-05-09）：新增 `scripts/ci_build_frontend_failure_index.sh`（配套 `scripts/test_ci_build_frontend_failure_index.sh`），`frontend-e2e` 的 Playwright 失败索引生成已改为脚本调用，统一输出结构并减少 workflow 内联 shell 体积
 - 阶段 5 CI 执行入口收口（2026-05-09）：新增 `scripts/ci_run_frontend_e2e.sh`（配套 `scripts/test_ci_run_frontend_e2e.sh`），`frontend-e2e` 的 smoke/full/rerun 执行步骤已统一为脚本调用；支持 `--phase` 与 `--dry-run`，便于本地语义校验与命令参数维护
 - 阶段 5 CI backend 启动收口（2026-05-09）：新增 `scripts/ci_boot_backend_instance.sh`（配套 `scripts/test_ci_boot_backend_instance.sh`），`frontend-e2e` 的 backend 启动与健康等待已合并为单入口脚本调用，减少 workflow 步骤分叉
+- 阶段 5 CI finalize 编排收口（2026-05-09）：新增 `scripts/ci_finalize_e2e_scope.sh`（配套 `scripts/test_ci_finalize_e2e_scope.sh`），`frontend-e2e` 的导出诊断与 artifact stage 已合并为单步骤 finalize 调用，降低收尾配置维护成本
+- 阶段 5 CI 失败日志展示收口（2026-05-09）：新增 `scripts/ci_print_log_files.sh`（配套 `scripts/test_ci_print_log_files.sh`），`frontend-e2e` 的 backend 失败日志展示已改为脚本调用；同时 `/tmp/frontend-e2e-backend.log` 已纳入 frontend artifact 清单
+- 阶段 5 CI upload 路径解耦（2026-05-09）：`ci_finalize_e2e_scope.sh` 新增 `--github-output-file` 输出，`frontend-e2e` 的 upload path 改为读取 `finalize_frontend.outputs.artifacts_stage_dir`，减少 workflow 中 stage 路径硬编码
 - 阶段 5 CI 告警增强（2026-05-08）：`frontend-e2e` 导出摘要新增 `threshold alerts` 阈值告警；若主链路或边界链路计数低于预期，会直接输出 expected vs actual，便于快速定位“下载层 / 响应头层 / 404 语义层”回归
 - 阶段 5 CI 告警分级（2026-05-08）：`frontend-e2e` 导出阈值告警已补严重级别标签（当前为 `[P1]`）与 `severity` 计数，并与 `backend-e2e` 告警视图对齐，便于跨端统一判读
 - 阶段 5 CI 告警分级补强（2026-05-08）：`frontend-e2e` 已新增 `P0` 判定规则：若存在 `error-context` 但 `export_api_path_hints=0`，或 UI 下载层/响应头层提示同时为 0（edge-cases 还包含 `export_404_semantic_hints=0`），则升级为 `P0` 告警

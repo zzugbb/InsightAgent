@@ -111,26 +111,19 @@ jobs:
       - name: Validate e2e tooling fixtures (backend scope)
         run: bash scripts/test_ci_e2e_tooling.sh backend
 
-      - name: Run export diagnostics flow
+      - name: Finalize backend diagnostics and artifacts
+        id: finalize_backend
         if: always()
         run: |
           dispatch_override="${{ github.event.inputs.export_diag_strict_level || '' }}"
-          bash scripts/ci_export_diag_flow.sh \
+          bash scripts/ci_finalize_e2e_scope.sh \
             --scope backend \
-            --source-path /tmp/e2e-export-consistency-8000.log \
-            --diagnostics-markdown-out /tmp/e2e-export-consistency-summary.txt \
-            --diagnostics-json-out /tmp/e2e-export-consistency-summary.json \
-            --guard-markdown-out /tmp/backend-e2e-export-guard-summary.md \
-            --guard-json-out /tmp/backend-e2e-export-guard-summary.json \
-            --overview-markdown-out /tmp/backend-e2e-export-overview.md \
-            --overview-json-out /tmp/backend-e2e-export-overview.json \
             --event-name "${GITHUB_EVENT_NAME}" \
             --ref "${GITHUB_REF}" \
             --default-level "${BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT}" \
             --main-push-level "${BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH}" \
             --dispatch-override "${dispatch_override:-auto}" \
-            --label backend-e2e-export \
-            --overview-label backend-e2e \
+            --github-output-file "$GITHUB_OUTPUT" \
             --summary-file "$GITHUB_STEP_SUMMARY"
 
       - name: Collect diagnostics on failure
@@ -146,22 +139,15 @@ jobs:
       - name: Show backend logs on failure
         if: failure()
         run: |
-          echo "===== backend-8000.log ====="
-          cat /tmp/backend-8000.log || true
-          echo "===== backend-8010.log ====="
-          cat /tmp/backend-8010.log || true
-
-      - name: Stage backend e2e artifacts
-        if: always()
-        run: |
-          bash scripts/ci_stage_artifacts.sh \
-            --list-file scripts/ci_artifacts_backend.txt \
-            --output-dir /tmp/backend-e2e-artifacts-stage
+          bash scripts/ci_print_log_files.sh \
+            --title "backend e2e backend logs" \
+            --file /tmp/backend-8000.log \
+            --file /tmp/backend-8010.log
 
       - name: Upload backend e2e artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: backend-e2e-artifacts
-          path: /tmp/backend-e2e-artifacts-stage
+          path: ${{ steps.finalize_backend.outputs.artifacts_stage_dir }}
           if-no-files-found: ignore
