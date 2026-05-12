@@ -145,16 +145,29 @@ jobs:
         if: always() && steps.finalize_backend.conclusion == 'success'
         run: |
           artifact_dispatch_override="${{ github.event.inputs.artifact_stage_strict_level || '' }}"
-          changed_files_path="${{ github.workspace }}/.github/backend-e2e-changed-files.txt"
-          bash scripts/ci_collect_changed_files.sh \
-            --repo-root "${{ github.workspace }}" \
-            --event-name "${GITHUB_EVENT_NAME}" \
-            --base-sha "${{ github.event.pull_request.base.sha || '' }}" \
-            --head-sha "${{ github.sha }}" \
-            --output-file "${changed_files_path}" \
-            --fallback-path "backend/" \
-            --fallback-path "compose.full.yml" \
-            --fallback-path ".github/workflows/backend-e2e.yml"
+          artifact_scope_config=$(bash scripts/ci_resolve_artifact_stage_scope_config.sh \
+            --scope backend \
+            --repo-root "${{ github.workspace }}")
+          changed_files_path=$(printf '%s\n' "${artifact_scope_config}" | awk -F= '$1=="changed_files_path"{print $2}')
+          path_regex=$(printf '%s\n' "${artifact_scope_config}" | awk -F= '$1=="path_regex"{print substr($0, length($1)+2)}')
+          mapfile -t fallback_paths < <(printf '%s\n' "${artifact_scope_config}" | awk -F= '$1=="fallback_path"{print substr($0, length($1)+2)}')
+          if [ -z "${changed_files_path}" ] || [ -z "${path_regex}" ] || [ "${#fallback_paths[@]}" -eq 0 ]; then
+            echo "failed to parse backend artifact scope config" >&2
+            echo "${artifact_scope_config}" >&2
+            exit 2
+          fi
+          collect_changed_files_cmd=(
+            bash scripts/ci_collect_changed_files.sh
+            --repo-root "${{ github.workspace }}"
+            --event-name "${GITHUB_EVENT_NAME}"
+            --base-sha "${{ github.event.pull_request.base.sha || '' }}"
+            --head-sha "${{ github.sha }}"
+            --output-file "${changed_files_path}"
+          )
+          for fallback_path in "${fallback_paths[@]}"; do
+            collect_changed_files_cmd+=(--fallback-path "${fallback_path}")
+          done
+          "${collect_changed_files_cmd[@]}"
           artifact_level_out=$(bash scripts/ci_resolve_artifact_stage_path_level.sh \
             --scope backend \
             --changed-files "${changed_files_path}" \
@@ -163,7 +176,7 @@ jobs:
             --fallback-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}" \
             --pr-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_PR}" \
             --pr-ref-regex '^(refs/pull/[0-9]+/merge)$' \
-            --path-regex '^(backend/|compose.full.yml|\.github/workflows/backend-e2e\.yml)$' \
+            --path-regex "${path_regex}" \
             --dispatch-override "${artifact_dispatch_override:-auto}")
           artifact_strict_level=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="strict_level"{print $2}')
           artifact_policy_source=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="policy_source"{print $2}')

@@ -23,10 +23,12 @@ main() {
   assert_contains "path: \${{ steps.finalize_frontend.outputs.artifacts_stage_dir }}" "${FRONTEND_WORKFLOW}"
   assert_contains "fetch-depth: 0" "${BACKEND_WORKFLOW}"
   assert_contains "fetch-depth: 0" "${FRONTEND_WORKFLOW}"
-  assert_contains "bash scripts/ci_collect_changed_files.sh \\" "${BACKEND_WORKFLOW}"
-  assert_contains "bash scripts/ci_collect_changed_files.sh \\" "${FRONTEND_WORKFLOW}"
-  assert_contains "--fallback-path \"backend/\"" "${BACKEND_WORKFLOW}"
-  assert_contains "--fallback-path \"frontend/\"" "${FRONTEND_WORKFLOW}"
+  assert_contains "bash scripts/ci_resolve_artifact_stage_scope_config.sh \\" "${BACKEND_WORKFLOW}"
+  assert_contains "bash scripts/ci_resolve_artifact_stage_scope_config.sh \\" "${FRONTEND_WORKFLOW}"
+  assert_contains "ci_collect_changed_files.sh" "${BACKEND_WORKFLOW}"
+  assert_contains "ci_collect_changed_files.sh" "${FRONTEND_WORKFLOW}"
+  assert_contains "--scope backend \\" "${BACKEND_WORKFLOW}"
+  assert_contains "--scope frontend \\" "${FRONTEND_WORKFLOW}"
 
   echo "ci_workflow_guards tests passed"
 }
