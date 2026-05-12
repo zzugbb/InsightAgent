@@ -145,73 +145,32 @@ jobs:
         if: always() && steps.finalize_backend.conclusion == 'success'
         run: |
           artifact_dispatch_override="${{ github.event.inputs.artifact_stage_strict_level || '' }}"
-          artifact_scope_config_file=/tmp/backend-artifact-scope-config.txt
-          artifact_scope_env_file=/tmp/backend-artifact-scope-env.sh
-          bash scripts/ci_resolve_artifact_stage_scope_config.sh \
+          bash scripts/ci_run_artifact_stage_guard.sh \
             --scope backend \
-            --repo-root "${{ github.workspace }}" > "${artifact_scope_config_file}"
-          bash scripts/ci_load_artifact_stage_scope_config.sh \
-            --config-file "${artifact_scope_config_file}" \
-            --output-file "${artifact_scope_env_file}"
-          source "${artifact_scope_env_file}"
-          collect_changed_files_cmd=(
-            bash scripts/ci_collect_changed_files.sh
-            --repo-root "${{ github.workspace }}"
-            --event-name "${GITHUB_EVENT_NAME}"
-            --base-sha "${{ github.event.pull_request.base.sha || '' }}"
-            --head-sha "${{ github.sha }}"
-            --output-file "${ARTIFACT_CHANGED_FILES_PATH}"
-          )
-          for fallback_path in "${ARTIFACT_FALLBACK_PATHS[@]}"; do
-            collect_changed_files_cmd+=(--fallback-path "${fallback_path}")
-          done
-          "${collect_changed_files_cmd[@]}"
-          artifact_level_out=$(bash scripts/ci_resolve_artifact_stage_path_level.sh \
-            --scope backend \
-            --changed-files "${ARTIFACT_CHANGED_FILES_PATH}" \
+            --repo-root "${{ github.workspace }}" \
+            --base-sha "${{ github.event.pull_request.base.sha || '' }}" \
+            --head-sha "${{ github.sha }}" \
             --event-name "${GITHUB_EVENT_NAME}" \
             --ref "${GITHUB_REF}" \
+            --dispatch-override "${artifact_dispatch_override:-auto}" \
             --fallback-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}" \
             --pr-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_PR}" \
-            --pr-ref-regex "${ARTIFACT_PR_REF_REGEX}" \
-            --path-regex "${ARTIFACT_PATH_REGEX}" \
-            --dispatch-override "${artifact_dispatch_override:-auto}")
-          artifact_strict_level=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="strict_level"{print $2}')
-          artifact_policy_source=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="policy_source"{print $2}')
-          if [ -z "${artifact_strict_level}" ] || [ -z "${artifact_policy_source}" ]; then
-            echo "failed to parse artifact strict-level resolver output" >&2
-            echo "${artifact_level_out}" >&2
-            exit 2
-          fi
-          bash scripts/ci_assert_artifact_stage_health.sh \
-            --scope backend \
             --included-count "${{ steps.finalize_backend.outputs.artifact_included_count }}" \
             --missing-count "${{ steps.finalize_backend.outputs.artifact_missing_count }}" \
+            --min-included-count "${BACKEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT}" \
             --stage-dir "${{ steps.finalize_backend.outputs.artifacts_stage_dir }}" \
             --manifest "${{ steps.finalize_backend.outputs.artifact_manifest }}" \
-            --min-included-count "${BACKEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT}" \
-            --strict-level "${artifact_strict_level}" \
-            --label "${ARTIFACT_GUARD_LABEL}" \
-            --summary-file /tmp/backend-e2e-artifact-guard-summary.md \
-            --json-summary-file /tmp/backend-e2e-artifact-guard-summary.json \
-            --quiet
-          {
-            echo "${ARTIFACT_SUMMARY_HEADING}"
-            echo "- policy: default=${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}, main_push=${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH}"
-            echo "- dispatch_override: ${artifact_dispatch_override:-auto}"
-            echo "- policy_source: ${artifact_policy_source}"
-            echo "- selected_strict_level: ${artifact_strict_level}"
-          } >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/backend-e2e-artifact-guard-summary.md >> "$GITHUB_STEP_SUMMARY"
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --guard-markdown-out /tmp/backend-e2e-artifact-guard-summary.md \
+            --guard-json-out /tmp/backend-e2e-artifact-guard-summary.json
 
       - name: Skip backend artifact stage guard when finalize failed
         if: always() && steps.finalize_backend.conclusion != 'success'
         run: |
-          {
-            echo "### backend-e2e artifact stage guard"
-            echo "- skipped: true"
-            echo "- reason: finalize_backend step did not succeed"
-          } >> "$GITHUB_STEP_SUMMARY"
+          bash scripts/ci_write_skipped_artifact_guard_summary.sh \
+            --scope backend \
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --reason "finalize_backend step did not succeed"
 
       - name: Collect diagnostics on failure
         if: failure()
