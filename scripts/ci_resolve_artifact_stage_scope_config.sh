@@ -15,6 +15,9 @@ Usage:
 Output:
   - changed_files_path=<path>
   - path_regex=<regex>
+  - pr_ref_regex=<regex>
+  - guard_label=<label>
+  - summary_heading=<markdown heading>
   - fallback_path=<path>   # repeated for each fallback path
 USAGE
 }
@@ -47,6 +50,9 @@ case "${scope}" in
   backend)
     changed_files_path="${prefix}.github/backend-e2e-changed-files.txt"
     path_regex='^(backend/|compose\.full\.yml$|\.github/workflows/backend-e2e\.yml$)'
+    pr_ref_regex='^(refs/pull/[0-9]+/merge)$'
+    guard_label='backend-e2e-artifact-stage'
+    summary_heading='### backend-e2e artifact strict policy'
     fallback_paths=(
       "backend/"
       "compose.full.yml"
@@ -56,6 +62,9 @@ case "${scope}" in
   frontend)
     changed_files_path="${prefix}.github/frontend-e2e-changed-files.txt"
     path_regex='^(frontend/|backend/|compose\.full\.yml$|\.github/workflows/frontend-e2e\.yml$)'
+    pr_ref_regex='^(refs/pull/[0-9]+/merge)$'
+    guard_label='frontend-e2e-artifact-stage'
+    summary_heading='### frontend-e2e artifact strict policy'
     fallback_paths=(
       "frontend/"
       "backend/"
@@ -71,6 +80,9 @@ esac
 
 echo "changed_files_path=${changed_files_path}"
 echo "path_regex=${path_regex}"
+echo "pr_ref_regex=${pr_ref_regex}"
+echo "guard_label=${guard_label}"
+echo "summary_heading=${summary_heading}"
 for fallback_path in "${fallback_paths[@]}"; do
   echo "fallback_path=${fallback_path}"
 done

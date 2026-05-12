@@ -29,6 +29,14 @@ main() {
   assert_contains "ci_collect_changed_files.sh" "${FRONTEND_WORKFLOW}"
   assert_contains "--scope backend \\" "${BACKEND_WORKFLOW}"
   assert_contains "--scope frontend \\" "${FRONTEND_WORKFLOW}"
+  assert_contains 'pr_ref_regex=$(printf '\''%s\n'\'' "${artifact_scope_config}"' "${BACKEND_WORKFLOW}"
+  assert_contains 'pr_ref_regex=$(printf '\''%s\n'\'' "${artifact_scope_config}"' "${FRONTEND_WORKFLOW}"
+  assert_contains '--pr-ref-regex "${pr_ref_regex}"' "${BACKEND_WORKFLOW}"
+  assert_contains '--pr-ref-regex "${pr_ref_regex}"' "${FRONTEND_WORKFLOW}"
+  assert_contains '--label "${guard_label}"' "${BACKEND_WORKFLOW}"
+  assert_contains '--label "${guard_label}"' "${FRONTEND_WORKFLOW}"
+  assert_contains 'echo "${summary_heading}"' "${BACKEND_WORKFLOW}"
+  assert_contains 'echo "${summary_heading}"' "${FRONTEND_WORKFLOW}"
 
   echo "ci_workflow_guards tests passed"
 }
