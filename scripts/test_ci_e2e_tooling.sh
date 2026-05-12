@@ -9,6 +9,7 @@ run_common() {
   bash "${ROOT_DIR}/scripts/test_ci_assert_artifact_stage_health.sh"
   bash "${ROOT_DIR}/scripts/test_ci_collect_changed_files.sh"
   bash "${ROOT_DIR}/scripts/test_ci_artifact_stage_scope_integration.sh"
+  bash "${ROOT_DIR}/scripts/test_ci_load_artifact_stage_scope_config.sh"
   bash "${ROOT_DIR}/scripts/test_ci_resolve_artifact_stage_scope_config.sh"
   bash "${ROOT_DIR}/scripts/test_ci_resolve_artifact_stage_strict_level.sh"
   bash "${ROOT_DIR}/scripts/test_ci_resolve_artifact_stage_path_level.sh"

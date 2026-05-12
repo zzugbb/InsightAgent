@@ -176,41 +176,36 @@ jobs:
         if: always() && steps.finalize_frontend.conclusion == 'success'
         run: |
           artifact_dispatch_override="${{ github.event.inputs.artifact_stage_strict_level || '' }}"
-          artifact_scope_config=$(bash scripts/ci_resolve_artifact_stage_scope_config.sh \
+          artifact_scope_config_file=/tmp/frontend-artifact-scope-config.txt
+          artifact_scope_env_file=/tmp/frontend-artifact-scope-env.sh
+          bash scripts/ci_resolve_artifact_stage_scope_config.sh \
             --scope frontend \
-            --repo-root "${{ github.workspace }}")
-          changed_files_path=$(printf '%s\n' "${artifact_scope_config}" | awk -F= '$1=="changed_files_path"{print $2}')
-          path_regex=$(printf '%s\n' "${artifact_scope_config}" | awk -F= '$1=="path_regex"{print substr($0, length($1)+2)}')
-          pr_ref_regex=$(printf '%s\n' "${artifact_scope_config}" | awk -F= '$1=="pr_ref_regex"{print substr($0, length($1)+2)}')
-          guard_label=$(printf '%s\n' "${artifact_scope_config}" | awk -F= '$1=="guard_label"{print substr($0, length($1)+2)}')
-          summary_heading=$(printf '%s\n' "${artifact_scope_config}" | awk -F= '$1=="summary_heading"{print substr($0, length($1)+2)}')
-          mapfile -t fallback_paths < <(printf '%s\n' "${artifact_scope_config}" | awk -F= '$1=="fallback_path"{print substr($0, length($1)+2)}')
-          if [ -z "${changed_files_path}" ] || [ -z "${path_regex}" ] || [ -z "${pr_ref_regex}" ] || [ -z "${guard_label}" ] || [ -z "${summary_heading}" ] || [ "${#fallback_paths[@]}" -eq 0 ]; then
-            echo "failed to parse frontend artifact scope config" >&2
-            echo "${artifact_scope_config}" >&2
-            exit 2
-          fi
+            --repo-root "${{ github.workspace }}" > "${artifact_scope_config_file}"
+          bash scripts/ci_load_artifact_stage_scope_config.sh \
+            --config-file "${artifact_scope_config_file}" \
+            --output-file "${artifact_scope_env_file}"
+          source "${artifact_scope_env_file}"
           collect_changed_files_cmd=(
             bash scripts/ci_collect_changed_files.sh
             --repo-root "${{ github.workspace }}"
             --event-name "${GITHUB_EVENT_NAME}"
             --base-sha "${{ github.event.pull_request.base.sha || '' }}"
             --head-sha "${{ github.sha }}"
-            --output-file "${changed_files_path}"
+            --output-file "${ARTIFACT_CHANGED_FILES_PATH}"
           )
-          for fallback_path in "${fallback_paths[@]}"; do
+          for fallback_path in "${ARTIFACT_FALLBACK_PATHS[@]}"; do
             collect_changed_files_cmd+=(--fallback-path "${fallback_path}")
           done
           "${collect_changed_files_cmd[@]}"
           artifact_level_out=$(bash scripts/ci_resolve_artifact_stage_path_level.sh \
             --scope frontend \
-            --changed-files "${changed_files_path}" \
+            --changed-files "${ARTIFACT_CHANGED_FILES_PATH}" \
             --event-name "${GITHUB_EVENT_NAME}" \
             --ref "${GITHUB_REF}" \
             --fallback-level "${FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}" \
             --pr-level "${FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_PR}" \
-            --pr-ref-regex "${pr_ref_regex}" \
-            --path-regex "${path_regex}" \
+            --pr-ref-regex "${ARTIFACT_PR_REF_REGEX}" \
+            --path-regex "${ARTIFACT_PATH_REGEX}" \
             --dispatch-override "${artifact_dispatch_override:-auto}")
           artifact_strict_level=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="strict_level"{print $2}')
           artifact_policy_source=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="policy_source"{print $2}')
@@ -227,12 +222,12 @@ jobs:
             --manifest "${{ steps.finalize_frontend.outputs.artifact_manifest }}" \
             --min-included-count "${FRONTEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT}" \
             --strict-level "${artifact_strict_level}" \
-            --label "${guard_label}" \
+            --label "${ARTIFACT_GUARD_LABEL}" \
             --summary-file /tmp/frontend-e2e-artifact-guard-summary.md \
             --json-summary-file /tmp/frontend-e2e-artifact-guard-summary.json \
             --quiet
           {
-            echo "${summary_heading}"
+            echo "${ARTIFACT_SUMMARY_HEADING}"
             echo "- policy: default=${FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}, main_push=${FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH}"
             echo "- dispatch_override: ${artifact_dispatch_override:-auto}"
             echo "- policy_source: ${artifact_policy_source}"
