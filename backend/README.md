@@ -93,6 +93,7 @@
 - 工程化增量（2026-05-11 artifact stage 防误伤补丁）：`backend-e2e` 的 artifact guard 改为仅在 `finalize_backend` 成功时执行；当 finalize 失败时写入 `skipped` 摘要而不追加二次失败，便于聚焦首个根因
 - 工程化增量（2026-05-12 artifact stage PR 门禁扩展）：`backend-e2e` 的 artifact guard 现支持 `min_included_count` 阈值，并将 `pull_request` 场景扩展为可选 `fail-on-empty` 策略源；当前 workflow 已为 PR/关键分支场景启用 `fail-on-empty + min_included_count=2`，同时保留 `push@main=warn` 以兼容既有单产物路径
 - 工程化增量（2026-05-12 artifact upload 防二次报错补丁）：`backend-e2e` 的 upload 步骤改为仅在 `finalize_backend` 成功时执行，避免 finalize 失败后继续触发 `actions/upload-artifact` 的空 path 报错；并新增 `scripts/test_ci_workflow_guards.sh` 静态校验 workflow guard 条件
+- 工程化增量（2026-05-12 artifact PR 路径感知扩展）：`backend-e2e` 新增 `ci_resolve_artifact_stage_path_level.sh`，PR 只有在命中 backend/compose/workflow 关键路径时才升级 artifact guard；否则保持默认阈值，降低无关 PR 的误伤概率
 - 工程化增量（2026-05-11 fixture 稳定性修复）：`scripts/test_ci_finalize_e2e_for_workflow.sh` 的缺失事件上下文断言改为显式清空 `GITHUB_EVENT_NAME/GITHUB_REF` 后执行，修复 CI 环境默认变量导致的 `expected fail but passed` 假阳性
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级
 - 工程化增量（2026-05-08 再补充）：`backend-e2e` 阈值告警已增加严重级别标签（`[P0]/[P1]`）与 `severity` 计数，便于团队按优先级分流处理导出回归

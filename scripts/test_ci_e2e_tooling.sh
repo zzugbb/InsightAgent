@@ -8,6 +8,7 @@ SCOPE="${1:-all}"
 run_common() {
   bash "${ROOT_DIR}/scripts/test_ci_assert_artifact_stage_health.sh"
   bash "${ROOT_DIR}/scripts/test_ci_resolve_artifact_stage_strict_level.sh"
+  bash "${ROOT_DIR}/scripts/test_ci_resolve_artifact_stage_path_level.sh"
   bash "${ROOT_DIR}/scripts/test_ci_print_log_files.sh"
   bash "${ROOT_DIR}/scripts/test_ci_finalize_e2e_for_workflow.sh"
   bash "${ROOT_DIR}/scripts/test_ci_finalize_e2e_scope.sh"

@@ -143,13 +143,21 @@ jobs:
         if: always() && steps.finalize_backend.conclusion == 'success'
         run: |
           artifact_dispatch_override="${{ github.event.inputs.artifact_stage_strict_level || '' }}"
-          artifact_level_out=$(bash scripts/ci_resolve_artifact_stage_strict_level.sh \
+          changed_files_path="${{ github.workspace }}/.github/backend-e2e-changed-files.txt"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" > "${changed_files_path}"
+          else
+            printf '%s\n' 'backend/' 'compose.full.yml' '.github/workflows/backend-e2e.yml' > "${changed_files_path}"
+          fi
+          artifact_level_out=$(bash scripts/ci_resolve_artifact_stage_path_level.sh \
+            --scope backend \
+            --changed-files "${changed_files_path}" \
             --event-name "${GITHUB_EVENT_NAME}" \
             --ref "${GITHUB_REF}" \
-            --default-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}" \
-            --main-push-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH}" \
+            --fallback-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}" \
             --pr-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_PR}" \
-            --pr-ref-regex '^(refs/pull/[0-9]+/merge|refs/heads/main)$' \
+            --pr-ref-regex '^(refs/pull/[0-9]+/merge)$' \
+            --path-regex '^(backend/|compose.full.yml|\.github/workflows/backend-e2e\.yml)$' \
             --dispatch-override "${artifact_dispatch_override:-auto}")
           artifact_strict_level=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="strict_level"{print $2}')
           artifact_policy_source=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="policy_source"{print $2}')
