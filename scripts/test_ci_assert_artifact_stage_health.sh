@@ -71,7 +71,28 @@ main() {
     --json-summary-file "${TMP_DIR}/be-empty.json" \
     --quiet
   assert_contains "gate_result: FAIL" "${TMP_DIR}/be-empty.md"
-  assert_contains "gate_reason: strict-level fail-on-empty requires included_count>0" "${TMP_DIR}/be-empty.md"
+  assert_contains "gate_reason: strict-level fail-on-empty requires included_count>=1" "${TMP_DIR}/be-empty.md"
+
+  expect_pass "${GUARD_SCRIPT}" \
+    --scope backend \
+    --included-count 1 \
+    --missing-count 0 \
+    --strict-level fail-on-empty \
+    --label be-empty-one \
+    --quiet
+
+  expect_fail "${GUARD_SCRIPT}" \
+    --scope backend \
+    --included-count 1 \
+    --missing-count 0 \
+    --min-included-count 2 \
+    --strict-level fail-on-empty \
+    --label be-empty-min-two \
+    --summary-file "${TMP_DIR}/be-empty-min-two.md" \
+    --json-summary-file "${TMP_DIR}/be-empty-min-two.json" \
+    --quiet
+  assert_contains "min_included_count: 2" "${TMP_DIR}/be-empty-min-two.md"
+  assert_contains "gate_reason: strict-level fail-on-empty requires included_count>=2" "${TMP_DIR}/be-empty-min-two.md"
 
   expect_fail "${GUARD_SCRIPT}" \
     --scope frontend \

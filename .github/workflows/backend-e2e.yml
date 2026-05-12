@@ -42,6 +42,8 @@ env:
   BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH: "any"
   BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT: "warn"
   BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "warn"
+  BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_PR: "fail-on-empty"
+  BACKEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT: "2"
 
 jobs:
   e2e:
@@ -132,6 +134,7 @@ jobs:
           bash scripts/ci_finalize_e2e_for_workflow.sh \
             --scope backend \
             --dispatch-override "${dispatch_override:-auto}" \
+            --min-included-count "${BACKEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT}" \
             --summary-file "$GITHUB_STEP_SUMMARY" \
             --github-output-file "$GITHUB_OUTPUT" \
             --quiet
@@ -145,6 +148,8 @@ jobs:
             --ref "${GITHUB_REF}" \
             --default-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}" \
             --main-push-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH}" \
+            --pr-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_PR}" \
+            --pr-ref-regex '^(refs/pull/[0-9]+/merge|refs/heads/main)$' \
             --dispatch-override "${artifact_dispatch_override:-auto}")
           artifact_strict_level=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="strict_level"{print $2}')
           artifact_policy_source=$(printf '%s\n' "${artifact_level_out}" | awk -F= '$1=="policy_source"{print $2}')
@@ -159,6 +164,7 @@ jobs:
             --missing-count "${{ steps.finalize_backend.outputs.artifact_missing_count }}" \
             --stage-dir "${{ steps.finalize_backend.outputs.artifacts_stage_dir }}" \
             --manifest "${{ steps.finalize_backend.outputs.artifact_manifest }}" \
+            --min-included-count "${BACKEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT}" \
             --strict-level "${artifact_strict_level}" \
             --label "backend-e2e-artifact-stage" \
             --summary-file /tmp/backend-e2e-artifact-guard-summary.md \

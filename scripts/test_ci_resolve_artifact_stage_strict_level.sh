@@ -27,6 +27,14 @@ main() {
   assert_contains "$out" "strict_level=warn"
   assert_contains "$out" "policy_source=default"
 
+  out=$(bash "$SCRIPT" --event-name pull_request --ref refs/pull/1/merge --default-level warn --main-push-level fail-on-empty --pr-level fail-on-empty)
+  assert_contains "$out" "strict_level=fail-on-empty"
+  assert_contains "$out" "policy_source=pull_request"
+
+  out=$(bash "$SCRIPT" --event-name pull_request --ref refs/pull/1/merge --default-level warn --main-push-level fail-on-empty --pr-level fail-on-empty --pr-ref-regex '^refs/pull/2/merge$')
+  assert_contains "$out" "strict_level=warn"
+  assert_contains "$out" "policy_source=default"
+
   out=$(bash "$SCRIPT" --event-name push --ref refs/heads/main --default-level warn --main-push-level fail-on-empty)
   assert_contains "$out" "strict_level=fail-on-empty"
   assert_contains "$out" "policy_source=main_push"

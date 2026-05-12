@@ -23,6 +23,7 @@ overview_label=""
 artifacts_list_file=""
 artifacts_stage_dir=""
 artifact_name=""
+min_included_count="1"
 github_output_file=""
 quiet="0"
 dry_run="0"
@@ -50,6 +51,7 @@ Usage:
     [--artifacts-list-file <path>] \
     [--artifacts-stage-dir <path>] \
     [--artifact-name <name>] \
+    [--min-included-count <n>] \
     [--github-output-file <path>] \
     [--quiet] \
     [--dry-run]
@@ -81,6 +83,7 @@ while [ "$#" -gt 0 ]; do
     --artifacts-list-file) artifacts_list_file="${2:-}"; shift 2 ;;
     --artifacts-stage-dir) artifacts_stage_dir="${2:-}"; shift 2 ;;
     --artifact-name) artifact_name="${2:-}"; shift 2 ;;
+    --min-included-count) min_included_count="${2:-}"; shift 2 ;;
     --github-output-file) github_output_file="${2:-}"; shift 2 ;;
     --quiet) quiet="1"; shift ;;
     --dry-run) dry_run="1"; shift ;;
@@ -174,6 +177,7 @@ if [ "${dry_run}" = "1" ]; then
   echo "[dry-run] ${stage_cmd[*]}"
   echo "[dry-run] artifact_name=${artifact_name}"
   echo "[dry-run] artifacts_stage_dir=${artifacts_stage_dir}"
+  echo "[dry-run] min_included_count=${min_included_count}"
   exit 0
 fi
 
@@ -205,6 +209,7 @@ fi
   echo "- output_dir: ${staged_output_dir}"
   echo "- included_count: ${included_count}"
   echo "- missing_count: ${missing_count}"
+  echo "- min_included_count: ${min_included_count}"
   echo "- manifest: ${stage_manifest}"
 } >> "${summary_file}"
 
@@ -216,6 +221,7 @@ if [ -n "${github_output_file}" ]; then
     echo "scope=${scope}"
     echo "artifact_included_count=${included_count}"
     echo "artifact_missing_count=${missing_count}"
+    echo "artifact_min_included_count=${min_included_count}"
     echo "artifact_manifest=${stage_manifest}"
   } >> "${github_output_file}"
 fi
@@ -224,4 +230,5 @@ echo "artifact_name=${artifact_name}"
 echo "artifacts_stage_dir=${staged_output_dir}"
 echo "artifact_included_count=${included_count}"
 echo "artifact_missing_count=${missing_count}"
+echo "artifact_min_included_count=${min_included_count}"
 echo "artifact_manifest=${stage_manifest}"

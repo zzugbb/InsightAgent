@@ -9,6 +9,7 @@ Usage:
     --scope <backend|frontend> \
     --included-count <n> \
     --missing-count <n> \
+    [--min-included-count <n>] \
     [--stage-dir <path>] \
     [--manifest <path>] \
     [--strict-level <none|warn|fail-on-empty|fail-on-missing>] \
@@ -20,7 +21,7 @@ Usage:
 Behavior:
   - none: always pass
   - warn: always pass, but emit warning status when counts look suspicious
-  - fail-on-empty: fail when included_count <= 0
+  - fail-on-empty: fail when included_count < min_included_count
   - fail-on-missing: fail when missing_count > 0
 USAGE
 }
@@ -28,6 +29,7 @@ USAGE
 scope=""
 included_count=""
 missing_count=""
+min_included_count="1"
 stage_dir=""
 manifest=""
 strict_level="warn"
@@ -41,6 +43,7 @@ while [ "$#" -gt 0 ]; do
     --scope) scope="${2:-}"; shift 2 ;;
     --included-count) included_count="${2:-}"; shift 2 ;;
     --missing-count) missing_count="${2:-}"; shift 2 ;;
+    --min-included-count) min_included_count="${2:-}"; shift 2 ;;
     --stage-dir) stage_dir="${2:-}"; shift 2 ;;
     --manifest) manifest="${2:-}"; shift 2 ;;
     --strict-level) strict_level="${2:-}"; shift 2 ;;
@@ -88,13 +91,17 @@ if ! is_non_negative_int "${included_count}" || ! is_non_negative_int "${missing
   echo "[artifact-guard][${label}] included/missing counts must be non-negative integers" >&2
   exit 2
 fi
+if ! is_non_negative_int "${min_included_count}"; then
+  echo "[artifact-guard][${label}] min-included-count must be a non-negative integer" >&2
+  exit 2
+fi
 
 json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 status="ok"
-if [ "${included_count}" -le 0 ] || [ "${missing_count}" -gt 0 ]; then
+if [ "${included_count}" -lt "${min_included_count}" ] || [ "${missing_count}" -gt 0 ]; then
   status="warning"
 fi
 
@@ -116,9 +123,9 @@ case "${strict_level}" in
     fi
     ;;
   fail-on-empty)
-    if [ "${included_count}" -le 0 ]; then
+    if [ "${included_count}" -lt "${min_included_count}" ]; then
       gate_result="FAIL"
-      gate_reason="strict-level fail-on-empty requires included_count>0"
+      gate_reason="strict-level fail-on-empty requires included_count>=${min_included_count}"
       exit_code=1
     fi
     ;;
@@ -144,6 +151,7 @@ if [ -n "${summary_file}" ]; then
     echo "- status: ${status}"
     echo "- included_count: ${included_count}"
     echo "- missing_count: ${missing_count}"
+    echo "- min_included_count: ${min_included_count}"
     echo "- stage_dir: ${stage_dir:-unknown}"
     echo "- manifest: ${manifest:-unknown}"
     echo "- gate_result: ${gate_result}"
@@ -161,6 +169,7 @@ if [ -n "${json_summary_file}" ]; then
   "status": "$(json_escape "${status}")",
   "included_count": ${included_count},
   "missing_count": ${missing_count},
+  "min_included_count": ${min_included_count},
   "stage_dir": "$(json_escape "${stage_dir}")",
   "manifest": "$(json_escape "${manifest}")",
   "gate_result": "$(json_escape "${gate_result}")",
