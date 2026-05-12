@@ -11,6 +11,7 @@ dispatch_override="auto"
 summary_file=""
 github_output_file=""
 artifact_name=""
+min_included_count=""
 run_id="${GITHUB_RUN_ID:-}"
 run_attempt="${GITHUB_RUN_ATTEMPT:-}"
 
@@ -42,6 +43,7 @@ Usage:
     [--default-level <none|p0|any>] \
     [--main-push-level <none|p0|any>] \
     [--artifact-name <name>] \
+    [--min-included-count <n>] \
     [--run-id <id>] \
     [--run-attempt <n>] \
     [--source-path <path>] \
@@ -75,6 +77,7 @@ while [ "$#" -gt 0 ]; do
     --summary-file) summary_file="${2:-}"; shift 2 ;;
     --github-output-file) github_output_file="${2:-}"; shift 2 ;;
     --artifact-name) artifact_name="${2:-}"; shift 2 ;;
+    --min-included-count) min_included_count="${2:-}"; shift 2 ;;
     --run-id) run_id="${2:-}"; shift 2 ;;
     --run-attempt) run_attempt="${2:-}"; shift 2 ;;
     --source-path) source_path="${2:-}"; shift 2 ;;
@@ -114,11 +117,13 @@ case "${scope}" in
   backend)
     : "${default_level:=${BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT:-p0}}"
     : "${main_push_level:=${BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH:-any}}"
+    : "${min_included_count:=${BACKEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT:-}}"
     : "${artifact_name:=backend-e2e-artifacts}"
     ;;
   frontend)
     : "${default_level:=${FRONTEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT:-p0}}"
     : "${main_push_level:=${FRONTEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH:-any}}"
+    : "${min_included_count:=${FRONTEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT:-}}"
     if [ -z "${artifact_name}" ]; then
       if [ -n "${run_id}" ] && [ -n "${run_attempt}" ]; then
         artifact_name="playwright-report-${run_id}-${run_attempt}"
@@ -144,9 +149,15 @@ cmd=(
   --summary-file "${summary_file}"
   --artifact-name "${artifact_name}"
 )
+if [ -n "${min_included_count}" ]; then
+  cmd+=(--min-included-count "${min_included_count}")
+fi
 
 if [ -n "${github_output_file}" ]; then
   cmd+=(--github-output-file "${github_output_file}")
+fi
+if [ -n "${min_included_count}" ]; then
+  cmd+=(--min-included-count "${min_included_count}")
 fi
 if [ -n "${source_path}" ]; then
   cmd+=(--source-path "${source_path}")

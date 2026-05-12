@@ -57,6 +57,21 @@ run_tests() {
     GITHUB_REF=refs/pull/12/merge \
     FRONTEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT=p0 \
     FRONTEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH=any \
+    FRONTEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT=2 \
+    GITHUB_RUN_ID=123456 \
+    GITHUB_RUN_ATTEMPT=7 \
+    bash "${SCRIPT_PATH}" \
+      --scope frontend \
+      --summary-file "${TMP_DIR}/frontend-min-count-summary.md" \
+      --dry-run > "${TMP_DIR}/frontend-min-count.out"
+
+  assert_contains "[dry-run] min_included_count=2" "${TMP_DIR}/frontend-min-count.out"
+
+  expect_pass env \
+    GITHUB_EVENT_NAME=pull_request \
+    GITHUB_REF=refs/pull/12/merge \
+    FRONTEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT=p0 \
+    FRONTEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH=any \
     GITHUB_RUN_ID=123456 \
     GITHUB_RUN_ATTEMPT=7 \
     bash "${SCRIPT_PATH}" \
