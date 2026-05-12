@@ -207,7 +207,7 @@ jobs:
             --file /tmp/backend-8010.log
 
       - name: Upload backend e2e artifacts
-        if: always()
+        if: always() && steps.finalize_backend.conclusion == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.finalize_backend.outputs.artifact_name }}

@@ -156,9 +156,6 @@ fi
 if [ -n "${github_output_file}" ]; then
   cmd+=(--github-output-file "${github_output_file}")
 fi
-if [ -n "${min_included_count}" ]; then
-  cmd+=(--min-included-count "${min_included_count}")
-fi
 if [ -n "${source_path}" ]; then
   cmd+=(--source-path "${source_path}")
 fi

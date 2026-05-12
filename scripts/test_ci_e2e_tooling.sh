@@ -11,6 +11,7 @@ run_common() {
   bash "${ROOT_DIR}/scripts/test_ci_print_log_files.sh"
   bash "${ROOT_DIR}/scripts/test_ci_finalize_e2e_for_workflow.sh"
   bash "${ROOT_DIR}/scripts/test_ci_finalize_e2e_scope.sh"
+  bash "${ROOT_DIR}/scripts/test_ci_workflow_guards.sh"
   bash "${ROOT_DIR}/scripts/test_ci_boot_backend_instance.sh"
   bash "${ROOT_DIR}/scripts/test_ci_run_backend_e2e.sh"
   bash "${ROOT_DIR}/scripts/test_ci_run_frontend_e2e.sh"

@@ -120,6 +120,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI artifact stage 策略解析收口（2026-05-11）：新增 `scripts/ci_resolve_artifact_stage_strict_level.sh`（配套 `scripts/test_ci_resolve_artifact_stage_strict_level.sh`），`frontend-e2e` 的 artifact guard strict-level 改为脚本按事件自动解析并支持 `workflow_dispatch` 覆盖（`auto/none/warn/fail-on-empty/fail-on-missing`）；当前策略为 `push@main=warn`、其余 `warn`
 - 阶段 5 CI artifact stage 防误伤补丁（2026-05-11）：`frontend-e2e` 的 artifact guard 改为仅在 `finalize_frontend` 成功时执行；若 finalize 失败则写入 `skipped` 摘要并不追加二次失败，避免掩盖真实首错步骤
 - 阶段 5 CI artifact stage PR 门禁扩展（2026-05-12）：`frontend-e2e` 的 artifact guard 现支持 `min_included_count` 阈值，并将 `pull_request` 场景扩展为可选 `fail-on-empty` 策略源；当前 workflow 已为 PR/关键分支场景启用 `fail-on-empty + min_included_count=2`，同时保留 `push@main=warn` 以兼容既有单产物路径
+- 阶段 5 CI artifact upload 防二次报错补丁（2026-05-12）：`frontend-e2e` 的 upload 步骤改为仅在 `finalize_frontend` 成功时执行，避免 finalize 失败后继续触发 `actions/upload-artifact` 的空 path 报错；并新增 `scripts/test_ci_workflow_guards.sh` 静态校验 workflow guard 条件
 - 阶段 5 CI fixture 稳定性修复（2026-05-11）：`scripts/test_ci_finalize_e2e_for_workflow.sh` 的“缺失事件上下文应失败”断言改为显式清空 `GITHUB_EVENT_NAME/GITHUB_REF` 后执行，修复 GitHub Actions 环境变量导致的假阳性失败
 - 阶段 5 CI 告警增强（2026-05-08）：`frontend-e2e` 导出摘要新增 `threshold alerts` 阈值告警；若主链路或边界链路计数低于预期，会直接输出 expected vs actual，便于快速定位“下载层 / 响应头层 / 404 语义层”回归
 - 阶段 5 CI 告警分级（2026-05-08）：`frontend-e2e` 导出阈值告警已补严重级别标签（当前为 `[P1]`）与 `severity` 计数，并与 `backend-e2e` 告警视图对齐，便于跨端统一判读
