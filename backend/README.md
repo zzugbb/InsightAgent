@@ -93,6 +93,7 @@
 - 工程化增量（2026-05-11 artifact stage 防误伤补丁）：`backend-e2e` 的 artifact guard 改为仅在 `finalize_backend` 成功时执行；当 finalize 失败时写入 `skipped` 摘要而不追加二次失败，便于聚焦首个根因
 - 工程化增量（2026-05-12 artifact stage PR 门禁扩展）：`backend-e2e` 的 artifact guard 现支持 `min_included_count` 阈值，并将 `pull_request` 场景扩展为可选 `fail-on-empty` 策略源；当前 workflow 已为 PR/关键分支场景启用 `fail-on-empty + min_included_count=2`，同时保留 `push@main=warn` 以兼容既有单产物路径
 - 工程化增量（2026-05-12 artifact upload 防二次报错补丁）：`backend-e2e` 的 upload 步骤改为仅在 `finalize_backend` 成功时执行，避免 finalize 失败后继续触发 `actions/upload-artifact` 的空 path 报错；并新增 `scripts/test_ci_workflow_guards.sh` 静态校验 workflow guard 条件
+- 工程化增量（2026-05-13 workflow guard 收口）：`backend-e2e` workflow 已移除对 `--guard-markdown-out/--guard-json-out` 的显式传参，artifact/export guard 输出路径统一由 finalize/scope 脚本解析；`scripts/test_ci_workflow_guards.sh` 同步改为验证“workflow 继续通过统一 guard 脚本接线，但不再硬编码这些 guard 输出路径”
 - 工程化增量（2026-05-12 artifact PR 路径感知扩展）：`backend-e2e` 新增 `ci_resolve_artifact_stage_path_level.sh`、`ci_collect_changed_files.sh`、`ci_resolve_artifact_stage_scope_config.sh`、`ci_load_artifact_stage_scope_config.sh`、`ci_run_artifact_stage_guard.sh` 与 `ci_write_skipped_artifact_guard_summary.sh`，PR 只有在命中 backend/compose/workflow 关键路径时才升级 artifact guard；workflow 已将 artifact guard 主逻辑与 finalize 失败时的 skipped summary 下沉到脚本，统一先通过 scope 配置脚本生成规则，再通过 load helper 注入 changed-files 路径、fallback paths、path-regex、`pr_ref_regex` 与 guard 摘要元信息，`actions/checkout` 使用 `fetch-depth: 0`，并在 base diff 不可解析时回退关键路径标记。同时 path-regex 已修正为可命中真实 `backend/...` 改动与关键单文件路径，降低浅克隆、缺失 base SHA 与旧正则过窄带来的误判概率
 - 工程化增量（2026-05-11 fixture 稳定性修复）：`scripts/test_ci_finalize_e2e_for_workflow.sh` 的缺失事件上下文断言改为显式清空 `GITHUB_EVENT_NAME/GITHUB_REF` 后执行，修复 CI 环境默认变量导致的 `expected fail but passed` 假阳性
 - 工程化增量（2026-05-08 补充）：`backend-e2e` export summary 已新增阈值告警输出（`Threshold alerts`），当计数不满足预期时会打印异常项明细（expected vs actual），便于在 CI Summary 直接识别导出链路回归层级
@@ -442,13 +443,13 @@ docker compose up -d chroma
 
 ### 优先做
 
-1. `full-trace-session-lite`：任务详情快照与导出入口已接入；后续补详情视图增强与导出 e2e。
-2. `trace-export-json-md`：单任务 JSON/Markdown 导出接口已落地；字段稳定性与导出 e2e 校验首版已补齐（`e2e_export_consistency`），后续补失败快照归档。
-3. `session-export-lite`：会话级 JSON/Markdown 导出接口已落地；字段稳定性与导出 e2e 校验首版已补齐（`e2e_export_consistency`），后续补失败快照归档。
+1. `full-trace-session-lite`：任务详情快照、回放与导出入口已接入；相关主链路 e2e 已完成当前轮收口，后续按开发主线补更深的调试体验。
+2. `trace-export-json-md`：单任务 JSON/Markdown 导出接口已落地；字段稳定性与导出 e2e 校验已完成当前轮收口（`e2e_export_consistency`）。
+3. `session-export-lite`：会话级 JSON/Markdown 导出接口已落地；字段稳定性与导出 e2e 校验已完成当前轮收口（`e2e_export_consistency`）。
 4. `remote-provider-hardening`：已完成首轮（错误码归一 + SSE 透传 + 前端映射联动）。
-5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）并接入后端 CI；后续补失败快照留档。
-6. `task-cancel-timeout`：首版已落地（取消接口 + 超时中断 + SSE 事件），并新增 cancel/timeout e2e 脚本；后续补细粒度状态反馈。
-7. `running-task-recovery`：前端恢复链路已接入，后续可补失败快照与恢复可观测字段。
+5. `e2e-main-path`：主链路 e2e 脚本已落地（登录、模型配置、任务流、Trace、RAG、导出）并接入后端 CI；当前轮收口已完成，可转回开发主线。
+6. `task-cancel-timeout`：首版已落地（取消接口 + 超时中断 + SSE 事件），cancel/timeout e2e 与 CI 已补齐；后续只保留随功能演进的小步回归。
+7. `running-task-recovery`：前端恢复链路已接入，当前 e2e 收口已覆盖到恢复/取消相关闭环；后续随主线需求再补更细的恢复可观测字段。
 8. `usage-dashboard-lite`、`audit-event-expansion` 与 `provider-usage-alignment` 已完成首版并补齐来源趋势联动；前端可视化回归 CI 已扩展至主链路导出、取消恢复与边界异常场景，并接入 smoke 跨浏览器矩阵；后端导出稳定性回归与后端 e2e 失败快照归档均已接入，下一步可细化失败快照内容与视觉断言。
 
 ### 暂不做

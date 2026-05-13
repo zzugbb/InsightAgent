@@ -16,6 +16,16 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local unexpected="$1"
+  local file="$2"
+  if grep -Fq -- "${unexpected}" "${file}"; then
+    echo "did not expect '${unexpected}' in ${file}" >&2
+    cat "${file}" >&2 || true
+    exit 1
+  fi
+}
+
 main() {
   assert_contains "if: always() && steps.finalize_backend.conclusion == 'success'" "${BACKEND_WORKFLOW}"
   assert_contains "if: always() && steps.finalize_frontend.conclusion == 'success'" "${FRONTEND_WORKFLOW}"
@@ -29,8 +39,10 @@ main() {
   assert_contains "--scope frontend \\" "${FRONTEND_WORKFLOW}"
   assert_contains '--dispatch-override "${artifact_dispatch_override:-auto}"' "${BACKEND_WORKFLOW}"
   assert_contains '--dispatch-override "${artifact_dispatch_override:-auto}"' "${FRONTEND_WORKFLOW}"
-  assert_contains '--guard-markdown-out /tmp/backend-e2e-artifact-guard-summary.md' "${BACKEND_WORKFLOW}"
-  assert_contains '--guard-markdown-out /tmp/frontend-e2e-artifact-guard-summary.md' "${FRONTEND_WORKFLOW}"
+  assert_not_contains "--guard-markdown-out" "${BACKEND_WORKFLOW}"
+  assert_not_contains "--guard-json-out" "${BACKEND_WORKFLOW}"
+  assert_not_contains "--guard-markdown-out" "${FRONTEND_WORKFLOW}"
+  assert_not_contains "--guard-json-out" "${FRONTEND_WORKFLOW}"
   assert_contains 'bash scripts/ci_write_skipped_artifact_guard_summary.sh \' "${BACKEND_WORKFLOW}"
   assert_contains 'bash scripts/ci_write_skipped_artifact_guard_summary.sh \' "${FRONTEND_WORKFLOW}"
   assert_contains '--reason "finalize_backend step did not succeed"' "${BACKEND_WORKFLOW}"

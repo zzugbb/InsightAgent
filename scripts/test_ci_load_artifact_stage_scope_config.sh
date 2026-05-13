@@ -27,17 +27,17 @@ main() {
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
 
-  config_out="$(bash "${RESOLVE_SCRIPT}" --scope backend --repo-root /tmp/workspace)"
   expect_fail bash "${LOAD_SCRIPT}"
   expect_fail bash "${LOAD_SCRIPT}" --config-file "${tmp}/missing.txt"
 
-  printf '%s\n' "${config_out}" > "${tmp}/config.txt"
-  bash "${LOAD_SCRIPT}" --config-file "${tmp}/config.txt" --output-file "${tmp}/env.sh"
+  config_out="$(bash "${RESOLVE_SCRIPT}" --scope backend --repo-root /tmp/workspace)"
+  printf '%s\n' "${config_out}" > "${tmp}/backend-config.txt"
+  bash "${LOAD_SCRIPT}" --config-file "${tmp}/backend-config.txt" --output-file "${tmp}/backend-env.sh"
 
   env_out="$(
     bash -lc '
       set -euo pipefail
-      source "'"${tmp}/env.sh"'"
+      source "'"${tmp}/backend-env.sh"'"
       printf "changed=%s\n" "${ARTIFACT_CHANGED_FILES_PATH}"
       printf "path_regex=%s\n" "${ARTIFACT_PATH_REGEX}"
       printf "pr_ref_regex=%s\n" "${ARTIFACT_PR_REF_REGEX}"
@@ -61,6 +61,38 @@ main() {
   assert_contains "${env_out}" "fallback_count=3"
   assert_contains "${env_out}" "fallback0=backend/"
   assert_contains "${env_out}" "fallback2=.github/workflows/backend-e2e.yml"
+
+  config_out="$(bash "${RESOLVE_SCRIPT}" --scope frontend --repo-root /tmp/workspace)"
+  printf '%s\n' "${config_out}" > "${tmp}/frontend-config.txt"
+  bash "${LOAD_SCRIPT}" --config-file "${tmp}/frontend-config.txt" --output-file "${tmp}/frontend-env.sh"
+
+  env_out="$(
+    bash -lc '
+      set -euo pipefail
+      source "'"${tmp}/frontend-env.sh"'"
+      printf "changed=%s\n" "${ARTIFACT_CHANGED_FILES_PATH}"
+      printf "path_regex=%s\n" "${ARTIFACT_PATH_REGEX}"
+      printf "pr_ref_regex=%s\n" "${ARTIFACT_PR_REF_REGEX}"
+      printf "guard_label=%s\n" "${ARTIFACT_GUARD_LABEL}"
+      printf "summary_heading=%s\n" "${ARTIFACT_SUMMARY_HEADING}"
+      printf "guard_markdown_out=%s\n" "${ARTIFACT_GUARD_MARKDOWN_OUT}"
+      printf "guard_json_out=%s\n" "${ARTIFACT_GUARD_JSON_OUT}"
+      printf "fallback_count=%s\n" "${#ARTIFACT_FALLBACK_PATHS[@]}"
+      printf "fallback0=%s\n" "${ARTIFACT_FALLBACK_PATHS[0]}"
+      printf "fallback3=%s\n" "${ARTIFACT_FALLBACK_PATHS[3]}"
+    '
+  )"
+
+  assert_contains "${env_out}" "changed=/tmp/workspace/.github/frontend-e2e-changed-files.txt"
+  assert_contains "${env_out}" "path_regex=^(frontend/|backend/|compose\\.full\\.yml$|\\.github/workflows/frontend-e2e\\.yml$)"
+  assert_contains "${env_out}" "pr_ref_regex=^(refs/pull/[0-9]+/merge)$"
+  assert_contains "${env_out}" "guard_label=frontend-e2e-artifact-stage"
+  assert_contains "${env_out}" "summary_heading=### frontend-e2e artifact strict policy"
+  assert_contains "${env_out}" "guard_markdown_out=/tmp/frontend-e2e-artifact-guard-summary.md"
+  assert_contains "${env_out}" "guard_json_out=/tmp/frontend-e2e-artifact-guard-summary.json"
+  assert_contains "${env_out}" "fallback_count=4"
+  assert_contains "${env_out}" "fallback0=frontend/"
+  assert_contains "${env_out}" "fallback3=.github/workflows/frontend-e2e.yml"
 
   echo "ci_load_artifact_stage_scope_config tests passed"
 }

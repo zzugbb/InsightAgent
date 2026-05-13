@@ -120,6 +120,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI artifact stage 策略解析收口（2026-05-11）：新增 `scripts/ci_resolve_artifact_stage_strict_level.sh`（配套 `scripts/test_ci_resolve_artifact_stage_strict_level.sh`），`frontend-e2e` 的 artifact guard strict-level 改为脚本按事件自动解析并支持 `workflow_dispatch` 覆盖（`auto/none/warn/fail-on-empty/fail-on-missing`）；当前策略为 `push@main=warn`、其余 `warn`
 - 阶段 5 CI artifact stage 防误伤补丁（2026-05-11）：`frontend-e2e` 的 artifact guard 改为仅在 `finalize_frontend` 成功时执行；若 finalize 失败则写入 `skipped` 摘要并不追加二次失败，避免掩盖真实首错步骤
 - 阶段 5 CI artifact stage PR 门禁扩展（2026-05-12）：`frontend-e2e` 的 artifact guard 现支持 `min_included_count` 阈值，并将 `pull_request` 场景扩展为可选 `fail-on-empty` 策略源；当前 workflow 已为 PR/关键分支场景启用 `fail-on-empty + min_included_count=2`，同时保留 `push@main=warn` 以兼容既有单产物路径
+- 阶段 5 CI workflow guard 收口（2026-05-13）：`frontend-e2e` workflow 已移除对 `--guard-markdown-out/--guard-json-out` 的显式传参，artifact/export guard 输出路径统一交由 finalize/scope 脚本解析；`scripts/test_ci_workflow_guards.sh` 同步改为验证“workflow 继续调用统一 guard 脚本，但不再硬编码 guard 输出路径”
 - 阶段 5 CI artifact upload 防二次报错补丁（2026-05-12）：`frontend-e2e` 的 upload 步骤改为仅在 `finalize_frontend` 成功时执行，避免 finalize 失败后继续触发 `actions/upload-artifact` 的空 path 报错；并新增 `scripts/test_ci_workflow_guards.sh` 静态校验 workflow guard 条件
 - 阶段 5 CI artifact PR 路径感知扩展（2026-05-12）：`frontend-e2e` 新增 `ci_resolve_artifact_stage_path_level.sh`、`ci_collect_changed_files.sh`、`ci_resolve_artifact_stage_scope_config.sh`、`ci_load_artifact_stage_scope_config.sh`、`ci_run_artifact_stage_guard.sh` 与 `ci_write_skipped_artifact_guard_summary.sh`，PR 只有在命中 frontend/backend/compose/workflow 关键路径时才升级 artifact guard；workflow 已将 artifact guard 主逻辑与 finalize 失败时的 skipped summary 下沉到脚本，统一先通过 scope 配置脚本生成规则，再通过 load helper 注入 changed-files 路径、fallback paths、path-regex、`pr_ref_regex` 与 guard 摘要元信息，`actions/checkout` 使用 `fetch-depth: 0`，并在 base diff 不可解析时回退关键路径标记。同时 path-regex 已修正为可命中真实 `frontend/...` / `backend/...` 改动与关键单文件路径，降低浅克隆、缺失 base SHA 与旧正则过窄带来的误判概率
 - 阶段 5 CI fixture 稳定性修复（2026-05-11）：`scripts/test_ci_finalize_e2e_for_workflow.sh` 的“缺失事件上下文应失败”断言改为显式清空 `GITHUB_EVENT_NAME/GITHUB_REF` 后执行，修复 GitHub Actions 环境变量导致的假阳性失败
@@ -355,13 +356,13 @@ npm run test:e2e:smoke:matrix
 
 ### 优先做
 
-1. `full-trace-session-lite`：任务详情抽屉/页面（任务快照 + 回放）已接入；后续补详情视图增强与更细粒度回放断言。
-2. `trace-export-json-md`：单任务 JSON/Markdown 导出入口与 Playwright 回归已接入；空数据/404/权限语义断言与前端导出错误提示一致性已补齐，后续补异常态可观测字段。
-3. `session-export-lite`：当前会话 JSON/Markdown 导出入口与 Playwright 回归已接入；空会话/404/跨用户隔离语义断言已补齐，后续补跨会话切换下的 UI 态断言。
+1. `full-trace-session-lite`：任务详情抽屉/页面（任务快照 + 回放）已接入；相关 Playwright 与主链路 e2e 当前轮收口已完成，后续按开发主线补更深的回放体验。
+2. `trace-export-json-md`：单任务 JSON/Markdown 导出入口与 Playwright 回归已接入；空数据/404/权限语义断言与前端导出错误提示一致性已补齐，当前轮 e2e 收口已完成。
+3. `session-export-lite`：当前会话 JSON/Markdown 导出入口与 Playwright 回归已接入；空会话/404/跨用户隔离语义断言已补齐，当前轮 e2e 收口已完成。
 4. `remote-provider-hardening`：真实模型错误提示、重试建议与设置入口联动。
-5. `e2e-main-path`：后端主链路 e2e 脚本已落地；前端 Playwright 现已覆盖主链路（登录态注入 + Workbench 兜底、任务流、Trace、RAG、导出）。
-6. `task-cancel-timeout`：首版已落地（取消按钮 + 状态提示）；后端 e2e/CI 已补齐，前端 Playwright 已补刷新恢复 + 取消后重发闭环。
-7. `running-task-recovery`：前端首版与恢复状态提示已落地（刷新/切回会话自动恢复 running 任务流）；后续补失败快照与可观测指标。
+5. `e2e-main-path`：后端主链路 e2e 脚本已落地；前端 Playwright 已覆盖主链路（登录态注入 + Workbench 兜底、任务流、Trace、RAG、导出），当前轮 e2e 收口已完成。
+6. `task-cancel-timeout`：首版已落地（取消按钮 + 状态提示）；后端 e2e/CI 已补齐，前端 Playwright 已补刷新恢复 + 取消后重发闭环，当前仅需随功能变更做小步回归。
+7. `running-task-recovery`：前端首版与恢复状态提示已落地（刷新/切回会话自动恢复 running 任务流）；当前 e2e 收口已覆盖恢复主闭环，后续按主线需要再加细粒度可观测指标。
 8. `usage-dashboard-lite`：用户/会话/任务维度成本统计增强。
 
 ### 暂不做
