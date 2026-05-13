@@ -470,6 +470,117 @@ def build_tool_attempt_start_events(
     }
 
 
+def build_tool_attempt_bundle(
+    *,
+    task_id: str,
+    step_id: str,
+    name: str,
+    tool_input: dict[str, object],
+    prompt: str,
+    user_id: str,
+    attempt: int,
+) -> dict[str, object]:
+    runtime_ctx = build_tool_runtime_context(
+        name=name,
+        prompt=prompt,
+        user_id=user_id,
+        attempt=attempt,
+    )
+    return {
+        "start_events": build_tool_attempt_start_events(
+            task_id=task_id,
+            step_id=step_id,
+            name=name,
+            tool_input=tool_input,
+            attempt=attempt,
+        ),
+        "runtime_ctx": runtime_ctx,
+        "runtime_policy": build_tool_execution_policy(runtime_ctx),
+    }
+
+
+def build_tool_attempt_execution(
+    *,
+    task_id: str,
+    iteration_ctx: dict[str, object],
+    action_step: dict[str, object],
+    attempt_bundle: dict[str, object],
+    name: str,
+    tool_input: dict[str, object],
+    output: dict[str, object] | None,
+    exc: MockToolExecutionError | None,
+    token_count: int,
+    last_error: str | None,
+    model: str,
+    rag_step_id: str,
+    rag_token_count: int,
+) -> dict[str, object]:
+    return build_tool_plan_item_execution(
+        task_id=task_id,
+        iteration_ctx=iteration_ctx,
+        action_step=action_step,
+        runtime_ctx=attempt_bundle["runtime_ctx"],
+        name=name,
+        tool_input=tool_input,
+        output=output,
+        exc=exc,
+        token_count=token_count,
+        last_error=last_error,
+        model=model,
+        rag_step_id=rag_step_id,
+        rag_token_count=rag_token_count,
+    )
+
+
+def build_tool_attempt_loop_result(
+    *,
+    attempt_execution: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "tool_end_event": attempt_execution["tool_end_event"],
+        "error_event": attempt_execution["error_event"],
+        "retryable": attempt_execution["retryable"],
+        "next_action_step": attempt_execution["next_action_step"],
+        "last_error": attempt_execution["last_error"],
+        "plan_item_result": attempt_execution["plan_item_result"],
+        "postprocess": attempt_execution["postprocess"],
+        "success_effects": attempt_execution["success_effects"],
+        "terminal_effects": attempt_execution["terminal_effects"],
+    }
+
+
+def build_tool_attempt_loop_terminal_result(
+    *,
+    loop_result: dict[str, object],
+) -> dict[str, object]:
+    terminal_effects = loop_result["terminal_effects"]
+    return {
+        "should_return": terminal_effects is not None,
+        "terminal_effects": terminal_effects,
+    }
+
+
+def build_tool_plan_item_retry_loop_result(
+    *,
+    loop_result: dict[str, object],
+) -> dict[str, object]:
+    success_effects = loop_result["success_effects"]
+    terminal_effects = loop_result["terminal_effects"]
+    trace_event = (
+        success_effects["trace"]
+        if success_effects is not None
+        else terminal_effects["trace"]
+        if terminal_effects is not None
+        else None
+    )
+    return {
+        "outcome": "success" if success_effects is not None else "terminal_failure",
+        "trace_event": trace_event,
+        "success_effects": success_effects,
+        "terminal_effects": terminal_effects,
+    }
+
+
 def build_tool_attempt_success_events(
     *,
     task_id: str,
@@ -996,13 +1107,37 @@ def build_tool_plan_item_execution(
             tool_name=name,
             output=success_output if isinstance(success_output, dict) else None,
             token_count=rag_token_count,
-        )
+    )
     plan_item_result = build_tool_plan_item_execution_result(
         iteration_execution=iteration_execution,
         rag_followup=rag_followup,
     )
+    attempt_outcome = iteration_execution["outcome"]
+    postprocess = None
+    success_effects = None
+    terminal_effects = None
+    if plan_item_result["success_bundle"] is not None:
+        postprocess = build_tool_plan_item_postprocess(
+            plan_item_result=plan_item_result,
+        )
+        success_effects = build_tool_plan_item_success_effects(
+            action_step=plan_item_result["action_step"],
+            postprocess=postprocess,
+        )
+    elif plan_item_result["terminal_failure"] is not None:
+        terminal_effects = build_tool_plan_item_terminal_effects(
+            action_step=plan_item_result["action_step"],
+            terminal_failure=plan_item_result["terminal_failure"],
+        )
     return {
         "start_events": iteration_execution["start_events"],
+        "iteration_execution": iteration_execution,
+        "tool_end_event": attempt_outcome["events"]["tool_end"],
+        "error_event": attempt_outcome["events"].get("error"),
+        "retryable": bool(attempt_outcome["retryable"]),
+        "postprocess": postprocess,
+        "success_effects": success_effects,
+        "terminal_effects": terminal_effects,
         "plan_item_result": plan_item_result,
         "next_action_step": plan_item_result["action_step"],
         "last_error": plan_item_result["last_error"],
@@ -1021,6 +1156,35 @@ def build_tool_plan_item_postprocess(
         "observation": success_bundle["observation"],
         "output": success_bundle["output"],
         "rag_followup": success_bundle["rag_followup"],
+    }
+
+
+def build_tool_plan_item_success_effects(
+    *,
+    action_step: dict[str, object],
+    postprocess: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "trace_step": action_step,
+        "trace": postprocess["trace"],
+        "observation": postprocess["observation"],
+        "output": postprocess["output"],
+        "rag_followup": postprocess["rag_followup"],
+    }
+
+
+def build_tool_plan_item_terminal_effects(
+    *,
+    action_step: dict[str, object],
+    terminal_failure: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "trace_step": action_step,
+        "trace": terminal_failure["trace"],
+        "status": terminal_failure["status"],
+        "error_message": terminal_failure["error_message"],
+        "audit_detail": terminal_failure["audit_detail"],
+        "state": terminal_failure["state"],
     }
 
 

@@ -14,9 +14,14 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_action_step_initial_meta,
     build_action_step_initial_step,
     build_tool_plan,
+    build_tool_attempt_bundle,
     build_tool_attempt_error_events,
     build_tool_attempt_start_events,
     build_tool_attempt_success_events,
+    build_tool_attempt_execution,
+    build_tool_attempt_loop_result,
+    build_tool_attempt_loop_terminal_result,
+    build_tool_plan_item_retry_loop_result,
     build_tool_attempt_error_transition,
     build_tool_attempt_outcome,
     build_tool_attempt_result,
@@ -26,6 +31,8 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_plan_item_execution,
     build_tool_plan_item_execution_result,
     build_tool_plan_item_result,
+    build_tool_plan_item_success_effects,
+    build_tool_plan_item_terminal_effects,
     build_tool_plan_item_success_bundle,
     build_tool_iteration_success_artifacts,
     build_tool_rag_followup,
@@ -428,6 +435,400 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             },
         )
+
+    def test_build_tool_attempt_bundle_keeps_runtime_and_start_shapes(self) -> None:
+        bundle = build_tool_attempt_bundle(
+            task_id="task-1",
+            step_id="step-1",
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            prompt="calc",
+            user_id="user-1",
+            attempt=1,
+        )
+
+        self.assertEqual(bundle["start_events"]["tool_start"]["retry_count"], 1)
+        self.assertEqual(bundle["start_events"]["state"]["phase"], "tool_retry")
+        self.assertEqual(bundle["runtime_ctx"].attempt, 1)
+        self.assertEqual(bundle["runtime_policy"]["effective_user_id"], "user-1")
+
+    def test_build_tool_attempt_execution_keeps_success_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        attempt_bundle = build_tool_attempt_bundle(
+            task_id="task-1",
+            step_id="step-1",
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+        )
+        output = {
+            "expression": "1+2*3",
+            "result": 7.0,
+            "tool_kind": "local_calculator",
+        }
+
+        result = build_tool_attempt_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            attempt_bundle=attempt_bundle,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=0,
+        )
+
+        self.assertEqual(result["start_events"]["state"]["phase"], "tool_running")
+        self.assertEqual(result["tool_end_event"]["status"], "done")
+        self.assertFalse(bool(result["retryable"]))
+        self.assertIsNotNone(result["success_effects"])
+        self.assertIsNone(result["terminal_effects"])
+
+    def test_build_tool_attempt_execution_keeps_terminal_failure_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        attempt_bundle = build_tool_attempt_bundle(
+            task_id="task-1",
+            step_id="step-1",
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            prompt="calc",
+            user_id="user-1",
+            attempt=1,
+        )
+
+        result = build_tool_attempt_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            attempt_bundle=attempt_bundle,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=None,
+            exc=MockToolExecutionError("transient", fatal=False),
+            token_count=9,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=0,
+        )
+
+        self.assertEqual(result["start_events"]["state"]["phase"], "tool_retry")
+        self.assertEqual(result["tool_end_event"]["status"], "error")
+        self.assertFalse(bool(result["retryable"]))
+        self.assertIsNone(result["success_effects"])
+        self.assertIsNotNone(result["terminal_effects"])
+
+    def test_build_tool_attempt_loop_result_keeps_success_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        attempt_bundle = build_tool_attempt_bundle(
+            task_id="task-1",
+            step_id="step-1",
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+        )
+        output = {
+            "expression": "1+2*3",
+            "result": 7.0,
+            "tool_kind": "local_calculator",
+        }
+        attempt_execution = build_tool_attempt_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            attempt_bundle=attempt_bundle,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=0,
+        )
+
+        loop_result = build_tool_attempt_loop_result(
+            attempt_execution=attempt_execution,
+        )
+
+        self.assertEqual(loop_result["tool_end_event"]["status"], "done")
+        self.assertFalse(bool(loop_result["retryable"]))
+        self.assertIsNotNone(loop_result["success_effects"])
+        self.assertIsNone(loop_result["terminal_effects"])
+
+    def test_build_tool_attempt_loop_result_keeps_terminal_failure_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        attempt_bundle = build_tool_attempt_bundle(
+            task_id="task-1",
+            step_id="step-1",
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            prompt="calc",
+            user_id="user-1",
+            attempt=1,
+        )
+        attempt_execution = build_tool_attempt_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            attempt_bundle=attempt_bundle,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=None,
+            exc=MockToolExecutionError("transient", fatal=False),
+            token_count=9,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=0,
+        )
+
+        loop_result = build_tool_attempt_loop_result(
+            attempt_execution=attempt_execution,
+        )
+
+        self.assertEqual(loop_result["tool_end_event"]["status"], "error")
+        self.assertFalse(bool(loop_result["retryable"]))
+        self.assertIsNone(loop_result["success_effects"])
+        self.assertIsNotNone(loop_result["terminal_effects"])
+
+    def test_build_tool_attempt_loop_terminal_result_keeps_success_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        attempt_bundle = build_tool_attempt_bundle(
+            task_id="task-1",
+            step_id="step-1",
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+        )
+        output = {
+            "expression": "1+2*3",
+            "result": 7.0,
+            "tool_kind": "local_calculator",
+        }
+        attempt_execution = build_tool_attempt_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            attempt_bundle=attempt_bundle,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=0,
+        )
+        loop_result = build_tool_attempt_loop_result(
+            attempt_execution=attempt_execution,
+        )
+
+        terminal = build_tool_attempt_loop_terminal_result(
+            loop_result=loop_result,
+        )
+
+        self.assertFalse(bool(terminal["should_return"]))
+        self.assertIsNone(terminal["terminal_effects"])
+
+    def test_build_tool_attempt_loop_terminal_result_keeps_terminal_failure_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        attempt_bundle = build_tool_attempt_bundle(
+            task_id="task-1",
+            step_id="step-1",
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            prompt="calc",
+            user_id="user-1",
+            attempt=1,
+        )
+        attempt_execution = build_tool_attempt_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            attempt_bundle=attempt_bundle,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=None,
+            exc=MockToolExecutionError("transient", fatal=False),
+            token_count=9,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=0,
+        )
+        loop_result = build_tool_attempt_loop_result(
+            attempt_execution=attempt_execution,
+        )
+
+        terminal = build_tool_attempt_loop_terminal_result(
+            loop_result=loop_result,
+        )
+
+        self.assertTrue(bool(terminal["should_return"]))
+        self.assertIsNotNone(terminal["terminal_effects"])
+        self.assertEqual(terminal["terminal_effects"]["state"]["phase"], "error")
+
+    def test_build_tool_plan_item_retry_loop_result_keeps_success_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool done: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "done",
+                    "output": {
+                        "expression": "1+2*3",
+                        "result": 7.0,
+                        "tool_kind": "local_calculator",
+                    },
+                }
+            },
+        }
+        success_effects = {
+            "trace_step": action_step,
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": action_step,
+            },
+            "observation": 'calc_eval: {"expression": "1+2*3", "result": 7.0, "tool_kind": "local_calculator"}',
+            "output": {
+                "expression": "1+2*3",
+                "result": 7.0,
+                "tool_kind": "local_calculator",
+            },
+            "rag_followup": None,
+        }
+        loop_result = {
+            "tool_end_event": {"status": "done"},
+            "error_event": None,
+            "retryable": False,
+            "next_action_step": action_step,
+            "last_error": None,
+            "plan_item_result": {"outcome": "success"},
+            "postprocess": {"trace": success_effects["trace"]},
+            "success_effects": success_effects,
+            "terminal_effects": None,
+        }
+
+        result = build_tool_plan_item_retry_loop_result(
+            loop_result=loop_result,
+        )
+
+        self.assertEqual(result["outcome"], "success")
+        self.assertEqual(result["trace_event"]["step"]["content"], "Tool done: calc_eval")
+        self.assertIsNotNone(result["success_effects"])
+        self.assertIsNone(result["terminal_effects"])
+
+    def test_build_tool_plan_item_retry_loop_result_keeps_terminal_failure_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool error: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "error",
+                }
+            },
+        }
+        terminal_effects = {
+            "trace_step": action_step,
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": action_step,
+            },
+            "status": "failed",
+            "error_message": "transient",
+            "audit_detail": {"step_id": "step-1", "retry_count": 2},
+            "state": {"task_id": "task-1", "phase": "error"},
+        }
+        loop_result = {
+            "tool_end_event": {"status": "error"},
+            "error_event": {"code": "tool_execution_error"},
+            "retryable": False,
+            "next_action_step": action_step,
+            "last_error": "transient",
+            "plan_item_result": {"outcome": "terminal_failure"},
+            "postprocess": None,
+            "success_effects": None,
+            "terminal_effects": terminal_effects,
+        }
+
+        result = build_tool_plan_item_retry_loop_result(
+            loop_result=loop_result,
+        )
+
+        self.assertEqual(result["outcome"], "terminal_failure")
+        self.assertEqual(result["trace_event"]["step"]["content"], "Tool error: calc_eval")
+        self.assertIsNone(result["success_effects"])
+        self.assertIsNotNone(result["terminal_effects"])
 
     def test_build_tool_step_updates_keep_current_shape(self) -> None:
         base_step = {
@@ -1392,6 +1793,16 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result["plan_item_result"]["success_bundle"]["trace"]["step"]["content"],
             "Tool done: calc_eval",
         )
+        self.assertEqual(result["tool_end_event"]["status"], "done")
+        self.assertFalse(bool(result["retryable"]))
+        self.assertIsNone(result["error_event"])
+        self.assertIsNotNone(result["postprocess"])
+        self.assertIsNotNone(result["success_effects"])
+        self.assertIsNone(result["terminal_effects"])
+        self.assertEqual(
+            result["success_effects"]["trace"]["step"]["content"],
+            "Tool done: calc_eval",
+        )
         self.assertEqual(
             result["next_action_step"]["content"],
             "Tool done: calc_eval",
@@ -1434,6 +1845,13 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result["plan_item_result"]["outcome"], "terminal_failure")
         self.assertEqual(result["start_events"]["state"]["phase"], "tool_retry")
         self.assertEqual(result["last_error"], "transient")
+        self.assertEqual(result["tool_end_event"]["status"], "error")
+        self.assertFalse(bool(result["retryable"]))
+        self.assertEqual(result["error_event"]["code"], "tool_execution_error")
+        self.assertIsNone(result["postprocess"])
+        self.assertIsNone(result["success_effects"])
+        self.assertIsNotNone(result["terminal_effects"])
+        self.assertEqual(result["terminal_effects"]["state"]["phase"], "error")
         self.assertIsNotNone(result["terminal_failure"])
         assert result["terminal_failure"] is not None
         self.assertEqual(result["terminal_failure"]["status"], "failed")
@@ -1486,6 +1904,53 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "demo-kb",
         )
 
+    def test_build_tool_plan_item_execution_exposes_iteration_execution_bundle(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+        )
+        output = {
+            "expression": "1+2*3",
+            "result": 7.0,
+            "tool_kind": "local_calculator",
+        }
+
+        result = build_tool_plan_item_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=0,
+        )
+
+        self.assertEqual(
+            result["iteration_execution"]["outcome"]["events"]["tool_end"]["status"],
+            "done",
+        )
+        self.assertEqual(
+            result["iteration_execution"]["start_events"]["state"]["phase"],
+            "tool_running",
+        )
+
     def test_build_tool_plan_item_postprocess_keeps_success_shape(self) -> None:
         action_step = {
             "id": "step-1",
@@ -1532,6 +1997,57 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(postprocess["output"], success_artifacts["output"])
         self.assertIsNone(postprocess["rag_followup"])
+
+    def test_build_tool_plan_item_success_effects_keep_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool done: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "done",
+                    "output": {
+                        "expression": "1+2*3",
+                        "result": 7.0,
+                        "tool_kind": "local_calculator",
+                    },
+                }
+            },
+        }
+        success_artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            name="calc_eval",
+        )
+        plan_item_result = build_tool_plan_item_result(
+            outcome="success",
+            action_step=action_step,
+            last_error=None,
+            success_bundle=build_tool_plan_item_success_bundle(
+                success_artifacts=success_artifacts,
+                rag_followup=None,
+            ),
+            terminal_failure=None,
+        )
+        postprocess = build_tool_plan_item_postprocess(
+            plan_item_result=plan_item_result,
+        )
+
+        effects = build_tool_plan_item_success_effects(
+            action_step=action_step,
+            postprocess=postprocess,
+        )
+
+        self.assertEqual(effects["trace_step"]["id"], "step-1")
+        self.assertEqual(effects["trace"]["step"]["content"], "Tool done: calc_eval")
+        self.assertEqual(
+            effects["observation"],
+            'calc_eval: {"expression": "1+2*3", "result": 7.0, "tool_kind": "local_calculator"}',
+        )
+        self.assertIsNone(effects["rag_followup"])
 
     def test_build_tool_plan_item_postprocess_keeps_rag_followup_shape(self) -> None:
         rag_followup = {
@@ -1586,6 +2102,38 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertEqual(postprocess["rag_followup"], rag_followup)
+
+    def test_build_tool_plan_item_terminal_effects_keep_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool error: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "error",
+                }
+            },
+        }
+        terminal_failure = build_tool_terminal_failure_transition(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            error_message="transient",
+            retry_count=2,
+        )
+
+        effects = build_tool_plan_item_terminal_effects(
+            action_step=action_step,
+            terminal_failure=terminal_failure,
+        )
+
+        self.assertEqual(effects["trace_step"]["id"], "step-1")
+        self.assertEqual(effects["trace"]["step"]["content"], "Tool error: calc_eval")
+        self.assertEqual(effects["status"], "failed")
+        self.assertEqual(effects["error_message"], "transient")
+        self.assertEqual(effects["state"]["phase"], "error")
 
 
 if __name__ == "__main__":
