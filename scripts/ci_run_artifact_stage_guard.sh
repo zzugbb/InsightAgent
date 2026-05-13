@@ -138,6 +138,13 @@ if [ -z "${artifact_strict_level}" ] || [ -z "${artifact_policy_source}" ]; then
   exit 2
 fi
 
+if [ -z "${guard_markdown_out}" ]; then
+  guard_markdown_out="${ARTIFACT_GUARD_MARKDOWN_OUT}"
+fi
+if [ -z "${guard_json_out}" ]; then
+  guard_json_out="${ARTIFACT_GUARD_JSON_OUT}"
+fi
+
 bash scripts/ci_assert_artifact_stage_health.sh \
   --scope "${scope}" \
   --included-count "${included_count}" \

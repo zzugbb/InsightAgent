@@ -191,9 +191,7 @@ jobs:
             --min-included-count "${FRONTEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT}" \
             --stage-dir "${{ steps.finalize_frontend.outputs.artifacts_stage_dir }}" \
             --manifest "${{ steps.finalize_frontend.outputs.artifact_manifest }}" \
-            --summary-file "$GITHUB_STEP_SUMMARY" \
-            --guard-markdown-out /tmp/frontend-e2e-artifact-guard-summary.md \
-            --guard-json-out /tmp/frontend-e2e-artifact-guard-summary.json
+            --summary-file "$GITHUB_STEP_SUMMARY"
 
       - name: Skip frontend artifact stage guard when finalize failed
         if: always() && steps.finalize_frontend.conclusion != 'success'

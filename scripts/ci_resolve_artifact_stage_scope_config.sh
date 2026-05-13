@@ -18,6 +18,8 @@ Output:
   - pr_ref_regex=<regex>
   - guard_label=<label>
   - summary_heading=<markdown heading>
+  - guard_markdown_out=<path>
+  - guard_json_out=<path>
   - fallback_path=<path>   # repeated for each fallback path
 USAGE
 }
@@ -53,6 +55,8 @@ case "${scope}" in
     pr_ref_regex='^(refs/pull/[0-9]+/merge)$'
     guard_label='backend-e2e-artifact-stage'
     summary_heading='### backend-e2e artifact strict policy'
+    guard_markdown_out='/tmp/backend-e2e-artifact-guard-summary.md'
+    guard_json_out='/tmp/backend-e2e-artifact-guard-summary.json'
     fallback_paths=(
       "backend/"
       "compose.full.yml"
@@ -65,6 +69,8 @@ case "${scope}" in
     pr_ref_regex='^(refs/pull/[0-9]+/merge)$'
     guard_label='frontend-e2e-artifact-stage'
     summary_heading='### frontend-e2e artifact strict policy'
+    guard_markdown_out='/tmp/frontend-e2e-artifact-guard-summary.md'
+    guard_json_out='/tmp/frontend-e2e-artifact-guard-summary.json'
     fallback_paths=(
       "frontend/"
       "backend/"
@@ -83,6 +89,8 @@ echo "path_regex=${path_regex}"
 echo "pr_ref_regex=${pr_ref_regex}"
 echo "guard_label=${guard_label}"
 echo "summary_heading=${summary_heading}"
+echo "guard_markdown_out=${guard_markdown_out}"
+echo "guard_json_out=${guard_json_out}"
 for fallback_path in "${fallback_paths[@]}"; do
   echo "fallback_path=${fallback_path}"
 done

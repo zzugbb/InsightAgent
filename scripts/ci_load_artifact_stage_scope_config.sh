@@ -56,12 +56,14 @@ path_regex="$(extract_single_value "path_regex")"
 pr_ref_regex="$(extract_single_value "pr_ref_regex")"
 guard_label="$(extract_single_value "guard_label")"
 summary_heading="$(extract_single_value "summary_heading")"
+guard_markdown_out="$(extract_single_value "guard_markdown_out")"
+guard_json_out="$(extract_single_value "guard_json_out")"
 fallback_paths=()
 while IFS= read -r fallback_path; do
   fallback_paths+=("${fallback_path}")
 done < <(awk -F= '$1=="fallback_path" {print substr($0, length($1)+2)}' "${config_file}")
 
-if [ -z "${changed_files_path}" ] || [ -z "${path_regex}" ] || [ -z "${pr_ref_regex}" ] || [ -z "${guard_label}" ] || [ -z "${summary_heading}" ] || [ "${#fallback_paths[@]}" -eq 0 ]; then
+if [ -z "${changed_files_path}" ] || [ -z "${path_regex}" ] || [ -z "${pr_ref_regex}" ] || [ -z "${guard_label}" ] || [ -z "${summary_heading}" ] || [ -z "${guard_markdown_out}" ] || [ -z "${guard_json_out}" ] || [ "${#fallback_paths[@]}" -eq 0 ]; then
   echo "failed to parse artifact stage scope config from ${config_file}" >&2
   exit 2
 fi
@@ -73,6 +75,8 @@ mkdir -p "$(dirname "${output_file}")"
   echo "ARTIFACT_PR_REF_REGEX=$(shell_quote "${pr_ref_regex}")"
   echo "ARTIFACT_GUARD_LABEL=$(shell_quote "${guard_label}")"
   echo "ARTIFACT_SUMMARY_HEADING=$(shell_quote "${summary_heading}")"
+  echo "ARTIFACT_GUARD_MARKDOWN_OUT=$(shell_quote "${guard_markdown_out}")"
+  echo "ARTIFACT_GUARD_JSON_OUT=$(shell_quote "${guard_json_out}")"
   printf 'ARTIFACT_FALLBACK_PATHS=('
   for fallback_path in "${fallback_paths[@]}"; do
     printf ' %s' "$(shell_quote "${fallback_path}")"
