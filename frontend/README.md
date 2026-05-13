@@ -39,6 +39,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 增量：`remote-provider-hardening` 前端收口已完成首轮；流式 `error` 与设置校验失败已按 `error_code` 做本地化提示映射，并保留错误码用于排障
 - 阶段 5 增量：`task-cancel-timeout` 前端首版已落地；Inspector「当前任务」支持取消运行中任务，流式状态接入 `cancelled/timeout` 事件提示
 - 阶段 5 协同：后端已补齐 `task-cancel-timeout` e2e 脚本并接入后端 CI（baseline/main-path/cancel/timeout；CI 已升级 `checkout`/`setup-python` 以适配 GitHub Actions Node 24；后端 Python 与 compose/`.python-version` 统一为 3.14）；前端 Node 与 compose/`.nvmrc`/engines 统一为 **24.x**，可继续专注可视化回归与状态细化
+- 阶段 5 协同（2026-05-13）：后端 `tool-runtime-productionization` 继续按“内部边界收口、外部行为不变”推进；`chat_execution_service.py` 中单次 tool attempt 的 success/error 分叉、tool success/error 的 step 更新、tool_end/error payload 组装、trace payload 拼装、fatal 失败收尾、RAG step 构造、observation 提取与 provider prompt 拼接已继续下沉到 `backend/app/services/tool_runtime.py` 的 runtime helper，focused 回归脚本 `backend/scripts/test_tool_runtime_slice.py` 已扩展到 33 条兼容测试。当前前端消费的 SSE/trace 契约保持不变，无需额外适配
 - 阶段 5 增量：`running-task-recovery` 前端首版已落地；刷新页面或切回会话时会自动接管该会话下 `pending/running` 任务流，并展示恢复中/成功/失败提示
 - 阶段 5 修复：会话切换时的任务串台已修复；流式状态按 `session_id` 绑定并按当前会话隔离渲染，避免短暂显示其他会话任务
 - 阶段 5 修复：恢复提示误报已修复；任务结束瞬间若列表状态滞后，自动恢复不再错误提示“任务流恢复失败”
@@ -88,6 +89,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 维护性补充（2026-05-09）：导出摘要对 `error-context.md` 的扫描已收敛为单次 `find` 后分组（main/shared/edge），减少重复扫描并提升分区计数口径一致性
 - 阶段 5 CI 维护性补充（2026-05-09 再补充）：导出摘要新增 `add_warning` 统一告警函数，集中维护 `P0/P1` 计数与提示文案拼装，降低阈值规则扩展的重复改动
 - 阶段 5 CI 准确性补充（2026-05-09）：`workbench-main-path` 分区已排除 shared 专项上下文（基于 `SHARED_CONTEXT_PATH_REGEX` 反向过滤），避免 shared 用例失败时把噪音计入主链路导出告警
+- 阶段 5 协同说明（2026-05-13）：当前轮进入后端 `tool-runtime-productionization` 连续小切片，已完成运行时最小 registry 化、显式 `ToolInvocation` 归一化边界与带最小元信息（`kind/label/retryable_by_default/default_timeout_ms/requires_user_context/supports_result_preview`）的 `ToolRegistration` 注册项结构收口；同时后端已开始用多个内部 helper 与 `ToolRuntimeContext` 消费这些注册项元信息，并进一步把 action step 初始组装、tool_start payload、tool success/error 元信息、tool_end payload、phase 与执行 policy 一并下沉到 runtime helper，但前端可见行为与现有 Playwright/e2e 契约保持不变
 - 阶段 5 CI 规则收口补充（2026-05-09）：新增 `MAIN_CONTEXT_PATH_REGEX` / `EDGE_CONTEXT_PATH_REGEX`，main/edge/shared 三分区匹配统一改为变量化入口，降低后续规则调整时的改动分散度
 - 阶段 5 CI 维护性补充（2026-05-09 三次）：导出摘要新增 `print_matched_files` / `print_key_lines` 统一输出函数，收敛 main/shared/edge 分区的重复打印逻辑并提升一致性
 - 阶段 5 CI 可见性补充（2026-05-09）：main/shared/edge 三分区断言计数均新增 `context_files_detected`，便于直接比对该分区当前计数是否具备对应失败上下文样本

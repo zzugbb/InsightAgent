@@ -1,6 +1,5 @@
 import json
 import re
-from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
 from collections.abc import Iterator
 from datetime import datetime
 from time import monotonic
@@ -17,14 +16,24 @@ from app.services.chat_persistence_service import (
     update_task_trace_steps,
 )
 from app.services.chroma_memory_service import try_append_task_memory
-from app.services.chroma_rag_service import query_knowledge_base
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
-
-
-class MockToolExecutionError(RuntimeError):
-    def __init__(self, message: str, *, fatal: bool):
-        super().__init__(message)
-        self.fatal = fatal
+from app.services.tool_runtime import (
+    build_action_step_initial_meta,
+    build_action_step_initial_step,
+    build_tool_attempt_outcome,
+    build_tool_attempt_start_events,
+    build_tool_observation_entry,
+    build_tool_prompt_with_observations,
+    build_tool_rag_step,
+    build_tool_execution_policy,
+    build_tool_step_output,
+    build_tool_terminal_failure_transition,
+    build_tool_trace_event,
+    build_tool_runtime_context,
+    MockToolExecutionError,
+    build_tool_plan,
+    run_tool,
+)
 
 
 class TaskExecutionAbortError(RuntimeError):
@@ -75,58 +84,6 @@ def sse_error_payload(
     return payload
 
 
-def _extract_calc_expression(prompt: str) -> str | None:
-    tagged = re.search(r"\[calc:(.+?)\]", prompt, flags=re.IGNORECASE)
-    if tagged:
-        expr = tagged.group(1).strip()
-        return expr or None
-
-    plain = re.search(r"(?:计算|calc)\s*[:：]?\s*([0-9+\-*/().%\s]{3,})", prompt)
-    if plain:
-        expr = plain.group(1).strip()
-        return expr or None
-
-    return None
-
-
-def _safe_eval_expression(expr: str) -> float:
-    tree = parse(expr, mode="eval")
-
-    def _eval(node: object) -> float:
-        if isinstance(node, Expression):
-            return _eval(node.body)
-        if isinstance(node, BinOp):
-            left = _eval(node.left)
-            right = _eval(node.right)
-            if isinstance(node.op, Add):
-                return left + right
-            if isinstance(node.op, Sub):
-                return left - right
-            if isinstance(node.op, Mult):
-                return left * right
-            if isinstance(node.op, Div):
-                return left / right
-            if isinstance(node.op, Mod):
-                return left % right
-            if isinstance(node.op, Pow):
-                return left**right
-            raise ValueError("unsupported binary operator")
-        if isinstance(node, UnaryOp):
-            value = _eval(node.operand)
-            if isinstance(node.op, UAdd):
-                return value
-            if isinstance(node.op, USub):
-                return -value
-            raise ValueError("unsupported unary operator")
-        if isinstance(node, int | float):
-            return float(node)
-        if hasattr(node, "value") and isinstance(getattr(node, "value"), (int, float)):
-            return float(getattr(node, "value"))
-        raise ValueError("unsupported expression node")
-
-    return _eval(tree)
-
-
 def _estimate_token_count(text: str) -> int:
     normalized = text.strip()
     if not normalized:
@@ -156,144 +113,6 @@ def _normalize_usage_token_count(value: int | None) -> int | None:
     return int(value)
 
 
-def _extract_knowledge_base_id(prompt: str) -> str | None:
-    tagged = re.search(r"\[kb:([a-zA-Z0-9_-]{1,64})\]", prompt)
-    if not tagged:
-        return None
-    value = tagged.group(1).strip()
-    return value or None
-
-
-def _build_tool_plan(prompt: str) -> list[dict[str, object]]:
-    normalized = prompt.strip().lower()
-    settings = get_settings()
-    knowledge_base_id = (
-        _extract_knowledge_base_id(prompt) or settings.rag_default_knowledge_base_id
-    )
-    plan: list[dict[str, object]] = [
-        {
-            "name": "mock_plan",
-            "input": {
-                "prompt_preview": prompt.strip()[:120],
-            },
-        }
-    ]
-
-    if (
-        "rag" in normalized
-        or "知识" in normalized
-        or "检索" in normalized
-        or "context" in normalized
-        or "[mock-multi-tool]" in normalized
-    ):
-        plan.append(
-            {
-                "name": "mock_retrieve",
-                "input": {
-                    "query": prompt.strip()[:80] or "default query",
-                    "top_k": settings.rag_default_top_k,
-                    "knowledge_base_id": knowledge_base_id,
-                },
-            }
-        )
-
-    calc_expr = _extract_calc_expression(prompt)
-    if calc_expr:
-        plan.append(
-            {
-                "name": "calc_eval",
-                "input": {
-                    "expression": calc_expr,
-                },
-            }
-        )
-
-    return plan
-
-
-def _run_mock_tool(
-    *,
-    name: str,
-    tool_input: dict[str, object],
-    prompt: str,
-    user_id: str,
-    attempt: int,
-) -> dict[str, object]:
-    normalized = prompt.strip().lower()
-
-    if "[mock-tool-fatal]" in normalized:
-        raise MockToolExecutionError(
-            "Mock tool fatal error: planner contract validation failed.",
-            fatal=True,
-        )
-
-    if "[mock-tool-error]" in normalized and attempt == 0:
-        raise MockToolExecutionError(
-            "Mock tool transient error: plan source unavailable on first attempt.",
-            fatal=False,
-        )
-
-    if name == "mock_plan":
-        return {
-            "plan": "Split task into analysis -> retrieval -> synthesis.",
-            "echo": True,
-        }
-
-    if name == "mock_retrieve":
-        query = str(tool_input.get("query", ""))
-        top_k_raw = tool_input.get("top_k")
-        top_k = top_k_raw if isinstance(top_k_raw, int) else 4
-        kb_raw = tool_input.get("knowledge_base_id")
-        kb_id = str(kb_raw or get_settings().rag_default_knowledge_base_id)
-        try:
-            result = query_knowledge_base(
-                user_id=user_id,
-                knowledge_base_id=kb_id,
-                query_text=query or prompt,
-                top_k=top_k,
-            )
-        except Exception as exc:  # noqa: BLE001
-            raise MockToolExecutionError(
-                f"RAG query failed: {exc}",
-                fatal=False,
-            ) from exc
-        chunks = [
-            str(x.get("content", "")).strip()
-            for x in result.get("hits", [])
-            if isinstance(x, dict)
-        ]
-        clean_chunks = [x for x in chunks if x]
-        return {
-            "chunks": clean_chunks,
-            "hits": result.get("hits", []),
-            "hit_count": int(result.get("hit_count", 0) or 0),
-            "knowledge_base_id": str(result.get("knowledge_base_id", kb_id)),
-            "collection": result.get("collection"),
-        }
-
-    if name == "calc_eval":
-        expression = str(tool_input.get("expression", "")).strip()
-        if not expression:
-            raise MockToolExecutionError(
-                "Calculator tool requires a non-empty expression.",
-                fatal=False,
-            )
-        try:
-            value = _safe_eval_expression(expression)
-        except Exception as exc:
-            raise MockToolExecutionError(
-                f"Calculator parse/eval failed: {exc}",
-                fatal=False,
-            ) from exc
-        return {
-            "expression": expression,
-            "result": value,
-            "tool_kind": "local_calculator",
-        }
-
-    raise MockToolExecutionError(f"Unknown mock tool: {name}", fatal=True)
-
-
 def stream_task_execution(
     *,
     task_id: str,
@@ -309,7 +128,6 @@ def stream_task_execution(
         0.0, float(get_settings().trace_persist_min_interval_sec)
     )
     TASK_TIMEOUT_SEC = max(1.0, float(get_settings().task_timeout_sec))
-    TOOL_MAX_RETRY = 1
     trace_steps: list[dict[str, object]] = []
     seq_cursor = 0
     last_trace_persist_ts = 0.0
@@ -435,7 +253,7 @@ def stream_task_execution(
 
         plan_step_id = str(uuid4())
         seq_cursor += 1
-        tool_plan = _build_tool_plan(prompt)
+        tool_plan = build_tool_plan(prompt)
         plan_content = "Planned tools: " + ", ".join(
             str(x["name"]) for x in tool_plan
         )
@@ -467,30 +285,21 @@ def stream_task_execution(
             tool_input = tool_spec.get("input")
             if not isinstance(tool_input, dict):
                 tool_input = {}
-
             action_step_id = str(uuid4())
-            action_step = {
-                "id": action_step_id,
-                "seq": seq_cursor + 1,
-                "type": "action",
-                "content": f"Tool running: {tool_name}",
-                "meta": {
-                    "model": getattr(provider, "model", "mock-gpt"),
-                    "step_type": "tool_call",
-                    "label": f"tool_{idx}",
-                    "retryCount": 0,
-                    "tokens": _estimate_token_count(
+            action_step = build_action_step_initial_step(
+                step_id=action_step_id,
+                seq=seq_cursor + 1,
+                name=tool_name,
+                meta=build_action_step_initial_meta(
+                    name=tool_name,
+                    tool_input=tool_input,
+                    model=getattr(provider, "model", "mock-gpt"),
+                    label=f"tool_{idx}",
+                    token_count=_estimate_token_count(
                         f"{tool_name} {json.dumps(tool_input, ensure_ascii=False)}"
                     ),
-                    "cost_estimate": None,
-                    "tool": {
-                        "name": tool_name,
-                        "input": tool_input,
-                        "status": "running",
-                        "retry_count": 0,
-                    },
-                },
-            }
+                ),
+            )
             seq_cursor += 1
             action_step["seq"] = seq_cursor
 
@@ -499,159 +308,132 @@ def stream_task_execution(
 
             while True:
                 raise_if_should_abort()
+                start_events = build_tool_attempt_start_events(
+                    task_id=task_id,
+                    step_id=action_step_id,
+                    name=tool_name,
+                    tool_input=tool_input,
+                    attempt=attempt,
+                )
                 yield sse_event(
                     "tool_start",
-                    {
-                        "task_id": task_id,
-                        "step_id": action_step_id,
-                        "name": tool_name,
-                        "input": tool_input,
-                        "retry_count": attempt,
-                    },
+                    start_events["tool_start"],
                 )
-                yield sse_event(
-                    "state",
-                    {
-                        "task_id": task_id,
-                        "phase": "tool_running" if attempt == 0 else "tool_retry",
-                    },
-                )
+                yield sse_event("state", start_events["state"])
 
                 try:
                     raise_if_should_abort()
-                    output = _run_mock_tool(
+                    runtime_ctx = build_tool_runtime_context(
                         name=tool_name,
-                        tool_input=tool_input,
                         prompt=prompt,
                         user_id=user_id,
                         attempt=attempt,
                     )
-
-                    action_step = {
-                        **action_step,
-                        "content": f"Tool done: {tool_name}",
-                        "meta": {
-                            **dict(action_step.get("meta", {})),
-                            "step_type": "tool_call",
-                            "retryCount": attempt,
-                            "tokens": _estimate_token_count(
-                                f"{tool_name} {json.dumps(output, ensure_ascii=False)}"
-                            ),
-                            "tool": {
-                                "name": tool_name,
-                                "input": tool_input,
-                                "output": output,
-                                "status": "done",
-                                "retry_count": attempt,
-                                "error": last_error,
-                            },
-                        },
-                    }
+                    runtime_policy = build_tool_execution_policy(runtime_ctx)
+                    output = run_tool(
+                        name=tool_name,
+                        tool_input=tool_input,
+                        prompt=prompt,
+                        user_id=str(runtime_policy["effective_user_id"]),
+                        attempt=attempt,
+                    )
+                    attempt_outcome = build_tool_attempt_outcome(
+                        task_id=task_id,
+                        step_id=action_step_id,
+                        action_step=action_step,
+                        runtime_ctx=runtime_ctx,
+                        name=tool_name,
+                        tool_input=tool_input,
+                        output=output,
+                        token_count=_estimate_token_count(
+                            f"{tool_name} {json.dumps(output, ensure_ascii=False)}"
+                        ),
+                        exc=None,
+                        last_error=last_error,
+                    )
+                    action_step = attempt_outcome["action_step"]
+                    success_events = attempt_outcome["events"]
                     yield sse_event(
                         "tool_end",
-                        {
-                            "task_id": task_id,
-                            "step_id": action_step_id,
-                            "status": "done",
-                            "latency_ms": 12,
-                            "output_preview": output,
-                            "retry_count": attempt,
-                        },
+                        success_events["tool_end"],
                     )
                     break
 
                 except MockToolExecutionError as exc:
-                    last_error = str(exc)
-                    is_retryable = (not exc.fatal) and attempt < TOOL_MAX_RETRY
-                    action_step = {
-                        **action_step,
-                        "content": f"Tool error: {tool_name}",
-                        "meta": {
-                            **dict(action_step.get("meta", {})),
-                            "step_type": "tool_call",
-                            "retryCount": attempt + 1,
-                            "tokens": _estimate_token_count(last_error),
-                            "tool": {
-                                "name": tool_name,
-                                "input": tool_input,
-                                "output": {"error": last_error},
-                                "status": "error",
-                                "retry_count": attempt + 1,
-                                "error": last_error,
-                            },
-                        },
-                    }
+                    runtime_ctx = build_tool_runtime_context(
+                        name=tool_name,
+                        prompt=prompt,
+                        user_id=user_id,
+                        attempt=attempt,
+                    )
+                    attempt_outcome = build_tool_attempt_outcome(
+                        task_id=task_id,
+                        step_id=action_step_id,
+                        action_step=action_step,
+                        runtime_ctx=runtime_ctx,
+                        name=tool_name,
+                        tool_input=tool_input,
+                        output=None,
+                        token_count=_estimate_token_count(str(exc)),
+                        exc=exc,
+                        last_error=None,
+                    )
+                    action_step = attempt_outcome["action_step"]
+                    error_events = attempt_outcome["events"]
+                    is_retryable = bool(attempt_outcome["retryable"])
+                    last_error = str(attempt_outcome["error_message"])
                     yield sse_event(
                         "tool_end",
-                        {
-                            "task_id": task_id,
-                            "step_id": action_step_id,
-                            "status": "error",
-                            "latency_ms": 12,
-                            "output_preview": {"error": last_error},
-                            "retry_count": attempt + 1,
-                            "error": last_error,
-                        },
+                        error_events["tool_end"],
                     )
-                    yield sse_event(
-                        "error",
-                        sse_error_payload(
-                            task_id=task_id,
-                            step_id=action_step_id,
-                            message=last_error,
-                            code="tool_execution_error",
-                            fatal=not is_retryable,
-                            retry_count=attempt + 1,
-                        ),
-                    )
+                    yield sse_event("error", error_events["error"])
                     if is_retryable:
                         attempt += 1
                         continue
 
                     trace_steps.append(action_step)
+                    terminal_failure = build_tool_terminal_failure_transition(
+                        task_id=task_id,
+                        step_id=action_step_id,
+                        action_step=action_step,
+                        error_message=last_error,
+                        retry_count=attempt + 1,
+                    )
                     yield sse_event(
                         "trace",
-                        {
-                            "task_id": task_id,
-                            "step_id": action_step_id,
-                            "step": action_step,
-                        },
+                        terminal_failure["trace"],
                     )
                     persist_trace(force=True)
                     complete_task(
                         task_id=task_id,
                         trace_steps=trace_steps,
                         user_id=user_id,
-                        status="failed",
+                        status=str(terminal_failure["status"]),
                     )
                     record_failure_event(
                         event_type="task_failed",
                         code="tool_execution_error",
-                        message=last_error,
-                        detail={"step_id": action_step_id, "retry_count": attempt + 1},
+                        message=str(terminal_failure["error_message"]),
+                        detail=terminal_failure["audit_detail"],
                     )
-                    yield sse_event("state", {"task_id": task_id, "phase": "error"})
+                    yield sse_event("state", terminal_failure["state"])
                     return
 
             trace_steps.append(action_step)
             yield sse_event(
                 "trace",
-                {
-                    "task_id": task_id,
-                    "step_id": action_step_id,
-                    "step": action_step,
-                },
+                build_tool_trace_event(
+                    task_id=task_id,
+                    step_id=action_step_id,
+                    step=action_step,
+                ),
             )
             persist_trace()
 
-            tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
-            tool_obj = (
-                tool_meta.get("tool")
-                if isinstance(tool_meta, dict) and isinstance(tool_meta.get("tool"), dict)
-                else {}
+            output = build_tool_step_output(action_step)
+            tool_observations.append(
+                build_tool_observation_entry(name=tool_name, output=output)
             )
-            output = tool_obj.get("output") if isinstance(tool_obj, dict) else None
-            tool_observations.append(f"{tool_name}: {json.dumps(output, ensure_ascii=False)}")
 
             if tool_name == "mock_retrieve" and isinstance(output, dict):
                 chunks = output.get("chunks")
@@ -659,28 +441,24 @@ def stream_task_execution(
                 if isinstance(chunks, list):
                     seq_cursor += 1
                     rag_step_id = str(uuid4())
-                    rag_step = {
-                        "id": rag_step_id,
-                        "seq": seq_cursor,
-                        "type": "thought",
-                        "content": "Retrieved snippets from mock knowledge base.",
-                        "meta": {
-                            "model": getattr(provider, "model", "mock-gpt"),
-                            "step_type": "rag_retrieval",
-                            "tokens": _estimate_token_count("\n".join(str(x) for x in chunks)),
-                            "cost_estimate": None,
-                            "rag": {
-                                "chunks": [str(x) for x in chunks],
-                                "knowledge_base_id": str(kb)
-                                if kb
-                                else get_settings().rag_default_knowledge_base_id,
-                            },
-                        },
-                    }
+                    rag_step = build_tool_rag_step(
+                        step_id=rag_step_id,
+                        seq=seq_cursor,
+                        model=getattr(provider, "model", "mock-gpt"),
+                        chunks=[str(x) for x in chunks],
+                        knowledge_base_id=str(kb)
+                        if kb
+                        else get_settings().rag_default_knowledge_base_id,
+                        token_count=_estimate_token_count("\n".join(str(x) for x in chunks)),
+                    )
                     trace_steps.append(rag_step)
                     yield sse_event(
                         "trace",
-                        {"task_id": task_id, "step_id": rag_step_id, "step": rag_step},
+                        build_tool_trace_event(
+                            task_id=task_id,
+                            step_id=rag_step_id,
+                            step=rag_step,
+                        ),
                     )
                     persist_trace()
 
@@ -720,11 +498,10 @@ def stream_task_execution(
             },
         )
 
-        provider_prompt = prompt
-        if tool_observations:
-            provider_prompt = (
-                f"{prompt}\n\nTool observations:\n" + "\n".join(tool_observations)
-            )
+        provider_prompt = build_tool_prompt_with_observations(
+            prompt=prompt,
+            tool_observations=tool_observations,
+        )
         prompt_tokens_estimated = _estimate_token_count(provider_prompt)
         stream_chunk_count = 0
         provider_usage: ProviderUsage | None = None
