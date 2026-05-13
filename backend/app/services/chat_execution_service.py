@@ -18,17 +18,12 @@ from app.services.chat_persistence_service import (
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.tool_runtime import (
-    build_action_step_initial_meta,
-    build_action_step_initial_step,
-    build_tool_attempt_outcome,
     build_tool_attempt_start_events,
-    build_tool_observation_entry,
+    build_tool_iteration_context,
+    build_tool_plan_item_execution,
+    build_tool_plan_item_postprocess,
     build_tool_prompt_with_observations,
-    build_tool_rag_step,
     build_tool_execution_policy,
-    build_tool_step_output,
-    build_tool_terminal_failure_transition,
-    build_tool_trace_event,
     build_tool_runtime_context,
     MockToolExecutionError,
     build_tool_plan,
@@ -286,20 +281,18 @@ def stream_task_execution(
             if not isinstance(tool_input, dict):
                 tool_input = {}
             action_step_id = str(uuid4())
-            action_step = build_action_step_initial_step(
+            iteration_ctx = build_tool_iteration_context(
                 step_id=action_step_id,
                 seq=seq_cursor + 1,
                 name=tool_name,
-                meta=build_action_step_initial_meta(
-                    name=tool_name,
-                    tool_input=tool_input,
-                    model=getattr(provider, "model", "mock-gpt"),
-                    label=f"tool_{idx}",
-                    token_count=_estimate_token_count(
-                        f"{tool_name} {json.dumps(tool_input, ensure_ascii=False)}"
-                    ),
+                tool_input=tool_input,
+                model=getattr(provider, "model", "mock-gpt"),
+                label=f"tool_{idx}",
+                token_count=_estimate_token_count(
+                    f"{tool_name} {json.dumps(tool_input, ensure_ascii=False)}"
                 ),
             )
+            action_step = iteration_ctx["action_step"]
             seq_cursor += 1
             action_step["seq"] = seq_cursor
 
@@ -315,10 +308,7 @@ def stream_task_execution(
                     tool_input=tool_input,
                     attempt=attempt,
                 )
-                yield sse_event(
-                    "tool_start",
-                    start_events["tool_start"],
-                )
+                yield sse_event("tool_start", start_events["tool_start"])
                 yield sse_event("state", start_events["state"])
 
                 try:
@@ -337,22 +327,30 @@ def stream_task_execution(
                         user_id=str(runtime_policy["effective_user_id"]),
                         attempt=attempt,
                     )
-                    attempt_outcome = build_tool_attempt_outcome(
+                    plan_item_execution = build_tool_plan_item_execution(
                         task_id=task_id,
-                        step_id=action_step_id,
+                        iteration_ctx=iteration_ctx,
                         action_step=action_step,
                         runtime_ctx=runtime_ctx,
                         name=tool_name,
                         tool_input=tool_input,
                         output=output,
+                        exc=None,
                         token_count=_estimate_token_count(
                             f"{tool_name} {json.dumps(output, ensure_ascii=False)}"
                         ),
-                        exc=None,
                         last_error=last_error,
+                        model=getattr(provider, "model", "mock-gpt"),
+                        rag_step_id=str(uuid4()),
+                        rag_token_count=_estimate_token_count(
+                            "\n".join(str(x) for x in output.get("chunks", []))
+                        )
+                        if isinstance(output, dict)
+                        else 0,
                     )
-                    action_step = attempt_outcome["action_step"]
-                    success_events = attempt_outcome["events"]
+                    plan_item_result = plan_item_execution["plan_item_result"]
+                    action_step = plan_item_execution["next_action_step"]
+                    success_events = plan_item_execution["iteration_execution"]["outcome"]["events"]
                     yield sse_event(
                         "tool_end",
                         success_events["tool_end"],
@@ -366,22 +364,27 @@ def stream_task_execution(
                         user_id=user_id,
                         attempt=attempt,
                     )
-                    attempt_outcome = build_tool_attempt_outcome(
+                    plan_item_execution = build_tool_plan_item_execution(
                         task_id=task_id,
-                        step_id=action_step_id,
+                        iteration_ctx=iteration_ctx,
                         action_step=action_step,
                         runtime_ctx=runtime_ctx,
                         name=tool_name,
                         tool_input=tool_input,
                         output=None,
-                        token_count=_estimate_token_count(str(exc)),
                         exc=exc,
+                        token_count=_estimate_token_count(str(exc)),
                         last_error=None,
+                        model=getattr(provider, "model", "mock-gpt"),
+                        rag_step_id=str(uuid4()),
+                        rag_token_count=0,
                     )
-                    action_step = attempt_outcome["action_step"]
+                    iteration_execution = plan_item_execution["iteration_execution"]
+                    attempt_outcome = iteration_execution["outcome"]
+                    action_step = plan_item_execution["next_action_step"]
                     error_events = attempt_outcome["events"]
                     is_retryable = bool(attempt_outcome["retryable"])
-                    last_error = str(attempt_outcome["error_message"])
+                    last_error = str(plan_item_execution["last_error"])
                     yield sse_event(
                         "tool_end",
                         error_events["tool_end"],
@@ -392,75 +395,43 @@ def stream_task_execution(
                         continue
 
                     trace_steps.append(action_step)
-                    terminal_failure = build_tool_terminal_failure_transition(
-                        task_id=task_id,
-                        step_id=action_step_id,
-                        action_step=action_step,
-                        error_message=last_error,
-                        retry_count=attempt + 1,
-                    )
+                    plan_item_result = plan_item_execution["plan_item_result"]
                     yield sse_event(
                         "trace",
-                        terminal_failure["trace"],
+                        plan_item_result["terminal_failure"]["trace"],
                     )
                     persist_trace(force=True)
                     complete_task(
                         task_id=task_id,
                         trace_steps=trace_steps,
                         user_id=user_id,
-                        status=str(terminal_failure["status"]),
+                        status=str(plan_item_result["terminal_failure"]["status"]),
                     )
                     record_failure_event(
                         event_type="task_failed",
                         code="tool_execution_error",
-                        message=str(terminal_failure["error_message"]),
-                        detail=terminal_failure["audit_detail"],
+                        message=str(plan_item_result["terminal_failure"]["error_message"]),
+                        detail=plan_item_result["terminal_failure"]["audit_detail"],
                     )
-                    yield sse_event("state", terminal_failure["state"])
+                    yield sse_event("state", plan_item_result["terminal_failure"]["state"])
                     return
 
             trace_steps.append(action_step)
-            yield sse_event(
-                "trace",
-                build_tool_trace_event(
-                    task_id=task_id,
-                    step_id=action_step_id,
-                    step=action_step,
-                ),
+            postprocess = build_tool_plan_item_postprocess(
+                plan_item_result=plan_item_result,
             )
+            yield sse_event("trace", postprocess["trace"])
             persist_trace()
 
-            output = build_tool_step_output(action_step)
-            tool_observations.append(
-                build_tool_observation_entry(name=tool_name, output=output)
-            )
+            output = postprocess["output"]
+            tool_observations.append(str(postprocess["observation"]))
 
-            if tool_name == "mock_retrieve" and isinstance(output, dict):
-                chunks = output.get("chunks")
-                kb = output.get("knowledge_base_id")
-                if isinstance(chunks, list):
-                    seq_cursor += 1
-                    rag_step_id = str(uuid4())
-                    rag_step = build_tool_rag_step(
-                        step_id=rag_step_id,
-                        seq=seq_cursor,
-                        model=getattr(provider, "model", "mock-gpt"),
-                        chunks=[str(x) for x in chunks],
-                        knowledge_base_id=str(kb)
-                        if kb
-                        else get_settings().rag_default_knowledge_base_id,
-                        token_count=_estimate_token_count("\n".join(str(x) for x in chunks)),
-                    )
-                    trace_steps.append(rag_step)
-                    yield sse_event(
-                        "trace",
-                        build_tool_trace_event(
-                            task_id=task_id,
-                            step_id=rag_step_id,
-                            step=rag_step,
-                        ),
-                    )
-                    persist_trace()
+            rag_followup = postprocess["rag_followup"]
+            if rag_followup is not None:
+                seq_cursor += 1
+                trace_steps.append(rag_followup["step"])
+                yield sse_event("trace", rag_followup["trace"])
+                persist_trace()
 
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
         raise_if_should_abort()

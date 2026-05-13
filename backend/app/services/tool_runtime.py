@@ -750,6 +750,280 @@ def build_tool_attempt_outcome(
     )
 
 
+def build_tool_iteration_context(
+    *,
+    step_id: str,
+    seq: int,
+    name: str,
+    tool_input: dict[str, object],
+    model: str,
+    label: str,
+    token_count: int,
+) -> dict[str, object]:
+    return {
+        "step_id": step_id,
+        "action_step": build_action_step_initial_step(
+            step_id=step_id,
+            seq=seq,
+            name=name,
+            meta=build_action_step_initial_meta(
+                name=name,
+                tool_input=tool_input,
+                model=model,
+                label=label,
+                token_count=token_count,
+            ),
+        ),
+    }
+
+
+def build_tool_iteration_success_artifacts(
+    *,
+    task_id: str,
+    step_id: str,
+    action_step: dict[str, object],
+    name: str,
+) -> dict[str, object]:
+    output = build_tool_step_output(action_step)
+    return {
+        "trace": build_tool_trace_event(
+            task_id=task_id,
+            step_id=step_id,
+            step=action_step,
+        ),
+        "observation": build_tool_observation_entry(name=name, output=output),
+        "output": output,
+    }
+
+
+def build_tool_rag_followup(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    tool_name: str,
+    output: dict[str, object] | None,
+    token_count: int,
+) -> dict[str, object] | None:
+    if tool_name != "mock_retrieve" or not isinstance(output, dict):
+        return None
+    chunks = output.get("chunks")
+    if not isinstance(chunks, list):
+        return None
+    kb = output.get("knowledge_base_id")
+    step = build_tool_rag_step(
+        step_id=step_id,
+        seq=seq,
+        model=model,
+        chunks=[str(x) for x in chunks],
+        knowledge_base_id=str(kb) if kb else get_settings().rag_default_knowledge_base_id,
+        token_count=token_count,
+    )
+    return {
+        "step": step,
+        "trace": build_tool_trace_event(
+            task_id=task_id,
+            step_id=step_id,
+            step=step,
+        ),
+    }
+
+
+def build_tool_iteration_execution(
+    *,
+    task_id: str,
+    step_id: str,
+    iteration_ctx: dict[str, object],
+    action_step: dict[str, object],
+    runtime_ctx: ToolRuntimeContext,
+    name: str,
+    tool_input: dict[str, object],
+    output: dict[str, object] | None,
+    exc: MockToolExecutionError | None,
+    token_count: int,
+    last_error: str | None,
+) -> dict[str, object]:
+    start_events = build_tool_attempt_start_events(
+        task_id=task_id,
+        step_id=step_id,
+        name=name,
+        tool_input=tool_input,
+        attempt=runtime_ctx.attempt,
+    )
+    outcome = build_tool_attempt_outcome(
+        task_id=task_id,
+        step_id=step_id,
+        action_step=dict(action_step),
+        runtime_ctx=runtime_ctx,
+        name=name,
+        tool_input=tool_input,
+        output=output,
+        exc=exc,
+        token_count=token_count,
+        last_error=last_error,
+    )
+    if outcome["outcome"] == "success":
+        return {
+            "start_events": start_events,
+            "outcome": outcome,
+            "success_artifacts": build_tool_iteration_success_artifacts(
+                task_id=task_id,
+                step_id=step_id,
+                action_step=outcome["action_step"],
+                name=name,
+            ),
+            "terminal_failure": None,
+        }
+
+    terminal_failure = None
+    if not bool(outcome["retryable"]):
+        terminal_failure = build_tool_terminal_failure_transition(
+            task_id=task_id,
+            step_id=step_id,
+            action_step=outcome["action_step"],
+            error_message=str(outcome["error_message"]),
+            retry_count=int(outcome["retry_count"]),
+        )
+    return {
+        "start_events": start_events,
+        "outcome": outcome,
+        "success_artifacts": None,
+        "terminal_failure": terminal_failure,
+    }
+
+
+def build_tool_plan_item_success_bundle(
+    *,
+    success_artifacts: dict[str, object],
+    rag_followup: dict[str, object] | None,
+) -> dict[str, object]:
+    return {
+        "trace": success_artifacts["trace"],
+        "observation": success_artifacts["observation"],
+        "output": success_artifacts["output"],
+        "rag_followup": rag_followup,
+    }
+
+
+def build_tool_plan_item_result(
+    *,
+    outcome: str,
+    action_step: dict[str, object],
+    last_error: str | None,
+    success_bundle: dict[str, object] | None,
+    terminal_failure: dict[str, object] | None,
+) -> dict[str, object]:
+    return {
+        "outcome": outcome,
+        "action_step": action_step,
+        "last_error": last_error,
+        "success_bundle": success_bundle,
+        "terminal_failure": terminal_failure,
+    }
+
+
+def build_tool_plan_item_execution_result(
+    *,
+    iteration_execution: dict[str, object],
+    rag_followup: dict[str, object] | None,
+) -> dict[str, object]:
+    success_artifacts = iteration_execution.get("success_artifacts")
+    terminal_failure = iteration_execution.get("terminal_failure")
+    outcome = iteration_execution["outcome"]
+    action_step = outcome["action_step"]
+    error_message = outcome.get("error_message")
+
+    if success_artifacts is not None:
+        return build_tool_plan_item_result(
+            outcome="success",
+            action_step=action_step,
+            last_error=error_message,
+            success_bundle=build_tool_plan_item_success_bundle(
+                success_artifacts=success_artifacts,
+                rag_followup=rag_followup,
+            ),
+            terminal_failure=None,
+        )
+
+    return build_tool_plan_item_result(
+        outcome="terminal_failure",
+        action_step=action_step,
+        last_error=error_message,
+        success_bundle=None,
+        terminal_failure=terminal_failure,
+    )
+
+
+def build_tool_plan_item_execution(
+    *,
+    task_id: str,
+    iteration_ctx: dict[str, object],
+    action_step: dict[str, object],
+    runtime_ctx: ToolRuntimeContext,
+    name: str,
+    tool_input: dict[str, object],
+    output: dict[str, object] | None,
+    exc: MockToolExecutionError | None,
+    token_count: int,
+    last_error: str | None,
+    model: str,
+    rag_step_id: str,
+    rag_token_count: int,
+) -> dict[str, object]:
+    iteration_execution = build_tool_iteration_execution(
+        task_id=task_id,
+        step_id=str(iteration_ctx["step_id"]),
+        iteration_ctx=iteration_ctx,
+        action_step=action_step,
+        runtime_ctx=runtime_ctx,
+        name=name,
+        tool_input=tool_input,
+        output=output,
+        exc=exc,
+        token_count=token_count,
+        last_error=last_error,
+    )
+    success_artifacts = iteration_execution.get("success_artifacts")
+    rag_followup = None
+    if success_artifacts is not None:
+        success_output = success_artifacts["output"]
+        rag_followup = build_tool_rag_followup(
+            task_id=task_id,
+            step_id=rag_step_id,
+            seq=int(action_step.get("seq", 0)) + 1,
+            model=model,
+            tool_name=name,
+            output=success_output if isinstance(success_output, dict) else None,
+            token_count=rag_token_count,
+        )
+    plan_item_result = build_tool_plan_item_execution_result(
+        iteration_execution=iteration_execution,
+        rag_followup=rag_followup,
+    )
+    return {
+        "start_events": iteration_execution["start_events"],
+        "plan_item_result": plan_item_result,
+        "next_action_step": plan_item_result["action_step"],
+        "last_error": plan_item_result["last_error"],
+        "terminal_failure": plan_item_result["terminal_failure"],
+    }
+
+
+def build_tool_plan_item_postprocess(
+    *,
+    plan_item_result: dict[str, object],
+) -> dict[str, object]:
+    success_bundle = plan_item_result["success_bundle"]
+    assert success_bundle is not None
+    return {
+        "trace": success_bundle["trace"],
+        "observation": success_bundle["observation"],
+        "output": success_bundle["output"],
+        "rag_followup": success_bundle["rag_followup"],
+    }
+
+
 def _extract_calc_expression(prompt: str) -> str | None:
     tagged = re.search(r"\[calc:(.+?)\]", prompt, flags=re.IGNORECASE)
     if tagged:

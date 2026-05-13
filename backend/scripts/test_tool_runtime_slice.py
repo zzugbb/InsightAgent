@@ -20,6 +20,15 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_attempt_error_transition,
     build_tool_attempt_outcome,
     build_tool_attempt_result,
+    build_tool_iteration_context,
+    build_tool_iteration_execution,
+    build_tool_plan_item_postprocess,
+    build_tool_plan_item_execution,
+    build_tool_plan_item_execution_result,
+    build_tool_plan_item_result,
+    build_tool_plan_item_success_bundle,
+    build_tool_iteration_success_artifacts,
+    build_tool_rag_followup,
     build_tool_attempt_success_transition,
     build_tool_prompt_with_observations,
     build_tool_rag_step,
@@ -880,6 +889,703 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(outcome["retry_count"], 1)
         self.assertEqual(outcome["action_step"]["content"], "Tool error: calc_eval")
         self.assertEqual(outcome["events"]["tool_end"]["status"], "error")
+
+    def test_build_tool_iteration_context_keeps_current_shape(self) -> None:
+        context = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+
+        self.assertEqual(context["step_id"], "step-1")
+        self.assertEqual(context["action_step"]["id"], "step-1")
+        self.assertEqual(context["action_step"]["seq"], 3)
+        self.assertEqual(context["action_step"]["content"], "Tool running: calc_eval")
+        self.assertEqual(context["action_step"]["meta"]["tool"]["status"], "running")
+
+    def test_build_tool_iteration_success_artifacts_keeps_current_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool done: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "done",
+                    "output": {
+                        "expression": "1+2*3",
+                        "result": 7.0,
+                        "tool_kind": "local_calculator",
+                    },
+                }
+            },
+        }
+
+        artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            name="calc_eval",
+        )
+
+        self.assertEqual(
+            artifacts["trace"],
+            {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": action_step,
+            },
+        )
+        self.assertEqual(
+            artifacts["observation"],
+            'calc_eval: {"expression": "1+2*3", "result": 7.0, "tool_kind": "local_calculator"}',
+        )
+        self.assertEqual(
+            artifacts["output"],
+            {
+                "expression": "1+2*3",
+                "result": 7.0,
+                "tool_kind": "local_calculator",
+            },
+        )
+
+    def test_build_tool_rag_followup_keeps_current_shape(self) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="mock_retrieve",
+            output={
+                "chunks": ["a", "b"],
+                "knowledge_base_id": "demo",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"],
+            {
+                "id": "rag-1",
+                "seq": 4,
+                "type": "thought",
+                "content": "Retrieved snippets from mock knowledge base.",
+                "meta": {
+                    "model": "mock-gpt",
+                    "step_type": "rag_retrieval",
+                    "tokens": 2,
+                    "cost_estimate": None,
+                    "rag": {
+                        "chunks": ["a", "b"],
+                        "knowledge_base_id": "demo",
+                    },
+                },
+            },
+        )
+        self.assertEqual(
+            followup["trace"],
+            {
+                "task_id": "task-1",
+                "step_id": "rag-1",
+                "step": followup["step"],
+            },
+        )
+
+    def test_build_tool_iteration_execution_keeps_success_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+        )
+        output = {
+            "expression": "1+2*3",
+            "result": 7.0,
+            "tool_kind": "local_calculator",
+        }
+
+        execution = build_tool_iteration_execution(
+            task_id="task-1",
+            step_id="step-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+        )
+
+        self.assertEqual(
+            execution["start_events"],
+            {
+                "tool_start": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "name": "calc_eval",
+                    "input": {"expression": "1+2*3"},
+                    "retry_count": 0,
+                },
+                "state": {
+                    "task_id": "task-1",
+                    "phase": "tool_running",
+                },
+            },
+        )
+        self.assertEqual(execution["outcome"]["outcome"], "success")
+        self.assertEqual(execution["outcome"]["events"]["tool_end"]["status"], "done")
+        self.assertEqual(
+            execution["success_artifacts"]["trace"],
+            {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": execution["outcome"]["action_step"],
+            },
+        )
+        self.assertIsNone(execution["terminal_failure"])
+
+    def test_build_tool_iteration_execution_keeps_terminal_error_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=1,
+        )
+
+        execution = build_tool_iteration_execution(
+            task_id="task-1",
+            step_id="step-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=None,
+            exc=MockToolExecutionError("transient", fatal=False),
+            token_count=9,
+            last_error=None,
+        )
+
+        self.assertEqual(execution["start_events"]["state"]["phase"], "tool_retry")
+        self.assertEqual(execution["outcome"]["outcome"], "error")
+        self.assertFalse(execution["outcome"]["retryable"])
+        self.assertIsNone(execution["success_artifacts"])
+        self.assertIsNotNone(execution["terminal_failure"])
+        assert execution["terminal_failure"] is not None
+        self.assertEqual(execution["terminal_failure"]["status"], "failed")
+        self.assertEqual(execution["terminal_failure"]["state"]["phase"], "error")
+
+    def test_build_tool_iteration_execution_uses_current_action_step_on_retry(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        current_step = build_tool_step_error_update(
+            action_step=iteration_ctx["action_step"],
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            retry_count=1,
+            token_count=9,
+            error_message="transient",
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=1,
+        )
+        output = {
+            "expression": "1+2*3",
+            "result": 7.0,
+            "tool_kind": "local_calculator",
+        }
+
+        execution = build_tool_iteration_execution(
+            task_id="task-1",
+            step_id="step-1",
+            iteration_ctx=iteration_ctx,
+            action_step=current_step,
+            runtime_ctx=runtime_ctx,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error="transient",
+        )
+
+        self.assertEqual(execution["start_events"]["tool_start"]["retry_count"], 1)
+        self.assertEqual(execution["start_events"]["state"]["phase"], "tool_retry")
+        self.assertEqual(
+            execution["outcome"]["action_step"]["meta"]["tool"]["error"],
+            "transient",
+        )
+        self.assertEqual(
+            execution["outcome"]["action_step"]["meta"]["tool"]["retry_count"],
+            1,
+        )
+
+    def test_build_tool_plan_item_success_bundle_keeps_current_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool done: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "done",
+                    "output": {
+                        "expression": "1+2*3",
+                        "result": 7.0,
+                        "tool_kind": "local_calculator",
+                    },
+                }
+            },
+        }
+        success_artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            name="calc_eval",
+        )
+
+        bundle = build_tool_plan_item_success_bundle(
+            success_artifacts=success_artifacts,
+            rag_followup=None,
+        )
+
+        self.assertEqual(bundle["trace"], success_artifacts["trace"])
+        self.assertEqual(bundle["observation"], success_artifacts["observation"])
+        self.assertEqual(bundle["output"], success_artifacts["output"])
+        self.assertIsNone(bundle["rag_followup"])
+
+    def test_build_tool_plan_item_result_keeps_success_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool done: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "done",
+                    "output": {
+                        "expression": "1+2*3",
+                        "result": 7.0,
+                        "tool_kind": "local_calculator",
+                    },
+                }
+            },
+        }
+        success_artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            name="calc_eval",
+        )
+
+        result = build_tool_plan_item_result(
+            outcome="success",
+            action_step=action_step,
+            last_error=None,
+            success_bundle=build_tool_plan_item_success_bundle(
+                success_artifacts=success_artifacts,
+                rag_followup=None,
+            ),
+            terminal_failure=None,
+        )
+
+        self.assertEqual(result["outcome"], "success")
+        self.assertIsNone(result["last_error"])
+        self.assertIsNotNone(result["success_bundle"])
+        self.assertIsNone(result["terminal_failure"])
+
+    def test_build_tool_plan_item_result_keeps_terminal_failure_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool error: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "error",
+                }
+            },
+        }
+        terminal_failure = build_tool_terminal_failure_transition(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            error_message="transient",
+            retry_count=2,
+        )
+
+        result = build_tool_plan_item_result(
+            outcome="terminal_failure",
+            action_step=action_step,
+            last_error="transient",
+            success_bundle=None,
+            terminal_failure=terminal_failure,
+        )
+
+        self.assertEqual(result["outcome"], "terminal_failure")
+        self.assertEqual(result["last_error"], "transient")
+        self.assertIsNone(result["success_bundle"])
+        self.assertEqual(result["terminal_failure"]["status"], "failed")
+
+    def test_build_tool_plan_item_execution_result_keeps_success_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool done: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "done",
+                    "output": {
+                        "expression": "1+2*3",
+                        "result": 7.0,
+                        "tool_kind": "local_calculator",
+                    },
+                }
+            },
+        }
+        success_artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            name="calc_eval",
+        )
+        iteration_execution = {
+            "outcome": {
+                "action_step": action_step,
+                "error_message": None,
+            },
+            "success_artifacts": success_artifacts,
+            "terminal_failure": None,
+        }
+
+        result = build_tool_plan_item_execution_result(
+            iteration_execution=iteration_execution,
+            rag_followup=None,
+        )
+
+        self.assertEqual(result["outcome"], "success")
+        self.assertEqual(result["success_bundle"]["trace"], success_artifacts["trace"])
+        self.assertIsNone(result["terminal_failure"])
+
+    def test_build_tool_plan_item_execution_result_keeps_terminal_failure_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool error: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "error",
+                }
+            },
+        }
+        terminal_failure = build_tool_terminal_failure_transition(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            error_message="transient",
+            retry_count=2,
+        )
+        iteration_execution = {
+            "outcome": {
+                "action_step": action_step,
+                "error_message": "transient",
+            },
+            "success_artifacts": None,
+            "terminal_failure": terminal_failure,
+        }
+
+        result = build_tool_plan_item_execution_result(
+            iteration_execution=iteration_execution,
+            rag_followup=None,
+        )
+
+        self.assertEqual(result["outcome"], "terminal_failure")
+        self.assertEqual(result["last_error"], "transient")
+        self.assertIsNone(result["success_bundle"])
+        self.assertEqual(result["terminal_failure"]["status"], "failed")
+
+    def test_build_tool_plan_item_execution_keeps_success_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+        )
+        output = {
+            "expression": "1+2*3",
+            "result": 7.0,
+            "tool_kind": "local_calculator",
+        }
+
+        result = build_tool_plan_item_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=0,
+        )
+
+        self.assertEqual(result["plan_item_result"]["outcome"], "success")
+        self.assertEqual(result["start_events"]["state"]["phase"], "tool_running")
+        self.assertEqual(
+            result["plan_item_result"]["success_bundle"]["trace"]["step"]["content"],
+            "Tool done: calc_eval",
+        )
+        self.assertEqual(
+            result["next_action_step"]["content"],
+            "Tool done: calc_eval",
+        )
+        self.assertIsNone(result["terminal_failure"])
+
+    def test_build_tool_plan_item_execution_keeps_terminal_failure_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=1,
+        )
+
+        result = build_tool_plan_item_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=None,
+            exc=MockToolExecutionError("transient", fatal=False),
+            token_count=9,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=0,
+        )
+
+        self.assertEqual(result["plan_item_result"]["outcome"], "terminal_failure")
+        self.assertEqual(result["start_events"]["state"]["phase"], "tool_retry")
+        self.assertEqual(result["last_error"], "transient")
+        self.assertIsNotNone(result["terminal_failure"])
+        assert result["terminal_failure"] is not None
+        self.assertEqual(result["terminal_failure"]["status"], "failed")
+
+    def test_build_tool_plan_item_execution_builds_rag_followup_for_retrieve(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="mock_retrieve",
+            tool_input={"query": "demo"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="mock_retrieve",
+            prompt="检索 demo",
+            user_id="user-1",
+            attempt=0,
+        )
+        output = {
+            "chunks": ["alpha", "beta"],
+            "knowledge_base_id": "demo-kb",
+            "hit_count": 2,
+        }
+
+        result = build_tool_plan_item_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="mock_retrieve",
+            tool_input={"query": "demo"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-1",
+            rag_token_count=2,
+        )
+
+        rag_followup = result["plan_item_result"]["success_bundle"]["rag_followup"]
+        self.assertIsNotNone(rag_followup)
+        assert rag_followup is not None
+        self.assertEqual(rag_followup["step"]["id"], "rag-1")
+        self.assertEqual(rag_followup["step"]["meta"]["tokens"], 2)
+        self.assertEqual(
+            rag_followup["step"]["meta"]["rag"]["knowledge_base_id"],
+            "demo-kb",
+        )
+
+    def test_build_tool_plan_item_postprocess_keeps_success_shape(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool done: calc_eval",
+            "meta": {
+                "tool": {
+                    "name": "calc_eval",
+                    "status": "done",
+                    "output": {
+                        "expression": "1+2*3",
+                        "result": 7.0,
+                        "tool_kind": "local_calculator",
+                    },
+                }
+            },
+        }
+        success_artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            name="calc_eval",
+        )
+        plan_item_result = build_tool_plan_item_result(
+            outcome="success",
+            action_step=action_step,
+            last_error=None,
+            success_bundle=build_tool_plan_item_success_bundle(
+                success_artifacts=success_artifacts,
+                rag_followup=None,
+            ),
+            terminal_failure=None,
+        )
+
+        postprocess = build_tool_plan_item_postprocess(
+            plan_item_result=plan_item_result,
+        )
+
+        self.assertEqual(postprocess["trace"], success_artifacts["trace"])
+        self.assertEqual(
+            postprocess["observation"],
+            'calc_eval: {"expression": "1+2*3", "result": 7.0, "tool_kind": "local_calculator"}',
+        )
+        self.assertEqual(postprocess["output"], success_artifacts["output"])
+        self.assertIsNone(postprocess["rag_followup"])
+
+    def test_build_tool_plan_item_postprocess_keeps_rag_followup_shape(self) -> None:
+        rag_followup = {
+            "step": {
+                "id": "rag-1",
+                "seq": 4,
+            },
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "rag-1",
+                "step": {
+                    "id": "rag-1",
+                    "seq": 4,
+                },
+            },
+        }
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool done: mock_retrieve",
+            "meta": {
+                "tool": {
+                    "name": "mock_retrieve",
+                    "status": "done",
+                    "output": {
+                        "chunks": ["alpha"],
+                        "knowledge_base_id": "demo-kb",
+                    },
+                }
+            },
+        }
+        success_artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=action_step,
+            name="mock_retrieve",
+        )
+        plan_item_result = build_tool_plan_item_result(
+            outcome="success",
+            action_step=action_step,
+            last_error=None,
+            success_bundle=build_tool_plan_item_success_bundle(
+                success_artifacts=success_artifacts,
+                rag_followup=rag_followup,
+            ),
+            terminal_failure=None,
+        )
+
+        postprocess = build_tool_plan_item_postprocess(
+            plan_item_result=plan_item_result,
+        )
+
+        self.assertEqual(postprocess["rag_followup"], rag_followup)
 
 
 if __name__ == "__main__":
