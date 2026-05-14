@@ -331,9 +331,9 @@ def stream_task_execution(
                 yield sse_event("state", return_action["state_event"])
                 return
 
-            continue_update = next_action_execution["continue_update"]
-            tool_observations.extend(continue_update["tool_observations"])
-            seq_cursor += int(continue_update["seq_increment"])
+            continue_action = next_action_execution["continue_action"]
+            tool_observations.extend(continue_action["tool_observations"])
+            seq_cursor += int(continue_action["seq_increment"])
 
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
         raise_if_should_abort()

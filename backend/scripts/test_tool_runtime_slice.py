@@ -31,6 +31,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_plan_item_execution,
     build_tool_plan_item_execution_result,
     build_tool_plan_item_stream_effects,
+    build_tool_plan_item_continue_action,
     build_tool_plan_item_next_action_execution,
     build_tool_plan_item_service_execution,
     build_tool_plan_item_service_effects_execution,
@@ -2340,6 +2341,24 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result["trace_event"], trace_write["event"])
         self.assertEqual(result["persist_force"], False)
 
+    def test_build_tool_plan_item_continue_action_keeps_shape(self) -> None:
+        continue_update = {
+            "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+            "seq_increment": 1,
+        }
+
+        result = build_tool_plan_item_continue_action(
+            continue_update=continue_update,
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+                "seq_increment": 1,
+            },
+        )
+
     def test_build_tool_plan_item_next_action_execution_keeps_continue_shape(self) -> None:
         next_action = {
             "kind": "continue",
@@ -2362,6 +2381,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             {
                 "kind": "continue",
                 "continue_update": next_action["continue_update"],
+                "continue_action": next_action["continue_update"],
                 "return_action": None,
             },
         )
@@ -2397,6 +2417,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(result["kind"], "return")
         self.assertEqual(result["continue_update"], next_action["continue_update"])
+        self.assertEqual(
+            result["continue_action"],
+            next_action["continue_update"],
+        )
         self.assertEqual(
             result["return_action"],
             {
@@ -2447,6 +2471,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result["next_action_execution"]["continue_update"],
             service_effects["next_action"]["continue_update"],
         )
+        self.assertEqual(
+            result["next_action_execution"]["continue_action"],
+            service_effects["next_action"]["continue_update"],
+        )
         self.assertIsNone(result["next_action_execution"]["return_action"])
 
     def test_build_tool_plan_item_service_effects_execution_keeps_return_shape(self) -> None:
@@ -2491,6 +2519,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(result["trace_write_actions"], service_effects["trace_write_actions"])
         self.assertEqual(result["next_action_execution"]["kind"], "return")
+        self.assertEqual(
+            result["next_action_execution"]["continue_action"],
+            service_effects["next_action"]["continue_update"],
+        )
         self.assertEqual(
             result["next_action_execution"]["return_action"],
             {

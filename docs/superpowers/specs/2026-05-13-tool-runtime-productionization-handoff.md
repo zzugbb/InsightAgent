@@ -40,6 +40,7 @@
 - `execute_tool_plan_item_retry_loop()`
 - `build_tool_plan_item_stream_effects()`
 - `build_tool_plan_item_continue_update()`
+- `build_tool_plan_item_continue_action()`
 - `build_tool_plan_item_next_action()`
 - `build_tool_plan_item_terminal_return_effects()`
 - `build_tool_plan_item_return_action()`
@@ -68,7 +69,7 @@
   - `record_failure_event(...)`
   - `yield state(error)`
   - `return`
-- `next_action_execution(kind=continue)` 下对 `continue_update` 的高层消费：
+- `next_action_execution(kind=continue)` 下对 `continue_action` 的高层消费：
   - `tool_observations.extend(...)`
   - `seq_cursor += ...`
 
@@ -76,7 +77,7 @@
 
 ### 3. 当前 focused regression 状态
 
-[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **77 条测试**，并全部通过。
+[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **78 条测试**，并全部通过。
 
 已覆盖的关键契约包括：
 
@@ -88,6 +89,7 @@
 - `build_tool_plan_item_retry_loop_execution_result`
 - `execute_tool_plan_item_retry_loop`
 - `build_tool_plan_item_stream_effects`
+- `build_tool_plan_item_continue_action`
 - `build_tool_plan_item_terminal_return_effects`
 - `build_tool_plan_item_return_action`
 - `build_tool_plan_item_trace_write_action`
@@ -139,90 +141,47 @@ bash scripts/test_ci_e2e_tooling.sh common
 
 结果：
 
-- focused tests：`69` 条通过
+- focused tests：`78` 条通过
 - `compileall`：通过
 - `common` tooling + backend/frontend e2e 聚合回归：通过
 
-## 推荐的新会话第一优先级
+## 当前建议
 
-### P0: 继续压薄 `chat_execution_service.py` 中单个 tool 的最终编排副作用
+### P0: 将当前状态视为阶段性合理停止点
 
-当前最自然的下一刀，已经不再是 retry loop 本身，而是继续把 service 里“执行 runtime 已经准备好的副作用指令”的部分再上提一层。
+到这一轮为止，`tool-runtime-productionization` 已经完成从：
 
-#### 建议目标
+- 单 tool retry loop
+- stream/continue/return effects
+- trace/return/next-action 执行输入
+- service 最终消费输入
 
-优先考虑在 `tool_runtime.py` 中新增一层更高层的“tool service effects” helper，直接把当前 service 里还在手工做的内容再统一一点，例如：
+的一整条内部收口链路。
 
-- trace append / persist 所需的高层动作序列
-- terminal failure 的最终任务副作用输入
-- success/terminal 分支选择所需的高层 `next_action`
-- `next_action` 对应的执行输入
-- service 最终消费所需的聚合执行输入
-- `loop_execution_result` 直达 service 最终消费输入
-- 需要继续兼容的旧字段（若 service 仍依赖）
+继续机械拆 helper 的收益已经明显下降，而过度包装的风险在上升。因此更推荐的下一步是：
 
-#### 理想返回内容
+1. 以当前 runtime 边界作为阶段性稳定点
+2. 维护 design/handoff 文档与 focused baseline
+3. 仅在新需求出现时再继续下一轮抽象
 
-建议该 helper 直接返回一个更接近 service 最终消费形态的对象，例如：
+### 什么情况下再继续抽象
 
-- `trace_write_actions`
-- `trace_writes`
-- `next_action`
-- `next_action_execution`
-- `service_effects_execution`
-- `service_execution`
-- `continue_update`
-- `return_action`
-- `should_return`
-- `terminal_return_effects`
+只有在以下触发条件出现时，才建议继续推进新一轮 runtime 下沉：
 
-#### 收益
+- 引入真实 tool registry
+- 增加更多 tool 类型并共享统一 policy
+- 将 runtime seam 复用到非 chat 执行路径
+- 将 trace/audit/state side effects 再统一成更高层执行器
 
-完成后，`chat_execution_service.py` 中单个 tool 的部分会进一步缩成：
+### 继续修改时的固定验证顺序
 
-1. 调 runtime helper 得到 loop 执行结果
-2. 发 SSE
-3. 按统一 effects 执行 trace / observation / task side effects
-4. 继续向最终答案流转或失败返回
-
-也就是让 service 更接近“编排副作用执行器”，而不是继续做 tool 级字段拼装。
-
-## 建议执行方式
-
-### 仍然保持当前节奏
-
-继续用“小切片成组推进”的方式，不要大改。
-
-建议一轮只推进 2-3 个紧邻小切片，例如：
-
-1. 先补 focused failing tests
-2. 再加一层更高层 service-effects helper
-3. 再把 service 切到消费这个 helper
-
-### 推荐固定验证顺序
-
-每一轮都保持：
+如果后续仍要修改这条链，继续保持：
 
 ```bash
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py
 python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py
 bash scripts/test_ci_e2e_tooling.sh common
 ```
-
-## 建议下一步测试补点
-
-新会话一开始，优先补这类 focused test：
-
-- 更高层 service-effects helper 的 success shape
-- 更高层 service-effects helper 的 terminal shape
-- `trace_write_actions` 的 step/event/persist_force 节奏不变
-- `trace_writes` 的 step/event/force_persist 节奏继续兼容
-- `next_action` 的 continue/return 分支语义不变
-- `next_action_execution` 的 continue/return 执行输入语义不变
-- `service_effects_execution` 的聚合 shape 不变
-- `service_execution` 的单入口聚合 shape 不变
-- `continue_update` 的 observation delta / seq delta 继续沿用既有语义
-- terminal path 的 `return_action` 输入与 task_failed / state(error) 语义继续不变
 
 ## 相关关键文件
 

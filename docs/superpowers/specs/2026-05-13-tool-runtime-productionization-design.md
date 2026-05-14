@@ -2,185 +2,187 @@
 
 **Date:** 2026-05-13
 **Scope:** InsightAgent backend service layer
-**Status:** Draft approved in chat, written for final review
+**Status:** Phase checkpoint after runtime extraction and service-consumption收口
 
 ## Goal
 
-Extract the current mock tool planning and execution logic out of
-`backend/app/services/chat_execution_service.py` into a dedicated backend
-runtime module, while keeping all external behavior unchanged.
+将 `backend/app/services/chat_execution_service.py` 中与 tool 执行相关的内部编排逻辑，持续下沉到
+`backend/app/services/tool_runtime.py`，同时保持以下外部契约不变：
+
+- SSE 事件形状不变
+- trace 结构不变
+- 错误语义不变
+- backend/frontend e2e 与 common tooling 回归不变
 
 ## Non-Goals
 
-- No SSE event contract changes
-- No REST API contract changes
-- No trace schema changes
-- No provider behavior changes
-- No new real tools in this slice
-- No queueing or concurrency changes in this slice
+- 不修改 REST API 契约
+- 不新增真实 tool 或 provider 能力
+- 不引入队列、并发或工作流语义变化
+- 不重写最终答案生成链路
+- 不为了抽象而抽象到完整 framework
 
 ## Success Criteria
 
-- `tool_start`, `tool_end`, `error`, `trace`, `state`, `done` event payloads remain unchanged
-- Existing task execution behavior for `mock_plan`, `mock_retrieve`, and `calc_eval` remains unchanged
-- Existing retry semantics for `[mock-tool-error]` and fatal semantics for `[mock-tool-fatal]` remain unchanged
-- Existing e2e assertions do not need to change because of this refactor
-- Tool logic is no longer embedded directly inside `chat_execution_service.py`
+- `mock_plan`、`mock_retrieve`、`calc_eval` 的现有行为保持不变
+- `[mock-tool-error]` 的 retry 语义保持不变
+- `[mock-tool-fatal]` 的 fatal 语义保持不变
+- `tool_start/tool_end/error/trace/state/done` 对外事件契约保持不变
+- tool 级控制流和大部分后处理字段搬运不再堆在 `chat_execution_service.py`
 
-## Current Problem
+## Current Architecture
 
-`backend/app/services/chat_execution_service.py` currently owns too many
-responsibilities at once:
+### 1. `tool_runtime.py` 当前已承接的层级
 
-- task lifecycle orchestration
-- SSE event emission
-- trace step persistence
-- timeout and cancel handling
-- tool plan construction
-- tool execution details
-- tool-specific output shaping
+运行时模块现在不仅负责 tool plan 和单 tool 执行，还已经承接了多层内部编排 helper，主要可分为：
 
-This makes the service harder to evolve into a real tool runtime. The smallest
-safe step is to isolate tool-specific logic without touching orchestration.
+- registry / invocation / runtime context
+- attempt start / success / error events
+- retry decision / transition
+- iteration context / iteration execution
+- plan-item result / execution result / postprocess
+- success effects / terminal effects
+- retry loop 最终结果
+- service 消费输入的逐层高层 helper
 
-## Chosen Approach
+当前关键 helper 包括：
 
-Use a lightweight dedicated runtime module while keeping
-`chat_execution_service.py` as the orchestration layer.
+- `build_tool_attempt_bundle()`
+- `build_tool_attempt_execution()`
+- `build_tool_attempt_loop_result()`
+- `build_tool_attempt_loop_terminal_result()`
+- `build_tool_plan_item_retry_loop_result()`
+- `build_tool_plan_item_retry_loop_execution_result()`
+- `execute_tool_plan_item_retry_loop()`
+- `build_tool_plan_item_stream_effects()`
+- `build_tool_plan_item_continue_update()`
+- `build_tool_plan_item_continue_action()`
+- `build_tool_plan_item_next_action()`
+- `build_tool_plan_item_terminal_return_effects()`
+- `build_tool_plan_item_return_action()`
+- `build_tool_plan_item_trace_write_action()`
+- `build_tool_plan_item_next_action_execution()`
+- `build_tool_plan_item_service_effects_execution()`
+- `build_tool_plan_item_service_execution()`
+- `build_tool_plan_item_service_effects()`
 
-This is intentionally narrower than introducing a full registry framework.
-It gives us clean internal boundaries now, while preserving today’s behavior
-and minimizing refactor risk.
+### 2. `chat_execution_service.py` 当前剩余职责
 
-## Architecture
+在当前阶段，`chat_execution_service.py` 保留的职责已经更接近“编排副作用执行器”：
 
-### 1. Keep orchestration in `chat_execution_service.py`
+- 外层 `tool_plan` 遍历
+- SSE 发射时机控制
+- trace step append 与 trace persistence 调用
+- terminal return 下的任务完成/失败副作用调用
+- success path 下按 `continue_action` 更新 `tool_observations` 与 `seq_cursor`
+- tool 阶段之后的最终答案生成、超时、取消与任务生命周期治理
 
-`chat_execution_service.py` will continue to own:
+当前单个 tool 的 service 壳子已经接近：
 
-- task status transitions
-- user message persistence
-- trace step sequencing and persistence
-- SSE event emission
-- timeout and cancellation checks
-- provider invocation for final answer generation
-- final task completion / failure handling
+1. 调 `execute_tool_plan_item_retry_loop()`
+2. 获取 `build_tool_plan_item_service_execution()` 产物
+3. 发 trace SSE 并持久化
+4. 执行 continue/return 两类后续动作
 
-### 2. Extract tool runtime logic into a dedicated module
+## Why This Is a Reasonable Stopping Point
 
-Create a new backend service module responsible for:
+这一轮之后，继续机械拆小 helper 的边际收益已经明显下降，原因是：
 
-- building a tool plan from the prompt
-- executing a single tool spec
-- encapsulating tool-specific errors
-- returning stable tool outputs in the same shape used today
+- 单个 tool 的 service 分支已经很薄
+- 外部 SSE/trace/e2e 契约已经被多层 focused regression 钉住
+- 继续细拆容易把“清晰边界”变成“过度包装”
+- 当前系统还没有新真实 tool、并发 runtime、队列执行器等新需求来验证更深抽象是否值得
 
-### 3. Preserve current tool set exactly
+因此，当前更合理的阶段性结论不是“继续无止境地下沉”，而是：
 
-The extracted runtime will support the current tool names only:
-
-- `mock_plan`
-- `mock_retrieve`
-- `calc_eval`
-
-The new module is a structural seam for future work, not a behavior expansion.
-
-## File Changes
-
-### New file
-
-- `backend/app/services/tool_runtime.py`
-
-Responsibilities:
-
-- define the tool execution error type
-- expose `build_tool_plan(prompt: str) -> list[dict[str, object]]`
-- expose a single tool execution entrypoint
-- hold current helper logic used only by tool execution
-
-### Modified file
-
-- `backend/app/services/chat_execution_service.py`
-
-Changes:
-
-- remove embedded tool plan construction helpers
-- remove embedded tool execution helpers
-- import the extracted runtime helpers
-- keep all existing orchestration, SSE, trace, retry, and completion behavior
+- 把现有内部 seam 稳定下来
+- 把设计文档、handoff 文档和测试基线同步到真实状态
+- 等到新真实能力进入时，再以需求倒逼下一轮 runtime 抽象
 
 ## Behavioral Compatibility Requirements
 
-The following must remain byte-for-byte compatible where practical, and
-semantically compatible everywhere:
+以下契约必须继续保持语义兼容：
 
-- tool names in plan output
-- tool input structures
-- tool output structures
-- retry count propagation
-- `meta.tool` content in trace steps
-- `tool_start` and `tool_end` payload fields
-- `tool_execution_error` code and fatal/retryable behavior
+- tool plan 输出结构
+- tool input / output 结构
+- retry count 与 fatal/retryable 语义
+- `meta.tool` 和 trace step 内容
+- `tool_execution_error` code
+- `tool_start/tool_end/error/trace/state/done` 事件形状
 
-## Testing Strategy
+## Testing and Verification
 
-This slice should use test-first validation around the new seam.
+当前采用严格的 focused compatibility + full regression 验证方式。
 
-### Required coverage
+### Focused regression baseline
 
-1. Tool plan compatibility
-   - prompts that trigger `mock_plan` only
-   - prompts that trigger `mock_retrieve`
-   - prompts that trigger `calc_eval`
+`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **78 条测试**，覆盖：
 
-2. Tool execution compatibility
-   - `mock_plan` output shape
-   - `calc_eval` output shape
-   - `mock_retrieve` success path shape
+- tool plan compatibility
+- tool execution compatibility
+- transient/fatal/unknown tool 行为
+- retry loop 最终结果
+- stream effects
+- continue / return / trace write / service execution 各层 helper shape
+- service 单入口消费链
 
-3. Error compatibility
-   - `[mock-tool-error]` first-attempt transient error
-   - `[mock-tool-fatal]` fatal error
-   - unknown tool fatal error
+### Required verification commands
 
-### Verification level for this slice
+每轮继续修改该链路时，固定执行：
 
-- add a focused backend test that exercises the extracted runtime directly
-- keep existing e2e/common regression checks green after refactor
+```bash
+backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py
+python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py
+bash scripts/test_ci_e2e_tooling.sh common
+```
 
-## Risks
+## Risks and Guardrails
 
-### Risk: accidental contract drift
+### Risk: contract drift
 
-If output dictionaries, retry counts, or error wording drift, existing front-end
-or e2e assertions may break.
+如果 helper 返回 shape 改动但 service 消费未同步，可能造成：
 
-Mitigation:
+- 丢失 `done`
+- trace 顺序漂移
+- terminal return 收尾丢字段
+- backend/frontend e2e 同时击穿
 
-- copy current behavior exactly first
-- add focused compatibility tests before moving code
+Guardrails:
 
-### Risk: refactor grows into framework work
+- 任何 helper shape 变化先补 focused failing test
+- 兼容字段不要随手删除
+- 每轮必须跑 focused + compileall + common
 
-It would be easy to introduce registry/context abstractions too early.
+### Risk: over-abstraction
 
-Mitigation:
+如果没有新需求支撑，继续机械拆 helper 容易让代码：
 
-- keep this slice to a single runtime module only
-- defer registry/generalized framework work to a later P0/P1 slice
+- 多一层间接性
+- 减少可读性
+- 提高未来接手成本
 
-## Rollout Plan
+Guardrails:
 
-1. Add failing compatibility tests for extracted runtime behavior
-2. Create `tool_runtime.py` with copied logic
-3. Rewire `chat_execution_service.py` to call the new runtime helpers
-4. Run focused tests
-5. Run existing regression checks that protect current e2e/service behavior
+- 优先在“减少真实 service 胶水”时再抽象
+- 若新 helper 只是换名转发、没有明显消费收益，就应停止
 
-## Follow-Up After This Slice
+## Recommended Next Step
 
-After this refactor is stable, the next logical slices are:
+当前更推荐的下一步不是继续硬拆内部 helper，而是：
 
-1. Introduce a minimal tool registry while preserving behavior
-2. Convert `calc_eval` into the first explicitly registered runtime tool
-3. Add runtime context boundaries for future real tools
+1. 维持当前 runtime 边界作为阶段性稳定点
+2. 将 design/handoff 文档视为“当前真实架构说明”
+3. 等到以下需求出现时再继续下一轮抽象：
+   - 引入真实 tool registry
+   - 支持更多 tool 类型或 runtime policy
+   - 引入并发/队列/workflow 执行模型
+   - 将最终答案生成链也纳入更统一的 runtime seam
+
+## Future Work Triggers
+
+只有在这些触发条件出现时，继续深入抽象才更合理：
+
+1. 需要新增真实 tool 并共享统一 policy
+2. 需要把 mock tool runtime 迁移为可扩展 registry
+3. 需要复用同一套 runtime seam 到非 chat 执行路径
+4. 需要将 trace / audit / state side effects 再统一成更高层执行器

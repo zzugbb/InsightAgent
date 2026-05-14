@@ -1410,6 +1410,16 @@ def build_tool_plan_item_continue_update(
     }
 
 
+def build_tool_plan_item_continue_action(
+    *,
+    continue_update: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "tool_observations": list(continue_update["tool_observations"]),
+        "seq_increment": int(continue_update["seq_increment"]),
+    }
+
+
 def build_tool_plan_item_next_action(
     *,
     continue_update: dict[str, object],
@@ -1459,12 +1469,16 @@ def build_tool_plan_item_next_action_execution(
     user_id: str,
     next_action: dict[str, object],
 ) -> dict[str, object]:
+    continue_action = build_tool_plan_item_continue_action(
+        continue_update=next_action["continue_update"],
+    )
     if str(next_action["kind"]) == "return":
         terminal_return_effects = next_action["terminal_return_effects"]
         assert terminal_return_effects is not None
         return {
             "kind": "return",
             "continue_update": next_action["continue_update"],
+            "continue_action": continue_action,
             "return_action": build_tool_plan_item_return_action(
                 task_id=task_id,
                 trace_steps=trace_steps,
@@ -1475,6 +1489,7 @@ def build_tool_plan_item_next_action_execution(
     return {
         "kind": "continue",
         "continue_update": next_action["continue_update"],
+        "continue_action": continue_action,
         "return_action": None,
     }
 
