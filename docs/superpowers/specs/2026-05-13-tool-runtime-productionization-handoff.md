@@ -44,6 +44,9 @@
 - `build_tool_plan_item_terminal_return_effects()`
 - `build_tool_plan_item_return_action()`
 - `build_tool_plan_item_trace_write_action()`
+- `build_tool_plan_item_next_action_execution()`
+- `build_tool_plan_item_service_effects_execution()`
+- `build_tool_plan_item_service_execution()`
 - `build_tool_plan_item_service_effects()`
 - `build_tool_plan_item_success_effects()`
 - `build_tool_plan_item_terminal_effects()`
@@ -60,12 +63,12 @@
   - `error`
   - `trace`
 - tool 级 `trace_write_actions` 执行与持久化副作用
-- `next_action(kind=return)` 下执行 runtime 已组装好的 return action：
+- `next_action_execution(kind=return)` 下执行 runtime 已组装好的 return action：
   - `complete_task(...)`
   - `record_failure_event(...)`
   - `yield state(error)`
   - `return`
-- `next_action(kind=continue)` 下对 `continue_update` 的高层消费：
+- `next_action_execution(kind=continue)` 下对 `continue_update` 的高层消费：
   - `tool_observations.extend(...)`
   - `seq_cursor += ...`
 
@@ -73,7 +76,7 @@
 
 ### 3. 当前 focused regression 状态
 
-[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **71 条测试**，并全部通过。
+[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **77 条测试**，并全部通过。
 
 已覆盖的关键契约包括：
 
@@ -88,6 +91,9 @@
 - `build_tool_plan_item_terminal_return_effects`
 - `build_tool_plan_item_return_action`
 - `build_tool_plan_item_trace_write_action`
+- `build_tool_plan_item_next_action_execution`
+- `build_tool_plan_item_service_effects_execution`
+- `build_tool_plan_item_service_execution`
 - `build_tool_plan_item_service_effects`
 - `build_tool_plan_item_execution` 继续暴露
   - `iteration_execution`
@@ -150,6 +156,9 @@ bash scripts/test_ci_e2e_tooling.sh common
 - trace append / persist 所需的高层动作序列
 - terminal failure 的最终任务副作用输入
 - success/terminal 分支选择所需的高层 `next_action`
+- `next_action` 对应的执行输入
+- service 最终消费所需的聚合执行输入
+- `loop_execution_result` 直达 service 最终消费输入
 - 需要继续兼容的旧字段（若 service 仍依赖）
 
 #### 理想返回内容
@@ -159,6 +168,9 @@ bash scripts/test_ci_e2e_tooling.sh common
 - `trace_write_actions`
 - `trace_writes`
 - `next_action`
+- `next_action_execution`
+- `service_effects_execution`
+- `service_execution`
 - `continue_update`
 - `return_action`
 - `should_return`
@@ -206,6 +218,9 @@ bash scripts/test_ci_e2e_tooling.sh common
 - `trace_write_actions` 的 step/event/persist_force 节奏不变
 - `trace_writes` 的 step/event/force_persist 节奏继续兼容
 - `next_action` 的 continue/return 分支语义不变
+- `next_action_execution` 的 continue/return 执行输入语义不变
+- `service_effects_execution` 的聚合 shape 不变
+- `service_execution` 的单入口聚合 shape 不变
 - `continue_update` 的 observation delta / seq delta 继续沿用既有语义
 - terminal path 的 `return_action` 输入与 task_failed / state(error) 语义继续不变
 

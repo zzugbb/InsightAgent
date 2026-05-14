@@ -1452,6 +1452,69 @@ def build_tool_plan_item_trace_write_action(
     }
 
 
+def build_tool_plan_item_next_action_execution(
+    *,
+    task_id: str,
+    trace_steps: list[dict[str, object]],
+    user_id: str,
+    next_action: dict[str, object],
+) -> dict[str, object]:
+    if str(next_action["kind"]) == "return":
+        terminal_return_effects = next_action["terminal_return_effects"]
+        assert terminal_return_effects is not None
+        return {
+            "kind": "return",
+            "continue_update": next_action["continue_update"],
+            "return_action": build_tool_plan_item_return_action(
+                task_id=task_id,
+                trace_steps=trace_steps,
+                user_id=user_id,
+                terminal_return_effects=terminal_return_effects,
+            ),
+        }
+    return {
+        "kind": "continue",
+        "continue_update": next_action["continue_update"],
+        "return_action": None,
+    }
+
+
+def build_tool_plan_item_service_effects_execution(
+    *,
+    task_id: str,
+    trace_steps: list[dict[str, object]],
+    user_id: str,
+    service_effects: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "trace_write_actions": list(service_effects["trace_write_actions"]),
+        "next_action_execution": build_tool_plan_item_next_action_execution(
+            task_id=task_id,
+            trace_steps=trace_steps,
+            user_id=user_id,
+            next_action=service_effects["next_action"],
+        ),
+    }
+
+
+def build_tool_plan_item_service_execution(
+    *,
+    task_id: str,
+    trace_steps: list[dict[str, object]],
+    user_id: str,
+    loop_execution_result: dict[str, object],
+) -> dict[str, object]:
+    service_effects = build_tool_plan_item_service_effects(
+        loop_execution_result=loop_execution_result,
+    )
+    return build_tool_plan_item_service_effects_execution(
+        task_id=task_id,
+        trace_steps=trace_steps,
+        user_id=user_id,
+        service_effects=service_effects,
+    )
+
+
 def build_tool_plan_item_service_effects(
     *,
     loop_execution_result: dict[str, object],

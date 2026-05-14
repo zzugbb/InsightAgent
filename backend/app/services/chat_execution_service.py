@@ -19,8 +19,7 @@ from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.tool_runtime import (
     build_tool_iteration_context,
-    build_tool_plan_item_service_effects,
-    build_tool_plan_item_return_action,
+    build_tool_plan_item_service_execution,
     build_tool_prompt_with_observations,
     build_tool_plan,
     execute_tool_plan_item_retry_loop,
@@ -312,30 +311,27 @@ def stream_task_execution(
                 loop_execution_result = item["result"]
 
             assert loop_execution_result is not None
-            service_effects = build_tool_plan_item_service_effects(
+            service_execution = build_tool_plan_item_service_execution(
+                task_id=task_id,
+                trace_steps=trace_steps,
+                user_id=user_id,
                 loop_execution_result=loop_execution_result,
             )
-            for trace_write_action in service_effects["trace_write_actions"]:
+            for trace_write_action in service_execution["trace_write_actions"]:
                 trace_steps.append(trace_write_action["trace_step"])
                 yield sse_event("trace", trace_write_action["trace_event"])
                 persist_trace(force=bool(trace_write_action["persist_force"]))
 
-            next_action = service_effects["next_action"]
-            if str(next_action["kind"]) == "return":
-                terminal_return_effects = next_action["terminal_return_effects"]
-                assert terminal_return_effects is not None
-                return_action = build_tool_plan_item_return_action(
-                    task_id=task_id,
-                    trace_steps=trace_steps,
-                    user_id=user_id,
-                    terminal_return_effects=terminal_return_effects,
-                )
+            next_action_execution = service_execution["next_action_execution"]
+            if str(next_action_execution["kind"]) == "return":
+                return_action = next_action_execution["return_action"]
+                assert return_action is not None
                 complete_task(**return_action["complete_task_kwargs"])
                 record_failure_event(**return_action["failure_event_kwargs"])
                 yield sse_event("state", return_action["state_event"])
                 return
 
-            continue_update = next_action["continue_update"]
+            continue_update = next_action_execution["continue_update"]
             tool_observations.extend(continue_update["tool_observations"])
             seq_cursor += int(continue_update["seq_increment"])
 
