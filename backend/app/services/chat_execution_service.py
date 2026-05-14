@@ -18,16 +18,11 @@ from app.services.chat_persistence_service import (
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.tool_runtime import (
-    build_tool_attempt_bundle,
-    build_tool_attempt_execution,
-    build_tool_attempt_loop_result,
-    build_tool_attempt_loop_terminal_result,
-    build_tool_plan_item_retry_loop_result,
     build_tool_iteration_context,
+    build_tool_plan_item_stream_effects,
     build_tool_prompt_with_observations,
-    MockToolExecutionError,
     build_tool_plan,
-    run_tool,
+    execute_tool_plan_item_retry_loop,
 )
 
 
@@ -296,147 +291,61 @@ def stream_task_execution(
             seq_cursor += 1
             action_step["seq"] = seq_cursor
 
-            attempt = 0
-            last_error: str | None = None
+            loop_execution_result = None
+            for item in execute_tool_plan_item_retry_loop(
+                task_id=task_id,
+                iteration_ctx=iteration_ctx,
+                initial_action_step=action_step,
+                tool_name=tool_name,
+                tool_input=tool_input,
+                prompt=prompt,
+                user_id=user_id,
+                model=getattr(provider, "model", "mock-gpt"),
+                estimate_token_count=_estimate_token_count,
+                make_step_id=lambda: str(uuid4()),
+                raise_if_should_abort=raise_if_should_abort,
+            ):
+                if item["kind"] == "event":
+                    yield sse_event(str(item["event"]), item["data"])
+                    continue
+                loop_execution_result = item["result"]
 
-            while True:
-                raise_if_should_abort()
-                attempt_bundle = build_tool_attempt_bundle(
-                    task_id=task_id,
-                    step_id=action_step_id,
-                    name=tool_name,
-                    tool_input=tool_input,
-                    prompt=prompt,
-                    user_id=user_id,
-                    attempt=attempt,
-                )
-                start_events = attempt_bundle["start_events"]
-                yield sse_event("tool_start", start_events["tool_start"])
-                yield sse_event("state", start_events["state"])
-
-                try:
-                    raise_if_should_abort()
-                    runtime_policy = attempt_bundle["runtime_policy"]
-                    output = run_tool(
-                        name=tool_name,
-                        tool_input=tool_input,
-                        prompt=prompt,
-                        user_id=str(runtime_policy["effective_user_id"]),
-                        attempt=attempt,
-                    )
-                    plan_item_execution = build_tool_attempt_execution(
-                        task_id=task_id,
-                        iteration_ctx=iteration_ctx,
-                        action_step=action_step,
-                        attempt_bundle=attempt_bundle,
-                        name=tool_name,
-                        tool_input=tool_input,
-                        output=output,
-                        exc=None,
-                        token_count=_estimate_token_count(
-                            f"{tool_name} {json.dumps(output, ensure_ascii=False)}"
-                        ),
-                        last_error=last_error,
-                        model=getattr(provider, "model", "mock-gpt"),
-                        rag_step_id=str(uuid4()),
-                        rag_token_count=_estimate_token_count(
-                            "\n".join(str(x) for x in output.get("chunks", []))
-                        )
-                        if isinstance(output, dict)
-                        else 0,
-                    )
-                    loop_result = build_tool_attempt_loop_result(
-                        attempt_execution=plan_item_execution,
-                    )
-                    plan_item_result = loop_result["plan_item_result"]
-                    action_step = loop_result["next_action_step"]
-                    yield sse_event(
-                        "tool_end",
-                        loop_result["tool_end_event"],
-                    )
-                    break
-
-                except MockToolExecutionError as exc:
-                    plan_item_execution = build_tool_attempt_execution(
-                        task_id=task_id,
-                        iteration_ctx=iteration_ctx,
-                        action_step=action_step,
-                        attempt_bundle=attempt_bundle,
-                        name=tool_name,
-                        tool_input=tool_input,
-                        output=None,
-                        exc=exc,
-                        token_count=_estimate_token_count(str(exc)),
-                        last_error=None,
-                        model=getattr(provider, "model", "mock-gpt"),
-                        rag_step_id=str(uuid4()),
-                        rag_token_count=0,
-                    )
-                    loop_result = build_tool_attempt_loop_result(
-                        attempt_execution=plan_item_execution,
-                    )
-                    action_step = loop_result["next_action_step"]
-                    is_retryable = bool(loop_result["retryable"])
-                    last_error = str(loop_result["last_error"])
-                    yield sse_event(
-                        "tool_end",
-                        loop_result["tool_end_event"],
-                    )
-                    error_event = loop_result["error_event"]
-                    if error_event is not None:
-                        yield sse_event("error", error_event)
-                    if is_retryable:
-                        attempt += 1
-                        continue
-
-                    plan_item_result = loop_result["plan_item_result"]
-                    loop_terminal_result = build_tool_attempt_loop_terminal_result(
-                        loop_result=loop_result,
-                    )
-                    terminal_effects = loop_terminal_result["terminal_effects"]
-                    assert loop_terminal_result["should_return"]
-                    assert terminal_effects is not None
-                    trace_steps.append(terminal_effects["trace_step"])
-                    yield sse_event(
-                        "trace",
-                        terminal_effects["trace"],
-                    )
-                    persist_trace(force=True)
-                    complete_task(
-                        task_id=task_id,
-                        trace_steps=trace_steps,
-                        user_id=user_id,
-                        status=str(terminal_effects["status"]),
-                    )
-                    record_failure_event(
-                        event_type="task_failed",
-                        code="tool_execution_error",
-                        message=str(terminal_effects["error_message"]),
-                        detail=terminal_effects["audit_detail"],
-                    )
-                    yield sse_event("state", terminal_effects["state"])
-                    return
-
-            retry_loop_result = build_tool_plan_item_retry_loop_result(
-                loop_result=loop_result,
+            assert loop_execution_result is not None
+            stream_effects = build_tool_plan_item_stream_effects(
+                loop_execution_result=loop_execution_result,
             )
-            postprocess = loop_result["postprocess"]
-            assert postprocess is not None
-            success_effects = retry_loop_result["success_effects"]
+            for trace_step, trace_event in zip(
+                stream_effects["trace_steps"],
+                stream_effects["trace_events"],
+            ):
+                trace_steps.append(trace_step)
+                yield sse_event("trace", trace_event)
+                persist_trace(force=bool(stream_effects["should_return"]))
+
+            if bool(stream_effects["should_return"]):
+                terminal_effects = stream_effects["terminal_effects"]
+                assert terminal_effects is not None
+                complete_task(
+                    task_id=task_id,
+                    trace_steps=trace_steps,
+                    user_id=user_id,
+                    status=str(terminal_effects["status"]),
+                )
+                record_failure_event(
+                    event_type="task_failed",
+                    code="tool_execution_error",
+                    message=str(terminal_effects["error_message"]),
+                    detail=terminal_effects["audit_detail"],
+                )
+                yield sse_event("state", terminal_effects["state"])
+                return
+
+            success_effects = loop_execution_result["success_effects"]
             assert success_effects is not None
-            trace_steps.append(success_effects["trace_step"])
-            yield sse_event("trace", retry_loop_result["trace_event"])
-            persist_trace()
-
-            output = success_effects["output"]
-            tool_observations.append(str(success_effects["observation"]))
-
+            tool_observations.append(str(stream_effects["observation"]))
             rag_followup = success_effects["rag_followup"]
             if rag_followup is not None:
                 seq_cursor += 1
-                trace_steps.append(rag_followup["step"])
-                yield sse_event("trace", rag_followup["trace"])
-                persist_trace()
 
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
         raise_if_should_abort()

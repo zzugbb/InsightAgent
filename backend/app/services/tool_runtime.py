@@ -4,7 +4,7 @@ import json
 import re
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Iterator
 
 from app.config import get_settings
 from app.services.chroma_rag_service import query_knowledge_base
@@ -579,6 +579,166 @@ def build_tool_plan_item_retry_loop_result(
         "success_effects": success_effects,
         "terminal_effects": terminal_effects,
     }
+
+
+def build_tool_plan_item_retry_loop_execution_result(
+    *,
+    loop_result: dict[str, object],
+) -> dict[str, object]:
+    retry_loop_result = build_tool_plan_item_retry_loop_result(
+        loop_result=loop_result,
+    )
+    loop_terminal_result = build_tool_attempt_loop_terminal_result(
+        loop_result=loop_result,
+    )
+    return {
+        "outcome": retry_loop_result["outcome"],
+        "trace_event": retry_loop_result["trace_event"],
+        "success_effects": retry_loop_result["success_effects"],
+        "terminal_effects": retry_loop_result["terminal_effects"],
+        "should_return": loop_terminal_result["should_return"],
+        "loop_result": loop_result,
+        "retry_loop_result": retry_loop_result,
+        "loop_terminal_result": loop_terminal_result,
+    }
+
+
+def execute_tool_plan_item_retry_loop(
+    *,
+    task_id: str,
+    iteration_ctx: dict[str, object],
+    initial_action_step: dict[str, object],
+    tool_name: str,
+    tool_input: dict[str, object],
+    prompt: str,
+    user_id: str,
+    model: str,
+    estimate_token_count: Callable[[str], int],
+    make_step_id: Callable[[], str],
+    raise_if_should_abort: Callable[[], None],
+    run_tool_fn: ToolRunner | None = None,
+) -> Iterator[dict[str, object]]:
+    step_id = str(iteration_ctx["step_id"])
+    action_step = dict(initial_action_step)
+    attempt = 0
+    last_error: str | None = None
+    runner = run_tool if run_tool_fn is None else run_tool_fn
+
+    while True:
+        raise_if_should_abort()
+        attempt_bundle = build_tool_attempt_bundle(
+            task_id=task_id,
+            step_id=step_id,
+            name=tool_name,
+            tool_input=tool_input,
+            prompt=prompt,
+            user_id=user_id,
+            attempt=attempt,
+        )
+        start_events = attempt_bundle["start_events"]
+        yield {
+            "kind": "event",
+            "event": "tool_start",
+            "data": start_events["tool_start"],
+        }
+        yield {
+            "kind": "event",
+            "event": "state",
+            "data": start_events["state"],
+        }
+
+        try:
+            raise_if_should_abort()
+            runtime_policy = attempt_bundle["runtime_policy"]
+            output = runner(
+                name=tool_name,
+                tool_input=tool_input,
+                prompt=prompt,
+                user_id=str(runtime_policy["effective_user_id"]),
+                attempt=attempt,
+            )
+            plan_item_execution = build_tool_attempt_execution(
+                task_id=task_id,
+                iteration_ctx=iteration_ctx,
+                action_step=action_step,
+                attempt_bundle=attempt_bundle,
+                name=tool_name,
+                tool_input=tool_input,
+                output=output,
+                exc=None,
+                token_count=estimate_token_count(
+                    f"{tool_name} {json.dumps(output, ensure_ascii=False)}"
+                ),
+                last_error=last_error,
+                model=model,
+                rag_step_id=make_step_id(),
+                rag_token_count=estimate_token_count(
+                    "\n".join(str(x) for x in output.get("chunks", []))
+                )
+                if isinstance(output, dict)
+                else 0,
+            )
+            loop_result = build_tool_attempt_loop_result(
+                attempt_execution=plan_item_execution,
+            )
+            action_step = loop_result["next_action_step"]
+            yield {
+                "kind": "event",
+                "event": "tool_end",
+                "data": loop_result["tool_end_event"],
+            }
+            yield {
+                "kind": "result",
+                "result": build_tool_plan_item_retry_loop_execution_result(
+                    loop_result=loop_result,
+                ),
+            }
+            return
+
+        except MockToolExecutionError as exc:
+            plan_item_execution = build_tool_attempt_execution(
+                task_id=task_id,
+                iteration_ctx=iteration_ctx,
+                action_step=action_step,
+                attempt_bundle=attempt_bundle,
+                name=tool_name,
+                tool_input=tool_input,
+                output=None,
+                exc=exc,
+                token_count=estimate_token_count(str(exc)),
+                last_error=None,
+                model=model,
+                rag_step_id=make_step_id(),
+                rag_token_count=0,
+            )
+            loop_result = build_tool_attempt_loop_result(
+                attempt_execution=plan_item_execution,
+            )
+            action_step = loop_result["next_action_step"]
+            yield {
+                "kind": "event",
+                "event": "tool_end",
+                "data": loop_result["tool_end_event"],
+            }
+            error_event = loop_result["error_event"]
+            if error_event is not None:
+                yield {
+                    "kind": "event",
+                    "event": "error",
+                    "data": error_event,
+                }
+            if bool(loop_result["retryable"]):
+                attempt += 1
+                last_error = str(loop_result["last_error"])
+                continue
+
+            yield {
+                "kind": "result",
+                "result": build_tool_plan_item_retry_loop_execution_result(
+                    loop_result=loop_result,
+                ),
+            }
+            return
 
 
 def build_tool_attempt_success_events(
@@ -1185,6 +1345,38 @@ def build_tool_plan_item_terminal_effects(
         "error_message": terminal_failure["error_message"],
         "audit_detail": terminal_failure["audit_detail"],
         "state": terminal_failure["state"],
+    }
+
+
+def build_tool_plan_item_stream_effects(
+    *,
+    loop_execution_result: dict[str, object],
+) -> dict[str, object]:
+    success_effects = loop_execution_result["success_effects"]
+    terminal_effects = loop_execution_result["terminal_effects"]
+
+    if success_effects is not None:
+        trace_steps = [success_effects["trace_step"]]
+        trace_events = [loop_execution_result["trace_event"]]
+        rag_followup = success_effects["rag_followup"]
+        if rag_followup is not None:
+            trace_steps.append(rag_followup["step"])
+            trace_events.append(rag_followup["trace"])
+        return {
+            "trace_steps": trace_steps,
+            "trace_events": trace_events,
+            "observation": success_effects["observation"],
+            "terminal_effects": None,
+            "should_return": False,
+        }
+
+    assert terminal_effects is not None
+    return {
+        "trace_steps": [terminal_effects["trace_step"]],
+        "trace_events": [terminal_effects["trace"]],
+        "observation": None,
+        "terminal_effects": terminal_effects,
+        "should_return": bool(loop_execution_result["should_return"]),
     }
 
 
