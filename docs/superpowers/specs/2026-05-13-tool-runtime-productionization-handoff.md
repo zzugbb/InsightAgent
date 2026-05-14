@@ -35,7 +35,16 @@
 - `build_tool_attempt_loop_result()`
 - `build_tool_attempt_loop_terminal_result()`
 - `build_tool_plan_item_retry_loop_result()`
+- `build_tool_plan_item_retry_loop_execution_result()`
 - `build_tool_plan_item_execution()`
+- `execute_tool_plan_item_retry_loop()`
+- `build_tool_plan_item_stream_effects()`
+- `build_tool_plan_item_continue_update()`
+- `build_tool_plan_item_next_action()`
+- `build_tool_plan_item_terminal_return_effects()`
+- `build_tool_plan_item_return_action()`
+- `build_tool_plan_item_trace_write_action()`
+- `build_tool_plan_item_service_effects()`
 - `build_tool_plan_item_success_effects()`
 - `build_tool_plan_item_terminal_effects()`
 
@@ -44,28 +53,27 @@
 虽然已经明显变薄，但它还保留以下职责：
 
 - `for tool_spec in tool_plan` 外层遍历
-- 单个 tool 的 `while True` retry loop 控制流
 - SSE 发射时机
   - `tool_start`
   - `state`
   - `tool_end`
   - `error`
   - `trace`
-- terminal failure 时的：
+- tool 级 `trace_write_actions` 执行与持久化副作用
+- `next_action(kind=return)` 下执行 runtime 已组装好的 return action：
   - `complete_task(...)`
   - `record_failure_event(...)`
   - `yield state(error)`
   - `return`
-- success path 时的：
-  - trace append
-  - `tool_observations.append(...)`
-  - rag follow-up step append
+- `next_action(kind=continue)` 下对 `continue_update` 的高层消费：
+  - `tool_observations.extend(...)`
+  - `seq_cursor += ...`
 
-换句话说，当前“字段搬运”已经显著减少，但“整个单个 tool plan item retry loop 的执行控制”还没有完整封装成一个更高层 helper。
+换句话说，当前“单个 tool retry loop 的执行控制”和大部分 success/terminal 字段搬运都已经下沉；`chat_execution_service.py` 里主要剩下 tool 级 SSE 发射、trace 持久化和任务完成/失败这类编排副作用。
 
 ### 3. 当前 focused regression 状态
 
-[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **61 条测试**，并全部通过。
+[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **71 条测试**，并全部通过。
 
 已覆盖的关键契约包括：
 
@@ -74,6 +82,13 @@
 - `build_tool_attempt_loop_result`
 - `build_tool_attempt_loop_terminal_result`
 - `build_tool_plan_item_retry_loop_result`
+- `build_tool_plan_item_retry_loop_execution_result`
+- `execute_tool_plan_item_retry_loop`
+- `build_tool_plan_item_stream_effects`
+- `build_tool_plan_item_terminal_return_effects`
+- `build_tool_plan_item_return_action`
+- `build_tool_plan_item_trace_write_action`
+- `build_tool_plan_item_service_effects`
 - `build_tool_plan_item_execution` 继续暴露
   - `iteration_execution`
   - `tool_end_event`
@@ -118,51 +133,36 @@ bash scripts/test_ci_e2e_tooling.sh common
 
 结果：
 
-- focused tests：`61` 条通过
+- focused tests：`69` 条通过
 - `compileall`：通过
 - `common` tooling + backend/frontend e2e 聚合回归：通过
 
 ## 推荐的新会话第一优先级
 
-### P0: 封装“执行单个 tool plan item retry loop”的完整 helper
+### P0: 继续压薄 `chat_execution_service.py` 中单个 tool 的最终编排副作用
 
-这是最自然的下一刀，也是当前收口链条的延续。
+当前最自然的下一刀，已经不再是 retry loop 本身，而是继续把 service 里“执行 runtime 已经准备好的副作用指令”的部分再上提一层。
 
 #### 建议目标
 
-在 `tool_runtime.py` 中新增一个更高层 helper，语义大致类似：
+优先考虑在 `tool_runtime.py` 中新增一层更高层的“tool service effects” helper，直接把当前 service 里还在手工做的内容再统一一点，例如：
 
-- `build_tool_plan_item_retry_loop_execution(...)`
-- 或 `execute_tool_plan_item_loop(...)`
-
-该 helper 最好直接承接：
-
-- `task_id`
-- `iteration_ctx`
-- `initial_action_step`
-- `tool_name`
-- `tool_input`
-- `prompt`
-- `user_id`
-- `provider_model`
-- 以及生成 token / rag token 所需输入
+- trace append / persist 所需的高层动作序列
+- terminal failure 的最终任务副作用输入
+- success/terminal 分支选择所需的高层 `next_action`
+- 需要继续兼容的旧字段（若 service 仍依赖）
 
 #### 理想返回内容
 
-建议该 helper 直接返回一个“循环终态对象”，至少包含：
+建议该 helper 直接返回一个更接近 service 最终消费形态的对象，例如：
 
-- start/tool_end/error 相关事件
-- 最终 `action_step`
-- `last_error`
-- `retryable`
-- success path 的：
-  - `trace_event`
-  - `success_effects`
-  - `rag_followup`
-- terminal path 的：
-  - `terminal_effects`
-  - `should_return`
-- 以及需要继续兼容的旧字段（若 service 仍依赖）
+- `trace_write_actions`
+- `trace_writes`
+- `next_action`
+- `continue_update`
+- `return_action`
+- `should_return`
+- `terminal_return_effects`
 
 #### 收益
 
@@ -170,10 +170,10 @@ bash scripts/test_ci_e2e_tooling.sh common
 
 1. 调 runtime helper 得到 loop 执行结果
 2. 发 SSE
-3. 成功则 append trace / observation / rag
-4. 失败则 complete task / audit / return
+3. 按统一 effects 执行 trace / observation / task side effects
+4. 继续向最终答案流转或失败返回
 
-也就是把当前 `while True` 自己控制 retry 的壳子进一步拿掉。
+也就是让 service 更接近“编排副作用执行器”，而不是继续做 tool 级字段拼装。
 
 ## 建议执行方式
 
@@ -184,7 +184,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 建议一轮只推进 2-3 个紧邻小切片，例如：
 
 1. 先补 focused failing tests
-2. 再加 loop execution helper
+2. 再加一层更高层 service-effects helper
 3. 再把 service 切到消费这个 helper
 
 ### 推荐固定验证顺序
@@ -201,11 +201,13 @@ bash scripts/test_ci_e2e_tooling.sh common
 
 新会话一开始，优先补这类 focused test：
 
-- 单个 tool retry loop success 终态 shape
-- 单个 tool retry loop terminal failure 终态 shape
-- retry 场景下 `attempt` / `last_error` / `next_action_step` 继续沿用既有语义
-- `tool_start/state` 仍然先于执行发出
-- success path 的 `trace + observation + rag_followup` 仍完整可取
+- 更高层 service-effects helper 的 success shape
+- 更高层 service-effects helper 的 terminal shape
+- `trace_write_actions` 的 step/event/persist_force 节奏不变
+- `trace_writes` 的 step/event/force_persist 节奏继续兼容
+- `next_action` 的 continue/return 分支语义不变
+- `continue_update` 的 observation delta / seq delta 继续沿用既有语义
+- terminal path 的 `return_action` 输入与 task_failed / state(error) 语义继续不变
 
 ## 相关关键文件
 
@@ -240,4 +242,3 @@ bash scripts/test_ci_e2e_tooling.sh common
    - focused tests
    - `compileall`
    - `common`
-

@@ -19,7 +19,8 @@ from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.tool_runtime import (
     build_tool_iteration_context,
-    build_tool_plan_item_stream_effects,
+    build_tool_plan_item_service_effects,
+    build_tool_plan_item_return_action,
     build_tool_prompt_with_observations,
     build_tool_plan,
     execute_tool_plan_item_retry_loop,
@@ -311,41 +312,32 @@ def stream_task_execution(
                 loop_execution_result = item["result"]
 
             assert loop_execution_result is not None
-            stream_effects = build_tool_plan_item_stream_effects(
+            service_effects = build_tool_plan_item_service_effects(
                 loop_execution_result=loop_execution_result,
             )
-            for trace_step, trace_event in zip(
-                stream_effects["trace_steps"],
-                stream_effects["trace_events"],
-            ):
-                trace_steps.append(trace_step)
-                yield sse_event("trace", trace_event)
-                persist_trace(force=bool(stream_effects["should_return"]))
+            for trace_write_action in service_effects["trace_write_actions"]:
+                trace_steps.append(trace_write_action["trace_step"])
+                yield sse_event("trace", trace_write_action["trace_event"])
+                persist_trace(force=bool(trace_write_action["persist_force"]))
 
-            if bool(stream_effects["should_return"]):
-                terminal_effects = stream_effects["terminal_effects"]
-                assert terminal_effects is not None
-                complete_task(
+            next_action = service_effects["next_action"]
+            if str(next_action["kind"]) == "return":
+                terminal_return_effects = next_action["terminal_return_effects"]
+                assert terminal_return_effects is not None
+                return_action = build_tool_plan_item_return_action(
                     task_id=task_id,
                     trace_steps=trace_steps,
                     user_id=user_id,
-                    status=str(terminal_effects["status"]),
+                    terminal_return_effects=terminal_return_effects,
                 )
-                record_failure_event(
-                    event_type="task_failed",
-                    code="tool_execution_error",
-                    message=str(terminal_effects["error_message"]),
-                    detail=terminal_effects["audit_detail"],
-                )
-                yield sse_event("state", terminal_effects["state"])
+                complete_task(**return_action["complete_task_kwargs"])
+                record_failure_event(**return_action["failure_event_kwargs"])
+                yield sse_event("state", return_action["state_event"])
                 return
 
-            success_effects = loop_execution_result["success_effects"]
-            assert success_effects is not None
-            tool_observations.append(str(stream_effects["observation"]))
-            rag_followup = success_effects["rag_followup"]
-            if rag_followup is not None:
-                seq_cursor += 1
+            continue_update = next_action["continue_update"]
+            tool_observations.extend(continue_update["tool_observations"])
+            seq_cursor += int(continue_update["seq_increment"])
 
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
         raise_if_should_abort()

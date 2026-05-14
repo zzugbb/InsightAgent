@@ -1366,7 +1366,9 @@ def build_tool_plan_item_stream_effects(
             "trace_steps": trace_steps,
             "trace_events": trace_events,
             "observation": success_effects["observation"],
+            "tool_observations": [success_effects["observation"]],
             "terminal_effects": None,
+            "seq_increment": 1 if rag_followup is not None else 0,
             "should_return": False,
         }
 
@@ -1375,8 +1377,130 @@ def build_tool_plan_item_stream_effects(
         "trace_steps": [terminal_effects["trace_step"]],
         "trace_events": [terminal_effects["trace"]],
         "observation": None,
+        "tool_observations": [],
         "terminal_effects": terminal_effects,
+        "seq_increment": 0,
         "should_return": bool(loop_execution_result["should_return"]),
+    }
+
+
+def build_tool_plan_item_terminal_return_effects(
+    *,
+    terminal_effects: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "task_status": terminal_effects["status"],
+        "state_event": terminal_effects["state"],
+        "failure_event": {
+            "event_type": "task_failed",
+            "code": "tool_execution_error",
+            "message": terminal_effects["error_message"],
+            "detail": terminal_effects["audit_detail"],
+        },
+    }
+
+
+def build_tool_plan_item_continue_update(
+    *,
+    stream_effects: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "tool_observations": list(stream_effects["tool_observations"]),
+        "seq_increment": int(stream_effects["seq_increment"]),
+    }
+
+
+def build_tool_plan_item_next_action(
+    *,
+    continue_update: dict[str, object],
+    terminal_return_effects: dict[str, object] | None,
+) -> dict[str, object]:
+    return {
+        "kind": "return" if terminal_return_effects is not None else "continue",
+        "continue_update": continue_update,
+        "terminal_return_effects": terminal_return_effects,
+    }
+
+
+def build_tool_plan_item_return_action(
+    *,
+    task_id: str,
+    trace_steps: list[dict[str, object]],
+    user_id: str,
+    terminal_return_effects: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "complete_task_kwargs": {
+            "task_id": task_id,
+            "trace_steps": trace_steps,
+            "user_id": user_id,
+            "status": str(terminal_return_effects["task_status"]),
+        },
+        "failure_event_kwargs": terminal_return_effects["failure_event"],
+        "state_event": terminal_return_effects["state_event"],
+    }
+
+
+def build_tool_plan_item_trace_write_action(
+    *,
+    trace_write: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "trace_step": trace_write["step"],
+        "trace_event": trace_write["event"],
+        "persist_force": bool(trace_write["force_persist"]),
+    }
+
+
+def build_tool_plan_item_service_effects(
+    *,
+    loop_execution_result: dict[str, object],
+) -> dict[str, object]:
+    stream_effects = build_tool_plan_item_stream_effects(
+        loop_execution_result=loop_execution_result,
+    )
+    continue_update = build_tool_plan_item_continue_update(
+        stream_effects=stream_effects,
+    )
+    terminal_effects = stream_effects["terminal_effects"]
+    terminal_return_effects = (
+        build_tool_plan_item_terminal_return_effects(
+            terminal_effects=terminal_effects,
+        )
+        if terminal_effects is not None
+        else None
+    )
+    should_return = bool(stream_effects["should_return"])
+    next_action = build_tool_plan_item_next_action(
+        continue_update=continue_update,
+        terminal_return_effects=terminal_return_effects,
+    )
+    trace_writes = [
+        {
+            "step": trace_step,
+            "event": trace_event,
+            "force_persist": should_return,
+        }
+        for trace_step, trace_event in zip(
+            stream_effects["trace_steps"],
+            stream_effects["trace_events"],
+        )
+    ]
+    trace_write_actions = [
+        build_tool_plan_item_trace_write_action(trace_write=trace_write)
+        for trace_write in trace_writes
+    ]
+    return {
+        "trace_steps": stream_effects["trace_steps"],
+        "trace_events": stream_effects["trace_events"],
+        "trace_writes": trace_writes,
+        "trace_write_actions": trace_write_actions,
+        "continue_update": continue_update,
+        "next_action": next_action,
+        "tool_observations": continue_update["tool_observations"],
+        "seq_increment": continue_update["seq_increment"],
+        "should_return": should_return,
+        "terminal_return_effects": terminal_return_effects,
     }
 
 

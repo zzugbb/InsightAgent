@@ -31,9 +31,13 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_plan_item_execution,
     build_tool_plan_item_execution_result,
     build_tool_plan_item_stream_effects,
+    build_tool_plan_item_return_action,
+    build_tool_plan_item_trace_write_action,
     execute_tool_plan_item_retry_loop,
     build_tool_plan_item_result,
     build_tool_plan_item_success_effects,
+    build_tool_plan_item_service_effects,
+    build_tool_plan_item_terminal_return_effects,
     build_tool_plan_item_terminal_effects,
     build_tool_plan_item_success_bundle,
     build_tool_iteration_success_artifacts,
@@ -2190,6 +2194,11 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertFalse(bool(result["should_return"]))
+        self.assertEqual(result["seq_increment"], 1)
+        self.assertEqual(
+            result["tool_observations"],
+            ['mock_retrieve: {"chunks": ["alpha"]}'],
+        )
         self.assertEqual(result["observation"], 'mock_retrieve: {"chunks": ["alpha"]}')
         self.assertIsNone(result["terminal_effects"])
         self.assertEqual([step["id"] for step in result["trace_steps"]], ["step-1", "rag-1"])
@@ -2228,10 +2237,260 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertTrue(bool(result["should_return"]))
+        self.assertEqual(result["seq_increment"], 0)
+        self.assertEqual(result["tool_observations"], [])
         self.assertIsNone(result["observation"])
         self.assertEqual(result["terminal_effects"], terminal_effects)
         self.assertEqual([step["id"] for step in result["trace_steps"]], ["step-1"])
         self.assertEqual([event["step_id"] for event in result["trace_events"]], ["step-1"])
+
+    def test_build_tool_plan_item_terminal_return_effects_keeps_shape(self) -> None:
+        terminal_effects = {
+            "trace_step": {
+                "id": "step-1",
+                "seq": 3,
+                "content": "Tool error: calc_eval",
+            },
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": "Tool error: calc_eval",
+                },
+            },
+            "status": "failed",
+            "error_message": "fatal",
+            "audit_detail": {"step_id": "step-1", "retry_count": 1},
+            "state": {"task_id": "task-1", "phase": "error"},
+        }
+
+        result = build_tool_plan_item_terminal_return_effects(
+            terminal_effects=terminal_effects,
+        )
+
+        self.assertEqual(result["task_status"], "failed")
+        self.assertEqual(result["state_event"]["phase"], "error")
+        self.assertEqual(result["failure_event"]["event_type"], "task_failed")
+        self.assertEqual(result["failure_event"]["code"], "tool_execution_error")
+        self.assertEqual(result["failure_event"]["message"], "fatal")
+        self.assertEqual(
+            result["failure_event"]["detail"],
+            {"step_id": "step-1", "retry_count": 1},
+        )
+
+    def test_build_tool_plan_item_return_action_keeps_shape(self) -> None:
+        terminal_return_effects = {
+            "task_status": "failed",
+            "state_event": {"task_id": "task-1", "phase": "error"},
+            "failure_event": {
+                "event_type": "task_failed",
+                "code": "tool_execution_error",
+                "message": "fatal",
+                "detail": {"step_id": "step-1", "retry_count": 1},
+            },
+        }
+        trace_steps = [
+            {"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"},
+        ]
+
+        result = build_tool_plan_item_return_action(
+            task_id="task-1",
+            trace_steps=trace_steps,
+            user_id="user-1",
+            terminal_return_effects=terminal_return_effects,
+        )
+
+        self.assertEqual(
+            result["complete_task_kwargs"],
+            {
+                "task_id": "task-1",
+                "trace_steps": trace_steps,
+                "user_id": "user-1",
+                "status": "failed",
+            },
+        )
+        self.assertEqual(
+            result["failure_event_kwargs"],
+            terminal_return_effects["failure_event"],
+        )
+        self.assertEqual(
+            result["state_event"],
+            terminal_return_effects["state_event"],
+        )
+
+    def test_build_tool_plan_item_trace_write_action_keeps_shape(self) -> None:
+        trace_write = {
+            "step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+            "event": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+            },
+            "force_persist": False,
+        }
+
+        result = build_tool_plan_item_trace_write_action(trace_write=trace_write)
+
+        self.assertEqual(result["trace_step"], trace_write["step"])
+        self.assertEqual(result["trace_event"], trace_write["event"])
+        self.assertEqual(result["persist_force"], False)
+
+    def test_build_tool_plan_item_service_effects_keeps_success_shape(self) -> None:
+        loop_execution_result = {
+            "trace_event": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": "Tool done: mock_retrieve",
+                },
+            },
+            "success_effects": {
+                "trace_step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": "Tool done: mock_retrieve",
+                },
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {
+                        "id": "step-1",
+                        "seq": 3,
+                        "content": "Tool done: mock_retrieve",
+                    },
+                },
+                "observation": 'mock_retrieve: {"chunks": ["alpha"]}',
+                "rag_followup": {
+                    "step": {
+                        "id": "rag-1",
+                        "seq": 4,
+                        "content": "Retrieved snippets",
+                    },
+                    "trace": {
+                        "task_id": "task-1",
+                        "step_id": "rag-1",
+                        "step": {
+                            "id": "rag-1",
+                            "seq": 4,
+                            "content": "Retrieved snippets",
+                        },
+                    },
+                },
+            },
+            "terminal_effects": None,
+            "should_return": False,
+        }
+
+        result = build_tool_plan_item_service_effects(
+            loop_execution_result=loop_execution_result,
+        )
+
+        self.assertFalse(bool(result["should_return"]))
+        self.assertEqual(
+            [(item["step"]["id"], item["event"]["step_id"], item["force_persist"]) for item in result["trace_writes"]],
+            [("step-1", "step-1", False), ("rag-1", "rag-1", False)],
+        )
+        self.assertEqual(
+            [(item["trace_step"]["id"], item["trace_event"]["step_id"], item["persist_force"]) for item in result["trace_write_actions"]],
+            [("step-1", "step-1", False), ("rag-1", "rag-1", False)],
+        )
+        self.assertEqual(
+            result["continue_update"],
+            {
+                "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+                "seq_increment": 1,
+            },
+        )
+        self.assertEqual(
+            result["next_action"],
+            {
+                "kind": "continue",
+                "continue_update": {
+                    "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+                    "seq_increment": 1,
+                },
+                "terminal_return_effects": None,
+            },
+        )
+        self.assertEqual(result["terminal_return_effects"], None)
+        self.assertEqual(result["tool_observations"], ['mock_retrieve: {"chunks": ["alpha"]}'])
+        self.assertEqual(result["seq_increment"], 1)
+        self.assertEqual([step["id"] for step in result["trace_steps"]], ["step-1", "rag-1"])
+        self.assertEqual([event["step_id"] for event in result["trace_events"]], ["step-1", "rag-1"])
+
+    def test_build_tool_plan_item_service_effects_keeps_terminal_shape(self) -> None:
+        terminal_effects = {
+            "trace_step": {
+                "id": "step-1",
+                "seq": 3,
+                "content": "Tool error: calc_eval",
+            },
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": "Tool error: calc_eval",
+                },
+            },
+            "status": "failed",
+            "error_message": "fatal",
+            "audit_detail": {"step_id": "step-1", "retry_count": 1},
+            "state": {"task_id": "task-1", "phase": "error"},
+        }
+        loop_execution_result = {
+            "trace_event": terminal_effects["trace"],
+            "success_effects": None,
+            "terminal_effects": terminal_effects,
+            "should_return": True,
+        }
+
+        result = build_tool_plan_item_service_effects(
+            loop_execution_result=loop_execution_result,
+        )
+
+        self.assertTrue(bool(result["should_return"]))
+        self.assertEqual(
+            [(item["step"]["id"], item["event"]["step_id"], item["force_persist"]) for item in result["trace_writes"]],
+            [("step-1", "step-1", True)],
+        )
+        self.assertEqual(
+            [(item["trace_step"]["id"], item["trace_event"]["step_id"], item["persist_force"]) for item in result["trace_write_actions"]],
+            [("step-1", "step-1", True)],
+        )
+        self.assertEqual(
+            result["continue_update"],
+            {
+                "tool_observations": [],
+                "seq_increment": 0,
+            },
+        )
+        self.assertEqual(
+            result["next_action"],
+            {
+                "kind": "return",
+                "continue_update": {
+                    "tool_observations": [],
+                    "seq_increment": 0,
+                },
+                "terminal_return_effects": result["terminal_return_effects"],
+            },
+        )
+        self.assertEqual(result["tool_observations"], [])
+        self.assertEqual(result["seq_increment"], 0)
+        self.assertEqual(
+            result["terminal_return_effects"]["failure_event"]["message"],
+            "fatal",
+        )
+        self.assertEqual(
+            result["terminal_return_effects"]["state_event"]["phase"],
+            "error",
+        )
 
     def test_execute_tool_plan_item_retry_loop_yields_start_events_before_runner(self) -> None:
         iteration_ctx = build_tool_iteration_context(
