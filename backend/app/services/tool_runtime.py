@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Iterator, Protocol
 
 from app.config import get_settings
@@ -57,6 +57,27 @@ class DefaultToolRegistryProvider:
 
 
 @dataclass(frozen=True)
+class ConfiguredToolRegistryProvider:
+    provider: ToolRegistryProvider | None = None
+    loader: ToolRegistryLoader | None = None
+    overrides: dict[str, ToolRegistration] | None = None
+    disabled_tool_names: tuple[str, ...] = ()
+
+    def load_tool_registry(self) -> dict[str, ToolRegistration]:
+        if self.provider is not None:
+            base_registry = dict(self.provider.load_tool_registry())
+        elif self.loader is not None:
+            base_registry = dict(self.loader())
+        else:
+            base_registry = DefaultToolRegistryProvider().load_tool_registry()
+        return build_tool_registry(
+            base_registry=base_registry,
+            overrides=self.overrides,
+            disabled_tool_names=self.disabled_tool_names,
+        )
+
+
+@dataclass(frozen=True)
 class ToolRuntimeContext:
     name: str
     prompt: str
@@ -66,6 +87,32 @@ class ToolRuntimeContext:
     retryable_by_default: bool
     default_timeout_ms: int
     requires_user_context: bool
+
+
+@dataclass(frozen=True)
+class ToolRegistrySettingsConfig:
+    overrides: dict[str, ToolRegistration]
+    disabled_tool_names: tuple[str, ...] = ()
+
+
+_TOOL_REGISTRY_PROFILE_CONFIGS: dict[str, ToolRegistrySettingsConfig] = {
+    "default": ToolRegistrySettingsConfig(
+        overrides={},
+        disabled_tool_names=(),
+    ),
+    "planning_only": ToolRegistrySettingsConfig(
+        overrides={},
+        disabled_tool_names=("calc_eval", "mock_retrieve"),
+    ),
+    "retrieval_only": ToolRegistrySettingsConfig(
+        overrides={},
+        disabled_tool_names=("calc_eval", "mock_plan"),
+    ),
+    "calculator_only": ToolRegistrySettingsConfig(
+        overrides={},
+        disabled_tool_names=("mock_plan", "mock_retrieve"),
+    ),
+}
 
 
 def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
@@ -184,16 +231,11 @@ def load_tool_registry(
     loader: ToolRegistryLoader | None = None,
     overrides: dict[str, ToolRegistration] | None = None,
 ) -> dict[str, ToolRegistration]:
-    if provider is not None:
-        base_registry = dict(provider.load_tool_registry())
-    elif loader is not None:
-        base_registry = dict(loader())
-    else:
-        base_registry = get_default_tool_registry_provider().load_tool_registry()
-    return build_tool_registry(
-        base_registry=base_registry,
+    return build_tool_registry_provider(
+        provider=provider,
+        loader=loader,
         overrides=overrides,
-    )
+    ).load_tool_registry()
 
 
 def get_default_tool_registry() -> dict[str, ToolRegistration]:
@@ -204,14 +246,214 @@ def get_default_tool_registry_provider() -> ToolRegistryProvider:
     return DefaultToolRegistryProvider()
 
 
+def get_tool_registry_profile_name_from_settings(*, settings: object | None = None) -> str:
+    if settings is None:
+        settings = get_settings()
+    raw_profile_name = getattr(settings, "tool_registry_profile", None)
+    if not isinstance(raw_profile_name, str):
+        return "default"
+    normalized = raw_profile_name.strip().lower()
+    return normalized or "default"
+
+
+def build_tool_registry_profile_settings_config(
+    *,
+    profile_name: str,
+) -> ToolRegistrySettingsConfig:
+    return _TOOL_REGISTRY_PROFILE_CONFIGS.get(
+        profile_name,
+        _TOOL_REGISTRY_PROFILE_CONFIGS["default"],
+    )
+
+
+def build_tool_registry_extra_tools_from_settings(
+    *,
+    settings: object | None = None,
+) -> dict[str, ToolRegistration]:
+    if settings is None:
+        settings = get_settings()
+    raw_extra_tools = getattr(settings, "tool_registry_extra_tools_json", None)
+    if not isinstance(raw_extra_tools, str) or not raw_extra_tools.strip():
+        return {}
+    try:
+        extra_tool_specs = json.loads(raw_extra_tools)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(extra_tool_specs, dict):
+        return {}
+
+    extra_tools: dict[str, ToolRegistration] = {}
+    for name, spec in extra_tool_specs.items():
+        if not isinstance(name, str) or not isinstance(spec, dict):
+            continue
+        if name in _REGISTERED_TOOLS:
+            continue
+        template_name = spec.get("template")
+        if not isinstance(template_name, str):
+            continue
+        template_registration = _REGISTERED_TOOLS.get(template_name)
+        if template_registration is None:
+            continue
+        extra_tools[name] = replace(
+            template_registration,
+            name=name,
+            kind=str(spec.get("kind", template_registration.kind)),
+            label=str(spec.get("label", template_registration.label)),
+            retryable_by_default=bool(
+                spec.get("retryable_by_default", template_registration.retryable_by_default)
+            ),
+            default_timeout_ms=int(
+                spec.get("default_timeout_ms", template_registration.default_timeout_ms)
+            ),
+            requires_user_context=bool(
+                spec.get("requires_user_context", template_registration.requires_user_context)
+            ),
+            supports_result_preview=bool(
+                spec.get("supports_result_preview", template_registration.supports_result_preview)
+            ),
+        )
+    return extra_tools
+
+
+def build_tool_registry_settings_config(
+    *,
+    settings: object | None = None,
+) -> ToolRegistrySettingsConfig:
+    if settings is None:
+        settings = get_settings()
+    profile_config = build_tool_registry_profile_settings_config(
+        profile_name=get_tool_registry_profile_name_from_settings(settings=settings),
+    )
+    extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+    raw_overrides = getattr(settings, "tool_registry_overrides_json", None)
+    if not isinstance(raw_overrides, str) or not raw_overrides.strip():
+        return ToolRegistrySettingsConfig(
+            overrides=build_tool_registry(
+                base_registry=profile_config.overrides,
+                overrides=extra_tools or None,
+            ),
+            disabled_tool_names=profile_config.disabled_tool_names,
+        )
+    try:
+        override_specs = json.loads(raw_overrides)
+    except json.JSONDecodeError:
+        return ToolRegistrySettingsConfig(
+            overrides=build_tool_registry(
+                base_registry=profile_config.overrides,
+                overrides=extra_tools or None,
+            ),
+            disabled_tool_names=profile_config.disabled_tool_names,
+        )
+    if not isinstance(override_specs, dict):
+        return ToolRegistrySettingsConfig(
+            overrides=build_tool_registry(
+                base_registry=profile_config.overrides,
+                overrides=extra_tools or None,
+            ),
+            disabled_tool_names=profile_config.disabled_tool_names,
+        )
+
+    overrides: dict[str, ToolRegistration] = build_tool_registry(
+        base_registry=profile_config.overrides,
+        overrides=extra_tools or None,
+    )
+    disabled_tool_names = set(profile_config.disabled_tool_names)
+    known_registrations = build_tool_registry(
+        overrides=extra_tools or None,
+    )
+    for name, spec in override_specs.items():
+        if not isinstance(name, str) or not isinstance(spec, dict):
+            continue
+        base_registration = known_registrations.get(name)
+        if base_registration is None:
+            continue
+        if spec.get("enabled") is False:
+            disabled_tool_names.add(name)
+        elif spec.get("enabled") is True:
+            disabled_tool_names.discard(name)
+        metadata_keys = {
+            "kind",
+            "label",
+            "retryable_by_default",
+            "default_timeout_ms",
+            "requires_user_context",
+            "supports_result_preview",
+        }
+        if not any(key in spec for key in metadata_keys):
+            continue
+        overrides[name] = replace(
+            base_registration,
+            kind=str(spec.get("kind", base_registration.kind)),
+            label=str(spec.get("label", base_registration.label)),
+            retryable_by_default=bool(
+                spec.get("retryable_by_default", base_registration.retryable_by_default)
+            ),
+            default_timeout_ms=int(
+                spec.get("default_timeout_ms", base_registration.default_timeout_ms)
+            ),
+            requires_user_context=bool(
+                spec.get("requires_user_context", base_registration.requires_user_context)
+            ),
+            supports_result_preview=bool(
+                spec.get("supports_result_preview", base_registration.supports_result_preview)
+            ),
+        )
+    return ToolRegistrySettingsConfig(
+        overrides=overrides,
+        disabled_tool_names=tuple(sorted(disabled_tool_names)),
+    )
+
+
+def build_tool_registry_overrides_from_settings(
+    *,
+    settings: object | None = None,
+) -> dict[str, ToolRegistration]:
+    return build_tool_registry_settings_config(settings=settings).overrides
+
+
+def get_disabled_tool_names_from_settings(*, settings: object | None = None) -> tuple[str, ...]:
+    return build_tool_registry_settings_config(settings=settings).disabled_tool_names
+
+
+def get_configured_tool_registry_provider(*, settings: object | None = None) -> ToolRegistryProvider:
+    settings_config = build_tool_registry_settings_config(settings=settings)
+    return build_tool_registry_provider(
+        overrides=settings_config.overrides or None,
+        disabled_tool_names=settings_config.disabled_tool_names,
+    )
+
+
+def build_tool_registry_provider(
+    *,
+    provider: ToolRegistryProvider | None = None,
+    loader: ToolRegistryLoader | None = None,
+    overrides: dict[str, ToolRegistration] | None = None,
+    disabled_tool_names: tuple[str, ...] = (),
+) -> ToolRegistryProvider:
+    if provider is not None and not overrides and not disabled_tool_names:
+        return provider
+    if provider is None and loader is None and not overrides and not disabled_tool_names:
+        return get_default_tool_registry_provider()
+    return ConfiguredToolRegistryProvider(
+        provider=provider,
+        loader=loader,
+        overrides=overrides,
+        disabled_tool_names=disabled_tool_names,
+    )
+
+
 def build_tool_registry(
     *,
     base_registry: dict[str, ToolRegistration] | None = None,
     overrides: dict[str, ToolRegistration] | None = None,
+    disabled_tool_names: tuple[str, ...] | None = None,
 ) -> dict[str, ToolRegistration]:
     registry = get_default_tool_registry() if base_registry is None else dict(base_registry)
     if overrides:
         registry.update(overrides)
+    if disabled_tool_names:
+        for name in disabled_tool_names:
+            registry.pop(name, None)
     return registry
 
 
@@ -221,12 +463,26 @@ def get_registered_tool_names(
     registry_provider: ToolRegistryProvider | None = None,
     registry_loader: ToolRegistryLoader | None = None,
 ) -> tuple[str, ...]:
-    effective_registry = (
-        load_tool_registry(provider=registry_provider, loader=registry_loader)
-        if registry is None
-        else registry
+    provider_stack = resolve_tool_registry_provider(
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
-    return tuple(sorted(effective_registry))
+    return tuple(sorted(provider_stack.load_tool_registry()))
+
+
+def resolve_tool_registry_provider(
+    *,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> ToolRegistryProvider:
+    if registry is not None:
+        return StaticToolRegistryProvider(registry=dict(registry))
+    return build_tool_registry_provider(
+        provider=registry_provider,
+        loader=registry_loader,
+    )
 
 
 def resolve_tool_registration(
@@ -236,12 +492,12 @@ def resolve_tool_registration(
     registry_provider: ToolRegistryProvider | None = None,
     registry_loader: ToolRegistryLoader | None = None,
 ) -> ToolRegistration | None:
-    effective_registry = (
-        load_tool_registry(provider=registry_provider, loader=registry_loader)
-        if registry is None
-        else registry
+    provider_stack = resolve_tool_registry_provider(
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
-    return effective_registry.get(name)
+    return provider_stack.load_tool_registry().get(name)
 
 
 def ensure_tool_registration(

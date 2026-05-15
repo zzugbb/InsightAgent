@@ -51,7 +51,17 @@
 - `ToolRegistryProvider`
 - `StaticToolRegistryProvider`
 - `DefaultToolRegistryProvider`
+- `ConfiguredToolRegistryProvider`
 - `get_default_tool_registry_provider()`
+- `get_configured_tool_registry_provider()`
+- `get_tool_registry_profile_name_from_settings()`
+- `build_tool_registry_profile_settings_config()`
+- `build_tool_registry_extra_tools_from_settings()`
+- `build_tool_registry_settings_config()`
+- `build_tool_registry_overrides_from_settings()`
+- `get_disabled_tool_names_from_settings()`
+- `build_tool_registry_provider()`
+- `resolve_tool_registry_provider()`
 - `get_default_tool_registry()`
 - `build_tool_registry()`
 - `get_registered_tool_names(..., registry=...)`
@@ -142,7 +152,7 @@
 
 ### Focused regression baseline
 
-`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **106 条测试**，覆盖：
+`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **126 条测试**，覆盖：
 
 - tool plan compatibility
 - tool execution compatibility
@@ -154,6 +164,14 @@
 - provider-object registry seam compatibility
 - default provider-object path compatibility
 - named default provider implementation compatibility
+- configured provider composition compatibility
+- configured provider entrypoint compatibility
+- settings-backed registry override compatibility
+- settings-backed disabled tool compatibility
+- settings-backed registry profile compatibility
+- settings-backed extra tool alias compatibility
+- provider resolution precedence compatibility
+- chat-consumed prebuilt provider compatibility
 - transient/fatal/unknown tool 行为
 - retry loop 最终结果
 - stream effects

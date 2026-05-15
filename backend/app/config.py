@@ -130,6 +130,21 @@ class Settings(BaseSettings):
         alias="INSIGHT_AGENT_SECRET_KEY",
         description="用户密钥加密主密钥；为空时回退 JWT 密钥（仅开发建议）",
     )
+    tool_registry_overrides_json: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_TOOL_REGISTRY_OVERRIDES_JSON",
+        description="Tool registry override JSON；用于覆盖已注册 tool 的标签、超时、重试、上下文字段，或通过 enabled=false 禁用 tool",
+    )
+    tool_registry_profile: str = Field(
+        default="default",
+        alias="INSIGHT_AGENT_TOOL_REGISTRY_PROFILE",
+        description="Tool registry profile；用于按环境启用内建 tool 组合，再叠加 JSON overrides",
+    )
+    tool_registry_extra_tools_json: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_TOOL_REGISTRY_EXTRA_TOOLS_JSON",
+        description="Tool registry extra tools JSON；用于基于现有 template tool 生成额外 alias registrations，再参与 profile/override 组合链",
+    )
 
     @property
     def chroma_http_url(self) -> str:

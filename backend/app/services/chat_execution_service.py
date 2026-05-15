@@ -23,6 +23,7 @@ from app.services.tool_runtime import (
     build_tool_plan,
     execute_tool_plan_item_service_actions,
     execute_tool_plan_item_service_execution,
+    get_configured_tool_registry_provider,
 )
 
 
@@ -268,6 +269,7 @@ def stream_task_execution(
         persist_trace(force=True)
 
         tool_observations: list[str] = []
+        tool_registry_provider = get_configured_tool_registry_provider()
 
         for idx, tool_spec in enumerate(tool_plan, start=1):
             raise_if_should_abort()
@@ -305,6 +307,7 @@ def stream_task_execution(
                 estimate_token_count=_estimate_token_count,
                 make_step_id=lambda: str(uuid4()),
                 raise_if_should_abort=raise_if_should_abort,
+                registry_provider=tool_registry_provider,
             ):
                 if item["kind"] == "event":
                     yield sse_event(str(item["event"]), item["data"])

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -11,6 +13,7 @@ if str(ROOT) not in sys.path:
 
 import app.services.tool_runtime as tool_runtime_module  # type: ignore[import-not-found]
 from app.services.tool_runtime import (  # type: ignore[import-not-found]
+    ConfiguredToolRegistryProvider,
     DefaultToolRegistryProvider,
     MockToolExecutionError,
     StaticToolRegistryProvider,
@@ -48,6 +51,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     execute_tool_plan_item_service_actions,
     execute_tool_plan_item_service_execution,
     execute_tool_plan_item_retry_loop,
+    build_tool_registry_provider,
     build_tool_plan_item_result,
     build_tool_plan_item_success_effects,
     build_tool_plan_item_service_effects,
@@ -74,11 +78,18 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_trace_event,
     compute_tool_retry_decision,
     execute_tool_spec,
+    get_disabled_tool_names_from_settings,
+    get_configured_tool_registry_provider,
     get_default_tool_registry_provider,
     get_default_tool_registry,
+    get_tool_registry_profile_name_from_settings,
     load_tool_registry,
     get_registered_tool_names,
     build_tool_registry,
+    build_tool_registry_extra_tools_from_settings,
+    build_tool_registry_overrides_from_settings,
+    build_tool_registry_profile_settings_config,
+    build_tool_registry_settings_config,
     build_tool_result_preview,
     build_tool_runtime_context,
     ensure_tool_registration,
@@ -87,6 +98,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     maybe_raise_mock_tool_execution_error,
     tool_requires_user_context,
     normalize_tool_spec,
+    resolve_tool_registry_provider,
     resolve_tool_registration,
     run_tool,
 )
@@ -398,6 +410,15 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertIsInstance(provider, DefaultToolRegistryProvider)
 
+    def test_build_tool_registry_provider_without_args_returns_default_provider(self) -> None:
+        provider = build_tool_registry_provider()
+
+        self.assertIsInstance(provider, DefaultToolRegistryProvider)
+        self.assertEqual(
+            tuple(sorted(provider.load_tool_registry())),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+
     def test_default_tool_registry_provider_loads_fresh_snapshot_per_call(self) -> None:
         provider = DefaultToolRegistryProvider()
         first = provider.load_tool_registry()
@@ -412,6 +433,456 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval", "mock_plan", "mock_retrieve"),
         )
         self.assertIsNot(first, second)
+
+    def test_build_tool_registry_provider_with_loader_and_overrides_returns_configured_provider(self) -> None:
+        def custom_loader() -> dict[str, ToolRegistration]:
+            return {
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="loader_calc",
+                    label="Loader Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=11_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            }
+
+        provider = build_tool_registry_provider(
+            loader=custom_loader,
+            overrides={
+                "custom_lookup": ToolRegistration(
+                    name="custom_lookup",
+                    kind="custom_lookup",
+                    label="Custom Lookup",
+                    retryable_by_default=False,
+                    default_timeout_ms=12_000,
+                    requires_user_context=False,
+                    supports_result_preview=False,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            },
+        )
+
+        self.assertIsInstance(provider, ConfiguredToolRegistryProvider)
+        self.assertEqual(
+            tuple(sorted(provider.load_tool_registry())),
+            ("calc_eval", "custom_lookup"),
+        )
+        self.assertEqual(
+            provider.load_tool_registry()["calc_eval"].kind,
+            "loader_calc",
+        )
+
+    def test_resolve_tool_registry_provider_wraps_explicit_registry(self) -> None:
+        provider = resolve_tool_registry_provider(
+            registry={
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="wrapped_calc",
+                    label="Wrapped Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=8_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            }
+        )
+
+        self.assertIsInstance(provider, StaticToolRegistryProvider)
+        self.assertEqual(
+            provider.load_tool_registry()["calc_eval"].kind,
+            "wrapped_calc",
+        )
+
+    def test_build_tool_registry_provider_prefers_explicit_provider_over_loader(self) -> None:
+        provider = build_tool_registry_provider(
+            provider=StaticToolRegistryProvider(
+                registry={
+                    "calc_eval": ToolRegistration(
+                        name="calc_eval",
+                        kind="provider_calc",
+                        label="Provider Calculator",
+                        retryable_by_default=False,
+                        default_timeout_ms=13_000,
+                        requires_user_context=False,
+                        supports_result_preview=True,
+                        runner=lambda *, tool_input, prompt, user_id: {
+                            "tool_input": tool_input,
+                            "prompt": prompt,
+                            "user_id": user_id,
+                        },
+                    )
+                }
+            ),
+            loader=lambda: {
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="loader_calc",
+                    label="Loader Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=11_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            },
+        )
+
+        self.assertIsInstance(provider, StaticToolRegistryProvider)
+        self.assertEqual(
+            provider.load_tool_registry()["calc_eval"].kind,
+            "provider_calc",
+        )
+
+    def test_resolve_tool_registry_provider_prefers_explicit_registry_over_provider_and_loader(self) -> None:
+        provider = resolve_tool_registry_provider(
+            registry={
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="registry_calc",
+                    label="Registry Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=8_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            },
+            registry_provider=StaticToolRegistryProvider(
+                registry={
+                    "calc_eval": ToolRegistration(
+                        name="calc_eval",
+                        kind="provider_calc",
+                        label="Provider Calculator",
+                        retryable_by_default=False,
+                        default_timeout_ms=13_000,
+                        requires_user_context=False,
+                        supports_result_preview=True,
+                        runner=lambda *, tool_input, prompt, user_id: {
+                            "tool_input": tool_input,
+                            "prompt": prompt,
+                            "user_id": user_id,
+                        },
+                    )
+                }
+            ),
+            registry_loader=lambda: {
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="loader_calc",
+                    label="Loader Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=11_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            },
+        )
+
+        self.assertIsInstance(provider, StaticToolRegistryProvider)
+        self.assertEqual(
+            provider.load_tool_registry()["calc_eval"].kind,
+            "registry_calc",
+        )
+
+    def test_get_configured_tool_registry_provider_returns_default_provider_stack(self) -> None:
+        provider = get_configured_tool_registry_provider()
+
+        self.assertIsInstance(provider, DefaultToolRegistryProvider)
+        self.assertEqual(
+            tuple(sorted(provider.load_tool_registry())),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+
+    def test_build_tool_registry_overrides_from_settings_updates_known_tools(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "calc_eval": {
+                        "label": "Configured Calculator",
+                        "default_timeout_ms": 9_999,
+                        "retryable_by_default": False,
+                    }
+                }
+            )
+        )
+
+        overrides = build_tool_registry_overrides_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(overrides)), ("calc_eval",))
+        self.assertEqual(overrides["calc_eval"].label, "Configured Calculator")
+        self.assertEqual(overrides["calc_eval"].default_timeout_ms, 9_999)
+        self.assertFalse(overrides["calc_eval"].retryable_by_default)
+        self.assertEqual(overrides["calc_eval"].kind, "local_calculator")
+
+    def test_build_tool_registry_settings_config_supports_disabled_tools(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "calc_eval": {
+                        "label": "Configured Calculator",
+                        "enabled": False,
+                    },
+                    "mock_retrieve": {
+                        "enabled": False,
+                    },
+                }
+            )
+        )
+
+        config = build_tool_registry_settings_config(settings=settings)
+
+        self.assertEqual(tuple(sorted(config.overrides)), ("calc_eval",))
+        self.assertEqual(
+            config.disabled_tool_names,
+            ("calc_eval", "mock_retrieve"),
+        )
+        self.assertEqual(
+            get_disabled_tool_names_from_settings(settings=settings),
+            ("calc_eval", "mock_retrieve"),
+        )
+
+    def test_build_tool_registry_profile_settings_config_supports_planning_only_profile(self) -> None:
+        config = build_tool_registry_profile_settings_config(profile_name="planning_only")
+
+        self.assertEqual(config.overrides, {})
+        self.assertEqual(
+            config.disabled_tool_names,
+            ("calc_eval", "mock_retrieve"),
+        )
+
+    def test_build_tool_registry_settings_config_allows_reenable_over_profile_disable(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_profile="planning_only",
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "mock_retrieve": {
+                        "enabled": True,
+                        "label": "Profile Reenabled Retrieve",
+                    }
+                }
+            ),
+        )
+
+        config = build_tool_registry_settings_config(settings=settings)
+
+        self.assertEqual(
+            config.disabled_tool_names,
+            ("calc_eval",),
+        )
+        self.assertEqual(
+            config.overrides["mock_retrieve"].label,
+            "Profile Reenabled Retrieve",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_clones_template_registration(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "calc_eval_fast": {
+                        "template": "calc_eval",
+                        "label": "Fast Calculator",
+                        "default_timeout_ms": 1_500,
+                        "retryable_by_default": False,
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(extra_tools)), ("calc_eval_fast",))
+        self.assertEqual(extra_tools["calc_eval_fast"].name, "calc_eval_fast")
+        self.assertEqual(extra_tools["calc_eval_fast"].label, "Fast Calculator")
+        self.assertEqual(extra_tools["calc_eval_fast"].default_timeout_ms, 1_500)
+        self.assertFalse(extra_tools["calc_eval_fast"].retryable_by_default)
+        self.assertEqual(extra_tools["calc_eval_fast"].kind, "local_calculator")
+
+    def test_build_tool_registry_extra_tools_from_settings_ignores_unknown_template_and_existing_name(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "calc_eval": {
+                        "template": "calc_eval",
+                        "label": "Should Ignore Existing Name",
+                    },
+                    "custom_unknown": {
+                        "template": "missing_tool",
+                        "label": "Should Ignore Unknown Template",
+                    },
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        self.assertEqual(extra_tools, {})
+
+    def test_build_tool_registry_overrides_from_settings_ignores_unknown_tools_and_bad_shapes(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "unknown_tool": {"label": "Ignored"},
+                    "calc_eval": "bad-shape",
+                }
+            )
+        )
+
+        overrides = build_tool_registry_overrides_from_settings(settings=settings)
+
+        self.assertEqual(overrides, {})
+
+    def test_build_tool_registry_settings_config_ignores_unknown_disabled_tools(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "unknown_tool": {"enabled": False},
+                    "calc_eval": "bad-shape",
+                }
+            )
+        )
+
+        config = build_tool_registry_settings_config(settings=settings)
+
+        self.assertEqual(config.overrides, {})
+        self.assertEqual(config.disabled_tool_names, ())
+
+    def test_get_configured_tool_registry_provider_applies_settings_overrides(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "calc_eval": {
+                        "label": "Configured Calculator",
+                        "default_timeout_ms": 8_888,
+                        "requires_user_context": False,
+                    }
+                }
+            )
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+
+        self.assertIsInstance(provider, ConfiguredToolRegistryProvider)
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+        self.assertEqual(runtime_ctx.registration.label, "Configured Calculator")
+        self.assertEqual(runtime_ctx.default_timeout_ms, 8_888)
+        self.assertEqual(runtime_ctx.user_id, "")
+
+    def test_get_configured_tool_registry_provider_includes_extra_tools(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_profile="default",
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "calc_eval_fast": {
+                        "requires_user_context": False,
+                    }
+                }
+            ),
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "calc_eval_fast": {
+                        "template": "calc_eval",
+                        "label": "Fast Calculator",
+                        "default_timeout_ms": 1_500,
+                    }
+                }
+            ),
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "calc_eval_fast", "mock_plan", "mock_retrieve"),
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval_fast",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+        self.assertEqual(runtime_ctx.registration.label, "Fast Calculator")
+        self.assertEqual(runtime_ctx.default_timeout_ms, 1_500)
+        self.assertEqual(runtime_ctx.user_id, "")
+
+    def test_get_configured_tool_registry_provider_applies_profile_disabled_tools(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_profile="planning_only",
+            tool_registry_overrides_json=None,
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("mock_plan",),
+        )
+
+    def test_get_configured_tool_registry_provider_filters_disabled_tools(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "mock_retrieve": {"enabled": False},
+                }
+            )
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+
+        self.assertIsInstance(provider, ConfiguredToolRegistryProvider)
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "mock_plan"),
+        )
+        with self.assertRaises(MockToolExecutionError) as ctx:
+            ensure_tool_registration(
+                "mock_retrieve",
+                registry_provider=provider,
+            )
+        self.assertEqual(str(ctx.exception), "Unknown mock tool: mock_retrieve")
+
+    def test_get_tool_registry_profile_name_from_settings_defaults_to_default(self) -> None:
+        settings = SimpleNamespace(tool_registry_profile=None)
+
+        self.assertEqual(
+            get_tool_registry_profile_name_from_settings(settings=settings),
+            "default",
+        )
 
     def test_load_tool_registry_returns_isolated_default_snapshot(self) -> None:
         registry = load_tool_registry()
@@ -601,6 +1072,73 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             tool_runtime_module.get_default_tool_registry_provider = original
 
         self.assertEqual(tuple(sorted(registry)), ("custom_only",))
+
+    def test_execute_tool_plan_item_service_execution_accepts_built_registry_provider(self) -> None:
+        runner_calls: list[tuple[dict[str, object], str, str]] = []
+
+        def custom_runner(
+            *,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+        ) -> dict[str, object]:
+            runner_calls.append((tool_input, prompt, user_id))
+            return {
+                "result": "provider-ok",
+                "tool_kind": "provider_calc",
+            }
+
+        provider = build_tool_registry_provider(
+            provider=StaticToolRegistryProvider(
+                registry={
+                    "calc_eval": ToolRegistration(
+                        name="calc_eval",
+                        kind="provider_calc",
+                        label="Provider Calculator",
+                        retryable_by_default=False,
+                        default_timeout_ms=13_000,
+                        requires_user_context=False,
+                        supports_result_preview=True,
+                        runner=custom_runner,
+                    )
+                }
+            )
+        )
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry_provider=provider,
+            )
+        )
+
+        self.assertEqual(runner_calls, [({"expression": "1+2*3"}, "calc", "")])
+        final_item = items[-1]
+        self.assertEqual(final_item["kind"], "result")
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
+            "provider_calc",
+        )
 
     def test_build_tool_registry_merges_overrides_without_mutating_default(self) -> None:
         custom_registry = build_tool_registry(

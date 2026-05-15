@@ -34,7 +34,17 @@
 - `ToolRegistryProvider`
 - `StaticToolRegistryProvider`
 - `DefaultToolRegistryProvider`
+- `ConfiguredToolRegistryProvider`
 - `get_default_tool_registry_provider()`
+- `get_configured_tool_registry_provider()`
+- `get_tool_registry_profile_name_from_settings()`
+- `build_tool_registry_profile_settings_config()`
+- `build_tool_registry_extra_tools_from_settings()`
+- `build_tool_registry_settings_config()`
+- `build_tool_registry_overrides_from_settings()`
+- `get_disabled_tool_names_from_settings()`
+- `build_tool_registry_provider()`
+- `resolve_tool_registry_provider()`
 - `get_default_tool_registry()`
 - `build_tool_registry()`
 - `get_registered_tool_names(..., registry=...)`
@@ -97,7 +107,7 @@
 
 ### 3. 当前 focused regression 状态
 
-[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **106 条测试**，并全部通过。
+[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **126 条测试**，并全部通过。
 
 已覆盖的关键契约包括：
 
@@ -110,6 +120,16 @@
 - `load_tool_registry(custom provider seam)`
 - `load_tool_registry(default provider path seam)`
 - `DefaultToolRegistryProvider(named default seam)`
+- `ConfiguredToolRegistryProvider(composition seam)`
+- `get_configured_tool_registry_provider(named configured seam)`
+- `get_tool_registry_profile_name_from_settings(profile seam)`
+- `build_tool_registry_profile_settings_config(profile config seam)`
+- `build_tool_registry_extra_tools_from_settings(extra tool seam)`
+- `build_tool_registry_settings_config(settings config seam)`
+- `build_tool_registry_overrides_from_settings(settings seam)`
+- `get_disabled_tool_names_from_settings(disable seam)`
+- `resolve_tool_registry_provider(precedence seam)`
+- `build_tool_registry_provider(default/loader/provider seam)`
 - `run_tool(custom registry seam)`
 - `run_tool(custom registry_loader seam)`
 - `run_tool(custom registry_provider seam)`
@@ -186,7 +206,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 
 结果：
 
-- focused tests：`106` 条通过
+- focused tests：`126` 条通过
 - `compileall`：通过
 - `common` tooling + backend/frontend e2e 聚合回归：通过
 
@@ -267,6 +287,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 - 默认 mock registry 仍保持全局兼容
 - 默认 registry 快照与 merge builder 已显式化
 - 默认 `load_tool_registry()` 路径现在也会显式经过 `get_default_tool_registry_provider()`
+- `chat_execution_service.py` 现在也会在 tool loop 外先显式构造一次 `build_tool_registry_provider()` 再复用到每个 tool plan item
 - `run_tool / execute_tool_spec / build_tool_runtime_context` 已支持可选 `registry` 注入
 - `run_tool / execute_tool_spec / build_tool_runtime_context` 已支持可选 `registry_provider` 注入
 - `run_tool / execute_tool_spec` 已支持可选 `registry_loader` 注入
