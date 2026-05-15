@@ -19,10 +19,10 @@ from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.tool_runtime import (
     build_tool_iteration_context,
-    build_tool_plan_item_service_execution,
     build_tool_prompt_with_observations,
     build_tool_plan,
-    execute_tool_plan_item_retry_loop,
+    execute_tool_plan_item_service_actions,
+    execute_tool_plan_item_service_execution,
 )
 
 
@@ -291,9 +291,10 @@ def stream_task_execution(
             seq_cursor += 1
             action_step["seq"] = seq_cursor
 
-            loop_execution_result = None
-            for item in execute_tool_plan_item_retry_loop(
+            service_execution = None
+            for item in execute_tool_plan_item_service_execution(
                 task_id=task_id,
+                trace_steps=trace_steps,
                 iteration_ctx=iteration_ctx,
                 initial_action_step=action_step,
                 tool_name=tool_name,
@@ -308,32 +309,28 @@ def stream_task_execution(
                 if item["kind"] == "event":
                     yield sse_event(str(item["event"]), item["data"])
                     continue
-                loop_execution_result = item["result"]
+                service_execution = item["result"]
 
-            assert loop_execution_result is not None
-            service_execution = build_tool_plan_item_service_execution(
-                task_id=task_id,
+            assert service_execution is not None
+            service_action_result = None
+            for item in execute_tool_plan_item_service_actions(
+                service_actions=service_execution["service_actions"],
                 trace_steps=trace_steps,
-                user_id=user_id,
-                loop_execution_result=loop_execution_result,
-            )
-            for trace_write_action in service_execution["trace_write_actions"]:
-                trace_steps.append(trace_write_action["trace_step"])
-                yield sse_event("trace", trace_write_action["trace_event"])
-                persist_trace(force=bool(trace_write_action["persist_force"]))
+                tool_observations=tool_observations,
+                seq_cursor=seq_cursor,
+                persist_trace_fn=persist_trace,
+                complete_task_fn=complete_task,
+                record_failure_event_fn=record_failure_event,
+            ):
+                if item["kind"] == "event":
+                    yield sse_event(str(item["event"]), item["data"])
+                    continue
+                service_action_result = item["result"]
 
-            next_action_execution = service_execution["next_action_execution"]
-            if str(next_action_execution["kind"]) == "return":
-                return_action = next_action_execution["return_action"]
-                assert return_action is not None
-                complete_task(**return_action["complete_task_kwargs"])
-                record_failure_event(**return_action["failure_event_kwargs"])
-                yield sse_event("state", return_action["state_event"])
-                return
-
-            continue_action = next_action_execution["continue_action"]
-            tool_observations.extend(continue_action["tool_observations"])
-            seq_cursor += int(continue_action["seq_increment"])
+            assert service_action_result is not None
+            seq_cursor = int(service_action_result["seq_cursor"])
+            if bool(service_action_result["should_return"]):
+                    return
 
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
         raise_if_should_abort()

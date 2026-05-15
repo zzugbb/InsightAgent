@@ -4,7 +4,7 @@ import json
 import re
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
 from dataclasses import dataclass
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Protocol
 
 from app.config import get_settings
 from app.services.chroma_rag_service import query_knowledge_base
@@ -23,6 +23,11 @@ class ToolInvocation:
 
 
 ToolRunner = Callable[..., dict[str, object]]
+ToolRegistryLoader = Callable[[], dict[str, "ToolRegistration"]]
+
+
+class ToolRegistryProvider(Protocol):
+    def load_tool_registry(self) -> dict[str, "ToolRegistration"]: ...
 
 
 @dataclass(frozen=True)
@@ -35,6 +40,20 @@ class ToolRegistration:
     requires_user_context: bool
     supports_result_preview: bool
     runner: ToolRunner
+
+
+@dataclass(frozen=True)
+class StaticToolRegistryProvider:
+    registry: dict[str, ToolRegistration]
+
+    def load_tool_registry(self) -> dict[str, ToolRegistration]:
+        return dict(self.registry)
+
+
+@dataclass(frozen=True)
+class DefaultToolRegistryProvider:
+    def load_tool_registry(self) -> dict[str, ToolRegistration]:
+        return get_default_tool_registry()
 
 
 @dataclass(frozen=True)
@@ -159,16 +178,85 @@ _REGISTERED_TOOLS = {
 }
 
 
-def get_registered_tool_names() -> tuple[str, ...]:
-    return tuple(sorted(_REGISTERED_TOOLS))
+def load_tool_registry(
+    *,
+    provider: ToolRegistryProvider | None = None,
+    loader: ToolRegistryLoader | None = None,
+    overrides: dict[str, ToolRegistration] | None = None,
+) -> dict[str, ToolRegistration]:
+    if provider is not None:
+        base_registry = dict(provider.load_tool_registry())
+    elif loader is not None:
+        base_registry = dict(loader())
+    else:
+        base_registry = get_default_tool_registry_provider().load_tool_registry()
+    return build_tool_registry(
+        base_registry=base_registry,
+        overrides=overrides,
+    )
 
 
-def resolve_tool_registration(name: str) -> ToolRegistration | None:
-    return _REGISTERED_TOOLS.get(name)
+def get_default_tool_registry() -> dict[str, ToolRegistration]:
+    return dict(_REGISTERED_TOOLS)
 
 
-def ensure_tool_registration(name: str) -> ToolRegistration:
-    registration = resolve_tool_registration(name)
+def get_default_tool_registry_provider() -> ToolRegistryProvider:
+    return DefaultToolRegistryProvider()
+
+
+def build_tool_registry(
+    *,
+    base_registry: dict[str, ToolRegistration] | None = None,
+    overrides: dict[str, ToolRegistration] | None = None,
+) -> dict[str, ToolRegistration]:
+    registry = get_default_tool_registry() if base_registry is None else dict(base_registry)
+    if overrides:
+        registry.update(overrides)
+    return registry
+
+
+def get_registered_tool_names(
+    *,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> tuple[str, ...]:
+    effective_registry = (
+        load_tool_registry(provider=registry_provider, loader=registry_loader)
+        if registry is None
+        else registry
+    )
+    return tuple(sorted(effective_registry))
+
+
+def resolve_tool_registration(
+    name: str,
+    *,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> ToolRegistration | None:
+    effective_registry = (
+        load_tool_registry(provider=registry_provider, loader=registry_loader)
+        if registry is None
+        else registry
+    )
+    return effective_registry.get(name)
+
+
+def ensure_tool_registration(
+    name: str,
+    *,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> ToolRegistration:
+    registration = resolve_tool_registration(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if registration is None:
         raise MockToolExecutionError(f"Unknown mock tool: {name}", fatal=True)
     return registration
@@ -197,9 +285,22 @@ def build_tool_runtime_context(
     prompt: str,
     user_id: str,
     attempt: int,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> ToolRuntimeContext:
-    registration = ensure_tool_registration(name)
-    requires_user_context = tool_requires_user_context(name)
+    registration = ensure_tool_registration(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    requires_user_context = tool_requires_user_context(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     effective_user_id = user_id if requires_user_context else ""
     return ToolRuntimeContext(
         name=name,
@@ -207,14 +308,29 @@ def build_tool_runtime_context(
         user_id=effective_user_id,
         attempt=attempt,
         registration=registration,
-        retryable_by_default=is_tool_retryable_by_default(name),
-        default_timeout_ms=get_tool_default_timeout_ms(name),
+        retryable_by_default=is_tool_retryable_by_default(
+            name,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        ),
+        default_timeout_ms=get_tool_default_timeout_ms(
+            name,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        ),
         requires_user_context=requires_user_context,
     )
 
 
-def build_tool_result_preview(*, name: str, output: dict[str, object]) -> dict[str, object] | None:
-    registration = resolve_tool_registration(name)
+def build_tool_result_preview(
+    *,
+    name: str,
+    output: dict[str, object],
+    registry: dict[str, ToolRegistration] | None = None,
+) -> dict[str, object] | None:
+    registration = resolve_tool_registration(name, registry=registry)
     if registration is None:
         return output
     if not registration.supports_result_preview:
@@ -222,22 +338,55 @@ def build_tool_result_preview(*, name: str, output: dict[str, object]) -> dict[s
     return output
 
 
-def tool_requires_user_context(name: str) -> bool:
-    registration = resolve_tool_registration(name)
+def tool_requires_user_context(
+    name: str,
+    *,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> bool:
+    registration = resolve_tool_registration(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if registration is None:
         return True
     return registration.requires_user_context
 
 
-def is_tool_retryable_by_default(name: str) -> bool:
-    registration = resolve_tool_registration(name)
+def is_tool_retryable_by_default(
+    name: str,
+    *,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> bool:
+    registration = resolve_tool_registration(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if registration is None:
         return True
     return registration.retryable_by_default
 
 
-def get_tool_default_timeout_ms(name: str) -> int:
-    registration = resolve_tool_registration(name)
+def get_tool_default_timeout_ms(
+    name: str,
+    *,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> int:
+    registration = resolve_tool_registration(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if registration is None:
         return 3_000
     return registration.default_timeout_ms
@@ -479,12 +628,18 @@ def build_tool_attempt_bundle(
     prompt: str,
     user_id: str,
     attempt: int,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     runtime_ctx = build_tool_runtime_context(
         name=name,
         prompt=prompt,
         user_id=user_id,
         attempt=attempt,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     return {
         "start_events": build_tool_attempt_start_events(
@@ -617,12 +772,37 @@ def execute_tool_plan_item_retry_loop(
     make_step_id: Callable[[], str],
     raise_if_should_abort: Callable[[], None],
     run_tool_fn: ToolRunner | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> Iterator[dict[str, object]]:
     step_id = str(iteration_ctx["step_id"])
     action_step = dict(initial_action_step)
     attempt = 0
     last_error: str | None = None
-    runner = run_tool if run_tool_fn is None else run_tool_fn
+    if run_tool_fn is None:
+        def default_runner(
+            *,
+            name: str,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+            attempt: int,
+        ) -> dict[str, object]:
+            return run_tool(
+                name=name,
+                tool_input=tool_input,
+                prompt=prompt,
+                user_id=user_id,
+                attempt=attempt,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
+            )
+
+        runner = default_runner
+    else:
+        runner = run_tool_fn
 
     while True:
         raise_if_should_abort()
@@ -634,6 +814,9 @@ def execute_tool_plan_item_retry_loop(
             prompt=prompt,
             user_id=user_id,
             attempt=attempt,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         )
         start_events = attempt_bundle["start_events"]
         yield {
@@ -739,6 +922,119 @@ def execute_tool_plan_item_retry_loop(
                 ),
             }
             return
+
+
+def execute_tool_plan_item_service_execution(
+    *,
+    task_id: str,
+    trace_steps: list[dict[str, object]],
+    iteration_ctx: dict[str, object],
+    initial_action_step: dict[str, object],
+    tool_name: str,
+    tool_input: dict[str, object],
+    prompt: str,
+    user_id: str,
+    model: str,
+    estimate_token_count: Callable[[str], int],
+    make_step_id: Callable[[], str],
+    raise_if_should_abort: Callable[[], None],
+    run_tool_fn: ToolRunner | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> Iterator[dict[str, object]]:
+    for item in execute_tool_plan_item_retry_loop(
+        task_id=task_id,
+        iteration_ctx=iteration_ctx,
+        initial_action_step=initial_action_step,
+        tool_name=tool_name,
+        tool_input=tool_input,
+        prompt=prompt,
+        user_id=user_id,
+        model=model,
+        estimate_token_count=estimate_token_count,
+        make_step_id=make_step_id,
+        raise_if_should_abort=raise_if_should_abort,
+        run_tool_fn=run_tool_fn,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    ):
+        if item["kind"] == "event":
+            yield item
+            continue
+        loop_execution_result = item["result"]
+        service_execution = build_tool_plan_item_service_execution(
+            task_id=task_id,
+            trace_steps=trace_steps,
+            user_id=user_id,
+            loop_execution_result=loop_execution_result,
+        )
+        service_execution["loop_execution_result"] = loop_execution_result
+        yield {
+            "kind": "result",
+            "result": service_execution,
+        }
+        return
+
+
+def execute_tool_plan_item_service_actions(
+    *,
+    service_actions: list[dict[str, object]],
+    trace_steps: list[dict[str, object]],
+    tool_observations: list[str],
+    seq_cursor: int,
+    persist_trace_fn: Callable[..., None],
+    complete_task_fn: Callable[..., None],
+    record_failure_event_fn: Callable[..., None],
+) -> Iterator[dict[str, object]]:
+    current_seq_cursor = int(seq_cursor)
+    for service_action in service_actions:
+        kind = str(service_action["kind"])
+        if kind == "trace_write":
+            trace_steps.append(service_action["trace_step"])
+            yield {
+                "kind": "event",
+                "event": "trace",
+                "data": service_action["trace_event"],
+            }
+            persist_trace_fn(force=bool(service_action["persist_force"]))
+            continue
+        if kind == "continue":
+            tool_observations.extend(service_action["tool_observations"])
+            current_seq_cursor += int(service_action["seq_increment"])
+            continue
+        if kind == "complete_task":
+            complete_task_fn(**service_action["kwargs"])
+            continue
+        if kind == "record_failure_event":
+            record_failure_event_fn(**service_action["kwargs"])
+            continue
+        if kind == "emit_state":
+            yield {
+                "kind": "event",
+                "event": str(service_action["event"]),
+                "data": service_action["data"],
+            }
+            continue
+        if kind == "return":
+            yield {
+                "kind": "result",
+                "result": {
+                    "seq_cursor": current_seq_cursor,
+                    "should_return": True,
+                },
+            }
+            return
+        raise AssertionError(f"unsupported tool service action: {kind}")
+
+    yield {
+        "kind": "result",
+        "result": {
+            "seq_cursor": current_seq_cursor,
+            "should_return": False,
+        },
+    }
 
 
 def build_tool_attempt_success_events(
@@ -1494,6 +1790,83 @@ def build_tool_plan_item_next_action_execution(
     }
 
 
+def build_tool_plan_item_service_actions(
+    *,
+    service_execution: dict[str, object],
+) -> list[dict[str, object]]:
+    actions = [
+        build_tool_plan_item_trace_write_service_action(
+            trace_write_action=trace_write_action,
+        )
+        for trace_write_action in service_execution["trace_write_actions"]
+    ]
+    next_action_execution = service_execution["next_action_execution"]
+    if str(next_action_execution["kind"]) == "return":
+        return_action = next_action_execution["return_action"]
+        assert return_action is not None
+        return [
+            *actions,
+            *build_tool_plan_item_return_service_actions(
+                return_action=return_action,
+            ),
+        ]
+
+    continue_action = next_action_execution["continue_action"]
+    return [
+        *actions,
+        build_tool_plan_item_continue_service_action(
+            continue_action=continue_action,
+        ),
+    ]
+
+
+def build_tool_plan_item_trace_write_service_action(
+    *,
+    trace_write_action: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "kind": "trace_write",
+        "trace_step": trace_write_action["trace_step"],
+        "trace_event": trace_write_action["trace_event"],
+        "persist_force": bool(trace_write_action["persist_force"]),
+    }
+
+
+def build_tool_plan_item_continue_service_action(
+    *,
+    continue_action: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "kind": "continue",
+        "tool_observations": list(continue_action["tool_observations"]),
+        "seq_increment": int(continue_action["seq_increment"]),
+    }
+
+
+def build_tool_plan_item_return_service_actions(
+    *,
+    return_action: dict[str, object],
+) -> list[dict[str, object]]:
+    return [
+        {
+            "kind": "complete_task",
+            "kwargs": return_action["complete_task_kwargs"],
+        },
+        {
+            "kind": "record_failure_event",
+            "kwargs": return_action["failure_event_kwargs"],
+        },
+        {
+            "kind": "emit_state",
+            "event": "state",
+            "data": return_action["state_event"],
+        },
+        {
+            "kind": "return",
+        },
+    ]
+
+
 def build_tool_plan_item_service_effects_execution(
     *,
     task_id: str,
@@ -1501,7 +1874,7 @@ def build_tool_plan_item_service_effects_execution(
     user_id: str,
     service_effects: dict[str, object],
 ) -> dict[str, object]:
-    return {
+    service_execution = {
         "trace_write_actions": list(service_effects["trace_write_actions"]),
         "next_action_execution": build_tool_plan_item_next_action_execution(
             task_id=task_id,
@@ -1510,6 +1883,10 @@ def build_tool_plan_item_service_effects_execution(
             next_action=service_effects["next_action"],
         ),
     }
+    service_execution["service_actions"] = build_tool_plan_item_service_actions(
+        service_execution=service_execution,
+    )
+    return service_execution
 
 
 def build_tool_plan_item_service_execution(
@@ -1696,6 +2073,9 @@ def run_tool(
     prompt: str,
     user_id: str,
     attempt: int,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     maybe_raise_mock_tool_execution_error(name=name, prompt=prompt, attempt=attempt)
     ctx = build_tool_runtime_context(
@@ -1703,6 +2083,9 @@ def run_tool(
         prompt=prompt,
         user_id=user_id,
         attempt=attempt,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     return ctx.registration.runner(
         tool_input=tool_input,
@@ -1717,6 +2100,9 @@ def execute_tool_spec(
     prompt: str,
     user_id: str,
     attempt: int,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     invocation = normalize_tool_spec(tool_spec)
     return run_tool(
@@ -1725,4 +2111,7 @@ def execute_tool_spec(
         prompt=prompt,
         user_id=user_id,
         attempt=attempt,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )

@@ -47,13 +47,37 @@
 
 当前关键 helper 包括：
 
+- `load_tool_registry()`
+- `ToolRegistryProvider`
+- `StaticToolRegistryProvider`
+- `DefaultToolRegistryProvider`
+- `get_default_tool_registry_provider()`
+- `get_default_tool_registry()`
+- `build_tool_registry()`
+- `get_registered_tool_names(..., registry=...)`
+- `get_registered_tool_names(..., registry_provider=...)`
+- `get_registered_tool_names(..., registry_loader=...)`
 - `build_tool_attempt_bundle()`
+- `resolve_tool_registration(..., registry=...)`
+- `resolve_tool_registration(..., registry_provider=...)`
+- `ensure_tool_registration(..., registry=...)`
+- `ensure_tool_registration(..., registry_provider=...)`
+- `build_tool_runtime_context(..., registry=...)`
+- `build_tool_runtime_context(..., registry_provider=...)`
+- `run_tool(..., registry=...)`
+- `run_tool(..., registry_provider=...)`
+- `execute_tool_spec(..., registry=...)`
+- `execute_tool_spec(..., registry_provider=...)`
+- `run_tool(..., registry_loader=...)`
+- `execute_tool_spec(..., registry_loader=...)`
 - `build_tool_attempt_execution()`
 - `build_tool_attempt_loop_result()`
 - `build_tool_attempt_loop_terminal_result()`
 - `build_tool_plan_item_retry_loop_result()`
 - `build_tool_plan_item_retry_loop_execution_result()`
 - `execute_tool_plan_item_retry_loop()`
+- `execute_tool_plan_item_service_execution()`
+- `execute_tool_plan_item_service_actions()`
 - `build_tool_plan_item_stream_effects()`
 - `build_tool_plan_item_continue_update()`
 - `build_tool_plan_item_continue_action()`
@@ -62,6 +86,10 @@
 - `build_tool_plan_item_return_action()`
 - `build_tool_plan_item_trace_write_action()`
 - `build_tool_plan_item_next_action_execution()`
+- `build_tool_plan_item_service_actions()`
+- `build_tool_plan_item_trace_write_service_action()`
+- `build_tool_plan_item_continue_service_action()`
+- `build_tool_plan_item_return_service_actions()`
 - `build_tool_plan_item_service_effects_execution()`
 - `build_tool_plan_item_service_execution()`
 - `build_tool_plan_item_service_effects()`
@@ -72,17 +100,15 @@
 
 - 外层 `tool_plan` 遍历
 - SSE 发射时机控制
-- trace step append 与 trace persistence 调用
-- terminal return 下的任务完成/失败副作用调用
-- success path 下按 `continue_action` 更新 `tool_observations` 与 `seq_cursor`
+- 按 `service_actions` 顺序执行 trace / continue / return 副作用
 - tool 阶段之后的最终答案生成、超时、取消与任务生命周期治理
 
 当前单个 tool 的 service 壳子已经接近：
 
-1. 调 `execute_tool_plan_item_retry_loop()`
-2. 获取 `build_tool_plan_item_service_execution()` 产物
-3. 发 trace SSE 并持久化
-4. 执行 continue/return 两类后续动作
+1. 调 `execute_tool_plan_item_service_execution()`
+2. 直接获取 runtime 产出的 `service_execution`
+3. 调 `execute_tool_plan_item_service_actions()`
+4. 只保留 SSE 字符串包装与 return 边界
 
 ## Why This Is a Reasonable Stopping Point
 
@@ -116,10 +142,18 @@
 
 ### Focused regression baseline
 
-`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **78 条测试**，覆盖：
+`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **106 条测试**，覆盖：
 
 - tool plan compatibility
 - tool execution compatibility
+- custom registry injection seam compatibility
+- registry builder / enumeration seam compatibility
+- high-level runtime registry threading compatibility
+- default registry loader compatibility
+- pluggable registry loader compatibility
+- provider-object registry seam compatibility
+- default provider-object path compatibility
+- named default provider implementation compatibility
 - transient/fatal/unknown tool 行为
 - retry loop 最终结果
 - stream effects
@@ -183,6 +217,6 @@ Guardrails:
 只有在这些触发条件出现时，继续深入抽象才更合理：
 
 1. 需要新增真实 tool 并共享统一 policy
-2. 需要把 mock tool runtime 迁移为可扩展 registry
+2. 需要把当前 `registry / loader / provider` seam 接到真实 registry provider
 3. 需要复用同一套 runtime seam 到非 chat 执行路径
 4. 需要将 trace / audit / state side effects 再统一成更高层执行器

@@ -9,8 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import app.services.tool_runtime as tool_runtime_module  # type: ignore[import-not-found]
 from app.services.tool_runtime import (  # type: ignore[import-not-found]
+    DefaultToolRegistryProvider,
     MockToolExecutionError,
+    StaticToolRegistryProvider,
+    ToolRegistration,
     build_action_step_initial_meta,
     build_action_step_initial_step,
     build_tool_plan,
@@ -32,11 +36,17 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_plan_item_execution_result,
     build_tool_plan_item_stream_effects,
     build_tool_plan_item_continue_action,
+    build_tool_plan_item_continue_service_action,
     build_tool_plan_item_next_action_execution,
+    build_tool_plan_item_return_service_actions,
+    build_tool_plan_item_service_actions,
     build_tool_plan_item_service_execution,
     build_tool_plan_item_service_effects_execution,
     build_tool_plan_item_return_action,
+    build_tool_plan_item_trace_write_service_action,
     build_tool_plan_item_trace_write_action,
+    execute_tool_plan_item_service_actions,
+    execute_tool_plan_item_service_execution,
     execute_tool_plan_item_retry_loop,
     build_tool_plan_item_result,
     build_tool_plan_item_success_effects,
@@ -64,7 +74,11 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_trace_event,
     compute_tool_retry_decision,
     execute_tool_spec,
+    get_default_tool_registry_provider,
+    get_default_tool_registry,
+    load_tool_registry,
     get_registered_tool_names,
+    build_tool_registry,
     build_tool_result_preview,
     build_tool_runtime_context,
     ensure_tool_registration,
@@ -106,6 +120,156 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_run_tool_accepts_custom_registry_override(self) -> None:
+        runner_calls: list[tuple[dict[str, object], str, str]] = []
+
+        def custom_runner(
+            *,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+        ) -> dict[str, object]:
+            runner_calls.append((tool_input, prompt, user_id))
+            return {
+                "result": "custom-ok",
+                "tool_kind": "custom_calc",
+            }
+
+        registry = {
+            "calc_eval": ToolRegistration(
+                name="calc_eval",
+                kind="custom_calc",
+                label="Custom Calculator",
+                retryable_by_default=False,
+                default_timeout_ms=9_000,
+                requires_user_context=False,
+                supports_result_preview=True,
+                runner=custom_runner,
+            )
+        }
+
+        output = run_tool(
+            name="calc_eval",
+            tool_input={"expression": "ignored"},
+            prompt="custom-calc",
+            user_id="user-1",
+            attempt=0,
+            registry=registry,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "result": "custom-ok",
+                "tool_kind": "custom_calc",
+            },
+        )
+        self.assertEqual(
+            runner_calls,
+            [({"expression": "ignored"}, "custom-calc", "")],
+        )
+
+    def test_run_tool_accepts_custom_registry_loader_override(self) -> None:
+        runner_calls: list[tuple[dict[str, object], str, str]] = []
+
+        def custom_runner(
+            *,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+        ) -> dict[str, object]:
+            runner_calls.append((tool_input, prompt, user_id))
+            return {
+                "result": "loader-ok",
+                "tool_kind": "loader_calc",
+            }
+
+        def custom_loader() -> dict[str, ToolRegistration]:
+            return {
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="loader_calc",
+                    label="Loader Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=11_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=custom_runner,
+                )
+            }
+
+        output = run_tool(
+            name="calc_eval",
+            tool_input={"expression": "ignored"},
+            prompt="loader-calc",
+            user_id="user-1",
+            attempt=0,
+            registry_loader=custom_loader,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "result": "loader-ok",
+                "tool_kind": "loader_calc",
+            },
+        )
+        self.assertEqual(
+            runner_calls,
+            [({"expression": "ignored"}, "loader-calc", "")],
+        )
+
+    def test_run_tool_accepts_custom_registry_provider_override(self) -> None:
+        runner_calls: list[tuple[dict[str, object], str, str]] = []
+
+        def custom_runner(
+            *,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+        ) -> dict[str, object]:
+            runner_calls.append((tool_input, prompt, user_id))
+            return {
+                "result": "provider-ok",
+                "tool_kind": "provider_calc",
+            }
+
+        provider = StaticToolRegistryProvider(
+            registry={
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="provider_calc",
+                    label="Provider Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=13_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=custom_runner,
+                )
+            }
+        )
+
+        output = run_tool(
+            name="calc_eval",
+            tool_input={"expression": "ignored"},
+            prompt="provider-calc",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "result": "provider-ok",
+                "tool_kind": "provider_calc",
+            },
+        )
+        self.assertEqual(
+            runner_calls,
+            [({"expression": "ignored"}, "provider-calc", "")],
+        )
+
     def test_run_tool_keeps_transient_error_semantics(self) -> None:
         with self.assertRaises(MockToolExecutionError) as ctx:
             run_tool(
@@ -139,6 +303,51 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_execute_tool_spec_accepts_custom_registry_override(self) -> None:
+        def custom_runner(
+            *,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+        ) -> dict[str, object]:
+            return {
+                "echo_input": tool_input,
+                "tool_kind": "custom_calc",
+                "prompt": prompt,
+                "user_id": user_id,
+            }
+
+        registry = {
+            "calc_eval": ToolRegistration(
+                name="calc_eval",
+                kind="custom_calc",
+                label="Custom Calculator",
+                retryable_by_default=False,
+                default_timeout_ms=9_000,
+                requires_user_context=False,
+                supports_result_preview=True,
+                runner=custom_runner,
+            )
+        }
+
+        output = execute_tool_spec(
+            tool_spec={"name": "calc_eval", "input": {"expression": "9*9"}},
+            prompt="custom-calc",
+            user_id="user-1",
+            attempt=0,
+            registry=registry,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "echo_input": {"expression": "9*9"},
+                "tool_kind": "custom_calc",
+                "prompt": "custom-calc",
+                "user_id": "",
+            },
+        )
+
     def test_execute_tool_spec_unknown_tool_remains_fatal(self) -> None:
         with self.assertRaises(MockToolExecutionError) as ctx:
             execute_tool_spec(
@@ -152,6 +361,290 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("unknown mock tool", str(ctx.exception).lower())
 
     def test_registered_tool_names_cover_current_mock_tools(self) -> None:
+        self.assertEqual(
+            get_registered_tool_names(),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+
+    def test_get_default_tool_registry_returns_copy_of_current_entries(self) -> None:
+        registry = get_default_tool_registry()
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+        registry.pop("calc_eval")
+        self.assertEqual(
+            get_registered_tool_names(),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+
+    def test_get_default_tool_registry_provider_returns_isolated_snapshot(self) -> None:
+        provider = get_default_tool_registry_provider()
+        registry = provider.load_tool_registry()
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+        registry.pop("calc_eval")
+        self.assertEqual(
+            tuple(sorted(provider.load_tool_registry())),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+
+    def test_get_default_tool_registry_provider_returns_default_provider_impl(self) -> None:
+        provider = get_default_tool_registry_provider()
+
+        self.assertIsInstance(provider, DefaultToolRegistryProvider)
+
+    def test_default_tool_registry_provider_loads_fresh_snapshot_per_call(self) -> None:
+        provider = DefaultToolRegistryProvider()
+        first = provider.load_tool_registry()
+        second = provider.load_tool_registry()
+
+        self.assertEqual(
+            tuple(sorted(first)),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+        self.assertEqual(
+            tuple(sorted(second)),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+        self.assertIsNot(first, second)
+
+    def test_load_tool_registry_returns_isolated_default_snapshot(self) -> None:
+        registry = load_tool_registry()
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+        registry.pop("mock_plan")
+        self.assertEqual(
+            get_registered_tool_names(),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+
+    def test_load_tool_registry_applies_overrides_on_fresh_snapshot(self) -> None:
+        registry = load_tool_registry(
+            overrides={
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="custom_calc",
+                    label="Custom Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=9_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                ),
+                "custom_lookup": ToolRegistration(
+                    name="custom_lookup",
+                    kind="custom_lookup",
+                    label="Custom Lookup",
+                    retryable_by_default=False,
+                    default_timeout_ms=12_000,
+                    requires_user_context=False,
+                    supports_result_preview=False,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                ),
+            }
+        )
+
+        self.assertEqual(
+            get_registered_tool_names(registry=registry),
+            ("calc_eval", "custom_lookup", "mock_plan", "mock_retrieve"),
+        )
+        self.assertEqual(
+            resolve_tool_registration("calc_eval", registry=registry).kind,
+            "custom_calc",
+        )
+        self.assertIsNotNone(resolve_tool_registration("custom_lookup", registry=registry))
+        self.assertEqual(
+            get_registered_tool_names(),
+            ("calc_eval", "mock_plan", "mock_retrieve"),
+        )
+
+    def test_load_tool_registry_accepts_custom_loader_then_applies_overrides(self) -> None:
+        def custom_loader() -> dict[str, ToolRegistration]:
+            return {
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="loader_calc",
+                    label="Loader Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=11_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            }
+
+        registry = load_tool_registry(
+            loader=custom_loader,
+            overrides={
+                "custom_lookup": ToolRegistration(
+                    name="custom_lookup",
+                    kind="custom_lookup",
+                    label="Custom Lookup",
+                    retryable_by_default=False,
+                    default_timeout_ms=12_000,
+                    requires_user_context=False,
+                    supports_result_preview=False,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            },
+        )
+
+        self.assertEqual(
+            get_registered_tool_names(registry=registry),
+            ("calc_eval", "custom_lookup"),
+        )
+        self.assertEqual(
+            resolve_tool_registration("calc_eval", registry=registry).kind,
+            "loader_calc",
+        )
+
+    def test_load_tool_registry_accepts_provider_then_applies_overrides(self) -> None:
+        provider = StaticToolRegistryProvider(
+            registry={
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="provider_calc",
+                    label="Provider Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=13_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            }
+        )
+
+        registry = load_tool_registry(
+            provider=provider,
+            overrides={
+                "custom_lookup": ToolRegistration(
+                    name="custom_lookup",
+                    kind="custom_lookup",
+                    label="Custom Lookup",
+                    retryable_by_default=False,
+                    default_timeout_ms=12_000,
+                    requires_user_context=False,
+                    supports_result_preview=False,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                )
+            },
+        )
+
+        self.assertEqual(
+            get_registered_tool_names(registry=registry),
+            ("calc_eval", "custom_lookup"),
+        )
+        self.assertEqual(
+            resolve_tool_registration("calc_eval", registry=registry).kind,
+            "provider_calc",
+        )
+
+    def test_load_tool_registry_uses_default_provider_when_no_source_is_given(self) -> None:
+        original = tool_runtime_module.get_default_tool_registry_provider
+
+        def fake_default_provider() -> StaticToolRegistryProvider:
+            return StaticToolRegistryProvider(
+                registry={
+                    "custom_only": ToolRegistration(
+                        name="custom_only",
+                        kind="custom_only",
+                        label="Custom Only",
+                        retryable_by_default=False,
+                        default_timeout_ms=7_000,
+                        requires_user_context=False,
+                        supports_result_preview=False,
+                        runner=lambda *, tool_input, prompt, user_id: {
+                            "tool_input": tool_input,
+                            "prompt": prompt,
+                            "user_id": user_id,
+                        },
+                    )
+                }
+            )
+
+        tool_runtime_module.get_default_tool_registry_provider = fake_default_provider
+        try:
+            registry = load_tool_registry()
+        finally:
+            tool_runtime_module.get_default_tool_registry_provider = original
+
+        self.assertEqual(tuple(sorted(registry)), ("custom_only",))
+
+    def test_build_tool_registry_merges_overrides_without_mutating_default(self) -> None:
+        custom_registry = build_tool_registry(
+            overrides={
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="custom_calc",
+                    label="Custom Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=9_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                ),
+                "custom_lookup": ToolRegistration(
+                    name="custom_lookup",
+                    kind="custom_lookup",
+                    label="Custom Lookup",
+                    retryable_by_default=False,
+                    default_timeout_ms=12_000,
+                    requires_user_context=False,
+                    supports_result_preview=False,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "tool_input": tool_input,
+                        "prompt": prompt,
+                        "user_id": user_id,
+                    },
+                ),
+            }
+        )
+
+        self.assertEqual(
+            get_registered_tool_names(registry=custom_registry),
+            ("calc_eval", "custom_lookup", "mock_plan", "mock_retrieve"),
+        )
+        self.assertEqual(
+            resolve_tool_registration("calc_eval", registry=custom_registry).kind,
+            "custom_calc",
+        )
+        self.assertIsNotNone(resolve_tool_registration("custom_lookup", registry=custom_registry))
         self.assertEqual(
             get_registered_tool_names(),
             ("calc_eval", "mock_plan", "mock_retrieve"),
@@ -230,6 +723,40 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(ctx.default_timeout_ms, 3_000)
         self.assertTrue(ctx.retryable_by_default)
         self.assertTrue(ctx.requires_user_context)
+
+    def test_build_tool_runtime_context_accepts_custom_registry_metadata(self) -> None:
+        registry = {
+            "calc_eval": ToolRegistration(
+                name="calc_eval",
+                kind="custom_calc",
+                label="Custom Calculator",
+                retryable_by_default=False,
+                default_timeout_ms=9_000,
+                requires_user_context=False,
+                supports_result_preview=False,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_input": tool_input,
+                    "prompt": prompt,
+                    "user_id": user_id,
+                },
+            )
+        }
+
+        ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="custom-calc",
+            user_id="user-1",
+            attempt=2,
+            registry=registry,
+        )
+
+        self.assertEqual(ctx.name, "calc_eval")
+        self.assertEqual(ctx.user_id, "")
+        self.assertEqual(ctx.attempt, 2)
+        self.assertEqual(ctx.default_timeout_ms, 9_000)
+        self.assertFalse(ctx.retryable_by_default)
+        self.assertFalse(ctx.requires_user_context)
+        self.assertEqual(ctx.registration.kind, "custom_calc")
 
     def test_compute_tool_retry_decision_keeps_current_calc_defaults(self) -> None:
         ctx = build_tool_runtime_context(
@@ -2435,6 +2962,226 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_plan_item_trace_write_service_action_keeps_shape(self) -> None:
+        trace_write_action = {
+            "trace_step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+            "trace_event": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+            },
+            "persist_force": False,
+        }
+
+        result = build_tool_plan_item_trace_write_service_action(
+            trace_write_action=trace_write_action,
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "kind": "trace_write",
+                "trace_step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                "trace_event": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                },
+                "persist_force": False,
+            },
+        )
+
+    def test_build_tool_plan_item_continue_service_action_keeps_shape(self) -> None:
+        continue_action = {
+            "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+            "seq_increment": 1,
+        }
+
+        result = build_tool_plan_item_continue_service_action(
+            continue_action=continue_action,
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "kind": "continue",
+                "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+                "seq_increment": 1,
+            },
+        )
+
+    def test_build_tool_plan_item_return_service_actions_keep_shape(self) -> None:
+        return_action = {
+            "complete_task_kwargs": {
+                "task_id": "task-1",
+                "trace_steps": [{"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"}],
+                "user_id": "user-1",
+                "status": "failed",
+            },
+            "failure_event_kwargs": {
+                "event_type": "task_failed",
+                "code": "tool_execution_error",
+                "message": "fatal",
+                "detail": {"step_id": "step-1", "retry_count": 1},
+            },
+            "state_event": {"task_id": "task-1", "phase": "error"},
+        }
+
+        result = build_tool_plan_item_return_service_actions(
+            return_action=return_action,
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "kind": "complete_task",
+                    "kwargs": return_action["complete_task_kwargs"],
+                },
+                {
+                    "kind": "record_failure_event",
+                    "kwargs": return_action["failure_event_kwargs"],
+                },
+                {
+                    "kind": "emit_state",
+                    "event": "state",
+                    "data": return_action["state_event"],
+                },
+                {
+                    "kind": "return",
+                },
+            ],
+        )
+
+    def test_build_tool_plan_item_service_actions_keep_continue_order(self) -> None:
+        service_execution = {
+            "trace_write_actions": [
+                {
+                    "trace_step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                    "trace_event": {
+                        "task_id": "task-1",
+                        "step_id": "step-1",
+                        "step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                    },
+                    "persist_force": False,
+                },
+            ],
+            "next_action_execution": {
+                "kind": "continue",
+                "continue_update": {
+                    "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+                    "seq_increment": 1,
+                },
+                "continue_action": {
+                    "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+                    "seq_increment": 1,
+                },
+                "return_action": None,
+            },
+        }
+
+        result = build_tool_plan_item_service_actions(
+            service_execution=service_execution,
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "kind": "trace_write",
+                    "trace_step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                    "trace_event": {
+                        "task_id": "task-1",
+                        "step_id": "step-1",
+                        "step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                    },
+                    "persist_force": False,
+                },
+                {
+                    "kind": "continue",
+                    "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+                    "seq_increment": 1,
+                },
+            ],
+        )
+
+    def test_build_tool_plan_item_service_actions_keep_return_order(self) -> None:
+        service_execution = {
+            "trace_write_actions": [
+                {
+                    "trace_step": {"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"},
+                    "trace_event": {
+                        "task_id": "task-1",
+                        "step_id": "step-1",
+                        "step": {"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"},
+                    },
+                    "persist_force": True,
+                },
+            ],
+            "next_action_execution": {
+                "kind": "return",
+                "continue_update": {
+                    "tool_observations": [],
+                    "seq_increment": 0,
+                },
+                "continue_action": {
+                    "tool_observations": [],
+                    "seq_increment": 0,
+                },
+                "return_action": {
+                    "complete_task_kwargs": {
+                        "task_id": "task-1",
+                        "trace_steps": [{"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"}],
+                        "user_id": "user-1",
+                        "status": "failed",
+                    },
+                    "failure_event_kwargs": {
+                        "event_type": "task_failed",
+                        "code": "tool_execution_error",
+                        "message": "fatal",
+                        "detail": {"step_id": "step-1", "retry_count": 1},
+                    },
+                    "state_event": {"task_id": "task-1", "phase": "error"},
+                },
+            },
+        }
+
+        result = build_tool_plan_item_service_actions(
+            service_execution=service_execution,
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "kind": "trace_write",
+                    "trace_step": {"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"},
+                    "trace_event": {
+                        "task_id": "task-1",
+                        "step_id": "step-1",
+                        "step": {"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"},
+                    },
+                    "persist_force": True,
+                },
+                {
+                    "kind": "complete_task",
+                    "kwargs": service_execution["next_action_execution"]["return_action"]["complete_task_kwargs"],
+                },
+                {
+                    "kind": "record_failure_event",
+                    "kwargs": service_execution["next_action_execution"]["return_action"]["failure_event_kwargs"],
+                },
+                {
+                    "kind": "emit_state",
+                    "event": "state",
+                    "data": service_execution["next_action_execution"]["return_action"]["state_event"],
+                },
+                {
+                    "kind": "return",
+                },
+            ],
+        )
+
     def test_build_tool_plan_item_service_effects_execution_keeps_continue_shape(self) -> None:
         service_effects = {
             "trace_write_actions": [
@@ -2476,6 +3223,26 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             service_effects["next_action"]["continue_update"],
         )
         self.assertIsNone(result["next_action_execution"]["return_action"])
+        self.assertEqual(
+            result["service_actions"],
+            [
+                {
+                    "kind": "trace_write",
+                    "trace_step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                    "trace_event": {
+                        "task_id": "task-1",
+                        "step_id": "step-1",
+                        "step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                    },
+                    "persist_force": False,
+                },
+                {
+                    "kind": "continue",
+                    "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+                    "seq_increment": 1,
+                },
+            ],
+        )
 
     def test_build_tool_plan_item_service_effects_execution_keeps_return_shape(self) -> None:
         service_effects = {
@@ -2535,6 +3302,37 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "failure_event_kwargs": service_effects["next_action"]["terminal_return_effects"]["failure_event"],
                 "state_event": service_effects["next_action"]["terminal_return_effects"]["state_event"],
             },
+        )
+        self.assertEqual(
+            result["service_actions"],
+            [
+                {
+                    "kind": "trace_write",
+                    "trace_step": {"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"},
+                    "trace_event": {
+                        "task_id": "task-1",
+                        "step_id": "step-1",
+                        "step": {"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"},
+                    },
+                    "persist_force": True,
+                },
+                {
+                    "kind": "complete_task",
+                    "kwargs": result["next_action_execution"]["return_action"]["complete_task_kwargs"],
+                },
+                {
+                    "kind": "record_failure_event",
+                    "kwargs": result["next_action_execution"]["return_action"]["failure_event_kwargs"],
+                },
+                {
+                    "kind": "emit_state",
+                    "event": "state",
+                    "data": result["next_action_execution"]["return_action"]["state_event"],
+                },
+                {
+                    "kind": "return",
+                },
+            ],
         )
 
     def test_build_tool_plan_item_service_execution_keeps_success_shape(self) -> None:
@@ -3001,6 +3799,484 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             final_item["result"]["terminal_effects"]["state"]["phase"],
             "error",
         )
+
+    def test_execute_tool_plan_item_retry_loop_accepts_custom_registry_retry_policy(self) -> None:
+        attempt_calls: list[tuple[int, str]] = []
+
+        def custom_runner(
+            *,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+        ) -> dict[str, object]:
+            del tool_input, prompt
+            attempt_calls.append((0, user_id))
+            raise MockToolExecutionError("transient", fatal=False)
+
+        registry = build_tool_registry(
+            overrides={
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="custom_calc",
+                    label="Custom Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=9_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=custom_runner,
+                )
+            }
+        )
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+
+        items = list(
+            execute_tool_plan_item_retry_loop(
+                task_id="task-1",
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        self.assertEqual(attempt_calls, [(0, "")])
+        self.assertEqual(
+            [item["event"] for item in items if item["kind"] == "event"],
+            ["tool_start", "state", "tool_end", "error"],
+        )
+        final_item = items[-1]
+        self.assertEqual(final_item["kind"], "result")
+        self.assertEqual(final_item["result"]["outcome"], "terminal_failure")
+        self.assertTrue(bool(final_item["result"]["should_return"]))
+
+
+    def test_execute_tool_plan_item_service_execution_keeps_success_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="mock_retrieve",
+            tool_input={"query": "demo"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+
+        def fake_run_tool(
+            *,
+            name: str,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+            attempt: int,
+        ) -> dict[str, object]:
+            return {
+                "chunks": ["alpha", "beta"],
+                "knowledge_base_id": "demo-kb",
+                "hit_count": 2,
+            }
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="mock_retrieve",
+                tool_input={"query": "demo"},
+                prompt="检索 demo",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-1",
+                raise_if_should_abort=lambda: None,
+                run_tool_fn=fake_run_tool,
+            )
+        )
+
+        self.assertEqual(
+            [item["event"] for item in items if item["kind"] == "event"],
+            ["tool_start", "state", "tool_end"],
+        )
+        final_item = items[-1]
+        self.assertEqual(final_item["kind"], "result")
+        self.assertEqual(
+            [(item["kind"], item.get("trace_step", {}).get("id")) for item in final_item["result"]["service_actions"]],
+            [("trace_write", "step-1"), ("trace_write", "rag-1"), ("continue", None)],
+        )
+        self.assertEqual(final_item["result"]["next_action_execution"]["kind"], "continue")
+
+    def test_execute_tool_plan_item_service_execution_keeps_terminal_shape(self) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+
+        def fake_run_tool(
+            *,
+            name: str,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+            attempt: int,
+        ) -> dict[str, object]:
+            raise MockToolExecutionError("fatal", fatal=True)
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                run_tool_fn=fake_run_tool,
+            )
+        )
+
+        self.assertEqual(
+            [item["event"] for item in items if item["kind"] == "event"],
+            ["tool_start", "state", "tool_end", "error"],
+        )
+        final_item = items[-1]
+        self.assertEqual(final_item["kind"], "result")
+        self.assertEqual(
+            [item["kind"] for item in final_item["result"]["service_actions"]],
+            ["trace_write", "complete_task", "record_failure_event", "emit_state", "return"],
+        )
+        self.assertEqual(final_item["result"]["next_action_execution"]["kind"], "return")
+
+    def test_execute_tool_plan_item_service_execution_accepts_custom_registry(self) -> None:
+        runner_calls: list[tuple[dict[str, object], str, str]] = []
+
+        def custom_runner(
+            *,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+        ) -> dict[str, object]:
+            runner_calls.append((tool_input, prompt, user_id))
+            return {
+                "result": "custom-ok",
+                "tool_kind": "custom_calc",
+            }
+
+        registry = build_tool_registry(
+            overrides={
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="custom_calc",
+                    label="Custom Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=9_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=custom_runner,
+                )
+            }
+        )
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        self.assertEqual(runner_calls, [({"expression": "1+2*3"}, "calc", "")])
+        final_item = items[-1]
+        self.assertEqual(final_item["kind"], "result")
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
+            "custom_calc",
+        )
+
+    def test_execute_tool_plan_item_service_execution_accepts_custom_registry_loader(self) -> None:
+        runner_calls: list[tuple[dict[str, object], str, str]] = []
+
+        def custom_runner(
+            *,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+        ) -> dict[str, object]:
+            runner_calls.append((tool_input, prompt, user_id))
+            return {
+                "result": "loader-ok",
+                "tool_kind": "loader_calc",
+            }
+
+        def custom_loader() -> dict[str, ToolRegistration]:
+            return {
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="loader_calc",
+                    label="Loader Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=11_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=custom_runner,
+                )
+            }
+
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry_loader=custom_loader,
+            )
+        )
+
+        self.assertEqual(runner_calls, [({"expression": "1+2*3"}, "calc", "")])
+        final_item = items[-1]
+        self.assertEqual(final_item["kind"], "result")
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
+            "loader_calc",
+        )
+
+    def test_execute_tool_plan_item_service_execution_accepts_custom_registry_provider(self) -> None:
+        runner_calls: list[tuple[dict[str, object], str, str]] = []
+
+        def custom_runner(
+            *,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+        ) -> dict[str, object]:
+            runner_calls.append((tool_input, prompt, user_id))
+            return {
+                "result": "provider-ok",
+                "tool_kind": "provider_calc",
+            }
+
+        provider = StaticToolRegistryProvider(
+            registry={
+                "calc_eval": ToolRegistration(
+                    name="calc_eval",
+                    kind="provider_calc",
+                    label="Provider Calculator",
+                    retryable_by_default=False,
+                    default_timeout_ms=13_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=custom_runner,
+                )
+            }
+        )
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry_provider=provider,
+            )
+        )
+
+        self.assertEqual(runner_calls, [({"expression": "1+2*3"}, "calc", "")])
+        final_item = items[-1]
+        self.assertEqual(final_item["kind"], "result")
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
+            "provider_calc",
+        )
+
+    def test_execute_tool_plan_item_service_actions_keeps_continue_shape(self) -> None:
+        trace_steps = [{"id": "existing-1", "seq": 2, "content": "Existing"}]
+        tool_observations: list[str] = []
+        persist_forces: list[bool] = []
+        complete_calls: list[dict[str, object]] = []
+        failure_calls: list[dict[str, object]] = []
+        service_actions = [
+            {
+                "kind": "trace_write",
+                "trace_step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                "trace_event": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {"id": "step-1", "seq": 3, "content": "Tool done: mock_retrieve"},
+                },
+                "persist_force": False,
+            },
+            {
+                "kind": "continue",
+                "tool_observations": ['mock_retrieve: {"chunks": ["alpha"]}'],
+                "seq_increment": 1,
+            },
+        ]
+
+        items = list(
+            execute_tool_plan_item_service_actions(
+                service_actions=service_actions,
+                trace_steps=trace_steps,
+                tool_observations=tool_observations,
+                seq_cursor=3,
+                persist_trace_fn=lambda *, force: persist_forces.append(bool(force)),
+                complete_task_fn=lambda **kwargs: complete_calls.append(kwargs),
+                record_failure_event_fn=lambda **kwargs: failure_calls.append(kwargs),
+            )
+        )
+
+        self.assertEqual([item["kind"] for item in items], ["event", "result"])
+        self.assertEqual(items[0]["event"], "trace")
+        self.assertEqual(items[0]["data"]["step_id"], "step-1")
+        self.assertEqual(items[1]["result"], {"seq_cursor": 4, "should_return": False})
+        self.assertEqual([step["id"] for step in trace_steps], ["existing-1", "step-1"])
+        self.assertEqual(tool_observations, ['mock_retrieve: {"chunks": ["alpha"]}'])
+        self.assertEqual(persist_forces, [False])
+        self.assertEqual(complete_calls, [])
+        self.assertEqual(failure_calls, [])
+
+    def test_execute_tool_plan_item_service_actions_keeps_return_shape(self) -> None:
+        trace_steps = [{"id": "existing-1", "seq": 2, "content": "Existing"}]
+        tool_observations: list[str] = []
+        persist_forces: list[bool] = []
+        complete_calls: list[dict[str, object]] = []
+        failure_calls: list[dict[str, object]] = []
+        service_actions = [
+            {
+                "kind": "trace_write",
+                "trace_step": {"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"},
+                "trace_event": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {"id": "step-1", "seq": 3, "content": "Tool error: calc_eval"},
+                },
+                "persist_force": True,
+            },
+            {
+                "kind": "complete_task",
+                "kwargs": {
+                    "task_id": "task-1",
+                    "trace_steps": trace_steps,
+                    "user_id": "user-1",
+                    "status": "failed",
+                },
+            },
+            {
+                "kind": "record_failure_event",
+                "kwargs": {
+                    "event_type": "task_failed",
+                    "code": "tool_execution_error",
+                    "message": "fatal",
+                    "detail": {"step_id": "step-1", "retry_count": 1},
+                },
+            },
+            {
+                "kind": "emit_state",
+                "event": "state",
+                "data": {"task_id": "task-1", "phase": "error"},
+            },
+            {
+                "kind": "return",
+            },
+        ]
+
+        items = list(
+            execute_tool_plan_item_service_actions(
+                service_actions=service_actions,
+                trace_steps=trace_steps,
+                tool_observations=tool_observations,
+                seq_cursor=3,
+                persist_trace_fn=lambda *, force: persist_forces.append(bool(force)),
+                complete_task_fn=lambda **kwargs: complete_calls.append(kwargs),
+                record_failure_event_fn=lambda **kwargs: failure_calls.append(kwargs),
+            )
+        )
+
+        self.assertEqual([item["kind"] for item in items], ["event", "event", "result"])
+        self.assertEqual([item["event"] for item in items[:2]], ["trace", "state"])
+        self.assertEqual(items[-1]["result"], {"seq_cursor": 3, "should_return": True})
+        self.assertEqual([step["id"] for step in trace_steps], ["existing-1", "step-1"])
+        self.assertEqual(tool_observations, [])
+        self.assertEqual(persist_forces, [True])
+        self.assertEqual(complete_calls, [service_actions[1]["kwargs"]])
+        self.assertEqual(failure_calls, [service_actions[2]["kwargs"]])
 
 
 if __name__ == "__main__":

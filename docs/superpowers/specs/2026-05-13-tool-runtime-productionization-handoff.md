@@ -30,6 +30,28 @@
 
 当前已经落地的较高层 helper 重点包括：
 
+- `load_tool_registry()`
+- `ToolRegistryProvider`
+- `StaticToolRegistryProvider`
+- `DefaultToolRegistryProvider`
+- `get_default_tool_registry_provider()`
+- `get_default_tool_registry()`
+- `build_tool_registry()`
+- `get_registered_tool_names(..., registry=...)`
+- `get_registered_tool_names(..., registry_provider=...)`
+- `get_registered_tool_names(..., registry_loader=...)`
+- `resolve_tool_registration(..., registry=...)`
+- `resolve_tool_registration(..., registry_provider=...)`
+- `ensure_tool_registration(..., registry=...)`
+- `ensure_tool_registration(..., registry_provider=...)`
+- `build_tool_runtime_context(..., registry=...)`
+- `build_tool_runtime_context(..., registry_provider=...)`
+- `run_tool(..., registry=...)`
+- `run_tool(..., registry_provider=...)`
+- `execute_tool_spec(..., registry=...)`
+- `execute_tool_spec(..., registry_provider=...)`
+- `run_tool(..., registry_loader=...)`
+- `execute_tool_spec(..., registry_loader=...)`
 - `build_tool_attempt_bundle()`
 - `build_tool_attempt_execution()`
 - `build_tool_attempt_loop_result()`
@@ -38,6 +60,8 @@
 - `build_tool_plan_item_retry_loop_execution_result()`
 - `build_tool_plan_item_execution()`
 - `execute_tool_plan_item_retry_loop()`
+- `execute_tool_plan_item_service_execution()`
+- `execute_tool_plan_item_service_actions()`
 - `build_tool_plan_item_stream_effects()`
 - `build_tool_plan_item_continue_update()`
 - `build_tool_plan_item_continue_action()`
@@ -46,6 +70,10 @@
 - `build_tool_plan_item_return_action()`
 - `build_tool_plan_item_trace_write_action()`
 - `build_tool_plan_item_next_action_execution()`
+- `build_tool_plan_item_service_actions()`
+- `build_tool_plan_item_trace_write_service_action()`
+- `build_tool_plan_item_continue_service_action()`
+- `build_tool_plan_item_return_service_actions()`
 - `build_tool_plan_item_service_effects_execution()`
 - `build_tool_plan_item_service_execution()`
 - `build_tool_plan_item_service_effects()`
@@ -63,24 +91,35 @@
   - `tool_end`
   - `error`
   - `trace`
-- tool 级 `trace_write_actions` 执行与持久化副作用
-- `next_action_execution(kind=return)` 下执行 runtime 已组装好的 return action：
-  - `complete_task(...)`
-  - `record_failure_event(...)`
-  - `yield state(error)`
-  - `return`
-- `next_action_execution(kind=continue)` 下对 `continue_action` 的高层消费：
-  - `tool_observations.extend(...)`
-  - `seq_cursor += ...`
+- 调 runtime 侧 `execute_tool_plan_item_service_actions()`，只做最终 SSE 字符串包装与 return 边界
 
-换句话说，当前“单个 tool retry loop 的执行控制”和大部分 success/terminal 字段搬运都已经下沉；`chat_execution_service.py` 里主要剩下 tool 级 SSE 发射、trace 持久化和任务完成/失败这类编排副作用。
+换句话说，当前“单个 tool retry loop 的执行控制”和大部分 success/terminal 字段搬运都已经下沉；`chat_execution_service.py` 里主要剩下 tool 级 SSE 发射、trace 持久化和任务完成/失败这类按序副作用执行。
 
 ### 3. 当前 focused regression 状态
 
-[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **78 条测试**，并全部通过。
+[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **106 条测试**，并全部通过。
 
 已覆盖的关键契约包括：
 
+- `load_tool_registry`
+- `get_default_tool_registry`
+- `build_tool_registry`
+- `get_registered_tool_names(custom registry seam)`
+- `get_registered_tool_names(custom registry_provider seam)`
+- `load_tool_registry(custom loader seam)`
+- `load_tool_registry(custom provider seam)`
+- `load_tool_registry(default provider path seam)`
+- `DefaultToolRegistryProvider(named default seam)`
+- `run_tool(custom registry seam)`
+- `run_tool(custom registry_loader seam)`
+- `run_tool(custom registry_provider seam)`
+- `execute_tool_spec(custom registry seam)`
+- `build_tool_runtime_context(custom registry seam)`
+- `build_tool_runtime_context(custom registry_provider seam)`
+- `execute_tool_plan_item_retry_loop(custom registry seam)`
+- `execute_tool_plan_item_service_execution(custom registry seam)`
+- `execute_tool_plan_item_service_execution(custom registry_loader seam)`
+- `execute_tool_plan_item_service_execution(custom registry_provider seam)`
 - `build_tool_attempt_bundle`
 - `build_tool_attempt_execution`
 - `build_tool_attempt_loop_result`
@@ -88,12 +127,18 @@
 - `build_tool_plan_item_retry_loop_result`
 - `build_tool_plan_item_retry_loop_execution_result`
 - `execute_tool_plan_item_retry_loop`
+- `execute_tool_plan_item_service_execution`
+- `execute_tool_plan_item_service_actions`
 - `build_tool_plan_item_stream_effects`
 - `build_tool_plan_item_continue_action`
 - `build_tool_plan_item_terminal_return_effects`
 - `build_tool_plan_item_return_action`
 - `build_tool_plan_item_trace_write_action`
 - `build_tool_plan_item_next_action_execution`
+- `build_tool_plan_item_service_actions`
+- `build_tool_plan_item_trace_write_service_action`
+- `build_tool_plan_item_continue_service_action`
+- `build_tool_plan_item_return_service_actions`
 - `build_tool_plan_item_service_effects_execution`
 - `build_tool_plan_item_service_execution`
 - `build_tool_plan_item_service_effects`
@@ -141,7 +186,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 
 结果：
 
-- focused tests：`78` 条通过
+- focused tests：`106` 条通过
 - `compileall`：通过
 - `common` tooling + backend/frontend e2e 聚合回归：通过
 
@@ -171,7 +216,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 - 引入真实 tool registry
 - 增加更多 tool 类型并共享统一 policy
 - 将 runtime seam 复用到非 chat 执行路径
-- 将 trace/audit/state side effects 再统一成更高层执行器
+- 将 trace/audit/state side effects 再统一成更高层执行器或跨路径执行器
 
 ### 继续修改时的固定验证顺序
 
@@ -208,7 +253,7 @@ bash scripts/test_ci_e2e_tooling.sh common
    - `tool_runtime.py`
    - `chat_execution_service.py`
 2. 目标：
-   - 继续把“单个 tool plan item retry loop”整体封装成 runtime helper
+   - 优先沿现有 `service_actions` 边界继续推进下一阶段 runtime 抽象
 3. 约束：
    - 外部 SSE / trace / e2e 契约不变
    - 先补 failing test，再改实现
@@ -216,3 +261,16 @@ bash scripts/test_ci_e2e_tooling.sh common
    - focused tests
    - `compileall`
    - `common`
+当前已经具备的前置条件：
+
+- 默认 registry loader 已显式化，且默认枚举/解析路径都会经过它
+- 默认 mock registry 仍保持全局兼容
+- 默认 registry 快照与 merge builder 已显式化
+- 默认 `load_tool_registry()` 路径现在也会显式经过 `get_default_tool_registry_provider()`
+- `run_tool / execute_tool_spec / build_tool_runtime_context` 已支持可选 `registry` 注入
+- `run_tool / execute_tool_spec / build_tool_runtime_context` 已支持可选 `registry_provider` 注入
+- `run_tool / execute_tool_spec` 已支持可选 `registry_loader` 注入
+- 高层 runtime 入口 `execute_tool_plan_item_retry_loop / execute_tool_plan_item_service_execution` 也已支持 `registry` 透传
+- 高层 runtime 入口 `execute_tool_plan_item_retry_loop / execute_tool_plan_item_service_execution` 也已支持 `registry_provider` 透传
+- `execute_tool_plan_item_service_execution` 也已支持 `registry_loader` 透传
+- 后续接真实 registry 时可以先从 provider object 或非默认调用路径逐步接线，而不必先改坏默认行为
