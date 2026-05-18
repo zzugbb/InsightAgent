@@ -145,6 +145,36 @@ class Settings(BaseSettings):
         alias="INSIGHT_AGENT_TOOL_REGISTRY_EXTRA_TOOLS_JSON",
         description="Tool registry extra tools JSON；用于基于现有 template tool 生成额外 alias registrations，再参与 profile/override 组合链",
     )
+    tool_registry_provider_source: str = Field(
+        default="default",
+        alias="INSIGHT_AGENT_TOOL_REGISTRY_PROVIDER_SOURCE",
+        description="Tool registry provider source；用于选择命名基础 registry source，再叠加 profile/disable/override/extra tool 配置",
+    )
+    tool_registry_loaders_json: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_TOOL_REGISTRY_LOADERS_JSON",
+        description="Tool registry loaders JSON；用于定义可复用命名 loader，支持 loader_factory/loader/registry_file/profile/disabled/overrides/extra_tools adapter 形态，其中 registry_file 可指向 pure extra_tools 文件、manifest 文件，或带 registry_files 的 composed manifest",
+    )
+    tool_registry_loader_factories_json: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_TOOL_REGISTRY_LOADER_FACTORIES_JSON",
+        description="Tool registry loader factories JSON；用于定义可复用命名 loader_factory 别名，映射到内建或已声明的 loader_factory，或通过 registry_file 绑定文件型 registry source（支持 pure extra_tools / manifest / composed manifest 三种文件形态）",
+    )
+    tool_registry_providers_json: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_TOOL_REGISTRY_PROVIDERS_JSON",
+        description="Tool registry providers JSON；用于定义可复用命名 provider，支持 provider_factory/loader/provider/registry_file/profile/disabled/overrides/extra_tools adapter 形态，其中 loader 可引用命名 loaders，registry_file 可指向 pure extra_tools 文件、manifest 文件，或带 registry_files 的 composed manifest",
+    )
+    tool_registry_provider_factories_json: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_TOOL_REGISTRY_PROVIDER_FACTORIES_JSON",
+        description="Tool registry provider factories JSON；用于定义可复用命名 provider_factory 别名，映射到内建或已声明的 provider_factory，或通过 registry_file 绑定文件型 registry source（支持 pure extra_tools / manifest / composed manifest 三种文件形态）",
+    )
+    tool_registry_provider_sources_json: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_TOOL_REGISTRY_PROVIDER_SOURCES_JSON",
+        description="Tool registry provider sources JSON；用于定义命名基础 registry source，支持 provider_factory/provider/loader/registry_file/profile/disabled/overrides/extra_tools adapter 形态，并可引用命名 providers 与 named loaders；registry_file 可指向 pure extra_tools 文件、manifest 文件，或带 registry_files 的 composed manifest",
+    )
 
     @property
     def chroma_http_url(self) -> str:

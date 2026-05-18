@@ -54,9 +54,29 @@
 - `ConfiguredToolRegistryProvider`
 - `get_default_tool_registry_provider()`
 - `get_configured_tool_registry_provider()`
+- `build_profile_tool_registry_provider()`
+- `build_profile_tool_registry_loader()`
+- `resolve_named_tool_registry_loader()`
+- `resolve_named_tool_registry_provider_reference()`
+- `resolve_named_tool_registry_provider_factory()`
+- `resolve_named_tool_registry_loader_factory()`
+- `get_tool_registry_provider_source_name_from_settings()`
+- `build_tool_registry_extra_tools_from_file()`
+- `load_tool_registry_file_payload()`
+- `build_tool_registry_from_file()`
+- `build_tool_registry_loader_from_file()`
+- `build_tool_registry_provider_from_file()`
+- `build_tool_registry_loader_factories_from_settings()`
+- `build_tool_registry_provider_factories_from_settings()`
+- `build_tool_registry_loaders_from_settings()`
+- `build_tool_registry_providers_from_settings()`
+- `build_tool_registry_provider_sources_from_settings()`
 - `get_tool_registry_profile_name_from_settings()`
 - `build_tool_registry_profile_settings_config()`
 - `build_tool_registry_extra_tools_from_settings()`
+- `build_tool_registry_extra_tools_from_specs()`
+- `build_tool_registry_loader_adapter()`
+- `build_tool_registry_provider_adapter()`
 - `build_tool_registry_settings_config()`
 - `build_tool_registry_overrides_from_settings()`
 - `get_disabled_tool_names_from_settings()`
@@ -152,7 +172,7 @@
 
 ### Focused regression baseline
 
-`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **126 条测试**，覆盖：
+`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **167 条测试**，覆盖：
 
 - tool plan compatibility
 - tool execution compatibility
@@ -170,6 +190,17 @@
 - settings-backed disabled tool compatibility
 - settings-backed registry profile compatibility
 - settings-backed extra tool alias compatibility
+- settings-backed named provider compatibility
+- settings-backed provider source compatibility
+- provider source adapter compatibility
+- loader-backed provider adapter compatibility
+- provider-factory-backed adapter compatibility
+- settings-backed named loader compatibility
+- loader-factory-backed adapter compatibility
+- settings-backed factory alias compatibility
+- file-backed registry source compatibility
+- file-backed registry manifest compatibility
+- composed file-backed manifest compatibility
 - provider resolution precedence compatibility
 - chat-consumed prebuilt provider compatibility
 - transient/fatal/unknown tool 行为

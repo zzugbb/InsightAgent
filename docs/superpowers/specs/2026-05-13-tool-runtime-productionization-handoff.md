@@ -37,9 +37,29 @@
 - `ConfiguredToolRegistryProvider`
 - `get_default_tool_registry_provider()`
 - `get_configured_tool_registry_provider()`
+- `build_profile_tool_registry_provider()`
+- `build_profile_tool_registry_loader()`
+- `resolve_named_tool_registry_loader()`
+- `resolve_named_tool_registry_provider_reference()`
+- `resolve_named_tool_registry_provider_factory()`
+- `resolve_named_tool_registry_loader_factory()`
+- `get_tool_registry_provider_source_name_from_settings()`
+- `build_tool_registry_extra_tools_from_file()`
+- `load_tool_registry_file_payload()`
+- `build_tool_registry_from_file()`
+- `build_tool_registry_loader_from_file()`
+- `build_tool_registry_provider_from_file()`
+- `build_tool_registry_loader_factories_from_settings()`
+- `build_tool_registry_provider_factories_from_settings()`
+- `build_tool_registry_loaders_from_settings()`
+- `build_tool_registry_providers_from_settings()`
+- `build_tool_registry_provider_sources_from_settings()`
 - `get_tool_registry_profile_name_from_settings()`
 - `build_tool_registry_profile_settings_config()`
 - `build_tool_registry_extra_tools_from_settings()`
+- `build_tool_registry_extra_tools_from_specs()`
+- `build_tool_registry_loader_adapter()`
+- `build_tool_registry_provider_adapter()`
 - `build_tool_registry_settings_config()`
 - `build_tool_registry_overrides_from_settings()`
 - `get_disabled_tool_names_from_settings()`
@@ -107,7 +127,7 @@
 
 ### 3. 当前 focused regression 状态
 
-[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **126 条测试**，并全部通过。
+[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **167 条测试**，并全部通过。
 
 已覆盖的关键契约包括：
 
@@ -122,6 +142,24 @@
 - `DefaultToolRegistryProvider(named default seam)`
 - `ConfiguredToolRegistryProvider(composition seam)`
 - `get_configured_tool_registry_provider(named configured seam)`
+- `build_tool_registry_loaders_from_settings(named loader seam)`
+- `build_tool_registry_providers_from_settings(named provider seam)`
+- `resolve_named_tool_registry_provider_factory(provider factory seam)`
+- `resolve_named_tool_registry_loader_factory(loader factory seam)`
+- `build_tool_registry_extra_tools_from_file(file-backed registry seam)`
+- `load_tool_registry_file_payload(file payload seam)`
+- `build_tool_registry_from_file(file manifest seam)`
+- `build_tool_registry_from_file(composed manifest seam)`
+- `build_tool_registry_loader_from_file(file-backed loader seam)`
+- `build_tool_registry_provider_from_file(file-backed provider seam)`
+- `build_tool_registry_provider_factories_from_settings(factory alias seam)`
+- `build_tool_registry_loader_factories_from_settings(factory alias seam)`
+- `get_tool_registry_provider_source_name_from_settings(source seam)`
+- `build_tool_registry_provider_sources_from_settings(source config seam)`
+- `build_tool_registry_provider_sources_from_settings(adapter seam)`
+- `build_tool_registry_provider_sources_from_settings(named provider reference seam)`
+- `build_tool_registry_provider_sources_from_settings(provider factory seam)`
+- `build_tool_registry_provider_sources_from_settings(named loader reference seam)`
 - `get_tool_registry_profile_name_from_settings(profile seam)`
 - `build_tool_registry_profile_settings_config(profile config seam)`
 - `build_tool_registry_extra_tools_from_settings(extra tool seam)`
@@ -206,7 +244,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 
 结果：
 
-- focused tests：`126` 条通过
+- focused tests：`167` 条通过
 - `compileall`：通过
 - `common` tooling + backend/frontend e2e 聚合回归：通过
 

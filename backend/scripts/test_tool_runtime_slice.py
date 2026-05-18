@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -52,6 +53,10 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     execute_tool_plan_item_service_execution,
     execute_tool_plan_item_retry_loop,
     build_tool_registry_provider,
+    build_tool_registry_loaders_from_settings,
+    build_tool_registry_loader_factories_from_settings,
+    build_tool_registry_providers_from_settings,
+    build_tool_registry_provider_factories_from_settings,
     build_tool_plan_item_result,
     build_tool_plan_item_success_effects,
     build_tool_plan_item_service_effects,
@@ -82,11 +87,16 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     get_configured_tool_registry_provider,
     get_default_tool_registry_provider,
     get_default_tool_registry,
+    get_tool_registry_provider_source_name_from_settings,
     get_tool_registry_profile_name_from_settings,
     load_tool_registry,
     get_registered_tool_names,
     build_tool_registry,
     build_tool_registry_extra_tools_from_settings,
+    build_tool_registry_from_file,
+    build_tool_registry_loader_from_file,
+    build_tool_registry_provider_sources_from_settings,
+    build_tool_registry_provider_from_file,
     build_tool_registry_overrides_from_settings,
     build_tool_registry_profile_settings_config,
     build_tool_registry_settings_config,
@@ -746,6 +756,1239 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(extra_tools, {})
 
+    def test_build_tool_registry_provider_sources_from_settings_groups_named_sources(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "analytics_suite": {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                            "default_timeout_ms": 1_500,
+                        }
+                    },
+                    "retrieval_suite": {
+                        "mock_retrieve_hot": {
+                            "template": "mock_retrieve",
+                            "label": "Hot Retrieval",
+                        }
+                    },
+                }
+            )
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(sources)), ("analytics_suite", "retrieval_suite"))
+        self.assertEqual(
+            tuple(sorted(sources["analytics_suite"].load_tool_registry())),
+            ("calc_eval_fast",),
+        )
+        self.assertEqual(
+            sources["analytics_suite"].load_tool_registry()["calc_eval_fast"].label,
+            "Fast Calculator",
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_supports_adapter_shape(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "provider": "default",
+                        "profile": "planning_only",
+                        "disabled_tool_names": ["mock_plan"],
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(sources)), ("planning_suite",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["planning_suite"]),
+            ("calc_eval", "calc_eval_fast"),
+        )
+        self.assertEqual(
+            sources["planning_suite"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_ignores_bad_shapes(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "broken": "bad-shape",
+                    "also_broken": {
+                        "calc_eval": {
+                            "template": "missing_template",
+                        }
+                    },
+                }
+            )
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(sources, {})
+
+    def test_build_tool_registry_provider_sources_from_settings_ignores_unknown_provider_name(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "broken_suite": {
+                        "provider": "missing",
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(sources, {})
+
+    def test_build_tool_registry_providers_from_settings_supports_loader_adapter_shape(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "loader": "default",
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        providers = build_tool_registry_providers_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=providers["planning_provider"]),
+            ("calc_eval", "calc_eval_fast", "mock_plan"),
+        )
+        self.assertEqual(
+            providers["planning_provider"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_loaders_from_settings_supports_adapter_shape(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "loader": "default",
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        loaders = build_tool_registry_loaders_from_settings(settings=settings)
+        planning_registry = loaders["planning_loader"]()
+
+        self.assertEqual(tuple(sorted(loaders)), ("planning_loader",))
+        self.assertEqual(
+            tuple(sorted(planning_registry)),
+            ("calc_eval", "calc_eval_fast", "mock_plan"),
+        )
+        self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_loaders_from_settings_supports_loader_factory_shape(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "loader_factory": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        loaders = build_tool_registry_loaders_from_settings(settings=settings)
+        planning_registry = loaders["planning_loader"]()
+
+        self.assertEqual(tuple(sorted(loaders)), ("planning_loader",))
+        self.assertEqual(
+            tuple(sorted(planning_registry)),
+            ("calc_eval", "calc_eval_fast", "mock_plan"),
+        )
+        self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_loader_factories_from_settings_supports_named_factory_alias(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loader_factories_json=json.dumps(
+                {
+                    "planning_factory": {
+                        "factory": "planning_only",
+                    }
+                }
+            )
+        )
+
+        factories = build_tool_registry_loader_factories_from_settings(settings=settings)
+        planning_registry = factories["planning_factory"](settings)()
+
+        self.assertEqual(tuple(sorted(factories)), ("planning_factory",))
+        self.assertEqual(
+            tuple(sorted(planning_registry)),
+            ("mock_plan",),
+        )
+
+    def test_build_tool_registry_provider_factories_from_settings_supports_named_factory_alias(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_factories_json=json.dumps(
+                {
+                    "planning_factory": {
+                        "factory": "planning_only",
+                    }
+                }
+            )
+        )
+
+        factories = build_tool_registry_provider_factories_from_settings(settings=settings)
+        planning_registry = factories["planning_factory"](settings).load_tool_registry()
+
+        self.assertEqual(tuple(sorted(factories)), ("planning_factory",))
+        self.assertEqual(
+            tuple(sorted(planning_registry)),
+            ("mock_plan",),
+        )
+
+    def test_build_tool_registry_loader_factories_from_settings_supports_registry_file_factory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(registry_file),
+                        }
+                    }
+                )
+            )
+
+            factories = build_tool_registry_loader_factories_from_settings(settings=settings)
+            file_registry = factories["file_factory"](settings)()
+
+        self.assertEqual(tuple(sorted(factories)), ("file_factory",))
+        self.assertEqual(tuple(sorted(file_registry)), ("calc_eval_fast",))
+        self.assertEqual(file_registry["calc_eval_fast"].label, "Fast Calculator")
+
+    def test_build_tool_registry_provider_factories_from_settings_supports_registry_file_factory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(registry_file),
+                        }
+                    }
+                )
+            )
+
+            factories = build_tool_registry_provider_factories_from_settings(settings=settings)
+            file_registry = factories["file_factory"](settings).load_tool_registry()
+
+        self.assertEqual(tuple(sorted(factories)), ("file_factory",))
+        self.assertEqual(tuple(sorted(file_registry)), ("calc_eval_fast",))
+        self.assertEqual(file_registry["calc_eval_fast"].label, "Fast Calculator")
+
+    def test_build_tool_registry_loader_from_file_supports_manifest_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry-manifest.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loader = build_tool_registry_loader_from_file(registry_file=str(registry_file))
+            self.assertIsNotNone(loader)
+            registry = loader()
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "calc_eval_fast", "mock_plan"),
+        )
+        self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_provider_from_file_supports_manifest_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry-manifest.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "profile": "retrieval_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Retrieval Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            provider = build_tool_registry_provider_from_file(registry_file=str(registry_file))
+            self.assertIsNotNone(provider)
+            registry = provider.load_tool_registry()
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "calc_eval_fast", "mock_retrieve"),
+        )
+        self.assertEqual(registry["calc_eval"].label, "Retrieval Calculator")
+
+    def test_build_tool_registry_from_file_supports_registry_files_composition(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_file = Path(tmpdir) / "base-registry.json"
+            base_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            overlay_file = Path(tmpdir) / "overlay-manifest.json"
+            overlay_file.write_text(
+                json.dumps(
+                    {
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "mock_plan_brief": {
+                                "template": "mock_plan",
+                                "label": "Brief Planner",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            root_file = Path(tmpdir) / "root-manifest.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [
+                            str(base_file),
+                            str(overlay_file),
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            registry = build_tool_registry_from_file(registry_file=str(root_file))
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "calc_eval_fast", "mock_plan", "mock_plan_brief"),
+        )
+        self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_from_file_resolves_relative_registry_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fixtures_dir = Path(tmpdir) / "fixtures"
+            fixtures_dir.mkdir()
+            nested_dir = fixtures_dir / "nested"
+            nested_dir.mkdir()
+
+            base_file = fixtures_dir / "base-registry.json"
+            base_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            overlay_file = fixtures_dir / "overlay-manifest.json"
+            overlay_file.write_text(
+                json.dumps(
+                    {
+                        "profile": "retrieval_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Retrieval Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            root_file = nested_dir / "root-manifest.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [
+                            "../base-registry.json",
+                            "../overlay-manifest.json",
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            registry = build_tool_registry_from_file(registry_file=str(root_file))
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "calc_eval_fast", "mock_retrieve"),
+        )
+        self.assertEqual(registry["calc_eval"].label, "Retrieval Calculator")
+
+    def test_build_tool_registry_providers_from_settings_supports_provider_factory_shape(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "provider_factory": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        providers = build_tool_registry_providers_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=providers["planning_provider"]),
+            ("calc_eval", "calc_eval_fast", "mock_plan"),
+        )
+        self.assertEqual(
+            providers["planning_provider"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_loaders_from_settings_accepts_named_loader_factory_reference(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loader_factories_json=json.dumps(
+                {
+                    "planning_factory": {
+                        "factory": "planning_only",
+                    }
+                }
+            ),
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "loader_factory": "planning_factory",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        loaders = build_tool_registry_loaders_from_settings(settings=settings)
+        planning_registry = loaders["planning_loader"]()
+
+        self.assertEqual(tuple(sorted(planning_registry)), ("calc_eval", "calc_eval_fast", "mock_plan"))
+        self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_providers_from_settings_accepts_named_provider_factory_reference(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_factories_json=json.dumps(
+                {
+                    "planning_factory": {
+                        "factory": "planning_only",
+                    }
+                }
+            ),
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "provider_factory": "planning_factory",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        providers = build_tool_registry_providers_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=providers["planning_provider"]),
+            ("calc_eval", "calc_eval_fast", "mock_plan"),
+        )
+
+    def test_build_tool_registry_loaders_from_settings_accepts_registry_file_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loaders_json=json.dumps(
+                    {
+                        "file_loader": {
+                            "registry_file": str(registry_file),
+                            "extra_tools": {
+                                "mock_plan_brief": {
+                                    "template": "mock_plan",
+                                    "label": "Brief Planner",
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+
+            loaders = build_tool_registry_loaders_from_settings(settings=settings)
+            file_registry = loaders["file_loader"]()
+
+        self.assertEqual(tuple(sorted(loaders)), ("file_loader",))
+        self.assertEqual(
+            tuple(sorted(file_registry)),
+            ("calc_eval_fast", "mock_plan_brief"),
+        )
+
+    def test_build_tool_registry_providers_from_settings_accepts_registry_file_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "file_provider": {
+                            "registry_file": str(registry_file),
+                            "extra_tools": {
+                                "mock_plan_brief": {
+                                    "template": "mock_plan",
+                                    "label": "Brief Planner",
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+
+            providers = build_tool_registry_providers_from_settings(settings=settings)
+            file_registry = providers["file_provider"].load_tool_registry()
+
+        self.assertEqual(tuple(sorted(providers)), ("file_provider",))
+        self.assertEqual(
+            tuple(sorted(file_registry)),
+            ("calc_eval_fast", "mock_plan_brief"),
+        )
+
+    def test_build_tool_registry_loaders_from_settings_accepts_registry_file_manifest_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry-manifest.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loaders_json=json.dumps(
+                    {
+                        "file_loader": {
+                            "registry_file": str(registry_file),
+                            "extra_tools": {
+                                "mock_plan_brief": {
+                                    "template": "mock_plan",
+                                    "label": "Brief Planner",
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+
+            loaders = build_tool_registry_loaders_from_settings(settings=settings)
+            file_registry = loaders["file_loader"]()
+
+        self.assertEqual(tuple(sorted(loaders)), ("file_loader",))
+        self.assertEqual(
+            tuple(sorted(file_registry)),
+            ("calc_eval", "calc_eval_fast", "mock_plan", "mock_plan_brief"),
+        )
+        self.assertEqual(file_registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_providers_from_settings_accepts_registry_file_manifest_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry-manifest.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "profile": "retrieval_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Retrieval Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "file_provider": {
+                            "registry_file": str(registry_file),
+                            "disabled_tool_names": ["mock_retrieve"],
+                            "extra_tools": {
+                                "mock_plan_brief": {
+                                    "template": "mock_plan",
+                                    "label": "Brief Planner",
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+
+            providers = build_tool_registry_providers_from_settings(settings=settings)
+            file_registry = providers["file_provider"].load_tool_registry()
+
+        self.assertEqual(tuple(sorted(providers)), ("file_provider",))
+        self.assertEqual(
+            tuple(sorted(file_registry)),
+            ("calc_eval", "calc_eval_fast", "mock_plan_brief"),
+        )
+        self.assertEqual(file_registry["calc_eval"].label, "Retrieval Calculator")
+
+    def test_build_tool_registry_loaders_from_settings_accepts_named_loader_factory_backed_by_registry_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(registry_file),
+                        }
+                    }
+                ),
+                tool_registry_loaders_json=json.dumps(
+                    {
+                        "file_loader": {
+                            "loader_factory": "file_factory",
+                            "extra_tools": {
+                                "mock_plan_brief": {
+                                    "template": "mock_plan",
+                                    "label": "Brief Planner",
+                                }
+                            },
+                        }
+                    }
+                ),
+            )
+
+            loaders = build_tool_registry_loaders_from_settings(settings=settings)
+            file_registry = loaders["file_loader"]()
+
+        self.assertEqual(tuple(sorted(loaders)), ("file_loader",))
+        self.assertEqual(
+            tuple(sorted(file_registry)),
+            ("calc_eval_fast", "mock_plan_brief"),
+        )
+
+    def test_build_tool_registry_providers_from_settings_accepts_named_provider_factory_backed_by_registry_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(registry_file),
+                        }
+                    }
+                ),
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "file_provider": {
+                            "provider_factory": "file_factory",
+                            "extra_tools": {
+                                "mock_plan_brief": {
+                                    "template": "mock_plan",
+                                    "label": "Brief Planner",
+                                }
+                            },
+                        }
+                    }
+                ),
+            )
+
+            providers = build_tool_registry_providers_from_settings(settings=settings)
+            file_registry = providers["file_provider"].load_tool_registry()
+
+        self.assertEqual(tuple(sorted(providers)), ("file_provider",))
+        self.assertEqual(
+            tuple(sorted(file_registry)),
+            ("calc_eval_fast", "mock_plan_brief"),
+        )
+
+    def test_build_tool_registry_providers_from_settings_accepts_named_loader_reference(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "loader": "default",
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "loader": "planning_loader",
+                        "disabled_tool_names": ["mock_plan"],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+
+        providers = build_tool_registry_providers_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=providers["planning_provider"]),
+            ("calc_eval", "calc_eval_fast"),
+        )
+        self.assertEqual(
+            providers["planning_provider"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_providers_from_settings_accepts_named_loader_built_from_loader_factory(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "loader_factory": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "loader": "planning_loader",
+                        "disabled_tool_names": ["mock_plan"],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+
+        providers = build_tool_registry_providers_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=providers["planning_provider"]),
+            ("calc_eval", "calc_eval_fast"),
+        )
+        self.assertEqual(
+            providers["planning_provider"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_accepts_named_provider_reference(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "loader": "default",
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "provider": "planning_provider",
+                        "disabled_tool_names": ["mock_plan"],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(sources)), ("planning_suite",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["planning_suite"]),
+            ("calc_eval", "calc_eval_fast"),
+        )
+        self.assertEqual(
+            sources["planning_suite"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_accepts_provider_factory_reference(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "provider_factory": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(sources)), ("planning_suite",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["planning_suite"]),
+            ("calc_eval", "calc_eval_fast", "mock_plan"),
+        )
+        self.assertEqual(
+            sources["planning_suite"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_accepts_named_loader_reference(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "loader": "default",
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "loader": "planning_loader",
+                        "disabled_tool_names": ["mock_plan"],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(sources)), ("planning_suite",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["planning_suite"]),
+            ("calc_eval", "calc_eval_fast"),
+        )
+        self.assertEqual(
+            sources["planning_suite"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_accepts_named_loader_built_from_loader_factory(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "loader_factory": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "loader": "planning_loader",
+                        "disabled_tool_names": ["mock_plan"],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(sources)), ("planning_suite",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["planning_suite"]),
+            ("calc_eval", "calc_eval_fast"),
+        )
+        self.assertEqual(
+            sources["planning_suite"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_providers_from_settings_ignores_unknown_loader_name(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_providers_json=json.dumps(
+                {
+                    "broken_provider": {
+                        "loader": "missing_loader",
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        providers = build_tool_registry_providers_from_settings(settings=settings)
+
+        self.assertEqual(providers, {})
+
+    def test_build_tool_registry_loaders_from_settings_ignores_unknown_loader_name(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "broken_loader": {
+                        "loader": "missing_loader",
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        loaders = build_tool_registry_loaders_from_settings(settings=settings)
+
+        self.assertEqual(loaders, {})
+
+    def test_build_tool_registry_loaders_from_settings_ignores_unknown_loader_factory_name(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "broken_loader": {
+                        "loader_factory": "missing_factory",
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        loaders = build_tool_registry_loaders_from_settings(settings=settings)
+
+        self.assertEqual(loaders, {})
+
+    def test_build_tool_registry_loader_factories_from_settings_ignores_unknown_factory_name(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loader_factories_json=json.dumps(
+                {
+                    "broken_factory": {
+                        "factory": "missing_factory",
+                    }
+                }
+            )
+        )
+
+        factories = build_tool_registry_loader_factories_from_settings(settings=settings)
+
+        self.assertEqual(factories, {})
+
+    def test_build_tool_registry_provider_factories_from_settings_ignores_unknown_factory_name(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_factories_json=json.dumps(
+                {
+                    "broken_factory": {
+                        "factory": "missing_factory",
+                    }
+                }
+            )
+        )
+
+        factories = build_tool_registry_provider_factories_from_settings(settings=settings)
+
+        self.assertEqual(factories, {})
+
+    def test_build_tool_registry_providers_from_settings_ignores_unknown_provider_factory_name(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_providers_json=json.dumps(
+                {
+                    "broken_provider": {
+                        "provider_factory": "missing_factory",
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        providers = build_tool_registry_providers_from_settings(settings=settings)
+
+        self.assertEqual(providers, {})
+
     def test_build_tool_registry_overrides_from_settings_ignores_unknown_tools_and_bad_shapes(self) -> None:
         settings = SimpleNamespace(
             tool_registry_overrides_json=json.dumps(
@@ -801,6 +2044,199 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(runtime_ctx.registration.label, "Configured Calculator")
         self.assertEqual(runtime_ctx.default_timeout_ms, 8_888)
         self.assertEqual(runtime_ctx.user_id, "")
+
+    def test_get_configured_tool_registry_provider_uses_selected_provider_source(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_source="analytics_suite",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "analytics_suite": {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                            "default_timeout_ms": 1_500,
+                        }
+                    }
+                }
+            ),
+            tool_registry_profile="default",
+            tool_registry_overrides_json=None,
+            tool_registry_extra_tools_json=None,
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval_fast",),
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval_fast",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+        self.assertEqual(runtime_ctx.registration.label, "Fast Calculator")
+        self.assertEqual(runtime_ctx.default_timeout_ms, 1_500)
+
+    def test_get_configured_tool_registry_provider_stacks_global_settings_on_selected_source(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_source="planning_suite",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "provider": "default",
+                        "profile": "planning_only",
+                        "disabled_tool_names": ["mock_plan"],
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_profile="default",
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "calc_eval": {
+                        "default_timeout_ms": 1_200,
+                    }
+                }
+            ),
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "calc_eval_fast": {
+                        "template": "calc_eval",
+                        "label": "Global Fast Calculator",
+                    }
+                }
+            ),
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "calc_eval_fast"),
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+        self.assertEqual(runtime_ctx.registration.label, "Planning Calculator")
+        self.assertEqual(runtime_ctx.default_timeout_ms, 1_200)
+
+    def test_get_configured_tool_registry_provider_uses_selected_source_backed_by_named_provider(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_source="planning_suite",
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "loader": "default",
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "provider": "planning_provider",
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_profile="default",
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "calc_eval": {
+                        "default_timeout_ms": 1_200,
+                    }
+                }
+            ),
+            tool_registry_extra_tools_json=None,
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+
+        self.assertEqual(runtime_ctx.registration.label, "Planning Calculator")
+        self.assertEqual(runtime_ctx.default_timeout_ms, 1_200)
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "calc_eval_fast", "mock_plan"),
+        )
+
+    def test_get_configured_tool_registry_provider_uses_selected_source_backed_by_provider_factory(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_source="planning_suite",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "provider_factory": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_profile="default",
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "calc_eval": {
+                        "default_timeout_ms": 1_200,
+                    }
+                }
+            ),
+            tool_registry_extra_tools_json=None,
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+
+        self.assertEqual(runtime_ctx.registration.label, "Planning Calculator")
+        self.assertEqual(runtime_ctx.default_timeout_ms, 1_200)
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "calc_eval_fast", "mock_plan"),
+        )
 
     def test_get_configured_tool_registry_provider_includes_extra_tools(self) -> None:
         settings = SimpleNamespace(
@@ -881,6 +2317,14 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             get_tool_registry_profile_name_from_settings(settings=settings),
+            "default",
+        )
+
+    def test_get_tool_registry_provider_source_name_from_settings_defaults_to_default(self) -> None:
+        settings = SimpleNamespace(tool_registry_provider_source=None)
+
+        self.assertEqual(
+            get_tool_registry_provider_source_name_from_settings(settings=settings),
             "default",
         )
 
