@@ -63,9 +63,24 @@
 - `get_tool_registry_provider_source_name_from_settings()`
 - `build_tool_registry_extra_tools_from_file()`
 - `load_tool_registry_file_payload()`
+- `build_tool_registry_from_file_artifacts()`
+- `build_tool_registry_loader_from_file_artifacts()`
+- `build_tool_registry_provider_from_file_artifacts()`
 - `build_tool_registry_from_file()`
 - `build_tool_registry_loader_from_file()`
 - `build_tool_registry_provider_from_file()`
+- `build_tool_registry_loaders_from_settings_artifacts()`
+- `build_tool_registry_providers_from_settings_artifacts()`
+- `build_tool_registry_provider_sources_from_settings_artifacts()`
+- `get_configured_tool_registry_provider_artifacts()`
+- `build_tool_registry_diagnostics_summary()`
+- `build_tool_registry_diagnostics_runtime_artifacts()`
+- `build_configured_tool_registry_provider_runtime_artifacts()`
+- `build_tool_registry_diagnostics_audit_event()`
+- `build_tool_registry_diagnostics_trace_service_action()`
+- `build_tool_registry_diagnostics_audit_service_action()`
+- `build_configured_tool_registry_provider_runtime_service_actions()`
+- `execute_configured_tool_registry_provider_runtime_service_actions()`
 - `build_tool_registry_loader_factories_from_settings()`
 - `build_tool_registry_provider_factories_from_settings()`
 - `build_tool_registry_loaders_from_settings()`
@@ -172,7 +187,7 @@
 
 ### Focused regression baseline
 
-`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **167 条测试**，覆盖：
+`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **192 条测试**，覆盖：
 
 - tool plan compatibility
 - tool execution compatibility
@@ -201,6 +216,14 @@
 - file-backed registry source compatibility
 - file-backed registry manifest compatibility
 - composed file-backed manifest compatibility
+- directory-backed composed manifest compatibility
+- file manifest named source reference compatibility
+- file manifest cycle/duplicate protection compatibility
+- file manifest diagnostics artifacts compatibility
+- settings-backed diagnostics artifact chain compatibility
+- runtime diagnostics summary / candidate compatibility
+- runtime diagnostics audit event compatibility
+- runtime diagnostics audit action chain compatibility
 - provider resolution precedence compatibility
 - chat-consumed prebuilt provider compatibility
 - transient/fatal/unknown tool 行为

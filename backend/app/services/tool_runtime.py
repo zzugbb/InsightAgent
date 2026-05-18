@@ -117,6 +117,15 @@ _TOOL_REGISTRY_PROFILE_CONFIGS: dict[str, ToolRegistrySettingsConfig] = {
     ),
 }
 
+_TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS = (
+    "skipped_registry_sources",
+    "missing_registry_sources",
+    "skipped_registry_files",
+    "missing_registry_files",
+    "skipped_registry_dirs",
+    "missing_registry_dirs",
+)
+
 
 def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
     name = str(tool_spec.get("name", "")).strip()
@@ -419,6 +428,20 @@ def _resolve_tool_registry_file_path(
     return path.resolve()
 
 
+def _resolve_tool_registry_dir_path(
+    *,
+    registry_dir: str,
+    base_dir: Path | None = None,
+) -> Path | None:
+    normalized_path = registry_dir.strip()
+    if not normalized_path:
+        return None
+    path = Path(normalized_path).expanduser()
+    if not path.is_absolute() and base_dir is not None:
+        path = base_dir / path
+    return path.resolve()
+
+
 def load_tool_registry_file_payload(
     *,
     registry_file: str,
@@ -443,19 +466,64 @@ def load_tool_registry_file_payload(
     return payload
 
 
-def build_tool_registry_from_file(
+def _normalize_tool_registry_file_diagnostics(
+    diagnostics: dict[str, list[str]],
+) -> dict[str, tuple[str, ...]]:
+    return {
+        key: tuple(value)
+        for key, value in diagnostics.items()
+    }
+
+
+def _empty_tool_registry_file_diagnostics() -> dict[str, tuple[str, ...]]:
+    return {key: () for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS}
+
+
+def _merge_tool_registry_file_diagnostics(
+    *diagnostics: dict[str, tuple[str, ...]] | None,
+) -> dict[str, tuple[str, ...]]:
+    merged: dict[str, list[str]] = {
+        key: [] for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS
+    }
+    for diagnostic_group in diagnostics:
+        if not isinstance(diagnostic_group, dict):
+            continue
+        for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
+            values = diagnostic_group.get(key, ())
+            if not isinstance(values, tuple):
+                continue
+            for value in values:
+                if not isinstance(value, str) or value in merged[key]:
+                    continue
+                merged[key].append(value)
+    return _normalize_tool_registry_file_diagnostics(merged)
+
+
+def _build_tool_registry_from_file_registry(
     *,
     registry_file: str,
+    settings: object | None = None,
+    _visited_files: set[str],
+    _visited_dirs: set[str],
+    _visited_sources: set[str],
+    _diagnostics: dict[str, list[str]],
 ) -> dict[str, ToolRegistration]:
     resolved_path = _resolve_tool_registry_file_path(registry_file=registry_file)
     if resolved_path is None:
         return {}
+    resolved_path_key = str(resolved_path)
+    if resolved_path_key in _visited_files:
+        _diagnostics["skipped_registry_files"].append(resolved_path_key)
+        return {}
+    _visited_files.add(resolved_path_key)
     payload = load_tool_registry_file_payload(registry_file=str(resolved_path))
     if not isinstance(payload, dict):
         return {}
 
     manifest_keys = {
+        "registry_sources",
         "registry_files",
+        "registry_dirs",
         "profile",
         "disabled_tool_names",
         "overrides",
@@ -474,19 +542,59 @@ def build_tool_registry_from_file(
         )
 
     composed_base_registry: dict[str, ToolRegistration] | None = None
+    raw_registry_sources = payload.get("registry_sources")
+    if isinstance(raw_registry_sources, list):
+        composed_base_registry = {}
+        named_sources = build_tool_registry_provider_sources_from_settings(
+            settings=settings,
+            named_providers={},
+        )
+        for child_registry_source in raw_registry_sources:
+            if (
+                not isinstance(child_registry_source, str)
+                or not child_registry_source.strip()
+            ):
+                continue
+            normalized_source_name = child_registry_source.strip().lower()
+            if normalized_source_name in _visited_sources:
+                _diagnostics["skipped_registry_sources"].append(normalized_source_name)
+                continue
+            source_provider = named_sources.get(normalized_source_name)
+            if source_provider is None:
+                _diagnostics["missing_registry_sources"].append(normalized_source_name)
+                continue
+            _visited_sources.add(normalized_source_name)
+            child_registry = source_provider.load_tool_registry()
+            if not child_registry:
+                continue
+            composed_base_registry = build_tool_registry(
+                base_registry=composed_base_registry,
+                overrides=child_registry,
+            )
     raw_registry_files = payload.get("registry_files")
     if isinstance(raw_registry_files, list):
-        composed_base_registry = {}
+        if composed_base_registry is None:
+            composed_base_registry = {}
         for child_registry_file in raw_registry_files:
             if not isinstance(child_registry_file, str) or not child_registry_file.strip():
                 continue
-            child_registry = build_tool_registry_from_file(
-                registry_file=str(
-                    _resolve_tool_registry_file_path(
-                        registry_file=child_registry_file,
-                        base_dir=resolved_path.parent,
-                    )
-                )
+            resolved_child_file = _resolve_tool_registry_file_path(
+                registry_file=child_registry_file,
+                base_dir=resolved_path.parent,
+            )
+            if resolved_child_file is None:
+                continue
+            resolved_child_file_key = str(resolved_child_file)
+            if not resolved_child_file.is_file():
+                _diagnostics["missing_registry_files"].append(resolved_child_file_key)
+                continue
+            child_registry = _build_tool_registry_from_file_registry(
+                registry_file=str(resolved_child_file),
+                settings=settings,
+                _visited_files=_visited_files,
+                _visited_dirs=_visited_dirs,
+                _visited_sources=_visited_sources,
+                _diagnostics=_diagnostics,
             )
             if not child_registry:
                 continue
@@ -494,6 +602,44 @@ def build_tool_registry_from_file(
                 base_registry=composed_base_registry,
                 overrides=child_registry,
             )
+    raw_registry_dirs = payload.get("registry_dirs")
+    if isinstance(raw_registry_dirs, list):
+        if composed_base_registry is None:
+            composed_base_registry = {}
+        for child_registry_dir in raw_registry_dirs:
+            if not isinstance(child_registry_dir, str) or not child_registry_dir.strip():
+                continue
+            resolved_dir = _resolve_tool_registry_dir_path(
+                registry_dir=child_registry_dir,
+                base_dir=resolved_path.parent,
+            )
+            if resolved_dir is None:
+                continue
+            resolved_dir_key = str(resolved_dir)
+            if not resolved_dir.is_dir():
+                _diagnostics["missing_registry_dirs"].append(resolved_dir_key)
+                continue
+            if resolved_dir_key in _visited_dirs:
+                _diagnostics["skipped_registry_dirs"].append(resolved_dir_key)
+                continue
+            _visited_dirs.add(resolved_dir_key)
+            for child_file in sorted(resolved_dir.iterdir(), key=lambda path: path.name):
+                if not child_file.is_file() or child_file.suffix.lower() != ".json":
+                    continue
+                child_registry = _build_tool_registry_from_file_registry(
+                    registry_file=str(child_file),
+                    settings=settings,
+                    _visited_files=_visited_files,
+                    _visited_dirs=_visited_dirs,
+                    _visited_sources=_visited_sources,
+                    _diagnostics=_diagnostics,
+                )
+                if not child_registry:
+                    continue
+                composed_base_registry = build_tool_registry(
+                    base_registry=composed_base_registry,
+                    overrides=child_registry,
+                )
 
     extra_tool_specs = payload.get("extra_tools")
     if not isinstance(extra_tool_specs, dict):
@@ -526,24 +672,169 @@ def build_tool_registry_from_file(
     )
 
 
+def build_tool_registry_from_file_artifacts(
+    *,
+    registry_file: str,
+    settings: object | None = None,
+) -> dict[str, object]:
+    diagnostics: dict[str, list[str]] = {
+        "skipped_registry_sources": [],
+        "missing_registry_sources": [],
+        "skipped_registry_files": [],
+        "missing_registry_files": [],
+        "skipped_registry_dirs": [],
+        "missing_registry_dirs": [],
+    }
+    registry = _build_tool_registry_from_file_registry(
+        registry_file=registry_file,
+        settings=settings,
+        _visited_files=set(),
+        _visited_dirs=set(),
+        _visited_sources=set(),
+        _diagnostics=diagnostics,
+    )
+    return {
+        "registry": registry,
+        "diagnostics": _normalize_tool_registry_file_diagnostics(diagnostics),
+    }
+
+
+def build_tool_registry_loader_from_file_artifacts(
+    *,
+    registry_file: str,
+    settings: object | None = None,
+) -> dict[str, object]:
+    artifacts = build_tool_registry_from_file_artifacts(
+        registry_file=registry_file,
+        settings=settings,
+    )
+    registry = dict(artifacts["registry"])
+    loader = (lambda registry=registry: dict(registry)) if registry else None
+    return {
+        "loader": loader,
+        "registry": registry,
+        "diagnostics": artifacts["diagnostics"],
+    }
+
+
+def build_tool_registry_provider_from_file_artifacts(
+    *,
+    registry_file: str,
+    settings: object | None = None,
+) -> dict[str, object]:
+    artifacts = build_tool_registry_loader_from_file_artifacts(
+        registry_file=registry_file,
+        settings=settings,
+    )
+    loader = artifacts["loader"]
+    registry = dict(artifacts["registry"])
+    provider = StaticToolRegistryProvider(registry=registry) if loader is not None else None
+    return {
+        "provider": provider,
+        "registry": registry,
+        "diagnostics": artifacts["diagnostics"],
+    }
+
+
+def build_tool_registry_from_file(
+    *,
+    registry_file: str,
+    settings: object | None = None,
+) -> dict[str, ToolRegistration]:
+    artifacts = build_tool_registry_from_file_artifacts(
+        registry_file=registry_file,
+        settings=settings,
+    )
+    return dict(artifacts["registry"])
+
+
 def build_tool_registry_loader_from_file(
     *,
     registry_file: str,
+    settings: object | None = None,
 ) -> ToolRegistryLoader | None:
-    registry = build_tool_registry_from_file(registry_file=registry_file)
-    if not registry:
-        return None
-    return lambda registry=registry: dict(registry)
+    artifacts = build_tool_registry_loader_from_file_artifacts(
+        registry_file=registry_file,
+        settings=settings,
+    )
+    return artifacts["loader"]
 
 
 def build_tool_registry_provider_from_file(
     *,
     registry_file: str,
+    settings: object | None = None,
 ) -> ToolRegistryProvider | None:
-    loader = build_tool_registry_loader_from_file(registry_file=registry_file)
-    if loader is None:
-        return None
-    return StaticToolRegistryProvider(registry=loader())
+    artifacts = build_tool_registry_provider_from_file_artifacts(
+        registry_file=registry_file,
+        settings=settings,
+    )
+    return artifacts["provider"]
+
+
+def build_tool_registry_loaders_from_settings_artifacts(
+    *,
+    settings: object | None = None,
+) -> dict[str, object]:
+    if settings is None:
+        settings = get_settings()
+    raw_loaders = getattr(settings, "tool_registry_loaders_json", None)
+    if not isinstance(raw_loaders, str) or not raw_loaders.strip():
+        return {
+            "loaders": {},
+            "loader_diagnostics": {},
+        }
+    try:
+        loader_specs = json.loads(raw_loaders)
+    except json.JSONDecodeError:
+        return {
+            "loaders": {},
+            "loader_diagnostics": {},
+        }
+    if not isinstance(loader_specs, dict):
+        return {
+            "loaders": {},
+            "loader_diagnostics": {},
+        }
+
+    loaders: dict[str, ToolRegistryLoader] = {}
+    loader_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
+    for loader_name, spec in loader_specs.items():
+        if not isinstance(loader_name, str) or not isinstance(spec, dict):
+            continue
+        normalized_loader_name = loader_name.strip().lower()
+        diagnostics = _empty_tool_registry_file_diagnostics()
+        registry_file = spec.get("registry_file")
+        loader_reference = spec.get("loader")
+        if isinstance(registry_file, str) and registry_file.strip():
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                build_tool_registry_loader_from_file_artifacts(
+                    registry_file=registry_file,
+                    settings=settings,
+                )["diagnostics"],
+            )
+        elif (
+            isinstance(loader_reference, str)
+            and loader_reference.strip().lower() in loader_diagnostics
+        ):
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                loader_diagnostics[loader_reference.strip().lower()],
+            )
+        loader = build_tool_registry_loader_adapter(
+            spec=spec,
+            settings=settings,
+            named_loaders=loaders,
+        )
+        if loader is None:
+            continue
+        loaders[normalized_loader_name] = loader
+        loader_diagnostics[normalized_loader_name] = diagnostics
+    return {
+        "loaders": loaders,
+        "loader_diagnostics": loader_diagnostics,
+    }
 
 
 def build_tool_registry_loader_factories_from_settings(
@@ -568,7 +859,10 @@ def build_tool_registry_loader_factories_from_settings(
             continue
         registry_file = spec.get("registry_file")
         if isinstance(registry_file, str) and registry_file.strip():
-            loader = build_tool_registry_loader_from_file(registry_file=registry_file)
+            loader = build_tool_registry_loader_from_file(
+                registry_file=registry_file,
+                settings=settings,
+            )
             if loader is None:
                 continue
             factories[factory_name.strip().lower()] = (
@@ -616,7 +910,10 @@ def build_tool_registry_provider_factories_from_settings(
             continue
         registry_file = spec.get("registry_file")
         if isinstance(registry_file, str) and registry_file.strip():
-            provider = build_tool_registry_provider_from_file(registry_file=registry_file)
+            provider = build_tool_registry_provider_from_file(
+                registry_file=registry_file,
+                settings=settings,
+            )
             if provider is None:
                 continue
             factories[factory_name.strip().lower()] = (
@@ -677,7 +974,10 @@ def build_tool_registry_loader_adapter(
             return None
         known_base_registry = dict(base_loader())
     elif isinstance(registry_file, str) and registry_file.strip():
-        base_loader = build_tool_registry_loader_from_file(registry_file=registry_file)
+        base_loader = build_tool_registry_loader_from_file(
+            registry_file=registry_file,
+            settings=settings,
+        )
         if base_loader is None:
             return None
         known_base_registry = dict(base_loader())
@@ -724,32 +1024,8 @@ def build_tool_registry_loaders_from_settings(
     *,
     settings: object | None = None,
 ) -> dict[str, ToolRegistryLoader]:
-    if settings is None:
-        settings = get_settings()
-    raw_loaders = getattr(settings, "tool_registry_loaders_json", None)
-    if not isinstance(raw_loaders, str) or not raw_loaders.strip():
-        return {}
-    try:
-        loader_specs = json.loads(raw_loaders)
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(loader_specs, dict):
-        return {}
-
-    loaders: dict[str, ToolRegistryLoader] = {}
-    for loader_name, spec in loader_specs.items():
-        if not isinstance(loader_name, str) or not isinstance(spec, dict):
-            continue
-        normalized_loader_name = loader_name.strip().lower()
-        loader = build_tool_registry_loader_adapter(
-            spec=spec,
-            settings=settings,
-            named_loaders=loaders,
-        )
-        if loader is None:
-            continue
-        loaders[normalized_loader_name] = loader
-    return loaders
+    artifacts = build_tool_registry_loaders_from_settings_artifacts(settings=settings)
+    return artifacts["loaders"]
 
 
 def build_tool_registry_provider_adapter(
@@ -800,7 +1076,10 @@ def build_tool_registry_provider_adapter(
             return None
         known_base_registry = dict(base_loader())
     elif isinstance(registry_file, str) and registry_file.strip():
-        base_loader = build_tool_registry_loader_from_file(registry_file=registry_file)
+        base_loader = build_tool_registry_loader_from_file(
+            registry_file=registry_file,
+            settings=settings,
+        )
         if base_loader is None:
             return None
         known_base_registry = dict(base_loader())
@@ -852,24 +1131,72 @@ def build_tool_registry_providers_from_settings(
     *,
     settings: object | None = None,
 ) -> dict[str, ToolRegistryProvider]:
+    artifacts = build_tool_registry_providers_from_settings_artifacts(settings=settings)
+    return artifacts["providers"]
+
+
+def build_tool_registry_providers_from_settings_artifacts(
+    *,
+    settings: object | None = None,
+) -> dict[str, object]:
     if settings is None:
         settings = get_settings()
     raw_providers = getattr(settings, "tool_registry_providers_json", None)
     if not isinstance(raw_providers, str) or not raw_providers.strip():
-        return {}
+        return {
+            "providers": {},
+            "provider_diagnostics": {},
+        }
     try:
         provider_specs = json.loads(raw_providers)
     except json.JSONDecodeError:
-        return {}
+        return {
+            "providers": {},
+            "provider_diagnostics": {},
+        }
     if not isinstance(provider_specs, dict):
-        return {}
+        return {
+            "providers": {},
+            "provider_diagnostics": {},
+        }
 
-    named_loaders = build_tool_registry_loaders_from_settings(settings=settings)
+    loader_artifacts = build_tool_registry_loaders_from_settings_artifacts(settings=settings)
+    named_loaders = loader_artifacts["loaders"]
+    loader_diagnostics = loader_artifacts["loader_diagnostics"]
     providers: dict[str, ToolRegistryProvider] = {}
+    provider_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
     for provider_name, spec in provider_specs.items():
         if not isinstance(provider_name, str) or not isinstance(spec, dict):
             continue
         normalized_provider_name = provider_name.strip().lower()
+        diagnostics = _empty_tool_registry_file_diagnostics()
+        registry_file = spec.get("registry_file")
+        provider_reference = spec.get("provider")
+        loader_reference = spec.get("loader")
+        if isinstance(registry_file, str) and registry_file.strip():
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                build_tool_registry_provider_from_file_artifacts(
+                    registry_file=registry_file,
+                    settings=settings,
+                )["diagnostics"],
+            )
+        elif (
+            isinstance(provider_reference, str)
+            and provider_reference.strip().lower() in provider_diagnostics
+        ):
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                provider_diagnostics[provider_reference.strip().lower()],
+            )
+        elif (
+            isinstance(loader_reference, str)
+            and loader_reference.strip().lower() in loader_diagnostics
+        ):
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                loader_diagnostics[loader_reference.strip().lower()],
+            )
         provider = build_tool_registry_provider_adapter(
             spec=spec,
             settings=settings,
@@ -879,28 +1206,74 @@ def build_tool_registry_providers_from_settings(
         if provider is None:
             continue
         providers[normalized_provider_name] = provider
-    return providers
+        provider_diagnostics[normalized_provider_name] = diagnostics
+    return {
+        "providers": providers,
+        "provider_diagnostics": provider_diagnostics,
+    }
 
 
 def build_tool_registry_provider_sources_from_settings(
     *,
     settings: object | None = None,
+    named_loaders: dict[str, ToolRegistryLoader] | None = None,
+    named_providers: dict[str, ToolRegistryProvider] | None = None,
 ) -> dict[str, ToolRegistryProvider]:
+    artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
+        settings=settings,
+        named_loaders=named_loaders,
+        named_providers=named_providers,
+    )
+    return artifacts["sources"]
+
+
+def build_tool_registry_provider_sources_from_settings_artifacts(
+    *,
+    settings: object | None = None,
+    named_loaders: dict[str, ToolRegistryLoader] | None = None,
+    named_providers: dict[str, ToolRegistryProvider] | None = None,
+) -> dict[str, object]:
     if settings is None:
         settings = get_settings()
     raw_sources = getattr(settings, "tool_registry_provider_sources_json", None)
     if not isinstance(raw_sources, str) or not raw_sources.strip():
-        return {}
+        return {
+            "sources": {},
+            "source_diagnostics": {},
+        }
     try:
         source_specs = json.loads(raw_sources)
     except json.JSONDecodeError:
-        return {}
+        return {
+            "sources": {},
+            "source_diagnostics": {},
+        }
     if not isinstance(source_specs, dict):
-        return {}
+        return {
+            "sources": {},
+            "source_diagnostics": {},
+        }
 
-    named_loaders = build_tool_registry_loaders_from_settings(settings=settings)
-    named_providers = build_tool_registry_providers_from_settings(settings=settings)
+    loader_artifacts: dict[str, object] | None = None
+    provider_artifacts: dict[str, object] | None = None
+    if named_loaders is None:
+        loader_artifacts = build_tool_registry_loaders_from_settings_artifacts(
+            settings=settings
+        )
+        named_loaders = loader_artifacts["loaders"]
+    loader_diagnostics = (
+        loader_artifacts["loader_diagnostics"] if loader_artifacts is not None else {}
+    )
+    if named_providers is None:
+        provider_artifacts = build_tool_registry_providers_from_settings_artifacts(
+            settings=settings
+        )
+        named_providers = provider_artifacts["providers"]
+    provider_diagnostics = (
+        provider_artifacts["provider_diagnostics"] if provider_artifacts is not None else {}
+    )
     sources: dict[str, ToolRegistryProvider] = {}
+    source_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
     for source_name, spec in source_specs.items():
         if not isinstance(source_name, str) or not isinstance(spec, dict):
             continue
@@ -916,6 +1289,34 @@ def build_tool_registry_provider_sources_from_settings(
             "extra_tools",
         }
         if any(key in spec for key in adapter_keys):
+            diagnostics = _empty_tool_registry_file_diagnostics()
+            registry_file = spec.get("registry_file")
+            provider_reference = spec.get("provider")
+            loader_reference = spec.get("loader")
+            if isinstance(registry_file, str) and registry_file.strip():
+                diagnostics = _merge_tool_registry_file_diagnostics(
+                    diagnostics,
+                    build_tool_registry_provider_from_file_artifacts(
+                        registry_file=registry_file,
+                        settings=settings,
+                    )["diagnostics"],
+                )
+            elif (
+                isinstance(provider_reference, str)
+                and provider_reference.strip().lower() in provider_diagnostics
+            ):
+                diagnostics = _merge_tool_registry_file_diagnostics(
+                    diagnostics,
+                    provider_diagnostics[provider_reference.strip().lower()],
+                )
+            elif (
+                isinstance(loader_reference, str)
+                and loader_reference.strip().lower() in loader_diagnostics
+            ):
+                diagnostics = _merge_tool_registry_file_diagnostics(
+                    diagnostics,
+                    loader_diagnostics[loader_reference.strip().lower()],
+                )
             provider = build_tool_registry_provider_adapter(
                 spec=spec,
                 settings=settings,
@@ -926,13 +1327,18 @@ def build_tool_registry_provider_sources_from_settings(
             if provider is None:
                 continue
             sources[normalized_source_name] = provider
+            source_diagnostics[normalized_source_name] = diagnostics
             continue
 
         extra_tools = build_tool_registry_extra_tools_from_specs(extra_tool_specs=spec)
         if not extra_tools:
             continue
         sources[normalized_source_name] = StaticToolRegistryProvider(registry=extra_tools)
-    return sources
+        source_diagnostics[normalized_source_name] = _empty_tool_registry_file_diagnostics()
+    return {
+        "sources": sources,
+        "source_diagnostics": source_diagnostics,
+    }
 
 
 def build_tool_registry_extra_tools_from_settings(
@@ -1099,20 +1505,257 @@ def get_disabled_tool_names_from_settings(*, settings: object | None = None) -> 
 
 
 def get_configured_tool_registry_provider(*, settings: object | None = None) -> ToolRegistryProvider:
+    artifacts = get_configured_tool_registry_provider_artifacts(settings=settings)
+    return artifacts["provider"]
+
+
+def get_configured_tool_registry_provider_artifacts(
+    *,
+    settings: object | None = None,
+) -> dict[str, object]:
     if settings is None:
         settings = get_settings()
     provider_source_name = get_tool_registry_provider_source_name_from_settings(settings=settings)
-    provider_sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+    source_artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
+        settings=settings
+    )
+    provider_sources = source_artifacts["sources"]
     base_provider = provider_sources.get(provider_source_name)
     settings_config = build_tool_registry_settings_config(
         settings=settings,
         base_provider=base_provider,
     )
-    return build_tool_registry_provider(
-        provider=base_provider,
-        overrides=settings_config.overrides or None,
-        disabled_tool_names=settings_config.disabled_tool_names,
+    return {
+        "provider": build_tool_registry_provider(
+            provider=base_provider,
+            overrides=settings_config.overrides or None,
+            disabled_tool_names=settings_config.disabled_tool_names,
+        ),
+        "provider_source_name": provider_source_name,
+        "provider_sources": provider_sources,
+        "selected_source_diagnostics": source_artifacts["source_diagnostics"].get(
+            provider_source_name,
+            _empty_tool_registry_file_diagnostics(),
+        ),
+        "source_diagnostics": source_artifacts["source_diagnostics"],
+    }
+
+
+def build_tool_registry_diagnostics_summary(
+    *,
+    diagnostics: dict[str, tuple[str, ...]],
+) -> dict[str, object]:
+    entries: list[dict[str, object]] = []
+    skipped_total = 0
+    missing_total = 0
+    for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
+        values = diagnostics.get(key, ())
+        if not isinstance(values, tuple) or not values:
+            continue
+        kind, target = key.split("_", 1)
+        entry = {
+            "kind": kind,
+            "target": target,
+            "count": len(values),
+            "values": values,
+        }
+        entries.append(entry)
+        if kind == "skipped":
+            skipped_total += len(values)
+        elif kind == "missing":
+            missing_total += len(values)
+    return {
+        "has_diagnostics": bool(entries),
+        "skipped_total": skipped_total,
+        "missing_total": missing_total,
+        "total": skipped_total + missing_total,
+        "entries": tuple(entries),
+    }
+
+
+def build_tool_registry_diagnostics_runtime_artifacts(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    provider_source_name: str,
+    diagnostics: dict[str, tuple[str, ...]],
+) -> dict[str, object]:
+    summary = build_tool_registry_diagnostics_summary(diagnostics=diagnostics)
+    if not bool(summary["has_diagnostics"]):
+        return {
+            "summary": summary,
+            "trace_step": None,
+            "trace_event": None,
+            "audit_detail": None,
+        }
+
+    trace_step = {
+        "id": step_id,
+        "seq": seq,
+        "type": "observation",
+        "content": (
+            "Tool registry diagnostics: "
+            f"source={provider_source_name} "
+            f"skipped={int(summary['skipped_total'])} "
+            f"missing={int(summary['missing_total'])}"
+        ),
+        "meta": {
+            "model": model,
+            "step_type": "tool_registry_diagnostics",
+            "tokens": None,
+            "cost_estimate": None,
+            "tool_registry": {
+                "provider_source": provider_source_name,
+                "has_diagnostics": bool(summary["has_diagnostics"]),
+                "skipped_total": int(summary["skipped_total"]),
+                "missing_total": int(summary["missing_total"]),
+                "total": int(summary["total"]),
+                "entries": summary["entries"],
+            },
+        },
+    }
+    return {
+        "summary": summary,
+        "trace_step": trace_step,
+        "trace_event": build_tool_trace_event(
+            task_id=task_id,
+            step_id=step_id,
+            step=trace_step,
+        ),
+        "audit_detail": {
+            "provider_source": provider_source_name,
+            "has_diagnostics": bool(summary["has_diagnostics"]),
+            "skipped_total": int(summary["skipped_total"]),
+            "missing_total": int(summary["missing_total"]),
+            "total": int(summary["total"]),
+            "entries": summary["entries"],
+        },
+    }
+
+
+def build_tool_registry_diagnostics_audit_event(
+    *,
+    diagnostics_runtime: dict[str, object],
+) -> dict[str, object] | None:
+    audit_detail = diagnostics_runtime.get("audit_detail")
+    if not isinstance(audit_detail, dict):
+        return None
+    return {
+        "event_type": "tool_registry_diagnostics",
+        "code": "tool_registry_diagnostics",
+        "message": "Tool registry diagnostics detected during configured provider resolution.",
+        "detail": audit_detail,
+    }
+
+
+def build_tool_registry_diagnostics_audit_service_action(
+    *,
+    audit_event: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "kind": "record_audit_event",
+        "kwargs": audit_event,
+    }
+
+
+def build_tool_registry_diagnostics_trace_service_action(
+    *,
+    trace_step: dict[str, object],
+    trace_event: dict[str, object],
+    persist_force: bool = True,
+) -> dict[str, object]:
+    return {
+        "kind": "internal_trace_write",
+        "trace_step": trace_step,
+        "trace_event": trace_event,
+        "persist_force": bool(persist_force),
+    }
+
+
+def build_configured_tool_registry_provider_runtime_service_actions(
+    *,
+    runtime_artifacts: dict[str, object],
+) -> list[dict[str, object]]:
+    service_actions: list[dict[str, object]] = []
+    diagnostics_runtime = runtime_artifacts.get("diagnostics_runtime")
+    if isinstance(diagnostics_runtime, dict):
+        trace_step = diagnostics_runtime.get("trace_step")
+        trace_event = diagnostics_runtime.get("trace_event")
+        if isinstance(trace_step, dict) and isinstance(trace_event, dict):
+            service_actions.append(
+                build_tool_registry_diagnostics_trace_service_action(
+                    trace_step=trace_step,
+                    trace_event=trace_event,
+                )
+            )
+    audit_event = runtime_artifacts.get("audit_event")
+    if isinstance(audit_event, dict):
+        service_actions.append(
+            build_tool_registry_diagnostics_audit_service_action(
+                audit_event=audit_event,
+            )
+        )
+    return service_actions
+
+
+def execute_configured_tool_registry_provider_runtime_service_actions(
+    *,
+    service_actions: list[dict[str, object]],
+    trace_steps: list[dict[str, object]],
+    persist_trace_fn: Callable[..., None],
+    record_audit_event_fn: Callable[..., None],
+) -> dict[str, object]:
+    trace_write_count = 0
+    audit_event_count = 0
+    for service_action in service_actions:
+        kind = str(service_action.get("kind"))
+        if kind == "internal_trace_write":
+            trace_step = service_action.get("trace_step")
+            if not isinstance(trace_step, dict):
+                continue
+            trace_steps.append(trace_step)
+            persist_trace_fn(force=bool(service_action.get("persist_force")))
+            trace_write_count += 1
+            continue
+        if kind != "record_audit_event":
+            continue
+        kwargs = service_action.get("kwargs")
+        if not isinstance(kwargs, dict):
+            continue
+        record_audit_event_fn(**kwargs)
+        audit_event_count += 1
+    return {
+        "trace_write_count": trace_write_count,
+        "audit_event_count": audit_event_count,
+    }
+
+
+def build_configured_tool_registry_provider_runtime_artifacts(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    settings: object | None = None,
+) -> dict[str, object]:
+    artifacts = get_configured_tool_registry_provider_artifacts(settings=settings)
+    diagnostics_runtime = build_tool_registry_diagnostics_runtime_artifacts(
+        task_id=task_id,
+        step_id=step_id,
+        seq=seq,
+        model=model,
+        provider_source_name=str(artifacts["provider_source_name"]),
+        diagnostics=artifacts["selected_source_diagnostics"],
     )
+    return {
+        **artifacts,
+        "diagnostics_runtime": diagnostics_runtime,
+        "audit_event": build_tool_registry_diagnostics_audit_event(
+            diagnostics_runtime=diagnostics_runtime
+        ),
+    }
 
 
 def build_tool_registry_provider(

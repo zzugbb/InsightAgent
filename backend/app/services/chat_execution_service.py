@@ -18,12 +18,14 @@ from app.services.chat_persistence_service import (
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.tool_runtime import (
+    build_configured_tool_registry_provider_runtime_artifacts,
+    build_configured_tool_registry_provider_runtime_service_actions,
     build_tool_iteration_context,
     build_tool_prompt_with_observations,
     build_tool_plan,
+    execute_configured_tool_registry_provider_runtime_service_actions,
     execute_tool_plan_item_service_actions,
     execute_tool_plan_item_service_execution,
-    get_configured_tool_registry_provider,
 )
 
 
@@ -126,7 +128,7 @@ def stream_task_execution(
     cached_task_status = "pending"
     stream_started_ts = monotonic()
 
-    def record_failure_event(
+    def record_audit_event(
         *,
         event_type: str,
         code: str,
@@ -145,6 +147,20 @@ def stream_task_execution(
             user_id=user_id,
             event_type=event_type,
             detail=payload,
+        )
+
+    def record_failure_event(
+        *,
+        event_type: str,
+        code: str,
+        message: str,
+        detail: dict[str, object] | None = None,
+    ) -> None:
+        record_audit_event(
+            event_type=event_type,
+            code=code,
+            message=message,
+            detail=detail,
         )
 
     def persist_trace(*, force: bool = False) -> None:
@@ -269,7 +285,21 @@ def stream_task_execution(
         persist_trace(force=True)
 
         tool_observations: list[str] = []
-        tool_registry_provider = get_configured_tool_registry_provider()
+        tool_registry_runtime = build_configured_tool_registry_provider_runtime_artifacts(
+            task_id=task_id,
+            step_id=str(uuid4()),
+            seq=seq_cursor + 1,
+            model=getattr(provider, "model", "mock-gpt"),
+        )
+        execute_configured_tool_registry_provider_runtime_service_actions(
+            service_actions=build_configured_tool_registry_provider_runtime_service_actions(
+                runtime_artifacts=tool_registry_runtime,
+            ),
+            trace_steps=trace_steps,
+            persist_trace_fn=persist_trace,
+            record_audit_event_fn=record_audit_event,
+        )
+        tool_registry_provider = tool_registry_runtime["provider"]
 
         for idx, tool_spec in enumerate(tool_plan, start=1):
             raise_if_should_abort()
