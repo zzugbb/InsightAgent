@@ -98,6 +98,114 @@ class ToolRegistrySettingsConfig:
     disabled_tool_names: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class ConfiguredToolRegistryProviderPreflightSummaryModel:
+    provider_source_name: str
+    tool_count: int
+    tool_names: tuple[str, ...]
+    service_action_count: int
+    service_action_kinds: tuple[str, ...]
+    trace_write_count: int
+    audit_event_count: int
+    has_diagnostics: bool
+    diagnostics_total: int
+    skipped_total: int
+    missing_total: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "provider_source_name": self.provider_source_name,
+            "tool_count": self.tool_count,
+            "tool_names": self.tool_names,
+            "service_action_count": self.service_action_count,
+            "service_action_kinds": self.service_action_kinds,
+            "trace_write_count": self.trace_write_count,
+            "audit_event_count": self.audit_event_count,
+            "has_diagnostics": self.has_diagnostics,
+            "diagnostics_total": self.diagnostics_total,
+            "skipped_total": self.skipped_total,
+            "missing_total": self.missing_total,
+        }
+
+
+@dataclass(frozen=True)
+class ConfiguredToolRegistryProviderPreflightResultModel:
+    provider: ToolRegistryProvider
+    provider_source_name: str
+    runtime_artifacts: dict[str, object]
+    service_execution: dict[str, object]
+    trace_write_count: int
+    audit_event_count: int
+    summary: ConfiguredToolRegistryProviderPreflightSummaryModel
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "provider": self.provider,
+            "provider_source_name": self.provider_source_name,
+            "runtime_artifacts": self.runtime_artifacts,
+            "service_execution": self.service_execution,
+            "trace_write_count": self.trace_write_count,
+            "audit_event_count": self.audit_event_count,
+            "summary": self.summary.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
+class ToolRegistryDiagnosticsSummaryModel:
+    has_diagnostics: bool
+    skipped_total: int
+    missing_total: int
+    total: int
+    entries: tuple[dict[str, object], ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "has_diagnostics": self.has_diagnostics,
+            "skipped_total": self.skipped_total,
+            "missing_total": self.missing_total,
+            "total": self.total,
+            "entries": self.entries,
+        }
+
+
+@dataclass(frozen=True)
+class ToolRegistryDiagnosticsRuntimeArtifactsModel:
+    summary: ToolRegistryDiagnosticsSummaryModel
+    trace_step: dict[str, object] | None
+    trace_event: dict[str, object] | None
+    audit_detail: dict[str, object] | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "summary": self.summary.to_dict(),
+            "trace_step": self.trace_step,
+            "trace_event": self.trace_event,
+            "audit_detail": self.audit_detail,
+        }
+
+
+@dataclass(frozen=True)
+class ConfiguredToolRegistryProviderRuntimeArtifactsModel:
+    provider: ToolRegistryProvider
+    provider_source_name: str
+    provider_sources: dict[str, ToolRegistryProvider]
+    selected_source_diagnostics: dict[str, tuple[str, ...]]
+    source_diagnostics: dict[str, dict[str, tuple[str, ...]]]
+    diagnostics_runtime: ToolRegistryDiagnosticsRuntimeArtifactsModel
+    audit_event: dict[str, object] | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "provider": self.provider,
+            "provider_source_name": self.provider_source_name,
+            "provider_sources": self.provider_sources,
+            "selected_source_diagnostics": self.selected_source_diagnostics,
+            "source_diagnostics": self.source_diagnostics,
+            "diagnostics_runtime": self.diagnostics_runtime.to_dict(),
+            "audit_event": self.audit_event,
+        }
+
+
 _TOOL_REGISTRY_PROFILE_CONFIGS: dict[str, ToolRegistrySettingsConfig] = {
     "default": ToolRegistrySettingsConfig(
         overrides={},
@@ -1541,10 +1649,10 @@ def get_configured_tool_registry_provider_artifacts(
     }
 
 
-def build_tool_registry_diagnostics_summary(
+def build_tool_registry_diagnostics_summary_model(
     *,
     diagnostics: dict[str, tuple[str, ...]],
-) -> dict[str, object]:
+) -> ToolRegistryDiagnosticsSummaryModel:
     entries: list[dict[str, object]] = []
     skipped_total = 0
     missing_total = 0
@@ -1564,13 +1672,84 @@ def build_tool_registry_diagnostics_summary(
             skipped_total += len(values)
         elif kind == "missing":
             missing_total += len(values)
-    return {
-        "has_diagnostics": bool(entries),
-        "skipped_total": skipped_total,
-        "missing_total": missing_total,
-        "total": skipped_total + missing_total,
-        "entries": tuple(entries),
+    return ToolRegistryDiagnosticsSummaryModel(
+        has_diagnostics=bool(entries),
+        skipped_total=skipped_total,
+        missing_total=missing_total,
+        total=skipped_total + missing_total,
+        entries=tuple(entries),
+    )
+
+
+def build_tool_registry_diagnostics_summary(
+    *,
+    diagnostics: dict[str, tuple[str, ...]],
+) -> dict[str, object]:
+    return build_tool_registry_diagnostics_summary_model(
+        diagnostics=diagnostics,
+    ).to_dict()
+
+
+def build_tool_registry_diagnostics_runtime_artifacts_model(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    provider_source_name: str,
+    diagnostics: dict[str, tuple[str, ...]],
+) -> ToolRegistryDiagnosticsRuntimeArtifactsModel:
+    summary = build_tool_registry_diagnostics_summary_model(diagnostics=diagnostics)
+    if not bool(summary.has_diagnostics):
+        return ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=summary,
+            trace_step=None,
+            trace_event=None,
+            audit_detail=None,
+        )
+
+    trace_step = {
+        "id": step_id,
+        "seq": seq,
+        "type": "observation",
+        "content": (
+            "Tool registry diagnostics: "
+            f"source={provider_source_name} "
+            f"skipped={int(summary.skipped_total)} "
+            f"missing={int(summary.missing_total)}"
+        ),
+        "meta": {
+            "model": model,
+            "step_type": "tool_registry_diagnostics",
+            "tokens": None,
+            "cost_estimate": None,
+            "tool_registry": {
+                "provider_source": provider_source_name,
+                "has_diagnostics": bool(summary.has_diagnostics),
+                "skipped_total": int(summary.skipped_total),
+                "missing_total": int(summary.missing_total),
+                "total": int(summary.total),
+                "entries": summary.entries,
+            },
+        },
     }
+    return ToolRegistryDiagnosticsRuntimeArtifactsModel(
+        summary=summary,
+        trace_step=trace_step,
+        trace_event=build_tool_trace_event(
+            task_id=task_id,
+            step_id=step_id,
+            step=trace_step,
+        ),
+        audit_detail={
+            "provider_source": provider_source_name,
+            "has_diagnostics": bool(summary.has_diagnostics),
+            "skipped_total": int(summary.skipped_total),
+            "missing_total": int(summary.missing_total),
+            "total": int(summary.total),
+            "entries": summary.entries,
+        },
+    )
 
 
 def build_tool_registry_diagnostics_runtime_artifacts(
@@ -1582,57 +1761,14 @@ def build_tool_registry_diagnostics_runtime_artifacts(
     provider_source_name: str,
     diagnostics: dict[str, tuple[str, ...]],
 ) -> dict[str, object]:
-    summary = build_tool_registry_diagnostics_summary(diagnostics=diagnostics)
-    if not bool(summary["has_diagnostics"]):
-        return {
-            "summary": summary,
-            "trace_step": None,
-            "trace_event": None,
-            "audit_detail": None,
-        }
-
-    trace_step = {
-        "id": step_id,
-        "seq": seq,
-        "type": "observation",
-        "content": (
-            "Tool registry diagnostics: "
-            f"source={provider_source_name} "
-            f"skipped={int(summary['skipped_total'])} "
-            f"missing={int(summary['missing_total'])}"
-        ),
-        "meta": {
-            "model": model,
-            "step_type": "tool_registry_diagnostics",
-            "tokens": None,
-            "cost_estimate": None,
-            "tool_registry": {
-                "provider_source": provider_source_name,
-                "has_diagnostics": bool(summary["has_diagnostics"]),
-                "skipped_total": int(summary["skipped_total"]),
-                "missing_total": int(summary["missing_total"]),
-                "total": int(summary["total"]),
-                "entries": summary["entries"],
-            },
-        },
-    }
-    return {
-        "summary": summary,
-        "trace_step": trace_step,
-        "trace_event": build_tool_trace_event(
-            task_id=task_id,
-            step_id=step_id,
-            step=trace_step,
-        ),
-        "audit_detail": {
-            "provider_source": provider_source_name,
-            "has_diagnostics": bool(summary["has_diagnostics"]),
-            "skipped_total": int(summary["skipped_total"]),
-            "missing_total": int(summary["missing_total"]),
-            "total": int(summary["total"]),
-            "entries": summary["entries"],
-        },
-    }
+    return build_tool_registry_diagnostics_runtime_artifacts_model(
+        task_id=task_id,
+        step_id=step_id,
+        seq=seq,
+        model=model,
+        provider_source_name=provider_source_name,
+        diagnostics=diagnostics,
+    ).to_dict()
 
 
 def build_tool_registry_diagnostics_audit_event(
@@ -1732,6 +1868,207 @@ def execute_configured_tool_registry_provider_runtime_service_actions(
     }
 
 
+def build_configured_tool_registry_provider_service_execution(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    settings: object | None = None,
+) -> dict[str, object]:
+    runtime_artifacts = build_configured_tool_registry_provider_runtime_artifacts(
+        task_id=task_id,
+        step_id=step_id,
+        seq=seq,
+        model=model,
+        settings=settings,
+    )
+    return {
+        "provider": runtime_artifacts["provider"],
+        "provider_source_name": runtime_artifacts["provider_source_name"],
+        "runtime_artifacts": runtime_artifacts,
+        "service_actions": build_configured_tool_registry_provider_runtime_service_actions(
+            runtime_artifacts=runtime_artifacts,
+        ),
+    }
+
+
+def execute_configured_tool_registry_provider_service_execution(
+    *,
+    service_execution: dict[str, object],
+    trace_steps: list[dict[str, object]],
+    persist_trace_fn: Callable[..., None],
+    record_audit_event_fn: Callable[..., None],
+) -> dict[str, object]:
+    execution_result = execute_configured_tool_registry_provider_runtime_service_actions(
+        service_actions=list(service_execution["service_actions"]),
+        trace_steps=trace_steps,
+        persist_trace_fn=persist_trace_fn,
+        record_audit_event_fn=record_audit_event_fn,
+    )
+    return {
+        "provider": service_execution["provider"],
+        "provider_source_name": service_execution["provider_source_name"],
+        "runtime_artifacts": service_execution["runtime_artifacts"],
+        **execution_result,
+    }
+
+
+def build_configured_tool_registry_provider_preflight_summary_model(
+    *,
+    preflight_result: dict[str, object],
+) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
+    runtime_artifacts = preflight_result.get("runtime_artifacts")
+    has_diagnostics = False
+    diagnostics_total = 0
+    skipped_total = 0
+    missing_total = 0
+    if isinstance(runtime_artifacts, dict):
+        diagnostics_runtime = runtime_artifacts.get("diagnostics_runtime")
+        if isinstance(diagnostics_runtime, dict):
+            summary = diagnostics_runtime.get("summary")
+            if isinstance(summary, dict):
+                has_diagnostics = bool(summary.get("has_diagnostics"))
+                diagnostics_total = int(summary.get("total", 0) or 0)
+                skipped_total = int(summary.get("skipped_total", 0) or 0)
+                missing_total = int(summary.get("missing_total", 0) or 0)
+    provider = preflight_result.get("provider")
+    tool_count = 0
+    tool_names: tuple[str, ...] = ()
+    if hasattr(provider, "load_tool_registry") and callable(
+        getattr(provider, "load_tool_registry", None)
+    ):
+        tool_registry = provider.load_tool_registry()
+        tool_count = len(tool_registry)
+        tool_names = tuple(sorted(tool_registry))
+    service_execution = preflight_result.get("service_execution")
+    service_action_count = 0
+    service_action_kinds: tuple[str, ...] = ()
+    if isinstance(service_execution, dict):
+        service_actions = service_execution.get("service_actions")
+        if isinstance(service_actions, list):
+            service_action_count = len(service_actions)
+            service_action_kinds = tuple(
+                str(item.get("kind")) for item in service_actions if isinstance(item, dict)
+            )
+    return ConfiguredToolRegistryProviderPreflightSummaryModel(
+        provider_source_name=str(preflight_result["provider_source_name"]),
+        tool_count=tool_count,
+        tool_names=tool_names,
+        service_action_count=service_action_count,
+        service_action_kinds=service_action_kinds,
+        trace_write_count=int(preflight_result["trace_write_count"]),
+        audit_event_count=int(preflight_result["audit_event_count"]),
+        has_diagnostics=has_diagnostics,
+        diagnostics_total=diagnostics_total,
+        skipped_total=skipped_total,
+        missing_total=missing_total,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_summary(
+    *,
+    preflight_result: dict[str, object],
+) -> dict[str, object]:
+    return build_configured_tool_registry_provider_preflight_summary_model(
+        preflight_result=preflight_result,
+    ).to_dict()
+
+
+def build_configured_tool_registry_provider_preflight_result_model(
+    *,
+    service_execution: dict[str, object],
+    execution_result: dict[str, object],
+) -> ConfiguredToolRegistryProviderPreflightResultModel:
+    preflight_result_payload = {
+        **execution_result,
+        "service_execution": service_execution,
+    }
+    summary = build_configured_tool_registry_provider_preflight_summary_model(
+        preflight_result=preflight_result_payload,
+    )
+    return ConfiguredToolRegistryProviderPreflightResultModel(
+        provider=execution_result["provider"],
+        provider_source_name=str(execution_result["provider_source_name"]),
+        runtime_artifacts=execution_result["runtime_artifacts"],
+        service_execution=service_execution,
+        trace_write_count=int(execution_result["trace_write_count"]),
+        audit_event_count=int(execution_result["audit_event_count"]),
+        summary=summary,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_result(
+    *,
+    service_execution: dict[str, object],
+    execution_result: dict[str, object],
+) -> dict[str, object]:
+    return build_configured_tool_registry_provider_preflight_result_model(
+        service_execution=service_execution,
+        execution_result=execution_result,
+    ).to_dict()
+
+
+def execute_configured_tool_registry_provider_preflight(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    trace_steps: list[dict[str, object]],
+    persist_trace_fn: Callable[..., None],
+    record_audit_event_fn: Callable[..., None],
+    settings: object | None = None,
+) -> dict[str, object]:
+    service_execution = build_configured_tool_registry_provider_service_execution(
+        task_id=task_id,
+        step_id=step_id,
+        seq=seq,
+        model=model,
+        settings=settings,
+    )
+    execution_result = execute_configured_tool_registry_provider_service_execution(
+        service_execution=service_execution,
+        trace_steps=trace_steps,
+        persist_trace_fn=persist_trace_fn,
+        record_audit_event_fn=record_audit_event_fn,
+    )
+    return build_configured_tool_registry_provider_preflight_result(
+        service_execution=service_execution,
+        execution_result=execution_result,
+    )
+
+
+def build_configured_tool_registry_provider_runtime_artifacts_model(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    settings: object | None = None,
+) -> ConfiguredToolRegistryProviderRuntimeArtifactsModel:
+    artifacts = get_configured_tool_registry_provider_artifacts(settings=settings)
+    diagnostics_runtime = build_tool_registry_diagnostics_runtime_artifacts_model(
+        task_id=task_id,
+        step_id=step_id,
+        seq=seq,
+        model=model,
+        provider_source_name=str(artifacts["provider_source_name"]),
+        diagnostics=artifacts["selected_source_diagnostics"],
+    )
+    return ConfiguredToolRegistryProviderRuntimeArtifactsModel(
+        provider=artifacts["provider"],
+        provider_source_name=str(artifacts["provider_source_name"]),
+        provider_sources=artifacts["provider_sources"],
+        selected_source_diagnostics=artifacts["selected_source_diagnostics"],
+        source_diagnostics=artifacts["source_diagnostics"],
+        diagnostics_runtime=diagnostics_runtime,
+        audit_event=build_tool_registry_diagnostics_audit_event(
+            diagnostics_runtime=diagnostics_runtime.to_dict()
+        ),
+    )
+
+
 def build_configured_tool_registry_provider_runtime_artifacts(
     *,
     task_id: str,
@@ -1740,22 +2077,13 @@ def build_configured_tool_registry_provider_runtime_artifacts(
     model: str,
     settings: object | None = None,
 ) -> dict[str, object]:
-    artifacts = get_configured_tool_registry_provider_artifacts(settings=settings)
-    diagnostics_runtime = build_tool_registry_diagnostics_runtime_artifacts(
+    return build_configured_tool_registry_provider_runtime_artifacts_model(
         task_id=task_id,
         step_id=step_id,
         seq=seq,
         model=model,
-        provider_source_name=str(artifacts["provider_source_name"]),
-        diagnostics=artifacts["selected_source_diagnostics"],
-    )
-    return {
-        **artifacts,
-        "diagnostics_runtime": diagnostics_runtime,
-        "audit_event": build_tool_registry_diagnostics_audit_event(
-            diagnostics_runtime=diagnostics_runtime
-        ),
-    }
+        settings=settings,
+    ).to_dict()
 
 
 def build_tool_registry_provider(

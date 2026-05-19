@@ -18,12 +18,10 @@ from app.services.chat_persistence_service import (
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.tool_runtime import (
-    build_configured_tool_registry_provider_runtime_artifacts,
-    build_configured_tool_registry_provider_runtime_service_actions,
+    execute_configured_tool_registry_provider_preflight,
     build_tool_iteration_context,
     build_tool_prompt_with_observations,
     build_tool_plan,
-    execute_configured_tool_registry_provider_runtime_service_actions,
     execute_tool_plan_item_service_actions,
     execute_tool_plan_item_service_execution,
 )
@@ -285,21 +283,16 @@ def stream_task_execution(
         persist_trace(force=True)
 
         tool_observations: list[str] = []
-        tool_registry_runtime = build_configured_tool_registry_provider_runtime_artifacts(
+        tool_registry_service_result = execute_configured_tool_registry_provider_preflight(
             task_id=task_id,
             step_id=str(uuid4()),
             seq=seq_cursor + 1,
             model=getattr(provider, "model", "mock-gpt"),
-        )
-        execute_configured_tool_registry_provider_runtime_service_actions(
-            service_actions=build_configured_tool_registry_provider_runtime_service_actions(
-                runtime_artifacts=tool_registry_runtime,
-            ),
             trace_steps=trace_steps,
             persist_trace_fn=persist_trace,
             record_audit_event_fn=record_audit_event,
         )
-        tool_registry_provider = tool_registry_runtime["provider"]
+        tool_registry_provider = tool_registry_service_result["provider"]
 
         for idx, tool_spec in enumerate(tool_plan, start=1):
             raise_if_should_abort()

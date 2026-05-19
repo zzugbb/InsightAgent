@@ -108,11 +108,21 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_registry_settings_config,
     build_tool_registry_diagnostics_runtime_artifacts,
     build_tool_registry_diagnostics_summary,
+    build_tool_registry_diagnostics_runtime_artifacts_model,
+    build_tool_registry_diagnostics_summary_model,
+    build_configured_tool_registry_provider_runtime_artifacts_model,
     build_tool_registry_diagnostics_audit_event,
     build_tool_registry_diagnostics_audit_service_action,
     build_tool_registry_diagnostics_trace_service_action,
     build_configured_tool_registry_provider_runtime_service_actions,
     execute_configured_tool_registry_provider_runtime_service_actions,
+    build_configured_tool_registry_provider_service_execution,
+    execute_configured_tool_registry_provider_service_execution,
+    execute_configured_tool_registry_provider_preflight,
+    build_configured_tool_registry_provider_preflight_result,
+    build_configured_tool_registry_provider_preflight_summary,
+    build_configured_tool_registry_provider_preflight_result_model,
+    build_configured_tool_registry_provider_preflight_summary_model,
     build_tool_result_preview,
     build_tool_runtime_context,
     build_configured_tool_registry_provider_runtime_artifacts,
@@ -2020,6 +2030,25 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
+    def test_build_tool_registry_diagnostics_summary_model_keeps_fields(self) -> None:
+        diagnostics = {
+            "skipped_registry_sources": ("planning_suite",),
+            "missing_registry_sources": (),
+            "skipped_registry_files": (),
+            "missing_registry_files": ("/tmp/missing.json",),
+            "skipped_registry_dirs": (),
+            "missing_registry_dirs": (),
+        }
+
+        result = build_tool_registry_diagnostics_summary_model(diagnostics=diagnostics)
+
+        self.assertTrue(result.has_diagnostics)
+        self.assertEqual(result.skipped_total, 1)
+        self.assertEqual(result.missing_total, 1)
+        self.assertEqual(result.total, 2)
+        self.assertEqual(result.entries[0]["kind"], "skipped")
+        self.assertEqual(result.entries[1]["kind"], "missing")
+
     def test_build_tool_registry_diagnostics_runtime_artifacts_keep_shape(self) -> None:
         diagnostics = {
             "skipped_registry_sources": ("planning_suite",),
@@ -2108,6 +2137,32 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 ),
             },
         )
+
+    def test_build_tool_registry_diagnostics_runtime_artifacts_model_keeps_fields(
+        self,
+    ) -> None:
+        diagnostics = {
+            "skipped_registry_sources": ("planning_suite",),
+            "missing_registry_sources": (),
+            "skipped_registry_files": (),
+            "missing_registry_files": ("/tmp/missing.json",),
+            "skipped_registry_dirs": (),
+            "missing_registry_dirs": (),
+        }
+
+        result = build_tool_registry_diagnostics_runtime_artifacts_model(
+            task_id="task-1",
+            step_id="step-1",
+            seq=4,
+            model="mock-gpt",
+            provider_source_name="file_source",
+            diagnostics=diagnostics,
+        )
+
+        self.assertEqual(result.summary.total, 2)
+        self.assertEqual(result.trace_step["id"], "step-1")
+        self.assertEqual(result.trace_event["step_id"], "step-1")
+        self.assertEqual(result.audit_detail["provider_source"], "file_source")
 
     def test_build_tool_registry_diagnostics_runtime_artifacts_keeps_empty_shape(self) -> None:
         diagnostics = {
@@ -2453,6 +2508,401 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             tuple(sorted(artifacts["provider"].load_tool_registry())),
             ("calc_eval_fast",),
         )
+
+    def test_build_configured_tool_registry_provider_runtime_artifacts_model_keeps_fields(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_file = Path(tmpdir) / "missing-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_source="file_source",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+            )
+
+            result = build_configured_tool_registry_provider_runtime_artifacts_model(
+                settings=settings,
+                task_id="task-1",
+                step_id="step-registry",
+                seq=2,
+                model="mock-gpt",
+            )
+
+        self.assertEqual(result.provider_source_name, "file_source")
+        self.assertEqual(result.diagnostics_runtime.summary.missing_total, 1)
+        self.assertEqual(result.audit_event["event_type"], "tool_registry_diagnostics")
+        self.assertEqual(tuple(sorted(result.provider.load_tool_registry())), ("calc_eval_fast",))
+
+    def test_build_configured_tool_registry_provider_service_execution_keeps_shape(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_file = Path(tmpdir) / "missing-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_source="file_source",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+            )
+
+            result = build_configured_tool_registry_provider_service_execution(
+                settings=settings,
+                task_id="task-1",
+                step_id="step-registry",
+                seq=2,
+                model="mock-gpt",
+            )
+
+        self.assertEqual(result["provider_source_name"], "file_source")
+        self.assertEqual(
+            tuple(sorted(result["provider"].load_tool_registry())),
+            ("calc_eval_fast",),
+        )
+        self.assertEqual(
+            [item["kind"] for item in result["service_actions"]],
+            ["internal_trace_write", "record_audit_event"],
+        )
+        self.assertEqual(
+            result["runtime_artifacts"]["diagnostics_runtime"]["summary"]["missing_total"],
+            1,
+        )
+
+    def test_execute_configured_tool_registry_provider_service_execution_applies_actions(
+        self,
+    ) -> None:
+        trace_steps: list[dict[str, object]] = []
+        persisted: list[bool] = []
+        audit_calls: list[dict[str, object]] = []
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        service_execution = {
+            "provider": provider,
+            "provider_source_name": "file_source",
+            "runtime_artifacts": {"provider_source_name": "file_source"},
+            "service_actions": [
+                {
+                    "kind": "internal_trace_write",
+                    "trace_step": {
+                        "id": "step-registry",
+                        "seq": 2,
+                        "type": "thought",
+                        "content": "Tool registry diagnostics: source=file_source skipped=1 missing=1",
+                    },
+                    "trace_event": {
+                        "task_id": "task-1",
+                        "step_id": "step-registry",
+                        "step": {
+                            "id": "step-registry",
+                            "seq": 2,
+                            "type": "thought",
+                            "content": "Tool registry diagnostics: source=file_source skipped=1 missing=1",
+                        },
+                    },
+                    "persist_force": True,
+                },
+                {
+                    "kind": "record_audit_event",
+                    "kwargs": {
+                        "event_type": "tool_registry_diagnostics",
+                        "code": "tool_registry_diagnostics",
+                        "message": "Tool registry diagnostics detected during configured provider resolution.",
+                        "detail": {
+                            "provider_source": "file_source",
+                            "missing_total": 1,
+                        },
+                    },
+                },
+            ],
+        }
+
+        result = execute_configured_tool_registry_provider_service_execution(
+            service_execution=service_execution,
+            trace_steps=trace_steps,
+            persist_trace_fn=lambda **kwargs: persisted.append(bool(kwargs["force"])),
+            record_audit_event_fn=lambda **kwargs: audit_calls.append(kwargs),
+        )
+
+        self.assertEqual(trace_steps, [service_execution["service_actions"][0]["trace_step"]])
+        self.assertEqual(persisted, [True])
+        self.assertEqual(audit_calls, [service_execution["service_actions"][1]["kwargs"]])
+        self.assertIs(result["provider"], provider)
+        self.assertEqual(result["provider_source_name"], "file_source")
+        self.assertEqual(result["trace_write_count"], 1)
+        self.assertEqual(result["audit_event_count"], 1)
+
+    def test_execute_configured_tool_registry_provider_preflight_keeps_shape(
+        self,
+    ) -> None:
+        trace_steps: list[dict[str, object]] = []
+        persisted: list[bool] = []
+        audit_calls: list[dict[str, object]] = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_file = Path(tmpdir) / "missing-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_source="file_source",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+            )
+
+            result = execute_configured_tool_registry_provider_preflight(
+                settings=settings,
+                task_id="task-1",
+                step_id="step-registry",
+                seq=2,
+                model="mock-gpt",
+                trace_steps=trace_steps,
+                persist_trace_fn=lambda **kwargs: persisted.append(bool(kwargs["force"])),
+                record_audit_event_fn=lambda **kwargs: audit_calls.append(kwargs),
+            )
+
+        self.assertEqual(result["provider_source_name"], "file_source")
+        self.assertEqual(
+            tuple(sorted(result["provider"].load_tool_registry())),
+            ("calc_eval_fast",),
+        )
+        self.assertEqual(
+            result["service_execution"]["runtime_artifacts"]["diagnostics_runtime"]["summary"]["missing_total"],
+            1,
+        )
+        self.assertEqual(len(trace_steps), 1)
+        self.assertEqual(persisted, [True])
+        self.assertEqual(len(audit_calls), 1)
+        self.assertEqual(result["trace_write_count"], 1)
+        self.assertEqual(result["audit_event_count"], 1)
+        self.assertEqual(
+            result["summary"],
+            {
+                "provider_source_name": "file_source",
+                "tool_count": 1,
+                "tool_names": ("calc_eval_fast",),
+                "service_action_count": 2,
+                "service_action_kinds": ("internal_trace_write", "record_audit_event"),
+                "trace_write_count": 1,
+                "audit_event_count": 1,
+                "has_diagnostics": True,
+                "diagnostics_total": 1,
+                "skipped_total": 0,
+                "missing_total": 1,
+            },
+        )
+
+    def test_build_configured_tool_registry_provider_preflight_result_keeps_shape(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        service_execution = {
+            "provider": provider,
+            "provider_source_name": "file_source",
+            "runtime_artifacts": {
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": True,
+                    }
+                }
+            },
+            "service_actions": [],
+        }
+        execution_result = {
+            "provider": provider,
+            "provider_source_name": "file_source",
+            "runtime_artifacts": service_execution["runtime_artifacts"],
+            "trace_write_count": 1,
+            "audit_event_count": 2,
+        }
+
+        result = build_configured_tool_registry_provider_preflight_result(
+            service_execution=service_execution,
+            execution_result=execution_result,
+        )
+
+        self.assertIs(result["provider"], provider)
+        self.assertIs(result["service_execution"], service_execution)
+        self.assertEqual(
+            result["summary"],
+            {
+                "provider_source_name": "file_source",
+                "tool_count": 1,
+                "tool_names": ("calc_eval",),
+                "service_action_count": 0,
+                "service_action_kinds": (),
+                "trace_write_count": 1,
+                "audit_event_count": 2,
+                "has_diagnostics": True,
+                "diagnostics_total": 0,
+                "skipped_total": 0,
+                "missing_total": 0,
+            },
+        )
+
+    def test_build_configured_tool_registry_provider_preflight_summary_keeps_shape(
+        self,
+    ) -> None:
+        preflight_result = {
+            "provider_source_name": "default",
+            "runtime_artifacts": {
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": False,
+                    }
+                }
+            },
+            "trace_write_count": 0,
+            "audit_event_count": 1,
+        }
+
+        result = build_configured_tool_registry_provider_preflight_summary(
+            preflight_result=preflight_result
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "provider_source_name": "default",
+                "tool_count": 0,
+                "tool_names": (),
+                "service_action_count": 0,
+                "service_action_kinds": (),
+                "trace_write_count": 0,
+                "audit_event_count": 1,
+                "has_diagnostics": False,
+                "diagnostics_total": 0,
+                "skipped_total": 0,
+                "missing_total": 0,
+            },
+        )
+
+    def test_build_configured_tool_registry_provider_preflight_summary_model_keeps_fields(
+        self,
+    ) -> None:
+        preflight_result = {
+            "provider_source_name": "default",
+            "runtime_artifacts": {
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": False,
+                        "total": 0,
+                        "skipped_total": 0,
+                        "missing_total": 0,
+                    }
+                }
+            },
+            "provider": StaticToolRegistryProvider({}),
+            "service_execution": {"service_actions": []},
+            "trace_write_count": 0,
+            "audit_event_count": 1,
+        }
+
+        result = build_configured_tool_registry_provider_preflight_summary_model(
+            preflight_result=preflight_result
+        )
+
+        self.assertEqual(result.provider_source_name, "default")
+        self.assertEqual(result.tool_count, 0)
+        self.assertEqual(result.tool_names, ())
+        self.assertEqual(result.service_action_kinds, ())
+        self.assertEqual(result.audit_event_count, 1)
+
+    def test_build_configured_tool_registry_provider_preflight_result_model_keeps_fields(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        service_execution = {
+            "provider": provider,
+            "provider_source_name": "file_source",
+            "runtime_artifacts": {
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": True,
+                        "total": 1,
+                        "skipped_total": 0,
+                        "missing_total": 1,
+                    }
+                }
+            },
+            "service_actions": [{"kind": "record_audit_event"}],
+        }
+        execution_result = {
+            "provider": provider,
+            "provider_source_name": "file_source",
+            "runtime_artifacts": service_execution["runtime_artifacts"],
+            "trace_write_count": 1,
+            "audit_event_count": 2,
+        }
+
+        result = build_configured_tool_registry_provider_preflight_result_model(
+            service_execution=service_execution,
+            execution_result=execution_result,
+        )
+
+        self.assertIs(result.provider, provider)
+        self.assertEqual(result.summary.provider_source_name, "file_source")
+        self.assertEqual(result.summary.tool_names, ("calc_eval",))
+        self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
+        self.assertEqual(result.summary.missing_total, 1)
 
     def test_build_tool_registry_providers_from_settings_supports_provider_factory_shape(self) -> None:
         settings = SimpleNamespace(

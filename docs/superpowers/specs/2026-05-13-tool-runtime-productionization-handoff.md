@@ -64,6 +64,16 @@
 - `build_tool_registry_diagnostics_audit_service_action()`
 - `build_configured_tool_registry_provider_runtime_service_actions()`
 - `execute_configured_tool_registry_provider_runtime_service_actions()`
+- `build_configured_tool_registry_provider_service_execution()`
+- `execute_configured_tool_registry_provider_service_execution()`
+- `execute_configured_tool_registry_provider_preflight()`
+- `build_configured_tool_registry_provider_preflight_result()`
+- `build_configured_tool_registry_provider_preflight_summary()`
+- `build_configured_tool_registry_provider_preflight_result_model()`
+- `build_configured_tool_registry_provider_preflight_summary_model()`
+- `build_tool_registry_diagnostics_summary_model()`
+- `build_tool_registry_diagnostics_runtime_artifacts_model()`
+- `build_configured_tool_registry_provider_runtime_artifacts_model()`
 - `build_tool_registry_loader_factories_from_settings()`
 - `build_tool_registry_provider_factories_from_settings()`
 - `build_tool_registry_loaders_from_settings()`
@@ -183,6 +193,16 @@
 - `build_tool_registry_diagnostics_audit_service_action(runtime audit action seam)`
 - `build_configured_tool_registry_provider_runtime_service_actions(runtime audit action list seam)`
 - `execute_configured_tool_registry_provider_runtime_service_actions(runtime audit apply seam)`
+- `execute_configured_tool_registry_provider_preflight(configured provider preflight single-entry seam)`
+- `build_configured_tool_registry_provider_service_execution(configured provider preflight service_execution seam)`
+- `execute_configured_tool_registry_provider_service_execution(configured provider preflight apply seam)`
+- `build_configured_tool_registry_provider_preflight_result(configured provider preflight result seam)`
+- `build_configured_tool_registry_provider_preflight_summary(configured provider preflight summary seam)`
+- `build_configured_tool_registry_provider_preflight_result_model(configured provider preflight typed result seam)`
+- `build_configured_tool_registry_provider_preflight_summary_model(configured provider preflight typed summary seam)`
+- `build_tool_registry_diagnostics_summary_model(tool registry diagnostics typed summary seam)`
+- `build_tool_registry_diagnostics_runtime_artifacts_model(tool registry diagnostics typed runtime seam)`
+- `build_configured_tool_registry_provider_runtime_artifacts_model(configured provider runtime typed artifacts seam)`
 - `build_tool_registry_loader_from_file(file-backed loader seam)`
 - `build_tool_registry_provider_from_file(file-backed provider seam)`
 - `build_tool_registry_provider_factories_from_settings(factory alias seam)`
