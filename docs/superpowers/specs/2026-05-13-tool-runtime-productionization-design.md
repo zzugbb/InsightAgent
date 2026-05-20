@@ -90,7 +90,26 @@
 - `build_configured_tool_registry_provider_preflight_summary_model()`
 - `build_tool_registry_diagnostics_summary_model()`
 - `build_tool_registry_diagnostics_runtime_artifacts_model()`
+- `build_tool_registry_diagnostics_trace_service_action_model()`
+- `build_tool_registry_diagnostics_audit_service_action_model()`
 - `build_configured_tool_registry_provider_runtime_artifacts_model()`
+- `build_configured_tool_registry_provider_runtime_service_actions_model()`
+- `build_configured_tool_registry_provider_runtime_service_actions_result_model()`
+- `build_configured_tool_registry_provider_service_execution_model()`
+- `build_configured_tool_registry_provider_service_execution_result_model()`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_result_model()`
+- `build_configured_tool_registry_provider_preflight_result_model_from_models()`
+- `execute_configured_tool_registry_provider_preflight_model()`
+- `build_configured_tool_registry_provider_service_execution_result_model_from_models()`
+- `execute_configured_tool_registry_provider_service_execution_model()`
+- `build_configured_tool_registry_provider_runtime_service_action_model_from_dict()`
+- `build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts()`
+- `execute_configured_tool_registry_provider_runtime_service_actions_model()`
+- `build_configured_tool_registry_provider_runtime_artifacts_model_from_dict()`
+- `build_configured_tool_registry_provider_service_execution_model_from_dict()`
+- `build_configured_tool_registry_provider_preflight_result_model_from_dict()`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_models()`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_parts()`
 - `build_tool_registry_loader_factories_from_settings()`
 - `build_tool_registry_provider_factories_from_settings()`
 - `build_tool_registry_loaders_from_settings()`
@@ -302,3 +321,9 @@ Guardrails:
 2. 需要把当前 `registry / loader / provider` seam 接到真实 registry provider
 3. 需要复用同一套 runtime seam 到非 chat 执行路径
 4. 需要将 trace / audit / state side effects 再统一成更高层执行器
+
+## Latest Sync (2026-05-20)
+
+- `ConfiguredToolRegistryProviderPreflightResult` 这层又去掉了一段 dict outward 兼容桥接：`build_configured_tool_registry_provider_preflight_result_model()` 不再把 `service_execution + execution_result` 重新拼成顶层 dict 后再回灌，而是先 hydration 成 `ConfiguredToolRegistryProviderServiceExecutionModel` 与 `ConfiguredToolRegistryProviderServiceExecutionResultModel`，再直接走 `build_configured_tool_registry_provider_preflight_result_model_from_models()`。
+- `execute_configured_tool_registry_provider_preflight_model()` 也已切到直接调用 typed `execute_configured_tool_registry_provider_service_execution_model()`；当前 preflight typed 链路已变成 `runtime_artifacts -> runtime_service_actions -> service_execution -> preflight_result` 的连续 model 内部通路，dict 仅保留在 outward 兼容层。
+- 顺手补平了一个真实兼容缺口：当 dict `execution_result` 只提供 `trace_write_count/audit_event_count` 时，preflight result 现在会从 `service_execution` 继承 `provider/provider_source_name/runtime_artifacts`，不再要求顶层 dict 再重复一份。

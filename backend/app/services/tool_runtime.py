@@ -132,8 +132,8 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
 class ConfiguredToolRegistryProviderPreflightResultModel:
     provider: ToolRegistryProvider
     provider_source_name: str
-    runtime_artifacts: dict[str, object]
-    service_execution: dict[str, object]
+    runtime_artifacts: ConfiguredToolRegistryProviderRuntimeArtifactsModel
+    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel
     trace_write_count: int
     audit_event_count: int
     summary: ConfiguredToolRegistryProviderPreflightSummaryModel
@@ -142,8 +142,8 @@ class ConfiguredToolRegistryProviderPreflightResultModel:
         return {
             "provider": self.provider,
             "provider_source_name": self.provider_source_name,
-            "runtime_artifacts": self.runtime_artifacts,
-            "service_execution": self.service_execution,
+            "runtime_artifacts": self.runtime_artifacts.to_dict(),
+            "service_execution": self.service_execution.to_dict(),
             "trace_write_count": self.trace_write_count,
             "audit_event_count": self.audit_event_count,
             "summary": self.summary.to_dict(),
@@ -203,6 +203,83 @@ class ConfiguredToolRegistryProviderRuntimeArtifactsModel:
             "source_diagnostics": self.source_diagnostics,
             "diagnostics_runtime": self.diagnostics_runtime.to_dict(),
             "audit_event": self.audit_event,
+        }
+
+
+@dataclass(frozen=True)
+class ConfiguredToolRegistryProviderRuntimeServiceActionModel:
+    kind: str
+    trace_step: dict[str, object] | None = None
+    trace_event: dict[str, object] | None = None
+    persist_force: bool = False
+    kwargs: dict[str, object] | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "kind": self.kind,
+        }
+        if self.trace_step is not None:
+            payload["trace_step"] = self.trace_step
+        if self.trace_event is not None:
+            payload["trace_event"] = self.trace_event
+        if self.persist_force:
+            payload["persist_force"] = self.persist_force
+        if self.kwargs is not None:
+            payload["kwargs"] = self.kwargs
+        return payload
+
+
+@dataclass(frozen=True)
+class ConfiguredToolRegistryProviderRuntimeServiceActionsModel:
+    actions: tuple[ConfiguredToolRegistryProviderRuntimeServiceActionModel, ...]
+
+    def to_dict(self) -> list[dict[str, object]]:
+        return [action.to_dict() for action in self.actions]
+
+
+@dataclass(frozen=True)
+class ConfiguredToolRegistryProviderRuntimeServiceActionsResultModel:
+    trace_write_count: int
+    audit_event_count: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "trace_write_count": self.trace_write_count,
+            "audit_event_count": self.audit_event_count,
+        }
+
+
+@dataclass(frozen=True)
+class ConfiguredToolRegistryProviderServiceExecutionModel:
+    provider: ToolRegistryProvider
+    provider_source_name: str
+    runtime_artifacts: ConfiguredToolRegistryProviderRuntimeArtifactsModel
+    service_actions: tuple[ConfiguredToolRegistryProviderRuntimeServiceActionModel, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "provider": self.provider,
+            "provider_source_name": self.provider_source_name,
+            "runtime_artifacts": self.runtime_artifacts.to_dict(),
+            "service_actions": [action.to_dict() for action in self.service_actions],
+        }
+
+
+@dataclass(frozen=True)
+class ConfiguredToolRegistryProviderServiceExecutionResultModel:
+    provider: ToolRegistryProvider
+    provider_source_name: str
+    runtime_artifacts: ConfiguredToolRegistryProviderRuntimeArtifactsModel
+    trace_write_count: int
+    audit_event_count: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "provider": self.provider,
+            "provider_source_name": self.provider_source_name,
+            "runtime_artifacts": self.runtime_artifacts.to_dict(),
+            "trace_write_count": self.trace_write_count,
+            "audit_event_count": self.audit_event_count,
         }
 
 
@@ -1790,10 +1867,19 @@ def build_tool_registry_diagnostics_audit_service_action(
     *,
     audit_event: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "kind": "record_audit_event",
-        "kwargs": audit_event,
-    }
+    return build_tool_registry_diagnostics_audit_service_action_model(
+        audit_event=audit_event,
+    ).to_dict()
+
+
+def build_tool_registry_diagnostics_audit_service_action_model(
+    *,
+    audit_event: dict[str, object],
+) -> ConfiguredToolRegistryProviderRuntimeServiceActionModel:
+    return ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+        kind="record_audit_event",
+        kwargs=audit_event,
+    )
 
 
 def build_tool_registry_diagnostics_trace_service_action(
@@ -1802,26 +1888,48 @@ def build_tool_registry_diagnostics_trace_service_action(
     trace_event: dict[str, object],
     persist_force: bool = True,
 ) -> dict[str, object]:
-    return {
-        "kind": "internal_trace_write",
-        "trace_step": trace_step,
-        "trace_event": trace_event,
-        "persist_force": bool(persist_force),
-    }
+    return build_tool_registry_diagnostics_trace_service_action_model(
+        trace_step=trace_step,
+        trace_event=trace_event,
+        persist_force=persist_force,
+    ).to_dict()
+
+
+def build_tool_registry_diagnostics_trace_service_action_model(
+    *,
+    trace_step: dict[str, object],
+    trace_event: dict[str, object],
+    persist_force: bool = True,
+) -> ConfiguredToolRegistryProviderRuntimeServiceActionModel:
+    return ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+        kind="internal_trace_write",
+        trace_step=trace_step,
+        trace_event=trace_event,
+        persist_force=bool(persist_force),
+    )
 
 
 def build_configured_tool_registry_provider_runtime_service_actions(
     *,
     runtime_artifacts: dict[str, object],
 ) -> list[dict[str, object]]:
-    service_actions: list[dict[str, object]] = []
+    return build_configured_tool_registry_provider_runtime_service_actions_model(
+        runtime_artifacts=runtime_artifacts,
+    ).to_dict()
+
+
+def build_configured_tool_registry_provider_runtime_service_actions_model(
+    *,
+    runtime_artifacts: dict[str, object],
+) -> ConfiguredToolRegistryProviderRuntimeServiceActionsModel:
+    service_actions: list[ConfiguredToolRegistryProviderRuntimeServiceActionModel] = []
     diagnostics_runtime = runtime_artifacts.get("diagnostics_runtime")
     if isinstance(diagnostics_runtime, dict):
         trace_step = diagnostics_runtime.get("trace_step")
         trace_event = diagnostics_runtime.get("trace_event")
         if isinstance(trace_step, dict) and isinstance(trace_event, dict):
             service_actions.append(
-                build_tool_registry_diagnostics_trace_service_action(
+                build_tool_registry_diagnostics_trace_service_action_model(
                     trace_step=trace_step,
                     trace_event=trace_event,
                 )
@@ -1829,11 +1937,118 @@ def build_configured_tool_registry_provider_runtime_service_actions(
     audit_event = runtime_artifacts.get("audit_event")
     if isinstance(audit_event, dict):
         service_actions.append(
-            build_tool_registry_diagnostics_audit_service_action(
+            build_tool_registry_diagnostics_audit_service_action_model(
                 audit_event=audit_event,
             )
         )
-    return service_actions
+    return ConfiguredToolRegistryProviderRuntimeServiceActionsModel(
+        actions=tuple(service_actions),
+    )
+
+
+def build_configured_tool_registry_provider_runtime_service_action_model_from_dict(
+    service_action: dict[str, object],
+) -> ConfiguredToolRegistryProviderRuntimeServiceActionModel:
+    return ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+        kind=str(service_action.get("kind")),
+        trace_step=service_action.get("trace_step")
+        if isinstance(service_action.get("trace_step"), dict)
+        else None,
+        trace_event=service_action.get("trace_event")
+        if isinstance(service_action.get("trace_event"), dict)
+        else None,
+        persist_force=bool(service_action.get("persist_force")),
+        kwargs=service_action.get("kwargs")
+        if isinstance(service_action.get("kwargs"), dict)
+        else None,
+    )
+
+
+def build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts(
+    *,
+    service_actions: list[dict[str, object]],
+) -> ConfiguredToolRegistryProviderRuntimeServiceActionsModel:
+    return ConfiguredToolRegistryProviderRuntimeServiceActionsModel(
+        actions=tuple(
+            build_configured_tool_registry_provider_runtime_service_action_model_from_dict(
+                service_action
+            )
+            for service_action in service_actions
+            if isinstance(service_action, dict)
+        )
+    )
+
+
+def build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+    *,
+    provider: ToolRegistryProvider,
+    provider_source_name: str,
+    runtime_artifacts: dict[str, object],
+) -> ConfiguredToolRegistryProviderRuntimeArtifactsModel:
+    diagnostics_runtime_payload = runtime_artifacts.get(
+        "diagnostics_runtime",
+        {
+            "summary": {
+                "has_diagnostics": False,
+                "skipped_total": 0,
+                "missing_total": 0,
+                "total": 0,
+                "entries": (),
+            },
+            "trace_step": None,
+            "trace_event": None,
+            "audit_detail": None,
+        },
+    )
+    summary_payload = diagnostics_runtime_payload.get("summary", {})
+    if not isinstance(summary_payload, dict):
+        summary_payload = {}
+    return ConfiguredToolRegistryProviderRuntimeArtifactsModel(
+        provider=provider,
+        provider_source_name=str(runtime_artifacts.get("provider_source_name", provider_source_name)),
+        provider_sources=runtime_artifacts.get("provider_sources", {}),
+        selected_source_diagnostics=runtime_artifacts.get("selected_source_diagnostics", {}),
+        source_diagnostics=runtime_artifacts.get("source_diagnostics", {}),
+        diagnostics_runtime=ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=ToolRegistryDiagnosticsSummaryModel(
+                has_diagnostics=bool(summary_payload.get("has_diagnostics", False)),
+                skipped_total=int(summary_payload.get("skipped_total", 0) or 0),
+                missing_total=int(summary_payload.get("missing_total", 0) or 0),
+                total=int(summary_payload.get("total", 0) or 0),
+                entries=tuple(summary_payload.get("entries", ())),
+            ),
+            trace_step=diagnostics_runtime_payload.get("trace_step"),
+            trace_event=diagnostics_runtime_payload.get("trace_event"),
+            audit_detail=diagnostics_runtime_payload.get("audit_detail"),
+        ),
+        audit_event=runtime_artifacts.get("audit_event"),
+    )
+
+
+def build_configured_tool_registry_provider_service_execution_model_from_dict(
+    *,
+    service_execution: dict[str, object],
+) -> ConfiguredToolRegistryProviderServiceExecutionModel:
+    provider = service_execution["provider"]
+    provider_source_name = str(service_execution["provider_source_name"])
+    runtime_artifacts_payload = service_execution.get("runtime_artifacts", {})
+    if not isinstance(runtime_artifacts_payload, dict):
+        runtime_artifacts_payload = {}
+    service_actions_payload = service_execution.get("service_actions", [])
+    if not isinstance(service_actions_payload, list):
+        service_actions_payload = []
+    return ConfiguredToolRegistryProviderServiceExecutionModel(
+        provider=provider,
+        provider_source_name=provider_source_name,
+        runtime_artifacts=build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+            provider=provider,
+            provider_source_name=provider_source_name,
+            runtime_artifacts=runtime_artifacts_payload,
+        ),
+        service_actions=build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts(
+            service_actions=service_actions_payload
+        ).actions,
+    )
 
 
 def execute_configured_tool_registry_provider_runtime_service_actions(
@@ -1843,29 +2058,99 @@ def execute_configured_tool_registry_provider_runtime_service_actions(
     persist_trace_fn: Callable[..., None],
     record_audit_event_fn: Callable[..., None],
 ) -> dict[str, object]:
+    return execute_configured_tool_registry_provider_runtime_service_actions_model(
+        service_actions=build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts(
+            service_actions=service_actions,
+        ),
+        trace_steps=trace_steps,
+        persist_trace_fn=persist_trace_fn,
+        record_audit_event_fn=record_audit_event_fn,
+    ).to_dict()
+
+
+def build_configured_tool_registry_provider_runtime_service_actions_result_model(
+    *,
+    trace_write_count: int,
+    audit_event_count: int,
+) -> ConfiguredToolRegistryProviderRuntimeServiceActionsResultModel:
+    return ConfiguredToolRegistryProviderRuntimeServiceActionsResultModel(
+        trace_write_count=int(trace_write_count),
+        audit_event_count=int(audit_event_count),
+    )
+
+
+def execute_configured_tool_registry_provider_runtime_service_actions_result_model(
+    *,
+    service_actions: list[dict[str, object]],
+    trace_steps: list[dict[str, object]],
+    persist_trace_fn: Callable[..., None],
+    record_audit_event_fn: Callable[..., None],
+) -> ConfiguredToolRegistryProviderRuntimeServiceActionsResultModel:
+    return execute_configured_tool_registry_provider_runtime_service_actions_model(
+        service_actions=build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts(
+            service_actions=service_actions,
+        ),
+        trace_steps=trace_steps,
+        persist_trace_fn=persist_trace_fn,
+        record_audit_event_fn=record_audit_event_fn,
+    )
+
+
+def execute_configured_tool_registry_provider_runtime_service_actions_model(
+    *,
+    service_actions: ConfiguredToolRegistryProviderRuntimeServiceActionsModel,
+    trace_steps: list[dict[str, object]],
+    persist_trace_fn: Callable[..., None],
+    record_audit_event_fn: Callable[..., None],
+) -> ConfiguredToolRegistryProviderRuntimeServiceActionsResultModel:
     trace_write_count = 0
     audit_event_count = 0
-    for service_action in service_actions:
-        kind = str(service_action.get("kind"))
+    for service_action in service_actions.actions:
+        kind = service_action.kind
         if kind == "internal_trace_write":
-            trace_step = service_action.get("trace_step")
-            if not isinstance(trace_step, dict):
+            trace_step = service_action.trace_step
+            if trace_step is None:
                 continue
             trace_steps.append(trace_step)
-            persist_trace_fn(force=bool(service_action.get("persist_force")))
+            persist_trace_fn(force=bool(service_action.persist_force))
             trace_write_count += 1
             continue
         if kind != "record_audit_event":
             continue
-        kwargs = service_action.get("kwargs")
-        if not isinstance(kwargs, dict):
+        kwargs = service_action.kwargs
+        if kwargs is None:
             continue
         record_audit_event_fn(**kwargs)
         audit_event_count += 1
-    return {
-        "trace_write_count": trace_write_count,
-        "audit_event_count": audit_event_count,
-    }
+    return build_configured_tool_registry_provider_runtime_service_actions_result_model(
+        trace_write_count=trace_write_count,
+        audit_event_count=audit_event_count,
+    )
+
+
+def build_configured_tool_registry_provider_service_execution_model(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    settings: object | None = None,
+) -> ConfiguredToolRegistryProviderServiceExecutionModel:
+    runtime_artifacts = build_configured_tool_registry_provider_runtime_artifacts_model(
+        task_id=task_id,
+        step_id=step_id,
+        seq=seq,
+        model=model,
+        settings=settings,
+    )
+    return ConfiguredToolRegistryProviderServiceExecutionModel(
+        provider=runtime_artifacts.provider,
+        provider_source_name=runtime_artifacts.provider_source_name,
+        runtime_artifacts=runtime_artifacts,
+        service_actions=build_configured_tool_registry_provider_runtime_service_actions_model(
+            runtime_artifacts=runtime_artifacts.to_dict(),
+        ).actions,
+    )
 
 
 def build_configured_tool_registry_provider_service_execution(
@@ -1876,21 +2161,43 @@ def build_configured_tool_registry_provider_service_execution(
     model: str,
     settings: object | None = None,
 ) -> dict[str, object]:
-    runtime_artifacts = build_configured_tool_registry_provider_runtime_artifacts(
+    return build_configured_tool_registry_provider_service_execution_model(
         task_id=task_id,
         step_id=step_id,
         seq=seq,
         model=model,
         settings=settings,
-    )
-    return {
-        "provider": runtime_artifacts["provider"],
-        "provider_source_name": runtime_artifacts["provider_source_name"],
-        "runtime_artifacts": runtime_artifacts,
-        "service_actions": build_configured_tool_registry_provider_runtime_service_actions(
-            runtime_artifacts=runtime_artifacts,
+    ).to_dict()
+
+
+def build_configured_tool_registry_provider_service_execution_result_model(
+    *,
+    service_execution: dict[str, object],
+    execution_result: dict[str, object],
+) -> ConfiguredToolRegistryProviderServiceExecutionResultModel:
+    return build_configured_tool_registry_provider_service_execution_result_model_from_models(
+        service_execution=build_configured_tool_registry_provider_service_execution_model_from_dict(
+            service_execution=service_execution,
         ),
-    }
+        execution_result=build_configured_tool_registry_provider_runtime_service_actions_result_model(
+            trace_write_count=int(execution_result["trace_write_count"]),
+            audit_event_count=int(execution_result["audit_event_count"]),
+        ),
+    )
+
+
+def build_configured_tool_registry_provider_service_execution_result_model_from_models(
+    *,
+    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
+    execution_result: ConfiguredToolRegistryProviderRuntimeServiceActionsResultModel,
+) -> ConfiguredToolRegistryProviderServiceExecutionResultModel:
+    return ConfiguredToolRegistryProviderServiceExecutionResultModel(
+        provider=service_execution.provider,
+        provider_source_name=service_execution.provider_source_name,
+        runtime_artifacts=service_execution.runtime_artifacts,
+        trace_write_count=execution_result.trace_write_count,
+        audit_event_count=execution_result.audit_event_count,
+    )
 
 
 def execute_configured_tool_registry_provider_service_execution(
@@ -1900,69 +2207,97 @@ def execute_configured_tool_registry_provider_service_execution(
     persist_trace_fn: Callable[..., None],
     record_audit_event_fn: Callable[..., None],
 ) -> dict[str, object]:
-    execution_result = execute_configured_tool_registry_provider_runtime_service_actions(
-        service_actions=list(service_execution["service_actions"]),
+    service_execution_model = build_configured_tool_registry_provider_service_execution_model_from_dict(
+        service_execution=service_execution,
+    )
+    return execute_configured_tool_registry_provider_service_execution_model(
+        service_execution=service_execution_model,
+        trace_steps=trace_steps,
+        persist_trace_fn=persist_trace_fn,
+        record_audit_event_fn=record_audit_event_fn,
+    ).to_dict()
+
+
+def execute_configured_tool_registry_provider_service_execution_model(
+    *,
+    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
+    trace_steps: list[dict[str, object]],
+    persist_trace_fn: Callable[..., None],
+    record_audit_event_fn: Callable[..., None],
+) -> ConfiguredToolRegistryProviderServiceExecutionResultModel:
+    execution_result = execute_configured_tool_registry_provider_runtime_service_actions_result_model(
+        service_actions=[action.to_dict() for action in service_execution.service_actions],
         trace_steps=trace_steps,
         persist_trace_fn=persist_trace_fn,
         record_audit_event_fn=record_audit_event_fn,
     )
-    return {
-        "provider": service_execution["provider"],
-        "provider_source_name": service_execution["provider_source_name"],
-        "runtime_artifacts": service_execution["runtime_artifacts"],
-        **execution_result,
-    }
+    return build_configured_tool_registry_provider_service_execution_result_model_from_models(
+        service_execution=service_execution,
+        execution_result=execution_result,
+    )
 
 
 def build_configured_tool_registry_provider_preflight_summary_model(
     *,
     preflight_result: dict[str, object],
 ) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
-    runtime_artifacts = preflight_result.get("runtime_artifacts")
-    has_diagnostics = False
-    diagnostics_total = 0
-    skipped_total = 0
-    missing_total = 0
-    if isinstance(runtime_artifacts, dict):
-        diagnostics_runtime = runtime_artifacts.get("diagnostics_runtime")
-        if isinstance(diagnostics_runtime, dict):
-            summary = diagnostics_runtime.get("summary")
-            if isinstance(summary, dict):
-                has_diagnostics = bool(summary.get("has_diagnostics"))
-                diagnostics_total = int(summary.get("total", 0) or 0)
-                skipped_total = int(summary.get("skipped_total", 0) or 0)
-                missing_total = int(summary.get("missing_total", 0) or 0)
-    provider = preflight_result.get("provider")
-    tool_count = 0
-    tool_names: tuple[str, ...] = ()
-    if hasattr(provider, "load_tool_registry") and callable(
-        getattr(provider, "load_tool_registry", None)
-    ):
-        tool_registry = provider.load_tool_registry()
-        tool_count = len(tool_registry)
-        tool_names = tuple(sorted(tool_registry))
-    service_execution = preflight_result.get("service_execution")
-    service_action_count = 0
-    service_action_kinds: tuple[str, ...] = ()
-    if isinstance(service_execution, dict):
-        service_actions = service_execution.get("service_actions")
-        if isinstance(service_actions, list):
-            service_action_count = len(service_actions)
-            service_action_kinds = tuple(
-                str(item.get("kind")) for item in service_actions if isinstance(item, dict)
-            )
+    return build_configured_tool_registry_provider_preflight_result_model_from_dict(
+        preflight_result=preflight_result,
+    ).summary
+
+
+def build_configured_tool_registry_provider_preflight_summary_model_from_result_model(
+    *,
+    preflight_result: ConfiguredToolRegistryProviderPreflightResultModel,
+) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
+    return build_configured_tool_registry_provider_preflight_summary_model_from_parts(
+        provider=preflight_result.provider,
+        provider_source_name=preflight_result.provider_source_name,
+        runtime_artifacts=preflight_result.runtime_artifacts,
+        service_actions=preflight_result.service_execution.service_actions,
+        trace_write_count=preflight_result.trace_write_count,
+        audit_event_count=preflight_result.audit_event_count,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_summary_model_from_models(
+    *,
+    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
+    execution_result: ConfiguredToolRegistryProviderServiceExecutionResultModel,
+) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
+    return build_configured_tool_registry_provider_preflight_summary_model_from_parts(
+        provider=execution_result.provider,
+        provider_source_name=execution_result.provider_source_name,
+        runtime_artifacts=execution_result.runtime_artifacts,
+        service_actions=service_execution.service_actions,
+        trace_write_count=execution_result.trace_write_count,
+        audit_event_count=execution_result.audit_event_count,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_summary_model_from_parts(
+    *,
+    provider: ToolRegistryProvider,
+    provider_source_name: str,
+    runtime_artifacts: ConfiguredToolRegistryProviderRuntimeArtifactsModel,
+    service_actions: tuple[ConfiguredToolRegistryProviderRuntimeServiceActionModel, ...],
+    trace_write_count: int,
+    audit_event_count: int,
+) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
+    tool_registry = provider.load_tool_registry()
+    diagnostics_summary = runtime_artifacts.diagnostics_runtime.summary
     return ConfiguredToolRegistryProviderPreflightSummaryModel(
-        provider_source_name=str(preflight_result["provider_source_name"]),
-        tool_count=tool_count,
-        tool_names=tool_names,
-        service_action_count=service_action_count,
-        service_action_kinds=service_action_kinds,
-        trace_write_count=int(preflight_result["trace_write_count"]),
-        audit_event_count=int(preflight_result["audit_event_count"]),
-        has_diagnostics=has_diagnostics,
-        diagnostics_total=diagnostics_total,
-        skipped_total=skipped_total,
-        missing_total=missing_total,
+        provider_source_name=provider_source_name,
+        tool_count=len(tool_registry),
+        tool_names=tuple(sorted(tool_registry)),
+        service_action_count=len(service_actions),
+        service_action_kinds=tuple(action.kind for action in service_actions),
+        trace_write_count=trace_write_count,
+        audit_event_count=audit_event_count,
+        has_diagnostics=diagnostics_summary.has_diagnostics,
+        diagnostics_total=diagnostics_summary.total,
+        skipped_total=diagnostics_summary.skipped_total,
+        missing_total=diagnostics_summary.missing_total,
     )
 
 
@@ -1980,21 +2315,82 @@ def build_configured_tool_registry_provider_preflight_result_model(
     service_execution: dict[str, object],
     execution_result: dict[str, object],
 ) -> ConfiguredToolRegistryProviderPreflightResultModel:
-    preflight_result_payload = {
-        **execution_result,
-        "service_execution": service_execution,
-    }
-    summary = build_configured_tool_registry_provider_preflight_summary_model(
-        preflight_result=preflight_result_payload,
+    service_execution_model = build_configured_tool_registry_provider_service_execution_model_from_dict(
+        service_execution=service_execution,
+    )
+    execution_result_model = build_configured_tool_registry_provider_service_execution_result_model_from_models(
+        service_execution=service_execution_model,
+        execution_result=build_configured_tool_registry_provider_runtime_service_actions_result_model(
+            trace_write_count=int(execution_result.get("trace_write_count", 0)),
+            audit_event_count=int(execution_result.get("audit_event_count", 0)),
+        ),
+    )
+    return build_configured_tool_registry_provider_preflight_result_model_from_models(
+        service_execution=service_execution_model,
+        execution_result=execution_result_model,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_result_model_from_models(
+    *,
+    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
+    execution_result: ConfiguredToolRegistryProviderServiceExecutionResultModel,
+) -> ConfiguredToolRegistryProviderPreflightResultModel:
+    summary = build_configured_tool_registry_provider_preflight_summary_model_from_models(
+        service_execution=service_execution,
+        execution_result=execution_result,
     )
     return ConfiguredToolRegistryProviderPreflightResultModel(
-        provider=execution_result["provider"],
-        provider_source_name=str(execution_result["provider_source_name"]),
-        runtime_artifacts=execution_result["runtime_artifacts"],
+        provider=execution_result.provider,
+        provider_source_name=execution_result.provider_source_name,
+        runtime_artifacts=execution_result.runtime_artifacts,
         service_execution=service_execution,
-        trace_write_count=int(execution_result["trace_write_count"]),
-        audit_event_count=int(execution_result["audit_event_count"]),
+        trace_write_count=execution_result.trace_write_count,
+        audit_event_count=execution_result.audit_event_count,
         summary=summary,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_result_model_from_dict(
+    *,
+    preflight_result: dict[str, object],
+) -> ConfiguredToolRegistryProviderPreflightResultModel:
+    service_execution_payload = preflight_result.get("service_execution", {})
+    if not isinstance(service_execution_payload, dict):
+        service_execution_payload = {}
+    provider = preflight_result.get("provider", service_execution_payload.get("provider"))
+    if provider is None:
+        provider = StaticToolRegistryProvider({})
+    provider_source_name = str(preflight_result["provider_source_name"])
+    runtime_artifacts_payload = preflight_result.get("runtime_artifacts", {})
+    if not isinstance(runtime_artifacts_payload, dict):
+        runtime_artifacts_payload = {}
+    service_runtime_artifacts_payload = service_execution_payload.get("runtime_artifacts", {})
+    if not isinstance(service_runtime_artifacts_payload, dict):
+        service_runtime_artifacts_payload = {}
+    merged_runtime_artifacts_payload: dict[str, object] = {}
+    merged_runtime_artifacts_payload.update(service_runtime_artifacts_payload)
+    merged_runtime_artifacts_payload.update(runtime_artifacts_payload)
+    service_execution_model = build_configured_tool_registry_provider_service_execution_model_from_dict(
+        service_execution={
+            **service_execution_payload,
+            "provider": service_execution_payload.get("provider", provider),
+            "provider_source_name": service_execution_payload.get(
+                "provider_source_name", provider_source_name
+            ),
+            "runtime_artifacts": merged_runtime_artifacts_payload,
+        }
+    )
+    execution_result_model = build_configured_tool_registry_provider_service_execution_result_model_from_models(
+        service_execution=service_execution_model,
+        execution_result=build_configured_tool_registry_provider_runtime_service_actions_result_model(
+            trace_write_count=int(preflight_result.get("trace_write_count", 0)),
+            audit_event_count=int(preflight_result.get("audit_event_count", 0)),
+        ),
+    )
+    return build_configured_tool_registry_provider_preflight_result_model_from_models(
+        service_execution=service_execution_model,
+        execution_result=execution_result_model,
     )
 
 
@@ -2020,22 +2416,45 @@ def execute_configured_tool_registry_provider_preflight(
     record_audit_event_fn: Callable[..., None],
     settings: object | None = None,
 ) -> dict[str, object]:
-    service_execution = build_configured_tool_registry_provider_service_execution(
+    return execute_configured_tool_registry_provider_preflight_model(
+        task_id=task_id,
+        step_id=step_id,
+        seq=seq,
+        model=model,
+        trace_steps=trace_steps,
+        persist_trace_fn=persist_trace_fn,
+        record_audit_event_fn=record_audit_event_fn,
+        settings=settings,
+    ).to_dict()
+
+
+def execute_configured_tool_registry_provider_preflight_model(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    trace_steps: list[dict[str, object]],
+    persist_trace_fn: Callable[..., None],
+    record_audit_event_fn: Callable[..., None],
+    settings: object | None = None,
+) -> ConfiguredToolRegistryProviderPreflightResultModel:
+    service_execution_model = build_configured_tool_registry_provider_service_execution_model(
         task_id=task_id,
         step_id=step_id,
         seq=seq,
         model=model,
         settings=settings,
     )
-    execution_result = execute_configured_tool_registry_provider_service_execution(
-        service_execution=service_execution,
+    execution_result_model = execute_configured_tool_registry_provider_service_execution_model(
+        service_execution=service_execution_model,
         trace_steps=trace_steps,
         persist_trace_fn=persist_trace_fn,
         record_audit_event_fn=record_audit_event_fn,
     )
-    return build_configured_tool_registry_provider_preflight_result(
-        service_execution=service_execution,
-        execution_result=execution_result,
+    return build_configured_tool_registry_provider_preflight_result_model_from_models(
+        service_execution=service_execution_model,
+        execution_result=execution_result_model,
     )
 
 

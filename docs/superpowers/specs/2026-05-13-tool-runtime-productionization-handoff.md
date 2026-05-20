@@ -73,7 +73,26 @@
 - `build_configured_tool_registry_provider_preflight_summary_model()`
 - `build_tool_registry_diagnostics_summary_model()`
 - `build_tool_registry_diagnostics_runtime_artifacts_model()`
+- `build_tool_registry_diagnostics_trace_service_action_model()`
+- `build_tool_registry_diagnostics_audit_service_action_model()`
 - `build_configured_tool_registry_provider_runtime_artifacts_model()`
+- `build_configured_tool_registry_provider_runtime_service_actions_model()`
+- `build_configured_tool_registry_provider_runtime_service_actions_result_model()`
+- `build_configured_tool_registry_provider_service_execution_model()`
+- `build_configured_tool_registry_provider_service_execution_result_model()`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_result_model()`
+- `build_configured_tool_registry_provider_preflight_result_model_from_models()`
+- `execute_configured_tool_registry_provider_preflight_model()`
+- `build_configured_tool_registry_provider_service_execution_result_model_from_models()`
+- `execute_configured_tool_registry_provider_service_execution_model()`
+- `build_configured_tool_registry_provider_runtime_service_action_model_from_dict()`
+- `build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts()`
+- `execute_configured_tool_registry_provider_runtime_service_actions_model()`
+- `build_configured_tool_registry_provider_runtime_artifacts_model_from_dict()`
+- `build_configured_tool_registry_provider_service_execution_model_from_dict()`
+- `build_configured_tool_registry_provider_preflight_result_model_from_dict()`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_models()`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_parts()`
 - `build_tool_registry_loader_factories_from_settings()`
 - `build_tool_registry_provider_factories_from_settings()`
 - `build_tool_registry_loaders_from_settings()`
@@ -202,7 +221,26 @@
 - `build_configured_tool_registry_provider_preflight_summary_model(configured provider preflight typed summary seam)`
 - `build_tool_registry_diagnostics_summary_model(tool registry diagnostics typed summary seam)`
 - `build_tool_registry_diagnostics_runtime_artifacts_model(tool registry diagnostics typed runtime seam)`
+- `build_tool_registry_diagnostics_trace_service_action_model(tool registry diagnostics typed trace service-action seam)`
+- `build_tool_registry_diagnostics_audit_service_action_model(tool registry diagnostics typed audit service-action seam)`
 - `build_configured_tool_registry_provider_runtime_artifacts_model(configured provider runtime typed artifacts seam)`
+- `build_configured_tool_registry_provider_runtime_service_actions_model(configured provider runtime typed service-actions seam)`
+- `build_configured_tool_registry_provider_runtime_service_actions_result_model(configured provider runtime typed service-actions result seam)`
+- `build_configured_tool_registry_provider_service_execution_model(configured provider service_execution typed seam)`
+- `build_configured_tool_registry_provider_service_execution_result_model(configured provider service_execution typed result seam)`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_result_model(configured provider preflight typed summary-from-model seam)`
+- `build_configured_tool_registry_provider_preflight_result_model_from_models(configured provider preflight typed result-from-model seam)`
+- `execute_configured_tool_registry_provider_preflight_model(configured provider preflight typed execution seam)`
+- `build_configured_tool_registry_provider_service_execution_result_model_from_models(configured provider service_execution typed result-from-model seam)`
+- `execute_configured_tool_registry_provider_service_execution_model(configured provider service_execution typed execution seam)`
+- `build_configured_tool_registry_provider_runtime_service_action_model_from_dict(configured provider runtime service-action typed hydration seam)`
+- `build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts(configured provider runtime service-actions typed hydration seam)`
+- `execute_configured_tool_registry_provider_runtime_service_actions_model(configured provider runtime service-actions typed execution seam)`
+- `build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(configured provider runtime artifacts shared hydration seam)`
+- `build_configured_tool_registry_provider_service_execution_model_from_dict(configured provider service_execution shared hydration seam)`
+- `build_configured_tool_registry_provider_preflight_result_model_from_dict(configured provider preflight_result shared bridge hydration seam)`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_models(configured provider preflight typed summary-from-model seam)`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_parts(configured provider preflight typed shared summary seam)`
 - `build_tool_registry_loader_from_file(file-backed loader seam)`
 - `build_tool_registry_provider_from_file(file-backed provider seam)`
 - `build_tool_registry_provider_factories_from_settings(factory alias seam)`
@@ -386,3 +424,10 @@ bash scripts/test_ci_e2e_tooling.sh common
 - 高层 runtime 入口 `execute_tool_plan_item_retry_loop / execute_tool_plan_item_service_execution` 也已支持 `registry_provider` 透传
 - `execute_tool_plan_item_service_execution` 也已支持 `registry_loader` 透传
 - 后续接真实 registry 时可以先从 provider object 或非默认调用路径逐步接线，而不必先改坏默认行为
+
+## 最新交接补充（2026-05-20）
+
+- `ConfiguredToolRegistryProviderPreflightResult` 这层的 typed internal 链又前推了一步：`build_configured_tool_registry_provider_preflight_result_model()` 现在直接走 hydrated `service_execution_model + service_execution_result_model`，不再先把输入重新拼回顶层 dict 再解析。
+- `execute_configured_tool_registry_provider_preflight_model()` 已改成直接消费 typed `execute_configured_tool_registry_provider_service_execution_model()`，减少一层 `model -> dict -> model` 的中转。
+- 新增 focused 回归锁定一个真实兼容场景：若 `execution_result` 只带 `trace_write_count/audit_event_count`，preflight result 仍应从 `service_execution` 继承 `provider_source_name/provider/runtime_artifacts`。当前 focused 基线已更新到 `220` 条。
+- 下一刀更值得做的是继续压缩 `build_configured_tool_registry_provider_preflight_result_model_from_dict()` 这类 outward dict bridge，只保留最薄兼容层；外部 SSE / trace / e2e 契约继续保持不变。
