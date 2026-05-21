@@ -216,7 +216,7 @@
 
 ### Focused regression baseline
 
-`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **192 条测试**，覆盖：
+`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **228 条测试**，覆盖：
 
 - tool plan compatibility
 - tool execution compatibility
@@ -327,3 +327,23 @@ Guardrails:
 - `ConfiguredToolRegistryProviderPreflightResult` 这层又去掉了一段 dict outward 兼容桥接：`build_configured_tool_registry_provider_preflight_result_model()` 不再把 `service_execution + execution_result` 重新拼成顶层 dict 后再回灌，而是先 hydration 成 `ConfiguredToolRegistryProviderServiceExecutionModel` 与 `ConfiguredToolRegistryProviderServiceExecutionResultModel`，再直接走 `build_configured_tool_registry_provider_preflight_result_model_from_models()`。
 - `execute_configured_tool_registry_provider_preflight_model()` 也已切到直接调用 typed `execute_configured_tool_registry_provider_service_execution_model()`；当前 preflight typed 链路已变成 `runtime_artifacts -> runtime_service_actions -> service_execution -> preflight_result` 的连续 model 内部通路，dict 仅保留在 outward 兼容层。
 - 顺手补平了一个真实兼容缺口：当 dict `execution_result` 只提供 `trace_write_count/audit_event_count` 时，preflight result 现在会从 `service_execution` 继承 `provider/provider_source_name/runtime_artifacts`，不再要求顶层 dict 再重复一份。
+
+## Latest Sync (2026-05-21)
+
+- `ConfiguredToolRegistryProviderPreflightResult` 的 dict outward bridge 又继续收薄了一步：`build_configured_tool_registry_provider_preflight_result_model_from_dict()` 现在只负责最薄的兼容归一化，再直接复用 `build_configured_tool_registry_provider_preflight_result_model()`，不再在这层重复手工 hydration `service_execution_model + execution_result_model`。
+- 本轮 focused failing test 锁定了另一个真实兼容场景：若顶层 `preflight_result` 只保留 `trace_write_count/audit_event_count`，而 `provider/provider_source_name/runtime_artifacts` 仅存在于 `service_execution`，dict bridge 仍应成功 hydration 并产出与现有外部契约一致的 summary/result。
+- 当前 preflight 这段内部链路已经变成 “typed builder 为主、dict bridge 只保留 outward compatibility shell” 的形态；外部 SSE / trace / e2e 契约继续保持不变。
+- 相邻的 `ConfiguredToolRegistryProviderServiceExecutionResult` seam 也已按同样方向继续收口：新增共享 `build_configured_tool_registry_provider_runtime_service_actions_result_model_from_dict()`，把 `trace_write_count/audit_event_count` 的 dict hydration 统一下沉到单点 helper，再让 `build_configured_tool_registry_provider_service_execution_result_model()` 与 `build_configured_tool_registry_provider_preflight_result_model()` 复用。
+- 顺手补平了一个最小 payload 兼容缺口：当 dict `execution_result` 为空时，`service_execution_result` 现在会默认回退 `trace_write_count=0`、`audit_event_count=0`，不再要求 outward dict bridge 调用方显式重复零值。
+- 相邻的 `ConfiguredToolRegistryProviderPreflightSummary` seam 也已继续收口：新增 `build_configured_tool_registry_provider_preflight_summary_model_from_dict()`，把 summary 这层的 dict bridge 单独抽成 helper，再让 `build_configured_tool_registry_provider_preflight_summary_model()` 直接复用。
+- 本轮 focused failing test 锁定了 summary 侧的最小顶层 payload 兼容场景：即使 `preflight_result` 顶层只保留计数，summary bridge 仍应从 `service_execution` 继承 `provider/provider_source_name/runtime_artifacts`，并保持外部 summary 形状不变。
+- `ConfiguredToolRegistryProviderPreflightSummary` 与 `ConfiguredToolRegistryProviderPreflightResult` 两条 dict bridge 之间共享的 `service_execution` 归一化也已进一步收口：新增 `build_configured_tool_registry_provider_preflight_service_execution_model_from_dict()`，单点承接 provider/provider_source_name 回退与顶层 `runtime_artifacts` 覆盖 merge。
+- 本轮 focused failing test 锁定了这层共享归一化的优先级语义：顶层 `runtime_artifacts` 需要覆盖 `service_execution.runtime_artifacts`，但 `service_execution` 自带的 `provider_source_name` 与 action 列表仍应保留。
+- 相邻的 execution-result 归一化也已继续收口：新增 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict()`，单点把 `preflight_result` 顶层计数 hydration 与共享 `service_execution` 归一化组合起来，再让 summary/result 两条 dict bridge 复用。
+- 本轮 focused failing test 锁定了这层 helper 的兼容语义：在最小顶层 payload 下，它仍应保留 `service_execution` 继承出的 provider/provider_source_name/runtime_artifacts，同时正确携带 `trace_write_count/audit_event_count`。
+- `ConfiguredToolRegistryProviderPreflightSummary` 与 `ConfiguredToolRegistryProviderPreflightResult` 共同依赖的 typed pair 也已继续收口：新增 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()`，统一返回 `service_execution_model + execution_result_model`，再让两条 dict bridge 直接复用。
+- 本轮 focused failing test 锁定了这层共享 helper 的组合语义：顶层 `runtime_artifacts` 覆盖 merge、`service_execution` 自带 `provider_source_name` 与 action 列表保留、同时 `execution_result_model` 正确携带计数字段。
+- 相邻的 execution-result typed helper 也已继续细化：新增 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model()`，让“已有 `service_execution_model` 时如何补齐 preflight execution-result”成为单点逻辑。
+- 本轮 focused failing test 锁定了这层 helper 的兼容语义：它需要保留传入 `service_execution_model` 已经归一化好的 provider/provider_source_name/runtime_artifacts，同时正确携带顶层计数字段。
+- 通用 `ConfiguredToolRegistryProviderServiceExecutionResult` 这层也已按同样方向继续统一：新增 `build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model()`，让“已有 `service_execution_model` 时如何补齐 execution-result”成为共享 typed helper。
+- 本轮 focused failing test 锁定了这层通用 helper 的兼容语义：它需要保留传入 `service_execution_model` 的 provider/provider_source_name/runtime_artifacts，并正确携带 `trace_write_count/audit_event_count`。

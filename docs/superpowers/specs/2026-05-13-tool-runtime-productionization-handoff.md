@@ -171,7 +171,7 @@
 
 ### 3. 当前 focused regression 状态
 
-[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **192 条测试**，并全部通过。
+[backend/scripts/test_tool_runtime_slice.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/scripts/test_tool_runtime_slice.py) 当前已经扩展到 **228 条测试**，并全部通过。
 
 已覆盖的关键契约包括：
 
@@ -431,3 +431,58 @@ bash scripts/test_ci_e2e_tooling.sh common
 - `execute_configured_tool_registry_provider_preflight_model()` 已改成直接消费 typed `execute_configured_tool_registry_provider_service_execution_model()`，减少一层 `model -> dict -> model` 的中转。
 - 新增 focused 回归锁定一个真实兼容场景：若 `execution_result` 只带 `trace_write_count/audit_event_count`，preflight result 仍应从 `service_execution` 继承 `provider_source_name/provider/runtime_artifacts`。当前 focused 基线已更新到 `220` 条。
 - 下一刀更值得做的是继续压缩 `build_configured_tool_registry_provider_preflight_result_model_from_dict()` 这类 outward dict bridge，只保留最薄兼容层；外部 SSE / trace / e2e 契约继续保持不变。
+
+## 最新交接补充（2026-05-21）
+
+- 上一条里提到的“继续压缩 `build_configured_tool_registry_provider_preflight_result_model_from_dict()`”这一刀已经完成：该 helper 现在只做兼容归一化，再直接复用 `build_configured_tool_registry_provider_preflight_result_model()`，减少一层重复的手工 hydration / 组装。
+- 本轮新增 focused failing test，锁定另一类最小顶层 payload 兼容场景：当 `preflight_result` 顶层只保留 `trace_write_count/audit_event_count`，而 `provider/provider_source_name/runtime_artifacts` 仅存在于 `service_execution` 时，dict bridge 仍应成功 hydration。
+- 当前 focused 基线已更新到 `221` 条；本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+- 相邻一刀建议继续沿 `service_execution_result` 的 outward dict bridge 推进：它和 preflight result 一样，都是 typed internal 旁边还留着一层计数 dict hydration，适合继续按“小 failing test -> 最小 helper 收口”的方式推进。
+
+## 最新交接补充（2026-05-21，续）
+
+- 上一条里提到的 `service_execution_result` 这刀也已经完成：新增 `build_configured_tool_registry_provider_runtime_service_actions_result_model_from_dict()`，并让 `build_configured_tool_registry_provider_service_execution_result_model()` 与 `build_configured_tool_registry_provider_preflight_result_model()` 统一复用这层计数 hydration。
+- 本轮新增 focused failing test，锁定最小 `execution_result={}` 兼容场景：`service_execution_result` 应默认回退 `trace_write_count=0`、`audit_event_count=0`，而不是要求调用方显式重复零值。
+- 当前 focused 基线已更新到 `222` 条；本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+- 下一刀更适合继续沿 `preflight_summary` 这条相邻 outward dict bridge 推进：当前 `build_configured_tool_registry_provider_preflight_summary_model()` 还只是从整份 `preflight_result` hydration 后再取 `.summary`，适合继续按“小 failing test -> 单独 helper 收口”的方式推进。
+
+## 最新交接补充（2026-05-21，续二）
+
+- 上一条里提到的 `preflight_summary` 这刀也已经完成：新增 `build_configured_tool_registry_provider_preflight_summary_model_from_dict()`，并让 `build_configured_tool_registry_provider_preflight_summary_model()` 直接复用这层 dict bridge。
+- 本轮新增 focused failing test，锁定 summary 侧的最小顶层 payload 兼容场景：当顶层 `preflight_result` 只保留计数，而 `provider/provider_source_name/runtime_artifacts` 仅存在于 `service_execution` 时，summary bridge 仍应成功 hydration。
+- 当前 focused 基线已更新到 `223` 条；本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+- 下一刀更自然的是把 `preflight_summary` / `preflight_result` 两边重复的 `service_execution` 归一化真正抽成共享 helper，避免 provider/provider_source_name/runtime_artifacts merge 逻辑继续复制两份。
+
+## 最新交接补充（2026-05-21，续三）
+
+- 上一条里提到的共享归一化 helper 这刀也已经完成：新增 `build_configured_tool_registry_provider_preflight_service_execution_model_from_dict()`，并让 `build_configured_tool_registry_provider_preflight_summary_model_from_dict()` 与 `build_configured_tool_registry_provider_preflight_result_model_from_dict()` 统一复用。
+- 本轮新增 focused failing test，锁定这层共享归一化的优先级语义：顶层 `runtime_artifacts` 应覆盖 `service_execution.runtime_artifacts`，同时保留 `service_execution` 的 `provider_source_name` 与 action 列表。
+- 当前 focused 基线已更新到 `224` 条；本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+- 下一刀自然会落在 `preflight_result` 顶层计数与共享 `service_execution` 组合出来的 `service_execution_result` 归一化上：这层现在也适合抽成单点 helper，进一步让 summary/result 两条 dict bridge 只保留最薄兼容壳。
+
+## 最新交接补充（2026-05-21，续四）
+
+- 上一条里提到的 `service_execution_result` 共享归一化 helper 这刀也已经完成：新增 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict()`，并让 `build_configured_tool_registry_provider_preflight_summary_model_from_dict()` 与 `build_configured_tool_registry_provider_preflight_result_model_from_dict()` 统一复用。
+- 本轮新增 focused failing test，锁定这层 helper 会保留 `service_execution` 继承出的 provider/provider_source_name/runtime_artifacts，并正确携带 `trace_write_count/audit_event_count`。
+- 当前 focused 基线已更新到 `225` 条；本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+- 下一刀更自然的是把 `preflight_summary` / `preflight_result` 共同依赖的 typed pair 再抽成共享 helper，彻底去掉 `preflight_result_model_from_dict()` 这边残留的 `model -> dict -> model` 往返。
+
+## 最新交接补充（2026-05-21，续五）
+
+- 上一条里提到的 typed pair 共享 helper 这刀也已经完成：新增 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()`，统一返回 `service_execution_model + execution_result_model`，并让 `build_configured_tool_registry_provider_preflight_summary_model_from_dict()` 与 `build_configured_tool_registry_provider_preflight_result_model_from_dict()` 共同复用。
+- `build_configured_tool_registry_provider_preflight_result_model_from_dict()` 现已直接调用 `build_configured_tool_registry_provider_preflight_result_model_from_models()`，不再先把 `service_execution_model` 降回 dict 再走一遍 builder。
+- 当前 focused 基线已更新到 `226` 条；本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+- 下一刀更自然的是继续把 `preflight_execution_models_from_dict()` 内部对 `service_execution_model` 的重复使用显式化成单点 helper，这样 typed pair helper 自身也不再重复构建 execution-result 依赖。
+
+## 最新交接补充（2026-05-21，续六）
+
+- 上一条里提到的 typed helper 细化这刀也已经完成：新增 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model()`，让 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()` 在已有 `service_execution_model` 时直接派生 execution-result，而不再重复计算。
+- 本轮新增 focused failing test，锁定这层 helper 会保留传入 `service_execution_model` 已经归一化好的 provider/provider_source_name/runtime_artifacts，同时正确携带顶层 `trace_write_count/audit_event_count`。
+- 当前 focused 基线已更新到 `227` 条；本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+- 下一刀自然会落在通用 `service_execution_result` 这条 typed helper 上：把“已有 `service_execution_model` 时如何补齐 execution-result”也统一成共享入口，减少 preflight/helper 与通用 helper 之间的平行实现。
+
+## 最新交接补充（2026-05-21，续七）
+
+- 上一条里提到的通用 typed helper 统一这刀也已经完成：新增 `build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model()`，并让 `build_configured_tool_registry_provider_service_execution_result_model()` 与 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model()` 共同复用。
+- 本轮新增 focused failing test，锁定这层通用 helper 会保留传入 `service_execution_model` 的 provider/provider_source_name/runtime_artifacts，同时正确携带 `trace_write_count/audit_event_count`。
+- 当前 focused 基线已更新到 `228` 条；本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
