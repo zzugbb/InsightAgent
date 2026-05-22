@@ -123,6 +123,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict,
     build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model,
     build_configured_tool_registry_provider_preflight_execution_models_from_dict,
+    build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model,
     build_configured_tool_registry_provider_service_execution_model,
     build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model,
     build_configured_tool_registry_provider_service_execution_result_model_from_models,
@@ -3616,6 +3617,125 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             execution_result_model.runtime_artifacts.diagnostics_runtime.summary.missing_total, 1
         )
 
+    def test_build_configured_tool_registry_provider_preflight_execution_models_from_dict_uses_service_execution_typed_helper(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        original_from_service_execution_model = (
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model
+        )
+        captured: list[tuple[str, int, int]] = []
+
+        def record_from_service_execution_model(
+            *,
+            service_execution: object,
+            preflight_result: dict[str, object],
+        ) -> tuple[object, object]:
+            captured.append(
+                (
+                    getattr(service_execution, "provider_source_name"),
+                    preflight_result["trace_write_count"],
+                    preflight_result["audit_event_count"],
+                )
+            )
+            return original_from_service_execution_model(
+                service_execution=service_execution,
+                preflight_result=preflight_result,
+            )
+
+        tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model = record_from_service_execution_model
+        try:
+            service_execution_model, execution_result_model = (
+                build_configured_tool_registry_provider_preflight_execution_models_from_dict(
+                    preflight_result={
+                        "trace_write_count": 1,
+                        "audit_event_count": 2,
+                        "service_execution": {
+                            "provider": provider,
+                            "provider_source_name": "file_source",
+                            "runtime_artifacts": {
+                                "diagnostics_runtime": {
+                                    "summary": {
+                                        "has_diagnostics": True,
+                                        "total": 1,
+                                        "skipped_total": 0,
+                                        "missing_total": 1,
+                                    }
+                                }
+                            },
+                            "service_actions": [{"kind": "record_audit_event"}],
+                        },
+                    }
+                )
+            )
+        finally:
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model = original_from_service_execution_model
+
+        self.assertEqual(captured, [("file_source", 1, 2)])
+        self.assertIs(service_execution_model.provider, provider)
+        self.assertEqual(service_execution_model.provider_source_name, "file_source")
+        self.assertEqual(execution_result_model.trace_write_count, 1)
+        self.assertEqual(execution_result_model.audit_event_count, 2)
+
+    def test_build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model_keeps_fields(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        service_execution_model = (
+            build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
+                preflight_result={
+                    "runtime_artifacts": {
+                        "diagnostics_runtime": {
+                            "summary": {
+                                "has_diagnostics": True,
+                                "total": 2,
+                                "skipped_total": 1,
+                                "missing_total": 1,
+                            }
+                        }
+                    },
+                    "service_execution": {
+                        "provider": provider,
+                        "provider_source_name": "file_source",
+                        "runtime_artifacts": {
+                            "diagnostics_runtime": {
+                                "summary": {
+                                    "has_diagnostics": False,
+                                    "total": 0,
+                                    "skipped_total": 0,
+                                    "missing_total": 0,
+                                }
+                            }
+                        },
+                        "service_actions": [{"kind": "record_audit_event"}],
+                    },
+                }
+            )
+        )
+
+        service_execution_model_out, execution_result_model = (
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model(
+                service_execution=service_execution_model,
+                preflight_result={
+                    "trace_write_count": 1,
+                    "audit_event_count": 2,
+                },
+            )
+        )
+
+        self.assertIs(service_execution_model_out, service_execution_model)
+        self.assertIs(execution_result_model.provider, provider)
+        self.assertEqual(execution_result_model.provider_source_name, "file_source")
+        self.assertEqual(execution_result_model.trace_write_count, 1)
+        self.assertEqual(execution_result_model.audit_event_count, 2)
+        self.assertEqual(
+            execution_result_model.runtime_artifacts.diagnostics_runtime.summary.missing_total, 1
+        )
+
     def test_build_configured_tool_registry_provider_preflight_summary_model_from_parts_keeps_fields(
         self,
     ) -> None:
@@ -3691,6 +3811,186 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result.summary.tool_names, ("calc_eval",))
         self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
         self.assertEqual(result.summary.missing_total, 1)
+
+    def test_build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model_keeps_fields(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        service_execution_model = (
+            build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
+                preflight_result={
+                    "runtime_artifacts": {
+                        "diagnostics_runtime": {
+                            "summary": {
+                                "has_diagnostics": True,
+                                "total": 2,
+                                "skipped_total": 1,
+                                "missing_total": 1,
+                            }
+                        }
+                    },
+                    "service_execution": {
+                        "provider": provider,
+                        "provider_source_name": "file_source",
+                        "runtime_artifacts": {
+                            "diagnostics_runtime": {
+                                "summary": {
+                                    "has_diagnostics": False,
+                                    "total": 0,
+                                    "skipped_total": 0,
+                                    "missing_total": 0,
+                                }
+                            }
+                        },
+                        "service_actions": [{"kind": "record_audit_event"}],
+                    },
+                }
+            )
+        )
+
+        result = (
+            build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model(
+                service_execution=service_execution_model,
+                execution_result={
+                    "trace_write_count": 1,
+                    "audit_event_count": 2,
+                },
+            )
+        )
+
+        self.assertIs(result.provider, provider)
+        self.assertEqual(result.provider_source_name, "file_source")
+        self.assertEqual(result.trace_write_count, 1)
+        self.assertEqual(result.audit_event_count, 2)
+        self.assertEqual(result.summary.provider_source_name, "file_source")
+        self.assertEqual(result.summary.tool_names, ("calc_eval",))
+        self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
+        self.assertEqual(result.summary.missing_total, 1)
+
+    def test_build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model_uses_execution_models_typed_helper(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        service_execution_model = (
+            build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
+                preflight_result={
+                    "service_execution": {
+                        "provider": provider,
+                        "provider_source_name": "file_source",
+                        "runtime_artifacts": {
+                            "diagnostics_runtime": {
+                                "summary": {
+                                    "has_diagnostics": True,
+                                    "total": 1,
+                                    "skipped_total": 0,
+                                    "missing_total": 1,
+                                }
+                            }
+                        },
+                        "service_actions": [{"kind": "record_audit_event"}],
+                    }
+                }
+            )
+        )
+        original_pair_helper = (
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model
+        )
+        captured: list[tuple[str, int, int]] = []
+
+        def record_pair_helper(
+            *,
+            service_execution: object,
+            preflight_result: dict[str, object],
+        ) -> tuple[object, object]:
+            captured.append(
+                (
+                    getattr(service_execution, "provider_source_name"),
+                    preflight_result["trace_write_count"],
+                    preflight_result["audit_event_count"],
+                )
+            )
+            return original_pair_helper(
+                service_execution=service_execution,
+                preflight_result=preflight_result,
+            )
+
+        tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model = record_pair_helper
+        try:
+            result = (
+                build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model(
+                    service_execution=service_execution_model,
+                    execution_result={
+                        "trace_write_count": 1,
+                        "audit_event_count": 2,
+                    },
+                )
+            )
+        finally:
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model = original_pair_helper
+
+        self.assertEqual(captured, [("file_source", 1, 2)])
+        self.assertIs(result.provider, provider)
+        self.assertEqual(result.summary.tool_names, ("calc_eval",))
+        self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
+
+    def test_build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model_keeps_fields(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        service_execution_model = (
+            build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
+                preflight_result={
+                    "runtime_artifacts": {
+                        "diagnostics_runtime": {
+                            "summary": {
+                                "has_diagnostics": True,
+                                "total": 2,
+                                "skipped_total": 1,
+                                "missing_total": 1,
+                            }
+                        }
+                    },
+                    "service_execution": {
+                        "provider": provider,
+                        "provider_source_name": "file_source",
+                        "runtime_artifacts": {
+                            "diagnostics_runtime": {
+                                "summary": {
+                                    "has_diagnostics": False,
+                                    "total": 0,
+                                    "skipped_total": 0,
+                                    "missing_total": 0,
+                                }
+                            }
+                        },
+                        "service_actions": [{"kind": "record_audit_event"}],
+                    },
+                }
+            )
+        )
+
+        result = (
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model(
+                service_execution=service_execution_model,
+                preflight_result={
+                    "trace_write_count": 1,
+                    "audit_event_count": 2,
+                },
+            )
+        )
+
+        self.assertEqual(result.provider_source_name, "file_source")
+        self.assertEqual(result.tool_names, ("calc_eval",))
+        self.assertEqual(result.service_action_kinds, ("record_audit_event",))
+        self.assertEqual(result.trace_write_count, 1)
+        self.assertEqual(result.audit_event_count, 2)
+        self.assertEqual(result.missing_total, 1)
 
     def test_build_configured_tool_registry_provider_preflight_result_model_uses_service_execution_defaults(
         self,
@@ -3809,6 +4109,76 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result.summary.tool_names, ("calc_eval",))
         self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
         self.assertEqual(result.summary.missing_total, 1)
+
+    def test_build_configured_tool_registry_provider_preflight_result_model_from_dict_uses_service_execution_typed_helper(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        original_pair_helper = (
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_dict
+        )
+        original_result_helper = (
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model
+        )
+        captured: list[tuple[str, int, int]] = []
+
+        def fail_pair_helper(
+            *,
+            preflight_result: dict[str, object],
+        ) -> tuple[object, object]:
+            raise AssertionError("preflight_execution_models_from_dict should not be used")
+
+        def record_result_helper(
+            *,
+            service_execution: object,
+            execution_result: dict[str, object],
+        ) -> object:
+            captured.append(
+                (
+                    getattr(service_execution, "provider_source_name"),
+                    execution_result["trace_write_count"],
+                    execution_result["audit_event_count"],
+                )
+            )
+            return original_result_helper(
+                service_execution=service_execution,
+                execution_result=execution_result,
+            )
+
+        tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_dict = fail_pair_helper
+        tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model = record_result_helper
+        try:
+            result = build_configured_tool_registry_provider_preflight_result_model_from_dict(
+                preflight_result={
+                    "service_execution": {
+                        "provider": provider,
+                        "provider_source_name": "file_source",
+                        "runtime_artifacts": {
+                            "diagnostics_runtime": {
+                                "summary": {
+                                    "has_diagnostics": True,
+                                    "total": 1,
+                                    "skipped_total": 0,
+                                    "missing_total": 1,
+                                }
+                            }
+                        },
+                        "service_actions": [{"kind": "record_audit_event"}],
+                    },
+                    "trace_write_count": 1,
+                    "audit_event_count": 2,
+                }
+            )
+        finally:
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_execution_models_from_dict = original_pair_helper
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model = original_result_helper
+
+        self.assertEqual(captured, [("file_source", 1, 2)])
+        self.assertIs(result.provider, provider)
+        self.assertEqual(result.summary.tool_names, ("calc_eval",))
+        self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
 
     def test_build_configured_tool_registry_provider_preflight_result_model_from_models_keeps_fields(
         self,

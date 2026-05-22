@@ -108,6 +108,8 @@
 - `build_configured_tool_registry_provider_runtime_artifacts_model_from_dict()`
 - `build_configured_tool_registry_provider_service_execution_model_from_dict()`
 - `build_configured_tool_registry_provider_preflight_result_model_from_dict()`
+- `build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model()`
+- `build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model()`
 - `build_configured_tool_registry_provider_preflight_summary_model_from_models()`
 - `build_configured_tool_registry_provider_preflight_summary_model_from_parts()`
 - `build_tool_registry_loader_factories_from_settings()`
@@ -216,7 +218,7 @@
 
 ### Focused regression baseline
 
-`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **228 条测试**，覆盖：
+`backend/scripts/test_tool_runtime_slice.py` 当前已扩展到 **234 条测试**，覆盖：
 
 - tool plan compatibility
 - tool execution compatibility
@@ -347,3 +349,15 @@ Guardrails:
 - 本轮 focused failing test 锁定了这层 helper 的兼容语义：它需要保留传入 `service_execution_model` 已经归一化好的 provider/provider_source_name/runtime_artifacts，同时正确携带顶层计数字段。
 - 通用 `ConfiguredToolRegistryProviderServiceExecutionResult` 这层也已按同样方向继续统一：新增 `build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model()`，让“已有 `service_execution_model` 时如何补齐 execution-result”成为共享 typed helper。
 - 本轮 focused failing test 锁定了这层通用 helper 的兼容语义：它需要保留传入 `service_execution_model` 的 provider/provider_source_name/runtime_artifacts，并正确携带 `trace_write_count/audit_event_count`。
+- `ConfiguredToolRegistryProviderPreflightResult` 这层也已按同样方向继续统一：新增 `build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model()`，让“已有 `service_execution_model` 时如何补齐 preflight result”成为共享 typed helper 组合入口。
+- 本轮 focused failing test 锁定了这层 helper 的兼容语义：它需要保留传入 `service_execution_model` 已经归一化好的 provider/provider_source_name/runtime_artifacts，同时正确产出 summary 与计数字段。
+- `ConfiguredToolRegistryProviderPreflightSummary` 这层也已按同样方向补齐对称 typed 入口：新增 `build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model()`，让“已有 `service_execution_model` 时如何补齐 preflight summary”成为共享 typed helper 组合入口。
+- 本轮 focused failing test 锁定了这层 helper 的兼容语义：它需要保留传入 `service_execution_model` 已经归一化好的 provider/provider_source_name/runtime_artifacts，同时正确产出 summary 中的 `tool_names`、`service_action_kinds` 与计数字段。
+- `ConfiguredToolRegistryProviderPreflightResult` 的 dict outward bridge 也已继续压薄：`build_configured_tool_registry_provider_preflight_result_model_from_dict()` 现已直接复用 `build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model()`，不再经过共享的 `preflight_execution_models_from_dict()` pair helper。
+- 本轮 focused failing test 锁定了这层委托方向：`preflight_result_model_from_dict()` 应直接走 `service_execution_model -> preflight_result typed helper`，同时继续保留既有 summary/计数字段兼容语义。
+- `ConfiguredToolRegistryProviderPreflightExecutionModels` 这层 shared pair helper 也已继续压薄：`build_configured_tool_registry_provider_preflight_execution_models_from_dict()` 现已直接复用 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict()`，不再自己显式串联更深一层的 typed execution-result helper。
+- 本轮 focused failing test 锁定了这层 helper 的委托方向：它现在应退化为“共享 service_execution hydration + 现有 dict execution-result helper”的组合壳，而不再携带额外中间逻辑。
+- `ConfiguredToolRegistryProviderPreflightExecutionModels` 这层随后又补齐了对称 typed 入口：新增 `build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model()`，统一承接“已有 `service_execution_model` 时如何补齐 execution-model pair”。
+- 本轮 focused failing test 锁定了这层新 helper 的兼容语义：它需要复用传入的 `service_execution_model` 本身，并正确产出带有 `trace_write_count/audit_event_count` 与归一化 runtime artifacts 的 execution-result model。
+- `ConfiguredToolRegistryProviderPreflightSummary` 与 `ConfiguredToolRegistryProviderPreflightResult` 这两个 typed 入口随后也已真正切到复用上述 pair helper：`build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model()` 与 `...preflight_result_model_from_service_execution_model()` 不再各自平行补 execution-result。
+- 本轮 focused failing test 锁定了这层新的生产复用方向：`preflight_result_model_from_service_execution_model()` 现在应直接走 `build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model()`，从而让 pair helper 真正成为共享单点。
