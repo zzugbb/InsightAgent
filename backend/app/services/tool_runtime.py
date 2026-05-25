@@ -2270,6 +2270,18 @@ def build_configured_tool_registry_provider_preflight_service_execution_model_fr
     *,
     preflight_result: dict[str, object],
 ) -> ConfiguredToolRegistryProviderServiceExecutionModel:
+    service_execution_model, _, _, _ = (
+        build_configured_tool_registry_provider_preflight_models_from_dict(
+            preflight_result=preflight_result,
+        )
+    )
+    return service_execution_model
+
+
+def build_configured_tool_registry_provider_preflight_service_execution_payload_from_dict(
+    *,
+    preflight_result: dict[str, object],
+) -> dict[str, object]:
     service_execution_payload = preflight_result.get("service_execution", {})
     if not isinstance(service_execution_payload, dict):
         service_execution_payload = {}
@@ -2291,33 +2303,26 @@ def build_configured_tool_registry_provider_preflight_service_execution_model_fr
     merged_runtime_artifacts_payload: dict[str, object] = {}
     merged_runtime_artifacts_payload.update(service_runtime_artifacts_payload)
     merged_runtime_artifacts_payload.update(runtime_artifacts_payload)
-    return build_configured_tool_registry_provider_service_execution_model_from_dict(
-        service_execution={
-            **service_execution_payload,
-            "provider": service_execution_payload.get("provider", provider),
-            "provider_source_name": service_execution_payload.get(
-                "provider_source_name", provider_source_name
-            ),
-            "runtime_artifacts": merged_runtime_artifacts_payload,
-        }
-    )
+    return {
+        **service_execution_payload,
+        "provider": service_execution_payload.get("provider", provider),
+        "provider_source_name": service_execution_payload.get(
+            "provider_source_name", provider_source_name
+        ),
+        "runtime_artifacts": merged_runtime_artifacts_payload,
+    }
 
 
 def build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict(
     *,
     preflight_result: dict[str, object],
 ) -> ConfiguredToolRegistryProviderServiceExecutionResultModel:
-    service_execution_model = (
-        build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
+    _, execution_result_model, _, _ = (
+        build_configured_tool_registry_provider_preflight_models_from_dict(
             preflight_result=preflight_result,
         )
     )
-    return (
-        build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model(
-            service_execution=service_execution_model,
-            preflight_result=preflight_result,
-        )
-    )
+    return execution_result_model
 
 
 def build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model(
@@ -2325,10 +2330,13 @@ def build_configured_tool_registry_provider_preflight_service_execution_result_m
     service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
     preflight_result: dict[str, object],
 ) -> ConfiguredToolRegistryProviderServiceExecutionResultModel:
-    return build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model(
-        service_execution=service_execution,
-        execution_result=preflight_result,
+    _, execution_result_model, _, _ = (
+        build_configured_tool_registry_provider_preflight_models_from_service_execution_model(
+            service_execution=service_execution,
+            preflight_result=preflight_result,
+        )
     )
+    return execution_result_model
 
 
 def build_configured_tool_registry_provider_preflight_execution_models_from_dict(
@@ -2338,12 +2346,29 @@ def build_configured_tool_registry_provider_preflight_execution_models_from_dict
     ConfiguredToolRegistryProviderServiceExecutionModel,
     ConfiguredToolRegistryProviderServiceExecutionResultModel,
 ]:
-    return build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model(
-        service_execution=build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
+    service_execution_model, execution_result_model, _, _ = (
+        build_configured_tool_registry_provider_preflight_models_from_dict(
             preflight_result=preflight_result,
-        ),
-        preflight_result=preflight_result,
+        )
     )
+    return service_execution_model, execution_result_model
+
+
+def build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload(
+    *,
+    service_execution: dict[str, object],
+    preflight_result: dict[str, object],
+) -> tuple[
+    ConfiguredToolRegistryProviderServiceExecutionModel,
+    ConfiguredToolRegistryProviderServiceExecutionResultModel,
+]:
+    service_execution_model, execution_result_model, _, _ = (
+        build_configured_tool_registry_provider_preflight_models_from_service_execution_payload(
+            service_execution=service_execution,
+            preflight_result=preflight_result,
+        )
+    )
+    return service_execution_model, execution_result_model
 
 
 def build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model(
@@ -2354,64 +2379,26 @@ def build_configured_tool_registry_provider_preflight_execution_models_from_serv
     ConfiguredToolRegistryProviderServiceExecutionModel,
     ConfiguredToolRegistryProviderServiceExecutionResultModel,
 ]:
-    execution_result_model = (
-        build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model(
+    service_execution_model, execution_result_model, _, _ = (
+        build_configured_tool_registry_provider_preflight_models_from_service_execution_model(
             service_execution=service_execution,
             preflight_result=preflight_result,
         )
     )
-    return service_execution, execution_result_model
+    return service_execution_model, execution_result_model
 
 
-def build_configured_tool_registry_provider_preflight_summary_model_from_dict(
-    *,
-    preflight_result: dict[str, object],
-) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
-    return build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model(
-        service_execution=build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
-            preflight_result=preflight_result,
-        ),
-        preflight_result=preflight_result,
-    )
-
-
-def build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model(
-    *,
-    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
-    preflight_result: dict[str, object],
-) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
-    service_execution_model, execution_result_model = (
-        build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model(
-            service_execution=service_execution,
-            preflight_result=preflight_result,
-        )
-    )
-    return build_configured_tool_registry_provider_preflight_summary_model_from_models(
-        service_execution=service_execution_model,
-        execution_result=execution_result_model,
-    )
-
-
-def build_configured_tool_registry_provider_preflight_summary_model_from_result_model(
-    *,
-    preflight_result: ConfiguredToolRegistryProviderPreflightResultModel,
-) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
-    return build_configured_tool_registry_provider_preflight_summary_model_from_parts(
-        provider=preflight_result.provider,
-        provider_source_name=preflight_result.provider_source_name,
-        runtime_artifacts=preflight_result.runtime_artifacts,
-        service_actions=preflight_result.service_execution.service_actions,
-        trace_write_count=preflight_result.trace_write_count,
-        audit_event_count=preflight_result.audit_event_count,
-    )
-
-
-def build_configured_tool_registry_provider_preflight_summary_model_from_models(
+def build_configured_tool_registry_provider_preflight_models_from_models(
     *,
     service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
     execution_result: ConfiguredToolRegistryProviderServiceExecutionResultModel,
-) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
-    return build_configured_tool_registry_provider_preflight_summary_model_from_parts(
+) -> tuple[
+    ConfiguredToolRegistryProviderServiceExecutionModel,
+    ConfiguredToolRegistryProviderServiceExecutionResultModel,
+    ConfiguredToolRegistryProviderPreflightSummaryModel,
+    ConfiguredToolRegistryProviderPreflightResultModel,
+]:
+    summary_model = build_configured_tool_registry_provider_preflight_summary_model_from_parts(
         provider=execution_result.provider,
         provider_source_name=execution_result.provider_source_name,
         runtime_artifacts=execution_result.runtime_artifacts,
@@ -2419,6 +2406,134 @@ def build_configured_tool_registry_provider_preflight_summary_model_from_models(
         trace_write_count=execution_result.trace_write_count,
         audit_event_count=execution_result.audit_event_count,
     )
+    result_model = ConfiguredToolRegistryProviderPreflightResultModel(
+        provider=execution_result.provider,
+        provider_source_name=execution_result.provider_source_name,
+        runtime_artifacts=execution_result.runtime_artifacts,
+        service_execution=service_execution,
+        trace_write_count=execution_result.trace_write_count,
+        audit_event_count=execution_result.audit_event_count,
+        summary=summary_model,
+    )
+    return (
+        service_execution,
+        execution_result,
+        summary_model,
+        result_model,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_models_from_service_execution_payload(
+    *,
+    service_execution: dict[str, object],
+    preflight_result: dict[str, object],
+) -> tuple[
+    ConfiguredToolRegistryProviderServiceExecutionModel,
+    ConfiguredToolRegistryProviderServiceExecutionResultModel,
+    ConfiguredToolRegistryProviderPreflightSummaryModel,
+    ConfiguredToolRegistryProviderPreflightResultModel,
+]:
+    service_execution_model = (
+        build_configured_tool_registry_provider_service_execution_model_from_dict(
+            service_execution=service_execution,
+        )
+    )
+    execution_result_model = (
+        build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model(
+            service_execution=service_execution_model,
+            execution_result=preflight_result,
+        )
+    )
+    return build_configured_tool_registry_provider_preflight_models_from_models(
+        service_execution=service_execution_model,
+        execution_result=execution_result_model,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_models_from_service_execution_model(
+    *,
+    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
+    preflight_result: dict[str, object],
+) -> tuple[
+    ConfiguredToolRegistryProviderServiceExecutionModel,
+    ConfiguredToolRegistryProviderServiceExecutionResultModel,
+    ConfiguredToolRegistryProviderPreflightSummaryModel,
+    ConfiguredToolRegistryProviderPreflightResultModel,
+]:
+    execution_result_model = (
+        build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model(
+            service_execution=service_execution,
+            execution_result=preflight_result,
+        )
+    )
+    return build_configured_tool_registry_provider_preflight_models_from_models(
+        service_execution=service_execution,
+        execution_result=execution_result_model,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_models_from_dict(
+    *,
+    preflight_result: dict[str, object],
+) -> tuple[
+    ConfiguredToolRegistryProviderServiceExecutionModel,
+    ConfiguredToolRegistryProviderServiceExecutionResultModel,
+    ConfiguredToolRegistryProviderPreflightSummaryModel,
+    ConfiguredToolRegistryProviderPreflightResultModel,
+]:
+    return build_configured_tool_registry_provider_preflight_models_from_service_execution_payload(
+        service_execution=build_configured_tool_registry_provider_preflight_service_execution_payload_from_dict(
+            preflight_result=preflight_result,
+        ),
+        preflight_result=preflight_result,
+    )
+
+
+def build_configured_tool_registry_provider_preflight_summary_model_from_dict(
+    *,
+    preflight_result: dict[str, object],
+) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
+    _, _, summary_model, _ = (
+        build_configured_tool_registry_provider_preflight_models_from_dict(
+            preflight_result=preflight_result,
+        )
+    )
+    return summary_model
+
+
+def build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model(
+    *,
+    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
+    preflight_result: dict[str, object],
+) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
+    _, _, summary_model, _ = (
+        build_configured_tool_registry_provider_preflight_models_from_service_execution_model(
+            service_execution=service_execution,
+            preflight_result=preflight_result,
+        )
+    )
+    return summary_model
+
+
+def build_configured_tool_registry_provider_preflight_summary_model_from_result_model(
+    *,
+    preflight_result: ConfiguredToolRegistryProviderPreflightResultModel,
+) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
+    return preflight_result.summary
+
+
+def build_configured_tool_registry_provider_preflight_summary_model_from_models(
+    *,
+    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
+    execution_result: ConfiguredToolRegistryProviderServiceExecutionResultModel,
+) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
+    _, _, summary_model, _ = (
+        build_configured_tool_registry_provider_preflight_models_from_models(
+            service_execution=service_execution,
+            execution_result=execution_result,
+        )
+    )
+    return summary_model
 
 
 def build_configured_tool_registry_provider_preflight_summary_model_from_parts(
@@ -2456,17 +2571,32 @@ def build_configured_tool_registry_provider_preflight_summary(
     ).to_dict()
 
 
+def build_configured_tool_registry_provider_preflight_models(
+    *,
+    service_execution: dict[str, object],
+    execution_result: dict[str, object],
+) -> tuple[
+    ConfiguredToolRegistryProviderServiceExecutionModel,
+    ConfiguredToolRegistryProviderServiceExecutionResultModel,
+    ConfiguredToolRegistryProviderPreflightSummaryModel,
+    ConfiguredToolRegistryProviderPreflightResultModel,
+]:
+    return build_configured_tool_registry_provider_preflight_models_from_service_execution_payload(
+        service_execution=service_execution,
+        preflight_result=execution_result,
+    )
+
+
 def build_configured_tool_registry_provider_preflight_result_model(
     *,
     service_execution: dict[str, object],
     execution_result: dict[str, object],
 ) -> ConfiguredToolRegistryProviderPreflightResultModel:
-    return build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model(
-        service_execution=build_configured_tool_registry_provider_service_execution_model_from_dict(
-            service_execution=service_execution,
-        ),
+    _, _, _, result_model = build_configured_tool_registry_provider_preflight_models(
+        service_execution=service_execution,
         execution_result=execution_result,
     )
+    return result_model
 
 
 def build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model(
@@ -2474,16 +2604,13 @@ def build_configured_tool_registry_provider_preflight_result_model_from_service_
     service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
     execution_result: dict[str, object],
 ) -> ConfiguredToolRegistryProviderPreflightResultModel:
-    service_execution_model, execution_result_model = (
-        build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model(
+    _, _, _, result_model = (
+        build_configured_tool_registry_provider_preflight_models_from_service_execution_model(
             service_execution=service_execution,
             preflight_result=execution_result,
         )
     )
-    return build_configured_tool_registry_provider_preflight_result_model_from_models(
-        service_execution=service_execution_model,
-        execution_result=execution_result_model,
-    )
+    return result_model
 
 
 def build_configured_tool_registry_provider_preflight_result_model_from_models(
@@ -2491,31 +2618,25 @@ def build_configured_tool_registry_provider_preflight_result_model_from_models(
     service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
     execution_result: ConfiguredToolRegistryProviderServiceExecutionResultModel,
 ) -> ConfiguredToolRegistryProviderPreflightResultModel:
-    summary = build_configured_tool_registry_provider_preflight_summary_model_from_models(
-        service_execution=service_execution,
-        execution_result=execution_result,
+    _, _, _, result_model = (
+        build_configured_tool_registry_provider_preflight_models_from_models(
+            service_execution=service_execution,
+            execution_result=execution_result,
+        )
     )
-    return ConfiguredToolRegistryProviderPreflightResultModel(
-        provider=execution_result.provider,
-        provider_source_name=execution_result.provider_source_name,
-        runtime_artifacts=execution_result.runtime_artifacts,
-        service_execution=service_execution,
-        trace_write_count=execution_result.trace_write_count,
-        audit_event_count=execution_result.audit_event_count,
-        summary=summary,
-    )
+    return result_model
 
 
 def build_configured_tool_registry_provider_preflight_result_model_from_dict(
     *,
     preflight_result: dict[str, object],
 ) -> ConfiguredToolRegistryProviderPreflightResultModel:
-    return build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model(
-        service_execution=build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
+    _, _, _, result_model = (
+        build_configured_tool_registry_provider_preflight_models_from_dict(
             preflight_result=preflight_result,
-        ),
-        execution_result=preflight_result,
+        )
     )
+    return result_model
 
 
 def build_configured_tool_registry_provider_preflight_result(
@@ -2527,6 +2648,41 @@ def build_configured_tool_registry_provider_preflight_result(
         service_execution=service_execution,
         execution_result=execution_result,
     ).to_dict()
+
+
+def execute_configured_tool_registry_provider_preflight_models(
+    *,
+    task_id: str,
+    step_id: str,
+    seq: int,
+    model: str,
+    trace_steps: list[dict[str, object]],
+    persist_trace_fn: Callable[..., None],
+    record_audit_event_fn: Callable[..., None],
+    settings: object | None = None,
+) -> tuple[
+    ConfiguredToolRegistryProviderServiceExecutionModel,
+    ConfiguredToolRegistryProviderServiceExecutionResultModel,
+    ConfiguredToolRegistryProviderPreflightSummaryModel,
+    ConfiguredToolRegistryProviderPreflightResultModel,
+]:
+    service_execution_model = build_configured_tool_registry_provider_service_execution_model(
+        task_id=task_id,
+        step_id=step_id,
+        seq=seq,
+        model=model,
+        settings=settings,
+    )
+    execution_result_model = execute_configured_tool_registry_provider_service_execution_model(
+        service_execution=service_execution_model,
+        trace_steps=trace_steps,
+        persist_trace_fn=persist_trace_fn,
+        record_audit_event_fn=record_audit_event_fn,
+    )
+    return build_configured_tool_registry_provider_preflight_models_from_models(
+        service_execution=service_execution_model,
+        execution_result=execution_result_model,
+    )
 
 
 def execute_configured_tool_registry_provider_preflight(
@@ -2563,23 +2719,17 @@ def execute_configured_tool_registry_provider_preflight_model(
     record_audit_event_fn: Callable[..., None],
     settings: object | None = None,
 ) -> ConfiguredToolRegistryProviderPreflightResultModel:
-    service_execution_model = build_configured_tool_registry_provider_service_execution_model(
+    _, _, _, result_model = execute_configured_tool_registry_provider_preflight_models(
         task_id=task_id,
         step_id=step_id,
         seq=seq,
         model=model,
-        settings=settings,
-    )
-    execution_result_model = execute_configured_tool_registry_provider_service_execution_model(
-        service_execution=service_execution_model,
         trace_steps=trace_steps,
         persist_trace_fn=persist_trace_fn,
         record_audit_event_fn=record_audit_event_fn,
+        settings=settings,
     )
-    return build_configured_tool_registry_provider_preflight_result_model_from_models(
-        service_execution=service_execution_model,
-        execution_result=execution_result_model,
-    )
+    return result_model
 
 
 def build_configured_tool_registry_provider_runtime_artifacts_model(
