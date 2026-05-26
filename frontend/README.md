@@ -501,3 +501,27 @@ npm run test:e2e:smoke:matrix
 - 当前前端仍无需任何协议调整；focused 回归脚本已扩展到 `251` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
 - 本轮后端继续把高层 raw-input / execute 入口也退成 total-model 兼容壳，`build_preflight_result_model()` 与 `execute_preflight_model()` 现在都只负责从统一 helper 取 `result_model`；前端外部 SSE / trace / e2e 契约仍未变化。
 - 当前前端仍无需任何协议调整；focused 回归脚本已扩展到 `253` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把最外层 outward dict seam 也收成单点：新增 `build_configured_tool_registry_provider_preflight_dicts_from_models()`、`build_configured_tool_registry_provider_preflight_dicts()` 与 `execute_configured_tool_registry_provider_preflight_dicts()`；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`build_preflight_summary()`、`build_preflight_result()`、`execute_preflight()` 现在都只会从共享 dict helper 取 summary/result，focused 回归脚本已扩展到 `256` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把高层 outward `models + dicts` 也统一到 total-output seam：新增 `build_configured_tool_registry_provider_preflight_outputs_from_models()`、`build_configured_tool_registry_provider_preflight_outputs()` 与 `execute_configured_tool_registry_provider_preflight_outputs()`；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`build_preflight_models()`、`build_preflight_result_model()`、`build_preflight_result()`、`execute_preflight_models()`、`execute_preflight_model()` 与 `execute_preflight()` 现在都只会从共享 `outputs` helper 取对应结果，focused 回归脚本已扩展到 `257` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把单参 `preflight_result` 的 dict 兼容链也统一到 total-output seam：新增 `build_configured_tool_registry_provider_preflight_outputs_from_dict()`；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`preflight_summary()`、`preflight_dicts()` 和几条 `...from_dict()` typed 兼容入口现在都只会从共享 `outputs_from_dict()` 取对应结果，focused 回归脚本维持 `257` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `service_execution_payload + preflight_result` 这条 payload typed 链也统一到 total-output seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`preflight_execution_models_from_service_execution_payload()` 与 `preflight_models_from_service_execution_payload()` 现在都只会从共享 `outputs` helper 取对应 typed 结果，focused 回归脚本维持 `257` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `service_execution_payload + execution_result` 这条 payload total-output seam 本身也明确收成单点：新增 `build_configured_tool_registry_provider_preflight_outputs_from_service_execution_payload()`；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`build_preflight_outputs()` 现在也只是这层 payload helper 的兼容壳，focused 回归脚本已扩展到 `258` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 typed `service_execution_model + preflight_result` 这条链也统一到 total-output seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`...from_service_execution_model()` 这几条 typed 兼容入口现在都只会从共享 `outputs_from_service_execution_model()` 取对应结果，focused 回归脚本已扩展到 `259` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把单参 dict total-output 总出口也并回更高层 `build_configured_tool_registry_provider_preflight_outputs()`；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`build_configured_tool_registry_provider_preflight_outputs_from_dict()` 现在只会从共享 `build_configured_tool_registry_provider_preflight_outputs(service_execution, execution_result)` 取总装结果，focused 回归脚本已扩展到 `261` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `service_execution_payload + execution_result` 这条 total-output 入口也并回更高层 `build_configured_tool_registry_provider_preflight_outputs()`；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；高层 `build_configured_tool_registry_provider_preflight_outputs()` 现在自己承担 `service_execution` hydration，而 `build_configured_tool_registry_provider_preflight_outputs_from_service_execution_payload()` 退回为兼容壳，focused 回归脚本已扩展到 `263` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 execute 侧也补成对称的 typed total-output seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`execute_configured_tool_registry_provider_preflight_outputs()` 现在只负责构造 `service_execution_model`，其余总装都交给新的 typed execute helper，focused 回归脚本已扩展到 `265` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把最外层 summary/result wrapper 这批 outward 入口退回到最近邻 helper；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；summary/result outward 入口现在更多只是从现成 `dicts()/models()` helper 取结果，不再平行依赖更深的 `outputs()` seam，focused 回归脚本维持 `265` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `service_execution/execution_models` 这组 wrapper 也退回到最近邻 helper；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`service_execution/execution_models` outward 入口现在更多只是从现成 `execution_models()/models()` helper 取结果，不再平行依赖更深的 `outputs()` seam，而 `models` 这一层本身也已直接走 `models_from_models()` 主链，focused 回归脚本已扩展到 `267` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `dicts` 这一层 outward wrapper 也退回到最近邻 `models()` helper；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`build_preflight_dicts_from_models()` / `build_preflight_dicts()` / `execute_preflight_dicts()` 现在都只是在现成 `models()` 主链之上做字典投影，不再平行依赖更深的 `outputs()` seam，focused 回归脚本已扩展到 `270` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
