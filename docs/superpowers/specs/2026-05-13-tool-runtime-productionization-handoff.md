@@ -735,3 +735,27 @@ bash scripts/test_ci_e2e_tooling.sh common
 - 这样 `dicts` 这一层不再平行直连更深的 `outputs()` seam，summary/result 的 dict outward 投影职责进一步集中到 typed `models` 主链之上。
 - 本轮新增了三条 focused seam tests，分别锁定 `dicts_from_models()`、`build_preflight_dicts()`、`execute_preflight_dicts()` 的新委托方向；focused 基线已更新到 `270` 条。
 - 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-05-26，续二十九）
+
+- 这轮继续把 `outputs` 这一组 build/execute wrapper 也退回到了 `models + dict projection` 主链：build 侧 `build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()`、`build_configured_tool_registry_provider_preflight_outputs()`、`...outputs_from_service_execution_payload()`、`...outputs_from_dict()` 现在都先走各自最近邻的 `models` helper，再统一通过共享 `build_configured_tool_registry_provider_preflight_outputs_from_resolved_models()` 组装 `summary/result` dict。
+- execute 侧也补齐了对称的 typed seam：新增 `execute_configured_tool_registry_provider_preflight_models_from_service_execution_model()`，统一负责 `service_execution_model + trace/persist/audit -> service_execution_result_model + summary_model + result_model`，然后让 `execute_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 与 `execute_configured_tool_registry_provider_preflight_outputs()` 都退回到这条 `execute_models` 主链之后再统一做 dict 投影。
+- 这样 build/execute 两侧的 `outputs` 入口都不再保留平行的总装路径，而只是 typed `models` 主链上的 outward compatibility shell。
+- 本轮把既有 build/execute seam tests 一起改严，并新增两条 focused seam tests，分别锁定 `build_preflight_outputs_from_service_execution_model()` 和 `execute_preflight_outputs_from_service_execution_model()` 的新委托方向；focused 基线已更新到 `272` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-05-26，续三十）
+
+- 这轮继续把 `service_execution` 内核层的两处 typed seam 也收紧了：新增 `build_configured_tool_registry_provider_runtime_service_actions_model_from_runtime_artifacts_model()`，让 `build_configured_tool_registry_provider_service_execution_model()` 直接从 typed `runtime_artifacts` 派生 typed `service_actions`，不再先走 `runtime_artifacts.to_dict()`。
+- execute 侧则让 `execute_configured_tool_registry_provider_service_execution_model()` 直接把 `service_execution.service_actions` 组装成 `ConfiguredToolRegistryProviderRuntimeServiceActionsModel` 后调用 typed `execute_configured_tool_registry_provider_runtime_service_actions_model()`，不再先做 `[action.to_dict()] -> execute_*_result_model()` 这段 dict 往返。
+- 这样 `service_execution` 这一层在 build/execute 两侧都更集中地停留在 typed model 内部流转，进一步缩小了 dict bridge 的使用面。
+- 本轮新增两条 focused seam tests，分别锁定 `build_service_execution_model()` 与 `execute_service_execution_model()` 的新委托方向；focused 基线已更新到 `274` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-05-26，续三十一）
+
+- 这轮继续把相邻的 `service_execution result + dict` 这一层也补成了 `outputs` 单点：新增 `build_configured_tool_registry_provider_service_execution_outputs()`、`...outputs_from_service_execution_model()`、`...outputs_from_models()` 与 `execute_configured_tool_registry_provider_service_execution_outputs()`、`...outputs_from_service_execution_model()`。
+- 相应地，`build_configured_tool_registry_provider_service_execution_result_model()` 与 `...result_model_from_service_execution_model()` 现在都退回为从 `build_service_execution_outputs*` 取 typed result model；`execute_configured_tool_registry_provider_service_execution()` 则退回为从 `execute_service_execution_outputs*` 取 result dict。
+- 这样 `service_execution` 这层的 build/execute 两侧都不再保留平行的 result+dict 组装路径，而是先统一走 `outputs` seam，再按需取 typed result 或 dict。
+- 本轮新增三条 focused seam tests，分别锁定 `build_service_execution_result_model()`、`build_service_execution_result_model_from_service_execution_model()`、`execute_service_execution()` 的新委托方向；focused 基线已更新到 `277` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。

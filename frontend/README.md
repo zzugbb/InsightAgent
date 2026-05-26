@@ -525,3 +525,9 @@ npm run test:e2e:smoke:matrix
 - 当前前端仍无需任何协议调整；`service_execution/execution_models` outward 入口现在更多只是从现成 `execution_models()/models()` helper 取结果，不再平行依赖更深的 `outputs()` seam，而 `models` 这一层本身也已直接走 `models_from_models()` 主链，focused 回归脚本已扩展到 `267` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
 - 本轮后端继续把 `dicts` 这一层 outward wrapper 也退回到最近邻 `models()` helper；前端外部 SSE / trace / e2e 契约仍未变化。
 - 当前前端仍无需任何协议调整；`build_preflight_dicts_from_models()` / `build_preflight_dicts()` / `execute_preflight_dicts()` 现在都只是在现成 `models()` 主链之上做字典投影，不再平行依赖更深的 `outputs()` seam，focused 回归脚本已扩展到 `270` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `outputs` 这一组 build/execute wrapper 也退回到 `models + dict projection` 主链；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；build/execute 两侧的 `outputs` 入口现在都只是从现成 `models()` 主链取 typed 结果，再统一做 dict 投影，不再保留平行的总装路径，focused 回归脚本已扩展到 `272` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `service_execution` 内核层的两处 model/dict 往返拿掉；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`service_execution` 现在在 build/execute 两侧都更多停留在 typed model 内部流转，不再额外做 `runtime_artifacts.to_dict()` 或 `[action.to_dict()]` 这种中转，focused 回归脚本已扩展到 `274` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把相邻的 `service_execution result + dict` 这一层也补成 `outputs` 单点；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`service_execution` 现在在 build/execute 两侧都可以先统一走 `outputs` seam，再取 typed result 或 dict，不再保留平行的 result+dict 组装路径，focused 回归脚本已扩展到 `277` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
