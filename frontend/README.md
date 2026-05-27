@@ -553,3 +553,31 @@ npm run test:e2e:smoke:matrix
 - 当前前端仍无需任何协议调整；`build_preflight_dicts_from_models()`、`build_preflight_summary_model_from_models()`、`build_preflight_result_model_from_models()` 与 `build_preflight_result_model()` 只是进一步改成从 `outputs_from_models` / `outputs_from_service_execution_payload` 直接取 outward dict 或 typed result，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `292` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
 - 本轮后端继续把 `preflight models_from_dict / ...payload / ...service_execution_model` 三条 typed 总装入口也统一并回 `preflight_execution_models_*` 主链；前端外部 SSE / trace / e2e 契约仍未变化。
 - 当前前端仍无需任何协议调整；这次只是把后端内部的 typed 总装边界进一步压到更少 helper 上，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `292` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 dict/typed `service_execution_model/result_model` wrapper 也统一并回 `preflight_execution_models_*` 主链；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次仍然只是进一步压缩后端内部的 seam 数量，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `292` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `preflight_execution_models_from_service_execution_payload()` 也退回到 typed helper；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是把 payload 层也统一先落到 typed `service_execution_model` 再派生 `execution_result_model`，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `292` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 typed `preflight_execution_models_from_service_execution_model()` 也退回到通用 `service_execution_result_model` helper；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是进一步压缩 typed path 内部的 seam 数量，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `292` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `preflight` 剩余的 dict/payload/typed wrapper 成片并回 `outputs_from_*` seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；`build_preflight_service_execution_model/result_model/execution_models/models` 这几组 wrapper 只是进一步改成从最近邻 `outputs_from_dict()` / `...outputs_from_service_execution_payload()` / `...outputs_from_service_execution_model()` 取 typed 结果，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `292` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 execute-side 的 `preflight models` 平行总装链也并回 `execute_preflight_outputs*` seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是让 execute 侧 `models` 入口也直接从最近邻 `execute outputs` seam 取 typed 结果，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本已扩展到 `294` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `service_execution` execute 侧也补成了和 build 侧对称的共享总装 seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是让 execute 侧 `service_execution` 也统一通过共享的 typed result+dict 总装 helper 出口，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本已扩展到 `296` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 execute-side 的 `preflight outputs_from_service_execution_model()` 也并回 `service_execution outputs` seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是让 execute-side preflight 总装链也优先通过最近邻 `service_execution outputs` seam 取 typed 执行结果，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `296` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把三条还直接切 `outputs()[0]` 的 `runtime_service_actions / service_execution` wrapper 一起退回到最近邻 `*_model_*` helper；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是继续压缩后端内部 helper 之间的委托层次，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本已扩展到 `297` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把一条 raw build 链和两条 `service_execution` result 链一起退回到最近邻 typed model helper；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是继续压缩后端内部 result/helper 的委托层次，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本已扩展到 `299` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `*_result_model` 这组 wrapper 成片退回到 typed result seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是继续压缩后端内部 result-model helper 之间的委托层次，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `299` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 raw dict `outputs` wrapper 这一批也并回到最近邻 `result_model` seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是继续压缩后端内部 raw wrapper 与 result-model helper 之间的委托层次，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本已扩展到 `302` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `preflight` 最外层 raw wrapper 也并回到 `summary/result model` seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是继续压缩后端最外层 preflight outward helper 的委托层次，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `302` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 `preflight` 剩下的 typed `summary/result model` wrapper 成片并回到 `result_model/models` 主链；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是把 `summary_model_from_*` 与 `result_model_from_*` 这批内部 helper 从 `outputs` seam 收回到更直接的 typed `result_model/models` 边界，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `302` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 execute-side 的 `preflight models/model` wrapper 成片并回到 `service_execution outputs + models_from_models` 主链；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是把 execute 侧内部 typed 总装边界从 `outputs` 反拆改成“先统一拿 typed `execution_result_model`，再组装 `summary/result`”，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `302` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
