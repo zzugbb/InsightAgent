@@ -1061,3 +1061,22 @@ bash scripts/test_ci_e2e_tooling.sh common
 - 这样 build / execute 两侧最外层 dict outward wrapper 都不再各自平行绕 `model/models` seam，边界进一步统一成“最近邻 dict seam + 极薄兼容壳”。
 - 本轮改严 5 条 focused tests，focused 基线维持 `303` 条。
 - 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-05-28，续六十六）
+
+- 这轮继续把 `service_execution` 最外层 raw wrapper 收回到了 `outputs_from_service_execution_model()` / `outputs()` seam。
+- 相应地，`build_configured_tool_registry_provider_service_execution_outputs()` 现在直接复用 `build_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()`，不再自己平行做一次 dict -> typed hydration。
+- 同时，`execute_configured_tool_registry_provider_service_execution_outputs()` 也退回成直接复用 `execute_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()`；而 `execute_configured_tool_registry_provider_service_execution()` 则直接复用 `execute_configured_tool_registry_provider_service_execution_outputs()` 取最终 dict。
+- 这样 `service_execution` build / execute 两侧最外层 raw outward wrapper 都进一步统一成了“最近邻 outputs seam + 极薄兼容壳”，继续减少平行 wrapper 与重复 `to_dict()`。
+- 本轮改严 3 条 focused tests，focused 基线维持 `303` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-05-28，续六十七）
+
+- 这轮继续把 `service_execution_result` 与 `preflight_service_execution_result` 这批 wrapper 收回到了最近邻 `service_execution outputs` seam。
+- 相应地，`build_configured_tool_registry_provider_service_execution_result_model()` 与 `...result_model_from_service_execution_model()` 现在都直接复用各自最近邻的 `service_execution outputs` helper 取 typed result，不再平行保留一条单独的 result-model 总装链。
+- execute 侧的 `execute_configured_tool_registry_provider_service_execution_model()` 也同步退回为直接从 `execute_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()` 取 typed result；这样 `service_execution` build / execute 两侧在 result-model 边界上再次对齐。
+- 同时，`build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict()` 改成先走 `build_configured_tool_registry_provider_preflight_service_execution_payload_from_dict()` 再直接复用 `build_configured_tool_registry_provider_service_execution_outputs()`，而 `...from_service_execution_model()` 也同步直接复用 `build_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()`；这批 preflight wrapper 不再平行绕旧的 result-model 直连入口。
+- 这轮还顺手把 `build_configured_tool_registry_provider_service_execution_outputs_from_models()` 里误入的一处 `typed -> dict -> typed` 往返去掉，并把两条 `outputs_from_service_execution_model()` seam tests 抬高到新的 core builder 边界。
+- 本轮 focused 基线维持 `303` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
