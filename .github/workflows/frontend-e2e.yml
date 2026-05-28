@@ -55,7 +55,7 @@ env:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16-alpine
@@ -114,8 +114,16 @@ jobs:
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
 
+      - name: Restore Playwright browser cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install Playwright browser
-        run: cd frontend && npx playwright install --with-deps chromium firefox webkit
+        run: cd frontend && npx playwright install chromium firefox webkit
 
       - name: Run frontend smoke e2e matrix
         run: |

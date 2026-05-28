@@ -47,6 +47,11 @@ main() {
   assert_contains 'bash scripts/ci_write_skipped_artifact_guard_summary.sh \' "${FRONTEND_WORKFLOW}"
   assert_contains '--reason "finalize_backend step did not succeed"' "${BACKEND_WORKFLOW}"
   assert_contains '--reason "finalize_frontend step did not succeed"' "${FRONTEND_WORKFLOW}"
+  assert_contains "uses: actions/cache@v4" "${FRONTEND_WORKFLOW}"
+  assert_contains "path: ~/.cache/ms-playwright" "${FRONTEND_WORKFLOW}"
+  assert_contains "key: playwright-\${{ runner.os }}-" "${FRONTEND_WORKFLOW}"
+  assert_contains "run: cd frontend && npx playwright install chromium firefox webkit" "${FRONTEND_WORKFLOW}"
+  assert_not_contains "run: cd frontend && npx playwright install --with-deps chromium firefox webkit" "${FRONTEND_WORKFLOW}"
 
   echo "ci_workflow_guards tests passed"
 }
