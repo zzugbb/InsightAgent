@@ -50,6 +50,7 @@ main() {
   assert_contains "uses: actions/cache@v4" "${FRONTEND_WORKFLOW}"
   assert_contains "path: ~/.cache/ms-playwright" "${FRONTEND_WORKFLOW}"
   assert_contains "key: playwright-\${{ runner.os }}-" "${FRONTEND_WORKFLOW}"
+  assert_contains "run: cd frontend && npx playwright install-deps chromium firefox webkit" "${FRONTEND_WORKFLOW}"
   assert_contains "run: cd frontend && npx playwright install chromium firefox webkit" "${FRONTEND_WORKFLOW}"
   assert_not_contains "run: cd frontend && npx playwright install --with-deps chromium firefox webkit" "${FRONTEND_WORKFLOW}"
 

@@ -122,6 +122,9 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
+      - name: Install Playwright system dependencies
+        run: cd frontend && npx playwright install-deps chromium firefox webkit
+
       - name: Install Playwright browser
         run: cd frontend && npx playwright install chromium firefox webkit
 
