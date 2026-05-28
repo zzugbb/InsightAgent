@@ -1052,3 +1052,12 @@ bash scripts/test_ci_e2e_tooling.sh common
 - 这样 build-side `preflight` 当前的 raw outward 边界也进一步统一成了 `payload -> from_dict -> typed seam` 的单点入口，继续减少 wrapper 套 wrapper 与重复 hydration。
 - 本轮改严 6 条 focused tests，focused 基线维持 `303` 条。
 - 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-05-28，续六十五）
+
+- 这轮继续把 build/execute 最外层 `preflight` dict outward wrapper 收回到了 `dicts` / `outputs_from_dict` seam。
+- 相应地，`build_configured_tool_registry_provider_preflight_summary()` 现在直接复用 `build_configured_tool_registry_provider_preflight_dicts()` 取 summary dict，`build_configured_tool_registry_provider_preflight_result()` 也直接复用同一层取 result dict。
+- 同时，`build_configured_tool_registry_provider_preflight_dicts()` 本身改成直接从 `build_configured_tool_registry_provider_preflight_outputs_from_dict()` 取最后两个 dict；execute 侧的 `execute_configured_tool_registry_provider_preflight_dicts()` 现在直接复用 `execute_configured_tool_registry_provider_preflight_outputs()`，而 `execute_configured_tool_registry_provider_preflight()` 则直接复用 `execute_configured_tool_registry_provider_preflight_dicts()`。
+- 这样 build / execute 两侧最外层 dict outward wrapper 都不再各自平行绕 `model/models` seam，边界进一步统一成“最近邻 dict seam + 极薄兼容壳”。
+- 本轮改严 5 条 focused tests，focused 基线维持 `303` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
