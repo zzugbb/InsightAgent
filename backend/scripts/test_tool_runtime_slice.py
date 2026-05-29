@@ -5025,7 +5025,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
-    def test_build_configured_tool_registry_provider_preflight_result_uses_dicts_helper(
+    def test_build_configured_tool_registry_provider_preflight_result_uses_result_model_helper(
         self,
     ) -> None:
         provider = StaticToolRegistryProvider(
@@ -5043,24 +5043,28 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
             "service_actions": [],
         }
-        original_helper = tool_runtime_module.build_configured_tool_registry_provider_preflight_dicts
+        original_helper = tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model
         captured: list[tuple[str, int, int, str]] = []
 
         def record_helper(
             *,
-            preflight_result: dict[str, object],
-        ) -> tuple[dict[str, object], dict[str, object]]:
+            service_execution: dict[str, object],
+            execution_result: dict[str, object],
+        ) -> object:
             captured.append(
                 (
-                    int(preflight_result["trace_write_count"]),
-                    int(preflight_result["audit_event_count"]),
-                    str(preflight_result["service_execution"]["provider_source_name"]),
-                    str(preflight_result["provider_source_name"]),
+                    int(execution_result["trace_write_count"]),
+                    int(execution_result["audit_event_count"]),
+                    str(service_execution["provider_source_name"]),
+                    str(execution_result["provider_source_name"]),
                 )
             )
-            return original_helper(preflight_result=preflight_result)
+            return original_helper(
+                service_execution=service_execution,
+                execution_result=execution_result,
+            )
 
-        tool_runtime_module.build_configured_tool_registry_provider_preflight_dicts = record_helper
+        tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model = record_helper
         try:
             result = build_configured_tool_registry_provider_preflight_result(
                 service_execution=service_execution,
@@ -5073,7 +5077,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 },
             )
         finally:
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_dicts = original_helper
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model = original_helper
 
         self.assertEqual(captured, [(1, 2, "file_source", "file_source")])
         self.assertIs(result["provider"], provider)
@@ -5116,16 +5120,16 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
-    def test_build_configured_tool_registry_provider_preflight_summary_uses_dicts_helper(
+    def test_build_configured_tool_registry_provider_preflight_summary_uses_summary_model_helper(
         self,
     ) -> None:
-        original_helper = tool_runtime_module.build_configured_tool_registry_provider_preflight_dicts
+        original_helper = tool_runtime_module.build_configured_tool_registry_provider_preflight_summary_model_from_dict
         captured: list[tuple[int, int]] = []
 
         def record_helper(
             *,
             preflight_result: dict[str, object],
-        ) -> tuple[dict[str, object], dict[str, object]]:
+        ) -> object:
             captured.append(
                 (
                     int(preflight_result["trace_write_count"]),
@@ -5134,7 +5138,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             )
             return original_helper(preflight_result=preflight_result)
 
-        tool_runtime_module.build_configured_tool_registry_provider_preflight_dicts = record_helper
+        tool_runtime_module.build_configured_tool_registry_provider_preflight_summary_model_from_dict = record_helper
         try:
             result = build_configured_tool_registry_provider_preflight_summary(
                 preflight_result={
@@ -5154,7 +5158,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             )
         finally:
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_dicts = original_helper
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_summary_model_from_dict = original_helper
 
         self.assertEqual(captured, [(0, 1)])
         self.assertEqual(result["provider_source_name"], "default")
@@ -5226,30 +5230,30 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result.audit_event_count, 2)
         self.assertEqual(result.missing_total, 1)
 
-    def test_build_configured_tool_registry_provider_preflight_summary_model_from_dict_uses_models_from_dict_helper(
+    def test_build_configured_tool_registry_provider_preflight_summary_model_from_dict_uses_result_model_from_dict_helper(
         self,
     ) -> None:
         provider = StaticToolRegistryProvider(
             {"calc_eval": get_default_tool_registry()["calc_eval"]}
         )
-        original_models_helper = (
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_models_from_dict
+        original_helper = (
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_dict
         )
         captured: list[tuple[int, int]] = []
 
-        def record_models_helper(
+        def record_helper(
             *,
             preflight_result: dict[str, object],
-        ) -> tuple[object, object, object, object]:
+        ) -> object:
             captured.append(
                 (
                     preflight_result["trace_write_count"],
                     preflight_result["audit_event_count"],
                 )
             )
-            return original_models_helper(preflight_result=preflight_result)
+            return original_helper(preflight_result=preflight_result)
 
-        tool_runtime_module.build_configured_tool_registry_provider_preflight_models_from_dict = record_models_helper
+        tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_dict = record_helper
         try:
             result = build_configured_tool_registry_provider_preflight_summary_model_from_dict(
                 preflight_result={
@@ -5273,7 +5277,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             )
         finally:
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_models_from_dict = original_models_helper
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_dict = original_helper
 
         self.assertEqual(captured, [(1, 2)])
         self.assertEqual(result.provider_source_name, "file_source")
@@ -6952,19 +6956,19 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result.summary.tool_names, ("calc_eval",))
         self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
 
-    def test_build_configured_tool_registry_provider_preflight_dicts_uses_outputs_from_dict_helper(
+    def test_build_configured_tool_registry_provider_preflight_dicts_uses_result_model_from_dict_helper(
         self,
     ) -> None:
         provider = StaticToolRegistryProvider(
             {"calc_eval": get_default_tool_registry()["calc_eval"]}
         )
-        original_helper = tool_runtime_module.build_configured_tool_registry_provider_preflight_outputs_from_dict
+        original_helper = tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_dict
         captured: list[tuple[int, int]] = []
 
         def record_helper(
             *,
             preflight_result: dict[str, object],
-        ) -> tuple[object, object, object, object, dict[str, object], dict[str, object]]:
+        ) -> object:
             captured.append(
                 (
                     int(preflight_result["trace_write_count"]),
@@ -6973,7 +6977,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             )
             return original_helper(preflight_result=preflight_result)
 
-        tool_runtime_module.build_configured_tool_registry_provider_preflight_outputs_from_dict = record_helper
+        tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_dict = record_helper
         try:
             summary_dict, result_dict = build_configured_tool_registry_provider_preflight_dicts(
                 preflight_result={
@@ -6997,7 +7001,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             )
         finally:
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_outputs_from_dict = original_helper
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_dict = original_helper
 
         self.assertEqual(captured, [(1, 2)])
         self.assertEqual(summary_dict["tool_names"], ("calc_eval",))
@@ -7610,7 +7614,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("record_audit_event",),
         )
 
-    def test_build_configured_tool_registry_provider_preflight_summary_model_from_models_uses_models_helper(
+    def test_build_configured_tool_registry_provider_preflight_summary_model_from_models_uses_result_model_helper(
         self,
     ) -> None:
         service_execution_model = build_configured_tool_registry_provider_service_execution_model(
@@ -7628,7 +7632,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
         original_helper = (
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_models_from_models
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_models
         )
         captured: list[tuple[str, int, int]] = []
 
@@ -7636,7 +7640,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             *,
             service_execution: object,
             execution_result: object,
-        ) -> tuple[object, object, object, object]:
+        ) -> object:
             captured.append(
                 (
                     getattr(service_execution, "provider_source_name"),
@@ -7649,14 +7653,14 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 execution_result=execution_result,
             )
 
-        tool_runtime_module.build_configured_tool_registry_provider_preflight_models_from_models = record_helper
+        tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_models = record_helper
         try:
             result = build_configured_tool_registry_provider_preflight_summary_model_from_models(
                 service_execution=service_execution_model,
                 execution_result=service_execution_result_model,
             )
         finally:
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_models_from_models = original_helper
+            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_models = original_helper
 
         self.assertEqual(captured, [("default", 1, 2)])
         self.assertEqual(result.provider_source_name, service_execution_model.provider_source_name)
@@ -8333,7 +8337,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(persisted, [True])
         self.assertEqual(len(audit_calls), 1)
 
-    def test_execute_configured_tool_registry_provider_preflight_uses_dicts_helper(
+    def test_execute_configured_tool_registry_provider_preflight_uses_model_helper(
         self,
     ) -> None:
         trace_steps: list[dict[str, object]] = []
@@ -8366,9 +8370,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     }
                 ),
             )
-            original_helper = (
-                tool_runtime_module.execute_configured_tool_registry_provider_preflight_dicts
-            )
+            original_helper = tool_runtime_module.execute_configured_tool_registry_provider_preflight_model
             captured: list[tuple[str, int, str]] = []
 
             def record_helper(
@@ -8381,7 +8383,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 persist_trace_fn: object,
                 record_audit_event_fn: object,
                 settings: object | None = None,
-            ) -> tuple[dict[str, object], dict[str, object]]:
+            ) -> object:
                 captured.append((task_id, seq, model))
                 return original_helper(
                     task_id=task_id,
@@ -8394,7 +8396,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     settings=settings,
                 )
 
-            tool_runtime_module.execute_configured_tool_registry_provider_preflight_dicts = record_helper
+            tool_runtime_module.execute_configured_tool_registry_provider_preflight_model = record_helper
             try:
                 result = execute_configured_tool_registry_provider_preflight(
                     settings=settings,
@@ -8407,7 +8409,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     record_audit_event_fn=lambda **kwargs: audit_calls.append(kwargs),
                 )
             finally:
-                tool_runtime_module.execute_configured_tool_registry_provider_preflight_dicts = original_helper
+                tool_runtime_module.execute_configured_tool_registry_provider_preflight_model = original_helper
 
         self.assertEqual(captured, [("task-1", 2, "mock-gpt")])
         self.assertEqual(result["provider_source_name"], "file_source")
@@ -8423,7 +8425,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(persisted, [True])
         self.assertEqual(len(audit_calls), 1)
 
-    def test_execute_configured_tool_registry_provider_preflight_dicts_uses_outputs_helper(
+    def test_execute_configured_tool_registry_provider_preflight_dicts_uses_model_helper(
         self,
     ) -> None:
         trace_steps: list[dict[str, object]] = []
@@ -8456,9 +8458,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     }
                 ),
             )
-            original_helper = (
-                tool_runtime_module.execute_configured_tool_registry_provider_preflight_outputs
-            )
+            original_helper = tool_runtime_module.execute_configured_tool_registry_provider_preflight_model
             captured: list[tuple[str, int, str]] = []
 
             def record_helper(
@@ -8471,7 +8471,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 persist_trace_fn: object,
                 record_audit_event_fn: object,
                 settings: object | None = None,
-            ) -> tuple[object, object, object, object, dict[str, object], dict[str, object]]:
+            ) -> object:
                 captured.append((task_id, seq, model))
                 return original_helper(
                     task_id=task_id,
@@ -8484,7 +8484,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     settings=settings,
                 )
 
-            tool_runtime_module.execute_configured_tool_registry_provider_preflight_outputs = record_helper
+            tool_runtime_module.execute_configured_tool_registry_provider_preflight_model = record_helper
             try:
                 summary_dict, result_dict = (
                     execute_configured_tool_registry_provider_preflight_dicts(
@@ -8503,7 +8503,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     )
                 )
             finally:
-                tool_runtime_module.execute_configured_tool_registry_provider_preflight_outputs = original_helper
+                tool_runtime_module.execute_configured_tool_registry_provider_preflight_model = original_helper
 
         self.assertEqual(captured, [("task-1", 2, "mock-gpt")])
         self.assertEqual(summary_dict["provider_source_name"], "file_source")
