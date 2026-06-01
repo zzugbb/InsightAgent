@@ -493,6 +493,13 @@ npm run test:e2e:smoke:matrix
 - 当前前端无需任何协议调整；focused 回归脚本已扩展到 `246` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
 - 本轮后端继续把 dict 侧的 `payload -> total models` 也收成 `build_configured_tool_registry_provider_preflight_models_from_service_execution_payload()`，同时把 typed pair helper 再往外退成 total-model 兼容壳；前端外部 SSE / trace / e2e 契约仍未变化。
 - 当前前端仍无需任何协议调整；focused 回归脚本已扩展到 `247` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+
+## 最新同步（2026-06-01）
+
+- 本轮 `tool-runtime-productionization` 继续集中在后端 `service_execution / preflight` 内部 wrapper 收薄：`service_execution` 的 build/execute `outputs` 壳已统一退回最近邻 typed `result_model` seam，相邻 `preflight_service_execution_result` typed 壳也同步挂回通用 `service_execution_result` 主链。
+- 前端外部 SSE / trace / e2e 契约仍未变化，Workbench 与任务详情页无需任何协议适配；focused 回归脚本维持 `303` 条兼容测试，`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py` 与 `bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 同轮续推又把 dict 侧 `preflight_result -> service_execution/execution_result pair` 入口再收薄一层：`build_configured_tool_registry_provider_preflight_execution_models_from_dict()` 现在直接复用 `...preflight_service_execution_model_from_dict()` 与 `...preflight_service_execution_result_model_from_dict()`。
+- 前端外部 SSE / trace / e2e 契约依旧不变，当前仍无需任何协议调整；focused 回归脚本维持 `303` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
 - 本轮后端又把 payload 侧 pair helper 也退成了 total-model 兼容壳，`payload -> total models` 现在已经成为 dict inward 的主单点；前端外部 SSE / trace / e2e 契约仍未变化。
 - 当前前端仍无需任何协议调整；focused 回归脚本已扩展到 `249` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
 - 本轮后端继续把 typed 侧 `service_execution_model -> execution_result_model` 的 preflight wrapper 也退成 total-model 兼容壳，typed inward 的主单点进一步集中到 `preflight_models_from_service_execution_model()`；前端外部 SSE / trace / e2e 契约仍未变化。
@@ -605,5 +612,17 @@ npm run test:e2e:smoke:matrix
 - 当前前端仍无需任何协议调整；这次只是把内部 typed result 的拿取路径统一压回最近邻 `service_execution outputs` helper，前端消费到的 provider/runtime_artifacts/summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `303` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
 - 本轮后端继续把 build/execute 最外层 `preflight` dict outward wrapper 收回到 `summary_model/result_model` seam；前端外部 SSE / trace / e2e 契约仍未变化。
 - 当前前端仍无需任何协议调整；这次只是把 build 侧 `summary/result/dicts` outward 与 execute 侧 `result/dicts` outward 统一改成直接复用最近邻 typed `summary/result model` helper，再做 `to_dict()` 投影，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `303` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 payload 侧 `preflight execution-model pair` 入口也收回到 dict seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是让 build-side `preflight` 的 payload inward 入口改成“先合成单参 `preflight_result`，再复用 dict pair helper”，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `303` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 build-side typed `preflight` 的 3 条 `...from_service_execution_model()` wrapper 成片收回到通用 `service_execution_result_model` 主链；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是让 build-side typed `preflight` inward 入口统一先拿 typed `service_execution_result_model`，再分别组装 `models/result/outputs`，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `303` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 execute-side `preflight` 的相邻 outward wrapper 成片收回到更直接的 typed seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是让 execute-side `preflight outputs*` 更早落到 typed `execution_result_model` 主链，再做最近邻 dict 投影，前端消费到的 summary/result outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `303` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端继续把 execute-side 顶层 `preflight` 的 `models/model/dicts` 三层 wrapper 也收回到统一的 `outputs` seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是让 execute-side 顶层 `preflight` 更统一地从同一条 total-output seam 取 typed 结果或 summary/result dict，前端消费到的 outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `303` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
 - 前端 e2e workflow 修复（2026-05-28）：`.github/workflows/frontend-e2e.yml` 已为 Playwright 浏览器目录增加 `~/.cache/ms-playwright` 缓存，并把安装步骤从 `npx playwright install --with-deps chromium firefox webkit` 调整为更轻的 `npx playwright install chromium firefox webkit`；同时 job 超时从 `35` 分钟放宽到 `45` 分钟，减少冷启动浏览器安装把整条前端 e2e job 卡死的风险。对应 workflow guard 与 `common` fixture 已通过。
 - 前端 e2e workflow 跟进修复（2026-05-28）：在缓存与超时放宽之后，前端 smoke matrix 仍提示 Playwright 缺系统依赖，因此 workflow 已进一步拆成“缓存浏览器目录 + `npx playwright install-deps chromium firefox webkit` + `npx playwright install chromium firefox webkit`”三段式安装。当前既能利用浏览器缓存，也能保证 `chromium/firefox/webkit` 三项目在 Ubuntu runner 上具备完整依赖；对应 workflow guard 与 `common` fixture 已再次通过。
+- 本轮后端继续把 build-side `preflight` 的 `summary/result/dicts/models` wrapper 成片收回到统一的 `outputs` seam；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是把 build 侧 `summary/result` typed/dict outward wrapper 进一步统一成从最近邻 `preflight_outputs*()` helper 取值，前端消费到的 `summary/result` outward 形状、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `303` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
+- 本轮后端还把 payload 侧两条 `preflight` inward wrapper 一起并回到了 `outputs_from_service_execution_payload()`；前端外部 SSE / trace / e2e 契约仍未变化。
+- 当前前端仍无需任何协议调整；这次只是让 build-side payload inward 入口和 dict / typed 两侧共用同一条 total-output seam，前端消费到的 outward 协议、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `303` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
