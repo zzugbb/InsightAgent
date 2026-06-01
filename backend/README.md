@@ -739,3 +739,30 @@ docker compose up -d chroma
 - 这样 payload inward 入口也开始和 dict / typed 两侧共用同一条 total-output seam，不再平行保留一条独立的 payload pair / models 总装链；外部 SSE / trace / e2e 契约继续保持不变。
 - 本轮先跑出 1 条新增回归红灯后转绿，focused 基线维持 `303` 条。
 - 本轮校验同上通过。
+
+## 最新进展（2026-06-01，续九）
+
+- 这轮继续把 dict 侧 `preflight` 的 `models_from_dict / outputs_from_dict` 总装边界再拉直一层。
+- `build_configured_tool_registry_provider_preflight_outputs_from_dict()` 现在不再先复用 `build_configured_tool_registry_provider_preflight_models_from_dict()`；它改为直接复用 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()` 拿 typed `service_execution_model/execution_result_model` pair，再统一进入 `build_configured_tool_registry_provider_preflight_models_from_models()` 和 `build_configured_tool_registry_provider_preflight_outputs_from_resolved_models()`。
+- 同时，`build_configured_tool_registry_provider_preflight_models_from_dict()` 也同步改成直接复用 `build_configured_tool_registry_provider_preflight_outputs_from_dict()` 并取前四个 typed 结果，不再自己平行保留一段 dict total-assembly 链。
+- 这样 dict 侧当前更接近“`outputs_from_dict` 作为单一 total-output seam，`models_from_dict` 只保留最近邻取值职责”的边界；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先跑出 2 条 focused 红灯后转绿，focused 基线维持 `303` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新进展（2026-06-01，续十）
+
+- 这轮继续把 build/execute typed `preflight ...from_service_execution_model()` 的相邻平行链也成片收回到了 `outputs_from_service_execution_model()`。
+- `build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model()` 现在直接复用 `build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 并取前两个 typed 结果；`build_configured_tool_registry_provider_preflight_models_from_service_execution_model()` 也同步直接复用同一条 helper 并取前四个 typed 结果。
+- execute 侧的 `execute_configured_tool_registry_provider_preflight_models_from_service_execution_model()` 也已经退回成直接复用 `execute_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 并取前四个 typed 结果，不再自己平行保留一段 `execute_service_execution_model() + build_preflight_models_from_models()` 的 typed 总装链。
+- 这样 build / execute 两侧在 `typed service_execution_model -> preflight total outputs` 这一层的边界更加一致：`outputs_from_service_execution_model()` 成为单一 total-output seam，而 `execution_models/models` 这批 outward wrapper 只保留最近邻取值职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先跑出 3 条 focused 红灯后转绿，focused 基线维持 `303` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新进展（2026-06-01，续十一）
+
+- 这轮继续把 dict / execute 顶层 `preflight` 的两条相邻 total-output 平行链也一起收回到了统一 seam。
+- `build_configured_tool_registry_provider_preflight_execution_models_from_dict()` 现在直接复用 `build_configured_tool_registry_provider_preflight_outputs_from_dict()` 并取前两个 typed 结果；对应地，`build_configured_tool_registry_provider_preflight_outputs_from_dict()` 自己则改成直接复用 `build_configured_tool_registry_provider_preflight_service_execution_model_from_dict()` 与 `...service_execution_result_model_from_dict()` 后统一进入 `build_configured_tool_registry_provider_preflight_models_from_models()` 与 `build_configured_tool_registry_provider_preflight_outputs_from_resolved_models()`。
+- 同时，execute 顶层的 `execute_configured_tool_registry_provider_preflight_models()` 也改成直接复用 `execute_configured_tool_registry_provider_preflight_outputs()` 并取前四个 typed 结果，不再自己平行保留一段“build typed `service_execution_model` 后直调 `...outputs_from_service_execution_model()`”的 top-level 总装链。
+- 这样 dict 侧 `outputs_from_dict` 与 execute 顶层 `outputs` 当前都更明确成了单一 total-output seam，其余 `execution_models/models` wrapper 只保留最近邻取值职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先跑出 3 条 focused 红灯后转绿，focused 基线维持 `303` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
