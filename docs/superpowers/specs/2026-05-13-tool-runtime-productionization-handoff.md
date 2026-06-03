@@ -1250,3 +1250,201 @@ bash scripts/test_ci_e2e_tooling.sh common
 - 这样 summary 这段当前的 build / execute 边界更完整对称了：build raw、build typed、execute typed、execute raw 四层都尽量优先落在最近邻 `result_model` 或 `summary_model` 主链，再做最终 dict outward 投影；外部 SSE / trace / e2e 契约继续保持不变。
 - 本轮新增并转绿 4 条 focused seam tests，focused 基线从 `304` 提升到 `308`。
 - 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续八十七）
+
+- 这轮继续把 build-side 两参 `service_execution + execution_result` payload 入口统一回到了单参 `preflight_result payload` seam。
+- 相应地，`build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload()` 现在不再直接 hydrate typed `service_execution_model`；它改成先通过 `build_configured_tool_registry_provider_preflight_result_payload()` 合成单参 `preflight_result`，再直接复用 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()`。
+- 同时，`build_configured_tool_registry_provider_preflight_models_from_service_execution_payload()` 与 `...outputs_from_service_execution_payload()` 也同步退回成先统一合成同一份 `preflight_result payload`，再分别直接复用 `...models_from_dict()` 和 `...outputs_from_dict()`，不再各自平行保留一条 payload -> typed hydration -> typed seam 的链路。
+- 这样 build-side payload 这一层当前更接近单一边界：两参 wrapper 只保留 `preflight_result payload` 合成职责，而后续 dict 归一化、typed hydration 与 summary/result 总装都统一继续落在单参 `preflight_result` 主链；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 3 条 focused payload seam tests 抬高后跑成红灯，再全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续八十八）
+
+- 这轮继续把 build-side 最外层 raw `models / result_model` 也统一回到了单参 `preflight_result` dict seam。
+- 相应地，`build_configured_tool_registry_provider_preflight_models()` 现在不再直接 hydrate typed `service_execution_model` 后进入 `...models_from_service_execution_model()`；它改成先通过 `build_configured_tool_registry_provider_preflight_result_payload()` 合成单参 `preflight_result`，再直接复用 `build_configured_tool_registry_provider_preflight_models_from_dict()`。
+- 同时，`build_configured_tool_registry_provider_preflight_result_model()` 也同步退回成先合成同一份 `preflight_result payload`，再直接复用 `build_configured_tool_registry_provider_preflight_result_model_from_dict()`，不再平行停在 `service_execution_model` 这一层。
+- 这样 build-side 当前的 raw outward 边界又更一致了一层：`summary`、`summary_model`、`models`、`result_model`、`result` 这些最外层 wrapper 都更集中地先落在单参 `preflight_result` seam，再做最近邻 typed 取值或最终 `to_dict()` 投影；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 2 条 focused raw seam tests 抬高后跑成红灯，再全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续八十九）
+
+- 这轮继续把 build-side `service_execution_model` 侧残留的 typed `preflight` wrapper 成片收回到了更近的 `service_execution_result_model / from_models` seam。
+- 相应地，`build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model()` 现在直接复用 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model()`，不再先平行绕 `build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 再切片取前两个 typed 结果。
+- 同时，`build_configured_tool_registry_provider_preflight_models_from_service_execution_model()` 也同步退回成先拿 typed `service_execution_result_model`，再直接进入 `build_configured_tool_registry_provider_preflight_models_from_models()`；`build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 则改成从同一条 typed result seam 直接进入 `build_configured_tool_registry_provider_preflight_outputs_from_models()`。
+- `build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model()` 这一层也一起收口：它现在先统一复用 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model()`，再进入 `build_configured_tool_registry_provider_preflight_result_model_from_models()`，不再平行绕 total `outputs` seam。
+- 这样 build-side typed `service_execution_model -> preflight` 这一层当前更清晰地落在 `service_execution_result_model -> preflight from_models` 主链：typed `execution_result` 归一化和 summary/result 总装分层更稳定，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 4 条 focused seam tests 抬高后跑成红灯，再全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十）
+
+- 这轮继续把 build-side `summary_model / result_model / dicts` 这组 wrapper 收回到了更中心的 `preflight_models_*` 主链。
+- 相应地，`build_configured_tool_registry_provider_preflight_summary_model_from_dict()`、`...from_service_execution_model()` 与 `...from_models()` 现在都直接从对应的 `preflight_models_*` helper 取第三个 `summary_model`，不再平行绕 `result_model` 辅助层。
+- 同时，`build_configured_tool_registry_provider_preflight_result_model_from_dict()` 也同步退回成直接从 `build_configured_tool_registry_provider_preflight_models_from_dict()` 取第四个 `result_model`；`build_configured_tool_registry_provider_preflight_dicts_from_models()` 与 `...preflight_dicts()` 则统一从 `preflight_models_*` 取 typed `summary/result`，再做最近邻 `to_dict()` 投影。
+- 这样 build-side `summary/result/dicts` 这族 wrapper 当前更清晰地落在同一条 typed 总装主链：`preflight_models_*` 负责 summary/result 组装，而外围 helper 只保留最近邻切片与 outward dict 投影职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 6 条 focused seam tests 抬高，其中 4 条先跑成红灯后全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十一）
+
+- 这轮继续把 execute-side `preflight` 的 `models / model / summary_model / outputs / dicts` 这组相邻 wrapper 收回到了统一的 `models` 主链。
+- 相应地，`execute_configured_tool_registry_provider_preflight_models_from_service_execution_model()` 现在直接复用 `execute_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()`，再进入 `build_configured_tool_registry_provider_preflight_models_from_models()`，不再先平行绕 `execute_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 再切片取值。
+- 同时，`execute_configured_tool_registry_provider_preflight_model_from_service_execution_model()`、`...preflight_summary_model_from_service_execution_model()` 与 `...preflight_outputs_from_service_execution_model()` 也都同步退回成直接从 `execute_configured_tool_registry_provider_preflight_models_from_service_execution_model()` 取最近邻 typed `result / summary / outputs`。
+- top-level `execute_configured_tool_registry_provider_preflight_dicts()` 这一层也一起收口：它现在直接复用 `execute_configured_tool_registry_provider_preflight_models()`，再从 typed `summary/result` 做最近邻 `to_dict()` 投影，不再平行依赖 top-level `model()`。
+- 这样 execute-side 这串相邻 wrapper 当前更清晰地落在 `execute_preflight_models*` 主链：typed `execution_result` 归一化、summary/result 组装与 outward dict 投影分层更稳定，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 5 条 focused seam tests 抬高，其中 4 条先跑成红灯后全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十二）
+
+- 这轮继续把 top-level execute raw `outputs / summary_model / model` wrapper 收回到了同一条 `execute_preflight_models()` seam。
+- 相应地，`execute_configured_tool_registry_provider_preflight_outputs()` 现在直接复用 `execute_configured_tool_registry_provider_preflight_models()`，再进入 `build_configured_tool_registry_provider_preflight_outputs_from_resolved_models()`，不再先平行绕 `execute_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()`。
+- 同时，`execute_configured_tool_registry_provider_preflight_summary_model()` 与 `execute_configured_tool_registry_provider_preflight_model()` 也同步退回成直接从 `execute_configured_tool_registry_provider_preflight_models()` 取第三个 `summary_model` 与第四个 `result_model`，不再各自平行绕 top-level `...from_service_execution_model()` helper。
+- 这样 execute-side top-level raw wrapper 当前也更清晰地落在 `execute_preflight_models()` 主链：`models` 负责 typed 总装，而 `outputs / summary_model / model` wrapper 只保留最近邻切片与 outward dict 投影职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 3 条 focused seam tests 抬高后跑成红灯，再全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十三）
+
+- 这轮继续把 build-side top-level raw `summary_model / result_model / outputs_from_dict` 收回到了同一条 `preflight_models_from_dict()` 主链。
+- 相应地，`build_configured_tool_registry_provider_preflight_summary_model()` 现在直接从 `build_configured_tool_registry_provider_preflight_models_from_dict()` 取第三个 `summary_model`；`build_configured_tool_registry_provider_preflight_result_model()` 也同步直接取第四个 `result_model`，不再各自平行绕 `result_model_from_dict()`。
+- 同时，`build_configured_tool_registry_provider_preflight_outputs_from_dict()` 这一层也一起收口：它现在直接从 `build_configured_tool_registry_provider_preflight_models_from_dict()` 取 typed `service_execution / execution_result / summary / result`，再进入 `build_configured_tool_registry_provider_preflight_outputs_from_resolved_models()`，不再平行绕 `build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()`。
+- 这样 build-side 这组 top-level raw wrapper 当前也更清晰地落在 `preflight_models_from_dict()` 主链：`models_from_dict` 负责 typed 总装，而 `summary_model / result_model / outputs_from_dict` wrapper 只保留最近邻切片与 outward dict 投影职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 3 条 focused seam tests 抬高后跑成红灯，其中 1 条实际转红、随后全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十四）
+
+- 这轮继续把 build-side `dict -> execution_models/models` 与 typed `service_execution_model -> outputs/result_model` 这组相邻 wrapper 收回到了更中心的 typed 主链。
+- 相应地，`build_configured_tool_registry_provider_preflight_execution_models_from_dict()` 现在直接复用 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict()`；`build_configured_tool_registry_provider_preflight_models_from_dict()` 也同步退回成先走 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()`，再进入 `build_configured_tool_registry_provider_preflight_models_from_models()`，不再先绕 `...models_from_service_execution_model()`。
+- 同时，`build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 与 `build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model()` 这两条 typed outward wrapper 也一起收口：它们现在都直接复用 `build_configured_tool_registry_provider_preflight_models_from_service_execution_model()` 取最近邻 typed `summary/result/outputs`，不再各自平行绕 `preflight_service_execution_result_model_from_service_execution_model()` 再二次总装。
+- 这样 build-side 这一段当前也更清晰地落在两条 typed 主链上：dict 侧由 `preflight_execution_models_from_dict()` 承担 typed pair 总装，typed `service_execution_model` 侧由 `preflight_models_from_service_execution_model()` 承担 summary/result 总装，而 `outputs / result_model` wrapper 只保留最近邻切片与 outward dict 投影职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 4 条 focused seam tests 抬高后跑成红灯，期间还顺手修正了 1 处测试 monkeypatch 的 `finally` 还原对象，随后全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十五）
+
+- 这轮继续把 build/execute 两侧 raw dict outward family 收回到了更少的 `outputs / dicts` seam。
+- 相应地，build 侧 `build_configured_tool_registry_provider_preflight_summary()` 现在直接复用 `build_configured_tool_registry_provider_preflight_dicts()` 取 `summary_dict`；`build_configured_tool_registry_provider_preflight_dicts()` 则进一步统一直接复用 `build_configured_tool_registry_provider_preflight_outputs_from_dict()` 取最后两个 dict；`build_configured_tool_registry_provider_preflight_result()` 也同步退回成直接复用 `build_configured_tool_registry_provider_preflight_outputs()` 取 `result_dict`。
+- 同时，execute 侧 `execute_configured_tool_registry_provider_preflight_summary()` 与 `execute_configured_tool_registry_provider_preflight()` 现在都统一直接复用 `execute_configured_tool_registry_provider_preflight_dicts()`；而 `execute_configured_tool_registry_provider_preflight_dicts()` 再统一直接复用 `execute_configured_tool_registry_provider_preflight_outputs()` 取 summary/result dict，不再平行绕 `summary_model / model / models` helper。
+- 这样 build/execute 两边 raw dict outward family 当前也更清晰地落在 `outputs*` 与 `dicts*` 两级 seam：`outputs*` 负责 total-output 总装，`dicts*` 负责 summary/result dict 对，而 `summary / preflight / result` wrapper 只保留最近邻 dict 取值职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 6 条 focused seam tests 抬高后跑成红灯，随后全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十六）
+
+- 这轮继续把 build/execute 两侧 typed model outward family 收回到了统一的 `outputs*` 主链。
+- 相应地，build 侧 `build_configured_tool_registry_provider_preflight_summary_model()`、`...summary_model_from_dict()`、`...summary_model_from_service_execution_model()`、`...result_model()` 与 `...result_model_from_service_execution_model()` 现在都统一直接从对应的 `preflight_outputs*` helper 取最近邻 typed `summary_model / result_model`，不再平行绕 `models*` seam。
+- 同时，execute 侧 `execute_configured_tool_registry_provider_preflight_summary_model()`、`...summary_model_from_service_execution_model()`、`...preflight_model()` 与 `...preflight_model_from_service_execution_model()` 也统一退回成直接复用 `execute_preflight_outputs*`，不再先走 `models*` 再二次切片。
+- 这样 build/execute 两边 typed model outward family 当前也更清晰地落在 `outputs*` 主链：`outputs*` 负责 total-output typed 总装，而 `summary_model / result_model / model` wrapper 只保留最近邻 typed 取值职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 8 条 focused seam tests 抬高后跑成红灯，期间修正了 1 处 focused test monkeypatch 的参数签名，随后全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十七）
+
+- 这轮继续把 build-side `from_models` outward family 收回到了统一的 `outputs_from_models()` 主链。
+- 相应地，`build_configured_tool_registry_provider_preflight_dicts_from_models()` 现在直接复用 `build_configured_tool_registry_provider_preflight_outputs_from_models()` 取最后两个 dict；`build_configured_tool_registry_provider_preflight_summary_model_from_models()` 与 `...preflight_result_model_from_models()` 也统一直接从同一条 `outputs_from_models()` 主链取最近邻 typed `summary_model / result_model`，不再平行绕 `models_from_models()`。
+- 这样 build-side 这一组 `from_models` outward helper 当前也更清晰地落在 `outputs_from_models()` 主链：`outputs_from_models()` 负责从 typed `service_execution/execution_result` 做 total-output 总装，而 `dicts_from_models / summary_model_from_models / result_model_from_models` wrapper 只保留最近邻 typed/dict 取值职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 3 条 focused seam tests 抬高后跑成红灯，随后全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十八）
+
+- 这轮继续把 build-side `dict / service_execution_model` 两条 typed seam 翻成了以 `outputs` 为中心的主链。
+- 相应地，`build_configured_tool_registry_provider_preflight_outputs_from_dict()` 现在直接以 dict 侧 typed `service_execution_model + execution_result_model` 为起点，再进入 `build_configured_tool_registry_provider_preflight_models_from_models()` 和 `build_configured_tool_registry_provider_preflight_outputs_from_resolved_models()`；`build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 也同步改成直接以 typed `service_execution_result_model` 为起点进入同一条总装主链。
+- 同时，`build_configured_tool_registry_provider_preflight_execution_models_from_dict()`、`...preflight_models_from_dict()`、`...preflight_execution_models_from_service_execution_model()` 与 `...preflight_models_from_service_execution_model()` 现在都统一退回成从各自 `outputs` seam 切片取前两个或前四个 typed 结果，不再平行绕 `service_execution_result_model` 或 `models_from_models` 做重复总装。
+- 这样 build-side 这两条 typed seam 当前也更清晰地落在 `outputs_from_dict()` 与 `outputs_from_service_execution_model()` 两个中心 seam：`outputs*` 负责 total-output 总装，而相邻的 `execution_models / models` wrapper 只保留最近邻 typed 切片职责；外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮先把 6 条 focused seam tests 抬高后跑成红灯，随后全部转绿，focused 基线维持 `308` 条。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
+
+## 最新交接补充（2026-06-03，续九十九）
+
+- 这轮把开发点放大，继续把 build-side `payload/raw -> outputs` 与 execute-side `outputs/models` 两组相邻 wrapper 一次性收薄。
+- 相应地，build 侧 `build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload()`、`...preflight_models_from_service_execution_payload()`、`...preflight_models()` 与 `...preflight_result_model_from_dict()` 现在都统一直接复用最近邻 `preflight_outputs*` seam，分别只保留前两个 / 前四个 typed 切片或第四个 `result_model` 取值职责，不再平行绕 `from_dict()` / `result_payload()` 链做重复总装。
+- execute 侧 `execute_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 也一起翻成了新的 typed total-output 根：它现在直接先复用 `execute_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()`，再进入 `build_configured_tool_registry_provider_preflight_outputs_from_models()`；`...preflight_models_from_service_execution_model()`、top-level `...preflight_outputs()` 与 `...preflight_models()` 则统一退回成从各自最近邻 `outputs` seam 切片取值。
+- 这轮先把 8 条 focused seam tests 抬高，其中 6 条先跑成红灯；期间还顺手修正了 1 条 execute seam test 对 typed `service_execution_model` 暴露字段的错误假设。这样 build/execute 两侧在 `preflight` 这段又少掉了一层平行总装，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-03，续一百）
+
+- 这轮继续把 build-side dict inward `service_execution_result / outputs` 这条链收回到了 typed `service_execution_model` 主链。
+- 相应地，`build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict()` 现在直接先复用 `build_configured_tool_registry_provider_preflight_service_execution_model_from_dict()`，再进入 `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model()`，不再平行绕 raw `service_execution_outputs()`。
+- 同时，`build_configured_tool_registry_provider_preflight_outputs_from_dict()` 也同步退回成先复用同一个 typed `service_execution_model` helper，再直接进入 `build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()`，不再额外保留一条 dict 侧 `service_execution_result_model + preflight_models_from_models()` 总装链。
+- 这轮先把 2 条 focused seam tests 抬高后跑成红灯，再全部转绿。这样 build-side dict inward 这一段又少掉了一层 payload/result 平行总装，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-03，续一百零一）
+
+- 这轮继续把 build-side payload inward `outputs` 入口也统一收回到了 typed `service_execution_model` 主链。
+- 相应地，`build_configured_tool_registry_provider_preflight_outputs_from_service_execution_payload()` 现在直接先复用 `build_configured_tool_registry_provider_service_execution_model_from_dict()` 做单次 typed `service_execution_model` hydration，再进入 `build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()`，不再先合成 `preflight_result` 后平行绕 `...preflight_outputs_from_dict()`。
+- 这轮先把 1 条 focused seam test 抬高并加严，显式禁止 payload inward 层再走 `outputs_from_dict()`，随后转绿。这样 build-side payload/dict 两条 inward 入口当前都已经更早统一落到 `typed service_execution_model -> preflight outputs` 主链，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-03，续一百零二）
+
+- 这轮继续把 `service_execution` top-level raw `result_model / outputs` 入口也统一收回到了 typed `service_execution_model` 主链。
+- 相应地，`build_configured_tool_registry_provider_service_execution_result_model()` 现在直接先复用 `build_configured_tool_registry_provider_service_execution_model_from_dict()` 做单次 typed `service_execution_model` hydration，再进入 `build_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()` 取 `result_model`；`build_configured_tool_registry_provider_service_execution_outputs()` 也同步退回到同一条 typed helper。
+- execute 侧 `execute_configured_tool_registry_provider_service_execution_outputs()` 这层也一起收口：它现在直接先复用 `build_configured_tool_registry_provider_service_execution_model_from_dict()`，再进入 `execute_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()`，不再平行绕 `execute_configured_tool_registry_provider_service_execution_model()` 再二次总装。
+- 这轮先把 3 条 focused seam tests 抬高后跑成红灯，再全部转绿。这样 `service_execution` 这层 raw 入口又少掉了一层平行总装，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-03，续一百零三）
+
+- 这轮继续把 `service_execution` typed build/execute 主链收回到了统一的 `outputs_from_models()` / `outputs_from_service_execution_model()` seam。
+- build 侧 `build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model()` 与 `...service_execution_outputs_from_service_execution_model()` 现在都统一先构造 typed `runtime_service_actions_result_model`，再直接进入 `build_configured_tool_registry_provider_service_execution_outputs_from_models()`，不再平行绕 `result_model_from_models()` 再二次做 outward dict 投影。
+- execute 侧本轮补齐了对称的 `execute_configured_tool_registry_provider_service_execution_outputs_from_models()`；`execute_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()` 现在直接先复用 `execute_configured_tool_registry_provider_runtime_service_actions_outputs_from_models()`，再进入这条 helper，而 `execute_configured_tool_registry_provider_service_execution_model()` 也同步退回成只从最近邻 `...outputs_from_service_execution_model()` 取 typed `result_model`。
+- 这轮先把 4 条新的 focused seam tests 抬高后跑成红灯；代码转绿后，又把 1 条仍钉在旧 `runtime_service_actions_model()` 边界的 execute focused test 一并抬到了新的 `outputs_from_service_execution_model()` seam。这样 `service_execution` 在 build / execute 两侧的 typed 总装边界当前更一致了，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-03，续一百零四）
+
+- 这轮继续把 build-side typed `preflight service_execution_model` 家族收回到了更近的 `service_execution_result / execution_models / models_from_models` 主链。
+- `build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model()` 现在直接复用 `build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model()`；`...preflight_execution_models_from_service_execution_model()` 则退回成只组合 `service_execution + execution_result_model`，不再先走 total `preflight_outputs_from_service_execution_model()` 再切前两个 typed 结果。
+- 同时，`build_configured_tool_registry_provider_preflight_models_from_service_execution_model()` 与 `...preflight_outputs_from_service_execution_model()` 现在都统一先走 `...preflight_execution_models_from_service_execution_model()`，再分别进入 `preflight_models_from_models()` 与 `preflight_outputs_from_models()`；`...preflight_result_model_from_service_execution_model()` 和 `...preflight_summary_model_from_service_execution_model()` 也同步退回成从更近的 typed `models/result_model` seam 取值。
+- 这轮先把 6 条 focused seam tests 抬高后跑成红灯，转绿后又顺手修正了 1 条 focused seam test 的 monkeypatch 参数签名。这样 build-side typed `preflight service_execution_model` 家族又少掉了一层“先 total outputs 再回拆 typed 结果”的平行中转，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-03，续一百零五）
+
+- 这轮继续把 execute-side typed `preflight service_execution_model` 家族也收回到了更近的 `service_execution_outputs / models_from_models / models` 主链。
+- `execute_configured_tool_registry_provider_preflight_models_from_service_execution_model()` 现在直接先复用 `execute_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()`，再进入 `build_configured_tool_registry_provider_preflight_models_from_models()`，不再先绕 total `execute_preflight_outputs_from_service_execution_model()` 再回拆前四个 typed 结果。
+- 同时，`execute_configured_tool_registry_provider_preflight_outputs_from_service_execution_model()` 与 `...preflight_model_from_service_execution_model()` 都同步退回成从 `execute_preflight_models_from_service_execution_model()` 取最近邻 typed 结果，其中前者再进入 `build_configured_tool_registry_provider_preflight_outputs_from_resolved_models()`，后者直接取第四个 `result_model`；`...preflight_summary_model_from_service_execution_model()` 则进一步退回成直接复用 `execute_preflight_model_from_service_execution_model()` 再取 `result.summary`。
+- 这轮先把 4 条 focused seam tests 抬高后跑成红灯；代码转绿过程中还修正了 1 处 execute 主链的递归口，把 `models_from_service_execution_model()` 一并拉直到 `service_execution_outputs -> preflight_models_from_models` 中心 seam。这样 execute-side typed `preflight service_execution_model` 家族也少掉了一层“先 total outputs 再回拆 typed 结果”的平行中转，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-03，续一百零六）
+
+- 这轮继续做顶层 outward wrapper 收尾批次，把 build/execute 两侧残留的 `preflight summary_model / result_model / dicts / model / result` 这批 outward helper 成片收回到了更少的入口。
+- build 侧 `build_configured_tool_registry_provider_preflight_summary_model()` 现在直接复用 `...preflight_summary_model_from_dict()`；`...preflight_result_model()` 退回成直接从 `build_configured_tool_registry_provider_preflight_models()` 取第四个 `result_model`；`...preflight_result()` 则进一步退回成只做 `result_model.to_dict()`；`...preflight_dicts()` 也同步改成直接从 `build_configured_tool_registry_provider_preflight_result_model_from_dict()` 取 `summary/result` 并做 dict 投影。
+- execute 侧 `execute_configured_tool_registry_provider_preflight_model()` 现在直接从 `execute_configured_tool_registry_provider_preflight_models()` 取第四个 `result_model`；`...preflight_summary_model()` 进一步退回成直接复用 `...preflight_model()` 再取 `result.summary`；`...preflight_dicts()` 则统一从 `...preflight_model()` 取 `summary/result` 做最终 dict 投影。
+- 这轮先把 7 条 focused seam tests 抬高后跑成红灯，再统一转绿。这样剩余 top-level outward family 也少掉了一层“先 total outputs 再回拆 typed 结果”的平行中转，外部 SSE / trace / e2e 契约继续保持不变。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+## 最新交接补充（2026-06-03，续一百零七）
+
+- 这轮继续按收尾批次把 build/execute 顶层剩余的 `preflight summary / outputs / models` outward family 一次性压回到了更近的 typed seam。
+- build 侧 `build_configured_tool_registry_provider_preflight_summary()` 现在直接复用 `...preflight_summary_model()` 再做 `to_dict()`；`...preflight_summary_model_from_dict()` 也退回成直接复用 `...preflight_result_model_from_dict()`。同时，`...preflight_execution_models_from_dict()` 与 `...preflight_execution_models_from_service_execution_payload()` 都统一先完成单次 typed `service_execution_model` hydration，再进入最近邻 `service_execution_result_model` seam；`...preflight_models_from_dict()` 与 `...preflight_models_from_service_execution_payload()` 则同步退回成先走对应 `execution_models` helper，再进入 `preflight_models_from_models()`。
+- execute 侧 `execute_configured_tool_registry_provider_preflight_models()` 现在直接复用 `...preflight_models_from_service_execution_model()`；`...preflight_outputs()` 则退回成直接从 top-level `models()` 取四个 typed 结果后进入 `preflight_outputs_from_resolved_models()`；`...preflight_summary()` 也同步退回成直接复用 `...preflight_summary_model()` 再做 `to_dict()`。
+- 这轮先把 8 条 focused seam tests 抬高后跑成红灯，再统一转绿。收完这一批后，顶层 outward family 已基本收口到“单次 hydration + 最近邻 typed seam + 单次 dict 投影”的边界，继续收薄的净收益已经明显变小；后续应优先停止无净收益的 wrapper churn，只在还能成片减少层级时再动。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-03，续一百零八）
+
+- 这轮继续把最后还值得动的 raw outward 入口再收一层。
+- build 侧 `build_configured_tool_registry_provider_preflight_models()` 现在直接复用 `...preflight_models_from_service_execution_payload()`；`build_configured_tool_registry_provider_preflight_result_model()` 也同步退回成直接从同一条 payload typed seam 取第四个 `result_model`。execute 侧最终 `execute_configured_tool_registry_provider_preflight()` 则进一步退回成直接复用 `...preflight_model()` 再做 `to_dict()`。
+- 这轮先把 3 条 focused seam tests 抬高后跑成红灯，再统一转绿。收完这一批后，`service_execution / preflight` 这组 wrapper 已经更接近“继续搬移只会做职责换位、净收益极低”的收尾边界；后续更适合转成稳定性复核，而不是继续在同族 wrapper 间来回搬移。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+## 最新交接补充（2026-06-03，续一百零九）
+
+- 这轮已经转入稳定性复核和小幅可读性收尾，不再继续扩大 wrapper 搬移范围。
+- 复核结论是：剩余 `service_execution / preflight` outward family 继续收薄已基本只会造成职责换位，而不会带来明显的层级净减少，因此这块当前更适合作为稳定维护边界保留。
+- 代码层本轮只保留了 1 处高信号整理：`execute_configured_tool_registry_provider_preflight_summary_model()` 现在先拿 `preflight_model`，再进入 `summary_model_from_result_model()`，避免继续堆叠内联调用，但不改变任何外部契约。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-03，续一百一十）
+
+- 这轮继续在稳定性复核阶段补了 1 处真实质量清理：通过全文检索确认 `build_configured_tool_registry_provider_preflight_result_payload()` 已经完全退出代码主链，只剩历史文档引用，因此现已从代码中删除。
+- 当前 build-side raw `service_execution + execution_result` 入口的真实主链是直接做单次 typed `service_execution_model` hydration，再进入 `...preflight_execution_models_from_service_execution_payload()` / `...models_from_service_execution_payload()` / `...outputs_from_service_execution_payload()`；旧文档里关于 `preflight_result_payload` 的描述只能视为历史演进记录，不再代表当前实现。
+- 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
