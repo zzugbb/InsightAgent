@@ -18,6 +18,7 @@ from app.services.chat_persistence_service import (
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.tool_runtime import (
+    build_tool_plan_summary,
     execute_configured_tool_registry_provider_preflight,
     build_tool_iteration_context,
     build_tool_prompt_with_observations,
@@ -259,9 +260,7 @@ def stream_task_execution(
         plan_step_id = str(uuid4())
         seq_cursor += 1
         tool_plan = build_tool_plan(prompt)
-        plan_content = "Planned tools: " + ", ".join(
-            str(x["name"]) for x in tool_plan
-        )
+        plan_content = build_tool_plan_summary(tool_plan)
         plan_step = {
             "id": plan_step_id,
             "seq": seq_cursor,

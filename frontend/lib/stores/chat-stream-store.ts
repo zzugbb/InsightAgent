@@ -516,6 +516,10 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (typeof p.step_id === "string" && typeof p.name === "string") {
         const stepId = p.step_id;
         const toolName = p.name;
+        const displayName =
+          typeof p.display_name === "string" && p.display_name.trim()
+            ? p.display_name.trim()
+            : toolName;
         const toolInput = p.input;
         const retryCount =
           typeof p.retry_count === "number" ? p.retry_count : undefined;
@@ -523,19 +527,20 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
           sseTraceSteps: upsertTraceStep(state.sseTraceSteps, {
             id: stepId,
             type: "action",
-            content: sm.toolRunning(toolName),
+            content: sm.toolRunning(displayName),
             meta: {
               ...(state.sseTraceSteps.find((x) => x.id === stepId)?.meta ?? {}),
               step_type: "tool_call",
               tool: {
                 name: toolName,
+                label: displayName,
                 input: toolInput,
                 status: "running",
                 retry_count: retryCount ?? 0,
               },
             },
           }),
-          sseMessage: sm.toolStarted(toolName),
+          sseMessage: sm.toolStarted(displayName),
         }));
       }
       return;
@@ -560,11 +565,15 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
             prevTool && typeof prevTool.name === "string"
               ? prevTool.name
               : "tool";
+          const toolLabel =
+            prevTool && typeof prevTool.label === "string" && prevTool.label.trim()
+              ? prevTool.label.trim()
+              : toolName;
           return {
             sseTraceSteps: upsertTraceStep(state.sseTraceSteps, {
               id: stepId,
               type: "action",
-              content: sm.toolStatus(status, toolName),
+              content: sm.toolStatus(status, toolLabel),
               meta: {
                 ...prevMeta,
                 step_type: "tool_call",
@@ -573,7 +582,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
                 latency:
                   typeof p.latency_ms === "number" ? p.latency_ms : undefined,
                 tool: {
-                  ...(prevTool ?? { name: toolName }),
+                  ...(prevTool ?? { name: toolName, label: toolLabel }),
                   output: p.output_preview,
                   retry_count:
                     typeof p.retry_count === "number" ? p.retry_count : undefined,
@@ -585,7 +594,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
                 },
               },
             }),
-            sseMessage: sm.toolStatus(status, toolName),
+            sseMessage: sm.toolStatus(status, toolLabel),
           };
         });
       }

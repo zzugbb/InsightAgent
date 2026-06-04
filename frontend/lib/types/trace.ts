@@ -15,6 +15,7 @@ export type TraceStepMeta = {
   step_type?: string;
   tool?: {
     name: string;
+    label?: string;
     input?: unknown;
     output?: unknown;
     status: "running" | "done" | "error";

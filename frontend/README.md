@@ -128,7 +128,12 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同（2026-05-25，preflight payload-to-pair seam）：后端已继续把 runtime seam 往“真实 registry 可接入”方向推进，新增 `build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload()`，并让 `preflight_service_execution_model/result/execution_models` 三条 dict 入口统一复用这层 “normalized payload -> typed pair” helper。前端可见的 SSE/trace 契约保持不变，focused 回归脚本维持 240 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过
 - 阶段 5 协同（2026-05-25，preflight dict-shell concentration）：后端已继续把 runtime seam 往“真实 registry 可接入”方向推进，`build_configured_tool_registry_provider_preflight_service_execution_model_from_dict()` 与 `...preflight_service_execution_result_model_from_dict()` 现在也已统一退回到 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()` 这条公开 dict 入口。前端可见的 SSE/trace 契约保持不变，focused 回归脚本维持 240 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过
 - 阶段 5 协同（2026-05-14，design checkpoint）：后端已把 `tool-runtime-productionization` 的 design/handoff 文档同步到当前真实状态，并明确当前 helper 分层已经达到阶段性合理停止点；当前前端消费的 SSE/trace 契约无需调整，后续只有在新需求触发时才建议继续 runtime 抽象
-- 新会话交接文档（2026-05-13）：后端已新增 [docs/superpowers/specs/2026-05-13-tool-runtime-productionization-handoff.md](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/docs/superpowers/specs/2026-05-13-tool-runtime-productionization-handoff.md)，用于在新会话中继续推进 runtime 收口；当前前端消费的 SSE/trace 契约无需调整
+- 新会话交接文档（2026-05-13，历史记录）：后端曾新增 [docs/superpowers/specs/2026-05-13-tool-runtime-productionization-handoff.md](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/docs/superpowers/specs/2026-05-13-tool-runtime-productionization-handoff.md) 用于继续推进 runtime 收口；该文档现已转为 archived 历史记录，当前前端消费的 SSE/trace 契约无需调整
+- 阶段 5 协同收尾（2026-06-04）：后端 `tool-runtime-productionization` 已完成运行时基础设施收口与残余风险修复；两份 runtime spec 继续保留但不再高频维护，前端后续默认无需再为这条 runtime 收口链路做协议适配，协同重点转向默认工具去 mock 化后的真实工具展示与轨迹验收
+- 阶段 5 协同进展（2026-06-04，默认 planner 去 mock 暴露）：前端流式 trace store 与 Inspector subtitle 已改为优先展示后端下发的 `display_name` / `meta.tool.label`；在默认 planner 路径下，页面不再直接暴露 `mock_plan`，而是显示 `Task Planner`
+- 阶段 5 协同进展（2026-06-04，默认 planner internal name 收敛）：后端默认 plan 现已直接产出 `task_plan`，前端无需额外适配旧的 `mock_plan` 展示兜底；在默认链路下，页面与轨迹继续稳定显示 `Task Planner`
+- 阶段 5 协同进展（2026-06-04，默认 retrieval internal name 收敛）：后端默认 plan 中的检索入口现已直接产出 `task_retrieve`，前端默认展示链会显示 `Knowledge Retrieval`；同时旧 `mock_retrieve` 兼容路径仍可继续回放历史与旧配置结果
+- 阶段 5 协同进展（2026-06-04，canonical registry 收口）：后端默认 registry / profile / provider 主链现已统一切到 `task_plan / task_retrieve`；前端默认不再需要为 `mock_*` 做常规展示兜底，旧 `mock_*` 仅用于历史 trace / 旧配置结果回放兼容
 - 阶段 5 增量：`running-task-recovery` 前端首版已落地；刷新页面或切回会话时会自动接管该会话下 `pending/running` 任务流，并展示恢复中/成功/失败提示
 - 阶段 5 修复：会话切换时的任务串台已修复；流式状态按 `session_id` 绑定并按当前会话隔离渲染，避免短暂显示其他会话任务
 - 阶段 5 修复：恢复提示误报已修复；任务结束瞬间若列表状态滞后，自动恢复不再错误提示“任务流恢复失败”
@@ -693,3 +698,4 @@ npm run test:e2e:smoke:matrix
 - 本轮后端做的是稳定性复核和小幅可读性收尾；前端外部 SSE / trace / e2e 契约仍未变化。
 - 当前前端仍无需任何协议调整；这次没有新增任何协议层变更，只是把 execute 侧一处内联调用整理成更直的 `result_model -> summary_model` 读取方式，并确认剩余 `service_execution / preflight` wrapper 已进入稳定维护边界。前端消费到的 outward 协议、SSE 事件与现有 e2e 断言继续保持不变，focused 回归脚本维持 `308` 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过。
 - 这轮后端还删除了一个已退出主链的内部 helper：`build_configured_tool_registry_provider_preflight_result_payload()`。这属于纯内部清理，前端消费到的 outward 协议、SSE 事件与现有 e2e 断言都没有变化。
+- 这轮后端又把 residual risk audit 里的兼容问题补齐了：两参 `service_execution + execution_result` payload 入口恢复成“先 merge metadata，再单次 typed hydrate”，同时删掉了 4 个无生产调用的 outward helper。前端消费到的 outward 协议、SSE 事件与现有 e2e 断言仍然没有变化；focused 回归脚本当前为 `305/305`，`bash scripts/test_ci_e2e_tooling.sh common` 继续通过。

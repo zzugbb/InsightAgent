@@ -1,8 +1,11 @@
 # Tool Runtime Productionization Design
 
+> Archived on 2026-06-04.
+> `tool-runtime-productionization` 的运行时基础设施收口已完成；本文件保留为阶段性设计记录，不再作为高频维护中的活跃 spec。
+
 **Date:** 2026-05-13
 **Scope:** InsightAgent backend service layer
-**Status:** Phase checkpoint after runtime extraction and service-consumption收口
+**Status:** Archived after runtime productionization closeout
 
 ## Goal
 
@@ -490,7 +493,7 @@ Guardrails:
 - 同时，`build_configured_tool_registry_provider_runtime_service_actions_outputs_from_runtime_artifacts_model()` 与 `...outputs_from_dicts()` 也都退回成“model helper + to_dict()”的 outward 薄壳；`execute_configured_tool_registry_provider_runtime_service_actions_outputs()` 则直接复用 `execute_configured_tool_registry_provider_runtime_service_actions_result_model()`，而 `execute_configured_tool_registry_provider_runtime_service_actions_model()` 则直接复用 `...result_model_from_models()`。这样 `runtime_service_actions` 这段的 raw outward 与 typed inward 边界都进一步拉直，不再为了拿 typed model 或 result 中间绕经 `outputs`。
 - 最新一轮又把 build-side `service_execution/preflight` 这条最近邻 typed seam 再拉直了一层：`build_configured_tool_registry_provider_service_execution_outputs_from_service_execution_model()` 现在直接复用 `build_configured_tool_registry_provider_service_execution_result_model_from_service_execution_model()`，不再自己平行组装 runtime-result model 再走 outputs seam。
 - 同时，`build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model()` 也改成先统一拿到 typed `service_execution_result_model`，再进入 `build_configured_tool_registry_provider_preflight_result_model_from_models()`；`build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model()` 则直接复用这条 `preflight_result_model` seam。这样 build-side `service_execution -> preflight` 当前也更接近 execute-side 已经稳定下来的“result-model 主链 + outward 兼容壳”边界。
-- 最新一轮又把 build-side 两参 `preflight` raw wrapper 成片收回到了单参 `preflight_result dict` seam：新增 `build_configured_tool_registry_provider_preflight_result_payload()` 之后，`build_configured_tool_registry_provider_preflight_models()`、`...outputs()`、`...outputs_from_service_execution_payload()`、`...result_model()` 与 `...result()` 现在都统一先合成 outward `preflight_result` payload。
+- 这里记录的是当时的阶段性方案：build-side 两参 `preflight` raw wrapper 曾短暂收回到单参 `preflight_result dict` seam，并新增过 `build_configured_tool_registry_provider_preflight_result_payload()`；该 helper 后续已删除，当前实现不再经过这条旧 seam。
 - 相应地，这批 raw wrapper 随后都直接复用对应的 `build_configured_tool_registry_provider_preflight_*_from_dict()` helper，不再平行保留一组“`service_execution + execution_result` 自己再拆 typed `execution_result/summary/result`”的链路；这进一步把 build-side raw 边界压回到了 `payload -> from_dict -> typed seam` 的单点入口。
 - 最新一轮又把 build/execute 最外层 `preflight` dict outward wrapper 收回到了 `dicts` / `outputs_from_dict` seam：`build_configured_tool_registry_provider_preflight_summary()` 现在直接复用 `build_configured_tool_registry_provider_preflight_dicts()` 取 summary dict，`build_configured_tool_registry_provider_preflight_result()` 也直接复用同一层取 result dict。
 - 同时，`build_configured_tool_registry_provider_preflight_dicts()` 本身改成直接从 `build_configured_tool_registry_provider_preflight_outputs_from_dict()` 取最后两个 dict；execute 侧的 `execute_configured_tool_registry_provider_preflight_dicts()` 则直接复用 `execute_configured_tool_registry_provider_preflight_outputs()`，而 `execute_configured_tool_registry_provider_preflight()` 也退回成直接复用 `execute_configured_tool_registry_provider_preflight_dicts()`。这样 build/execute 两侧最外层 dict outward 边界都进一步拉直到了“最近邻 dict seam”。
@@ -540,9 +543,9 @@ Guardrails:
 - 这轮又继续把 build raw `preflight summary_model` 与 execute-side 对称的 `summary` helper 家族一起拉齐：`build_configured_tool_registry_provider_preflight_summary_model()` 现在也直接退回到 `preflight_result_model_from_dict() -> summary_model_from_result_model()`，不再只做 `summary_model_from_dict()` 的薄壳转发。
 - 同时，execute 侧新增 `execute_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model()`、`...preflight_summary_model()` 与 `...preflight_summary()`，让 execute-side 也具备和 build-side 对称的 `summary_model / summary` 主链。
 - 到这个检查点为止，summary 这段的目标边界更完整了：build raw / build typed / execute typed / execute raw 四层都尽量优先落到最近邻 `result_model` 或 `summary_model` 主链，再做最终 dict 投影。
-- 这轮又继续把 build-side 两参 `service_execution + execution_result` payload 入口统一回到单参 `preflight_result payload` seam：`build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload()`、`...models_from_service_execution_payload()` 与 `...outputs_from_service_execution_payload()` 现在都统一先走 `build_configured_tool_registry_provider_preflight_result_payload()`，再分别进入对应的 `...from_dict()` helper。
+- 这里记录的是当时的阶段性方案：build-side 两参 `service_execution + execution_result` payload 入口曾短暂统一先走 `build_configured_tool_registry_provider_preflight_result_payload()`，再进入对应的 `...from_dict()` helper。该 helper 后续已删除，当前实现改为“先 merge metadata，再单次 typed hydrate”。
 - 到这个检查点为止，build-side `payload -> dict -> typed seam` 的边界更清晰了：两参 payload wrapper 只保留 `preflight_result payload` 合成职责，而后续的 dict 归一化、typed hydration 与 summary/result 组装都进一步收敛到单参 `preflight_result` 主链。
-- 这轮又继续把 build-side 最外层 raw `models / result_model` 也统一回到同一条单参 `preflight_result` 主链：`build_configured_tool_registry_provider_preflight_models()` 与 `...preflight_result_model()` 现在都统一先走 `build_configured_tool_registry_provider_preflight_result_payload()`，再分别进入 `...models_from_dict()` 和 `...result_model_from_dict()`。
+- 这里记录的是当时的阶段性方案：build-side 最外层 raw `models / result_model` 曾短暂统一先走 `build_configured_tool_registry_provider_preflight_result_payload()`，再分别进入 `...models_from_dict()` 和 `...result_model_from_dict()`。该 helper 后续已删除，当前实现不再经过这条旧主链。
 - 到这个检查点为止，build-side raw outward 边界更一致了：`summary`、`summary_model`、`models`、`result_model`、`result` 这些最外层 wrapper 现在都尽量先汇聚到单参 `preflight_result` seam，再做最近邻的 typed 取值或 `to_dict()` 投影。
 - 这轮又继续把 build-side `service_execution_model` 侧残留的 typed `preflight` wrapper 成片收回到了更近的 `service_execution_result_model / from_models` seam：`build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_model()` 现在直接复用 `...preflight_service_execution_result_model_from_service_execution_model()`，不再先绕 total `preflight_outputs_from_service_execution_model()` 再切片拿前两个 typed 结果。
 - 同时，`build_configured_tool_registry_provider_preflight_models_from_service_execution_model()`、`...preflight_outputs_from_service_execution_model()` 与 `...preflight_result_model_from_service_execution_model()` 也统一改成先拿 typed `service_execution_result_model`，再分别进入 `build_configured_tool_registry_provider_preflight_models_from_models()`、`...preflight_outputs_from_models()` 与 `...preflight_result_model_from_models()`。
@@ -605,3 +608,4 @@ Guardrails:
 - 这轮稳定性复核后，这个判断进一步确认了：剩余 outward family 再往下压已经主要是“谁调用谁”的重排，而不是实质性的层级净减少。
 - 因此本轮只保留了 1 处高信号的可读性整理，让 `execute_configured_tool_registry_provider_preflight_summary_model()` 退回成“先拿 `result_model`，再进入 `summary_model_from_result_model()`”的直写形式，不再继续扩大 wrapper 搬移面。
 - 同时，本轮又补了一处真正的主链清理：`build_configured_tool_registry_provider_preflight_result_payload()` 已经完全退出当前实现，因此已从代码中删除。设计上，当前 build-side raw `service_execution + execution_result` 入口不再经过单参 `preflight_result payload` 汇合，而是直接做单次 typed `service_execution_model` hydration，再进入相邻的 typed `execution_models / models / outputs` seam。
+- 最新 residual risk audit 修复后，这段设计边界进一步稳定：build-side 两参 `service_execution + execution_result` payload 入口会先按旧单参 `preflight_result` 语义 merge `provider / provider_source_name / runtime_artifacts`，再做单次 typed `service_execution_model` hydration；同时，4 个没有生产调用、只被 focused tests 固定住的 outward helper 已删除，剩余设计表面积与当前真实主链一致。

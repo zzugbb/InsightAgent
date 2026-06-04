@@ -1,8 +1,11 @@
 # Tool Runtime Productionization Handoff
 
+> Archived on 2026-06-04.
+> `tool-runtime-productionization` 已完成收尾；本文件保留为阶段性交接与历史追溯记录，后续默认不再继续追加同族 wrapper 收薄进度。
+
 ## 背景
 
-当前开发主线是后端 `tool-runtime-productionization`。
+当前开发主线曾是后端 `tool-runtime-productionization`，现已完成并归档。
 
 目标不是改外部行为，而是持续把 [backend/app/services/chat_execution_service.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/app/services/chat_execution_service.py) 中与 tool 执行相关的内部编排逻辑，逐步下沉到 [backend/app/services/tool_runtime.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/app/services/tool_runtime.py)，同时保持以下外部契约不变：
 
@@ -1047,7 +1050,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 ## 最新交接补充（2026-05-27，续六十四）
 
 - 这轮继续把 build-side 两参 `preflight` raw wrapper 成片收回到了单参 `preflight_result dict` seam。
-- 相应地，新增 `build_configured_tool_registry_provider_preflight_result_payload()` 作为新的 raw payload 汇入口，统一把 `service_execution + execution_result` 组装成 outward `preflight_result` 形状，并补齐顶层 `provider/provider_source_name/runtime_artifacts` 默认值。
+- 这里记录的是当时的阶段性方案：曾新增 `build_configured_tool_registry_provider_preflight_result_payload()` 作为 raw payload 汇入口，把 `service_execution + execution_result` 组装成 outward `preflight_result` 形状。该 helper 后续已删除，当前实现不再经过这条旧汇入口。
 - 在这层 payload seam 之上，`build_configured_tool_registry_provider_preflight_models()`、`...outputs()`、`...outputs_from_service_execution_payload()`、`...result_model()` 与 `...result()` 现在都直接复用对应的 `...from_dict()` helper，不再平行保留一组 raw 两参总装链。
 - 这样 build-side `preflight` 当前的 raw outward 边界也进一步统一成了 `payload -> from_dict -> typed seam` 的单点入口，继续减少 wrapper 套 wrapper 与重复 hydration。
 - 本轮改严 6 条 focused tests，focused 基线维持 `303` 条。
@@ -1111,7 +1114,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 ## 最新交接补充（2026-06-01，续七十一）
 
 - 这轮继续把 payload 侧 `preflight execution-model pair` 入口也收回到同一条 dict seam。
-- 相应地，`build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload()` 现在不再先 hydrate typed `service_execution_model` 再平行调用 `...from_service_execution_model()`；它改为先通过 `build_configured_tool_registry_provider_preflight_result_payload()` 合成单参 `preflight_result` payload，再直接复用 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()`。
+- 这里记录的是当时的阶段性方案：`build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload()` 曾短暂先通过 `build_configured_tool_registry_provider_preflight_result_payload()` 合成单参 `preflight_result` payload，再复用 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()`。该 helper 后续已删除，当前实现改为“先 merge metadata，再单次 typed hydrate”。
 - 这样 build-side `preflight` 的 `payload -> dict -> typed pair` inward 边界进一步统一到了同一条单参入口，和上一轮刚收薄的 dict pair seam 完全对齐；外部 SSE / trace / e2e 契约继续保持不变。
 - 本轮先跑出 1 条 focused 红灯后转绿，focused 基线维持 `303` 条。
 - 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。
@@ -1254,7 +1257,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 ## 最新交接补充（2026-06-03，续八十七）
 
 - 这轮继续把 build-side 两参 `service_execution + execution_result` payload 入口统一回到了单参 `preflight_result payload` seam。
-- 相应地，`build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload()` 现在不再直接 hydrate typed `service_execution_model`；它改成先通过 `build_configured_tool_registry_provider_preflight_result_payload()` 合成单参 `preflight_result`，再直接复用 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()`。
+- 这里记录的是当时的阶段性方案：`build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload()` 曾短暂先通过 `build_configured_tool_registry_provider_preflight_result_payload()` 合成单参 `preflight_result`，再复用 `build_configured_tool_registry_provider_preflight_execution_models_from_dict()`。该 helper 后续已删除，当前实现已改为“先 merge metadata，再单次 typed hydrate”。
 - 同时，`build_configured_tool_registry_provider_preflight_models_from_service_execution_payload()` 与 `...outputs_from_service_execution_payload()` 也同步退回成先统一合成同一份 `preflight_result payload`，再分别直接复用 `...models_from_dict()` 和 `...outputs_from_dict()`，不再各自平行保留一条 payload -> typed hydration -> typed seam 的链路。
 - 这样 build-side payload 这一层当前更接近单一边界：两参 wrapper 只保留 `preflight_result payload` 合成职责，而后续 dict 归一化、typed hydration 与 summary/result 总装都统一继续落在单参 `preflight_result` 主链；外部 SSE / trace / e2e 契约继续保持不变。
 - 本轮先把 3 条 focused payload seam tests 抬高后跑成红灯，再全部转绿，focused 基线维持 `308` 条。
@@ -1263,7 +1266,7 @@ bash scripts/test_ci_e2e_tooling.sh common
 ## 最新交接补充（2026-06-03，续八十八）
 
 - 这轮继续把 build-side 最外层 raw `models / result_model` 也统一回到了单参 `preflight_result` dict seam。
-- 相应地，`build_configured_tool_registry_provider_preflight_models()` 现在不再直接 hydrate typed `service_execution_model` 后进入 `...models_from_service_execution_model()`；它改成先通过 `build_configured_tool_registry_provider_preflight_result_payload()` 合成单参 `preflight_result`，再直接复用 `build_configured_tool_registry_provider_preflight_models_from_dict()`。
+- 这里记录的是当时的阶段性方案：`build_configured_tool_registry_provider_preflight_models()` 曾短暂先通过 `build_configured_tool_registry_provider_preflight_result_payload()` 合成单参 `preflight_result`，再复用 `build_configured_tool_registry_provider_preflight_models_from_dict()`。该 helper 后续已删除，当前实现不再经过这条旧主链。
 - 同时，`build_configured_tool_registry_provider_preflight_result_model()` 也同步退回成先合成同一份 `preflight_result payload`，再直接复用 `build_configured_tool_registry_provider_preflight_result_model_from_dict()`，不再平行停在 `service_execution_model` 这一层。
 - 这样 build-side 当前的 raw outward 边界又更一致了一层：`summary`、`summary_model`、`models`、`result_model`、`result` 这些最外层 wrapper 都更集中地先落在单参 `preflight_result` seam，再做最近邻 typed 取值或最终 `to_dict()` 投影；外部 SSE / trace / e2e 契约继续保持不变。
 - 本轮先把 2 条 focused raw seam tests 抬高后跑成红灯，再全部转绿，focused 基线维持 `308` 条。
@@ -1448,3 +1451,11 @@ bash scripts/test_ci_e2e_tooling.sh common
 - 这轮继续在稳定性复核阶段补了 1 处真实质量清理：通过全文检索确认 `build_configured_tool_registry_provider_preflight_result_payload()` 已经完全退出代码主链，只剩历史文档引用，因此现已从代码中删除。
 - 当前 build-side raw `service_execution + execution_result` 入口的真实主链是直接做单次 typed `service_execution_model` hydration，再进入 `...preflight_execution_models_from_service_execution_payload()` / `...models_from_service_execution_payload()` / `...outputs_from_service_execution_payload()`；旧文档里关于 `preflight_result_payload` 的描述只能视为历史演进记录，不再代表当前实现。
 - 本轮校验仍然是 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过，focused 基线维持 `308` 条。
+
+## 最新交接补充（2026-06-04，residual-risk-fixes）
+
+- 这轮把 residual risk audit 里的三类问题一起补掉了。
+- 第一，build-side 两参 `service_execution + execution_result` payload 入口现在会先按旧单参 `preflight_result` 语义 merge `provider / provider_source_name / runtime_artifacts`，再做单次 typed `service_execution_model` hydration；这样旧调用方若仍把 metadata 放在 `execution_result` 顶层，不会再被静默丢掉。
+- 第二，前面这些仍提到 `build_configured_tool_registry_provider_preflight_result_payload()` 的旧记录现在都已经明确标注成历史阶段，而不是当前主链说明，避免后续 handoff 再被误导。
+- 第三，4 个没有生产调用、只被 focused tests 固定住的 outward helper 已从 `backend/app/services/tool_runtime.py` 删除，当前 focused 回归脚本基线变为 `305/305`。
+- 本轮校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common` 全通过。

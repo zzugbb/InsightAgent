@@ -290,15 +290,15 @@ _TOOL_REGISTRY_PROFILE_CONFIGS: dict[str, ToolRegistrySettingsConfig] = {
     ),
     "planning_only": ToolRegistrySettingsConfig(
         overrides={},
-        disabled_tool_names=("calc_eval", "mock_retrieve"),
+        disabled_tool_names=("calc_eval", "task_retrieve"),
     ),
     "retrieval_only": ToolRegistrySettingsConfig(
         overrides={},
-        disabled_tool_names=("calc_eval", "mock_plan"),
+        disabled_tool_names=("calc_eval", "task_plan"),
     ),
     "calculator_only": ToolRegistrySettingsConfig(
         overrides={},
-        disabled_tool_names=("mock_plan", "mock_retrieve"),
+        disabled_tool_names=("task_plan", "task_retrieve"),
     ),
 }
 
@@ -321,9 +321,25 @@ def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
 
 
 def _run_mock_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) -> dict[str, object]:
-    del tool_input, prompt, user_id
+    del user_id
+    prompt_preview = str(tool_input.get("prompt_preview", "")).strip() or prompt.strip()[:120]
+    steps = ["Analyze request"]
+    normalized = prompt.lower()
+    if (
+        "rag" in normalized
+        or "知识" in normalized
+        or "检索" in normalized
+        or "context" in normalized
+        or "[mock-multi-tool]" in normalized
+    ):
+        steps.append("Retrieve supporting context")
+    if _extract_calc_expression(prompt):
+        steps.append("Evaluate calculation")
+    steps.append("Synthesize final answer")
     return {
-        "plan": "Split task into analysis -> retrieval -> synthesis.",
+        "plan": " -> ".join(steps),
+        "steps": steps,
+        "prompt_preview": prompt_preview,
         "echo": True,
     }
 
@@ -389,20 +405,20 @@ def _run_calc_eval(*, tool_input: dict[str, object], prompt: str, user_id: str) 
 
 
 _REGISTERED_TOOLS = {
-    "mock_plan": ToolRegistration(
-        name="mock_plan",
+    "task_plan": ToolRegistration(
+        name="task_plan",
         kind="mock_planner",
-        label="Mock Planner",
+        label="Task Planner",
         retryable_by_default=True,
         default_timeout_ms=3_000,
         requires_user_context=True,
         supports_result_preview=True,
         runner=_run_mock_plan,
     ),
-    "mock_retrieve": ToolRegistration(
-        name="mock_retrieve",
+    "task_retrieve": ToolRegistration(
+        name="task_retrieve",
         kind="mock_retrieval",
-        label="Mock Retrieval",
+        label="Knowledge Retrieval",
         retryable_by_default=True,
         default_timeout_ms=5_000,
         requires_user_context=True,
@@ -420,6 +436,58 @@ _REGISTERED_TOOLS = {
         runner=_run_calc_eval,
     ),
 }
+
+_TOOL_NAME_ALIASES: dict[str, str] = {
+    "mock_plan": "task_plan",
+    "mock_retrieve": "task_retrieve",
+}
+
+
+def normalize_tool_registry_name(name: str) -> str:
+    normalized = name.strip()
+    if not normalized:
+        return normalized
+    return _TOOL_NAME_ALIASES.get(normalized, normalized)
+
+
+def normalize_tool_registry_names(names: tuple[str, ...] | list[str] | set[str]) -> tuple[str, ...]:
+    normalized_names: list[str] = []
+    for name in names:
+        normalized_name = normalize_tool_registry_name(str(name))
+        if normalized_name and normalized_name not in normalized_names:
+            normalized_names.append(normalized_name)
+    return tuple(normalized_names)
+
+
+def get_tool_display_name(
+    name: str,
+    *,
+    registry_provider: ToolRegistryProvider | None = None,
+) -> str:
+    registration = resolve_tool_registration(name=name, registry_provider=registry_provider)
+    if registration is None:
+        return name
+    if name in {"mock_plan", "task_plan", "mock_retrieve", "task_retrieve"}:
+        return registration.label
+    return name
+
+
+def build_tool_plan_summary(
+    tool_plan: list[dict[str, object]],
+    *,
+    registry_provider: ToolRegistryProvider | None = None,
+) -> str:
+    if not tool_plan:
+        return "Planned tools: none"
+    names = []
+    for item in tool_plan:
+        tool_name = str(item.get("name", "")).strip()
+        if not tool_name:
+            continue
+        names.append(get_tool_display_name(tool_name, registry_provider=registry_provider))
+    if not names:
+        return "Planned tools: none"
+    return "Planned tools: " + ", ".join(names)
 
 
 def load_tool_registry(
@@ -719,12 +787,10 @@ def _build_tool_registry_from_file_registry(
 
     profile_name = str(payload.get("profile", "default")).strip().lower() or "default"
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
-    disabled_tool_names = set(profile_config.disabled_tool_names)
+    disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = payload.get("disabled_tool_names")
     if isinstance(raw_disabled_tool_names, list):
-        disabled_tool_names.update(
-            str(name).strip() for name in raw_disabled_tool_names if str(name).strip()
-        )
+        disabled_tool_names.update(normalize_tool_registry_names(raw_disabled_tool_names))
 
     composed_base_registry: dict[str, ToolRegistration] | None = None
     raw_registry_sources = payload.get("registry_sources")
@@ -1172,14 +1238,10 @@ def build_tool_registry_loader_adapter(
 
     profile_name = str(spec.get("profile", implicit_profile_name)).strip().lower() or "default"
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
-    disabled_tool_names = set(profile_config.disabled_tool_names)
+    disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = spec.get("disabled_tool_names")
     if isinstance(raw_disabled_tool_names, list):
-        disabled_tool_names.update(
-            str(name).strip()
-            for name in raw_disabled_tool_names
-            if str(name).strip()
-        )
+        disabled_tool_names.update(normalize_tool_registry_names(raw_disabled_tool_names))
 
     extra_tools = build_tool_registry_extra_tools_from_specs(
         extra_tool_specs=spec.get("extra_tools"),
@@ -1274,14 +1336,10 @@ def build_tool_registry_provider_adapter(
 
     profile_name = str(spec.get("profile", "default")).strip().lower() or "default"
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
-    disabled_tool_names = set(profile_config.disabled_tool_names)
+    disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = spec.get("disabled_tool_names")
     if isinstance(raw_disabled_tool_names, list):
-        disabled_tool_names.update(
-            str(name).strip()
-            for name in raw_disabled_tool_names
-            if str(name).strip()
-        )
+        disabled_tool_names.update(normalize_tool_registry_names(raw_disabled_tool_names))
 
     extra_tools = build_tool_registry_extra_tools_from_specs(
         extra_tool_specs=spec.get("extra_tools"),
@@ -1546,12 +1604,15 @@ def build_tool_registry_extra_tools_from_settings(
     for name, spec in extra_tool_specs.items():
         if not isinstance(name, str) or not isinstance(spec, dict):
             continue
-        if name in _REGISTERED_TOOLS:
+        normalized_name = normalize_tool_registry_name(name)
+        if normalized_name in _REGISTERED_TOOLS:
             continue
         template_name = spec.get("template")
         if not isinstance(template_name, str):
             continue
-        template_registration = _REGISTERED_TOOLS.get(template_name)
+        template_registration = _REGISTERED_TOOLS.get(
+            normalize_tool_registry_name(template_name)
+        )
         if template_registration is None:
             continue
         extra_tools[name] = replace(
@@ -1588,13 +1649,14 @@ def _build_registry_overrides_from_specs(
     for name, spec in override_specs.items():
         if not isinstance(name, str) or not isinstance(spec, dict):
             continue
-        base_registration = base_registry.get(name)
+        normalized_name = normalize_tool_registry_name(name)
+        base_registration = base_registry.get(normalized_name)
         if base_registration is None:
             continue
         if spec.get("enabled") is False:
-            disabled_tool_names.add(name)
+            disabled_tool_names.add(normalized_name)
         elif spec.get("enabled") is True:
-            disabled_tool_names.discard(name)
+            disabled_tool_names.discard(normalized_name)
         metadata_keys = {
             "kind",
             "label",
@@ -1605,7 +1667,7 @@ def _build_registry_overrides_from_specs(
         }
         if not any(key in spec for key in metadata_keys):
             continue
-        overrides[name] = replace(
+        overrides[normalized_name] = replace(
             base_registration,
             kind=str(spec.get("kind", base_registration.kind)),
             label=str(spec.get("label", base_registration.label)),
@@ -1649,23 +1711,23 @@ def build_tool_registry_settings_config(
     if not isinstance(raw_overrides, str) or not raw_overrides.strip():
         return ToolRegistrySettingsConfig(
             overrides=dict(extra_tools),
-            disabled_tool_names=profile_config.disabled_tool_names,
+            disabled_tool_names=normalize_tool_registry_names(profile_config.disabled_tool_names),
         )
     try:
         override_specs = json.loads(raw_overrides)
     except json.JSONDecodeError:
         return ToolRegistrySettingsConfig(
             overrides=dict(extra_tools),
-            disabled_tool_names=profile_config.disabled_tool_names,
+            disabled_tool_names=normalize_tool_registry_names(profile_config.disabled_tool_names),
         )
     if not isinstance(override_specs, dict):
         return ToolRegistrySettingsConfig(
             overrides=dict(extra_tools),
-            disabled_tool_names=profile_config.disabled_tool_names,
+            disabled_tool_names=normalize_tool_registry_names(profile_config.disabled_tool_names),
         )
 
     overrides: dict[str, ToolRegistration] = dict(extra_tools)
-    disabled_tool_names = set(profile_config.disabled_tool_names)
+    disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     source_overrides, disabled_tool_names = _build_registry_overrides_from_specs(
         override_specs=override_specs,
         base_registry=known_registrations,
@@ -2557,6 +2619,40 @@ def build_configured_tool_registry_provider_preflight_service_execution_payload_
     }
 
 
+def _merge_configured_tool_registry_provider_preflight_service_execution_payload(
+    *,
+    service_execution: dict[str, object],
+    preflight_result: dict[str, object],
+) -> dict[str, object]:
+    provider = service_execution.get("provider", preflight_result.get("provider"))
+    if provider is None:
+        provider = StaticToolRegistryProvider({})
+    provider_source_name = str(
+        service_execution.get(
+            "provider_source_name",
+            preflight_result.get("provider_source_name", "default"),
+        )
+    )
+    runtime_artifacts_payload = preflight_result.get("runtime_artifacts", {})
+    if not isinstance(runtime_artifacts_payload, dict):
+        runtime_artifacts_payload = {}
+    service_runtime_artifacts_payload = service_execution.get("runtime_artifacts", {})
+    if not isinstance(service_runtime_artifacts_payload, dict):
+        service_runtime_artifacts_payload = {}
+    merged_runtime_artifacts_payload: dict[str, object] = {}
+    merged_runtime_artifacts_payload.update(service_runtime_artifacts_payload)
+    merged_runtime_artifacts_payload.update(runtime_artifacts_payload)
+    return {
+        **service_execution,
+        "provider": service_execution.get("provider", provider),
+        "provider_source_name": service_execution.get(
+            "provider_source_name",
+            provider_source_name,
+        ),
+        "runtime_artifacts": merged_runtime_artifacts_payload,
+    }
+
+
 def build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict(
     *,
     preflight_result: dict[str, object],
@@ -2610,7 +2706,10 @@ def build_configured_tool_registry_provider_preflight_execution_models_from_serv
     ConfiguredToolRegistryProviderServiceExecutionResultModel,
 ]:
     service_execution_model = build_configured_tool_registry_provider_service_execution_model_from_dict(
-        service_execution=service_execution,
+        service_execution=_merge_configured_tool_registry_provider_preflight_service_execution_payload(
+            service_execution=service_execution,
+            preflight_result=preflight_result,
+        ),
     )
     execution_result_model = (
         build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model(
@@ -2783,19 +2882,6 @@ def build_configured_tool_registry_provider_preflight_summary_model_from_dict(
     )
 
 
-def build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model(
-    *,
-    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
-    preflight_result: dict[str, object],
-) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
-    return build_configured_tool_registry_provider_preflight_summary_model_from_result_model(
-        preflight_result=build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model(
-            service_execution=service_execution,
-            execution_result=preflight_result,
-        ),
-    )
-
-
 def build_configured_tool_registry_provider_preflight_summary_model_from_result_model(
     *,
     preflight_result: ConfiguredToolRegistryProviderPreflightResultModel,
@@ -2961,7 +3047,10 @@ def build_configured_tool_registry_provider_preflight_outputs_from_service_execu
 ]:
     return build_configured_tool_registry_provider_preflight_outputs_from_service_execution_model(
         service_execution=build_configured_tool_registry_provider_service_execution_model_from_dict(
-            service_execution=service_execution,
+            service_execution=_merge_configured_tool_registry_provider_preflight_service_execution_payload(
+                service_execution=service_execution,
+                preflight_result=execution_result,
+            ),
         ),
         preflight_result=execution_result,
     )
@@ -3000,18 +3089,6 @@ def build_configured_tool_registry_provider_preflight_models(
         service_execution=service_execution,
         preflight_result=execution_result,
     )
-
-
-def build_configured_tool_registry_provider_preflight_dicts_from_models(
-    *,
-    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
-    execution_result: ConfiguredToolRegistryProviderServiceExecutionResultModel,
-) -> tuple[dict[str, object], dict[str, object]]:
-    _, _, _, _, summary_dict, result_dict = build_configured_tool_registry_provider_preflight_outputs_from_models(
-        service_execution=service_execution,
-        execution_result=execution_result,
-    )
-    return summary_dict, result_dict
 
 
 def build_configured_tool_registry_provider_preflight_dicts(
@@ -3119,41 +3196,6 @@ def execute_configured_tool_registry_provider_preflight_models_from_service_exec
         execution_result_model,
         summary_model,
         result_model,
-    )
-
-
-def execute_configured_tool_registry_provider_preflight_model_from_service_execution_model(
-    *,
-    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
-    trace_steps: list[dict[str, object]],
-    persist_trace_fn: Callable[..., None],
-    record_audit_event_fn: Callable[..., None],
-) -> ConfiguredToolRegistryProviderPreflightResultModel:
-    _, _, _, result_model = (
-        execute_configured_tool_registry_provider_preflight_models_from_service_execution_model(
-            service_execution=service_execution,
-            trace_steps=trace_steps,
-            persist_trace_fn=persist_trace_fn,
-            record_audit_event_fn=record_audit_event_fn,
-        )
-    )
-    return result_model
-
-
-def execute_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model(
-    *,
-    service_execution: ConfiguredToolRegistryProviderServiceExecutionModel,
-    trace_steps: list[dict[str, object]],
-    persist_trace_fn: Callable[..., None],
-    record_audit_event_fn: Callable[..., None],
-) -> ConfiguredToolRegistryProviderPreflightSummaryModel:
-    return build_configured_tool_registry_provider_preflight_summary_model_from_result_model(
-        preflight_result=execute_configured_tool_registry_provider_preflight_model_from_service_execution_model(
-            service_execution=service_execution,
-            trace_steps=trace_steps,
-            persist_trace_fn=persist_trace_fn,
-            record_audit_event_fn=record_audit_event_fn,
-        ),
     )
 
 
@@ -3457,7 +3499,7 @@ def build_tool_registry(
     if overrides:
         registry.update(overrides)
     if disabled_tool_names:
-        for name in disabled_tool_names:
+        for name in normalize_tool_registry_names(disabled_tool_names):
             registry.pop(name, None)
     return registry
 
@@ -3502,7 +3544,8 @@ def resolve_tool_registration(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    return provider_stack.load_tool_registry().get(name)
+    lookup_name = normalize_tool_registry_name(name)
+    return provider_stack.load_tool_registry().get(lookup_name)
 
 
 def ensure_tool_registration(
@@ -3687,6 +3730,7 @@ def build_tool_success_meta(
     return {
         "tool": {
             "name": name,
+            "label": get_tool_display_name(name),
             "input": tool_input,
             "output": output,
             "status": "done",
@@ -3706,6 +3750,7 @@ def build_tool_error_meta(
     return {
         "tool": {
             "name": name,
+            "label": get_tool_display_name(name),
             "input": tool_input,
             "status": "error",
             "retry_count": retry_count,
@@ -3726,6 +3771,7 @@ def build_tool_start_payload(
         "task_id": task_id,
         "step_id": step_id,
         "name": name,
+        "display_name": get_tool_display_name(name),
         "input": tool_input,
         "retry_count": retry_count,
     }
@@ -3778,6 +3824,7 @@ def build_action_step_initial_meta(
         "cost_estimate": None,
         "tool": {
             "name": name,
+            "label": get_tool_display_name(name),
             "input": tool_input,
             "status": "running",
             "retry_count": 0,
@@ -3792,11 +3839,17 @@ def build_action_step_initial_step(
     name: str,
     meta: dict[str, object],
 ) -> dict[str, object]:
+    tool_meta = meta.get("tool") if isinstance(meta.get("tool"), dict) else None
+    display_name = (
+        str(tool_meta.get("label")).strip()
+        if isinstance(tool_meta, dict) and isinstance(tool_meta.get("label"), str)
+        else get_tool_display_name(name)
+    )
     return {
         "id": step_id,
         "seq": seq,
         "type": "action",
-        "content": f"Tool running: {name}",
+        "content": f"Tool running: {display_name}",
         "meta": meta,
     }
 
@@ -3811,9 +3864,20 @@ def build_tool_step_success_update(
     token_count: int,
     last_error: str | None,
 ) -> dict[str, object]:
+    tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
+    tool_obj = (
+        tool_meta.get("tool")
+        if isinstance(tool_meta, dict) and isinstance(tool_meta.get("tool"), dict)
+        else None
+    )
+    display_name = (
+        str(tool_obj.get("label")).strip()
+        if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
+        else get_tool_display_name(name)
+    )
     return {
         **action_step,
-        "content": f"Tool done: {name}",
+        "content": f"Tool done: {display_name}",
         "meta": {
             **dict(action_step.get("meta", {})),
             "step_type": "tool_call",
@@ -3839,9 +3903,20 @@ def build_tool_step_error_update(
     token_count: int,
     error_message: str,
 ) -> dict[str, object]:
+    tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
+    tool_obj = (
+        tool_meta.get("tool")
+        if isinstance(tool_meta, dict) and isinstance(tool_meta.get("tool"), dict)
+        else None
+    )
+    display_name = (
+        str(tool_obj.get("label")).strip()
+        if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
+        else get_tool_display_name(name)
+    )
     return {
         **action_step,
-        "content": f"Tool error: {name}",
+        "content": f"Tool error: {display_name}",
         "meta": {
             **dict(action_step.get("meta", {})),
             "step_type": "tool_call",
@@ -4424,7 +4499,7 @@ def build_tool_step_output(action_step: dict[str, object]) -> dict[str, object] 
 
 
 def build_tool_observation_entry(*, name: str, output: dict[str, object] | None) -> str:
-    return f"{name}: {json.dumps(output, ensure_ascii=False)}"
+    return f"{get_tool_display_name(name)}: {json.dumps(output, ensure_ascii=False)}"
 
 
 def build_tool_trace_event(
@@ -4634,7 +4709,7 @@ def build_tool_rag_followup(
     output: dict[str, object] | None,
     token_count: int,
 ) -> dict[str, object] | None:
-    if tool_name != "mock_retrieve" or not isinstance(output, dict):
+    if tool_name not in {"mock_retrieve", "task_retrieve"} or not isinstance(output, dict):
         return None
     chunks = output.get("chunks")
     if not isinstance(chunks, list):
@@ -5288,7 +5363,7 @@ def build_tool_plan(prompt: str) -> list[dict[str, object]]:
     )
     plan: list[dict[str, object]] = [
         {
-            "name": "mock_plan",
+            "name": "task_plan",
             "input": {
                 "prompt_preview": prompt.strip()[:120],
             },
@@ -5304,7 +5379,7 @@ def build_tool_plan(prompt: str) -> list[dict[str, object]]:
     ):
         plan.append(
             {
-                "name": "mock_retrieve",
+                "name": "task_retrieve",
                 "input": {
                     "query": prompt.strip()[:80] or "default query",
                     "top_k": settings.rag_default_top_k,

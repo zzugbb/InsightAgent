@@ -585,7 +585,7 @@ export function formatTraceStepMetaSubtitle(
   }
   const parts: string[] = [];
   if (meta.tool?.name) {
-    const name = String(meta.tool.name).trim();
+    const name = String(meta.tool.label ?? meta.tool.name).trim();
     if (name) {
       parts.push(labels.toolLine(name, String(meta.tool.status ?? "")));
       const retryCountRaw = meta.tool.retry_count;

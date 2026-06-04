@@ -75,6 +75,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_observation_entry,
     build_tool_terminal_failure_transition,
     build_tool_phase,
+    build_tool_plan_summary,
     build_tool_start_payload,
     build_tool_step_output,
     build_tool_step_error_update,
@@ -130,6 +131,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_configured_tool_registry_provider_preflight_service_execution_model_from_dict,
     build_configured_tool_registry_provider_preflight_service_execution_result_model_from_dict,
     build_configured_tool_registry_provider_preflight_service_execution_result_model_from_service_execution_model,
+    build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload,
     build_configured_tool_registry_provider_preflight_execution_models_from_dict,
     build_configured_tool_registry_provider_preflight_models_from_service_execution_payload,
     build_configured_tool_registry_provider_preflight_models,
@@ -163,9 +165,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     execute_configured_tool_registry_provider_preflight_dicts,
     execute_configured_tool_registry_provider_preflight_outputs,
     execute_configured_tool_registry_provider_preflight_model,
-    execute_configured_tool_registry_provider_preflight_model_from_service_execution_model,
     execute_configured_tool_registry_provider_preflight_summary_model,
-    execute_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model,
     execute_configured_tool_registry_provider_preflight_summary,
     execute_configured_tool_registry_provider_preflight,
     build_configured_tool_registry_provider_preflight_summary_model_from_parts,
@@ -173,7 +173,6 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_configured_tool_registry_provider_preflight_result_model_from_dict,
     build_configured_tool_registry_provider_preflight_summary,
     build_configured_tool_registry_provider_preflight_dicts,
-    build_configured_tool_registry_provider_preflight_dicts_from_models,
     build_configured_tool_registry_provider_preflight_summary_model_from_dict,
     build_configured_tool_registry_provider_preflight_summary_model_from_models,
     build_configured_tool_registry_provider_preflight_summary_model_from_result_model,
@@ -201,11 +200,19 @@ class ToolRuntimeSliceTests(unittest.TestCase):
     def test_build_tool_plan_keeps_calc_and_retrieve_behavior(self) -> None:
         plan = build_tool_plan("请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]")
 
-        self.assertEqual(plan[0]["name"], "mock_plan")
-        self.assertEqual(plan[1]["name"], "mock_retrieve")
+        self.assertEqual(plan[0]["name"], "task_plan")
+        self.assertEqual(plan[1]["name"], "task_retrieve")
         self.assertEqual(plan[1]["input"]["knowledge_base_id"], "demo")
         self.assertEqual(plan[2]["name"], "calc_eval")
         self.assertEqual(plan[2]["input"]["expression"], "1+2*3")
+
+    def test_build_tool_plan_summary_uses_display_labels(self) -> None:
+        plan = build_tool_plan("请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]")
+
+        self.assertEqual(
+            build_tool_plan_summary(plan),
+            "Planned tools: Task Planner, Knowledge Retrieval, calc_eval",
+        )
 
     def test_run_tool_keeps_calc_output_shape(self) -> None:
         output = run_tool(
@@ -222,6 +229,78 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "expression": "1+2*3",
                 "result": 7.0,
                 "tool_kind": "local_calculator",
+            },
+        )
+
+    def test_run_tool_supports_task_plan_alias(self) -> None:
+        output = run_tool(
+            name="task_plan",
+            tool_input={"prompt_preview": "请帮我规划"},
+            prompt="请帮我检索知识库并计算 [calc:1+2*3]",
+            user_id="user-1",
+            attempt=0,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Retrieve supporting context -> Evaluate calculation -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Retrieve supporting context",
+                    "Evaluate calculation",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "请帮我规划",
+                "echo": True,
+            },
+        )
+
+    def test_run_tool_supports_task_retrieve_alias(self) -> None:
+        original_query = tool_runtime_module.query_knowledge_base
+
+        def fake_query_knowledge_base(
+            *,
+            user_id: str,
+            knowledge_base_id: str,
+            query_text: str,
+            top_k: int,
+        ) -> dict[str, object]:
+            self.assertEqual(user_id, "user-1")
+            self.assertEqual(knowledge_base_id, "demo-kb")
+            self.assertEqual(query_text, "检索 demo")
+            self.assertEqual(top_k, 2)
+            return {
+                "hits": [{"content": "alpha"}],
+                "hit_count": 1,
+                "knowledge_base_id": knowledge_base_id,
+                "collection": "kb_demo-kb",
+            }
+
+        tool_runtime_module.query_knowledge_base = fake_query_knowledge_base
+        try:
+            output = run_tool(
+                name="task_retrieve",
+                tool_input={
+                    "query": "检索 demo",
+                    "knowledge_base_id": "demo-kb",
+                    "top_k": 2,
+                },
+                prompt="检索 demo",
+                user_id="user-1",
+                attempt=0,
+            )
+        finally:
+            tool_runtime_module.query_knowledge_base = original_query
+
+        self.assertEqual(
+            output,
+            {
+                "chunks": ["alpha"],
+                "hits": [{"content": "alpha"}],
+                "hit_count": 1,
+                "knowledge_base_id": "demo-kb",
+                "collection": "kb_demo-kb",
             },
         )
 
@@ -468,7 +547,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
     def test_registered_tool_names_cover_current_mock_tools(self) -> None:
         self.assertEqual(
             get_registered_tool_names(),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
 
     def test_get_default_tool_registry_returns_copy_of_current_entries(self) -> None:
@@ -476,12 +555,12 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
         registry.pop("calc_eval")
         self.assertEqual(
             get_registered_tool_names(),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
 
     def test_get_default_tool_registry_provider_returns_isolated_snapshot(self) -> None:
@@ -490,12 +569,12 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
         registry.pop("calc_eval")
         self.assertEqual(
             tuple(sorted(provider.load_tool_registry())),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
 
     def test_get_default_tool_registry_provider_returns_default_provider_impl(self) -> None:
@@ -509,7 +588,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsInstance(provider, DefaultToolRegistryProvider)
         self.assertEqual(
             tuple(sorted(provider.load_tool_registry())),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
 
     def test_default_tool_registry_provider_loads_fresh_snapshot_per_call(self) -> None:
@@ -519,11 +598,11 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(first)),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
         self.assertEqual(
             tuple(sorted(second)),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
         self.assertIsNot(first, second)
 
@@ -712,7 +791,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsInstance(provider, DefaultToolRegistryProvider)
         self.assertEqual(
             tuple(sorted(provider.load_tool_registry())),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
 
     def test_build_tool_registry_overrides_from_settings_updates_known_tools(self) -> None:
@@ -756,11 +835,11 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(config.overrides)), ("calc_eval",))
         self.assertEqual(
             config.disabled_tool_names,
-            ("calc_eval", "mock_retrieve"),
+            ("calc_eval", "task_retrieve"),
         )
         self.assertEqual(
             get_disabled_tool_names_from_settings(settings=settings),
-            ("calc_eval", "mock_retrieve"),
+            ("calc_eval", "task_retrieve"),
         )
 
     def test_build_tool_registry_profile_settings_config_supports_planning_only_profile(self) -> None:
@@ -769,7 +848,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(config.overrides, {})
         self.assertEqual(
             config.disabled_tool_names,
-            ("calc_eval", "mock_retrieve"),
+            ("calc_eval", "task_retrieve"),
         )
 
     def test_build_tool_registry_settings_config_allows_reenable_over_profile_disable(self) -> None:
@@ -792,7 +871,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval",),
         )
         self.assertEqual(
-            config.overrides["mock_retrieve"].label,
+            config.overrides["task_retrieve"].label,
             "Profile Reenabled Retrieve",
         )
 
@@ -976,7 +1055,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
         self.assertEqual(
             get_registered_tool_names(registry_provider=providers["planning_provider"]),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(
             providers["planning_provider"].load_tool_registry()["calc_eval"].label,
@@ -1013,7 +1092,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(loaders)), ("planning_loader",))
         self.assertEqual(
             tuple(sorted(planning_registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
 
@@ -1046,7 +1125,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(loaders)), ("planning_loader",))
         self.assertEqual(
             tuple(sorted(planning_registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
 
@@ -1067,7 +1146,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(factories)), ("planning_factory",))
         self.assertEqual(
             tuple(sorted(planning_registry)),
-            ("mock_plan",),
+            ("task_plan",),
         )
 
     def test_build_tool_registry_provider_factories_from_settings_supports_named_factory_alias(self) -> None:
@@ -1087,7 +1166,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(factories)), ("planning_factory",))
         self.assertEqual(
             tuple(sorted(planning_registry)),
-            ("mock_plan",),
+            ("task_plan",),
         )
 
     def test_build_tool_registry_loader_factories_from_settings_supports_registry_file_factory(self) -> None:
@@ -1182,7 +1261,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
@@ -1216,7 +1295,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_retrieve"),
+            ("calc_eval", "calc_eval_fast", "task_retrieve"),
         )
         self.assertEqual(registry["calc_eval"].label, "Retrieval Calculator")
 
@@ -1272,7 +1351,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan", "mock_plan_brief"),
+            ("calc_eval", "calc_eval_fast", "mock_plan_brief", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
@@ -1327,7 +1406,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_retrieve"),
+            ("calc_eval", "calc_eval_fast", "task_retrieve"),
         )
         self.assertEqual(registry["calc_eval"].label, "Retrieval Calculator")
 
@@ -1380,7 +1459,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan", "mock_plan_brief"),
+            ("calc_eval", "calc_eval_fast", "mock_plan_brief", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
@@ -1431,7 +1510,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_retrieve"),
+            ("calc_eval", "calc_eval_fast", "task_retrieve"),
         )
         self.assertEqual(registry["calc_eval"].label, "Retrieval Calculator")
 
@@ -1482,7 +1561,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
@@ -1528,7 +1607,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
@@ -1578,7 +1657,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(providers)), ("file_provider",))
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
@@ -1619,7 +1698,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "mock_plan"),
+            ("calc_eval", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
@@ -1668,7 +1747,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
@@ -1742,7 +1821,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "mock_retrieve"),
+            ("calc_eval", "task_retrieve"),
         )
         self.assertEqual(registry["calc_eval"].label, "Retrieval Calculator")
 
@@ -1804,7 +1883,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(artifacts["registry"])),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         diagnostics = artifacts["diagnostics"]
         self.assertEqual(diagnostics["skipped_registry_sources"], ("planning_suite",))
@@ -6699,129 +6778,6 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result.summary.tool_names, ("calc_eval",))
         self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
 
-    def test_build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model_keeps_fields(
-        self,
-    ) -> None:
-        provider = StaticToolRegistryProvider(
-            {"calc_eval": get_default_tool_registry()["calc_eval"]}
-        )
-        service_execution_model = (
-            build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
-                preflight_result={
-                    "runtime_artifacts": {
-                        "diagnostics_runtime": {
-                            "summary": {
-                                "has_diagnostics": True,
-                                "total": 2,
-                                "skipped_total": 1,
-                                "missing_total": 1,
-                            }
-                        }
-                    },
-                    "service_execution": {
-                        "provider": provider,
-                        "provider_source_name": "file_source",
-                        "runtime_artifacts": {
-                            "diagnostics_runtime": {
-                                "summary": {
-                                    "has_diagnostics": False,
-                                    "total": 0,
-                                    "skipped_total": 0,
-                                    "missing_total": 0,
-                                }
-                            }
-                        },
-                        "service_actions": [{"kind": "record_audit_event"}],
-                    },
-                }
-            )
-        )
-
-        result = (
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model(
-                service_execution=service_execution_model,
-                preflight_result={
-                    "trace_write_count": 1,
-                    "audit_event_count": 2,
-                },
-            )
-        )
-
-        self.assertEqual(result.provider_source_name, "file_source")
-        self.assertEqual(result.tool_names, ("calc_eval",))
-        self.assertEqual(result.service_action_kinds, ("record_audit_event",))
-        self.assertEqual(result.trace_write_count, 1)
-        self.assertEqual(result.audit_event_count, 2)
-        self.assertEqual(result.missing_total, 1)
-
-    def test_build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model_uses_result_model_from_service_execution_model_helper(
-        self,
-    ) -> None:
-        provider = StaticToolRegistryProvider(
-            {"calc_eval": get_default_tool_registry()["calc_eval"]}
-        )
-        service_execution_model = (
-            build_configured_tool_registry_provider_preflight_service_execution_model_from_dict(
-                preflight_result={
-                    "service_execution": {
-                        "provider": provider,
-                        "provider_source_name": "file_source",
-                        "runtime_artifacts": {
-                            "diagnostics_runtime": {
-                                "summary": {
-                                    "has_diagnostics": True,
-                                    "total": 1,
-                                    "skipped_total": 0,
-                                    "missing_total": 1,
-                                }
-                            }
-                        },
-                        "service_actions": [{"kind": "record_audit_event"}],
-                    }
-                }
-            )
-        )
-        original_helper = (
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model
-        )
-        captured: list[tuple[str, int, int]] = []
-
-        def record_helper(
-            *,
-            service_execution: object,
-            execution_result: dict[str, object],
-        ) -> object:
-            captured.append(
-                (
-                    getattr(service_execution, "provider_source_name"),
-                    execution_result["trace_write_count"],
-                    execution_result["audit_event_count"],
-                )
-            )
-            return original_helper(
-                service_execution=service_execution,
-                execution_result=execution_result,
-            )
-
-        tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model = record_helper
-        try:
-            result = (
-                tool_runtime_module.build_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model(
-                    service_execution=service_execution_model,
-                    preflight_result={
-                        "trace_write_count": 1,
-                        "audit_event_count": 2,
-                    },
-                )
-            )
-        finally:
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_result_model_from_service_execution_model = original_helper
-
-        self.assertEqual(captured, [("file_source", 1, 2)])
-        self.assertEqual(result.provider_source_name, "file_source")
-        self.assertEqual(result.tool_names, ("calc_eval",))
-        self.assertEqual(result.service_action_kinds, ("record_audit_event",))
-
     def test_build_configured_tool_registry_provider_preflight_result_model_uses_service_execution_defaults(
         self,
     ) -> None:
@@ -6858,6 +6814,110 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result.summary.tool_names, ("calc_eval",))
         self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
         self.assertEqual(result.summary.missing_total, 1)
+
+    def test_build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload_fills_missing_metadata_from_execution_result(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        service_execution_model, execution_result_model = (
+            build_configured_tool_registry_provider_preflight_execution_models_from_service_execution_payload(
+                service_execution={
+                    "service_actions": [{"kind": "record_audit_event"}],
+                },
+                preflight_result={
+                    "provider": provider,
+                    "provider_source_name": "file_source",
+                    "runtime_artifacts": {
+                        "diagnostics_runtime": {
+                            "summary": {
+                                "has_diagnostics": True,
+                                "total": 1,
+                                "skipped_total": 0,
+                                "missing_total": 1,
+                            }
+                        }
+                    },
+                    "trace_write_count": 1,
+                    "audit_event_count": 2,
+                },
+            )
+        )
+
+        self.assertIs(service_execution_model.provider, provider)
+        self.assertEqual(service_execution_model.provider_source_name, "file_source")
+        self.assertEqual(
+            service_execution_model.runtime_artifacts.diagnostics_runtime.summary.missing_total,
+            1,
+        )
+        self.assertEqual(execution_result_model.provider_source_name, "file_source")
+        self.assertEqual(
+            execution_result_model.runtime_artifacts.diagnostics_runtime.summary.missing_total,
+            1,
+        )
+        self.assertEqual(execution_result_model.trace_write_count, 1)
+        self.assertEqual(execution_result_model.audit_event_count, 2)
+
+    def test_build_configured_tool_registry_provider_preflight_outputs_from_service_execution_payload_overlays_execution_result_runtime_artifacts(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        (
+            service_execution_model,
+            execution_result_model,
+            summary_model,
+            result_model,
+            summary_dict,
+            result_dict,
+        ) = build_configured_tool_registry_provider_preflight_outputs_from_service_execution_payload(
+            service_execution={
+                "provider": provider,
+                "provider_source_name": "service_source",
+                "runtime_artifacts": {
+                    "diagnostics_runtime": {
+                        "summary": {
+                            "has_diagnostics": False,
+                            "total": 0,
+                            "skipped_total": 0,
+                            "missing_total": 0,
+                        }
+                    }
+                },
+                "service_actions": [{"kind": "record_audit_event"}],
+            },
+            execution_result={
+                "provider_source_name": "result_source",
+                "runtime_artifacts": {
+                    "diagnostics_runtime": {
+                        "summary": {
+                            "has_diagnostics": True,
+                            "total": 2,
+                            "skipped_total": 1,
+                            "missing_total": 1,
+                        }
+                    }
+                },
+                "trace_write_count": 1,
+                "audit_event_count": 2,
+            },
+        )
+
+        self.assertEqual(service_execution_model.provider_source_name, "service_source")
+        self.assertEqual(execution_result_model.provider_source_name, "service_source")
+        self.assertEqual(summary_model.provider_source_name, "service_source")
+        self.assertEqual(result_model.provider_source_name, "service_source")
+        self.assertEqual(summary_model.missing_total, 1)
+        self.assertEqual(
+            execution_result_model.runtime_artifacts.diagnostics_runtime.summary.missing_total,
+            1,
+        )
+        self.assertEqual(result_dict["provider_source_name"], "service_source")
+        self.assertEqual(summary_dict["missing_total"], 1)
 
     def test_build_configured_tool_registry_provider_preflight_result_model_from_dict_keeps_fields(
         self,
@@ -7592,74 +7652,6 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(summary_dict["tool_names"], ("calc_eval",))
         self.assertEqual(result_dict["summary"]["service_action_kinds"], ("record_audit_event",))
 
-    def test_build_configured_tool_registry_provider_preflight_dicts_from_models_uses_outputs_from_models_helper(
-        self,
-    ) -> None:
-        provider = StaticToolRegistryProvider(
-            {"calc_eval": get_default_tool_registry()["calc_eval"]}
-        )
-        service_execution_model, execution_result_model, _, _ = (
-            build_configured_tool_registry_provider_preflight_models(
-                service_execution={
-                    "provider": provider,
-                    "provider_source_name": "file_source",
-                    "runtime_artifacts": {
-                        "diagnostics_runtime": {
-                            "summary": {
-                                "has_diagnostics": True,
-                                "total": 1,
-                                "skipped_total": 0,
-                                "missing_total": 1,
-                            }
-                        }
-                    },
-                    "service_actions": [{"kind": "record_audit_event"}],
-                },
-                execution_result={
-                    "trace_write_count": 1,
-                    "audit_event_count": 2,
-                },
-            )
-        )
-        original_helper = tool_runtime_module.build_configured_tool_registry_provider_preflight_outputs_from_models
-        captured: list[tuple[str, int, int]] = []
-
-        def record_helper(
-            *,
-            service_execution: object,
-            execution_result: object,
-        ) -> tuple[object, object, object, object, dict[str, object], dict[str, object]]:
-            captured.append(
-                (
-                    getattr(service_execution, "provider_source_name"),
-                    getattr(execution_result, "trace_write_count"),
-                    getattr(execution_result, "audit_event_count"),
-                )
-            )
-            return original_helper(
-                service_execution=service_execution,
-                execution_result=execution_result,
-            )
-
-        tool_runtime_module.build_configured_tool_registry_provider_preflight_outputs_from_models = record_helper
-        try:
-            summary_dict, result_dict = (
-                build_configured_tool_registry_provider_preflight_dicts_from_models(
-                    service_execution=service_execution_model,
-                    execution_result=execution_result_model,
-                )
-            )
-        finally:
-            tool_runtime_module.build_configured_tool_registry_provider_preflight_outputs_from_models = original_helper
-
-        self.assertEqual(captured, [("file_source", 1, 2)])
-        self.assertEqual(summary_dict["tool_names"], ("calc_eval",))
-        self.assertEqual(result_dict["provider_source_name"], "file_source")
-        self.assertEqual(
-            result_dict["summary"]["service_action_kinds"],
-            ("record_audit_event",),
-        )
-
     def test_build_configured_tool_registry_provider_preflight_summary_model_from_models_uses_result_model_from_models_helper(
         self,
     ) -> None:
@@ -8277,175 +8269,6 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(persisted, [True])
         self.assertEqual(len(audit_calls), 1)
 
-    def test_execute_configured_tool_registry_provider_preflight_model_from_service_execution_model_uses_models_from_service_execution_model_helper(
-        self,
-    ) -> None:
-        trace_steps: list[dict[str, object]] = []
-        persisted: list[bool] = []
-        audit_calls: list[dict[str, object]] = []
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root_file = Path(tmpdir) / "root-manifest.json"
-            missing_file = Path(tmpdir) / "missing-registry.json"
-            root_file.write_text(
-                json.dumps(
-                    {
-                        "registry_files": [str(missing_file)],
-                        "extra_tools": {
-                            "calc_eval_fast": {
-                                "template": "calc_eval",
-                                "label": "Fast Calculator",
-                            }
-                        },
-                    }
-                ),
-                encoding="utf-8",
-            )
-            settings = SimpleNamespace(
-                tool_registry_provider_source="file_source",
-                tool_registry_provider_sources_json=json.dumps(
-                    {
-                        "file_source": {
-                            "registry_file": str(root_file),
-                        }
-                    }
-                ),
-            )
-            service_execution_model = build_configured_tool_registry_provider_service_execution_model(
-                task_id="task-1",
-                step_id="step-registry",
-                seq=2,
-                model="mock-gpt",
-                settings=settings,
-            )
-            original_helper = tool_runtime_module.execute_configured_tool_registry_provider_preflight_models_from_service_execution_model
-            captured: list[tuple[str, tuple[str, ...]]] = []
-
-            def record_helper(
-                *,
-                service_execution: object,
-                trace_steps: list[dict[str, object]],
-                persist_trace_fn: object,
-                record_audit_event_fn: object,
-            ) -> tuple[object, object, object, object]:
-                captured.append(
-                    (
-                        str(getattr(service_execution, "provider_source_name")),
-                        tuple(sorted(getattr(service_execution, "provider").load_tool_registry())),
-                    )
-                )
-                return original_helper(
-                    service_execution=service_execution,
-                    trace_steps=trace_steps,
-                    persist_trace_fn=persist_trace_fn,
-                    record_audit_event_fn=record_audit_event_fn,
-                )
-
-            tool_runtime_module.execute_configured_tool_registry_provider_preflight_models_from_service_execution_model = record_helper
-            try:
-                result = (
-                    execute_configured_tool_registry_provider_preflight_model_from_service_execution_model(
-                        service_execution=service_execution_model,
-                        trace_steps=trace_steps,
-                        persist_trace_fn=lambda **kwargs: persisted.append(bool(kwargs["force"])),
-                        record_audit_event_fn=lambda **kwargs: audit_calls.append(kwargs),
-                    )
-                )
-            finally:
-                tool_runtime_module.execute_configured_tool_registry_provider_preflight_models_from_service_execution_model = original_helper
-
-        self.assertEqual(captured, [("file_source", ("calc_eval_fast",))])
-        self.assertEqual(result.provider_source_name, "file_source")
-        self.assertEqual(
-            tuple(sorted(result.provider.load_tool_registry())),
-            ("calc_eval_fast",),
-        )
-        self.assertEqual(result.summary.service_action_kinds, ("internal_trace_write", "record_audit_event"))
-        self.assertEqual(len(trace_steps), 1)
-        self.assertEqual(persisted, [True])
-        self.assertEqual(len(audit_calls), 1)
-
-    def test_execute_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model_uses_model_from_service_execution_model_helper(
-        self,
-    ) -> None:
-        trace_steps: list[dict[str, object]] = []
-        persisted: list[bool] = []
-        audit_calls: list[dict[str, object]] = []
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root_file = Path(tmpdir) / "root-manifest.json"
-            missing_file = Path(tmpdir) / "missing-registry.json"
-            root_file.write_text(
-                json.dumps(
-                    {
-                        "registry_files": [str(missing_file)],
-                        "extra_tools": {
-                            "calc_eval_fast": {
-                                "template": "calc_eval",
-                                "label": "Fast Calculator",
-                            }
-                        },
-                    }
-                ),
-                encoding="utf-8",
-            )
-            settings = SimpleNamespace(
-                tool_registry_provider_source="file_source",
-                tool_registry_provider_sources_json=json.dumps(
-                    {
-                        "file_source": {
-                            "registry_file": str(root_file),
-                        }
-                    }
-                ),
-            )
-            service_execution_model = build_configured_tool_registry_provider_service_execution_model(
-                task_id="task-1",
-                step_id="step-registry",
-                seq=2,
-                model="mock-gpt",
-                settings=settings,
-            )
-            original_helper = tool_runtime_module.execute_configured_tool_registry_provider_preflight_model_from_service_execution_model
-            captured: list[tuple[str, tuple[str, ...]]] = []
-
-            def record_helper(
-                *,
-                service_execution: object,
-                trace_steps: list[dict[str, object]],
-                persist_trace_fn: object,
-                record_audit_event_fn: object,
-            ) -> object:
-                captured.append(
-                    (
-                        str(getattr(service_execution, "provider_source_name")),
-                        tuple(sorted(getattr(service_execution, "provider").load_tool_registry())),
-                    )
-                )
-                return original_helper(
-                    service_execution=service_execution,
-                    trace_steps=trace_steps,
-                    persist_trace_fn=persist_trace_fn,
-                    record_audit_event_fn=record_audit_event_fn,
-                )
-
-            tool_runtime_module.execute_configured_tool_registry_provider_preflight_model_from_service_execution_model = record_helper
-            try:
-                result = execute_configured_tool_registry_provider_preflight_summary_model_from_service_execution_model(
-                    service_execution=service_execution_model,
-                    trace_steps=trace_steps,
-                    persist_trace_fn=lambda **kwargs: persisted.append(bool(kwargs["force"])),
-                    record_audit_event_fn=lambda **kwargs: audit_calls.append(kwargs),
-                )
-            finally:
-                tool_runtime_module.execute_configured_tool_registry_provider_preflight_model_from_service_execution_model = original_helper
-
-        self.assertEqual(captured, [("file_source", ("calc_eval_fast",))])
-        self.assertEqual(result.provider_source_name, "file_source")
-        self.assertEqual(result.tool_names, ("calc_eval_fast",))
-        self.assertEqual(result.service_action_kinds, ("internal_trace_write", "record_audit_event"))
-        self.assertEqual(len(trace_steps), 1)
-        self.assertEqual(persisted, [True])
-        self.assertEqual(len(audit_calls), 1)
-
     def test_execute_configured_tool_registry_provider_preflight_summary_model_uses_model_helper(
         self,
     ) -> None:
@@ -8915,7 +8738,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
         self.assertEqual(
             get_registered_tool_names(registry_provider=providers["planning_provider"]),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(
             providers["planning_provider"].load_tool_registry()["calc_eval"].label,
@@ -8955,7 +8778,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         loaders = build_tool_registry_loaders_from_settings(settings=settings)
         planning_registry = loaders["planning_loader"]()
 
-        self.assertEqual(tuple(sorted(planning_registry)), ("calc_eval", "calc_eval_fast", "mock_plan"))
+        self.assertEqual(tuple(sorted(planning_registry)), ("calc_eval", "calc_eval_fast", "task_plan"))
         self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
 
     def test_build_tool_registry_providers_from_settings_accepts_named_provider_factory_reference(self) -> None:
@@ -8993,7 +8816,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
         self.assertEqual(
             get_registered_tool_names(registry_provider=providers["planning_provider"]),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
 
     def test_build_tool_registry_loaders_from_settings_accepts_registry_file_shape(self) -> None:
@@ -9119,7 +8942,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(loaders)), ("file_loader",))
         self.assertEqual(
             tuple(sorted(file_registry)),
-            ("calc_eval", "calc_eval_fast", "mock_plan", "mock_plan_brief"),
+            ("calc_eval", "calc_eval_fast", "mock_plan_brief", "task_plan"),
         )
         self.assertEqual(file_registry["calc_eval"].label, "Planning Calculator")
 
@@ -9424,7 +9247,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(sources)), ("planning_suite",))
         self.assertEqual(
             get_registered_tool_names(registry_provider=sources["planning_suite"]),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(
             sources["planning_suite"].load_tool_registry()["calc_eval"].label,
@@ -9825,7 +9648,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(runtime_ctx.default_timeout_ms, 1_200)
         self.assertEqual(
             get_registered_tool_names(registry_provider=provider),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
 
     def test_get_configured_tool_registry_provider_uses_selected_source_backed_by_provider_factory(self) -> None:
@@ -9874,7 +9697,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(runtime_ctx.default_timeout_ms, 1_200)
         self.assertEqual(
             get_registered_tool_names(registry_provider=provider),
-            ("calc_eval", "calc_eval_fast", "mock_plan"),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
         )
 
     def test_get_configured_tool_registry_provider_includes_extra_tools(self) -> None:
@@ -9902,7 +9725,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             get_registered_tool_names(registry_provider=provider),
-            ("calc_eval", "calc_eval_fast", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "calc_eval_fast", "task_plan", "task_retrieve"),
         )
         runtime_ctx = build_tool_runtime_context(
             name="calc_eval_fast",
@@ -9925,7 +9748,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             get_registered_tool_names(registry_provider=provider),
-            ("mock_plan",),
+            ("task_plan",),
         )
 
     def test_get_configured_tool_registry_provider_filters_disabled_tools(self) -> None:
@@ -9942,7 +9765,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsInstance(provider, ConfiguredToolRegistryProvider)
         self.assertEqual(
             get_registered_tool_names(registry_provider=provider),
-            ("calc_eval", "mock_plan"),
+            ("calc_eval", "task_plan"),
         )
         with self.assertRaises(MockToolExecutionError) as ctx:
             ensure_tool_registration(
@@ -9972,12 +9795,12 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(sorted(registry)),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
-        registry.pop("mock_plan")
+        registry.pop("task_plan")
         self.assertEqual(
             get_registered_tool_names(),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
 
     def test_load_tool_registry_applies_overrides_on_fresh_snapshot(self) -> None:
@@ -10016,7 +9839,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             get_registered_tool_names(registry=registry),
-            ("calc_eval", "custom_lookup", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "custom_lookup", "task_plan", "task_retrieve"),
         )
         self.assertEqual(
             resolve_tool_registration("calc_eval", registry=registry).kind,
@@ -10025,7 +9848,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNotNone(resolve_tool_registration("custom_lookup", registry=registry))
         self.assertEqual(
             get_registered_tool_names(),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
 
     def test_load_tool_registry_accepts_custom_loader_then_applies_overrides(self) -> None:
@@ -10259,7 +10082,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             get_registered_tool_names(registry=custom_registry),
-            ("calc_eval", "custom_lookup", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "custom_lookup", "task_plan", "task_retrieve"),
         )
         self.assertEqual(
             resolve_tool_registration("calc_eval", registry=custom_registry).kind,
@@ -10268,7 +10091,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNotNone(resolve_tool_registration("custom_lookup", registry=custom_registry))
         self.assertEqual(
             get_registered_tool_names(),
-            ("calc_eval", "mock_plan", "mock_retrieve"),
+            ("calc_eval", "task_plan", "task_retrieve"),
         )
 
     def test_normalize_tool_spec_coerces_name_and_defaults_input(self) -> None:
@@ -10467,6 +10290,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "task_id": "task-1",
                 "step_id": "step-1",
                 "name": "calc_eval",
+                "display_name": "calc_eval",
                 "input": {"expression": "1+2*3"},
                 "retry_count": 0,
             },
@@ -10520,10 +10344,53 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertEqual(meta["tool"]["name"], "calc_eval")
+        self.assertEqual(meta["tool"]["label"], "calc_eval")
         self.assertEqual(meta["tool"]["status"], "running")
         self.assertEqual(step["id"], "step-1")
         self.assertEqual(step["seq"], 3)
         self.assertEqual(step["content"], "Tool running: calc_eval")
+
+    def test_build_action_step_initial_meta_and_step_use_display_label_for_mock_plan(
+        self,
+    ) -> None:
+        meta = build_action_step_initial_meta(
+            name="mock_plan",
+            tool_input={"prompt_preview": "请帮我规划"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        step = build_action_step_initial_step(
+            step_id="step-1",
+            seq=3,
+            name="mock_plan",
+            meta=meta,
+        )
+
+        self.assertEqual(meta["tool"]["name"], "mock_plan")
+        self.assertEqual(meta["tool"]["label"], "Task Planner")
+        self.assertEqual(step["content"], "Tool running: Task Planner")
+
+    def test_build_action_step_initial_meta_and_step_use_display_label_for_task_retrieve(
+        self,
+    ) -> None:
+        meta = build_action_step_initial_meta(
+            name="task_retrieve",
+            tool_input={"query": "检索 demo"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+        )
+        step = build_action_step_initial_step(
+            step_id="step-2",
+            seq=4,
+            name="task_retrieve",
+            meta=meta,
+        )
+
+        self.assertEqual(meta["tool"]["name"], "task_retrieve")
+        self.assertEqual(meta["tool"]["label"], "Knowledge Retrieval")
+        self.assertEqual(step["content"], "Tool running: Knowledge Retrieval")
 
     def test_build_tool_attempt_start_and_success_events_keep_shape(self) -> None:
         output = {
@@ -10544,6 +10411,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "task_id": "task-1",
                     "step_id": "step-1",
                     "name": "calc_eval",
+                    "display_name": "calc_eval",
                     "input": {"expression": "1+2*3"},
                     "retry_count": 0,
                 },
@@ -11185,6 +11053,52 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'calc_eval: {"expression": "1+2*3", "result": 7.0, "tool_kind": "local_calculator"}',
         )
 
+    def test_build_tool_step_updates_and_observation_use_display_label_for_mock_plan(
+        self,
+    ) -> None:
+        base_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool running: Task Planner",
+            "meta": {
+                "model": "mock-gpt",
+                "step_type": "tool_call",
+                "label": "tool_1",
+                "retryCount": 0,
+                "tokens": 5,
+                "cost_estimate": None,
+                "tool": {
+                    "name": "mock_plan",
+                    "label": "Task Planner",
+                    "input": {"prompt_preview": "请帮我规划"},
+                    "status": "running",
+                    "retry_count": 0,
+                },
+            },
+        }
+        output = {
+            "plan": "Analyze request -> retrieve context -> synthesize answer.",
+            "echo": True,
+        }
+
+        success_step = build_tool_step_success_update(
+            action_step=base_step,
+            name="mock_plan",
+            tool_input={"prompt_preview": "请帮我规划"},
+            output=output,
+            retry_count=0,
+            token_count=7,
+            last_error=None,
+        )
+
+        self.assertEqual(success_step["content"], "Tool done: Task Planner")
+        self.assertEqual(success_step["meta"]["tool"]["label"], "Task Planner")
+        self.assertEqual(
+            build_tool_observation_entry(name="mock_plan", output=output),
+            'Task Planner: {"plan": "Analyze request -> retrieve context -> synthesize answer.", "echo": true}',
+        )
+
     def test_build_tool_trace_event_keeps_current_shape(self) -> None:
         step = {
             "id": "step-1",
@@ -11600,6 +11514,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "task_id": "task-1",
                     "step_id": "step-1",
                     "name": "calc_eval",
+                    "display_name": "calc_eval",
                     "input": {"expression": "1+2*3"},
                     "retry_count": 0,
                 },
@@ -13291,7 +13206,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertFalse(bool(final_item["result"]["should_return"]))
         self.assertEqual(
             final_item["result"]["trace_event"]["step"]["content"],
-            "Tool done: mock_retrieve",
+            "Tool done: Knowledge Retrieval",
         )
         self.assertIsNone(final_item["result"]["terminal_effects"])
         self.assertEqual(
