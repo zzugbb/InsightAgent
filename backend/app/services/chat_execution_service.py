@@ -21,6 +21,7 @@ from app.services.tool_runtime import (
     build_tool_plan_summary,
     build_tool_plan_artifacts,
     execute_configured_tool_registry_provider_preflight,
+    get_configured_tool_registry_provider,
     build_tool_iteration_context,
     build_tool_prompt_with_observations,
     execute_tool_plan_item_service_actions,
@@ -373,9 +374,17 @@ def stream_task_execution(
 
         plan_step_id = str(uuid4())
         seq_cursor += 1
-        tool_plan_artifacts = build_tool_plan_artifacts(prompt, provider=provider)
+        planning_registry_provider = get_configured_tool_registry_provider()
+        tool_plan_artifacts = build_tool_plan_artifacts(
+            prompt,
+            provider=provider,
+            registry_provider=planning_registry_provider,
+        )
         tool_plan = tool_plan_artifacts.tool_plan
-        plan_content = build_tool_plan_summary(tool_plan)
+        plan_content = build_tool_plan_summary(
+            tool_plan,
+            registry_provider=planning_registry_provider,
+        )
         planning_usage_payload = None
         plan_meta: dict[str, object] = {
             "model": getattr(provider, "model", "mock-gpt"),

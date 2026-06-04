@@ -141,6 +141,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同进展（2026-06-04，planning usage / overall usage 对齐）：后端现已把 planning provider 调用的 token/cost 写入 planning trace step meta，并在 `done.usage` 额外补 `planning_*` 与 `overall_*` 字段；前端当前无需调整旧的 usage 主展示语义，但后续若要展示“规划成本”或“总成本”，可以直接消费这些新增字段
 - 阶段 5 协同进展（2026-06-04，retrieval 可见文案收口）：后端默认真实检索链的 RAG follow-up 文案现已从 `mock knowledge base` 收口为 `Knowledge Retrieval returned snippets from the selected knowledge base.`；同时 `mock_retrieve` 兼容入口在 success step、observation 与 follow-up thought 侧也统一显示 `Knowledge Retrieval`。因此前端后续做真实工具验收时，不需要再为默认 retrieval 路径解释遗留 mock 文案
 - 阶段 5 协同进展（2026-06-04，planning trace 可观测性收口）：前端现已把 planning trace meta 的细分字段展示出来：Inspector 与任务详情页 subtitle 会同时显示 `Prompt / Completion Token`、`Usage 来源`，并在 planning 步骤上明确标记“Planner provider used / Planner fallback”。这样即使页面不打开 usage 面板，也能直接从轨迹判断本次规划是不是走了真实 provider
+- 阶段 5 协同进展（2026-06-04，planner registry-aware 治理首步）：后端现已让 planner 真正跟着 configured registry 走。也就是说当前端后续做 profile/disable/real-tool 验收时，planning trace 不会再继续计划被 registry 关闭的 retrieval/calc 工具；如果进入 planning-only profile，默认规划链也只会保留可执行的 planning 工具
 - 阶段 5 增量：`running-task-recovery` 前端首版已落地；刷新页面或切回会话时会自动接管该会话下 `pending/running` 任务流，并展示恢复中/成功/失败提示
 - 阶段 5 修复：会话切换时的任务串台已修复；流式状态按 `session_id` 绑定并按当前会话隔离渲染，避免短暂显示其他会话任务
 - 阶段 5 修复：恢复提示误报已修复；任务结束瞬间若列表状态滞后，自动恢复不再错误提示“任务流恢复失败”

@@ -218,6 +218,41 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["task_plan", "task_retrieve"],
         )
 
+    def test_build_tool_plan_respects_registry_provider_when_retrieve_disabled(self) -> None:
+        provider = StaticToolRegistryProvider(
+            {
+                "task_plan": get_default_tool_registry()["task_plan"],
+                "calc_eval": get_default_tool_registry()["calc_eval"],
+            }
+        )
+
+        plan = build_tool_plan(
+            "请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]",
+            registry_provider=provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "calc_eval"],
+        )
+
+    def test_build_tool_plan_respects_planning_only_registry_provider(self) -> None:
+        provider = StaticToolRegistryProvider(
+            {
+                "task_plan": get_default_tool_registry()["task_plan"],
+            }
+        )
+
+        plan = build_tool_plan(
+            "请帮我检索知识库并计算 [calc:1+2*3] [kb:demo] [multi-tool]",
+            registry_provider=provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan"],
+        )
+
     def test_build_tool_plan_accepts_provider_generated_json_tools(self) -> None:
         class FakeProvider:
             provider = "openai"
@@ -262,6 +297,51 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(plan[1]["input"]["knowledge_base_id"], "kb-provider")
         self.assertEqual(plan[2]["input"]["expression"], "6/2")
         self.assertIn("JSON", provider.last_prompt)
+
+    def test_build_tool_plan_provider_branch_respects_registry_provider(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+            last_prompt = ""
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                self.last_prompt = prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "task_retrieve",
+                                    "input": {"query": "应被过滤"},
+                                },
+                                {
+                                    "name": "calc_eval",
+                                    "input": {"expression": "6/2"},
+                                },
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        registry_provider = StaticToolRegistryProvider(
+            {
+                "task_plan": get_default_tool_registry()["task_plan"],
+                "calc_eval": get_default_tool_registry()["calc_eval"],
+            }
+        )
+        provider = FakeProvider()
+        plan = build_tool_plan(
+            "请先检索再计算 [calc:1+2] [kb:demo]",
+            provider=provider,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertNotIn("task_retrieve", provider.last_prompt)
+        self.assertIn("Allowed tool names: calc_eval.", provider.last_prompt)
 
     def test_build_tool_plan_artifacts_capture_provider_usage_for_planning(self) -> None:
         class FakeProvider:
