@@ -14,7 +14,11 @@ if str(ROOT) not in sys.path:
 
 import app.services.tool_runtime as tool_runtime_module  # type: ignore[import-not-found]
 import app.services.chat_execution_service as chat_execution_module  # type: ignore[import-not-found]
+from app.api.routes.settings import (  # type: ignore[import-not-found]
+    _build_settings_summary_response,
+)
 from app.providers.base import ProviderUsage  # type: ignore[import-not-found]
+from app.services.settings_service import StoredSettings  # type: ignore[import-not-found]
 from app.services.tool_runtime import (  # type: ignore[import-not-found]
     ConfiguredToolRegistryProvider,
     DefaultToolRegistryProvider,
@@ -375,6 +379,14 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertTrue(artifacts.planning_provider_attempted)
         self.assertTrue(artifacts.planning_provider_used)
         self.assertIsNotNone(artifacts.provider_usage)
+        self.assertEqual(
+            artifacts.allowed_tool_names,
+            ("task_plan", "task_retrieve", "calc_eval"),
+        )
+        self.assertEqual(
+            artifacts.allowed_tool_labels,
+            ("Task Planner", "Knowledge Retrieval", "calc_eval"),
+        )
         assert artifacts.provider_usage is not None
         self.assertEqual(artifacts.provider_usage.prompt_tokens, 21)
         self.assertEqual(
@@ -426,9 +438,66 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             [item["name"] for item in artifacts.tool_plan],
             ["task_plan", "task_retrieve", "calc_eval"],
         )
+        self.assertEqual(
+            artifacts.allowed_tool_names,
+            ("task_plan", "task_retrieve", "calc_eval"),
+        )
         self.assertIsNotNone(artifacts.provider_usage)
         assert artifacts.provider_usage is not None
         self.assertEqual(artifacts.provider_usage.total_tokens, 18)
+
+    def test_build_tool_plan_artifacts_capture_registry_allowed_tools_metadata(self) -> None:
+        registry_provider = StaticToolRegistryProvider(
+            {
+                "task_plan": get_default_tool_registry()["task_plan"],
+                "calc_eval": get_default_tool_registry()["calc_eval"],
+            }
+        )
+
+        artifacts = build_tool_plan_artifacts(
+            "请先检索再计算 [calc:1+2]",
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            artifacts.allowed_tool_names,
+            ("task_plan", "calc_eval"),
+        )
+        self.assertEqual(
+            artifacts.allowed_tool_labels,
+            ("Task Planner", "calc_eval"),
+        )
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+
+    def test_build_settings_summary_response_captures_registry_profile_source_and_enabled_tools(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url="https://example.invalid/v1",
+                api_key="secret",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_provider_source="default",
+            ),
+            database_locator="postgresql://demo",
+        )
+
+        self.assertEqual(summary.mode, "remote")
+        self.assertEqual(summary.provider, "openai")
+        self.assertEqual(summary.model, "gpt-4.1-mini")
+        self.assertEqual(summary.tool_registry_profile, "planning_only")
+        self.assertEqual(summary.tool_registry_provider_source, "default")
+        self.assertEqual(summary.enabled_tool_names, ["task_plan"])
+        self.assertEqual(summary.enabled_tool_labels, ["Task Planner"])
+        self.assertEqual(summary.database_locator, "postgresql://demo")
 
     def test_build_tool_plan_summary_uses_display_labels(self) -> None:
         plan = build_tool_plan("请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]")

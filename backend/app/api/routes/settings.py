@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from urllib.error import HTTPError, URLError
@@ -5,9 +7,17 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from app.api.deps import get_current_user
+from app.config import get_settings
 from app.db import get_database_locator
 from app.services.audit_service import safe_record_audit_event
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
+from app.services.tool_runtime import (
+    get_configured_tool_registry_provider,
+    get_registered_tool_names,
+    get_tool_display_name,
+    get_tool_registry_profile_name_from_settings,
+    get_tool_registry_provider_source_name_from_settings,
+)
 
 
 router = APIRouter()
@@ -52,6 +62,10 @@ class SettingsSummaryResponse(BaseModel):
     base_url: str | None = None
     api_key_configured: bool
     base_url_configured: bool
+    tool_registry_profile: str
+    tool_registry_provider_source: str
+    enabled_tool_names: list[str]
+    enabled_tool_labels: list[str]
     database_locator: str
 
 
@@ -102,10 +116,49 @@ def _build_preflight_response(
     )
 
 
-@router.get("", response_model=SettingsSummaryResponse)
-def get_settings_summary(current_user: dict = Depends(get_current_user)) -> SettingsSummaryResponse:
-    user_id = str(current_user["id"])
-    settings = get_stored_settings(user_id)
+def _merge_runtime_settings_for_summary(
+    *,
+    settings: StoredSettings,
+    runtime_settings: object | None = None,
+) -> object:
+    base_settings = get_settings() if runtime_settings is None else runtime_settings
+    if isinstance(base_settings, dict):
+        merged_values = dict(base_settings)
+    elif hasattr(base_settings, "model_dump"):
+        merged_values = dict(getattr(base_settings, "model_dump")())
+    else:
+        merged_values = dict(vars(base_settings))
+    merged_values.update(
+        {
+            "mode": settings.mode,
+            "provider": settings.provider,
+            "model": settings.model,
+            "model_name": settings.model,
+            "base_url": settings.base_url,
+            "api_key": settings.api_key,
+        }
+    )
+    return SimpleNamespace(**merged_values)
+
+
+def _build_settings_summary_response(
+    *,
+    settings: StoredSettings,
+    runtime_settings: object | None = None,
+    database_locator: str | None = None,
+) -> SettingsSummaryResponse:
+    effective_settings = _merge_runtime_settings_for_summary(
+        settings=settings,
+        runtime_settings=runtime_settings,
+    )
+    registry_provider = get_configured_tool_registry_provider(settings=effective_settings)
+    enabled_tool_names = list(
+        get_registered_tool_names(registry_provider=registry_provider)
+    )
+    enabled_tool_labels = [
+        get_tool_display_name(name, registry_provider=registry_provider)
+        for name in enabled_tool_names
+    ]
     return SettingsSummaryResponse(
         mode=settings.mode,
         provider=settings.provider,
@@ -113,8 +166,23 @@ def get_settings_summary(current_user: dict = Depends(get_current_user)) -> Sett
         base_url=settings.base_url,
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
-        database_locator=get_database_locator(),
+        tool_registry_profile=get_tool_registry_profile_name_from_settings(
+            settings=effective_settings
+        ),
+        tool_registry_provider_source=get_tool_registry_provider_source_name_from_settings(
+            settings=effective_settings
+        ),
+        enabled_tool_names=enabled_tool_names,
+        enabled_tool_labels=enabled_tool_labels,
+        database_locator=database_locator or get_database_locator(),
     )
+
+
+@router.get("", response_model=SettingsSummaryResponse)
+def get_settings_summary(current_user: dict = Depends(get_current_user)) -> SettingsSummaryResponse:
+    user_id = str(current_user["id"])
+    settings = get_stored_settings(user_id)
+    return _build_settings_summary_response(settings=settings)
 
 
 @router.put("", response_model=SettingsSummaryResponse)
@@ -162,15 +230,7 @@ def update_settings(
             "api_key_configured": bool(settings.api_key),
         },
     )
-    return SettingsSummaryResponse(
-        mode=settings.mode,
-        provider=settings.provider,
-        model=settings.model,
-        base_url=settings.base_url,
-        api_key_configured=bool(settings.api_key),
-        base_url_configured=bool(settings.base_url),
-        database_locator=get_database_locator(),
-    )
+    return _build_settings_summary_response(settings=settings)
 
 
 @router.post("/validate", response_model=SettingsValidateResponse)

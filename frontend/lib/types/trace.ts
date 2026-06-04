@@ -16,7 +16,10 @@ export type TraceStepMeta = {
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
   usage_source?: "provider" | "estimated" | "legacy" | string;
+  planning_provider_attempted?: boolean;
   planning_provider_used?: boolean;
+  allowed_tool_names?: string[];
+  allowed_tool_labels?: string[];
   tool?: {
     name: string;
     label?: string;

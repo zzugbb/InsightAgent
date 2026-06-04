@@ -661,12 +661,38 @@ export function formatTraceStepMetaSubtitle(
   if (stepKind) {
     parts.push(`${labels.stepKind} ${stepKind}`);
   }
-  if (typeof meta.planning_provider_used === "boolean") {
+  if (typeof meta.planning_provider_attempted === "boolean") {
+    if (meta.planning_provider_attempted) {
+      parts.push(
+        meta.planning_provider_used
+          ? labels.planningProviderUsed
+          : labels.planningProviderFallback,
+      );
+    } else {
+      parts.push(labels.planningProviderRuleOnly);
+    }
+  } else if (typeof meta.planning_provider_used === "boolean") {
     parts.push(
       meta.planning_provider_used
         ? labels.planningProviderUsed
         : labels.planningProviderFallback,
     );
+  }
+  const allowedToolLabels = Array.isArray(meta.allowed_tool_labels)
+    ? meta.allowed_tool_labels
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter((item) => item.length > 0)
+    : [];
+  const allowedToolNames =
+    allowedToolLabels.length > 0
+      ? allowedToolLabels
+      : Array.isArray(meta.allowed_tool_names)
+        ? meta.allowed_tool_names
+            .map((item) => (typeof item === "string" ? item.trim() : ""))
+            .filter((item) => item.length > 0)
+        : [];
+  if (allowedToolNames.length > 0) {
+    parts.push(`${labels.allowedTools} ${allowedToolNames.join(", ")}`);
   }
   if (tokensPart !== undefined) {
     parts.push(`${labels.tokens} ${tokensPart}`);

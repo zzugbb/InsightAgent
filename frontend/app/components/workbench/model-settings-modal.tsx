@@ -221,6 +221,10 @@ export function ModelSettingsModal({
       ? data.api_key_configured
       : false
     : false;
+  const summaryEnabledTools =
+    data?.enabled_tool_labels && data.enabled_tool_labels.length > 0
+      ? data.enabled_tool_labels.join(", ")
+      : "—";
 
   return (
     <Modal
@@ -363,6 +367,15 @@ export function ModelSettingsModal({
           </Descriptions.Item>
           <Descriptions.Item label={t.settings.metaModel}>
             {summaryModel}
+          </Descriptions.Item>
+          <Descriptions.Item label={t.settings.metaToolRegistryProfile}>
+            {data.tool_registry_profile}
+          </Descriptions.Item>
+          <Descriptions.Item label={t.settings.metaToolRegistrySource}>
+            {data.tool_registry_provider_source}
+          </Descriptions.Item>
+          <Descriptions.Item label={t.settings.metaEnabledTools}>
+            {summaryEnabledTools}
           </Descriptions.Item>
           {isRemoteMode ? (
             <>

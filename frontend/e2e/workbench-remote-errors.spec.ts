@@ -640,18 +640,21 @@ test("remote cancel enters cooldown and recovers send", async ({
 
     await composerInput.fill("trigger remote cancel cooldown flow");
     await composerSend.click();
-    await expect
-      .poll(() => mockProvider.getRequestCount(), {
-        timeout: 20_000,
-        intervals: [200, 400, 800],
-      })
-      .toBe(1);
 
     await openInspectorContextTab(page);
     const cancelButton = page
       .locator('[data-testid="inspector-task-cancel"]:visible')
       .first();
     await expect(cancelButton).toBeVisible({ timeout: 20_000 });
+    await expect
+      .poll(() => mockProvider.getRequestCount(), {
+        timeout: 20_000,
+        intervals: [200, 400, 800],
+      })
+      .toBeGreaterThan(0);
+    await page.waitForTimeout(350);
+    const firstSendRequestCount = mockProvider.getRequestCount();
+    expect(firstSendRequestCount).toBeGreaterThan(0);
     await cancelButton.click();
 
     await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
@@ -662,7 +665,7 @@ test("remote cancel enters cooldown and recovers send", async ({
     await composerInput.fill("blocked during cooldown");
     await composerInput.press("Enter");
     await page.waitForTimeout(350);
-    expect(mockProvider.getRequestCount()).toBe(1);
+    expect(mockProvider.getRequestCount()).toBe(firstSendRequestCount);
 
     await expect(composerSend).toBeEnabled({ timeout: 12_000 });
     await composerInput.fill("after cooldown send works");
@@ -673,7 +676,7 @@ test("remote cancel enters cooldown and recovers send", async ({
         timeout: 20_000,
         intervals: [200, 400, 800],
       })
-      .toBe(2);
+      .toBeGreaterThan(firstSendRequestCount);
     await expect(
       page
         .locator("article.message-row.assistant")

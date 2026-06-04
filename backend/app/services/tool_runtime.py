@@ -96,6 +96,8 @@ class ToolRuntimeContext:
 @dataclass(frozen=True)
 class ToolPlanArtifacts:
     tool_plan: list[dict[str, object]]
+    allowed_tool_names: tuple[str, ...] = ()
+    allowed_tool_labels: tuple[str, ...] = ()
     planning_prompt: str | None = None
     provider_usage: ProviderUsage | None = None
     planning_provider_attempted: bool = False
@@ -525,6 +527,36 @@ def _get_enabled_planning_optional_tool_names(
         for name in _PLANNING_OPTIONAL_TOOL_NAMES
         if _is_tool_enabled_for_planning(
             name,
+            registry_provider=registry_provider,
+        )
+    )
+
+
+def get_enabled_planning_tool_names(
+    *,
+    registry_provider: ToolRegistryProvider | None = None,
+) -> tuple[str, ...]:
+    names: list[str] = []
+    if _is_tool_enabled_for_planning(
+        "task_plan",
+        registry_provider=registry_provider,
+    ):
+        names.append("task_plan")
+    names.extend(
+        _get_enabled_planning_optional_tool_names(
+            registry_provider=registry_provider,
+        )
+    )
+    return tuple(names)
+
+
+def get_enabled_planning_tool_labels(
+    *,
+    registry_provider: ToolRegistryProvider | None = None,
+) -> tuple[str, ...]:
+    return tuple(
+        get_tool_display_name(name, registry_provider=registry_provider)
+        for name in get_enabled_planning_tool_names(
             registry_provider=registry_provider,
         )
     )
@@ -5677,12 +5709,22 @@ def build_tool_plan_artifacts(
     provider: object | None = None,
     registry_provider: ToolRegistryProvider | None = None,
 ) -> ToolPlanArtifacts:
+    allowed_tool_names = get_enabled_planning_tool_names(
+        registry_provider=registry_provider,
+    )
+    allowed_tool_labels = get_enabled_planning_tool_labels(
+        registry_provider=registry_provider,
+    )
     fallback_plan = _build_rule_based_tool_plan(
         prompt,
         registry_provider=registry_provider,
     )
     if provider is None:
-        return ToolPlanArtifacts(tool_plan=fallback_plan)
+        return ToolPlanArtifacts(
+            tool_plan=fallback_plan,
+            allowed_tool_names=allowed_tool_names,
+            allowed_tool_labels=allowed_tool_labels,
+        )
     try:
         provider_plan = _build_provider_tool_plan(
             prompt,
@@ -5692,11 +5734,21 @@ def build_tool_plan_artifacts(
     except Exception:  # noqa: BLE001
         provider_plan = None
     if provider_plan is None:
-        return ToolPlanArtifacts(tool_plan=fallback_plan)
+        return ToolPlanArtifacts(
+            tool_plan=fallback_plan,
+            allowed_tool_names=allowed_tool_names,
+            allowed_tool_labels=allowed_tool_labels,
+        )
     if provider_plan.planning_provider_used and provider_plan.tool_plan:
-        return provider_plan
+        return replace(
+            provider_plan,
+            allowed_tool_names=allowed_tool_names,
+            allowed_tool_labels=allowed_tool_labels,
+        )
     return ToolPlanArtifacts(
         tool_plan=fallback_plan,
+        allowed_tool_names=allowed_tool_names,
+        allowed_tool_labels=allowed_tool_labels,
         planning_prompt=provider_plan.planning_prompt,
         provider_usage=provider_plan.provider_usage,
         planning_provider_attempted=provider_plan.planning_provider_attempted,

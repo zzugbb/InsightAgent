@@ -588,8 +588,10 @@ export const en: Messages = {
       usageSourceProvider: "provider",
       usageSourceEstimated: "estimated",
       usageSourceLegacy: "legacy",
+      planningProviderRuleOnly: "Rule planner",
       planningProviderUsed: "Planner provider used",
       planningProviderFallback: "Planner fallback",
+      allowedTools: "Allowed tools",
       toolLine: (name: string, status: string) =>
         `Tool ${name} · ${status}`,
       toolRetry: (count: number) => `retry ${count}`,
@@ -795,6 +797,9 @@ export const en: Messages = {
     metaConfigured: "Configured",
     metaNotConfigured: "Not set",
     metaDatabase: "Database",
+    metaToolRegistryProfile: "Tool registry profile",
+    metaToolRegistrySource: "Tool registry source",
+    metaEnabledTools: "Enabled tools",
     remoteCompatibilityHint:
       "Remote currently supports OpenAI-compatible APIs only (/chat/completions with SSE).",
     appearanceTitle: "Appearance & language",

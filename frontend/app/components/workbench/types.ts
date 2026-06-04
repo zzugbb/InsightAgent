@@ -5,6 +5,10 @@ export type SettingsSummary = {
   base_url: string | null;
   api_key_configured: boolean;
   base_url_configured: boolean;
+  tool_registry_profile: string;
+  tool_registry_provider_source: string;
+  enabled_tool_names: string[];
+  enabled_tool_labels: string[];
   database_locator: string;
 };
 

@@ -576,8 +576,10 @@ export const zh: Messages = {
       usageSourceProvider: "provider",
       usageSourceEstimated: "估算",
       usageSourceLegacy: "兼容",
+      planningProviderRuleOnly: "规划使用规则 planner",
       planningProviderUsed: "规划已走真实 provider",
       planningProviderFallback: "规划已回退规则 planner",
+      allowedTools: "允许工具",
       toolLine: (name: string, status: string) =>
         `工具 ${name} · ${status}`,
       toolRetry: (count: number) => `重试 ${count} 次`,
@@ -778,6 +780,9 @@ export const zh: Messages = {
     metaConfigured: "已配置",
     metaNotConfigured: "未配置",
     metaDatabase: "数据库连接",
+    metaToolRegistryProfile: "Tool registry profile",
+    metaToolRegistrySource: "Tool registry source",
+    metaEnabledTools: "已启用工具",
     remoteCompatibilityHint:
       "remote 目前仅支持 OpenAI-compatible 接口（/chat/completions 与 SSE）。",
     appearanceTitle: "外观与语言",

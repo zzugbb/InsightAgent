@@ -392,6 +392,10 @@ def stream_task_execution(
             "label": "tool_plan",
             "tokens": _estimate_token_count(plan_content),
             "cost_estimate": None,
+            "planning_provider_attempted": tool_plan_artifacts.planning_provider_attempted,
+            "planning_provider_used": tool_plan_artifacts.planning_provider_used,
+            "allowed_tool_names": list(tool_plan_artifacts.allowed_tool_names),
+            "allowed_tool_labels": list(tool_plan_artifacts.allowed_tool_labels),
         }
         if tool_plan_artifacts.planning_provider_attempted:
             planning_usage_payload = _build_usage_payload(
@@ -406,7 +410,6 @@ def stream_task_execution(
                     "prompt_tokens": planning_usage_payload["prompt_tokens"],
                     "completion_tokens": planning_usage_payload["completion_tokens"],
                     "usage_source": planning_usage_payload["usage_source"],
-                    "planning_provider_used": tool_plan_artifacts.planning_provider_used,
                 }
             )
         plan_step = {

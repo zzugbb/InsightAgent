@@ -508,8 +508,10 @@ export type Messages = {
       usageSourceProvider: string;
       usageSourceEstimated: string;
       usageSourceLegacy: string;
+      planningProviderRuleOnly: string;
       planningProviderUsed: string;
       planningProviderFallback: string;
+      allowedTools: string;
       toolLine: (name: string, status: string) => string;
       toolRetry: (count: number) => string;
       toolError: (message: string) => string;
@@ -684,6 +686,9 @@ export type Messages = {
     metaConfigured: string;
     metaNotConfigured: string;
     metaDatabase: string;
+    metaToolRegistryProfile: string;
+    metaToolRegistrySource: string;
+    metaEnabledTools: string;
     remoteCompatibilityHint: string;
     appearanceTitle: string;
     themeLabel: string;
