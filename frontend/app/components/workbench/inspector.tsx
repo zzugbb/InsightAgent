@@ -26,8 +26,12 @@ import {
   getStepTitle,
   getTaskLabel,
   normalizeTraceStepKind,
+  resolveInspectorTaskUsage,
+  resolveTasksUsageAggregate,
   shortenId,
+  type UsageBreakdown,
 } from "./utils";
+import type { SseTaskUsage } from "../../../lib/stores/chat-stream-store";
 
 const TRACE_PREVIEW = 6;
 
@@ -53,6 +57,8 @@ type InspectorProps = {
   activeSessionId: string | null;
   activeTaskId: string | null;
   activeTask: TaskSummary | undefined;
+  recentTasksScoped: TaskSummary[];
+  sseTaskUsage: SseTaskUsage | null;
   latestTaskForSession: TaskSummary | undefined;
   onReplayTrace: () => void;
   onLoadDelta: () => void;
@@ -84,6 +90,8 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     activeSessionId,
     activeTaskId,
     activeTask,
+    recentTasksScoped,
+    sseTaskUsage,
     latestTaskForSession,
     onReplayTrace,
     onLoadDelta,
@@ -230,6 +238,49 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     const normalized = status.trim().toLowerCase();
     return normalized === "pending" || normalized === "running";
   };
+
+  const inspectorUsage = useMemo(
+    () =>
+      resolveInspectorTaskUsage({
+        taskId: activeTaskId,
+        activeTask,
+        sseTaskUsage,
+      }),
+    [activeTask, activeTaskId, sseTaskUsage],
+  );
+  const sessionUsageAggregate = useMemo(
+    () => resolveTasksUsageAggregate(recentTasksScoped),
+    [recentTasksScoped],
+  );
+
+  const renderUsageBreakdown = (
+    usage: UsageBreakdown,
+    title?: string,
+  ) => (
+    <div>
+      {title ? <p className="panel-note panel-note--muted">{title}</p> : null}
+      <div className="context-grid context-grid--stats compact">
+        <span>{t.inspector.usagePrompt}</span>
+        <strong>{usage.prompt ?? "—"}</strong>
+        <span>{t.inspector.usageCompletion}</span>
+        <strong>{usage.completion ?? "—"}</strong>
+        <span>{t.inspector.usageTotal}</span>
+        <strong>{usage.total ?? "—"}</strong>
+        <span>{t.inspector.usageCost}</span>
+        <strong>{usage.cost ?? "—"}</strong>
+        <span>{t.inspector.usageSource}</span>
+        <strong>
+          {usage.usageSource === "provider"
+            ? t.inspector.usageSourceProvider
+            : usage.usageSource === "estimated"
+              ? t.inspector.usageSourceEstimated
+              : usage.usageSource === "legacy"
+                ? t.inspector.usageSourceLegacy
+                : "—"}
+        </strong>
+      </div>
+    </div>
+  );
 
   const tracePanel = (
     <section
@@ -407,6 +458,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <Button size="small" onClick={() => scrollToContextSection("ctx-overview")}>
             {t.inspector.contextJumpOverview}
           </Button>
+          <Button size="small" onClick={() => scrollToContextSection("ctx-usage")}>
+            {t.inspector.contextJumpUsage}
+          </Button>
           <Button size="small" onClick={() => scrollToContextSection("ctx-sync")}>
             {t.inspector.contextJumpSync}
           </Button>
@@ -440,6 +494,32 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           <strong>{activeSessionId ? shortenId(activeSessionId) : "—"}</strong>
         </div>
       </div>
+
+      {inspectorUsage ? (
+        <div className="inspector-block" id="ctx-usage">
+          <p className="summary-label">{t.inspector.usageTitle}</p>
+          <p className="inspector-section-lead">{t.inspector.usageLead}</p>
+          {renderUsageBreakdown(inspectorUsage)}
+          {inspectorUsage.planning ? renderUsageBreakdown(inspectorUsage.planning, t.inspector.usagePlanningTitle) : null}
+          {inspectorUsage.overall ? renderUsageBreakdown(inspectorUsage.overall, t.inspector.usageOverallTitle) : null}
+        </div>
+      ) : null}
+
+      {sessionUsageAggregate ? (
+        <div className="inspector-block">
+          <p className="summary-label">{t.inspector.usageSummaryTitle}</p>
+          <p className="inspector-section-lead">{t.inspector.usageScopeSession}</p>
+          {renderUsageBreakdown(sessionUsageAggregate)}
+          <div className="context-grid context-grid--stats compact">
+            <span>{t.inspector.usageTaskCount(sessionUsageAggregate.taskCount)}</span>
+            <strong>—</strong>
+            <span>{t.inspector.usageAvgTotal}</span>
+            <strong>{sessionUsageAggregate.avgTotal ?? "—"}</strong>
+            <span>{t.inspector.usageAvgCost}</span>
+            <strong>{sessionUsageAggregate.avgCost ?? "—"}</strong>
+          </div>
+        </div>
+      ) : null}
 
       <div className="inspector-block" id="ctx-sync">
         <p className="summary-label">{t.inspector.traceSyncStatus}</p>

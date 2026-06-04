@@ -422,6 +422,8 @@ export type Messages = {
     usageCompletion: string;
     usageTotal: string;
     usageCost: string;
+    usagePlanningTitle: string;
+    usageOverallTitle: string;
     usageSource: string;
     usageSourceProvider: string;
     usageSourceEstimated: string;
@@ -499,7 +501,15 @@ export type Messages = {
       model: string;
       stepKind: string;
       tokens: string;
+      promptTokens: string;
+      completionTokens: string;
       cost: string;
+      usageSource: string;
+      usageSourceProvider: string;
+      usageSourceEstimated: string;
+      usageSourceLegacy: string;
+      planningProviderUsed: string;
+      planningProviderFallback: string;
       toolLine: (name: string, status: string) => string;
       toolRetry: (count: number) => string;
       toolError: (message: string) => string;

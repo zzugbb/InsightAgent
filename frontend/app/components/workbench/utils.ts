@@ -13,12 +13,24 @@ export type InspectorUsageRow = {
   promptSource: "provider" | "estimated" | null;
   completionSource: "provider" | "estimated" | null;
   usageSource: "provider" | "estimated" | "legacy" | null;
+  planning?: UsageBreakdown | null;
+  overall?: UsageBreakdown | null;
 };
 
 export type UsageAggregateRow = InspectorUsageRow & {
   taskCount: number;
   avgTotal: string | null;
   avgCost: string | null;
+};
+
+export type UsageBreakdown = {
+  prompt: string | null;
+  completion: string | null;
+  total: string | null;
+  cost: string | null;
+  promptSource: "provider" | "estimated" | null;
+  completionSource: "provider" | "estimated" | null;
+  usageSource: "provider" | "estimated" | "legacy" | null;
 };
 
 export type TaskSnapshotSummary = {
@@ -78,22 +90,33 @@ function parseUsageSource(
   return null;
 }
 
-function normalizeUsageObject(
+function normalizeUsageSection(
   raw: Record<string, unknown>,
-): InspectorUsageRow | null {
-  const promptRaw = parseUsageNumber(raw["prompt_tokens"]);
-  const completionRaw = parseUsageNumber(raw["completion_tokens"]);
-  const prompt = formatTokenCount(raw["prompt_tokens"]);
-  const completion = formatTokenCount(raw["completion_tokens"]);
+  prefix = "",
+): UsageBreakdown | null {
+  const promptKey = `${prefix}prompt_tokens`;
+  const completionKey = `${prefix}completion_tokens`;
+  const totalKey = `${prefix}total_tokens`;
+  const costKey = `${prefix}cost_estimate`;
+  const promptSourceKey = `${prefix}prompt_tokens_source`;
+  const completionSourceKey = `${prefix}completion_tokens_source`;
+  const usageSourceKey = `${prefix}usage_source`;
+  const promptRaw = parseUsageNumber(raw[promptKey]);
+  const completionRaw = parseUsageNumber(raw[completionKey]);
+  const totalRaw = parseUsageNumber(raw[totalKey]);
+  const prompt = formatTokenCount(raw[promptKey]);
+  const completion = formatTokenCount(raw[completionKey]);
   const total =
-    promptRaw !== null || completionRaw !== null
-      ? formatTokenCount((promptRaw ?? 0) + (completionRaw ?? 0))
-      : null;
-  const cost = formatCost(raw["cost_estimate"]);
-  const promptSource = parseUsageSource(raw["prompt_tokens_source"]);
-  const completionSource = parseUsageSource(raw["completion_tokens_source"]);
+    totalRaw !== null
+      ? formatTokenCount(totalRaw)
+      : promptRaw !== null || completionRaw !== null
+        ? formatTokenCount((promptRaw ?? 0) + (completionRaw ?? 0))
+        : null;
+  const cost = formatCost(raw[costKey]);
+  const promptSource = parseUsageSource(raw[promptSourceKey]);
+  const completionSource = parseUsageSource(raw[completionSourceKey]);
   const usageSource =
-    parseUsageSource(raw["usage_source"]) ??
+    parseUsageSource(raw[usageSourceKey]) ??
     (promptSource === "provider" || completionSource === "provider"
       ? "provider"
       : promptSource === "estimated" || completionSource === "estimated"
@@ -112,6 +135,20 @@ function normalizeUsageObject(
     promptSource,
     completionSource,
     usageSource,
+  };
+}
+
+function normalizeUsageObject(
+  raw: Record<string, unknown>,
+): InspectorUsageRow | null {
+  const base = normalizeUsageSection(raw);
+  if (!base) {
+    return null;
+  }
+  return {
+    ...base,
+    planning: normalizeUsageSection(raw, "planning_"),
+    overall: normalizeUsageSection(raw, "overall_"),
   };
 }
 
@@ -574,6 +611,18 @@ export function formatTraceStepMetaSubtitle(
     tokensPart =
       t === null || t === undefined ? "—" : String(t);
   }
+  let promptTokensPart: string | undefined;
+  if ("prompt_tokens" in meta) {
+    const t = meta.prompt_tokens;
+    promptTokensPart =
+      t === null || t === undefined ? "—" : String(t);
+  }
+  let completionTokensPart: string | undefined;
+  if ("completion_tokens" in meta) {
+    const t = meta.completion_tokens;
+    completionTokensPart =
+      t === null || t === undefined ? "—" : String(t);
+  }
   let costPart: string | undefined;
   if ("cost_estimate" in meta) {
     const c = meta.cost_estimate;
@@ -612,11 +661,36 @@ export function formatTraceStepMetaSubtitle(
   if (stepKind) {
     parts.push(`${labels.stepKind} ${stepKind}`);
   }
+  if (typeof meta.planning_provider_used === "boolean") {
+    parts.push(
+      meta.planning_provider_used
+        ? labels.planningProviderUsed
+        : labels.planningProviderFallback,
+    );
+  }
   if (tokensPart !== undefined) {
     parts.push(`${labels.tokens} ${tokensPart}`);
   }
+  if (promptTokensPart !== undefined) {
+    parts.push(`${labels.promptTokens} ${promptTokensPart}`);
+  }
+  if (completionTokensPart !== undefined) {
+    parts.push(`${labels.completionTokens} ${completionTokensPart}`);
+  }
   if (costPart !== undefined) {
     parts.push(`${labels.cost} ${costPart}`);
+  }
+  if (typeof meta.usage_source === "string" && meta.usage_source.trim()) {
+    const usageSource = meta.usage_source.trim().toLowerCase();
+    const usageSourceLabel =
+      usageSource === "provider"
+        ? labels.usageSourceProvider
+        : usageSource === "estimated"
+          ? labels.usageSourceEstimated
+          : usageSource === "legacy"
+            ? labels.usageSourceLegacy
+            : usageSource;
+    parts.push(`${labels.usageSource} ${usageSourceLabel}`);
   }
   return parts.length > 0 ? parts.join(" · ") : null;
 }

@@ -19,10 +19,10 @@ from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.tool_runtime import (
     build_tool_plan_summary,
+    build_tool_plan_artifacts,
     execute_configured_tool_registry_provider_preflight,
     build_tool_iteration_context,
     build_tool_prompt_with_observations,
-    build_tool_plan,
     execute_tool_plan_item_service_actions,
     execute_tool_plan_item_service_execution,
 )
@@ -103,6 +103,120 @@ def _normalize_usage_token_count(value: int | None) -> int | None:
     if value < 0:
         return None
     return int(value)
+
+
+def _build_usage_payload(
+    *,
+    prompt_text: str,
+    completion_text: str,
+    provider_usage: ProviderUsage | None,
+) -> dict[str, object]:
+    prompt_tokens_estimated = _estimate_token_count(prompt_text)
+    completion_tokens_estimated = _estimate_token_count(completion_text)
+    prompt_tokens_provider = _normalize_usage_token_count(
+        provider_usage.prompt_tokens if provider_usage else None
+    )
+    completion_tokens_provider = _normalize_usage_token_count(
+        provider_usage.completion_tokens if provider_usage else None
+    )
+    provider_total_tokens = _normalize_usage_token_count(
+        provider_usage.total_tokens if provider_usage else None
+    )
+    prompt_tokens_final = (
+        prompt_tokens_provider
+        if prompt_tokens_provider is not None
+        else prompt_tokens_estimated
+    )
+    completion_tokens_final = (
+        completion_tokens_provider
+        if completion_tokens_provider is not None
+        else completion_tokens_estimated
+    )
+    prompt_tokens_source = (
+        "provider" if prompt_tokens_provider is not None else "estimated"
+    )
+    completion_tokens_source = (
+        "provider" if completion_tokens_provider is not None else "estimated"
+    )
+    usage_source = (
+        "provider"
+        if prompt_tokens_source == "provider"
+        or completion_tokens_source == "provider"
+        else "estimated"
+    )
+    payload: dict[str, object] = {
+        "prompt_tokens": prompt_tokens_final,
+        "completion_tokens": completion_tokens_final,
+        "total_tokens": prompt_tokens_final + completion_tokens_final,
+        "prompt_tokens_source": prompt_tokens_source,
+        "completion_tokens_source": completion_tokens_source,
+        "usage_source": usage_source,
+        "cost_estimate": _estimate_usage_cost(
+            prompt_tokens=prompt_tokens_final,
+            completion_tokens=completion_tokens_final,
+        ),
+        "prompt_token_price_per_1k": get_settings().usage_prompt_token_price_per_1k,
+        "completion_token_price_per_1k": get_settings().usage_completion_token_price_per_1k,
+    }
+    if provider_total_tokens is not None:
+        payload["provider_total_tokens"] = provider_total_tokens
+    return payload
+
+
+def _merge_usage_payloads(
+    *,
+    final_usage: dict[str, object],
+    planning_usage: dict[str, object] | None,
+) -> dict[str, object]:
+    usage_payload = dict(final_usage)
+    if planning_usage is None:
+        return usage_payload
+
+    planning_prompt_tokens = int(planning_usage.get("prompt_tokens", 0) or 0)
+    planning_completion_tokens = int(planning_usage.get("completion_tokens", 0) or 0)
+    planning_total_tokens = int(planning_usage.get("total_tokens", 0) or 0)
+    final_prompt_tokens = int(final_usage.get("prompt_tokens", 0) or 0)
+    final_completion_tokens = int(final_usage.get("completion_tokens", 0) or 0)
+    final_total_tokens = int(final_usage.get("total_tokens", 0) or 0)
+    planning_cost_estimate = planning_usage.get("cost_estimate")
+    final_cost_estimate = final_usage.get("cost_estimate")
+
+    usage_payload.update(
+        {
+            "planning_prompt_tokens": planning_prompt_tokens,
+            "planning_completion_tokens": planning_completion_tokens,
+            "planning_total_tokens": planning_total_tokens,
+            "planning_prompt_tokens_source": planning_usage.get("prompt_tokens_source"),
+            "planning_completion_tokens_source": planning_usage.get(
+                "completion_tokens_source"
+            ),
+            "planning_usage_source": planning_usage.get("usage_source"),
+            "planning_cost_estimate": planning_cost_estimate,
+            "overall_prompt_tokens": final_prompt_tokens + planning_prompt_tokens,
+            "overall_completion_tokens": final_completion_tokens
+            + planning_completion_tokens,
+            "overall_total_tokens": final_total_tokens + planning_total_tokens,
+        }
+    )
+    if isinstance(planning_usage.get("provider_total_tokens"), int):
+        usage_payload["planning_provider_total_tokens"] = planning_usage[
+            "provider_total_tokens"
+        ]
+    if (
+        isinstance(planning_cost_estimate, (int, float))
+        and isinstance(final_cost_estimate, (int, float))
+    ):
+        usage_payload["overall_cost_estimate"] = round(
+            float(planning_cost_estimate) + float(final_cost_estimate),
+            8,
+        )
+    elif isinstance(final_cost_estimate, (int, float)):
+        usage_payload["overall_cost_estimate"] = float(final_cost_estimate)
+    elif isinstance(planning_cost_estimate, (int, float)):
+        usage_payload["overall_cost_estimate"] = float(planning_cost_estimate)
+    else:
+        usage_payload["overall_cost_estimate"] = None
+    return usage_payload
 
 
 def stream_task_execution(
@@ -259,20 +373,39 @@ def stream_task_execution(
 
         plan_step_id = str(uuid4())
         seq_cursor += 1
-        tool_plan = build_tool_plan(prompt)
+        tool_plan_artifacts = build_tool_plan_artifacts(prompt, provider=provider)
+        tool_plan = tool_plan_artifacts.tool_plan
         plan_content = build_tool_plan_summary(tool_plan)
+        planning_usage_payload = None
+        plan_meta: dict[str, object] = {
+            "model": getattr(provider, "model", "mock-gpt"),
+            "step_type": "planning",
+            "label": "tool_plan",
+            "tokens": _estimate_token_count(plan_content),
+            "cost_estimate": None,
+        }
+        if tool_plan_artifacts.planning_provider_attempted:
+            planning_usage_payload = _build_usage_payload(
+                prompt_text=tool_plan_artifacts.planning_prompt or prompt,
+                completion_text=plan_content,
+                provider_usage=tool_plan_artifacts.provider_usage,
+            )
+            plan_meta.update(
+                {
+                    "tokens": planning_usage_payload["completion_tokens"],
+                    "cost_estimate": planning_usage_payload["cost_estimate"],
+                    "prompt_tokens": planning_usage_payload["prompt_tokens"],
+                    "completion_tokens": planning_usage_payload["completion_tokens"],
+                    "usage_source": planning_usage_payload["usage_source"],
+                    "planning_provider_used": tool_plan_artifacts.planning_provider_used,
+                }
+            )
         plan_step = {
             "id": plan_step_id,
             "seq": seq_cursor,
             "type": "thought",
             "content": plan_content,
-            "meta": {
-                "model": getattr(provider, "model", "mock-gpt"),
-                "step_type": "planning",
-                "label": "tool_plan",
-                "tokens": _estimate_token_count(plan_content),
-                "cost_estimate": None,
-            },
+            "meta": plan_meta,
         }
         trace_steps.append(plan_step)
         yield sse_event(
@@ -397,7 +530,6 @@ def stream_task_execution(
             prompt=prompt,
             tool_observations=tool_observations,
         )
-        prompt_tokens_estimated = _estimate_token_count(provider_prompt)
         stream_chunk_count = 0
         provider_usage: ProviderUsage | None = None
         get_last_usage = getattr(provider, "get_last_usage", None)
@@ -454,41 +586,10 @@ def stream_task_execution(
                     provider_usage = latest_usage
         else:
             final_step_seq += 1
-        completion_tokens_estimated = _estimate_token_count(final_content)
-        prompt_tokens_provider = _normalize_usage_token_count(
-            provider_usage.prompt_tokens if provider_usage else None
-        )
-        completion_tokens_provider = _normalize_usage_token_count(
-            provider_usage.completion_tokens if provider_usage else None
-        )
-        provider_total_tokens = _normalize_usage_token_count(
-            provider_usage.total_tokens if provider_usage else None
-        )
-        prompt_tokens_final = (
-            prompt_tokens_provider
-            if prompt_tokens_provider is not None
-            else prompt_tokens_estimated
-        )
-        completion_tokens_final = (
-            completion_tokens_provider
-            if completion_tokens_provider is not None
-            else completion_tokens_estimated
-        )
-        prompt_tokens_source = (
-            "provider" if prompt_tokens_provider is not None else "estimated"
-        )
-        completion_tokens_source = (
-            "provider" if completion_tokens_provider is not None else "estimated"
-        )
-        usage_source = (
-            "provider"
-            if prompt_tokens_source == "provider"
-            or completion_tokens_source == "provider"
-            else "estimated"
-        )
-        usage_cost_estimate = _estimate_usage_cost(
-            prompt_tokens=prompt_tokens_final,
-            completion_tokens=completion_tokens_final,
+        final_usage_payload = _build_usage_payload(
+            prompt_text=provider_prompt,
+            completion_text=final_content,
+            provider_usage=provider_usage,
         )
         trace_steps[-1] = {
             **final_step_streaming,
@@ -496,8 +597,8 @@ def stream_task_execution(
             "seq": final_step_seq,
             "meta": {
                 **dict(final_step_streaming.get("meta", {})),
-                "tokens": completion_tokens_final,
-                "cost_estimate": usage_cost_estimate,
+                "tokens": final_usage_payload["completion_tokens"],
+                "cost_estimate": final_usage_payload["cost_estimate"],
             },
         }
         persist_trace(force=True)
@@ -510,19 +611,10 @@ def stream_task_execution(
             content=final_content,
         )
 
-        usage_payload: dict[str, object] = {
-            "prompt_tokens": prompt_tokens_final,
-            "completion_tokens": completion_tokens_final,
-            "total_tokens": prompt_tokens_final + completion_tokens_final,
-            "prompt_tokens_source": prompt_tokens_source,
-            "completion_tokens_source": completion_tokens_source,
-            "usage_source": usage_source,
-            "cost_estimate": usage_cost_estimate,
-            "prompt_token_price_per_1k": get_settings().usage_prompt_token_price_per_1k,
-            "completion_token_price_per_1k": get_settings().usage_completion_token_price_per_1k,
-        }
-        if provider_total_tokens is not None:
-            usage_payload["provider_total_tokens"] = provider_total_tokens
+        usage_payload = _merge_usage_payloads(
+            final_usage=final_usage_payload,
+            planning_usage=planning_usage_payload,
+        )
 
         complete_task(
             task_id=task_id,

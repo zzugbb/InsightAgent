@@ -13,6 +13,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import app.services.tool_runtime as tool_runtime_module  # type: ignore[import-not-found]
+import app.services.chat_execution_service as chat_execution_module  # type: ignore[import-not-found]
+from app.providers.base import ProviderUsage  # type: ignore[import-not-found]
 from app.services.tool_runtime import (  # type: ignore[import-not-found]
     ConfiguredToolRegistryProvider,
     DefaultToolRegistryProvider,
@@ -22,6 +24,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_action_step_initial_meta,
     build_action_step_initial_step,
     build_tool_plan,
+    build_tool_plan_artifacts,
     build_tool_attempt_bundle,
     build_tool_attempt_error_events,
     build_tool_attempt_start_events,
@@ -187,6 +190,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     get_configured_tool_registry_provider_artifacts,
     get_tool_default_timeout_ms,
     is_tool_retryable_by_default,
+    maybe_raise_tool_execution_error,
     maybe_raise_mock_tool_execution_error,
     tool_requires_user_context,
     normalize_tool_spec,
@@ -206,6 +210,146 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(plan[2]["name"], "calc_eval")
         self.assertEqual(plan[2]["input"]["expression"], "1+2*3")
 
+    def test_build_tool_plan_supports_generic_multi_tool_marker(self) -> None:
+        plan = build_tool_plan("请先规划再执行 [multi-tool]")
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "task_retrieve"],
+        )
+
+    def test_build_tool_plan_accepts_provider_generated_json_tools(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+            last_prompt = ""
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                self.last_prompt = prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "task_retrieve",
+                                    "input": {
+                                        "query": "深入检索并整理背景",
+                                        "top_k": 5,
+                                        "knowledge_base_id": "kb-provider",
+                                    },
+                                },
+                                {
+                                    "name": "calc_eval",
+                                    "input": {"expression": "6/2"},
+                                },
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        provider = FakeProvider()
+        plan = build_tool_plan(
+            "请先检索再计算 [calc:1+2] [kb:demo]",
+            provider=provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "task_retrieve", "calc_eval"],
+        )
+        self.assertEqual(plan[1]["input"]["query"], "深入检索并整理背景")
+        self.assertEqual(plan[1]["input"]["top_k"], 5)
+        self.assertEqual(plan[1]["input"]["knowledge_base_id"], "kb-provider")
+        self.assertEqual(plan[2]["input"]["expression"], "6/2")
+        self.assertIn("JSON", provider.last_prompt)
+
+    def test_build_tool_plan_artifacts_capture_provider_usage_for_planning(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "task_retrieve",
+                                    "input": {"query": "检索", "top_k": 4},
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    ),
+                    usage=ProviderUsage(
+                        prompt_tokens=21,
+                        completion_tokens=7,
+                        total_tokens=28,
+                    ),
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "请先检索",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertIsNotNone(artifacts.provider_usage)
+        assert artifacts.provider_usage is not None
+        self.assertEqual(artifacts.provider_usage.prompt_tokens, 21)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "task_retrieve"],
+        )
+        self.assertIn("Allowed tool names", artifacts.planning_prompt or "")
+
+    def test_build_tool_plan_falls_back_when_provider_plan_is_invalid(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                return SimpleNamespace(content="not-json-at-all")
+
+        plan = build_tool_plan(
+            "请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]",
+            provider=FakeProvider(),
+        )
+
+        self.assertEqual(plan[0]["name"], "task_plan")
+        self.assertEqual(plan[1]["name"], "task_retrieve")
+        self.assertEqual(plan[1]["input"]["knowledge_base_id"], "demo")
+        self.assertEqual(plan[2]["name"], "calc_eval")
+        self.assertEqual(plan[2]["input"]["expression"], "1+2*3")
+
+    def test_build_tool_plan_artifacts_keep_provider_attempt_metadata_on_fallback(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                return SimpleNamespace(
+                    content="not-json-at-all",
+                    usage=ProviderUsage(
+                        prompt_tokens=13,
+                        completion_tokens=5,
+                        total_tokens=18,
+                    ),
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertFalse(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "task_retrieve", "calc_eval"],
+        )
+        self.assertIsNotNone(artifacts.provider_usage)
+        assert artifacts.provider_usage is not None
+        self.assertEqual(artifacts.provider_usage.total_tokens, 18)
+
     def test_build_tool_plan_summary_uses_display_labels(self) -> None:
         plan = build_tool_plan("请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]")
 
@@ -213,6 +357,40 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             build_tool_plan_summary(plan),
             "Planned tools: Task Planner, Knowledge Retrieval, calc_eval",
         )
+
+    def test_build_usage_payload_supports_overall_and_planning_fields(self) -> None:
+        planning_usage = chat_execution_module._build_usage_payload(  # type: ignore[attr-defined]
+            prompt_text="planner prompt",
+            completion_text="Planned tools: Task Planner, Knowledge Retrieval",
+            provider_usage=ProviderUsage(
+                prompt_tokens=10,
+                completion_tokens=6,
+                total_tokens=16,
+            ),
+        )
+        final_usage = chat_execution_module._build_usage_payload(  # type: ignore[attr-defined]
+            prompt_text="final prompt",
+            completion_text="final answer",
+            provider_usage=ProviderUsage(
+                prompt_tokens=20,
+                completion_tokens=8,
+                total_tokens=28,
+            ),
+        )
+
+        merged = chat_execution_module._merge_usage_payloads(  # type: ignore[attr-defined]
+            final_usage=final_usage,
+            planning_usage=planning_usage,
+        )
+
+        self.assertEqual(merged["prompt_tokens"], 20)
+        self.assertEqual(merged["completion_tokens"], 8)
+        self.assertEqual(merged["planning_prompt_tokens"], 10)
+        self.assertEqual(merged["planning_completion_tokens"], 6)
+        self.assertEqual(merged["overall_prompt_tokens"], 30)
+        self.assertEqual(merged["overall_completion_tokens"], 14)
+        self.assertEqual(merged["overall_total_tokens"], 44)
+        self.assertEqual(merged["planning_usage_source"], "provider")
 
     def test_run_tool_keeps_calc_output_shape(self) -> None:
         output = run_tool(
@@ -542,7 +720,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             )
 
         self.assertTrue(ctx.exception.fatal)
-        self.assertIn("unknown mock tool", str(ctx.exception).lower())
+        self.assertIn("unknown tool", str(ctx.exception).lower())
 
     def test_registered_tool_names_cover_current_mock_tools(self) -> None:
         self.assertEqual(
@@ -9772,7 +9950,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "mock_retrieve",
                 registry_provider=provider,
             )
-        self.assertEqual(str(ctx.exception), "Unknown mock tool: mock_retrieve")
+        self.assertEqual(str(ctx.exception), "Unknown tool: mock_retrieve")
 
     def test_get_tool_registry_profile_name_from_settings_defaults_to_default(self) -> None:
         settings = SimpleNamespace(tool_registry_profile=None)
@@ -10140,9 +10318,20 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ensure_tool_registration("does_not_exist")
 
         self.assertTrue(ctx.exception.fatal)
-        self.assertIn("unknown mock tool", str(ctx.exception).lower())
+        self.assertIn("unknown tool", str(ctx.exception).lower())
 
-    def test_maybe_raise_mock_tool_execution_error_keeps_transient_semantics(self) -> None:
+    def test_maybe_raise_tool_execution_error_keeps_transient_semantics(self) -> None:
+        with self.assertRaises(MockToolExecutionError) as ctx:
+            maybe_raise_tool_execution_error(
+                name="mock_plan",
+                prompt="[tool-error]",
+                attempt=0,
+            )
+
+        self.assertFalse(ctx.exception.fatal)
+        self.assertIn("transient error", str(ctx.exception).lower())
+
+    def test_maybe_raise_mock_tool_execution_error_keeps_legacy_marker_compatibility(self) -> None:
         with self.assertRaises(MockToolExecutionError) as ctx:
             maybe_raise_mock_tool_execution_error(
                 name="mock_plan",
@@ -10367,7 +10556,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             meta=meta,
         )
 
-        self.assertEqual(meta["tool"]["name"], "mock_plan")
+        self.assertEqual(meta["tool"]["name"], "task_plan")
         self.assertEqual(meta["tool"]["label"], "Task Planner")
         self.assertEqual(step["content"], "Tool running: Task Planner")
 
@@ -11099,6 +11288,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Task Planner: {"plan": "Analyze request -> retrieve context -> synthesize answer.", "echo": true}',
         )
 
+    def test_build_tool_step_updates_observation_and_rag_followup_use_display_label_for_mock_retrieve(
+        self,
+    ) -> None:
+        base_step = {
+            "id": "step-2",
+            "seq": 4,
+            "type": "action",
+            "content": "Tool running: Knowledge Retrieval",
+            "meta": {
+                "model": "mock-gpt",
+                "step_type": "tool_call",
+                "label": "tool_2",
+                "retryCount": 0,
+                "tokens": 5,
+                "cost_estimate": None,
+                "tool": {
+                    "name": "mock_retrieve",
+                    "label": "Knowledge Retrieval",
+                    "input": {"query": "检索 demo"},
+                    "status": "running",
+                    "retry_count": 0,
+                },
+            },
+        }
+        output = {
+            "chunks": ["alpha", "beta"],
+            "knowledge_base_id": "demo-kb",
+            "hit_count": 2,
+        }
+
+        success_step = build_tool_step_success_update(
+            action_step=base_step,
+            name="mock_retrieve",
+            tool_input={"query": "检索 demo"},
+            output=output,
+            retry_count=0,
+            token_count=7,
+            last_error=None,
+        )
+        rag_followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=5,
+            model="mock-gpt",
+            tool_name="mock_retrieve",
+            output=output,
+            token_count=2,
+        )
+
+        self.assertEqual(success_step["content"], "Tool done: Knowledge Retrieval")
+        self.assertEqual(success_step["meta"]["tool"]["name"], "task_retrieve")
+        self.assertEqual(
+            build_tool_observation_entry(name="mock_retrieve", output=output),
+            'Knowledge Retrieval: {"chunks": ["alpha", "beta"], "knowledge_base_id": "demo-kb", "hit_count": 2}',
+        )
+        self.assertIsNotNone(rag_followup)
+        assert rag_followup is not None
+        self.assertEqual(
+            rag_followup["step"]["content"],
+            "Knowledge Retrieval returned snippets from the selected knowledge base.",
+        )
+
     def test_build_tool_trace_event_keeps_current_shape(self) -> None:
         step = {
             "id": "step-1",
@@ -11187,7 +11438,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "id": "rag-1",
                 "seq": 4,
                 "type": "thought",
-                "content": "Retrieved snippets from mock knowledge base.",
+                "content": "Knowledge Retrieval returned snippets from the selected knowledge base.",
                 "meta": {
                     "model": "mock-gpt",
                     "step_type": "rag_retrieval",
@@ -11449,7 +11700,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "id": "rag-1",
                 "seq": 4,
                 "type": "thought",
-                "content": "Retrieved snippets from mock knowledge base.",
+                "content": "Knowledge Retrieval returned snippets from the selected knowledge base.",
                 "meta": {
                     "model": "mock-gpt",
                     "step_type": "rag_retrieval",
@@ -11971,6 +12222,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNotNone(rag_followup)
         assert rag_followup is not None
         self.assertEqual(rag_followup["step"]["id"], "rag-1")
+        self.assertEqual(
+            rag_followup["step"]["content"],
+            "Knowledge Retrieval returned snippets from the selected knowledge base.",
+        )
         self.assertEqual(rag_followup["step"]["meta"]["tokens"], 2)
         self.assertEqual(
             rag_followup["step"]["meta"]["rag"]["knowledge_base_id"],

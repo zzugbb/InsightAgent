@@ -13,6 +13,10 @@ export type TraceStepKind =
 export type TraceStepMeta = {
   model?: string;
   step_type?: string;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  usage_source?: "provider" | "estimated" | "legacy" | string;
+  planning_provider_used?: boolean;
   tool?: {
     name: string;
     label?: string;

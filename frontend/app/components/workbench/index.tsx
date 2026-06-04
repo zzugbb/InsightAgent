@@ -187,6 +187,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   );
   const sseMessage = useChatStreamStore((s: ChatStreamStore) => s.sseMessage);
   const traceCursor = useChatStreamStore((s: ChatStreamStore) => s.traceCursor);
+  const sseTaskUsage = useChatStreamStore(
+    (s: ChatStreamStore) => s.sseTaskUsage,
+  );
   const resetStreamUi = useChatStreamStore(
     (s: ChatStreamStore) => s.resetStreamUi,
   );
@@ -640,6 +643,7 @@ const TASK_PAGE_GLOBAL = 50;
   const scopedSseTraceSteps = streamSessionMatchesActive ? sseTraceSteps : [];
   const scopedSsePhase = streamSessionMatchesActive ? ssePhase : null;
   const scopedSseTaskId = streamSessionMatchesActive ? sseTaskId : null;
+  const scopedSseTaskUsage = streamSessionMatchesActive ? sseTaskUsage : null;
   const scopedSseMessage = streamSessionMatchesActive
     ? sseMessage
     : t.stream.idleHint;
@@ -1521,6 +1525,8 @@ const TASK_PAGE_GLOBAL = 50;
         activeSessionId={activeSessionId}
         activeTaskId={activeTaskIdScoped}
         activeTask={activeTask}
+        recentTasksScoped={recentTasksScoped}
+        sseTaskUsage={scopedSseTaskUsage}
         latestTaskForSession={latestTaskForSession}
         onReplayTrace={handleLoadPersistedTrace}
         onLoadDelta={handleLoadTraceDelta}

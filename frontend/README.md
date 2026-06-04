@@ -134,6 +134,13 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 协同进展（2026-06-04，默认 planner internal name 收敛）：后端默认 plan 现已直接产出 `task_plan`，前端无需额外适配旧的 `mock_plan` 展示兜底；在默认链路下，页面与轨迹继续稳定显示 `Task Planner`
 - 阶段 5 协同进展（2026-06-04，默认 retrieval internal name 收敛）：后端默认 plan 中的检索入口现已直接产出 `task_retrieve`，前端默认展示链会显示 `Knowledge Retrieval`；同时旧 `mock_retrieve` 兼容路径仍可继续回放历史与旧配置结果
 - 阶段 5 协同进展（2026-06-04，canonical registry 收口）：后端默认 registry / profile / provider 主链现已统一切到 `task_plan / task_retrieve`；前端默认不再需要为 `mock_*` 做常规展示兜底，旧 `mock_*` 仅用于历史 trace / 旧配置结果回放兼容
+- 阶段 5 协同进展（2026-06-04，canonical runtime outward 收口）：后端兼容 alias 即使仍接收 `mock_plan / mock_retrieve`，默认下发到前端的 tool start/meta outward 也已统一优先落成 `task_plan / task_retrieve`；前端后续只需围绕 canonical tool name 做真实工具验收
+- 阶段 5 协同进展（2026-06-04，internal mock semantics 收口）：后端 planner / retrieval 的内部 kind 与 unknown-tool 文案也已去掉 `mock` 语义；前端侧默认无需再把这两条主链视为 mock-only 协议分支
+- 阶段 5 协同进展（2026-06-04，generic runtime markers 收口）：后端默认开发期 marker 已切到 `[tool-error] / [tool-fatal] / [multi-tool]`，前端若需复现实验性错误/多工具轨迹，后续优先使用 generic marker；旧 `[mock-*]` 仅保留兼容
+- 阶段 5 协同进展（2026-06-04，provider-assisted planner 首版）：后端 remote 模式下的 planning 入口已可先请求真实 provider 生成受限 JSON tool plan，但最终仍会约束回现有 `task_plan / task_retrieve / calc_eval` schema，并在异常时自动回退到规则 planner；因此前端当前无需为 planning trace、tool card 或 Inspector 追加新协议分支
+- 阶段 5 协同进展（2026-06-04，planning usage / overall usage 对齐）：后端现已把 planning provider 调用的 token/cost 写入 planning trace step meta，并在 `done.usage` 额外补 `planning_*` 与 `overall_*` 字段；前端当前无需调整旧的 usage 主展示语义，但后续若要展示“规划成本”或“总成本”，可以直接消费这些新增字段
+- 阶段 5 协同进展（2026-06-04，retrieval 可见文案收口）：后端默认真实检索链的 RAG follow-up 文案现已从 `mock knowledge base` 收口为 `Knowledge Retrieval returned snippets from the selected knowledge base.`；同时 `mock_retrieve` 兼容入口在 success step、observation 与 follow-up thought 侧也统一显示 `Knowledge Retrieval`。因此前端后续做真实工具验收时，不需要再为默认 retrieval 路径解释遗留 mock 文案
+- 阶段 5 协同进展（2026-06-04，planning trace 可观测性收口）：前端现已把 planning trace meta 的细分字段展示出来：Inspector 与任务详情页 subtitle 会同时显示 `Prompt / Completion Token`、`Usage 来源`，并在 planning 步骤上明确标记“Planner provider used / Planner fallback”。这样即使页面不打开 usage 面板，也能直接从轨迹判断本次规划是不是走了真实 provider
 - 阶段 5 增量：`running-task-recovery` 前端首版已落地；刷新页面或切回会话时会自动接管该会话下 `pending/running` 任务流，并展示恢复中/成功/失败提示
 - 阶段 5 修复：会话切换时的任务串台已修复；流式状态按 `session_id` 绑定并按当前会话隔离渲染，避免短暂显示其他会话任务
 - 阶段 5 修复：恢复提示误报已修复；任务结束瞬间若列表状态滞后，自动恢复不再错误提示“任务流恢复失败”
@@ -184,6 +191,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 阶段 5 CI 维护性补充（2026-05-09 再补充）：导出摘要新增 `add_warning` 统一告警函数，集中维护 `P0/P1` 计数与提示文案拼装，降低阈值规则扩展的重复改动
 - 阶段 5 CI 准确性补充（2026-05-09）：`workbench-main-path` 分区已排除 shared 专项上下文（基于 `SHARED_CONTEXT_PATH_REGEX` 反向过滤），避免 shared 用例失败时把噪音计入主链路导出告警
 - 阶段 5 协同说明（2026-05-13）：当前轮进入后端 `tool-runtime-productionization` 连续小切片，已完成运行时最小 registry 化、显式 `ToolInvocation` 归一化边界与带最小元信息（`kind/label/retryable_by_default/default_timeout_ms/requires_user_context/supports_result_preview`）的 `ToolRegistration` 注册项结构收口；同时后端已开始用多个内部 helper 与 `ToolRuntimeContext` 消费这些注册项元信息，并进一步把 action step 初始组装、tool_start payload、tool success/error 元信息、tool_end payload、phase 与执行 policy 一并下沉到 runtime helper，但前端可见行为与现有 Playwright/e2e 契约保持不变
+- 阶段 5 协同收尾（2026-06-04）：Inspector 上下文面板现已真正消费后端新增的 `planning_* / overall_*` usage 字段。`Workbench` 会把流式 `sseTaskUsage` 与当前会话 `recentTasksScoped` 一并传入 Inspector，因此当前任务用量卡片除了原有基础 token/cost 外，还会展示“规划阶段”“整体总计”两个细分分区；会话聚合区继续保留任务数、平均总 token 与平均成本。校验：`cd frontend && npm run lint`、`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` `318/318`、`bash scripts/test_ci_e2e_tooling.sh common` 通过
 - 阶段 5 CI 规则收口补充（2026-05-09）：新增 `MAIN_CONTEXT_PATH_REGEX` / `EDGE_CONTEXT_PATH_REGEX`，main/edge/shared 三分区匹配统一改为变量化入口，降低后续规则调整时的改动分散度
 - 阶段 5 CI 维护性补充（2026-05-09 三次）：导出摘要新增 `print_matched_files` / `print_key_lines` 统一输出函数，收敛 main/shared/edge 分区的重复打印逻辑并提升一致性
 - 阶段 5 CI 可见性补充（2026-05-09）：main/shared/edge 三分区断言计数均新增 `context_files_detected`，便于直接比对该分区当前计数是否具备对应失败上下文样本
@@ -316,7 +324,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 左侧/中栏优化：侧栏会话区强化激活层级；聊天头部改为统一 runtime strip；消息流与输入区补充克制动效并统一节奏
 - 交互收敛：已移除会话状态胶囊与输入计数提示，模式/提供方/模型恢复为头部紧凑标签展示，减少纵向占用
 - 后端任务接口已提供 `status_normalized/status_label/status_rank`，前端可继续按需切换到后端统一状态语义
-- W3 增量：`tool_end` 与 `trace.meta.tool` 已接入 `retry_count/error`，Trace 元信息可展示工具重试次数与错误摘要（配合 `[mock-tool-error]` / `[mock-tool-fatal]` 触发）
+- W3 增量：`tool_end` 与 `trace.meta.tool` 已接入 `retry_count/error`，Trace 元信息可展示工具重试次数与错误摘要（默认配合 `[tool-error]` / `[tool-fatal]` 触发，旧 `[mock-tool-*]` 仍兼容）
 - W3 优化：新增计算器工具链路展示（`[calc:1+2*3]` 或“计算 1+2*3”），沿用现有工具状态可视化
 - W1 优化：模型设置弹窗新增“校验配置”按钮，先调用 `POST /api/settings/validate` 再决定是否保存
 - W2 稳定性优化：SSE + `trace/delta` 合并后的步骤按 `seq` 稳定排序，降低轨迹偶发乱序

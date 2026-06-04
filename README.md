@@ -36,6 +36,28 @@ profile / override / extra tool template 对旧名字的兼容依赖。
 file-manifest 主链现已统一切到 `task_plan / task_retrieve`；旧的 `mock_plan / mock_retrieve` 只保留为兼容别名，
 用于历史 `disabled_tool_names`、`template`、`overrides` 与旧 trace 回放路径，不再作为默认注册表中的一等键名。
 
+2026-06-04 下一阶段继续推进（canonical runtime outward 收口）：即便旧配置仍通过 `mock_plan / mock_retrieve`
+触发兼容执行，默认 tool start/meta/trace step 的 `tool.name` 也已统一落成 canonical `task_plan / task_retrieve`；
+因此兼容层继续保留，但用户可见轨迹不再被 legacy `mock_*` 名字污染。
+
+2026-06-04 下一阶段继续推进（internal mock semantics 收口）：后端内部 registration `kind` 现也已从
+`mock_planner / mock_retrieval` 收到 `task_planner / knowledge_retrieval`，unknown-tool 错误文案同步去掉 `mock`
+前缀；兼容 alias 继续负责 lookup/执行，但默认运行时语义已不再把 planner / retrieval 定义成 mock。
+
+2026-06-04 下一阶段继续推进（generic runtime markers 收口）：默认开发期 marker 已从
+`[mock-tool-error] / [mock-tool-fatal] / [mock-multi-tool]` 切到
+`[tool-error] / [tool-fatal] / [multi-tool]`；旧 marker 仍继续兼容，但后续调试与文档均以 generic marker 为准。
+
+2026-06-04 下一阶段继续推进（provider-assisted planner 首版）：默认 `build_tool_plan()` 已新增可选
+provider 规划分支；当运行在非 `mock` provider 下时，后端会先尝试向远端模型请求受限 JSON tool plan，再将结果约束回
+现有 `task_plan / task_retrieve / calc_eval` schema，若远端返回无效 JSON、未知工具或异常，则静默回退到既有规则 planner。
+因此页面与 SSE/trace 形状保持不变，但 remote 模式已具备“真实 provider 参与规划”的第一条生产化入口。
+
+2026-06-04 下一阶段继续推进（planning usage / overall usage 对齐）：planning provider 调用现已回传 planning artifacts，
+`chat_execution_service.py` 会把 planning 阶段的 token/cost 写入 planning trace step meta，并在 `done.usage`
+额外补充 `planning_*` 与 `overall_*` 字段；旧的 `prompt_tokens / completion_tokens / cost_estimate` 仍保持原有最终回答语义，
+因此现有前端与 e2e 断言不会被打断。
+
 ## 当前能力摘要
 
 - backend：
@@ -223,6 +245,14 @@ file-manifest 主链现已统一切到 `task_plan / task_retrieve`；旧的 `moc
   - 默认 planner 内部名去 mock 化（2026-06-04）：后端本轮继续把默认 plan 入口从 `mock_plan` 切到 `task_plan`，并新增 alias 解析，让 `task_plan` 在运行时复用现有 `mock_plan` 注册项与配置生态；因此默认主链与页面展示都不再依赖 mock 内部名，而旧的 `planning_only` profile、`disabled_tool_names=["mock_plan"]`、`template="mock_plan"` 等设置仍然保持兼容。当前 focused 回归已提升到 `309/309`，`compileall`、`bash scripts/test_ci_e2e_tooling.sh common` 与前端 `npm run lint` 通过
   - 默认 retrieval 内部名去 mock 化（2026-06-04）：后端本轮继续把默认检索入口从 `mock_retrieve` 切到 `task_retrieve`，并新增 alias 解析，让 `task_retrieve` 在运行时复用现有 `mock_retrieve` 注册项与 query 行为；同时默认 planning summary 与默认 tool 展示链开始使用 `Knowledge Retrieval` 作为展示名。这样默认主链进一步摆脱 `mock_*` 内部名，而旧的 `disabled_tool_names=["mock_retrieve"]`、`template="mock_retrieve"` 等配置保持兼容。当前 focused 回归已提升到 `311/311`，`compileall`、`bash scripts/test_ci_e2e_tooling.sh common` 与前端 `npm run lint` 通过
   - 默认 registry canonical 收口（2026-06-04）：后端本轮继续把默认 registry / profile / provider / loader / file-manifest 主链统一切到 `task_plan / task_retrieve`，并新增统一的 tool-name normalize helper，让旧的 `mock_plan / mock_retrieve` 只作为兼容别名参与 `disabled_tool_names`、`template`、`overrides` 与旧 trace 路径解析。这样“默认工具去 mock 化”不再只停留在展示层或 plan 入口，而是推进到了默认注册表与配置主链。当前 focused 回归保持 `311/311`，`compileall`、`bash scripts/test_ci_e2e_tooling.sh common` 与前端 `npm run lint` 通过
+  - 默认 runtime outward canonical 收口（2026-06-04）：后端本轮继续把兼容 alias 的 outward 输出统一到 canonical tool name。现在即使旧配置仍传 `mock_plan / mock_retrieve`，`build_tool_runtime_context()`、tool start payload、action step meta、success/error meta 与 observation 主链都会优先落成 `task_plan / task_retrieve`；兼容 alias 只负责 lookup/执行，不再继续把 legacy 名字泄漏到默认 trace/meta。当前 focused 回归保持 `311/311`，`compileall`、`bash scripts/test_ci_e2e_tooling.sh common` 与前端 `npm run lint` 通过
+  - 默认 internal mock semantics 收口（2026-06-04）：后端本轮继续把 planner / retrieval 的内部语义命名也从 mock 收口到真实任务语义：`ToolRegistration.kind` 已改成 `task_planner / knowledge_retrieval`，runner helper 同步改成 task 命名，`Unknown mock tool` 错误文案也统一改成 `Unknown tool`。这样兼容 alias 仍继续工作，但默认运行时内部语义已不再把这两条主链标注成 mock。当前 focused 回归保持 `311/311`，`compileall`、`bash scripts/test_ci_e2e_tooling.sh common` 与前端 `npm run lint` 通过
+  - 默认 generic runtime markers 收口（2026-06-04）：后端本轮继续把开发期 marker 从 mock 语义切到 generic 语义，新增 `maybe_raise_tool_execution_error()` 并让 `run_tool()` 默认走这条主链；`[tool-error] / [tool-fatal] / [multi-tool]` 现已成为默认测试/调试标记，旧 `[mock-tool-error] / [mock-tool-fatal] / [mock-multi-tool]` 仍通过兼容桥继续可用。focused 回归基线已提升到 `313/313`，`compileall`、`bash scripts/test_ci_e2e_tooling.sh common` 与前端 `npm run lint` 通过
+  - provider-assisted planner 首版（2026-06-04）：后端本轮开始真正接入非 mock planner 能力，在 `chat_execution_service.py` 中让 `build_tool_plan(prompt, provider=provider)` 优先尝试远端 provider 生成受限 JSON tool plan，再把结果约束回当前 `task_plan / task_retrieve / calc_eval` schema；若返回无效 JSON、未知工具、非法计算表达式或直接抛错，则静默回退到既有规则 planner，因此页面、SSE、trace 与工具执行主链形状保持不变。focused 回归基线已提升到 `315/315`，`compileall` 与 `bash scripts/test_ci_e2e_tooling.sh common` 通过
+  - planning usage / overall usage 对齐（2026-06-04）：后端本轮继续把 provider-assisted planner 的调用纳入 usage/cost 闭环：`build_tool_plan_artifacts()` 现会带出 planning provider usage 与 attempt/used 状态，`chat_execution_service.py` 则把 planning 阶段 token/cost 写入 planning trace meta，并在 `done.usage` 中追加 `planning_prompt_tokens/planning_completion_tokens/planning_total_tokens/planning_cost_estimate/planning_usage_source` 与 `overall_prompt_tokens/overall_completion_tokens/overall_total_tokens/overall_cost_estimate`。原有 `done.usage.prompt_tokens/completion_tokens/cost_estimate` 仍保持最终回答语义不变。focused 回归基线已提升到 `318/318`，`compileall` 与 `bash scripts/test_ci_e2e_tooling.sh common` 通过
+  - planning usage 前端接线收尾（2026-06-04）：Workbench 现已把流式 `sseTaskUsage` 与当前会话 `recentTasksScoped` 真正接入 Inspector，上下文面板会同时展示“当前任务用量”“规划阶段用量”“整体总计”与会话聚合用量，不再停留在仅后端产出 `planning_* / overall_*` 字段但前端未消费的半完成状态。校验：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` `318/318`、`python3 -m compileall backend/app backend/scripts/test_tool_runtime_slice.py`、`bash scripts/test_ci_e2e_tooling.sh common`、`cd frontend && npm run lint` 通过
+  - retrieval 可见文案收口（2026-06-04）：后端本轮继续把默认真实检索链里最后的 `mock` 可见语义清掉：`build_tool_rag_step()` 生成的 follow-up thought 现已改成 `Knowledge Retrieval returned snippets from the selected knowledge base.`，并新增 focused tests 锁定 `mock_retrieve` 兼容入口在 success step、observation 与 rag follow-up 三条 outward 主链上都统一显示 `Knowledge Retrieval`。focused 回归基线已提升到 `319/319`，`compileall` 与 `bash scripts/test_ci_e2e_tooling.sh common` 通过
+  - planning trace 可观测性前端收口（2026-06-04）：前端本轮继续把后端已落盘的 planning trace meta 真正展示出来：`formatTraceStepMetaSubtitle()` 现会额外显示 `Prompt / Completion Token`、`Usage 来源`，并在 planning 步骤上明确标出“Planner provider used / Planner fallback”。这一增强同时覆盖 Workbench Inspector 与任务详情页 trace 时间线，因此现在可以直接从 UI 判断本次规划是否真的走了 provider 以及其 token 来源。校验：`cd frontend && npm run lint`、`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` `319/319`、`bash scripts/test_ci_e2e_tooling.sh common` 通过
   - CI fixture 稳定性修复（2026-05-11）：`scripts/test_ci_finalize_e2e_for_workflow.sh` 的“缺失事件上下文应失败”断言改为显式 `unset GITHUB_EVENT_NAME/GITHUB_REF` 后执行，避免在 GitHub Actions 默认环境变量存在时出现假阳性（expected fail but passed）
   - CI 告警增强（2026-05-08）：`frontend-e2e` 导出摘要新增阈值告警（`threshold alerts`），当 `main-path` 或 `edge-cases` 的关键计数低于预期时会直接输出 `expected vs actual`，便于第一时间判断是下载层、响应头层还是 404 语义层回归
   - 回归稳态收口（2026-04-22）：修复 `workbench-edge-cases` 在并发回归下的偶发抖动（Context tab 定位收敛到 Inspector 顶部导航，取消后同文案重发场景改为“API cancel + UI 去重可见性断言”）；最新本地全量回归再次验证为 chromium `30/30`。

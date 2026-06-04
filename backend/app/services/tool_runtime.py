@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Iterator, Protocol
 
 from app.config import get_settings
+from app.providers.base import ProviderUsage
 from app.services.chroma_rag_service import query_knowledge_base
 
 
@@ -90,6 +91,15 @@ class ToolRuntimeContext:
     retryable_by_default: bool
     default_timeout_ms: int
     requires_user_context: bool
+
+
+@dataclass(frozen=True)
+class ToolPlanArtifacts:
+    tool_plan: list[dict[str, object]]
+    planning_prompt: str | None = None
+    provider_usage: ProviderUsage | None = None
+    planning_provider_attempted: bool = False
+    planning_provider_used: bool = False
 
 
 @dataclass(frozen=True)
@@ -320,7 +330,7 @@ def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
     return ToolInvocation(name=name, tool_input=tool_input)
 
 
-def _run_mock_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) -> dict[str, object]:
+def _run_task_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) -> dict[str, object]:
     del user_id
     prompt_preview = str(tool_input.get("prompt_preview", "")).strip() or prompt.strip()[:120]
     steps = ["Analyze request"]
@@ -330,6 +340,7 @@ def _run_mock_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) 
         or "知识" in normalized
         or "检索" in normalized
         or "context" in normalized
+        or "[multi-tool]" in normalized
         or "[mock-multi-tool]" in normalized
     ):
         steps.append("Retrieve supporting context")
@@ -344,7 +355,7 @@ def _run_mock_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) 
     }
 
 
-def _run_mock_retrieve(
+def _run_task_retrieve(
     *,
     tool_input: dict[str, object],
     prompt: str,
@@ -407,23 +418,23 @@ def _run_calc_eval(*, tool_input: dict[str, object], prompt: str, user_id: str) 
 _REGISTERED_TOOLS = {
     "task_plan": ToolRegistration(
         name="task_plan",
-        kind="mock_planner",
+        kind="task_planner",
         label="Task Planner",
         retryable_by_default=True,
         default_timeout_ms=3_000,
         requires_user_context=True,
         supports_result_preview=True,
-        runner=_run_mock_plan,
+        runner=_run_task_plan,
     ),
     "task_retrieve": ToolRegistration(
         name="task_retrieve",
-        kind="mock_retrieval",
+        kind="knowledge_retrieval",
         label="Knowledge Retrieval",
         retryable_by_default=True,
         default_timeout_ms=5_000,
         requires_user_context=True,
         supports_result_preview=True,
-        runner=_run_mock_retrieve,
+        runner=_run_task_retrieve,
     ),
     "calc_eval": ToolRegistration(
         name="calc_eval",
@@ -3562,25 +3573,33 @@ def ensure_tool_registration(
         registry_loader=registry_loader,
     )
     if registration is None:
-        raise MockToolExecutionError(f"Unknown mock tool: {name}", fatal=True)
+        raise MockToolExecutionError(f"Unknown tool: {name}", fatal=True)
     return registration
 
 
-def maybe_raise_mock_tool_execution_error(*, name: str, prompt: str, attempt: int) -> None:
+def maybe_raise_tool_execution_error(*, name: str, prompt: str, attempt: int) -> None:
     del name
     normalized = prompt.strip().lower()
 
-    if "[mock-tool-fatal]" in normalized:
+    if "[tool-fatal]" in normalized or "[mock-tool-fatal]" in normalized:
         raise MockToolExecutionError(
-            "Mock tool fatal error: planner contract validation failed.",
+            "Tool fatal error: planner contract validation failed.",
             fatal=True,
         )
 
-    if "[mock-tool-error]" in normalized and attempt == 0:
+    if ("[tool-error]" in normalized or "[mock-tool-error]" in normalized) and attempt == 0:
         raise MockToolExecutionError(
-            "Mock tool transient error: plan source unavailable on first attempt.",
+            "Tool transient error: plan source unavailable on first attempt.",
             fatal=False,
         )
+
+
+def maybe_raise_mock_tool_execution_error(*, name: str, prompt: str, attempt: int) -> None:
+    maybe_raise_tool_execution_error(
+        name=name,
+        prompt=prompt,
+        attempt=attempt,
+    )
 
 
 def build_tool_runtime_context(
@@ -3599,27 +3618,28 @@ def build_tool_runtime_context(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
+    canonical_name = registration.name
     requires_user_context = tool_requires_user_context(
-        name,
+        canonical_name,
         registry=registry,
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
     effective_user_id = user_id if requires_user_context else ""
     return ToolRuntimeContext(
-        name=name,
+        name=canonical_name,
         prompt=prompt,
         user_id=effective_user_id,
         attempt=attempt,
         registration=registration,
         retryable_by_default=is_tool_retryable_by_default(
-            name,
+            canonical_name,
             registry=registry,
             registry_provider=registry_provider,
             registry_loader=registry_loader,
         ),
         default_timeout_ms=get_tool_default_timeout_ms(
-            name,
+            canonical_name,
             registry=registry,
             registry_provider=registry_provider,
             registry_loader=registry_loader,
@@ -3709,12 +3729,13 @@ def build_tool_end_payload(
     output: dict[str, object],
     retry_count: int,
 ) -> dict[str, object]:
+    canonical_name = normalize_tool_registry_name(name)
     return {
         "task_id": task_id,
         "step_id": step_id,
         "status": "done",
-        "latency_ms": max(1, get_tool_default_timeout_ms(name) // 250),
-        "output_preview": build_tool_result_preview(name=name, output=output),
+        "latency_ms": max(1, get_tool_default_timeout_ms(canonical_name) // 250),
+        "output_preview": build_tool_result_preview(name=canonical_name, output=output),
         "retry_count": retry_count,
     }
 
@@ -3727,10 +3748,11 @@ def build_tool_success_meta(
     retry_count: int,
     last_error: str | None,
 ) -> dict[str, object]:
+    canonical_name = normalize_tool_registry_name(name)
     return {
         "tool": {
-            "name": name,
-            "label": get_tool_display_name(name),
+            "name": canonical_name,
+            "label": get_tool_display_name(canonical_name),
             "input": tool_input,
             "output": output,
             "status": "done",
@@ -3747,10 +3769,11 @@ def build_tool_error_meta(
     retry_count: int,
     error_message: str,
 ) -> dict[str, object]:
+    canonical_name = normalize_tool_registry_name(name)
     return {
         "tool": {
-            "name": name,
-            "label": get_tool_display_name(name),
+            "name": canonical_name,
+            "label": get_tool_display_name(canonical_name),
             "input": tool_input,
             "status": "error",
             "retry_count": retry_count,
@@ -3767,11 +3790,12 @@ def build_tool_start_payload(
     tool_input: dict[str, object],
     retry_count: int,
 ) -> dict[str, object]:
+    canonical_name = normalize_tool_registry_name(name)
     return {
         "task_id": task_id,
         "step_id": step_id,
-        "name": name,
-        "display_name": get_tool_display_name(name),
+        "name": canonical_name,
+        "display_name": get_tool_display_name(canonical_name),
         "input": tool_input,
         "retry_count": retry_count,
     }
@@ -3815,6 +3839,7 @@ def build_action_step_initial_meta(
     label: str,
     token_count: int,
 ) -> dict[str, object]:
+    canonical_name = normalize_tool_registry_name(name)
     return {
         "model": model,
         "step_type": "tool_call",
@@ -3823,8 +3848,8 @@ def build_action_step_initial_meta(
         "tokens": token_count,
         "cost_estimate": None,
         "tool": {
-            "name": name,
-            "label": get_tool_display_name(name),
+            "name": canonical_name,
+            "label": get_tool_display_name(canonical_name),
             "input": tool_input,
             "status": "running",
             "retry_count": 0,
@@ -3981,7 +4006,7 @@ def build_tool_attempt_bundle(
         "start_events": build_tool_attempt_start_events(
             task_id=task_id,
             step_id=step_id,
-            name=name,
+            name=runtime_ctx.name,
             tool_input=tool_input,
             attempt=attempt,
         ),
@@ -4011,7 +4036,7 @@ def build_tool_attempt_execution(
         iteration_ctx=iteration_ctx,
         action_step=action_step,
         runtime_ctx=attempt_bundle["runtime_ctx"],
-        name=name,
+        name=attempt_bundle["runtime_ctx"].name,
         tool_input=tool_input,
         output=output,
         exc=exc,
@@ -4555,7 +4580,7 @@ def build_tool_rag_step(
         "id": step_id,
         "seq": seq,
         "type": "thought",
-        "content": "Retrieved snippets from mock knowledge base.",
+        "content": "Knowledge Retrieval returned snippets from the selected knowledge base.",
         "meta": {
             "model": model,
             "step_type": "rag_retrieval",
@@ -4663,14 +4688,15 @@ def build_tool_iteration_context(
     label: str,
     token_count: int,
 ) -> dict[str, object]:
+    canonical_name = normalize_tool_registry_name(name)
     return {
         "step_id": step_id,
         "action_step": build_action_step_initial_step(
             step_id=step_id,
             seq=seq,
-            name=name,
+            name=canonical_name,
             meta=build_action_step_initial_meta(
-                name=name,
+                name=canonical_name,
                 tool_input=tool_input,
                 model=model,
                 label=label,
@@ -4688,13 +4714,14 @@ def build_tool_iteration_success_artifacts(
     name: str,
 ) -> dict[str, object]:
     output = build_tool_step_output(action_step)
+    canonical_name = normalize_tool_registry_name(name)
     return {
         "trace": build_tool_trace_event(
             task_id=task_id,
             step_id=step_id,
             step=action_step,
         ),
-        "observation": build_tool_observation_entry(name=name, output=output),
+        "observation": build_tool_observation_entry(name=canonical_name, output=output),
         "output": output,
     }
 
@@ -4709,7 +4736,7 @@ def build_tool_rag_followup(
     output: dict[str, object] | None,
     token_count: int,
 ) -> dict[str, object] | None:
-    if tool_name not in {"mock_retrieve", "task_retrieve"} or not isinstance(output, dict):
+    if normalize_tool_registry_name(tool_name) != "task_retrieve" or not isinstance(output, dict):
         return None
     chunks = output.get("chunks")
     if not isinstance(chunks, list):
@@ -5355,7 +5382,7 @@ def _extract_knowledge_base_id(prompt: str) -> str | None:
     return value or None
 
 
-def build_tool_plan(prompt: str) -> list[dict[str, object]]:
+def _build_rule_based_tool_plan(prompt: str) -> list[dict[str, object]]:
     normalized = prompt.strip().lower()
     settings = get_settings()
     knowledge_base_id = (
@@ -5375,6 +5402,7 @@ def build_tool_plan(prompt: str) -> list[dict[str, object]]:
         or "知识" in normalized
         or "检索" in normalized
         or "context" in normalized
+        or "[multi-tool]" in normalized
         or "[mock-multi-tool]" in normalized
     ):
         plan.append(
@@ -5402,6 +5430,198 @@ def build_tool_plan(prompt: str) -> list[dict[str, object]]:
     return plan
 
 
+def _build_provider_tool_plan_prompt(prompt: str) -> str:
+    return (
+        "You are the Task Planner for InsightAgent.\n"
+        "Return JSON only with shape {\"tools\": [...]}.\n"
+        "Allowed tool names: task_retrieve, calc_eval.\n"
+        "Do not include task_plan in the JSON; it is added automatically.\n"
+        "For task_retrieve input, include query, optional top_k, optional knowledge_base_id.\n"
+        "For calc_eval input, include expression.\n"
+        "If no extra tools are needed, return {\"tools\": []}.\n"
+        f"User request:\n{prompt.strip() or 'empty prompt'}"
+    )
+
+
+def _extract_provider_tool_plan_items(provider_content: str) -> list[object] | None:
+    raw = provider_content.strip()
+    if not raw:
+        return None
+    candidates = [raw]
+    fenced = re.findall(r"```(?:json)?\s*(.*?)```", raw, flags=re.DOTALL | re.IGNORECASE)
+    candidates.extend(item.strip() for item in fenced if item.strip())
+
+    for candidate in candidates:
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            tools = payload.get("tools", payload.get("plan"))
+            if isinstance(tools, list):
+                return tools
+    return None
+
+
+def _normalize_provider_tool_plan(
+    raw_items: list[object],
+    *,
+    prompt: str,
+) -> list[dict[str, object]] | None:
+    settings = get_settings()
+    prompt_preview = prompt.strip()[:120]
+    default_query = prompt.strip()[:80] or "default query"
+    default_kb_id = (
+        _extract_knowledge_base_id(prompt) or settings.rag_default_knowledge_base_id
+    )
+    fallback_calc_expression = _extract_calc_expression(prompt)
+    normalized_plan: list[dict[str, object]] = [
+        {
+            "name": "task_plan",
+            "input": {
+                "prompt_preview": prompt_preview,
+            },
+        }
+    ]
+    seen_names = {"task_plan"}
+
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            continue
+        tool_name = normalize_tool_registry_name(str(raw_item.get("name", "")).strip())
+        tool_input = raw_item.get("input")
+        if not isinstance(tool_input, dict):
+            tool_input = {}
+        if tool_name in seen_names:
+            continue
+        if tool_name == "task_retrieve":
+            top_k = tool_input.get("top_k")
+            if isinstance(top_k, bool):
+                top_k = None
+            if not isinstance(top_k, int) or top_k <= 0:
+                top_k = settings.rag_default_top_k
+            query = str(tool_input.get("query") or default_query)
+            knowledge_base_id = str(
+                tool_input.get("knowledge_base_id") or default_kb_id
+            )
+            normalized_plan.append(
+                {
+                    "name": "task_retrieve",
+                    "input": {
+                        "query": query,
+                        "top_k": top_k,
+                        "knowledge_base_id": knowledge_base_id,
+                    },
+                }
+            )
+            seen_names.add("task_retrieve")
+            continue
+        if tool_name == "calc_eval":
+            expression = tool_input.get("expression")
+            if not isinstance(expression, str) or not expression.strip():
+                expression = fallback_calc_expression
+            if not isinstance(expression, str) or not expression.strip():
+                continue
+            try:
+                _safe_eval_expression(expression)
+            except Exception:  # noqa: BLE001
+                continue
+            normalized_plan.append(
+                {
+                    "name": "calc_eval",
+                    "input": {
+                        "expression": expression,
+                    },
+                }
+            )
+            seen_names.add("calc_eval")
+
+    if len(normalized_plan) == 1:
+        return None
+    return normalized_plan
+
+
+def _build_provider_tool_plan(
+    prompt: str,
+    *,
+    provider: object,
+) -> ToolPlanArtifacts | None:
+    provider_name = str(getattr(provider, "provider", "")).strip().lower()
+    generate = getattr(provider, "generate", None)
+    if provider_name == "mock" or not callable(generate):
+        return None
+    planning_prompt = _build_provider_tool_plan_prompt(prompt)
+    response = generate(planning_prompt)
+    provider_usage = getattr(response, "usage", None)
+    if not isinstance(provider_usage, ProviderUsage):
+        get_last_usage = getattr(provider, "get_last_usage", None)
+        if callable(get_last_usage):
+            latest_usage = get_last_usage()
+            if isinstance(latest_usage, ProviderUsage):
+                provider_usage = latest_usage
+    content = getattr(response, "content", None)
+    if not isinstance(content, str):
+        return ToolPlanArtifacts(
+            tool_plan=[],
+            planning_prompt=planning_prompt,
+            provider_usage=provider_usage,
+            planning_provider_attempted=True,
+            planning_provider_used=False,
+        )
+    items = _extract_provider_tool_plan_items(content)
+    if items is None:
+        return ToolPlanArtifacts(
+            tool_plan=[],
+            planning_prompt=planning_prompt,
+            provider_usage=provider_usage,
+            planning_provider_attempted=True,
+            planning_provider_used=False,
+        )
+    normalized_plan = _normalize_provider_tool_plan(items, prompt=prompt)
+    return ToolPlanArtifacts(
+        tool_plan=normalized_plan or [],
+        planning_prompt=planning_prompt,
+        provider_usage=provider_usage,
+        planning_provider_attempted=True,
+        planning_provider_used=normalized_plan is not None,
+    )
+
+
+def build_tool_plan_artifacts(
+    prompt: str,
+    *,
+    provider: object | None = None,
+) -> ToolPlanArtifacts:
+    fallback_plan = _build_rule_based_tool_plan(prompt)
+    if provider is None:
+        return ToolPlanArtifacts(tool_plan=fallback_plan)
+    try:
+        provider_plan = _build_provider_tool_plan(prompt, provider=provider)
+    except Exception:  # noqa: BLE001
+        provider_plan = None
+    if provider_plan is None:
+        return ToolPlanArtifacts(tool_plan=fallback_plan)
+    if provider_plan.planning_provider_used and provider_plan.tool_plan:
+        return provider_plan
+    return ToolPlanArtifacts(
+        tool_plan=fallback_plan,
+        planning_prompt=provider_plan.planning_prompt,
+        provider_usage=provider_plan.provider_usage,
+        planning_provider_attempted=provider_plan.planning_provider_attempted,
+        planning_provider_used=False,
+    )
+
+
+def build_tool_plan(
+    prompt: str,
+    *,
+    provider: object | None = None,
+) -> list[dict[str, object]]:
+    return build_tool_plan_artifacts(prompt, provider=provider).tool_plan
+
+
 def run_tool(
     *,
     name: str,
@@ -5413,7 +5633,7 @@ def run_tool(
     registry_provider: ToolRegistryProvider | None = None,
     registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
-    maybe_raise_mock_tool_execution_error(name=name, prompt=prompt, attempt=attempt)
+    maybe_raise_tool_execution_error(name=name, prompt=prompt, attempt=attempt)
     ctx = build_tool_runtime_context(
         name=name,
         prompt=prompt,
