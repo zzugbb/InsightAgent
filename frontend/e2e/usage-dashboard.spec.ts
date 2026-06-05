@@ -63,13 +63,51 @@ async function saveToolRegistryProfile(
   return payload;
 }
 
-async function openTaskDetailFromTaskCenter(page: Page): Promise<Page> {
+async function submitPromptAndCaptureTaskId(
+  page: Page,
+  prompt: string,
+): Promise<string> {
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  await composerInput.fill(prompt);
+  const createTaskResponsePromise = page.waitForResponse((response) => {
+    if (response.request().method() !== "POST") {
+      return false;
+    }
+    try {
+      return new URL(response.url()).pathname === "/api/tasks";
+    } catch {
+      return false;
+    }
+  });
+  await composerSend.click();
+  const createTaskResponse = await createTaskResponsePromise;
+  expect(createTaskResponse.ok()).toBeTruthy();
+  const payload = (await createTaskResponse.json()) as { task_id?: string };
+  expect(typeof payload.task_id).toBe("string");
+  expect((payload.task_id ?? "").trim().length).toBeGreaterThan(0);
+  return String(payload.task_id).trim();
+}
+
+async function openTaskDetailFromTaskCenter(
+  page: Page,
+  taskId: string,
+): Promise<Page> {
   const openTaskCenter = page.getByTestId("chat-open-task-center");
   await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
   await openTaskCenter.click();
   await expect(page.getByTestId("task-center-shell")).toBeVisible({
     timeout: 20_000,
   });
+  const taskKeywordFilter = page.getByTestId("task-center-keyword-filter");
+  await taskKeywordFilter.fill(taskId);
+  const openDetailButtons = page.getByTestId("task-center-open-task-detail");
+  await expect
+    .poll(() => openDetailButtons.count(), {
+      timeout: 20_000,
+      intervals: [200, 400, 800],
+    })
+    .toBe(1);
   const openDetail = page.getByTestId("task-center-open-task-detail").first();
   await expect(openDetail).toBeVisible({ timeout: 20_000 });
   const [detailPage] = await Promise.all([
@@ -237,12 +275,10 @@ test("saved planning-only profile constrains actual trace allowed tools", async 
   expect(savedPayload.tool_registry_profile).toBe("planning_only");
   expect(savedPayload.enabled_tool_labels).toEqual(["Task Planner"]);
 
-  const composerInput = page.getByTestId("composer-input");
-  const composerSend = page.getByTestId("composer-send");
-  await composerInput.fill(
+  await submitPromptAndCaptureTaskId(
+    page,
     "Need rag context and [calc:1+2] for planning-only runtime acceptance",
   );
-  await composerSend.click();
 
   const allowedToolsMeta = page
     .getByTestId("trace-card-meta")
@@ -282,12 +318,10 @@ test("saved retrieval-only profile executes retrieval without planner or calcula
   expect(savedPayload.tool_registry_profile).toBe("retrieval_only");
   expect(savedPayload.enabled_tool_labels).toEqual(["Knowledge Retrieval"]);
 
-  const composerInput = page.getByTestId("composer-input");
-  const composerSend = page.getByTestId("composer-send");
-  await composerInput.fill(
+  await submitPromptAndCaptureTaskId(
+    page,
     "Please retrieve project context from the kb and explain the result [kb:demo]",
   );
-  await composerSend.click();
 
   const allowedToolsMeta = page
     .getByTestId("trace-card-meta")
@@ -328,12 +362,10 @@ test("saved calculator-only profile executes calculator without planner or retri
   expect(savedPayload.tool_registry_profile).toBe("calculator_only");
   expect(savedPayload.enabled_tool_labels).toEqual(["calc_eval"]);
 
-  const composerInput = page.getByTestId("composer-input");
-  const composerSend = page.getByTestId("composer-send");
-  await composerInput.fill(
+  await submitPromptAndCaptureTaskId(
+    page,
     "Please calculate the result for me [calc:12/3+5]",
   );
-  await composerSend.click();
 
   const allowedToolsMeta = page
     .getByTestId("trace-card-meta")
@@ -396,10 +428,10 @@ for (const acceptanceCase of [
     const savedPayload = await saveToolRegistryProfile(page, acceptanceCase.profile);
     expect(savedPayload.tool_registry_profile).toBe(acceptanceCase.profile);
 
-    const composerInput = page.getByTestId("composer-input");
-    const composerSend = page.getByTestId("composer-send");
-    await composerInput.fill(acceptanceCase.prompt);
-    await composerSend.click();
+    const taskId = await submitPromptAndCaptureTaskId(
+      page,
+      acceptanceCase.prompt,
+    );
 
     await expect(
       page.locator("article.message-row.assistant").filter({
@@ -407,7 +439,7 @@ for (const acceptanceCase of [
       }).first(),
     ).toBeVisible({ timeout: 20_000 });
 
-    const detailPage = await openTaskDetailFromTaskCenter(page);
+    const detailPage = await openTaskDetailFromTaskCenter(page, taskId);
     const allowedToolsMeta = detailPage
       .getByTestId("task-detail-trace-card-meta")
       .filter({ hasText: "Allowed tools" })
