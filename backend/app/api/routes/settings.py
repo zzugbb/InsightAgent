@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,7 @@ from app.db import get_database_locator
 from app.services.audit_service import safe_record_audit_event
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 from app.services.tool_runtime import (
+    build_tool_registry_provider_sources_from_settings,
     get_available_tool_registry_profile_names,
     get_available_tool_registry_provider_source_names,
     get_configured_tool_registry_provider,
@@ -23,6 +25,24 @@ from app.services.tool_runtime import (
 
 
 router = APIRouter()
+_TOOL_REGISTRY_DISPLAY_ORDER = {
+    "task_plan": 0,
+    "task_retrieve": 1,
+    "calc_eval": 2,
+}
+
+
+class ToolRegistryProfileOptionResponse(BaseModel):
+    name: str
+    enabled_tool_names: list[str]
+    enabled_tool_labels: list[str]
+
+
+class ToolRegistryProviderSourceOptionResponse(BaseModel):
+    name: str
+    base_profile: str
+    enabled_tool_names: list[str]
+    enabled_tool_labels: list[str]
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -81,7 +101,9 @@ class SettingsSummaryResponse(BaseModel):
     enabled_tool_names: list[str]
     enabled_tool_labels: list[str]
     available_tool_registry_profiles: list[str]
+    available_tool_registry_profile_details: list[ToolRegistryProfileOptionResponse]
     available_tool_registry_provider_sources: list[str]
+    available_tool_registry_provider_source_details: list[ToolRegistryProviderSourceOptionResponse]
     database_locator: str
 
 
@@ -97,6 +119,12 @@ class SettingsValidateResponse(BaseModel):
     tool_registry_provider_source: str | None = None
     enabled_tool_names: list[str] = Field(default_factory=list)
     enabled_tool_labels: list[str] = Field(default_factory=list)
+    available_tool_registry_profile_details: list[ToolRegistryProfileOptionResponse] = Field(
+        default_factory=list
+    )
+    available_tool_registry_provider_source_details: list[
+        ToolRegistryProviderSourceOptionResponse
+    ] = Field(default_factory=list)
 
 
 def _build_tool_registry_preview_fields(*, effective_settings: object) -> dict[str, object]:
@@ -120,13 +148,146 @@ def _build_tool_registry_preview_fields(*, effective_settings: object) -> dict[s
     }
 
 
+def _order_tool_names_for_display(names: list[str]) -> list[str]:
+    return sorted(
+        names,
+        key=lambda name: (_TOOL_REGISTRY_DISPLAY_ORDER.get(name, 999), name),
+    )
+
+
+def _clone_settings_with_updates(
+    *,
+    settings: object,
+    **updates: object,
+) -> object:
+    if isinstance(settings, dict):
+        merged_values = dict(settings)
+    elif hasattr(settings, "model_dump"):
+        merged_values = dict(getattr(settings, "model_dump")())
+    else:
+        merged_values = dict(vars(settings))
+    merged_values.update(updates)
+    return SimpleNamespace(**merged_values)
+
+
+def _build_tool_registry_profile_option_details(
+    *,
+    effective_settings: object,
+) -> list[ToolRegistryProfileOptionResponse]:
+    details: list[ToolRegistryProfileOptionResponse] = []
+    for profile_name in get_available_tool_registry_profile_names():
+        preview_fields = _build_tool_registry_preview_fields(
+            effective_settings=_clone_settings_with_updates(
+                settings=effective_settings,
+                tool_registry_profile=profile_name,
+                tool_registry_provider_source="default",
+            )
+        )
+        ordered_tool_names = _order_tool_names_for_display(
+            list(preview_fields["enabled_tool_names"])
+        )
+        details.append(
+            ToolRegistryProfileOptionResponse(
+                name=profile_name,
+                enabled_tool_names=ordered_tool_names,
+                enabled_tool_labels=[
+                    get_tool_display_name(tool_name)
+                    for tool_name in ordered_tool_names
+                ],
+            )
+        )
+    return details
+
+
+def _build_tool_registry_provider_source_option_details(
+    *,
+    effective_settings: object,
+) -> list[ToolRegistryProviderSourceOptionResponse]:
+    named_sources = build_tool_registry_provider_sources_from_settings(
+        settings=effective_settings
+    )
+    source_specs_raw = getattr(
+        effective_settings,
+        "tool_registry_provider_sources_json",
+        None,
+    )
+    try:
+        source_specs = (
+            json.loads(source_specs_raw)
+            if isinstance(source_specs_raw, str) and source_specs_raw.strip()
+            else {}
+        )
+    except json.JSONDecodeError:
+        source_specs = {}
+    details: list[ToolRegistryProviderSourceOptionResponse] = []
+    for source_name in get_available_tool_registry_provider_source_names(
+        settings=effective_settings
+    ):
+        if source_name == "default":
+            preview_fields = _build_tool_registry_preview_fields(
+                effective_settings=_clone_settings_with_updates(
+                    settings=effective_settings,
+                    tool_registry_provider_source="default",
+                )
+            )
+            details.append(
+                ToolRegistryProviderSourceOptionResponse(
+                    name="default",
+                    base_profile="default",
+                    enabled_tool_names=list(preview_fields["enabled_tool_names"]),
+                    enabled_tool_labels=list(preview_fields["enabled_tool_labels"]),
+                )
+            )
+            continue
+        provider = named_sources.get(source_name)
+        if provider is None:
+            continue
+        provider_registry = provider.load_tool_registry()
+        enabled_tool_names = _order_tool_names_for_display(
+            list(provider_registry.keys())
+        )
+        enabled_tool_labels = [
+            provider_registry[tool_name].label for tool_name in enabled_tool_names
+        ]
+        source_spec = source_specs.get(source_name, {})
+        base_profile = (
+            str(source_spec.get("profile", "default")).strip().lower()
+            if isinstance(source_spec, dict)
+            else "default"
+        ) or "default"
+        details.append(
+            ToolRegistryProviderSourceOptionResponse(
+                name=source_name,
+                base_profile=base_profile,
+                enabled_tool_names=enabled_tool_names,
+                enabled_tool_labels=enabled_tool_labels,
+            )
+        )
+    return details
+
+
 def _apply_tool_registry_preview_to_validate_response(
     *,
     result: SettingsValidateResponse,
     effective_settings: object,
 ) -> SettingsValidateResponse:
+    preview_fields = _build_tool_registry_preview_fields(
+        effective_settings=effective_settings
+    )
     return result.model_copy(
-        update=_build_tool_registry_preview_fields(effective_settings=effective_settings)
+        update={
+            **preview_fields,
+            "available_tool_registry_profile_details": (
+                _build_tool_registry_profile_option_details(
+                    effective_settings=effective_settings
+                )
+            ),
+            "available_tool_registry_provider_source_details": (
+                _build_tool_registry_provider_source_option_details(
+                    effective_settings=effective_settings
+                )
+            ),
+        }
     )
 
 
@@ -212,8 +373,18 @@ def _build_settings_summary_response(
     available_tool_registry_profiles = list(
         get_available_tool_registry_profile_names()
     )
+    available_tool_registry_profile_details = (
+        _build_tool_registry_profile_option_details(
+            effective_settings=effective_settings
+        )
+    )
     available_tool_registry_provider_sources = list(
         get_available_tool_registry_provider_source_names(settings=effective_settings)
+    )
+    available_tool_registry_provider_source_details = (
+        _build_tool_registry_provider_source_option_details(
+            effective_settings=effective_settings
+        )
     )
     return SettingsSummaryResponse(
         mode=settings.mode,
@@ -227,7 +398,9 @@ def _build_settings_summary_response(
         enabled_tool_names=list(preview_fields["enabled_tool_names"]),
         enabled_tool_labels=list(preview_fields["enabled_tool_labels"]),
         available_tool_registry_profiles=available_tool_registry_profiles,
+        available_tool_registry_profile_details=available_tool_registry_profile_details,
         available_tool_registry_provider_sources=available_tool_registry_provider_sources,
+        available_tool_registry_provider_source_details=available_tool_registry_provider_source_details,
         database_locator=database_locator or get_database_locator(),
     )
 

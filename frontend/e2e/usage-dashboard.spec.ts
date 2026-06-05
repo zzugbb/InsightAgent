@@ -28,8 +28,12 @@ async function openSettingsMenu(page: Parameters<typeof ensureWorkbenchReady>[0]
 async function saveToolRegistryProfile(
   page: Parameters<typeof ensureWorkbenchReady>[0],
   profile: "planning_only" | "retrieval_only" | "calculator_only",
+  options?: {
+    source?: string;
+  },
 ): Promise<{
   tool_registry_profile?: string;
+  tool_registry_provider_source?: string;
   enabled_tool_labels?: string[];
 }> {
   await page.getByTestId("sidebar-settings-trigger").click();
@@ -38,6 +42,11 @@ async function saveToolRegistryProfile(
 
   await page.getByTestId("model-settings-tool-registry-profile").click();
   await page.getByTitle(profile, { exact: true }).click();
+
+  if (options?.source) {
+    await page.getByTestId("model-settings-tool-registry-source").click();
+    await page.getByTitle(options.source, { exact: true }).click();
+  }
 
   const saveResponsePromise = page.waitForResponse((response) => {
     return (
@@ -50,6 +59,7 @@ async function saveToolRegistryProfile(
   expect(saveResponse.ok()).toBeTruthy();
   const payload = (await saveResponse.json()) as {
     tool_registry_profile?: string;
+    tool_registry_provider_source?: string;
     enabled_tool_labels?: string[];
   };
 
@@ -119,6 +129,26 @@ async function openTaskDetailFromTaskCenter(
     timeout: 20_000,
   });
   return detailPage;
+}
+
+async function assertInspectorSessionGovernance(
+  page: Page,
+  args: {
+    profile: string;
+    source: string;
+    expectedAllowed: string;
+    forbiddenAllowed: string[];
+  },
+): Promise<void> {
+  await page.getByTestId("inspector-tab-context").click();
+  const governanceSummary = page.getByTestId("inspector-session-governance");
+  await expect(governanceSummary).toBeVisible({ timeout: 20_000 });
+  await expect(governanceSummary).toContainText(args.profile);
+  await expect(governanceSummary).toContainText(args.source);
+  await expect(governanceSummary).toContainText(args.expectedAllowed);
+  for (const forbidden of args.forbiddenAllowed) {
+    await expect(governanceSummary).not.toContainText(forbidden);
+  }
 }
 
 test("usage dashboard source trend is visible @smoke", async ({ page, request }) => {
@@ -262,6 +292,108 @@ test("model settings validate previews planning-only enabled tools", async ({
   await expect(metaDescriptions).toContainText("Task Planner");
 });
 
+test("model settings validate previews retrieval suite enabled tools", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-model").click();
+  await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
+
+  await page.getByTestId("model-settings-tool-registry-profile").click();
+  await page.getByTitle("retrieval_only", { exact: true }).click();
+  await page.getByTestId("model-settings-tool-registry-source").click();
+  await page.getByTitle("retrieval_suite", { exact: true }).click();
+
+  const validateResponsePromise = page.waitForResponse((response) => {
+    return (
+      response.url().includes("/api/settings/validate")
+      && response.request().method() === "POST"
+    );
+  });
+  await page.getByTestId("model-settings-validate").click();
+  const validateResponse = await validateResponsePromise;
+  expect(validateResponse.ok()).toBeTruthy();
+  const payload = (await validateResponse.json()) as {
+    tool_registry_profile?: string;
+    tool_registry_provider_source?: string;
+    enabled_tool_labels?: string[];
+  };
+  expect(payload.tool_registry_profile).toBe("retrieval_only");
+  expect(payload.tool_registry_provider_source).toBe("retrieval_suite");
+  expect(payload.enabled_tool_labels).toEqual(["Knowledge Retrieval Suite"]);
+
+  const metaDescriptions = page.locator(".model-settings-meta-descriptions");
+  await expect(metaDescriptions).toContainText("retrieval_only");
+  await expect(metaDescriptions).toContainText("retrieval_suite");
+  await expect(metaDescriptions).toContainText("Knowledge Retrieval Suite");
+  await expect(
+    page.getByTestId("model-settings-selected-profile-summary"),
+  ).toContainText("Knowledge Retrieval Suite");
+  await expect(
+    page.getByTestId("model-settings-selected-source-summary"),
+  ).toContainText("retrieval_only");
+  await expect(
+    page.getByTestId("model-settings-selected-source-summary"),
+  ).toContainText("Knowledge Retrieval Suite");
+});
+
+test("model settings validate previews calculator suite enabled tools", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-model").click();
+  await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
+
+  await page.getByTestId("model-settings-tool-registry-profile").click();
+  await page.getByTitle("calculator_only", { exact: true }).click();
+  await page.getByTestId("model-settings-tool-registry-source").click();
+  await page.getByTitle("calculator_suite", { exact: true }).click();
+
+  const validateResponsePromise = page.waitForResponse((response) => {
+    return (
+      response.url().includes("/api/settings/validate")
+      && response.request().method() === "POST"
+    );
+  });
+  await page.getByTestId("model-settings-validate").click();
+  const validateResponse = await validateResponsePromise;
+  expect(validateResponse.ok()).toBeTruthy();
+  const payload = (await validateResponse.json()) as {
+    tool_registry_profile?: string;
+    tool_registry_provider_source?: string;
+    enabled_tool_labels?: string[];
+  };
+  expect(payload.tool_registry_profile).toBe("calculator_only");
+  expect(payload.tool_registry_provider_source).toBe("calculator_suite");
+  expect(payload.enabled_tool_labels).toEqual(["Calculator Suite"]);
+
+  const metaDescriptions = page.locator(".model-settings-meta-descriptions");
+  await expect(metaDescriptions).toContainText("calculator_only");
+  await expect(metaDescriptions).toContainText("calculator_suite");
+  await expect(metaDescriptions).toContainText("Calculator Suite");
+  await expect(
+    page.getByTestId("model-settings-selected-profile-summary"),
+  ).toContainText("Calculator Suite");
+  await expect(
+    page.getByTestId("model-settings-selected-source-summary"),
+  ).toContainText("calculator_only");
+  await expect(
+    page.getByTestId("model-settings-selected-source-summary"),
+  ).toContainText("Calculator Suite");
+});
+
 test("saved planning-only profile constrains actual trace allowed tools", async ({
   page,
   request,
@@ -303,6 +435,13 @@ test("saved planning-only profile constrains actual trace allowed tools", async 
   const traceFeedText = await page.getByTestId("inspector-trace-feed").textContent();
   expect(traceFeedText ?? "").not.toContain("Knowledge Retrieval");
   expect(traceFeedText ?? "").not.toContain("calc_eval");
+
+  await assertInspectorSessionGovernance(page, {
+    profile: "planning_only",
+    source: "default",
+    expectedAllowed: "Task Planner",
+    forbiddenAllowed: ["Knowledge Retrieval", "calc_eval"],
+  });
 });
 
 test("saved retrieval-only profile executes retrieval without planner or calculator", async ({
@@ -347,6 +486,13 @@ test("saved retrieval-only profile executes retrieval without planner or calcula
   expect(traceFeedText ?? "").toContain("Knowledge Retrieval");
   expect(traceFeedText ?? "").not.toContain("Task Planner");
   expect(traceFeedText ?? "").not.toContain("calc_eval");
+
+  await assertInspectorSessionGovernance(page, {
+    profile: "retrieval_only",
+    source: "default",
+    expectedAllowed: "Knowledge Retrieval",
+    forbiddenAllowed: ["Task Planner", "calc_eval"],
+  });
 });
 
 test("saved calculator-only profile executes calculator without planner or retrieval", async ({
@@ -391,6 +537,382 @@ test("saved calculator-only profile executes calculator without planner or retri
   expect(traceFeedText ?? "").toContain("calc_eval");
   expect(traceFeedText ?? "").not.toContain("Task Planner");
   expect(traceFeedText ?? "").not.toContain("Knowledge Retrieval");
+
+  await assertInspectorSessionGovernance(page, {
+    profile: "calculator_only",
+    source: "default",
+    expectedAllowed: "calc_eval",
+    forbiddenAllowed: ["Task Planner", "Knowledge Retrieval"],
+  });
+});
+
+test("saved planning suite source propagates through runtime and export governance", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  const savedPayload = await saveToolRegistryProfile(page, "planning_only", {
+    source: "planning_suite",
+  });
+  expect(savedPayload.tool_registry_profile).toBe("planning_only");
+  expect(savedPayload.tool_registry_provider_source).toBe("planning_suite");
+  expect(savedPayload.enabled_tool_labels).toEqual(["Task Planner Suite"]);
+
+  const taskId = await submitPromptAndCaptureTaskId(
+    page,
+    "Need planning suite runtime acceptance with rag and calculator requests [kb:suite] [calc:9+3]",
+  );
+
+  const allowedToolsMeta = page
+    .getByTestId("trace-card-meta")
+    .filter({ hasText: "Allowed tools" })
+    .first();
+  await expect(allowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(allowedToolsMeta).toContainText("Profile planning_only");
+  await expect(allowedToolsMeta).toContainText("Source planning_suite");
+  await expect(allowedToolsMeta).toContainText("Task Planner Suite");
+  await expect(allowedToolsMeta).not.toContainText("Knowledge Retrieval");
+  await expect(allowedToolsMeta).not.toContainText("calc_eval");
+
+  await assertInspectorSessionGovernance(page, {
+    profile: "planning_only",
+    source: "planning_suite",
+    expectedAllowed: "Task Planner Suite",
+    forbiddenAllowed: ["Knowledge Retrieval", "calc_eval"],
+  });
+
+  const taskResponse = await request.get(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(taskResponse.ok()).toBeTruthy();
+  const taskPayload = (await taskResponse.json()) as { session_id: string };
+  expect(taskPayload.session_id.trim()).not.toBe("");
+
+  const detailPage = await openTaskDetailFromTaskCenter(page, taskId);
+  const detailAllowedToolsMeta = detailPage
+    .getByTestId("task-detail-trace-card-meta")
+    .filter({ hasText: "Allowed tools" })
+    .first();
+  await expect(detailAllowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(detailAllowedToolsMeta).toContainText("Source planning_suite");
+  await expect(detailAllowedToolsMeta).toContainText("Task Planner Suite");
+  await expect(detailAllowedToolsMeta).not.toContainText("Knowledge Retrieval");
+  await expect(detailAllowedToolsMeta).not.toContainText("calc_eval");
+
+  const governanceSummary = detailPage.getByTestId(
+    "task-detail-governance-summary",
+  );
+  await expect(governanceSummary).toBeVisible({ timeout: 20_000 });
+  await expect(governanceSummary).toContainText("planning_only");
+  await expect(governanceSummary).toContainText("planning_suite");
+  await expect(governanceSummary).toContainText("Task Planner Suite");
+
+  const taskExportJsonResponse = await request.get(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/json`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(taskExportJsonResponse.ok()).toBeTruthy();
+  const taskExportJsonPayload = (await taskExportJsonResponse.json()) as {
+    trace?: {
+      governance?: {
+        profile?: string;
+        provider_source?: string;
+        allowed_tool_labels?: string[];
+      };
+    };
+  };
+  expect(taskExportJsonPayload.trace?.governance?.profile).toBe("planning_only");
+  expect(taskExportJsonPayload.trace?.governance?.provider_source).toBe(
+    "planning_suite",
+  );
+  expect(taskExportJsonPayload.trace?.governance?.allowed_tool_labels).toEqual([
+    "Task Planner Suite",
+  ]);
+
+  const sessionExportJsonResponse = await request.get(
+    `${API_BASE_URL}/api/sessions/${encodeURIComponent(taskPayload.session_id)}/export/json`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(sessionExportJsonResponse.ok()).toBeTruthy();
+  const sessionExportJsonPayload = (await sessionExportJsonResponse.json()) as {
+    governance?: {
+      profiles?: string[];
+      provider_sources?: string[];
+      allowed_tool_labels?: string[];
+    };
+  };
+  expect(sessionExportJsonPayload.governance?.profiles).toContain("planning_only");
+  expect(sessionExportJsonPayload.governance?.provider_sources).toContain(
+    "planning_suite",
+  );
+  expect(sessionExportJsonPayload.governance?.allowed_tool_labels).toContain(
+    "Task Planner Suite",
+  );
+
+  await detailPage.close();
+});
+
+test("saved retrieval suite source propagates through runtime and export governance", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  const savedPayload = await saveToolRegistryProfile(page, "retrieval_only", {
+    source: "retrieval_suite",
+  });
+  expect(savedPayload.tool_registry_profile).toBe("retrieval_only");
+  expect(savedPayload.tool_registry_provider_source).toBe("retrieval_suite");
+  expect(savedPayload.enabled_tool_labels).toEqual(["Knowledge Retrieval Suite"]);
+
+  const taskId = await submitPromptAndCaptureTaskId(
+    page,
+    "Retrieve suite runtime acceptance from the selected kb [kb:retrieval-suite-check]",
+  );
+
+  const allowedToolsMeta = page
+    .getByTestId("trace-card-meta")
+    .filter({ hasText: "Allowed tools" })
+    .first();
+  await expect(allowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(allowedToolsMeta).toContainText("Profile retrieval_only");
+  await expect(allowedToolsMeta).toContainText("Source retrieval_suite");
+  await expect(allowedToolsMeta).toContainText("Knowledge Retrieval Suite");
+  await expect(allowedToolsMeta).not.toContainText("Task Planner");
+  await expect(allowedToolsMeta).not.toContainText("calc_eval");
+
+  await assertInspectorSessionGovernance(page, {
+    profile: "retrieval_only",
+    source: "retrieval_suite",
+    expectedAllowed: "Knowledge Retrieval Suite",
+    forbiddenAllowed: ["Task Planner", "calc_eval"],
+  });
+
+  const taskResponse = await request.get(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(taskResponse.ok()).toBeTruthy();
+  const taskPayload = (await taskResponse.json()) as { session_id: string };
+  expect(taskPayload.session_id.trim()).not.toBe("");
+
+  const detailPage = await openTaskDetailFromTaskCenter(page, taskId);
+  const detailAllowedToolsMeta = detailPage
+    .getByTestId("task-detail-trace-card-meta")
+    .filter({ hasText: "Allowed tools" })
+    .first();
+  await expect(detailAllowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(detailAllowedToolsMeta).toContainText("Source retrieval_suite");
+  await expect(detailAllowedToolsMeta).toContainText("Knowledge Retrieval Suite");
+  await expect(detailAllowedToolsMeta).not.toContainText("Task Planner");
+  await expect(detailAllowedToolsMeta).not.toContainText("calc_eval");
+
+  const governanceSummary = detailPage.getByTestId(
+    "task-detail-governance-summary",
+  );
+  await expect(governanceSummary).toBeVisible({ timeout: 20_000 });
+  await expect(governanceSummary).toContainText("retrieval_only");
+  await expect(governanceSummary).toContainText("retrieval_suite");
+  await expect(governanceSummary).toContainText("Knowledge Retrieval Suite");
+
+  const taskExportJsonResponse = await request.get(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/json`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(taskExportJsonResponse.ok()).toBeTruthy();
+  const taskExportJsonPayload = (await taskExportJsonResponse.json()) as {
+    trace?: {
+      governance?: {
+        profile?: string;
+        provider_source?: string;
+        allowed_tool_labels?: string[];
+      };
+    };
+  };
+  expect(taskExportJsonPayload.trace?.governance?.profile).toBe("retrieval_only");
+  expect(taskExportJsonPayload.trace?.governance?.provider_source).toBe(
+    "retrieval_suite",
+  );
+  expect(taskExportJsonPayload.trace?.governance?.allowed_tool_labels).toEqual([
+    "Knowledge Retrieval Suite",
+  ]);
+
+  const sessionExportJsonResponse = await request.get(
+    `${API_BASE_URL}/api/sessions/${encodeURIComponent(taskPayload.session_id)}/export/json`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(sessionExportJsonResponse.ok()).toBeTruthy();
+  const sessionExportJsonPayload = (await sessionExportJsonResponse.json()) as {
+    governance?: {
+      profiles?: string[];
+      provider_sources?: string[];
+      allowed_tool_labels?: string[];
+    };
+  };
+  expect(sessionExportJsonPayload.governance?.profiles).toContain("retrieval_only");
+  expect(sessionExportJsonPayload.governance?.provider_sources).toContain(
+    "retrieval_suite",
+  );
+  expect(sessionExportJsonPayload.governance?.allowed_tool_labels).toContain(
+    "Knowledge Retrieval Suite",
+  );
+
+  await detailPage.close();
+});
+
+test("saved calculator suite source propagates through runtime and export governance", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  const savedPayload = await saveToolRegistryProfile(page, "calculator_only", {
+    source: "calculator_suite",
+  });
+  expect(savedPayload.tool_registry_profile).toBe("calculator_only");
+  expect(savedPayload.tool_registry_provider_source).toBe("calculator_suite");
+  expect(savedPayload.enabled_tool_labels).toEqual(["Calculator Suite"]);
+
+  const taskId = await submitPromptAndCaptureTaskId(
+    page,
+    "Please execute calculator suite runtime acceptance [calc:18/3+4]",
+  );
+
+  const allowedToolsMeta = page
+    .getByTestId("trace-card-meta")
+    .filter({ hasText: "Allowed tools" })
+    .first();
+  await expect(allowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(allowedToolsMeta).toContainText("Profile calculator_only");
+  await expect(allowedToolsMeta).toContainText("Source calculator_suite");
+  await expect(allowedToolsMeta).toContainText("Calculator Suite");
+  await expect(allowedToolsMeta).not.toContainText("Task Planner");
+  await expect(allowedToolsMeta).not.toContainText("Knowledge Retrieval");
+
+  await assertInspectorSessionGovernance(page, {
+    profile: "calculator_only",
+    source: "calculator_suite",
+    expectedAllowed: "Calculator Suite",
+    forbiddenAllowed: ["Task Planner", "Knowledge Retrieval"],
+  });
+
+  const taskResponse = await request.get(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(taskResponse.ok()).toBeTruthy();
+  const taskPayload = (await taskResponse.json()) as { session_id: string };
+  expect(taskPayload.session_id.trim()).not.toBe("");
+
+  const detailPage = await openTaskDetailFromTaskCenter(page, taskId);
+  const detailAllowedToolsMeta = detailPage
+    .getByTestId("task-detail-trace-card-meta")
+    .filter({ hasText: "Allowed tools" })
+    .first();
+  await expect(detailAllowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(detailAllowedToolsMeta).toContainText("Source calculator_suite");
+  await expect(detailAllowedToolsMeta).toContainText("Calculator Suite");
+  await expect(detailAllowedToolsMeta).not.toContainText("Task Planner");
+  await expect(detailAllowedToolsMeta).not.toContainText("Knowledge Retrieval");
+
+  const governanceSummary = detailPage.getByTestId(
+    "task-detail-governance-summary",
+  );
+  await expect(governanceSummary).toBeVisible({ timeout: 20_000 });
+  await expect(governanceSummary).toContainText("calculator_only");
+  await expect(governanceSummary).toContainText("calculator_suite");
+  await expect(governanceSummary).toContainText("Calculator Suite");
+
+  const taskExportJsonResponse = await request.get(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/json`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(taskExportJsonResponse.ok()).toBeTruthy();
+  const taskExportJsonPayload = (await taskExportJsonResponse.json()) as {
+    trace?: {
+      governance?: {
+        profile?: string;
+        provider_source?: string;
+        allowed_tool_labels?: string[];
+      };
+    };
+  };
+  expect(taskExportJsonPayload.trace?.governance?.profile).toBe("calculator_only");
+  expect(taskExportJsonPayload.trace?.governance?.provider_source).toBe(
+    "calculator_suite",
+  );
+  expect(taskExportJsonPayload.trace?.governance?.allowed_tool_labels).toEqual([
+    "Calculator Suite",
+  ]);
+
+  const sessionExportJsonResponse = await request.get(
+    `${API_BASE_URL}/api/sessions/${encodeURIComponent(taskPayload.session_id)}/export/json`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(sessionExportJsonResponse.ok()).toBeTruthy();
+  const sessionExportJsonPayload = (await sessionExportJsonResponse.json()) as {
+    governance?: {
+      profiles?: string[];
+      provider_sources?: string[];
+      allowed_tool_labels?: string[];
+    };
+  };
+  expect(sessionExportJsonPayload.governance?.profiles).toContain("calculator_only");
+  expect(sessionExportJsonPayload.governance?.provider_sources).toContain(
+    "calculator_suite",
+  );
+  expect(sessionExportJsonPayload.governance?.allowed_tool_labels).toContain(
+    "Calculator Suite",
+  );
+
+  await detailPage.close();
 });
 
 for (const acceptanceCase of [
@@ -454,6 +976,19 @@ for (const acceptanceCase of [
       await expect(allowedToolsMeta).not.toContainText(forbidden);
     }
 
+    const governanceSummary = detailPage.getByTestId(
+      "task-detail-governance-summary",
+    );
+    await expect(governanceSummary).toBeVisible({ timeout: 20_000 });
+    await expect(governanceSummary).toContainText(acceptanceCase.profile);
+    await expect(governanceSummary).toContainText("default");
+    await expect(governanceSummary).toContainText(
+      acceptanceCase.expectedAllowed,
+    );
+    for (const forbidden of acceptanceCase.forbiddenAllowed) {
+      await expect(governanceSummary).not.toContainText(forbidden);
+    }
+
     await expect(
       detailPage
         .getByTestId("task-detail-trace-card")
@@ -470,8 +1005,9 @@ for (const acceptanceCase of [
     }
 
     const taskDetailUrl = new URL(detailPage.url());
-    const taskId = taskDetailUrl.pathname.split("/").filter(Boolean).at(-1) ?? "";
-    expect(taskId).not.toBe("");
+    const detailTaskId = taskDetailUrl.pathname.split("/").filter(Boolean).at(-1) ?? "";
+    expect(detailTaskId).not.toBe("");
+    expect(detailTaskId).toBe(taskId);
 
     const exportJsonResponse = await request.get(
       `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/json`,

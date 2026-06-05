@@ -299,6 +299,44 @@ export default function TaskDetailPage() {
               </p>
             ) : null}
 
+            {taskSnapshot?.governance ? (
+              <section
+                className="inspector-block task-detail-governance-block"
+                data-testid="task-detail-governance-summary"
+              >
+                <div className="panel-head">
+                  <div>
+                    <p className="chat-kicker">{t.taskDetail.governanceTitle}</p>
+                    <h3>{t.taskDetail.governanceTitle}</h3>
+                  </div>
+                </div>
+                <div className="task-detail-kpi-grid">
+                  <div className="inspector-kpi-item">
+                    <span>{t.taskDetail.governanceProfileLabel}</span>
+                    <strong>
+                      {taskSnapshot.governance.profile ?? t.taskDetail.governanceNone}
+                    </strong>
+                  </div>
+                  <div className="inspector-kpi-item">
+                    <span>{t.taskDetail.governanceSourceLabel}</span>
+                    <strong>
+                      {taskSnapshot.governance.providerSource ??
+                        t.taskDetail.governanceNone}
+                    </strong>
+                  </div>
+                  <div className="inspector-kpi-item">
+                    <span>{t.taskDetail.governanceAllowedToolsLabel}</span>
+                    <strong>
+                      {(taskSnapshot.governance.allowedToolLabels.length > 0
+                        ? taskSnapshot.governance.allowedToolLabels
+                        : taskSnapshot.governance.allowedToolNames
+                      ).join(", ") || t.taskDetail.governanceNone}
+                    </strong>
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
             <section className="task-detail-main-grid">
               <article className="inspector-block task-detail-content-block">
                 <p className="summary-label">{t.taskDetail.taskPromptTitle}</p>

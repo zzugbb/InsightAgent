@@ -1,3 +1,16 @@
+export type ToolRegistryProfileOptionDetail = {
+  name: string;
+  enabled_tool_names: string[];
+  enabled_tool_labels: string[];
+};
+
+export type ToolRegistryProviderSourceOptionDetail = {
+  name: string;
+  base_profile: string;
+  enabled_tool_names: string[];
+  enabled_tool_labels: string[];
+};
+
 export type SettingsSummary = {
   mode: string;
   provider: string;
@@ -10,7 +23,9 @@ export type SettingsSummary = {
   enabled_tool_names: string[];
   enabled_tool_labels: string[];
   available_tool_registry_profiles: string[];
+  available_tool_registry_profile_details: ToolRegistryProfileOptionDetail[];
   available_tool_registry_provider_sources: string[];
+  available_tool_registry_provider_source_details: ToolRegistryProviderSourceOptionDetail[];
   database_locator: string;
 };
 
@@ -86,6 +101,8 @@ export type SettingsValidateResponse = {
   tool_registry_provider_source?: string | null;
   enabled_tool_names?: string[];
   enabled_tool_labels?: string[];
+  available_tool_registry_profile_details?: ToolRegistryProfileOptionDetail[];
+  available_tool_registry_provider_source_details?: ToolRegistryProviderSourceOptionDetail[];
 };
 
 export type InspectorTab = "trace" | "context";

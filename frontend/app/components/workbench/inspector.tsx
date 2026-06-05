@@ -26,6 +26,7 @@ import {
   getStepTitle,
   getTaskLabel,
   normalizeTraceStepKind,
+  resolveSessionGovernanceSummary,
   resolveInspectorTaskUsage,
   resolveTasksUsageAggregate,
   shortenId,
@@ -250,6 +251,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   );
   const sessionUsageAggregate = useMemo(
     () => resolveTasksUsageAggregate(recentTasksScoped),
+    [recentTasksScoped],
+  );
+  const sessionGovernance = useMemo(
+    () => resolveSessionGovernanceSummary(recentTasksScoped),
     [recentTasksScoped],
   );
 
@@ -523,6 +528,37 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
             <strong>{sessionUsageAggregate.avgTotal ?? "—"}</strong>
             <span>{t.inspector.usageAvgCost}</span>
             <strong>{sessionUsageAggregate.avgCost ?? "—"}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      {sessionGovernance ? (
+        <div
+          className="inspector-block"
+          data-testid="inspector-session-governance"
+        >
+          <p className="summary-label">{t.inspector.sessionGovernanceTitle}</p>
+          <p className="inspector-section-lead">
+            {t.inspector.sessionGovernanceLead}
+          </p>
+          <div className="context-grid context-grid--stats compact">
+            <span>{t.inspector.sessionGovernanceProfiles}</span>
+            <strong>
+              {sessionGovernance.profiles.join(", ")
+                || t.inspector.sessionGovernanceNone}
+            </strong>
+            <span>{t.inspector.sessionGovernanceSources}</span>
+            <strong>
+              {sessionGovernance.providerSources.join(", ")
+                || t.inspector.sessionGovernanceNone}
+            </strong>
+            <span>{t.inspector.sessionGovernanceAllowedTools}</span>
+            <strong>
+              {(sessionGovernance.allowedToolLabels.length > 0
+                ? sessionGovernance.allowedToolLabels
+                : sessionGovernance.allowedToolNames
+              ).join(", ") || t.inspector.sessionGovernanceNone}
+            </strong>
           </div>
         </div>
       ) : null}

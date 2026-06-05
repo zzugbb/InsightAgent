@@ -522,6 +522,48 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             summary.available_tool_registry_provider_sources,
             ["default", "suite_a", "suite_b"],
         )
+        self.assertEqual(
+            [
+                (
+                    detail.name,
+                    tuple(detail.enabled_tool_labels),
+                )
+                for detail in summary.available_tool_registry_profile_details
+            ],
+            [
+                ("default", ("Task Planner", "Knowledge Retrieval", "calc_eval")),
+                ("planning_only", ("Task Planner",)),
+                ("retrieval_only", ("Knowledge Retrieval",)),
+                ("calculator_only", ("calc_eval",)),
+            ],
+        )
+        self.assertEqual(
+            [
+                (
+                    detail.name,
+                    detail.base_profile,
+                    tuple(detail.enabled_tool_labels),
+                )
+                for detail in summary.available_tool_registry_provider_source_details
+            ],
+            [
+                (
+                    "default",
+                    "default",
+                    ("Task Planner",),
+                ),
+                (
+                    "suite_a",
+                    "planning_only",
+                    ("Task Planner",),
+                ),
+                (
+                    "suite_b",
+                    "calculator_only",
+                    ("Calculator",),
+                ),
+            ],
+        )
         self.assertEqual(summary.database_locator, "postgresql://demo")
 
     def test_apply_tool_registry_preview_to_validate_response_uses_effective_settings(
@@ -553,6 +595,32 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(response.tool_registry_provider_source, "suite_a")
         self.assertEqual(response.enabled_tool_names, ["task_plan"])
         self.assertEqual(response.enabled_tool_labels, ["Task Planner"])
+        self.assertEqual(
+            [
+                (detail.name, tuple(detail.enabled_tool_labels))
+                for detail in response.available_tool_registry_profile_details
+            ],
+            [
+                ("default", ("Task Planner", "Knowledge Retrieval", "calc_eval")),
+                ("planning_only", ("Task Planner",)),
+                ("retrieval_only", ("Knowledge Retrieval",)),
+                ("calculator_only", ("calc_eval",)),
+            ],
+        )
+        self.assertEqual(
+            [
+                (
+                    detail.name,
+                    detail.base_profile,
+                    tuple(detail.enabled_tool_labels),
+                )
+                for detail in response.available_tool_registry_provider_source_details
+            ],
+            [
+                ("default", "default", ("Task Planner",)),
+                ("suite_a", "planning_only", ("Task Planner",)),
+            ],
+        )
 
     def test_build_task_export_payload_surfaces_registry_governance_summary(self) -> None:
         task = {

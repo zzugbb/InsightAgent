@@ -58,6 +58,8 @@ export function ModelSettingsModal({
     | "tool_registry_provider_source"
     | "enabled_tool_names"
     | "enabled_tool_labels"
+    | "available_tool_registry_profile_details"
+    | "available_tool_registry_provider_source_details"
   > | null>(null);
 
   const { data, isLoading, error, isError } = useQuery({
@@ -115,6 +117,10 @@ export function ModelSettingsModal({
           data.tool_registry_provider_source ?? form.tool_registry_provider_source,
         enabled_tool_names: data.enabled_tool_names ?? [],
         enabled_tool_labels: data.enabled_tool_labels ?? [],
+        available_tool_registry_profile_details:
+          data.available_tool_registry_profile_details ?? [],
+        available_tool_registry_provider_source_details:
+          data.available_tool_registry_provider_source_details ?? [],
       });
       if (data.ok) {
         message.success(`${t.settings.validatePass}: ${data.message}`);
@@ -256,6 +262,20 @@ export function ModelSettingsModal({
     previewSource?.enabled_tool_labels && previewSource.enabled_tool_labels.length > 0
       ? previewSource.enabled_tool_labels.join(", ")
       : "—";
+  const selectedProfileDetail = data?.available_tool_registry_profile_details?.find(
+    (detail) => detail.name === form.tool_registry_profile,
+  );
+  const selectedSourceDetail = data?.available_tool_registry_provider_source_details?.find(
+    (detail) => detail.name === form.tool_registry_provider_source,
+  );
+  const selectedProfileTools =
+    selectedProfileDetail && selectedProfileDetail.enabled_tool_labels.length > 0
+      ? selectedProfileDetail.enabled_tool_labels.join(", ")
+      : "—";
+  const selectedSourceTools =
+    selectedSourceDetail && selectedSourceDetail.enabled_tool_labels.length > 0
+      ? selectedSourceDetail.enabled_tool_labels.join(", ")
+      : "—";
 
   return (
     <Modal
@@ -342,6 +362,13 @@ export function ModelSettingsModal({
                 }),
               )}
             />
+            <Typography.Paragraph
+              type="secondary"
+              data-testid="model-settings-selected-profile-summary"
+              style={{ marginTop: 8, marginBottom: 0 }}
+            >
+              {t.settings.profileSummaryLabel}: {selectedProfileTools}
+            </Typography.Paragraph>
           </Form.Item>
           <Form.Item label={t.settings.fieldToolRegistrySource}>
             <Select
@@ -355,6 +382,15 @@ export function ModelSettingsModal({
                 label: value,
               }))}
             />
+            <Typography.Paragraph
+              type="secondary"
+              data-testid="model-settings-selected-source-summary"
+              style={{ marginTop: 8, marginBottom: 0 }}
+            >
+              {t.settings.sourceSummaryLabel}: {t.settings.sourceSummaryProfileLabel}{" "}
+              {selectedSourceDetail?.base_profile ?? "—"};{" "}
+              {t.settings.sourceSummaryAllowedToolsLabel} {selectedSourceTools}
+            </Typography.Paragraph>
           </Form.Item>
           {isRemoteMode ? (
             <>

@@ -435,6 +435,12 @@ export type Messages = {
     usageScopeGlobal: string;
     usageLead: string;
     usageSessionTitle: string;
+    sessionGovernanceTitle: string;
+    sessionGovernanceLead: string;
+    sessionGovernanceProfiles: string;
+    sessionGovernanceSources: string;
+    sessionGovernanceAllowedTools: string;
+    sessionGovernanceNone: string;
     usageTaskCount: (n: number) => string;
     usageTaskCoverage: (withUsage: number, total: number) => string;
     usageSummaryLoading: string;
@@ -648,6 +654,11 @@ export type Messages = {
     loading: string;
     loadFailed: string;
     notFound: string;
+    governanceTitle: string;
+    governanceProfileLabel: string;
+    governanceSourceLabel: string;
+    governanceAllowedToolsLabel: string;
+    governanceNone: string;
     taskPromptTitle: string;
     finalAnswerTitle: string;
     finalAnswerEmpty: string;
@@ -693,6 +704,10 @@ export type Messages = {
     metaToolRegistryProfile: string;
     metaToolRegistrySource: string;
     metaEnabledTools: string;
+    profileSummaryLabel: string;
+    sourceSummaryLabel: string;
+    sourceSummaryProfileLabel: string;
+    sourceSummaryAllowedToolsLabel: string;
     remoteCompatibilityHint: string;
     appearanceTitle: string;
     themeLabel: string;

@@ -39,6 +39,19 @@ export type TaskSnapshotSummary = {
   ragKnowledgeBaseIds: string[];
   finalAnswer: string | null;
   lastObservation: string | null;
+  governance: {
+    profile: string | null;
+    providerSource: string | null;
+    allowedToolNames: string[];
+    allowedToolLabels: string[];
+  } | null;
+};
+
+export type SessionGovernanceSummary = {
+  profiles: string[];
+  providerSources: string[];
+  allowedToolNames: string[];
+  allowedToolLabels: string[];
 };
 
 function parseUsageNumber(v: unknown): number | null {
@@ -507,12 +520,106 @@ export function resolveTaskSnapshotSummary(args: {
     ) ??
     findLastStepContent(steps);
 
+  let governance: TaskSnapshotSummary["governance"] = null;
+  for (const step of steps) {
+    const meta = step.meta;
+    if (!meta) {
+      continue;
+    }
+    const profile =
+      typeof meta.tool_registry_profile === "string" &&
+      meta.tool_registry_profile.trim().length > 0
+        ? meta.tool_registry_profile.trim()
+        : null;
+    const providerSource =
+      typeof meta.tool_registry_provider_source === "string" &&
+      meta.tool_registry_provider_source.trim().length > 0
+        ? meta.tool_registry_provider_source.trim()
+        : null;
+    const allowedToolNames = Array.isArray(meta.allowed_tool_names)
+      ? meta.allowed_tool_names
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : [];
+    const allowedToolLabels = Array.isArray(meta.allowed_tool_labels)
+      ? meta.allowed_tool_labels
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : [];
+    if (
+      profile === null &&
+      providerSource === null &&
+      allowedToolNames.length === 0 &&
+      allowedToolLabels.length === 0
+    ) {
+      continue;
+    }
+    governance = {
+      profile,
+      providerSource,
+      allowedToolNames,
+      allowedToolLabels,
+    };
+    break;
+  }
+
   return {
     stepCount: steps.length,
     ragHitCount,
     ragKnowledgeBaseIds: [...ragKnowledgeBaseIds],
     finalAnswer,
     lastObservation,
+    governance,
+  };
+}
+
+export function resolveSessionGovernanceSummary(
+  tasks: TaskSummary[],
+): SessionGovernanceSummary | null {
+  const profiles = new Set<string>();
+  const providerSources = new Set<string>();
+  const allowedToolNames = new Set<string>();
+  const allowedToolLabels = new Set<string>();
+
+  for (const task of tasks) {
+    const governance = resolveTaskSnapshotSummary({ task }).governance;
+    if (!governance) {
+      continue;
+    }
+    if (governance.profile) {
+      profiles.add(governance.profile);
+    }
+    if (governance.providerSource) {
+      providerSources.add(governance.providerSource);
+    }
+    for (const item of governance.allowedToolNames) {
+      if (item.trim()) {
+        allowedToolNames.add(item.trim());
+      }
+    }
+    for (const item of governance.allowedToolLabels) {
+      if (item.trim()) {
+        allowedToolLabels.add(item.trim());
+      }
+    }
+  }
+
+  if (
+    profiles.size === 0
+    && providerSources.size === 0
+    && allowedToolNames.size === 0
+    && allowedToolLabels.size === 0
+  ) {
+    return null;
+  }
+
+  return {
+    profiles: [...profiles].sort(),
+    providerSources: [...providerSources].sort(),
+    allowedToolNames: [...allowedToolNames].sort(),
+    allowedToolLabels: [...allowedToolLabels].sort(),
   };
 }
 
