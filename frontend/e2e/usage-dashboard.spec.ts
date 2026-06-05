@@ -25,6 +25,29 @@ async function openSettingsMenu(page: Parameters<typeof ensureWorkbenchReady>[0]
   await expect(page.getByTestId("sidebar-settings-menu-popover")).toBeVisible();
 }
 
+async function selectVisibleAntdOption(
+  page: Page,
+  args: {
+    triggerTestId: string;
+    value: string;
+  },
+): Promise<void> {
+  await page.getByTestId(args.triggerTestId).click();
+  const dropdown = page.locator(".ant-select-dropdown:visible").last();
+  await expect(dropdown).toBeVisible({ timeout: 10_000 });
+  const option = dropdown.getByRole("option", { name: args.value, exact: true });
+  await expect(option).toBeVisible({ timeout: 10_000 });
+  await option.click();
+}
+
+async function closeModelSettingsModal(page: Page): Promise<void> {
+  const modal = page.locator(".model-settings-ant-modal");
+  const closeButton = modal.locator(".ant-modal-close").first();
+  await expect(closeButton).toBeVisible({ timeout: 10_000 });
+  await closeButton.click();
+  await expect(modal).toBeHidden({ timeout: 10_000 });
+}
+
 async function saveToolRegistryProfile(
   page: Parameters<typeof ensureWorkbenchReady>[0],
   profile: "planning_only" | "retrieval_only" | "calculator_only",
@@ -40,12 +63,16 @@ async function saveToolRegistryProfile(
   await page.getByTestId("settings-menu-model").click();
   await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
 
-  await page.getByTestId("model-settings-tool-registry-profile").click();
-  await page.getByTitle(profile, { exact: true }).click();
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "model-settings-tool-registry-profile",
+    value: profile,
+  });
 
   if (options?.source) {
-    await page.getByTestId("model-settings-tool-registry-source").click();
-    await page.getByTitle(options.source, { exact: true }).click();
+    await selectVisibleAntdOption(page, {
+      triggerTestId: "model-settings-tool-registry-source",
+      value: options.source,
+    });
   }
 
   const saveResponsePromise = page.waitForResponse((response) => {
@@ -68,8 +95,7 @@ async function saveToolRegistryProfile(
   for (const label of payload.enabled_tool_labels ?? []) {
     await expect(metaDescriptions).toContainText(label);
   }
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".model-settings-ant-modal")).toBeHidden();
+  await closeModelSettingsModal(page);
   return payload;
 }
 
@@ -268,8 +294,10 @@ test("model settings validate previews planning-only enabled tools", async ({
   await page.getByTestId("settings-menu-model").click();
   await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
 
-  await page.getByTestId("model-settings-tool-registry-profile").click();
-  await page.getByTitle("planning_only", { exact: true }).click();
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "model-settings-tool-registry-profile",
+    value: "planning_only",
+  });
 
   const validateResponsePromise = page.waitForResponse((response) => {
     return (
@@ -305,10 +333,14 @@ test("model settings validate previews retrieval suite enabled tools", async ({
   await page.getByTestId("settings-menu-model").click();
   await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
 
-  await page.getByTestId("model-settings-tool-registry-profile").click();
-  await page.getByTitle("retrieval_only", { exact: true }).click();
-  await page.getByTestId("model-settings-tool-registry-source").click();
-  await page.getByTitle("retrieval_suite", { exact: true }).click();
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "model-settings-tool-registry-profile",
+    value: "retrieval_only",
+  });
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "model-settings-tool-registry-source",
+    value: "retrieval_suite",
+  });
 
   const validateResponsePromise = page.waitForResponse((response) => {
     return (
@@ -356,10 +388,14 @@ test("model settings validate previews calculator suite enabled tools", async ({
   await page.getByTestId("settings-menu-model").click();
   await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
 
-  await page.getByTestId("model-settings-tool-registry-profile").click();
-  await page.getByTitle("calculator_only", { exact: true }).click();
-  await page.getByTestId("model-settings-tool-registry-source").click();
-  await page.getByTitle("calculator_suite", { exact: true }).click();
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "model-settings-tool-registry-profile",
+    value: "calculator_only",
+  });
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "model-settings-tool-registry-source",
+    value: "calculator_suite",
+  });
 
   const validateResponsePromise = page.waitForResponse((response) => {
     return (

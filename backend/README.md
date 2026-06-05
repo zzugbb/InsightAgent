@@ -26,6 +26,10 @@
 - 阶段 5 下一步（2026-06-04，generic runtime markers 收口）：默认开发期 marker 现已切到 `[tool-error] / [tool-fatal] / [multi-tool]`；旧 `[mock-tool-*] / [mock-multi-tool]` 仅继续保留兼容，不再作为默认文档与调试口径
 - 阶段 5 下一步（2026-06-04，provider-assisted planner 首版）：`chat_execution_service.py` 现已让 `build_tool_plan(prompt, provider=provider)` 在非 `mock` provider 下先尝试远端模型生成受限 JSON tool plan，再把结果约束回 `task_plan / task_retrieve / calc_eval` 这条现有执行 schema；若远端返回无效 JSON、未知工具、非法表达式或直接抛错，则静默回退到规则 planner，因此默认 SSE/trace/tool execution 契约保持不变
 - 阶段 5 下一步（2026-06-04，planning usage / overall usage 对齐）：provider-assisted planner 的调用现已纳入 usage/cost 闭环；planning trace step 会写入该次规划的 token/cost，`done.usage` 额外补充 `planning_*` 与 `overall_*` 字段，而原有 `prompt_tokens / completion_tokens / cost_estimate` 仍保留最终回答语义
+- 阶段 5 协同（2026-06-05，frontend e2e stabilization）：当前轮次优先处理 `frontend/e2e/usage-dashboard.spec.ts` 的 CI
+  回归，而不是继续主线功能扩展。根因落在前端 e2e 交互层：Ant Design select 选项定位过度依赖 `getByTitle(...)`，
+  modal 关闭依赖 `Escape`，两者在 chromium CI 上都不稳定；本轮后端运行时与 settings 契约未再扩展，focused
+  基线继续维持 `330/330`，用于确保 e2e 稳定性修复没有把主链行为带坏。
 - 会话命名补充：空会话在首条消息发送时，若仍为占位标题则自动改为首条消息前缀
 - 会话命名规则补充：仅在“无历史消息 + 占位标题”条件下自动命名，不覆盖用户手动重命名
 - 协同进展（前端侧）：已完成登录表单填充态样式优化、密码显隐图标可见性与切换修复、登录页左侧文案（主页叙事 + 关键信息）收口、退出入口并入左下角设置模块

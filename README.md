@@ -58,6 +58,12 @@ provider 规划分支；当运行在非 `mock` provider 下时，后端会先尝
 额外补充 `planning_*` 与 `overall_*` 字段；旧的 `prompt_tokens / completion_tokens / cost_estimate` 仍保持原有最终回答语义，
 因此现有前端与 e2e 断言不会被打断。
 
+2026-06-05 前端 e2e 稳定性修复：针对 `frontend/e2e/usage-dashboard.spec.ts` 在 CI chromium 上的回归，本轮先停下主线功能，
+改为优先修复测试链本身的脆弱交互。当前 `model settings` 相关用例已不再依赖 `getByTitle(...)` 选择 Ant Design
+下拉项，而是改成“打开当前可见 dropdown 后显式点击可见 option”；保存 helper 关闭 modal 也从键盘 `Escape`
+切换成显式点击 `.ant-modal-close`。这一步命中的是 CI 上 `retrieval_suite / calculator_suite / planning_suite`
+选项点击超时，以及 `calculator_only` 保存后 modal 未关闭的共同脆弱点。
+
 ## 当前能力摘要
 
 - backend：
