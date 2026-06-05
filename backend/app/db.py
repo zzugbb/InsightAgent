@@ -165,10 +165,24 @@ def initialize_postgres_database() -> None:
                 model TEXT NOT NULL,
                 base_url TEXT,
                 api_key_enc TEXT,
+                tool_registry_profile TEXT,
+                tool_registry_provider_source TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
+            """
+        )
+        connection.execute(
+            """
+            ALTER TABLE user_settings
+            ADD COLUMN IF NOT EXISTS tool_registry_profile TEXT
+            """
+        )
+        connection.execute(
+            """
+            ALTER TABLE user_settings
+            ADD COLUMN IF NOT EXISTS tool_registry_provider_source TEXT
             """
         )
         connection.execute(

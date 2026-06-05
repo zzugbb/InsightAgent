@@ -129,6 +129,112 @@ test("settings menu governance entries open expected modals @smoke", async ({
   await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
 });
 
+test("model settings validate previews planning-only enabled tools", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-model").click();
+  await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
+
+  await page.getByTestId("model-settings-tool-registry-profile").click();
+  await page.getByTitle("planning_only", { exact: true }).click();
+
+  const validateResponsePromise = page.waitForResponse((response) => {
+    return (
+      response.url().includes("/api/settings/validate")
+      && response.request().method() === "POST"
+    );
+  });
+  await page.getByTestId("model-settings-validate").click();
+  const validateResponse = await validateResponsePromise;
+  expect(validateResponse.ok()).toBeTruthy();
+  const payload = (await validateResponse.json()) as {
+    tool_registry_profile?: string;
+    enabled_tool_labels?: string[];
+  };
+  expect(payload.tool_registry_profile).toBe("planning_only");
+  expect(payload.enabled_tool_labels).toEqual(["Task Planner"]);
+
+  const metaDescriptions = page.locator(".model-settings-meta-descriptions");
+  await expect(metaDescriptions).toContainText("planning_only");
+  await expect(metaDescriptions).toContainText("Task Planner");
+});
+
+test("saved planning-only profile constrains actual trace allowed tools", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-model").click();
+  await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
+
+  await page.getByTestId("model-settings-tool-registry-profile").click();
+  await page.getByTitle("planning_only", { exact: true }).click();
+
+  const saveResponsePromise = page.waitForResponse((response) => {
+    return (
+      response.url().includes("/api/settings")
+      && response.request().method() === "PUT"
+    );
+  });
+  await page.getByTestId("model-settings-save").click();
+  const saveResponse = await saveResponsePromise;
+  expect(saveResponse.ok()).toBeTruthy();
+  const savedPayload = (await saveResponse.json()) as {
+    tool_registry_profile?: string;
+    enabled_tool_labels?: string[];
+  };
+  expect(savedPayload.tool_registry_profile).toBe("planning_only");
+  expect(savedPayload.enabled_tool_labels).toEqual(["Task Planner"]);
+
+  const metaDescriptions = page.locator(".model-settings-meta-descriptions");
+  await expect(metaDescriptions).toContainText("planning_only");
+  await expect(metaDescriptions).toContainText("Task Planner");
+
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".model-settings-ant-modal")).toBeHidden();
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  await composerInput.fill(
+    "Need rag context and [calc:1+2] for planning-only runtime acceptance",
+  );
+  await composerSend.click();
+
+  const allowedToolsMeta = page
+    .getByTestId("trace-card-meta")
+    .filter({ hasText: "Allowed tools" })
+    .first();
+  await expect(allowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(allowedToolsMeta).toContainText("Task Planner");
+  await expect(allowedToolsMeta).not.toContainText("Knowledge Retrieval");
+  await expect(allowedToolsMeta).not.toContainText("calc_eval");
+
+  await expect(
+    page.getByTestId("trace-card").filter({ hasText: "Task Planner" }).first(),
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(
+    page.locator("article.message-row.assistant").filter({
+      hasText: "This is a mock response from InsightAgent",
+    }).first(),
+  ).toBeVisible({ timeout: 20_000 });
+
+  const traceFeedText = await page.getByTestId("inspector-trace-feed").textContent();
+  expect(traceFeedText ?? "").not.toContain("Knowledge Retrieval");
+  expect(traceFeedText ?? "").not.toContain("calc_eval");
+});
+
 test("knowledge governance action buttons keep text style without borders", async ({
   page,
   request,

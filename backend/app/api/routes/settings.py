@@ -12,6 +12,8 @@ from app.db import get_database_locator
 from app.services.audit_service import safe_record_audit_event
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 from app.services.tool_runtime import (
+    get_available_tool_registry_profile_names,
+    get_available_tool_registry_provider_source_names,
     get_configured_tool_registry_provider,
     get_registered_tool_names,
     get_tool_display_name,
@@ -29,6 +31,8 @@ class SettingsUpdateRequest(BaseModel):
     model: str = Field(min_length=1)
     base_url: str | None = None
     api_key: str | None = None
+    tool_registry_profile: str | None = None
+    tool_registry_provider_source: str | None = None
 
     @model_validator(mode="after")
     def validate_by_mode(self) -> "SettingsUpdateRequest":
@@ -37,6 +41,16 @@ class SettingsUpdateRequest(BaseModel):
         self.model = self.model.strip()
         self.base_url = self.base_url.strip() if self.base_url else None
         self.api_key = self.api_key.strip() if self.api_key else None
+        self.tool_registry_profile = (
+            self.tool_registry_profile.strip().lower()
+            if self.tool_registry_profile
+            else None
+        )
+        self.tool_registry_provider_source = (
+            self.tool_registry_provider_source.strip().lower()
+            if self.tool_registry_provider_source
+            else None
+        )
 
         if self.mode not in {"mock", "remote"}:
             raise ValueError("mode must be either 'mock' or 'remote'")
@@ -66,6 +80,8 @@ class SettingsSummaryResponse(BaseModel):
     tool_registry_provider_source: str
     enabled_tool_names: list[str]
     enabled_tool_labels: list[str]
+    available_tool_registry_profiles: list[str]
+    available_tool_registry_provider_sources: list[str]
     database_locator: str
 
 
@@ -77,6 +93,41 @@ class SettingsValidateResponse(BaseModel):
     message: str
     error: str | None = None
     error_code: str | None = None
+    tool_registry_profile: str | None = None
+    tool_registry_provider_source: str | None = None
+    enabled_tool_names: list[str] = Field(default_factory=list)
+    enabled_tool_labels: list[str] = Field(default_factory=list)
+
+
+def _build_tool_registry_preview_fields(*, effective_settings: object) -> dict[str, object]:
+    registry_provider = get_configured_tool_registry_provider(settings=effective_settings)
+    enabled_tool_names = list(
+        get_registered_tool_names(registry_provider=registry_provider)
+    )
+    enabled_tool_labels = [
+        get_tool_display_name(name, registry_provider=registry_provider)
+        for name in enabled_tool_names
+    ]
+    return {
+        "tool_registry_profile": get_tool_registry_profile_name_from_settings(
+            settings=effective_settings
+        ),
+        "tool_registry_provider_source": get_tool_registry_provider_source_name_from_settings(
+            settings=effective_settings
+        ),
+        "enabled_tool_names": enabled_tool_names,
+        "enabled_tool_labels": enabled_tool_labels,
+    }
+
+
+def _apply_tool_registry_preview_to_validate_response(
+    *,
+    result: SettingsValidateResponse,
+    effective_settings: object,
+) -> SettingsValidateResponse:
+    return result.model_copy(
+        update=_build_tool_registry_preview_fields(effective_settings=effective_settings)
+    )
 
 
 def _build_preflight_response(
@@ -136,6 +187,10 @@ def _merge_runtime_settings_for_summary(
             "model_name": settings.model,
             "base_url": settings.base_url,
             "api_key": settings.api_key,
+            "tool_registry_profile": settings.tool_registry_profile
+            or merged_values.get("tool_registry_profile"),
+            "tool_registry_provider_source": settings.tool_registry_provider_source
+            or merged_values.get("tool_registry_provider_source"),
         }
     )
     return SimpleNamespace(**merged_values)
@@ -151,14 +206,15 @@ def _build_settings_summary_response(
         settings=settings,
         runtime_settings=runtime_settings,
     )
-    registry_provider = get_configured_tool_registry_provider(settings=effective_settings)
-    enabled_tool_names = list(
-        get_registered_tool_names(registry_provider=registry_provider)
+    preview_fields = _build_tool_registry_preview_fields(
+        effective_settings=effective_settings
     )
-    enabled_tool_labels = [
-        get_tool_display_name(name, registry_provider=registry_provider)
-        for name in enabled_tool_names
-    ]
+    available_tool_registry_profiles = list(
+        get_available_tool_registry_profile_names()
+    )
+    available_tool_registry_provider_sources = list(
+        get_available_tool_registry_provider_source_names(settings=effective_settings)
+    )
     return SettingsSummaryResponse(
         mode=settings.mode,
         provider=settings.provider,
@@ -166,14 +222,12 @@ def _build_settings_summary_response(
         base_url=settings.base_url,
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
-        tool_registry_profile=get_tool_registry_profile_name_from_settings(
-            settings=effective_settings
-        ),
-        tool_registry_provider_source=get_tool_registry_provider_source_name_from_settings(
-            settings=effective_settings
-        ),
-        enabled_tool_names=enabled_tool_names,
-        enabled_tool_labels=enabled_tool_labels,
+        tool_registry_profile=str(preview_fields["tool_registry_profile"]),
+        tool_registry_provider_source=str(preview_fields["tool_registry_provider_source"]),
+        enabled_tool_names=list(preview_fields["enabled_tool_names"]),
+        enabled_tool_labels=list(preview_fields["enabled_tool_labels"]),
+        available_tool_registry_profiles=available_tool_registry_profiles,
+        available_tool_registry_provider_sources=available_tool_registry_provider_sources,
         database_locator=database_locator or get_database_locator(),
     )
 
@@ -198,6 +252,29 @@ def update_settings(
     else:
         effective_api_key = payload.api_key or existing.api_key
         effective_base_url = payload.base_url
+    effective_tool_registry_profile = (
+        payload.tool_registry_profile
+        or existing.tool_registry_profile
+        or get_settings().tool_registry_profile
+    )
+    effective_tool_registry_provider_source = (
+        payload.tool_registry_provider_source
+        or existing.tool_registry_provider_source
+        or get_settings().tool_registry_provider_source
+    )
+    if effective_tool_registry_profile not in get_available_tool_registry_profile_names():
+        raise HTTPException(
+            status_code=422,
+            detail="tool_registry_profile is invalid",
+        )
+    if (
+        effective_tool_registry_provider_source
+        not in get_available_tool_registry_provider_source_names(settings=get_settings())
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="tool_registry_provider_source is invalid",
+        )
     if payload.mode == "remote" and not effective_api_key:
         raise HTTPException(
             status_code=422,
@@ -217,6 +294,8 @@ def update_settings(
             model=payload.model,
             base_url=effective_base_url,
             api_key=effective_api_key,
+            tool_registry_profile=effective_tool_registry_profile,
+            tool_registry_provider_source=effective_tool_registry_provider_source,
         )
     )
     safe_record_audit_event(
@@ -228,6 +307,8 @@ def update_settings(
             "model": settings.model,
             "base_url_configured": bool(settings.base_url),
             "api_key_configured": bool(settings.api_key),
+            "tool_registry_profile": settings.tool_registry_profile,
+            "tool_registry_provider_source": settings.tool_registry_provider_source,
         },
     )
     return _build_settings_summary_response(settings=settings)
@@ -242,6 +323,27 @@ def validate_settings(
     existing = get_stored_settings(user_id)
     effective_api_key = payload.api_key or existing.api_key
     effective_base_url = payload.base_url
+    effective_tool_registry_profile = (
+        payload.tool_registry_profile
+        or existing.tool_registry_profile
+        or get_settings().tool_registry_profile
+    )
+    effective_tool_registry_provider_source = (
+        payload.tool_registry_provider_source
+        or existing.tool_registry_provider_source
+        or get_settings().tool_registry_provider_source
+    )
+    effective_runtime_settings = _merge_runtime_settings_for_summary(
+        settings=StoredSettings(
+            mode=payload.mode,
+            provider=payload.provider,
+            model=payload.model,
+            base_url=effective_base_url,
+            api_key=effective_api_key,
+            tool_registry_profile=effective_tool_registry_profile,
+            tool_registry_provider_source=effective_tool_registry_provider_source,
+        )
+    )
 
     def _audit_validate(result: SettingsValidateResponse) -> SettingsValidateResponse:
         safe_record_audit_event(
@@ -255,52 +357,74 @@ def validate_settings(
                 "error_code": result.error_code,
                 "base_url_configured": bool(effective_base_url),
                 "api_key_configured": bool(effective_api_key),
+                "tool_registry_profile": effective_tool_registry_profile,
+                "tool_registry_provider_source": effective_tool_registry_provider_source,
             },
         )
         return result
 
     if payload.mode == "remote" and not effective_api_key:
-        return _audit_validate(SettingsValidateResponse(
-            ok=False,
-            mode=payload.mode,
-            provider=payload.provider,
-            model=payload.model,
-            message="remote mode preflight failed.",
-            error="api_key is required when mode is 'remote'",
-            error_code="remote_api_key_required",
-        ))
+        return _audit_validate(
+            _apply_tool_registry_preview_to_validate_response(
+                result=SettingsValidateResponse(
+                    ok=False,
+                    mode=payload.mode,
+                    provider=payload.provider,
+                    model=payload.model,
+                    message="remote mode preflight failed.",
+                    error="api_key is required when mode is 'remote'",
+                    error_code="remote_api_key_required",
+                ),
+                effective_settings=effective_runtime_settings,
+            )
+        )
     if payload.mode == "remote" and not effective_base_url:
-        return _audit_validate(SettingsValidateResponse(
-            ok=False,
-            mode=payload.mode,
-            provider=payload.provider,
-            model=payload.model,
-            message="remote mode preflight failed.",
-            error="base_url is required when mode is 'remote'",
-            error_code="remote_base_url_required",
-        ))
+        return _audit_validate(
+            _apply_tool_registry_preview_to_validate_response(
+                result=SettingsValidateResponse(
+                    ok=False,
+                    mode=payload.mode,
+                    provider=payload.provider,
+                    model=payload.model,
+                    message="remote mode preflight failed.",
+                    error="base_url is required when mode is 'remote'",
+                    error_code="remote_base_url_required",
+                ),
+                effective_settings=effective_runtime_settings,
+            )
+        )
 
     if payload.mode == "mock":
-        return _audit_validate(SettingsValidateResponse(
-            ok=True,
-            mode=payload.mode,
-            provider=payload.provider,
-            model=payload.model,
-            message="mock mode is ready.",
-        ))
+        return _audit_validate(
+            _apply_tool_registry_preview_to_validate_response(
+                result=SettingsValidateResponse(
+                    ok=True,
+                    mode=payload.mode,
+                    provider=payload.provider,
+                    model=payload.model,
+                    message="mock mode is ready.",
+                ),
+                effective_settings=effective_runtime_settings,
+            )
+        )
 
     if effective_base_url:
         parsed = urlparse(effective_base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            return _audit_validate(SettingsValidateResponse(
-                ok=False,
-                mode=payload.mode,
-                provider=payload.provider,
-                model=payload.model,
-                message="base_url is invalid.",
-                error="base_url must be a valid http(s) URL",
-                error_code="remote_base_url_invalid",
-            ))
+            return _audit_validate(
+                _apply_tool_registry_preview_to_validate_response(
+                    result=SettingsValidateResponse(
+                        ok=False,
+                        mode=payload.mode,
+                        provider=payload.provider,
+                        model=payload.model,
+                        message="base_url is invalid.",
+                        error="base_url must be a valid http(s) URL",
+                        error_code="remote_base_url_invalid",
+                    ),
+                    effective_settings=effective_runtime_settings,
+                )
+            )
 
         headers: dict[str, str] = {}
         if effective_api_key:
@@ -322,7 +446,12 @@ def validate_settings(
                 success_message="remote preflight succeeded.",
             )
             if head_result.ok or head_result.error_code == "remote_api_key_unauthorized":
-                return _audit_validate(head_result)
+                return _audit_validate(
+                    _apply_tool_registry_preview_to_validate_response(
+                        result=head_result,
+                        effective_settings=effective_runtime_settings,
+                    )
+                )
         except URLError as exc:
             head_error = exc
         except Exception as exc:  # noqa: BLE001
@@ -336,29 +465,44 @@ def validate_settings(
                     status_code = int(getattr(response, "status", 0))
             except HTTPError as exc:
                 status_code = int(exc.code)
-            return _audit_validate(_build_preflight_response(
-                status_code=status_code,
-                mode=payload.mode,
-                provider=payload.provider,
-                model=payload.model,
-                success_message="remote preflight succeeded (GET fallback).",
-            ))
+            return _audit_validate(
+                _apply_tool_registry_preview_to_validate_response(
+                    result=_build_preflight_response(
+                        status_code=status_code,
+                        mode=payload.mode,
+                        provider=payload.provider,
+                        model=payload.model,
+                        success_message="remote preflight succeeded (GET fallback).",
+                    ),
+                    effective_settings=effective_runtime_settings,
+                )
+            )
         except Exception as fallback_exc:  # noqa: BLE001
             base_error = head_error if head_error is not None else "head request failed"
-            return _audit_validate(SettingsValidateResponse(
-                ok=False,
+            return _audit_validate(
+                _apply_tool_registry_preview_to_validate_response(
+                    result=SettingsValidateResponse(
+                        ok=False,
+                        mode=payload.mode,
+                        provider=payload.provider,
+                        model=payload.model,
+                        message="remote preflight failed.",
+                        error=f"{base_error}; fallback_get={fallback_exc}",
+                        error_code="remote_preflight_network_error",
+                    ),
+                    effective_settings=effective_runtime_settings,
+                )
+            )
+
+    return _audit_validate(
+        _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
                 mode=payload.mode,
                 provider=payload.provider,
                 model=payload.model,
-                message="remote preflight failed.",
-                error=f"{base_error}; fallback_get={fallback_exc}",
-                error_code="remote_preflight_network_error",
-            ))
-
-    return _audit_validate(SettingsValidateResponse(
-        ok=True,
-        mode=payload.mode,
-        provider=payload.provider,
-        model=payload.model,
-        message="remote mode is ready.",
-    ))
+                message="remote mode is ready.",
+            ),
+            effective_settings=effective_runtime_settings,
+        )
+    )

@@ -9,6 +9,8 @@ export type SettingsSummary = {
   tool_registry_provider_source: string;
   enabled_tool_names: string[];
   enabled_tool_labels: string[];
+  available_tool_registry_profiles: string[];
+  available_tool_registry_provider_sources: string[];
   database_locator: string;
 };
 
@@ -68,6 +70,8 @@ export type SettingsFormState = {
   model: string;
   base_url: string;
   api_key: string;
+  tool_registry_profile: string;
+  tool_registry_provider_source: string;
 };
 
 export type SettingsValidateResponse = {
@@ -78,6 +82,10 @@ export type SettingsValidateResponse = {
   message: string;
   error: string | null;
   error_code?: string | null;
+  tool_registry_profile?: string | null;
+  tool_registry_provider_source?: string | null;
+  enabled_tool_names?: string[];
+  enabled_tool_labels?: string[];
 };
 
 export type InspectorTab = "trace" | "context";

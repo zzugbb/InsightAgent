@@ -26,8 +26,16 @@ def _read_sqlite_rows(sqlite_path: Path, table: str, columns: list[str]) -> list
     connection = sqlite3.connect(sqlite_path)
     connection.row_factory = sqlite3.Row
     try:
+        existing_columns = {
+            str(row["name"])
+            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        select_columns = [
+            column if column in existing_columns else f"NULL AS {column}"
+            for column in columns
+        ]
         rows = connection.execute(
-            f"SELECT {', '.join(columns)} FROM {table}"
+            f"SELECT {', '.join(select_columns)} FROM {table}"
         ).fetchall()
         return [dict(row) for row in rows]
     finally:
@@ -77,6 +85,8 @@ def _ensure_postgres_schema(pg_connection) -> None:
             model TEXT NOT NULL,
             base_url TEXT,
             api_key_enc TEXT,
+            tool_registry_profile TEXT,
+            tool_registry_provider_source TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -215,6 +225,8 @@ def main() -> None:
             "model",
             "base_url",
             "api_key_enc",
+            "tool_registry_profile",
+            "tool_registry_provider_source",
             "created_at",
             "updated_at",
         ],
@@ -292,15 +304,18 @@ def main() -> None:
             pg_connection.execute(
                 """
                 INSERT INTO user_settings(
-                    user_id, mode, provider, model, base_url, api_key_enc, created_at, updated_at
+                    user_id, mode, provider, model, base_url, api_key_enc,
+                    tool_registry_profile, tool_registry_provider_source, created_at, updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id) DO UPDATE SET
                     mode = EXCLUDED.mode,
                     provider = EXCLUDED.provider,
                     model = EXCLUDED.model,
                     base_url = EXCLUDED.base_url,
                     api_key_enc = EXCLUDED.api_key_enc,
+                    tool_registry_profile = EXCLUDED.tool_registry_profile,
+                    tool_registry_provider_source = EXCLUDED.tool_registry_provider_source,
                     updated_at = EXCLUDED.updated_at
                 """,
                 (
@@ -310,6 +325,8 @@ def main() -> None:
                     row["model"],
                     row["base_url"],
                     row["api_key_enc"],
+                    row.get("tool_registry_profile"),
+                    row.get("tool_registry_provider_source"),
                     row["created_at"],
                     row["updated_at"],
                 ),

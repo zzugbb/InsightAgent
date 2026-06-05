@@ -665,6 +665,8 @@ export type Messages = {
     fieldModel: string;
     fieldBaseUrl: string;
     fieldApiKey: string;
+    fieldToolRegistryProfile: string;
+    fieldToolRegistrySource: string;
     optionalPlaceholder: string;
     save: string;
     saving: string;

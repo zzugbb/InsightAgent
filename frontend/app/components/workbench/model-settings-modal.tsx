@@ -32,6 +32,8 @@ const DEFAULT_FORM: SettingsFormState = {
   model: "mock-gpt",
   base_url: "",
   api_key: "",
+  tool_registry_profile: "default",
+  tool_registry_provider_source: "default",
 };
 
 type RemoteFormState = Omit<SettingsFormState, "mode">;
@@ -50,6 +52,13 @@ export function ModelSettingsModal({
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<SettingsFormState>(DEFAULT_FORM);
+  const [validatedPreview, setValidatedPreview] = useState<Pick<
+    SettingsSummary,
+    | "tool_registry_profile"
+    | "tool_registry_provider_source"
+    | "enabled_tool_names"
+    | "enabled_tool_labels"
+  > | null>(null);
 
   const { data, isLoading, error, isError } = useQuery({
     queryKey: ["settings"],
@@ -66,8 +75,11 @@ export function ModelSettingsModal({
       model: data.model,
       base_url: data.base_url ?? "",
       api_key: "",
+      tool_registry_profile: data.tool_registry_profile,
+      tool_registry_provider_source: data.tool_registry_provider_source,
     };
     setForm(nextForm);
+    setValidatedPreview(null);
   }, [data, open]);
 
   useEffect(() => {
@@ -84,6 +96,7 @@ export function ModelSettingsModal({
       queryClient.setQueryData(["settings"], nextSettings);
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
       setForm((c) => ({ ...c, api_key: "" }));
+      setValidatedPreview(null);
       message.success(t.settings.saveSuccess);
     },
     onError: (e) => {
@@ -96,6 +109,13 @@ export function ModelSettingsModal({
     mutationFn: (body: Record<string, unknown>) =>
       apiPostJson<SettingsValidateResponse>(`${API_BASE_URL}/api/settings/validate`, body),
     onSuccess: (data) => {
+      setValidatedPreview({
+        tool_registry_profile: data.tool_registry_profile ?? form.tool_registry_profile,
+        tool_registry_provider_source:
+          data.tool_registry_provider_source ?? form.tool_registry_provider_source,
+        enabled_tool_names: data.enabled_tool_names ?? [],
+        enabled_tool_labels: data.enabled_tool_labels ?? [],
+      });
       if (data.ok) {
         message.success(`${t.settings.validatePass}: ${data.message}`);
         return;
@@ -118,6 +138,7 @@ export function ModelSettingsModal({
   useEffect(() => {
     if (!open) {
       setForm(DEFAULT_FORM);
+      setValidatedPreview(null);
     }
   }, [open]);
 
@@ -125,6 +146,7 @@ export function ModelSettingsModal({
     field: keyof RemoteFormState,
     value: string,
   ) {
+    setValidatedPreview(null);
     setForm((current) => ({ ...current, [field]: value }));
   }
 
@@ -133,17 +155,21 @@ export function ModelSettingsModal({
       return;
     }
     if (nextMode === "mock") {
+      setValidatedPreview(null);
       setForm(DEFAULT_FORM);
       return;
     }
 
     const shouldRestorePersistedRemote = data?.mode === "remote";
+    setValidatedPreview(null);
     setForm({
       mode: "remote",
       provider: shouldRestorePersistedRemote ? data.provider : "",
       model: shouldRestorePersistedRemote ? data.model : "",
       base_url: shouldRestorePersistedRemote ? (data.base_url ?? "") : "",
       api_key: "",
+      tool_registry_profile: data?.tool_registry_profile ?? "default",
+      tool_registry_provider_source: data?.tool_registry_provider_source ?? "default",
     });
   }
 
@@ -162,6 +188,8 @@ export function ModelSettingsModal({
       model: isMockMode ? "mock-gpt" : form.model.trim(),
       base_url: isMockMode ? null : form.base_url.trim() || null,
       api_key: isMockMode ? null : form.api_key || null,
+      tool_registry_profile: form.tool_registry_profile,
+      tool_registry_provider_source: form.tool_registry_provider_source,
     });
   }
 
@@ -180,6 +208,8 @@ export function ModelSettingsModal({
       model: isMockMode ? "mock-gpt" : form.model.trim(),
       base_url: isMockMode ? null : form.base_url.trim() || null,
       api_key: isMockMode ? null : form.api_key || null,
+      tool_registry_profile: form.tool_registry_profile,
+      tool_registry_provider_source: form.tool_registry_provider_source,
     });
   }
 
@@ -221,9 +251,10 @@ export function ModelSettingsModal({
       ? data.api_key_configured
       : false
     : false;
+  const previewSource = validatedPreview ?? data ?? null;
   const summaryEnabledTools =
-    data?.enabled_tool_labels && data.enabled_tool_labels.length > 0
-      ? data.enabled_tool_labels.join(", ")
+    previewSource?.enabled_tool_labels && previewSource.enabled_tool_labels.length > 0
+      ? previewSource.enabled_tool_labels.join(", ")
       : "—";
 
   return (
@@ -299,6 +330,32 @@ export function ModelSettingsModal({
               <Input value="mock-gpt" disabled data-testid="model-settings-model" />
             )}
           </Form.Item>
+          <Form.Item label={t.settings.fieldToolRegistryProfile}>
+            <Select
+              data-testid="model-settings-tool-registry-profile"
+              value={form.tool_registry_profile}
+              onChange={(value) => setRemoteField("tool_registry_profile", value)}
+              options={(data?.available_tool_registry_profiles ?? [form.tool_registry_profile]).map(
+                (value) => ({
+                  value,
+                  label: value,
+                }),
+              )}
+            />
+          </Form.Item>
+          <Form.Item label={t.settings.fieldToolRegistrySource}>
+            <Select
+              data-testid="model-settings-tool-registry-source"
+              value={form.tool_registry_provider_source}
+              onChange={(value) => setRemoteField("tool_registry_provider_source", value)}
+              options={(data?.available_tool_registry_provider_sources ?? [
+                form.tool_registry_provider_source,
+              ]).map((value) => ({
+                value,
+                label: value,
+              }))}
+            />
+          </Form.Item>
           {isRemoteMode ? (
             <>
               <Form.Item label={t.settings.fieldBaseUrl}>
@@ -369,10 +426,10 @@ export function ModelSettingsModal({
             {summaryModel}
           </Descriptions.Item>
           <Descriptions.Item label={t.settings.metaToolRegistryProfile}>
-            {data.tool_registry_profile}
+            {previewSource?.tool_registry_profile ?? "—"}
           </Descriptions.Item>
           <Descriptions.Item label={t.settings.metaToolRegistrySource}>
-            {data.tool_registry_provider_source}
+            {previewSource?.tool_registry_provider_source ?? "—"}
           </Descriptions.Item>
           <Descriptions.Item label={t.settings.metaEnabledTools}>
             {summaryEnabledTools}

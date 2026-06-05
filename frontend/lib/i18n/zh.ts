@@ -738,6 +738,8 @@ export const zh: Messages = {
     fieldModel: "模型",
     fieldBaseUrl: "基础地址",
     fieldApiKey: "API 密钥",
+    fieldToolRegistryProfile: "Tool registry profile",
+    fieldToolRegistrySource: "Tool registry source",
     optionalPlaceholder: "可选",
     save: "保存设置",
     saving: "保存中…",

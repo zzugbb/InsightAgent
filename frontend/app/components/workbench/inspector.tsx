@@ -402,7 +402,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       {traceView === "flow" && filteredTraceSteps.length > 0 ? (
         <TraceFlowView steps={filteredTraceSteps} colorMode={theme} />
       ) : traceView === "list" && visibleSteps.length > 0 ? (
-        <div className={`trace-feed trace-feed--${traceDensity}`}>
+        <div
+          className={`trace-feed trace-feed--${traceDensity}`}
+          data-testid="inspector-trace-feed"
+        >
           {visibleSteps.map((step) => {
             const traceKind = normalizeTraceStepKind(step);
             const metaLine = formatTraceStepMetaSubtitle(
@@ -414,6 +417,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
               key={step.id}
               className={`trace-card trace-card--enter trace-card--kind-${traceKind}${traceDensity === "compact" ? " trace-card--compact" : ""}`}
               data-trace-kind={traceKind}
+              data-testid="trace-card"
             >
               <div className="trace-top">
                 <strong>{getStepTitle(step)}</strong>
@@ -424,7 +428,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                 </span>
               </div>
               {metaLine ? (
-                <p className="trace-card-meta">{metaLine}</p>
+                <p className="trace-card-meta" data-testid="trace-card-meta">
+                  {metaLine}
+                </p>
               ) : null}
               <p>{step.content || t.inspector.stepEmpty}</p>
             </article>

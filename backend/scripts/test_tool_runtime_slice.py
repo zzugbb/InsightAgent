@@ -15,7 +15,9 @@ if str(ROOT) not in sys.path:
 import app.services.tool_runtime as tool_runtime_module  # type: ignore[import-not-found]
 import app.services.chat_execution_service as chat_execution_module  # type: ignore[import-not-found]
 from app.api.routes.settings import (  # type: ignore[import-not-found]
+    _apply_tool_registry_preview_to_validate_response,
     _build_settings_summary_response,
+    SettingsValidateResponse,
 )
 from app.providers.base import ProviderUsage  # type: ignore[import-not-found]
 from app.services.settings_service import StoredSettings  # type: ignore[import-not-found]
@@ -482,10 +484,23 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 model="gpt-4.1-mini",
                 base_url="https://example.invalid/v1",
                 api_key="secret",
+                tool_registry_profile="planning_only",
+                tool_registry_provider_source="suite_a",
             ),
             runtime_settings=SimpleNamespace(
-                tool_registry_profile="planning_only",
+                tool_registry_profile="default",
                 tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_a": {
+                            "profile": "planning_only",
+                        },
+                        "suite_b": {
+                            "profile": "calculator_only",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
             ),
             database_locator="postgresql://demo",
         )
@@ -494,10 +509,48 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(summary.provider, "openai")
         self.assertEqual(summary.model, "gpt-4.1-mini")
         self.assertEqual(summary.tool_registry_profile, "planning_only")
-        self.assertEqual(summary.tool_registry_provider_source, "default")
+        self.assertEqual(summary.tool_registry_provider_source, "suite_a")
         self.assertEqual(summary.enabled_tool_names, ["task_plan"])
         self.assertEqual(summary.enabled_tool_labels, ["Task Planner"])
+        self.assertEqual(
+            summary.available_tool_registry_profiles,
+            ["default", "planning_only", "retrieval_only", "calculator_only"],
+        )
+        self.assertEqual(
+            summary.available_tool_registry_provider_sources,
+            ["default", "suite_a", "suite_b"],
+        )
         self.assertEqual(summary.database_locator, "postgresql://demo")
+
+    def test_apply_tool_registry_preview_to_validate_response_uses_effective_settings(
+        self,
+    ) -> None:
+        response = _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                message="ok",
+            ),
+            effective_settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_provider_source="suite_a",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_a": {
+                            "profile": "planning_only",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        self.assertEqual(response.tool_registry_profile, "planning_only")
+        self.assertEqual(response.tool_registry_provider_source, "suite_a")
+        self.assertEqual(response.enabled_tool_names, ["task_plan"])
+        self.assertEqual(response.enabled_tool_labels, ["Task Planner"])
 
     def test_build_tool_plan_summary_uses_display_labels(self) -> None:
         plan = build_tool_plan("请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]")

@@ -755,6 +755,8 @@ export const en: Messages = {
     fieldModel: "Model",
     fieldBaseUrl: "Base URL",
     fieldApiKey: "API key",
+    fieldToolRegistryProfile: "Tool registry profile",
+    fieldToolRegistrySource: "Tool registry source",
     optionalPlaceholder: "Optional",
     save: "Save settings",
     saving: "Saving…",

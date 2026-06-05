@@ -703,6 +703,22 @@ def get_tool_registry_profile_name_from_settings(*, settings: object | None = No
     return normalized or "default"
 
 
+def get_available_tool_registry_profile_names() -> tuple[str, ...]:
+    return tuple(_TOOL_REGISTRY_PROFILE_CONFIGS.keys())
+
+
+def get_available_tool_registry_provider_source_names(
+    *,
+    settings: object | None = None,
+) -> tuple[str, ...]:
+    named_sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+    names = ["default"]
+    names.extend(
+        name for name in sorted(named_sources) if name and name != "default"
+    )
+    return tuple(names)
+
+
 def build_tool_registry_profile_settings_config(
     *,
     profile_name: str,

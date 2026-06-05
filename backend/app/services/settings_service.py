@@ -15,6 +15,8 @@ class StoredSettings(BaseModel):
     model: str
     base_url: str | None = None
     api_key: str | None = None
+    tool_registry_profile: str | None = None
+    tool_registry_provider_source: str | None = None
 
 
 def _now_iso() -> str:
@@ -29,6 +31,8 @@ def _default_settings() -> StoredSettings:
         model=settings.model_name,
         base_url=settings.base_url,
         api_key=settings.api_key,
+        tool_registry_profile=settings.tool_registry_profile,
+        tool_registry_provider_source=settings.tool_registry_provider_source,
     )
 
 
@@ -37,7 +41,8 @@ def get_stored_settings(user_id: str) -> StoredSettings:
     with get_db_connection() as connection:
         row = connection.execute(
             """
-            SELECT mode, provider, model, base_url, api_key_enc
+            SELECT mode, provider, model, base_url, api_key_enc,
+                   tool_registry_profile, tool_registry_provider_source
             FROM user_settings
             WHERE user_id = ?
             """,
@@ -53,6 +58,8 @@ def get_stored_settings(user_id: str) -> StoredSettings:
         model=row["model"],
         base_url=row["base_url"],
         api_key=decrypt_secret(row["api_key_enc"]),
+        tool_registry_profile=row["tool_registry_profile"],
+        tool_registry_provider_source=row["tool_registry_provider_source"],
     )
 
 
@@ -69,16 +76,20 @@ def save_settings(user_id: str, settings: StoredSettings) -> StoredSettings:
                 model,
                 base_url,
                 api_key_enc,
+                tool_registry_profile,
+                tool_registry_provider_source,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
                 mode = excluded.mode,
                 provider = excluded.provider,
                 model = excluded.model,
                 base_url = excluded.base_url,
                 api_key_enc = excluded.api_key_enc,
+                tool_registry_profile = excluded.tool_registry_profile,
+                tool_registry_provider_source = excluded.tool_registry_provider_source,
                 updated_at = excluded.updated_at
             """,
             (
@@ -88,6 +99,8 @@ def save_settings(user_id: str, settings: StoredSettings) -> StoredSettings:
                 settings.model,
                 settings.base_url,
                 encrypted_api_key,
+                settings.tool_registry_profile,
+                settings.tool_registry_provider_source,
                 now,
                 now,
             ),
