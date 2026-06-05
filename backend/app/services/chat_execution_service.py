@@ -17,11 +17,14 @@ from app.services.chat_persistence_service import (
 )
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
+from app.services.settings_service import get_stored_settings
 from app.services.tool_runtime import (
     build_tool_plan_summary,
     build_tool_plan_artifacts,
     execute_configured_tool_registry_provider_preflight,
     get_configured_tool_registry_provider,
+    get_tool_registry_profile_name_from_settings,
+    get_tool_registry_provider_source_name_from_settings,
     build_tool_iteration_context,
     build_tool_prompt_with_observations,
     execute_tool_plan_item_service_actions,
@@ -358,6 +361,7 @@ def stream_task_execution(
     probe_task_status(force=True)
 
     try:
+        runtime_settings = get_stored_settings(user_id)
         provider = get_llm_provider(user_id)
         raise_if_should_abort(force_status_probe=True)
 
@@ -374,7 +378,9 @@ def stream_task_execution(
 
         plan_step_id = str(uuid4())
         seq_cursor += 1
-        planning_registry_provider = get_configured_tool_registry_provider()
+        planning_registry_provider = get_configured_tool_registry_provider(
+            settings=runtime_settings
+        )
         tool_plan_artifacts = build_tool_plan_artifacts(
             prompt,
             provider=provider,
@@ -396,6 +402,12 @@ def stream_task_execution(
             "planning_provider_used": tool_plan_artifacts.planning_provider_used,
             "allowed_tool_names": list(tool_plan_artifacts.allowed_tool_names),
             "allowed_tool_labels": list(tool_plan_artifacts.allowed_tool_labels),
+            "tool_registry_profile": get_tool_registry_profile_name_from_settings(
+                settings=runtime_settings
+            ),
+            "tool_registry_provider_source": get_tool_registry_provider_source_name_from_settings(
+                settings=runtime_settings
+            ),
         }
         if tool_plan_artifacts.planning_provider_attempted:
             planning_usage_payload = _build_usage_payload(
@@ -435,6 +447,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             persist_trace_fn=persist_trace,
             record_audit_event_fn=record_audit_event,
+            settings=runtime_settings,
         )
         tool_registry_provider = tool_registry_service_result["provider"]
 

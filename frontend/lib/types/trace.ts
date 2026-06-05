@@ -18,6 +18,8 @@ export type TraceStepMeta = {
   usage_source?: "provider" | "estimated" | "legacy" | string;
   planning_provider_attempted?: boolean;
   planning_provider_used?: boolean;
+  tool_registry_profile?: string;
+  tool_registry_provider_source?: string;
   allowed_tool_names?: string[];
   allowed_tool_labels?: string[];
   tool?: {

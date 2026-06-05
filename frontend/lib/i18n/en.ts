@@ -591,6 +591,8 @@ export const en: Messages = {
       planningProviderRuleOnly: "Rule planner",
       planningProviderUsed: "Planner provider used",
       planningProviderFallback: "Planner fallback",
+      toolRegistryProfile: "Profile",
+      toolRegistrySource: "Source",
       allowedTools: "Allowed tools",
       toolLine: (name: string, status: string) =>
         `Tool ${name} · ${status}`,

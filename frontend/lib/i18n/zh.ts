@@ -579,6 +579,8 @@ export const zh: Messages = {
       planningProviderRuleOnly: "规划使用规则 planner",
       planningProviderUsed: "规划已走真实 provider",
       planningProviderFallback: "规划已回退规则 planner",
+      toolRegistryProfile: "Profile",
+      toolRegistrySource: "Source",
       allowedTools: "允许工具",
       toolLine: (name: string, status: string) =>
         `工具 ${name} · ${status}`,

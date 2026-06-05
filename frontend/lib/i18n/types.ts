@@ -511,6 +511,8 @@ export type Messages = {
       planningProviderRuleOnly: string;
       planningProviderUsed: string;
       planningProviderFallback: string;
+      toolRegistryProfile: string;
+      toolRegistrySource: string;
       allowedTools: string;
       toolLine: (name: string, status: string) => string;
       toolRetry: (count: number) => string;

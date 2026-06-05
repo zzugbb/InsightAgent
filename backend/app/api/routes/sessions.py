@@ -170,6 +170,13 @@ class SessionExportTaskSummary(BaseModel):
     trace_preview: list[SessionExportTracePreviewStep]
 
 
+class SessionExportGovernanceSummary(BaseModel):
+    profiles: list[str] = Field(default_factory=list)
+    provider_sources: list[str] = Field(default_factory=list)
+    allowed_tool_names: list[str] = Field(default_factory=list)
+    allowed_tool_labels: list[str] = Field(default_factory=list)
+
+
 class SessionExportStats(BaseModel):
     task_count: int
     message_count: int
@@ -182,6 +189,7 @@ class SessionExportJsonResponse(BaseModel):
     exported_at: str
     session: SessionResponse
     usage_summary: SessionUsageSummaryResponse
+    governance: SessionExportGovernanceSummary | None = None
     stats: SessionExportStats
     messages: list[SessionExportMessage]
     tasks: list[SessionExportTaskSummary]
@@ -296,6 +304,56 @@ def _build_session_task_summary(
     return summary, len(parsed_steps), rag_hit_count
 
 
+def _collect_session_governance_summary(
+    tasks: list[dict],
+) -> SessionExportGovernanceSummary | None:
+    profiles: set[str] = set()
+    provider_sources: set[str] = set()
+    allowed_tool_names: set[str] = set()
+    allowed_tool_labels: set[str] = set()
+
+    for task in tasks:
+        raw_trace = task.get("trace_json")
+        if not isinstance(raw_trace, str) or not raw_trace.strip():
+            continue
+        try:
+            loaded = json.loads(raw_trace)
+        except Exception:
+            continue
+        if not isinstance(loaded, list):
+            continue
+        parsed_steps = parse_trace_steps([x for x in loaded if isinstance(x, dict)])
+        for step in parsed_steps:
+            if step.meta is None:
+                continue
+            meta = step.meta.model_dump(exclude_none=True)
+            raw_profile = meta.get("tool_registry_profile")
+            if isinstance(raw_profile, str) and raw_profile.strip():
+                profiles.add(raw_profile.strip())
+            raw_provider_source = meta.get("tool_registry_provider_source")
+            if isinstance(raw_provider_source, str) and raw_provider_source.strip():
+                provider_sources.add(raw_provider_source.strip())
+            raw_allowed_names = meta.get("allowed_tool_names")
+            if isinstance(raw_allowed_names, list):
+                for item in raw_allowed_names:
+                    if isinstance(item, str) and item.strip():
+                        allowed_tool_names.add(item.strip())
+            raw_allowed_labels = meta.get("allowed_tool_labels")
+            if isinstance(raw_allowed_labels, list):
+                for item in raw_allowed_labels:
+                    if isinstance(item, str) and item.strip():
+                        allowed_tool_labels.add(item.strip())
+
+    if not profiles and not provider_sources and not allowed_tool_names and not allowed_tool_labels:
+        return None
+    return SessionExportGovernanceSummary(
+        profiles=sorted(profiles),
+        provider_sources=sorted(provider_sources),
+        allowed_tool_names=sorted(allowed_tool_names),
+        allowed_tool_labels=sorted(allowed_tool_labels),
+    )
+
+
 def _append_fenced_block(lines: list[str], content: str, language: str = "text") -> None:
     text = content.rstrip("\n")
     fence = "```"
@@ -318,6 +376,31 @@ def _build_session_export_markdown(payload: SessionExportJsonResponse) -> str:
     lines.append(f"- Trace Step Count: {payload.stats.trace_step_count}")
     lines.append(f"- RAG Hit Count: {payload.stats.rag_hit_count}")
     lines.append("")
+    if payload.governance is not None:
+        lines.append("## Tool Registry Governance")
+        lines.append("")
+        lines.append(
+            "- Profiles: "
+            + (", ".join(payload.governance.profiles) if payload.governance.profiles else "(none)")
+        )
+        lines.append(
+            "- Provider Sources: "
+            + (
+                ", ".join(payload.governance.provider_sources)
+                if payload.governance.provider_sources
+                else "(none)"
+            )
+        )
+        allowed_tools = (
+            payload.governance.allowed_tool_labels
+            if payload.governance.allowed_tool_labels
+            else payload.governance.allowed_tool_names
+        )
+        lines.append(
+            "- Allowed Tools: "
+            + (", ".join(allowed_tools) if allowed_tools else "(none)")
+        )
+        lines.append("")
     lines.append("## Usage Summary")
     lines.append("")
     _append_fenced_block(
@@ -390,12 +473,14 @@ def _build_session_export_payload(
         task_summaries.append(summary)
         trace_step_total += trace_count
         rag_hit_total += rag_count
+    governance = _collect_session_governance_summary(task_rows)
 
     return SessionExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
         session=SessionResponse(**session),
         usage_summary=usage_summary,
+        governance=governance,
         stats=SessionExportStats(
             task_count=len(task_rows),
             message_count=len(message_rows),

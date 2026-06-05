@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import {
   ensureWorkbenchReady,
@@ -23,6 +23,64 @@ async function openSettingsMenu(page: Parameters<typeof ensureWorkbenchReady>[0]
   await expect(settingsTrigger).toBeVisible();
   await settingsTrigger.click();
   await expect(page.getByTestId("sidebar-settings-menu-popover")).toBeVisible();
+}
+
+async function saveToolRegistryProfile(
+  page: Parameters<typeof ensureWorkbenchReady>[0],
+  profile: "planning_only" | "retrieval_only" | "calculator_only",
+): Promise<{
+  tool_registry_profile?: string;
+  enabled_tool_labels?: string[];
+}> {
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-model").click();
+  await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
+
+  await page.getByTestId("model-settings-tool-registry-profile").click();
+  await page.getByTitle(profile, { exact: true }).click();
+
+  const saveResponsePromise = page.waitForResponse((response) => {
+    return (
+      response.url().includes("/api/settings")
+      && response.request().method() === "PUT"
+    );
+  });
+  await page.getByTestId("model-settings-save").click();
+  const saveResponse = await saveResponsePromise;
+  expect(saveResponse.ok()).toBeTruthy();
+  const payload = (await saveResponse.json()) as {
+    tool_registry_profile?: string;
+    enabled_tool_labels?: string[];
+  };
+
+  const metaDescriptions = page.locator(".model-settings-meta-descriptions");
+  await expect(metaDescriptions).toContainText(profile);
+  for (const label of payload.enabled_tool_labels ?? []) {
+    await expect(metaDescriptions).toContainText(label);
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".model-settings-ant-modal")).toBeHidden();
+  return payload;
+}
+
+async function openTaskDetailFromTaskCenter(page: Page): Promise<Page> {
+  const openTaskCenter = page.getByTestId("chat-open-task-center");
+  await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
+  await openTaskCenter.click();
+  await expect(page.getByTestId("task-center-shell")).toBeVisible({
+    timeout: 20_000,
+  });
+  const openDetail = page.getByTestId("task-center-open-task-detail").first();
+  await expect(openDetail).toBeVisible({ timeout: 20_000 });
+  const [detailPage] = await Promise.all([
+    page.waitForEvent("popup"),
+    openDetail.click(),
+  ]);
+  await detailPage.waitForLoadState("domcontentloaded");
+  await expect(detailPage.getByTestId("task-detail-page")).toBeVisible({
+    timeout: 20_000,
+  });
+  return detailPage;
 }
 
 test("usage dashboard source trend is visible @smoke", async ({ page, request }) => {
@@ -175,35 +233,9 @@ test("saved planning-only profile constrains actual trace allowed tools", async 
 
   await page.goto("/");
   await ensureWorkbenchReady(page, auth);
-  await page.getByTestId("sidebar-settings-trigger").click();
-  await page.getByTestId("settings-menu-model").click();
-  await expect(page.locator(".model-settings-ant-modal")).toBeVisible();
-
-  await page.getByTestId("model-settings-tool-registry-profile").click();
-  await page.getByTitle("planning_only", { exact: true }).click();
-
-  const saveResponsePromise = page.waitForResponse((response) => {
-    return (
-      response.url().includes("/api/settings")
-      && response.request().method() === "PUT"
-    );
-  });
-  await page.getByTestId("model-settings-save").click();
-  const saveResponse = await saveResponsePromise;
-  expect(saveResponse.ok()).toBeTruthy();
-  const savedPayload = (await saveResponse.json()) as {
-    tool_registry_profile?: string;
-    enabled_tool_labels?: string[];
-  };
+  const savedPayload = await saveToolRegistryProfile(page, "planning_only");
   expect(savedPayload.tool_registry_profile).toBe("planning_only");
   expect(savedPayload.enabled_tool_labels).toEqual(["Task Planner"]);
-
-  const metaDescriptions = page.locator(".model-settings-meta-descriptions");
-  await expect(metaDescriptions).toContainText("planning_only");
-  await expect(metaDescriptions).toContainText("Task Planner");
-
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".model-settings-ant-modal")).toBeHidden();
 
   const composerInput = page.getByTestId("composer-input");
   const composerSend = page.getByTestId("composer-send");
@@ -217,6 +249,8 @@ test("saved planning-only profile constrains actual trace allowed tools", async 
     .filter({ hasText: "Allowed tools" })
     .first();
   await expect(allowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(allowedToolsMeta).toContainText("Profile planning_only");
+  await expect(allowedToolsMeta).toContainText("Source default");
   await expect(allowedToolsMeta).toContainText("Task Planner");
   await expect(allowedToolsMeta).not.toContainText("Knowledge Retrieval");
   await expect(allowedToolsMeta).not.toContainText("calc_eval");
@@ -234,6 +268,226 @@ test("saved planning-only profile constrains actual trace allowed tools", async 
   expect(traceFeedText ?? "").not.toContain("Knowledge Retrieval");
   expect(traceFeedText ?? "").not.toContain("calc_eval");
 });
+
+test("saved retrieval-only profile executes retrieval without planner or calculator", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  const savedPayload = await saveToolRegistryProfile(page, "retrieval_only");
+  expect(savedPayload.tool_registry_profile).toBe("retrieval_only");
+  expect(savedPayload.enabled_tool_labels).toEqual(["Knowledge Retrieval"]);
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  await composerInput.fill(
+    "Please retrieve project context from the kb and explain the result [kb:demo]",
+  );
+  await composerSend.click();
+
+  const allowedToolsMeta = page
+    .getByTestId("trace-card-meta")
+    .filter({ hasText: "Allowed tools" })
+    .first();
+  await expect(allowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(allowedToolsMeta).toContainText("Profile retrieval_only");
+  await expect(allowedToolsMeta).toContainText("Source default");
+  await expect(allowedToolsMeta).toContainText("Knowledge Retrieval");
+  await expect(allowedToolsMeta).not.toContainText("Task Planner");
+  await expect(allowedToolsMeta).not.toContainText("calc_eval");
+
+  await expect(
+    page.getByTestId("trace-card").filter({ hasText: "Knowledge Retrieval" }).first(),
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(
+    page.locator("article.message-row.assistant").filter({
+      hasText: "This is a mock response from InsightAgent",
+    }).first(),
+  ).toBeVisible({ timeout: 20_000 });
+
+  const traceFeedText = await page.getByTestId("inspector-trace-feed").textContent();
+  expect(traceFeedText ?? "").toContain("Knowledge Retrieval");
+  expect(traceFeedText ?? "").not.toContain("Task Planner");
+  expect(traceFeedText ?? "").not.toContain("calc_eval");
+});
+
+test("saved calculator-only profile executes calculator without planner or retrieval", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  const savedPayload = await saveToolRegistryProfile(page, "calculator_only");
+  expect(savedPayload.tool_registry_profile).toBe("calculator_only");
+  expect(savedPayload.enabled_tool_labels).toEqual(["calc_eval"]);
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  await composerInput.fill(
+    "Please calculate the result for me [calc:12/3+5]",
+  );
+  await composerSend.click();
+
+  const allowedToolsMeta = page
+    .getByTestId("trace-card-meta")
+    .filter({ hasText: "Allowed tools" })
+    .first();
+  await expect(allowedToolsMeta).toBeVisible({ timeout: 20_000 });
+  await expect(allowedToolsMeta).toContainText("Profile calculator_only");
+  await expect(allowedToolsMeta).toContainText("Source default");
+  await expect(allowedToolsMeta).toContainText("calc_eval");
+  await expect(allowedToolsMeta).not.toContainText("Task Planner");
+  await expect(allowedToolsMeta).not.toContainText("Knowledge Retrieval");
+
+  await expect(
+    page.getByTestId("trace-card").filter({ hasText: "calc_eval" }).first(),
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(
+    page.locator("article.message-row.assistant").filter({
+      hasText: "This is a mock response from InsightAgent",
+    }).first(),
+  ).toBeVisible({ timeout: 20_000 });
+
+  const traceFeedText = await page.getByTestId("inspector-trace-feed").textContent();
+  expect(traceFeedText ?? "").toContain("calc_eval");
+  expect(traceFeedText ?? "").not.toContain("Task Planner");
+  expect(traceFeedText ?? "").not.toContain("Knowledge Retrieval");
+});
+
+for (const acceptanceCase of [
+  {
+    profile: "planning_only" as const,
+    prompt: "Need rag context and [calc:2+3] but keep runtime restricted to planning only",
+    expectedAllowed: "Task Planner",
+    forbiddenAllowed: ["Knowledge Retrieval", "calc_eval"],
+    expectedTraceCard: "Task Planner",
+  },
+  {
+    profile: "retrieval_only" as const,
+    prompt: "Retrieve kb context for the active runtime profile [kb:detail-check]",
+    expectedAllowed: "Knowledge Retrieval",
+    forbiddenAllowed: ["Task Planner", "calc_eval"],
+    expectedTraceCard: "Knowledge Retrieval",
+  },
+  {
+    profile: "calculator_only" as const,
+    prompt: "Please calculate this for the task detail replay [calc:40/5+6]",
+    expectedAllowed: "calc_eval",
+    forbiddenAllowed: ["Task Planner", "Knowledge Retrieval"],
+    expectedTraceCard: "calc_eval",
+  },
+]) {
+  test(`task detail replay preserves ${acceptanceCase.profile} registry trace metadata`, async ({
+    page,
+    request,
+  }) => {
+    const auth = await registerViaApi(request);
+    await seedBrowserAuth(page, auth);
+
+    await page.goto("/");
+    await ensureWorkbenchReady(page, auth);
+    const savedPayload = await saveToolRegistryProfile(page, acceptanceCase.profile);
+    expect(savedPayload.tool_registry_profile).toBe(acceptanceCase.profile);
+
+    const composerInput = page.getByTestId("composer-input");
+    const composerSend = page.getByTestId("composer-send");
+    await composerInput.fill(acceptanceCase.prompt);
+    await composerSend.click();
+
+    await expect(
+      page.locator("article.message-row.assistant").filter({
+        hasText: "This is a mock response from InsightAgent",
+      }).first(),
+    ).toBeVisible({ timeout: 20_000 });
+
+    const detailPage = await openTaskDetailFromTaskCenter(page);
+    const allowedToolsMeta = detailPage
+      .getByTestId("task-detail-trace-card-meta")
+      .filter({ hasText: "Allowed tools" })
+      .first();
+    await expect(allowedToolsMeta).toBeVisible({ timeout: 20_000 });
+    await expect(allowedToolsMeta).toContainText(
+      `Profile ${acceptanceCase.profile}`,
+    );
+    await expect(allowedToolsMeta).toContainText("Source default");
+    await expect(allowedToolsMeta).toContainText(acceptanceCase.expectedAllowed);
+    for (const forbidden of acceptanceCase.forbiddenAllowed) {
+      await expect(allowedToolsMeta).not.toContainText(forbidden);
+    }
+
+    await expect(
+      detailPage
+        .getByTestId("task-detail-trace-card")
+        .filter({ hasText: acceptanceCase.expectedTraceCard })
+        .first(),
+    ).toBeVisible({ timeout: 20_000 });
+
+    const detailTraceText = await detailPage
+      .getByTestId("task-detail-trace-feed")
+      .textContent();
+    expect(detailTraceText ?? "").toContain(acceptanceCase.expectedTraceCard);
+    for (const forbidden of acceptanceCase.forbiddenAllowed) {
+      expect(detailTraceText ?? "").not.toContain(forbidden);
+    }
+
+    const taskDetailUrl = new URL(detailPage.url());
+    const taskId = taskDetailUrl.pathname.split("/").filter(Boolean).at(-1) ?? "";
+    expect(taskId).not.toBe("");
+
+    const exportJsonResponse = await request.get(
+      `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/json`,
+      {
+        headers: {
+          Authorization: `Bearer ${auth.access_token}`,
+        },
+      },
+    );
+    expect(exportJsonResponse.ok()).toBeTruthy();
+    const exportJsonPayload = (await exportJsonResponse.json()) as {
+      trace?: {
+        governance?: {
+          profile?: string;
+          provider_source?: string;
+          allowed_tool_labels?: string[];
+        };
+      };
+    };
+    expect(exportJsonPayload.trace?.governance?.profile).toBe(
+      acceptanceCase.profile,
+    );
+    expect(exportJsonPayload.trace?.governance?.provider_source).toBe("default");
+    expect(exportJsonPayload.trace?.governance?.allowed_tool_labels).toEqual([
+      acceptanceCase.expectedAllowed,
+    ]);
+
+    const exportMarkdownResponse = await request.get(
+      `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/markdown`,
+      {
+        headers: {
+          Authorization: `Bearer ${auth.access_token}`,
+        },
+      },
+    );
+    expect(exportMarkdownResponse.ok()).toBeTruthy();
+    const exportMarkdown = await exportMarkdownResponse.text();
+    expect(exportMarkdown).toContain(
+      `- Tool Registry Profile: ${acceptanceCase.profile}`,
+    );
+    expect(exportMarkdown).toContain("- Tool Registry Source: default");
+    expect(exportMarkdown).toContain(
+      `- Allowed Tools: ${acceptanceCase.expectedAllowed}`,
+    );
+
+    await detailPage.close();
+  });
+}
 
 test("knowledge governance action buttons keep text style without borders", async ({
   page,

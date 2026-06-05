@@ -678,6 +678,22 @@ export function formatTraceStepMetaSubtitle(
         : labels.planningProviderFallback,
     );
   }
+  if (
+    typeof meta.tool_registry_profile === "string"
+    && meta.tool_registry_profile.trim().length > 0
+  ) {
+    parts.push(
+      `${labels.toolRegistryProfile} ${meta.tool_registry_profile.trim()}`,
+    );
+  }
+  if (
+    typeof meta.tool_registry_provider_source === "string"
+    && meta.tool_registry_provider_source.trim().length > 0
+  ) {
+    parts.push(
+      `${labels.toolRegistrySource} ${meta.tool_registry_provider_source.trim()}`,
+    );
+  }
   const allowedToolLabels = Array.isArray(meta.allowed_tool_labels)
     ? meta.allowed_tool_labels
         .map((item) => (typeof item === "string" ? item.trim() : ""))

@@ -407,7 +407,10 @@ export default function TaskDetailPage() {
                 ) : traceView === "flow" && filteredTraceSteps.length > 0 ? (
                   <TraceFlowView steps={filteredTraceSteps} colorMode={theme} />
                 ) : traceView === "list" && filteredTraceSteps.length > 0 ? (
-                  <div className={`trace-feed trace-feed--${traceDensity}`}>
+                  <div
+                    className={`trace-feed trace-feed--${traceDensity}`}
+                    data-testid="task-detail-trace-feed"
+                  >
                     {filteredTraceSteps.map((step) => {
                       const traceKind = normalizeTraceStepKind(step);
                       const metaLine = formatTraceStepMetaSubtitle(
@@ -420,12 +423,16 @@ export default function TaskDetailPage() {
                           className={`trace-card trace-card--kind-${traceKind}${
                             traceDensity === "compact" ? " trace-card--compact" : ""
                           }`}
+                          data-testid="task-detail-trace-card"
                         >
                           <div className="trace-top">
                             <strong>{getStepTitle(step)}</strong>
                             <span>{shortenId(step.id)}</span>
                           </div>
-                          <p className="trace-card-meta">
+                          <p
+                            className="trace-card-meta"
+                            data-testid="task-detail-trace-card-meta"
+                          >
                             {metaLine ?? t.taskDetail.traceMetaNone}
                           </p>
                           <p>{step.content || t.inspector.stepEmpty}</p>

@@ -371,7 +371,15 @@ class TaskExportTask(BaseModel):
     updated_at: str
 
 
+class TaskExportGovernance(BaseModel):
+    profile: str | None = None
+    provider_source: str | None = None
+    allowed_tool_names: list[str] = Field(default_factory=list)
+    allowed_tool_labels: list[str] = Field(default_factory=list)
+
+
 class TaskExportTrace(BaseModel):
+    governance: TaskExportGovernance | None = None
     step_count: int
     rag_hit_count: int
     rag_knowledge_base_ids: list[str]
@@ -450,11 +458,59 @@ def _collect_rag_export(steps: list[TraceStep]) -> tuple[int, list[str], list[Ta
     return rag_hit_count, rag_knowledge_base_ids, rag_chunks
 
 
+def _collect_trace_governance_export(
+    steps: list[TraceStep],
+) -> TaskExportGovernance | None:
+    for step in steps:
+        if step.meta is None:
+            continue
+        meta = step.meta.model_dump(exclude_none=True)
+        raw_profile = meta.get("tool_registry_profile")
+        raw_provider_source = meta.get("tool_registry_provider_source")
+        raw_allowed_names = meta.get("allowed_tool_names")
+        raw_allowed_labels = meta.get("allowed_tool_labels")
+        profile = (
+            raw_profile.strip()
+            if isinstance(raw_profile, str) and raw_profile.strip()
+            else None
+        )
+        provider_source = (
+            raw_provider_source.strip()
+            if isinstance(raw_provider_source, str) and raw_provider_source.strip()
+            else None
+        )
+        allowed_tool_names = [
+            item.strip()
+            for item in raw_allowed_names
+            if isinstance(item, str) and item.strip()
+        ] if isinstance(raw_allowed_names, list) else []
+        allowed_tool_labels = [
+            item.strip()
+            for item in raw_allowed_labels
+            if isinstance(item, str) and item.strip()
+        ] if isinstance(raw_allowed_labels, list) else []
+        if (
+            profile is None
+            and provider_source is None
+            and not allowed_tool_names
+            and not allowed_tool_labels
+        ):
+            continue
+        return TaskExportGovernance(
+            profile=profile,
+            provider_source=provider_source,
+            allowed_tool_names=allowed_tool_names,
+            allowed_tool_labels=allowed_tool_labels,
+        )
+    return None
+
+
 def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonResponse:
     task_id = str(task["id"])
     raw_steps = get_task_trace(task_id, user_id)
     parsed_steps = parse_trace_steps(raw_steps)
     rag_hit_count, rag_knowledge_base_ids, rag_chunks = _collect_rag_export(parsed_steps)
+    governance = _collect_trace_governance_export(parsed_steps)
     return TaskExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
@@ -470,6 +526,7 @@ def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonRespon
             for row in get_task_messages(task_id, user_id)
         ],
         trace=TaskExportTrace(
+            governance=governance,
             step_count=len(parsed_steps),
             rag_hit_count=rag_hit_count,
             rag_knowledge_base_ids=rag_knowledge_base_ids,
@@ -533,6 +590,25 @@ def _build_task_export_markdown(payload: TaskExportJsonResponse) -> str:
     lines.append("")
     lines.append(f"- Step Count: {payload.trace.step_count}")
     lines.append(f"- RAG Hit Count: {payload.trace.rag_hit_count}")
+    if payload.trace.governance is not None:
+        if payload.trace.governance.profile:
+            lines.append(
+                f"- Tool Registry Profile: {payload.trace.governance.profile}",
+            )
+        if payload.trace.governance.provider_source:
+            lines.append(
+                f"- Tool Registry Source: {payload.trace.governance.provider_source}",
+            )
+        if payload.trace.governance.allowed_tool_labels:
+            lines.append(
+                "- Allowed Tools: "
+                + ", ".join(payload.trace.governance.allowed_tool_labels),
+            )
+        elif payload.trace.governance.allowed_tool_names:
+            lines.append(
+                "- Allowed Tools: "
+                + ", ".join(payload.trace.governance.allowed_tool_names),
+            )
     if payload.trace.rag_knowledge_base_ids:
         lines.append(
             "- RAG Knowledge Bases: "

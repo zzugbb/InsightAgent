@@ -14,6 +14,8 @@ if str(ROOT) not in sys.path:
 
 import app.services.tool_runtime as tool_runtime_module  # type: ignore[import-not-found]
 import app.services.chat_execution_service as chat_execution_module  # type: ignore[import-not-found]
+import app.api.routes.tasks as task_routes_module  # type: ignore[import-not-found]
+import app.api.routes.sessions as session_routes_module  # type: ignore[import-not-found]
 from app.api.routes.settings import (  # type: ignore[import-not-found]
     _apply_tool_registry_preview_to_validate_response,
     _build_settings_summary_response,
@@ -551,6 +553,417 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(response.tool_registry_provider_source, "suite_a")
         self.assertEqual(response.enabled_tool_names, ["task_plan"])
         self.assertEqual(response.enabled_tool_labels, ["Task Planner"])
+
+    def test_build_task_export_payload_surfaces_registry_governance_summary(self) -> None:
+        task = {
+            "id": "task-export-governance",
+            "session_id": "session-export-governance",
+            "prompt": "export governance summary",
+            "status": "completed",
+            "created_at": "2026-06-05T10:00:00",
+            "updated_at": "2026-06-05T10:05:00",
+            "trace_json": None,
+            "usage_json": None,
+        }
+        original_get_task_trace = task_routes_module.get_task_trace
+        original_get_task_messages = task_routes_module.get_task_messages
+        try:
+            task_routes_module.get_task_trace = lambda *_args, **_kwargs: [
+                {
+                    "id": "trace-plan-1",
+                    "type": "thought",
+                    "content": "Planner constrained the tool set.",
+                    "seq": 1,
+                    "meta": {
+                        "tool_registry_profile": "planning_only",
+                        "tool_registry_provider_source": "default",
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner"],
+                    },
+                },
+            ]
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []
+
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                task,
+                "user-export-governance",
+            )
+        finally:
+            task_routes_module.get_task_trace = original_get_task_trace
+            task_routes_module.get_task_messages = original_get_task_messages
+
+        self.assertIsNotNone(payload.trace.governance)
+        assert payload.trace.governance is not None
+        self.assertEqual(payload.trace.governance.profile, "planning_only")
+        self.assertEqual(payload.trace.governance.provider_source, "default")
+        self.assertEqual(payload.trace.governance.allowed_tool_names, ["task_plan"])
+        self.assertEqual(
+            payload.trace.governance.allowed_tool_labels,
+            ["Task Planner"],
+        )
+
+    def test_build_task_export_markdown_includes_registry_governance_summary(self) -> None:
+        task = {
+            "id": "task-export-governance-md",
+            "session_id": "session-export-governance-md",
+            "prompt": "export markdown governance summary",
+            "status": "completed",
+            "created_at": "2026-06-05T10:00:00",
+            "updated_at": "2026-06-05T10:05:00",
+            "trace_json": None,
+            "usage_json": None,
+        }
+        original_get_task_trace = task_routes_module.get_task_trace
+        original_get_task_messages = task_routes_module.get_task_messages
+        try:
+            task_routes_module.get_task_trace = lambda *_args, **_kwargs: [
+                {
+                    "id": "trace-plan-2",
+                    "type": "thought",
+                    "content": "Planner constrained the tool set.",
+                    "seq": 1,
+                    "meta": {
+                        "tool_registry_profile": "retrieval_only",
+                        "tool_registry_provider_source": "default",
+                        "allowed_tool_names": ["task_retrieve"],
+                        "allowed_tool_labels": ["Knowledge Retrieval"],
+                    },
+                },
+            ]
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []
+
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                task,
+                "user-export-governance",
+            )
+            markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+                payload,
+            )
+        finally:
+            task_routes_module.get_task_trace = original_get_task_trace
+            task_routes_module.get_task_messages = original_get_task_messages
+
+        self.assertIn("- Tool Registry Profile: retrieval_only", markdown)
+        self.assertIn("- Tool Registry Source: default", markdown)
+        self.assertIn("- Allowed Tools: Knowledge Retrieval", markdown)
+
+    def test_build_session_export_payload_surfaces_governance_summary(self) -> None:
+        session = {
+            "id": "session-export-governance",
+            "title": "Governance Session",
+            "created_at": "2026-06-05T10:00:00",
+            "updated_at": "2026-06-05T10:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-1",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-05T10:00:00",
+                    "updated_at": "2026-06-05T10:01:00",
+                    "usage_json": None,
+                    "trace_json": json.dumps(
+                        [
+                            {
+                                "id": "trace-1",
+                                "type": "thought",
+                                "content": "planning only",
+                                "seq": 1,
+                                "meta": {
+                                    "tool_registry_profile": "planning_only",
+                                    "tool_registry_provider_source": "default",
+                                    "allowed_tool_names": ["task_plan"],
+                                    "allowed_tool_labels": ["Task Planner"],
+                                },
+                            }
+                        ]
+                    ),
+                },
+                {
+                    "id": "task-2",
+                    "prompt": "task two",
+                    "status": "completed",
+                    "created_at": "2026-06-05T10:02:00",
+                    "updated_at": "2026-06-05T10:03:00",
+                    "usage_json": None,
+                    "trace_json": json.dumps(
+                        [
+                            {
+                                "id": "trace-2",
+                                "type": "thought",
+                                "content": "retrieval only",
+                                "seq": 1,
+                                "meta": {
+                                    "tool_registry_profile": "retrieval_only",
+                                    "tool_registry_provider_source": "suite_a",
+                                    "allowed_tool_names": ["task_retrieve"],
+                                    "allowed_tool_labels": ["Knowledge Retrieval"],
+                                },
+                            }
+                        ]
+                    ),
+                },
+            ]
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-session-governance",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+
+        self.assertIsNotNone(payload.governance)
+        assert payload.governance is not None
+        self.assertEqual(
+            payload.governance.profiles,
+            ["planning_only", "retrieval_only"],
+        )
+        self.assertEqual(payload.governance.provider_sources, ["default", "suite_a"])
+        self.assertEqual(
+            payload.governance.allowed_tool_labels,
+            ["Knowledge Retrieval", "Task Planner"],
+        )
+
+    def test_build_session_export_markdown_includes_governance_summary(self) -> None:
+        session = {
+            "id": "session-export-governance-md",
+            "title": "Governance Session",
+            "created_at": "2026-06-05T10:00:00",
+            "updated_at": "2026-06-05T10:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-md-1",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-05T10:00:00",
+                    "updated_at": "2026-06-05T10:01:00",
+                    "usage_json": None,
+                    "trace_json": json.dumps(
+                        [
+                            {
+                                "id": "trace-md-1",
+                                "type": "thought",
+                                "content": "calc only",
+                                "seq": 1,
+                                "meta": {
+                                    "tool_registry_profile": "calculator_only",
+                                    "tool_registry_provider_source": "default",
+                                    "allowed_tool_names": ["calc_eval"],
+                                    "allowed_tool_labels": ["calc_eval"],
+                                },
+                            }
+                        ]
+                    ),
+                },
+            ]
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-session-governance",
+            )
+            markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+                payload,
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+
+        self.assertIn("## Tool Registry Governance", markdown)
+        self.assertIn("- Profiles: calculator_only", markdown)
+        self.assertIn("- Provider Sources: default", markdown)
+        self.assertIn("- Allowed Tools: calc_eval", markdown)
+
+    def test_stream_task_execution_uses_stored_registry_settings_for_planning_and_preflight(
+        self,
+    ) -> None:
+        runtime_settings = StoredSettings(
+            mode="mock",
+            provider="mock",
+            model="mock-gpt",
+            tool_registry_profile="planning_only",
+            tool_registry_provider_source="suite_a",
+        )
+        planning_settings_seen: list[object | None] = []
+        preflight_settings_seen: list[object | None] = []
+
+        class FakeProvider:
+            provider = "mock"
+            model = "mock-gpt"
+
+            def stream_generate(self, prompt: str):
+                del prompt
+                yield "This is a mock response from InsightAgent"
+
+        original_get_stored_settings = getattr(
+            chat_execution_module,
+            "get_stored_settings",
+            None,
+        )
+        original_get_llm_provider = chat_execution_module.get_llm_provider
+        original_get_configured_tool_registry_provider = (
+            chat_execution_module.get_configured_tool_registry_provider
+        )
+        original_build_tool_plan_artifacts = chat_execution_module.build_tool_plan_artifacts
+        original_execute_preflight = (
+            chat_execution_module.execute_configured_tool_registry_provider_preflight
+        )
+        original_update_task_status = chat_execution_module.update_task_status
+        original_get_task = chat_execution_module.get_task
+        original_update_task_trace_steps = chat_execution_module.update_task_trace_steps
+        original_complete_task = chat_execution_module.complete_task
+        original_create_message = chat_execution_module.create_message
+        original_try_append_task_memory = chat_execution_module.try_append_task_memory
+        original_safe_record_audit_event = chat_execution_module.safe_record_audit_event
+
+        def fake_get_stored_settings(user_id: str) -> StoredSettings:
+            self.assertEqual(user_id, "user-1")
+            return runtime_settings
+
+        def fake_get_llm_provider(user_id: str) -> FakeProvider:
+            self.assertEqual(user_id, "user-1")
+            return FakeProvider()
+
+        def fake_get_configured_tool_registry_provider(*, settings=None):
+            planning_settings_seen.append(settings)
+            return StaticToolRegistryProvider(
+                {"task_plan": get_default_tool_registry()["task_plan"]}
+            )
+
+        def fake_build_tool_plan_artifacts(
+            prompt: str,
+            *,
+            provider: object | None = None,
+            registry_provider: object | None = None,
+        ) -> SimpleNamespace:
+            del prompt, provider, registry_provider
+            return SimpleNamespace(
+                tool_plan=[],
+                planning_prompt=None,
+                provider_usage=None,
+                planning_provider_attempted=False,
+                planning_provider_used=False,
+                allowed_tool_names=("task_plan",),
+                allowed_tool_labels=("Task Planner",),
+            )
+
+        def fake_execute_preflight(
+            *,
+            task_id: str,
+            step_id: str,
+            seq: int,
+            model: str,
+            trace_steps: list[dict[str, object]],
+            persist_trace_fn,
+            record_audit_event_fn,
+            settings=None,
+        ) -> dict[str, object]:
+            del task_id, step_id, seq, model, trace_steps, persist_trace_fn, record_audit_event_fn
+            preflight_settings_seen.append(settings)
+            return {
+                "provider": StaticToolRegistryProvider({}),
+                "provider_source_name": "suite_a",
+            }
+
+        try:
+            chat_execution_module.get_stored_settings = fake_get_stored_settings
+            chat_execution_module.get_llm_provider = fake_get_llm_provider
+            chat_execution_module.get_configured_tool_registry_provider = (
+                fake_get_configured_tool_registry_provider
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                fake_build_tool_plan_artifacts
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                fake_execute_preflight
+            )
+            chat_execution_module.update_task_status = lambda *args, **kwargs: None
+            chat_execution_module.get_task = lambda *args, **kwargs: {"status": "running"}
+            chat_execution_module.update_task_trace_steps = lambda *args, **kwargs: None
+            chat_execution_module.complete_task = lambda *args, **kwargs: None
+            chat_execution_module.create_message = lambda *args, **kwargs: None
+            chat_execution_module.try_append_task_memory = lambda *args, **kwargs: None
+            chat_execution_module.safe_record_audit_event = lambda *args, **kwargs: None
+
+            events = list(
+                chat_execution_module.stream_task_execution(
+                    task_id="task-1",
+                    session_id="session-1",
+                    user_id="user-1",
+                    prompt="please plan with user-scoped registry settings",
+                )
+            )
+        finally:
+            if original_get_stored_settings is not None:
+                chat_execution_module.get_stored_settings = original_get_stored_settings
+            chat_execution_module.get_llm_provider = original_get_llm_provider
+            chat_execution_module.get_configured_tool_registry_provider = (
+                original_get_configured_tool_registry_provider
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                original_build_tool_plan_artifacts
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                original_execute_preflight
+            )
+            chat_execution_module.update_task_status = original_update_task_status
+            chat_execution_module.get_task = original_get_task
+            chat_execution_module.update_task_trace_steps = original_update_task_trace_steps
+            chat_execution_module.complete_task = original_complete_task
+            chat_execution_module.create_message = original_create_message
+            chat_execution_module.try_append_task_memory = original_try_append_task_memory
+            chat_execution_module.safe_record_audit_event = original_safe_record_audit_event
+
+        self.assertEqual(planning_settings_seen, [runtime_settings])
+        self.assertEqual(preflight_settings_seen, [runtime_settings])
+        trace_payload = next(
+            json.loads(event.split("data: ", 1)[1])
+            for event in events
+            if event.startswith("event: trace\n")
+        )
+        meta = trace_payload["step"]["meta"]
+        self.assertEqual(meta["tool_registry_profile"], "planning_only")
+        self.assertEqual(meta["tool_registry_provider_source"], "suite_a")
+        self.assertEqual(meta["allowed_tool_labels"], ["Task Planner"])
 
     def test_build_tool_plan_summary_uses_display_labels(self) -> None:
         plan = build_tool_plan("请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]")

@@ -309,8 +309,10 @@ def main() -> None:
 
     trace_steps = trace_obj.get("steps")
     rag_chunks = trace_obj.get("rag_chunks")
+    governance = trace_obj.get("governance")
     _assert(isinstance(trace_steps, list), "task export trace.steps must be list")
     _assert(isinstance(rag_chunks, list), "task export trace.rag_chunks must be list")
+    _assert(isinstance(governance, dict), "task export trace.governance must be dict")
     _assert(
         int(trace_obj.get("step_count", -1)) == len(trace_steps),
         f"task export trace.step_count mismatch: {trace_obj}",
@@ -318,6 +320,20 @@ def main() -> None:
     _assert(
         int(trace_obj.get("rag_hit_count", -1)) == len(rag_chunks),
         f"task export trace.rag_hit_count mismatch: {trace_obj}",
+    )
+    _assert(
+        isinstance(governance.get("profile"), str) and bool(str(governance["profile"]).strip()),
+        f"task export trace.governance.profile missing: {governance}",
+    )
+    _assert(
+        isinstance(governance.get("provider_source"), str)
+        and bool(str(governance["provider_source"]).strip()),
+        f"task export trace.governance.provider_source missing: {governance}",
+    )
+    allowed_tool_labels = governance.get("allowed_tool_labels")
+    _assert(
+        isinstance(allowed_tool_labels, list) and len(allowed_tool_labels) >= 1,
+        f"task export trace.governance.allowed_tool_labels missing: {governance}",
     )
 
     task_export_md = _request(
@@ -332,6 +348,18 @@ def main() -> None:
     _assert(
         f"- Step Count: {len(trace_steps)}" in task_export_md.text,
         "task export markdown step count mismatch",
+    )
+    _assert(
+        "- Tool Registry Profile: " in task_export_md.text,
+        "task export markdown governance profile missing",
+    )
+    _assert(
+        "- Tool Registry Source: " in task_export_md.text,
+        "task export markdown governance source missing",
+    )
+    _assert(
+        "- Allowed Tools: " in task_export_md.text,
+        "task export markdown governance allowed tools missing",
     )
 
     task_export_json_download = _request(
@@ -368,11 +396,13 @@ def main() -> None:
     session_obj = session_payload.get("session")
     stats_obj = session_payload.get("stats")
     usage_summary_obj = session_payload.get("usage_summary")
+    governance_obj = session_payload.get("governance")
     session_messages = session_payload.get("messages")
     session_tasks = session_payload.get("tasks")
     _assert(isinstance(session_obj, dict), "session export json missing session")
     _assert(isinstance(stats_obj, dict), "session export json missing stats")
     _assert(isinstance(usage_summary_obj, dict), "session export json missing usage_summary")
+    _assert(isinstance(governance_obj, dict), "session export json missing governance")
     _assert(isinstance(session_messages, list), "session export json missing messages")
     _assert(isinstance(session_tasks, list), "session export json missing tasks")
     _assert(str(session_obj.get("id", "")) == session_id, "session export session.id mismatch")
@@ -409,6 +439,18 @@ def main() -> None:
         int(usage_summary_obj.get("tasks_total", -1)) == task_count,
         f"session export usage_summary.tasks_total mismatch: usage={usage_summary_obj}, task_count={task_count}",
     )
+    _assert(
+        isinstance(governance_obj.get("profiles"), list),
+        f"session export governance.profiles invalid: {governance_obj}",
+    )
+    _assert(
+        isinstance(governance_obj.get("provider_sources"), list),
+        f"session export governance.provider_sources invalid: {governance_obj}",
+    )
+    _assert(
+        isinstance(governance_obj.get("allowed_tool_labels"), list),
+        f"session export governance.allowed_tool_labels invalid: {governance_obj}",
+    )
 
     session_export_md = _request(
         method="GET",
@@ -422,10 +464,26 @@ def main() -> None:
         "session export markdown header missing",
     )
     _assert("## Usage Summary" in session_export_md.text, "session export markdown usage summary missing")
+    _assert(
+        "## Tool Registry Governance" in session_export_md.text,
+        "session export markdown governance summary missing",
+    )
     _assert("## Tasks" in session_export_md.text, "session export markdown tasks section missing")
     _assert(
         f"- Task Count: {task_count}" in session_export_md.text,
         "session export markdown task count mismatch",
+    )
+    _assert(
+        "- Profiles: " in session_export_md.text,
+        "session export markdown governance profiles missing",
+    )
+    _assert(
+        "- Provider Sources: " in session_export_md.text,
+        "session export markdown governance provider sources missing",
+    )
+    _assert(
+        "- Allowed Tools: " in session_export_md.text,
+        "session export markdown governance allowed tools missing",
     )
 
     session_export_json_download = _request(

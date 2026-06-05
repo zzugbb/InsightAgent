@@ -466,6 +466,18 @@ def main() -> None:
         str(export_task_json.json_body.get("task", {}).get("id", "")) == task_id,
         "task export json task.id mismatch",
     )
+    governance = export_task_json.json_body.get("trace", {}).get("governance", {})
+    _assert(
+        isinstance(governance, dict)
+        and isinstance(governance.get("profile"), str)
+        and isinstance(governance.get("provider_source"), str),
+        f"task export json governance missing: {export_task_json.json_body}",
+    )
+    _assert(
+        isinstance(governance.get("allowed_tool_labels"), list)
+        and len(governance["allowed_tool_labels"]) >= 1,
+        f"task export json allowed_tool_labels missing: {export_task_json.json_body}",
+    )
     export_task_md = _request(
         method="GET",
         url=f"{base_url}/api/tasks/{task_id}/export/markdown",
@@ -475,6 +487,18 @@ def main() -> None:
     _assert(
         "InsightAgent Task Export" in export_task_md.text,
         "task export markdown missing header",
+    )
+    _assert(
+        "- Tool Registry Profile: " in export_task_md.text,
+        "task export markdown governance profile missing",
+    )
+    _assert(
+        "- Tool Registry Source: " in export_task_md.text,
+        "task export markdown governance source missing",
+    )
+    _assert(
+        "- Allowed Tools: " in export_task_md.text,
+        "task export markdown governance allowed tools missing",
     )
     print("  - OK: task exports")
 
@@ -495,6 +519,14 @@ def main() -> None:
         str(export_session_json.json_body.get("session", {}).get("id", "")) == session_id,
         "session export json session.id mismatch",
     )
+    session_governance = export_session_json.json_body.get("governance", {})
+    _assert(
+        isinstance(session_governance, dict)
+        and isinstance(session_governance.get("profiles"), list)
+        and isinstance(session_governance.get("provider_sources"), list)
+        and isinstance(session_governance.get("allowed_tool_labels"), list),
+        f"session export json governance missing: {export_session_json.json_body}",
+    )
     export_session_md = _request(
         method="GET",
         url=f"{base_url}/api/sessions/{session_id}/export/markdown",
@@ -504,6 +536,22 @@ def main() -> None:
     _assert(
         "InsightAgent Session Export" in export_session_md.text,
         "session export markdown missing header",
+    )
+    _assert(
+        "## Tool Registry Governance" in export_session_md.text,
+        "session export markdown governance summary missing",
+    )
+    _assert(
+        "- Profiles: " in export_session_md.text,
+        "session export markdown governance profiles missing",
+    )
+    _assert(
+        "- Provider Sources: " in export_session_md.text,
+        "session export markdown governance provider sources missing",
+    )
+    _assert(
+        "- Allowed Tools: " in export_session_md.text,
+        "session export markdown governance allowed tools missing",
     )
     print("  - OK: session exports")
 
