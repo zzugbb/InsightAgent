@@ -54,6 +54,20 @@ export type SessionMessage = {
   created_at: string;
 };
 
+export type TaskGovernanceSummary = {
+  profile: string | null;
+  provider_source: string | null;
+  allowed_tool_names: string[];
+  allowed_tool_labels: string[];
+};
+
+export type SessionGovernanceSummary = {
+  profiles: string[];
+  provider_sources: string[];
+  allowed_tool_names: string[];
+  allowed_tool_labels: string[];
+};
+
 export type TaskSummary = {
   id: string;
   session_id: string;
@@ -62,6 +76,7 @@ export type TaskSummary = {
   status_normalized?: string;
   status_label?: string;
   status_rank?: number;
+  governance?: TaskGovernanceSummary | null;
   trace_json: string | null;
   /** JSON 字符串，与 SSE `done.usage` 同结构（prompt_tokens / completion_tokens / cost_estimate） */
   usage_json?: string | null;
@@ -153,6 +168,7 @@ export type UsageDashboardSessionRow = {
   total_tokens: number;
   cost_estimate: number;
   last_task_at: string | null;
+  governance?: SessionGovernanceSummary | null;
 };
 
 export type UsageDashboardTaskRow = {
@@ -164,6 +180,8 @@ export type UsageDashboardTaskRow = {
   cost_estimate: number;
   created_at: string;
   updated_at: string;
+  source_kind: "provider" | "estimated" | "mixed" | "legacy";
+  governance?: TaskGovernanceSummary | null;
 };
 
 export type UsageDashboardResponse = {

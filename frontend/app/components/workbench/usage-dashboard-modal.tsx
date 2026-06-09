@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Modal, Segmented, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, Modal, Segmented, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { RefreshCw } from "lucide-react";
 
@@ -11,6 +11,7 @@ import { toUserFacingError } from "../../../lib/errors";
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
 import type {
+  SettingsSummary,
   UsageDashboardResponse,
   UsageDashboardSessionRow,
   UsageDashboardTaskRow,
@@ -27,11 +28,33 @@ type UsageScope = "global" | "session";
 type UsageMetric = "tokens" | "cost";
 type UsageView = "sessions" | "tasks";
 type UsageSourceFilter = "all" | "provider" | "estimated" | "mixed" | "legacy";
+const GOVERNANCE_FILTER_ALL = "__all__";
+
+function formatUsageSourceLabel(
+  value: UsageSourceFilter,
+  t: ReturnType<typeof useMessages>,
+): string {
+  if (value === "provider") {
+    return t.sidebar.usage.sourceProvider;
+  }
+  if (value === "estimated") {
+    return t.sidebar.usage.sourceEstimated;
+  }
+  if (value === "mixed") {
+    return t.sidebar.usage.sourceMixed;
+  }
+  if (value === "legacy") {
+    return t.sidebar.usage.sourceLegacy;
+  }
+  return t.sidebar.usage.sourceFilterAll;
+}
 
 function buildDashboardUrl(args: {
   scope: UsageScope;
   sessionId: string | null;
   sourceFilter: UsageSourceFilter;
+  toolRegistryProfileFilter: string;
+  toolRegistryProviderSourceFilter: string;
 }): string {
   const params = new URLSearchParams();
   params.set("window_days", "14");
@@ -42,6 +65,15 @@ function buildDashboardUrl(args: {
   }
   if (args.sourceFilter !== "all") {
     params.set("source_kind", args.sourceFilter);
+  }
+  if (args.toolRegistryProfileFilter !== GOVERNANCE_FILTER_ALL) {
+    params.set("tool_registry_profile", args.toolRegistryProfileFilter);
+  }
+  if (args.toolRegistryProviderSourceFilter !== GOVERNANCE_FILTER_ALL) {
+    params.set(
+      "tool_registry_provider_source",
+      args.toolRegistryProviderSourceFilter,
+    );
   }
   return `${API_BASE_URL}/api/tasks/usage/dashboard?${params.toString()}`;
 }
@@ -83,6 +115,10 @@ export function UsageDashboardModal({
   const [metric, setMetric] = useState<UsageMetric>("tokens");
   const [view, setView] = useState<UsageView>("sessions");
   const [sourceFilter, setSourceFilter] = useState<UsageSourceFilter>("all");
+  const [toolRegistryProfileFilter, setToolRegistryProfileFilter] =
+    useState<string>(GOVERNANCE_FILTER_ALL);
+  const [toolRegistryProviderSourceFilter, setToolRegistryProviderSourceFilter] =
+    useState<string>(GOVERNANCE_FILTER_ALL);
 
   useEffect(() => {
     if (!open) {
@@ -92,13 +128,30 @@ export function UsageDashboardModal({
     setMetric("tokens");
     setView("sessions");
     setSourceFilter("all");
+    setToolRegistryProfileFilter(GOVERNANCE_FILTER_ALL);
+    setToolRegistryProviderSourceFilter(GOVERNANCE_FILTER_ALL);
   }, [open, activeSessionId]);
 
   const resolvedScope: UsageScope =
     scope === "session" && activeSessionId ? "session" : "global";
 
+  const settingsQuery = useQuery({
+    queryKey: ["usage-dashboard-settings", open],
+    enabled: open,
+    staleTime: 30_000,
+    queryFn: () => apiJson<SettingsSummary>(`${API_BASE_URL}/api/settings`),
+  });
+
   const usageQuery = useQuery({
-    queryKey: ["usage-dashboard", open, resolvedScope, activeSessionId, sourceFilter],
+    queryKey: [
+      "usage-dashboard",
+      open,
+      resolvedScope,
+      activeSessionId,
+      sourceFilter,
+      toolRegistryProfileFilter,
+      toolRegistryProviderSourceFilter,
+    ],
     enabled: open,
     staleTime: 8_000,
     queryFn: () =>
@@ -107,6 +160,8 @@ export function UsageDashboardModal({
           scope: resolvedScope,
           sessionId: activeSessionId,
           sourceFilter,
+          toolRegistryProfileFilter,
+          toolRegistryProviderSourceFilter,
         }),
       ),
   });
@@ -124,6 +179,39 @@ export function UsageDashboardModal({
         maximumFractionDigits: 0,
       }),
     [localeTag],
+  );
+
+  const profileFilterOptions = useMemo(
+    () => [
+      {
+        label: t.sidebar.usage.governanceProfileFilterAll,
+        value: GOVERNANCE_FILTER_ALL,
+      },
+      ...(settingsQuery.data?.available_tool_registry_profiles ?? []).map((value) => ({
+        label: value,
+        value,
+      })),
+    ],
+    [settingsQuery.data?.available_tool_registry_profiles, t.sidebar.usage.governanceProfileFilterAll],
+  );
+
+  const providerSourceFilterOptions = useMemo(
+    () => [
+      {
+        label: t.sidebar.usage.governanceSourceFilterAll,
+        value: GOVERNANCE_FILTER_ALL,
+      },
+      ...(settingsQuery.data?.available_tool_registry_provider_sources ?? []).map(
+        (value) => ({
+          label: value,
+          value,
+        }),
+      ),
+    ],
+    [
+      settingsQuery.data?.available_tool_registry_provider_sources,
+      t.sidebar.usage.governanceSourceFilterAll,
+    ],
   );
 
   const formatCost = (value: number | null | undefined): string => {
@@ -146,10 +234,33 @@ export function UsageDashboardModal({
       dataIndex: "session_id",
       render: (_value: string, row) => {
         const label = row.session_title?.trim() || shortenId(row.session_id);
+        const governance = row.governance;
+        const governanceAllowedTools =
+          governance && governance.allowed_tool_labels.length > 0
+            ? governance.allowed_tool_labels
+            : governance?.allowed_tool_names ?? [];
         return (
           <div className="usage-session-cell">
             <strong title={label}>{label}</strong>
             <span>{shortenId(row.session_id)}</span>
+            <span
+              className="usage-session-governance"
+              data-testid="usage-session-governance-summary"
+            >
+              {[
+                governance?.profiles?.length
+                  ? `${t.sidebar.usage.governanceProfilesLabel} ${governance.profiles.join(", ")}`
+                  : null,
+                governance?.provider_sources?.length
+                  ? `${t.sidebar.usage.governanceSourcesLabel} ${governance.provider_sources.join(", ")}`
+                  : null,
+                governanceAllowedTools.length > 0
+                  ? `${t.inspector.traceMeta.allowedTools} ${governanceAllowedTools.join(", ")}`
+                  : null,
+              ]
+                .filter((item): item is string => Boolean(item))
+                .join(" · ")}
+            </span>
           </div>
         );
       },
@@ -187,11 +298,35 @@ export function UsageDashboardModal({
       dataIndex: "prompt_excerpt",
       render: (_value: string, row) => {
         const prompt = row.prompt_excerpt?.trim() || t.sidebar.usage.promptEmpty;
+        const governance = row.governance;
+        const governanceAllowedTools =
+          governance && governance.allowed_tool_labels.length > 0
+            ? governance.allowed_tool_labels
+            : governance?.allowed_tool_names ?? [];
         return (
           <div className="usage-task-prompt-cell">
             <strong title={prompt}>{prompt}</strong>
             <span>
               {row.session_title?.trim() || shortenId(row.session_id)} · {shortenId(row.task_id)}
+            </span>
+            <span
+              className="usage-task-governance"
+              data-testid="usage-task-governance-summary"
+            >
+              {[
+                `${t.sidebar.usage.sourceTitle} ${formatUsageSourceLabel(row.source_kind, t)}`,
+                governance?.profile
+                  ? `${t.inspector.traceMeta.toolRegistryProfile} ${governance.profile}`
+                  : null,
+                governance?.provider_source
+                  ? `${t.inspector.traceMeta.toolRegistrySource} ${governance.provider_source}`
+                  : null,
+                governanceAllowedTools.length > 0
+                  ? `${t.inspector.traceMeta.allowedTools} ${governanceAllowedTools.join(", ")}`
+                  : null,
+              ]
+                .filter((item): item is string => Boolean(item))
+                .join(" · ")}
             </span>
           </div>
         );
@@ -340,6 +475,32 @@ export function UsageDashboardModal({
               value: "legacy",
             },
           ]}
+        />
+      </div>
+      <div
+        className="usage-governance-filter-row"
+        data-testid="usage-governance-filter-row"
+      >
+        <span className="usage-governance-filter-label">
+          {t.sidebar.usage.governanceFilterTitle}
+        </span>
+        <Select
+          size="small"
+          data-testid="usage-governance-profile-filter"
+          value={toolRegistryProfileFilter}
+          onChange={(value) => setToolRegistryProfileFilter(value)}
+          options={profileFilterOptions}
+          popupMatchSelectWidth={false}
+          style={{ minWidth: 180 }}
+        />
+        <Select
+          size="small"
+          data-testid="usage-governance-source-filter"
+          value={toolRegistryProviderSourceFilter}
+          onChange={(value) => setToolRegistryProviderSourceFilter(value)}
+          options={providerSourceFilterOptions}
+          popupMatchSelectWidth={false}
+          style={{ minWidth: 180 }}
         />
       </div>
 

@@ -19,6 +19,7 @@ import {
   formatTimestamp,
   getTaskLabel,
   isTaskFailedStatus,
+  resolveTaskSnapshotSummary,
 } from "./utils";
 
 type TaskCenterProps = {
@@ -26,6 +27,8 @@ type TaskCenterProps = {
   activeSessionId: string | null;
   activeTaskId: string | null;
   recentTasks: TaskSummary[];
+  taskSearchQuery: string;
+  onTaskSearchQueryChange: (value: string) => void;
   tasksLoading: boolean;
   onSelectTask: (task: TaskSummary) => void;
   onClose: () => void;
@@ -59,6 +62,8 @@ export function TaskCenter({
   activeSessionId,
   activeTaskId,
   recentTasks,
+  taskSearchQuery,
+  onTaskSearchQueryChange,
   tasksLoading,
   onSelectTask,
   onClose,
@@ -74,7 +79,6 @@ export function TaskCenter({
   const [taskSortOrder, setTaskSortOrder] = useState<"latest" | "oldest">(
     "latest",
   );
-  const [taskSearchQuery, setTaskSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -109,7 +113,22 @@ export function TaskCenter({
         : statusMatched.filter((task) => {
             const prompt = task.prompt.trim().toLowerCase();
             const id = task.id.toLowerCase();
-            return prompt.includes(q) || id.includes(q);
+            const governance = resolveTaskSnapshotSummary({ task }).governance;
+            const governanceKeywords = governance
+              ? [
+                  governance.profile ?? "",
+                  governance.providerSource ?? "",
+                  ...governance.allowedToolNames,
+                  ...governance.allowedToolLabels,
+                ]
+                  .map((item) => item.trim().toLowerCase())
+                  .filter(Boolean)
+              : [];
+            return (
+              prompt.includes(q)
+              || id.includes(q)
+              || governanceKeywords.some((item) => item.includes(q))
+            );
           });
     const sorted = [...queryMatched].sort((a, b) => {
       const at = new Date(a.updated_at).getTime();
@@ -138,9 +157,34 @@ export function TaskCenter({
         key: "task",
         render: (_value: unknown, task: TaskSummary) => {
           const failedHint = extractTaskFailureHint(task);
+          const governance = resolveTaskSnapshotSummary({ task }).governance;
+          const governanceAllowedTools =
+            governance && governance.allowedToolLabels.length > 0
+              ? governance.allowedToolLabels
+              : governance?.allowedToolNames ?? [];
           return (
             <div className="task-center-cell-main">
               <strong>{getTaskLabel(task, t.workbench)}</strong>
+              {governance ? (
+                <span
+                  className="task-summary-governance"
+                  data-testid="task-center-governance-summary"
+                >
+                  {[
+                    governance.profile
+                      ? `${t.inspector.traceMeta.toolRegistryProfile} ${governance.profile}`
+                      : null,
+                    governance.providerSource
+                      ? `${t.inspector.traceMeta.toolRegistrySource} ${governance.providerSource}`
+                      : null,
+                    governanceAllowedTools.length > 0
+                      ? `${t.inspector.traceMeta.allowedTools} ${governanceAllowedTools.join(", ")}`
+                      : null,
+                  ]
+                    .filter((item): item is string => Boolean(item))
+                    .join(" · ")}
+                </span>
+              ) : null}
               {failedHint ? (
                 <span className="task-summary-failed-hint">
                   {t.inspector.taskFailureHint}: {failedHint}
@@ -280,7 +324,7 @@ export function TaskCenter({
               data-testid="task-center-keyword-filter"
               allowClear
               value={taskSearchQuery}
-              onChange={(e) => setTaskSearchQuery(e.target.value)}
+              onChange={(e) => onTaskSearchQueryChange(e.target.value)}
               placeholder={t.inspector.taskSearchPlaceholder}
             />
           </div>
@@ -304,7 +348,7 @@ export function TaskCenter({
                 onScopeModeChange(scopeDisabledSession ? "global" : "session");
                 setTaskStatusFilter("all");
                 setTaskSortOrder("latest");
-                setTaskSearchQuery("");
+                onTaskSearchQueryChange("");
               }}
             >
               {t.sidebar.audit.filterReset}

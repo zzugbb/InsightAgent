@@ -239,6 +239,7 @@ class TaskResponse(BaseModel):
     status_normalized: str
     status_label: str
     status_rank: int
+    governance: "TaskGovernanceSummary | None" = None
     trace_json: str | None = None
     usage_json: str | None = None
     created_at: str
@@ -318,6 +319,13 @@ class TaskUsageTrendPoint(BaseModel):
     cost_estimate: float
 
 
+class TaskUsageSessionGovernanceSummary(BaseModel):
+    profiles: list[str] = Field(default_factory=list)
+    provider_sources: list[str] = Field(default_factory=list)
+    allowed_tool_names: list[str] = Field(default_factory=list)
+    allowed_tool_labels: list[str] = Field(default_factory=list)
+
+
 class TaskUsageBySessionRow(BaseModel):
     session_id: str
     session_title: str | None = None
@@ -325,6 +333,7 @@ class TaskUsageBySessionRow(BaseModel):
     total_tokens: int
     cost_estimate: float
     last_task_at: str | None = None
+    governance: TaskUsageSessionGovernanceSummary | None = None
 
 
 class TaskUsageTopTaskRow(BaseModel):
@@ -336,6 +345,8 @@ class TaskUsageTopTaskRow(BaseModel):
     cost_estimate: float
     created_at: str
     updated_at: str
+    source_kind: str = "legacy"
+    governance: TaskGovernanceSummary | None = None
 
 
 class TaskUsageDashboardResponse(BaseModel):
@@ -371,11 +382,15 @@ class TaskExportTask(BaseModel):
     updated_at: str
 
 
-class TaskExportGovernance(BaseModel):
+class TaskGovernanceSummary(BaseModel):
     profile: str | None = None
     provider_source: str | None = None
     allowed_tool_names: list[str] = Field(default_factory=list)
     allowed_tool_labels: list[str] = Field(default_factory=list)
+
+
+class TaskExportGovernance(TaskGovernanceSummary):
+    pass
 
 
 class TaskExportTrace(BaseModel):
@@ -421,6 +436,79 @@ def _parse_task_usage_blob(task: dict) -> dict[str, object] | None:
     if not isinstance(parsed, dict):
         return None
     return parsed
+
+
+def _collect_task_governance_from_trace_json(
+    trace_json: str | None,
+) -> TaskGovernanceSummary | None:
+    if not isinstance(trace_json, str) or not trace_json.strip():
+        return None
+    try:
+        raw = json.loads(trace_json)
+    except Exception:
+        return None
+    if not isinstance(raw, list):
+        return None
+    steps = parse_trace_steps([item for item in raw if isinstance(item, dict)])
+    governance = _collect_trace_governance_export(steps)
+    if governance is None:
+        return None
+    return TaskGovernanceSummary(**governance.model_dump())
+
+
+def _build_task_response(task: dict) -> TaskResponse:
+    task_with_status = _with_status_meta(task)
+    return TaskResponse(
+        **task_with_status,
+        governance=_collect_task_governance_from_trace_json(
+            task_with_status.get("trace_json")
+        ),
+    )
+
+
+def _build_task_usage_top_task_row(row: dict) -> TaskUsageTopTaskRow:
+    session_title = row.get("session_title")
+    governance_raw = row.get("governance")
+    governance = (
+        TaskGovernanceSummary(**governance_raw)
+        if isinstance(governance_raw, dict)
+        else _collect_task_governance_from_trace_json(row.get("trace_json"))
+    )
+    return TaskUsageTopTaskRow(
+        task_id=str(row.get("task_id", "")),
+        session_id=str(row.get("session_id", "")),
+        session_title=session_title if isinstance(session_title, str) else None,
+        prompt_excerpt=str(row.get("prompt_excerpt", "")),
+        total_tokens=int(row.get("total_tokens", 0) or 0),
+        cost_estimate=float(row.get("cost_estimate", 0.0) or 0.0),
+        created_at=str(row.get("created_at", "")),
+        updated_at=str(row.get("updated_at", "")),
+        source_kind=str(row.get("source_kind", "legacy") or "legacy"),
+        governance=governance,
+    )
+
+
+def _build_task_usage_by_session_row(row: dict) -> TaskUsageBySessionRow:
+    session_title = row.get("session_title")
+    governance_raw = row.get("governance")
+    governance = (
+        TaskUsageSessionGovernanceSummary(**governance_raw)
+        if isinstance(governance_raw, dict)
+        else None
+    )
+    return TaskUsageBySessionRow(
+        session_id=str(row.get("session_id", "")),
+        session_title=session_title if isinstance(session_title, str) else None,
+        tasks_with_usage=int(row.get("tasks_with_usage", 0) or 0),
+        total_tokens=int(row.get("total_tokens", 0) or 0),
+        cost_estimate=float(row.get("cost_estimate", 0.0) or 0.0),
+        last_task_at=(
+            str(row.get("last_task_at"))
+            if isinstance(row.get("last_task_at"), str)
+            else None
+        ),
+        governance=governance,
+    )
 
 
 def _collect_rag_export(steps: list[TraceStep]) -> tuple[int, list[str], list[TaskExportRagChunk]]:
@@ -714,21 +802,37 @@ def get_tasks(
         default=None,
         description="仅返回该会话下的任务；会话须存在，否则 404",
     ),
+    query: str | None = Query(
+        default=None,
+        description="可选关键词搜索；匹配 prompt、task id 与治理 trace 元数据",
+    ),
     current_user: dict = Depends(get_current_user),
 ) -> TaskListResponse:
     user_id = str(current_user["id"])
+    search_query = query.strip() if query is not None and query.strip() else None
     if session_id is not None and session_id.strip():
         sid = session_id.strip()
         if get_session(sid, user_id) is None:
             raise HTTPException(status_code=404, detail="Session not found")
-        tasks = list_tasks(user_id=user_id, limit=limit, session_id=sid, offset=offset)
-        total = count_tasks(user_id, sid)
+        tasks = list_tasks(
+            user_id=user_id,
+            limit=limit,
+            session_id=sid,
+            offset=offset,
+            query=search_query,
+        )
+        total = count_tasks(user_id, sid, search_query)
     else:
-        tasks = list_tasks(user_id=user_id, limit=limit, offset=offset)
-        total = count_tasks(user_id, None)
+        tasks = list_tasks(
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+            query=search_query,
+        )
+        total = count_tasks(user_id, None, search_query)
     n = len(tasks)
     return TaskListResponse(
-        items=[TaskResponse(**_with_status_meta(task)) for task in tasks],
+        items=[_build_task_response(task) for task in tasks],
         total=total,
         limit=limit,
         offset=offset,
@@ -780,6 +884,14 @@ def get_tasks_usage_dashboard_route(
         default="all",
         description="来源筛选：all/provider/estimated/mixed/legacy",
     ),
+    tool_registry_profile: str | None = Query(
+        default=None,
+        description="可选：按 tool registry profile 精确过滤 usage 仪表盘",
+    ),
+    tool_registry_provider_source: str | None = Query(
+        default=None,
+        description="可选：按 tool registry provider source 精确过滤 usage 仪表盘",
+    ),
     current_user: dict = Depends(get_current_user),
 ) -> TaskUsageDashboardResponse:
     user_id = str(current_user["id"])
@@ -796,6 +908,8 @@ def get_tasks_usage_dashboard_route(
         user_id,
         session_id=sid,
         source_filter=None if source_normalized == "all" else source_normalized,
+        tool_registry_profile_filter=tool_registry_profile,
+        tool_registry_provider_source_filter=tool_registry_provider_source,
         window_days=window_days,
         top_sessions=top_sessions,
         top_tasks=top_tasks,
@@ -804,8 +918,8 @@ def get_tasks_usage_dashboard_route(
         window_days=int(payload["window_days"]),
         summary=TaskUsageSummaryResponse(**payload["summary"]),
         trend=[TaskUsageTrendPoint(**row) for row in payload["trend"]],
-        by_session=[TaskUsageBySessionRow(**row) for row in payload["by_session"]],
-        top_tasks=[TaskUsageTopTaskRow(**row) for row in payload["top_tasks"]],
+        by_session=[_build_task_usage_by_session_row(row) for row in payload["by_session"]],
+        top_tasks=[_build_task_usage_top_task_row(row) for row in payload["top_tasks"]],
     )
 
 
@@ -817,7 +931,7 @@ def get_task_detail(
     task = get_task(task_id, str(current_user["id"]))
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return TaskResponse(**_with_status_meta(task))
+    return _build_task_response(task)
 
 
 @router.post("/{task_id}/cancel", response_model=TaskCancelResponse)

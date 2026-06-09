@@ -520,8 +520,44 @@ export function resolveTaskSnapshotSummary(args: {
     ) ??
     findLastStepContent(steps);
 
-  let governance: TaskSnapshotSummary["governance"] = null;
+  const taskGovernance = args.task.governance;
+  const governanceFromTask =
+    taskGovernance &&
+    (
+      (typeof taskGovernance.profile === "string" && taskGovernance.profile.trim().length > 0)
+      || (
+        typeof taskGovernance.provider_source === "string"
+        && taskGovernance.provider_source.trim().length > 0
+      )
+      || taskGovernance.allowed_tool_names.length > 0
+      || taskGovernance.allowed_tool_labels.length > 0
+    )
+      ? {
+          profile:
+            typeof taskGovernance.profile === "string" && taskGovernance.profile.trim().length > 0
+              ? taskGovernance.profile.trim()
+              : null,
+          providerSource:
+            typeof taskGovernance.provider_source === "string"
+            && taskGovernance.provider_source.trim().length > 0
+              ? taskGovernance.provider_source.trim()
+              : null,
+          allowedToolNames: taskGovernance.allowed_tool_names
+            .filter((item) => typeof item === "string")
+            .map((item) => item.trim())
+            .filter(Boolean),
+          allowedToolLabels: taskGovernance.allowed_tool_labels
+            .filter((item) => typeof item === "string")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        }
+      : null;
+
+  let governance: TaskSnapshotSummary["governance"] = governanceFromTask;
   for (const step of steps) {
+    if (governance !== null) {
+      break;
+    }
     const meta = step.meta;
     if (!meta) {
       continue;

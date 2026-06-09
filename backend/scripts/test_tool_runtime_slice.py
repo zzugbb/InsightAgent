@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 
 import app.services.tool_runtime as tool_runtime_module  # type: ignore[import-not-found]
 import app.services.chat_execution_service as chat_execution_module  # type: ignore[import-not-found]
+import app.services.chat_persistence_service as chat_persistence_module  # type: ignore[import-not-found]
 import app.api.routes.tasks as task_routes_module  # type: ignore[import-not-found]
 import app.api.routes.sessions as session_routes_module  # type: ignore[import-not-found]
 from app.api.routes.settings import (  # type: ignore[import-not-found]
@@ -668,6 +669,609 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             payload.trace.governance.allowed_tool_labels,
             ["Task Planner"],
+        )
+
+    def test_build_task_response_surfaces_registry_governance_summary(self) -> None:
+        task = {
+            "id": "task-response-governance",
+            "session_id": "session-response-governance",
+            "prompt": "task response governance summary",
+            "status": "completed",
+            "created_at": "2026-06-09T10:00:00",
+            "updated_at": "2026-06-09T10:05:00",
+            "trace_json": json.dumps(
+                [
+                    {
+                        "id": "trace-response-1",
+                        "type": "thought",
+                        "content": "Planner constrained the tool set.",
+                        "seq": 1,
+                        "meta": {
+                            "tool_registry_profile": "planning_only",
+                            "tool_registry_provider_source": "planning_suite",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                    },
+                ]
+            ),
+            "usage_json": None,
+        }
+
+        payload = task_routes_module._build_task_response(  # type: ignore[attr-defined]
+            task,
+        )
+
+        self.assertIsNotNone(payload.governance)
+        assert payload.governance is not None
+        self.assertEqual(payload.governance.profile, "planning_only")
+        self.assertEqual(payload.governance.provider_source, "planning_suite")
+        self.assertEqual(payload.governance.allowed_tool_names, ["task_plan"])
+        self.assertEqual(
+            payload.governance.allowed_tool_labels,
+            ["Task Planner Suite"],
+        )
+
+    def test_get_tasks_forwards_query_to_list_and_count(self) -> None:
+        original_get_session = task_routes_module.get_session
+        original_list_tasks = task_routes_module.list_tasks
+        original_count_tasks = task_routes_module.count_tasks
+        calls: list[tuple[str, str | None]] = []
+        try:
+            task_routes_module.get_session = (
+                lambda session_id, user_id: {
+                    "id": session_id,
+                    "user_id": user_id,
+                    "title": "Query Session",
+                }
+            )
+
+            def fake_list_tasks(*, user_id, limit, session_id=None, offset=0, query=None):
+                calls.append(("list", query))
+                return [
+                    {
+                        "id": "task-query-1",
+                        "session_id": session_id or "session-query",
+                        "prompt": "query matched task",
+                        "status": "completed",
+                        "trace_json": None,
+                        "usage_json": None,
+                        "created_at": "2026-06-09T11:00:00",
+                        "updated_at": "2026-06-09T11:05:00",
+                    }
+                ]
+
+            def fake_count_tasks(user_id, session_id=None, query=None):
+                calls.append(("count", query))
+                return 1
+
+            task_routes_module.list_tasks = fake_list_tasks
+            task_routes_module.count_tasks = fake_count_tasks
+
+            payload = task_routes_module.get_tasks(
+                limit=20,
+                offset=0,
+                session_id="session-query",
+                query="planning_suite",
+                current_user={"id": "user-query"},
+            )
+        finally:
+            task_routes_module.get_session = original_get_session
+            task_routes_module.list_tasks = original_list_tasks
+            task_routes_module.count_tasks = original_count_tasks
+
+        self.assertEqual(calls, [("list", "planning_suite"), ("count", "planning_suite")])
+        self.assertEqual(payload.total, 1)
+        self.assertEqual(len(payload.items), 1)
+
+    def test_list_tasks_applies_query_to_prompt_id_and_trace_json(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeCursor:
+            def fetchall(self) -> list[dict]:
+                return []
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["query"] = query
+                captured["params"] = tuple(params)
+                return FakeCursor()
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module.list_tasks(
+                user_id="user-query",
+                limit=20,
+                session_id="session-query",
+                offset=40,
+                query="planning_suite",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        rendered_query = str(captured.get("query", ""))
+        rendered_params = tuple(captured.get("params", ()))
+        self.assertIn("LOWER(prompt) LIKE ?", rendered_query)
+        self.assertIn("LOWER(id) LIKE ?", rendered_query)
+        self.assertIn("LOWER(COALESCE(trace_json, '')) LIKE ?", rendered_query)
+        self.assertEqual(
+            rendered_params,
+            (
+                "user-query",
+                "session-query",
+                "%planning_suite%",
+                "%planning_suite%",
+                "%planning_suite%",
+                20,
+                40,
+            ),
+        )
+
+    def test_collect_task_governance_from_trace_json_returns_summary(self) -> None:
+        trace_json = json.dumps(
+            [
+                {
+                    "id": "trace-governance-1",
+                    "type": "thought",
+                    "content": "planner constrained tools",
+                    "seq": 1,
+                    "meta": {
+                        "tool_registry_profile": "planning_only",
+                        "tool_registry_provider_source": "planning_suite",
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner Suite"],
+                    },
+                }
+            ]
+        )
+
+        payload = task_routes_module._collect_task_governance_from_trace_json(  # type: ignore[attr-defined]
+            trace_json,
+        )
+
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload.profile, "planning_only")
+        self.assertEqual(payload.provider_source, "planning_suite")
+        self.assertEqual(payload.allowed_tool_names, ["task_plan"])
+        self.assertEqual(payload.allowed_tool_labels, ["Task Planner Suite"])
+
+    def test_get_tasks_usage_dashboard_top_task_surfaces_governance_summary(self) -> None:
+        rows = [
+            {
+                "id": "task-usage-governance-1",
+                "session_id": "session-usage-governance",
+                "prompt": "usage dashboard governance task",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 12,
+                        "completion_tokens": 34,
+                        "cost_estimate": 0.12,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": json.dumps(
+                    [
+                        {
+                            "id": "trace-usage-governance-1",
+                            "type": "thought",
+                            "content": "Planner constrained the task.",
+                            "seq": 1,
+                            "meta": {
+                                "tool_registry_profile": "planning_only",
+                                "tool_registry_provider_source": "planning_suite",
+                                "allowed_tool_names": ["task_plan"],
+                                "allowed_tool_labels": ["Task Planner Suite"],
+                            },
+                        }
+                    ]
+                ),
+                "created_at": "2026-06-09T10:00:00",
+                "updated_at": "2026-06-09T10:05:00",
+                "session_title": "Usage Governance Session",
+            }
+        ]
+
+        class FakeCursor:
+            def __init__(self, payload: list[dict]):
+                self._payload = payload
+
+            def fetchall(self) -> list[dict]:
+                return self._payload
+
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return FakeCursor(rows)
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            payload = chat_persistence_module.get_tasks_usage_dashboard(
+                "user-usage-governance",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        top_tasks = payload["top_tasks"]
+        self.assertEqual(len(top_tasks), 1)
+        row = top_tasks[0]
+        self.assertEqual(row["task_id"], "task-usage-governance-1")
+        self.assertEqual(row["source_kind"], "provider")
+        self.assertEqual(
+            row["governance"],
+            {
+                "profile": "planning_only",
+                "provider_source": "planning_suite",
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner Suite"],
+            },
+        )
+
+    def test_get_tasks_usage_dashboard_route_surfaces_top_task_governance_summary(self) -> None:
+        original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
+        try:
+            task_routes_module.get_tasks_usage_dashboard = lambda *_args, **_kwargs: {
+                "window_days": 14,
+                "summary": {
+                    "tasks_total": 1,
+                    "tasks_with_usage": 1,
+                    "source_tasks_provider": 1,
+                    "source_tasks_estimated": 0,
+                    "source_tasks_mixed": 0,
+                    "source_tasks_legacy": 0,
+                    "prompt_tokens": 12,
+                    "completion_tokens": 34,
+                    "total_tokens": 46,
+                    "cost_estimate": 0.12,
+                    "avg_total_tokens": 46.0,
+                    "avg_cost_estimate": 0.12,
+                },
+                "trend": [],
+                "by_session": [],
+                "top_tasks": [
+                    {
+                        "task_id": "task-usage-governance-1",
+                        "session_id": "session-usage-governance",
+                        "session_title": "Usage Governance Session",
+                        "prompt_excerpt": "usage dashboard governance task",
+                        "total_tokens": 46,
+                        "cost_estimate": 0.12,
+                        "created_at": "2026-06-09T10:00:00",
+                        "updated_at": "2026-06-09T10:05:00",
+                        "source_kind": "provider",
+                        "governance": {
+                            "profile": "planning_only",
+                            "provider_source": "planning_suite",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                    }
+                ],
+            }
+
+            payload = task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=10,
+                top_tasks=14,
+                source_kind="all",
+                current_user={"id": "user-usage-governance"},
+            )
+        finally:
+            task_routes_module.get_tasks_usage_dashboard = original_get_tasks_usage_dashboard
+
+        self.assertEqual(len(payload.top_tasks), 1)
+        row = payload.top_tasks[0]
+        self.assertEqual(row.source_kind, "provider")
+        self.assertIsNotNone(row.governance)
+        assert row.governance is not None
+        self.assertEqual(row.governance.profile, "planning_only")
+        self.assertEqual(row.governance.provider_source, "planning_suite")
+        self.assertEqual(row.governance.allowed_tool_names, ["task_plan"])
+        self.assertEqual(row.governance.allowed_tool_labels, ["Task Planner Suite"])
+
+    def test_get_tasks_usage_dashboard_by_session_surfaces_governance_summary(self) -> None:
+        rows = [
+            {
+                "id": "task-usage-session-governance-1",
+                "session_id": "session-usage-governance",
+                "prompt": "usage session governance task",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 20,
+                        "completion_tokens": 30,
+                        "cost_estimate": 0.15,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": json.dumps(
+                    [
+                        {
+                            "id": "trace-usage-session-governance-1",
+                            "type": "thought",
+                            "content": "Planner constrained the task.",
+                            "seq": 1,
+                            "meta": {
+                                "tool_registry_profile": "planning_only",
+                                "tool_registry_provider_source": "planning_suite",
+                                "allowed_tool_names": ["task_plan"],
+                                "allowed_tool_labels": ["Task Planner Suite"],
+                            },
+                        }
+                    ]
+                ),
+                "created_at": "2026-06-09T10:00:00",
+                "updated_at": "2026-06-09T10:05:00",
+                "session_title": "Usage Governance Session",
+            }
+        ]
+
+        class FakeCursor:
+            def __init__(self, payload: list[dict]):
+                self._payload = payload
+
+            def fetchall(self) -> list[dict]:
+                return self._payload
+
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return FakeCursor(rows)
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            payload = chat_persistence_module.get_tasks_usage_dashboard(
+                "user-usage-session-governance",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        by_session = payload["by_session"]
+        self.assertEqual(len(by_session), 1)
+        row = by_session[0]
+        self.assertEqual(row["session_id"], "session-usage-governance")
+        self.assertEqual(
+            row["governance"],
+            {
+                "profiles": ["planning_only"],
+                "provider_sources": ["planning_suite"],
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner Suite"],
+            },
+        )
+
+    def test_get_tasks_usage_dashboard_route_surfaces_session_governance_summary(self) -> None:
+        original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
+        try:
+            task_routes_module.get_tasks_usage_dashboard = lambda *_args, **_kwargs: {
+                "window_days": 14,
+                "summary": {
+                    "tasks_total": 1,
+                    "tasks_with_usage": 1,
+                    "source_tasks_provider": 1,
+                    "source_tasks_estimated": 0,
+                    "source_tasks_mixed": 0,
+                    "source_tasks_legacy": 0,
+                    "prompt_tokens": 20,
+                    "completion_tokens": 30,
+                    "total_tokens": 50,
+                    "cost_estimate": 0.15,
+                    "avg_total_tokens": 50.0,
+                    "avg_cost_estimate": 0.15,
+                },
+                "trend": [],
+                "by_session": [
+                    {
+                        "session_id": "session-usage-governance",
+                        "session_title": "Usage Governance Session",
+                        "tasks_with_usage": 1,
+                        "total_tokens": 50,
+                        "cost_estimate": 0.15,
+                        "last_task_at": "2026-06-09T10:05:00",
+                        "governance": {
+                            "profiles": ["planning_only"],
+                            "provider_sources": ["planning_suite"],
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                    }
+                ],
+                "top_tasks": [],
+            }
+
+            payload = task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=10,
+                top_tasks=14,
+                source_kind="all",
+                current_user={"id": "user-usage-session-governance"},
+            )
+        finally:
+            task_routes_module.get_tasks_usage_dashboard = original_get_tasks_usage_dashboard
+
+        self.assertEqual(len(payload.by_session), 1)
+        row = payload.by_session[0]
+        self.assertIsNotNone(row.governance)
+        assert row.governance is not None
+        self.assertEqual(row.governance.profiles, ["planning_only"])
+        self.assertEqual(row.governance.provider_sources, ["planning_suite"])
+        self.assertEqual(row.governance.allowed_tool_names, ["task_plan"])
+        self.assertEqual(row.governance.allowed_tool_labels, ["Task Planner Suite"])
+
+    def test_get_tasks_usage_dashboard_filters_by_profile_and_provider_source(self) -> None:
+        rows = [
+            {
+                "id": "task-usage-filtered-1",
+                "session_id": "session-usage-filtered-1",
+                "prompt": "planning suite dashboard row",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 15,
+                        "cost_estimate": 0.05,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": json.dumps(
+                    [
+                        {
+                            "id": "trace-usage-filtered-1",
+                            "type": "thought",
+                            "content": "planner constrained task",
+                            "seq": 1,
+                            "meta": {
+                                "tool_registry_profile": "planning_only",
+                                "tool_registry_provider_source": "planning_suite",
+                                "allowed_tool_names": ["task_plan"],
+                                "allowed_tool_labels": ["Task Planner Suite"],
+                            },
+                        }
+                    ]
+                ),
+                "created_at": "2026-06-09T10:00:00",
+                "updated_at": "2026-06-09T10:05:00",
+                "session_title": "Planning Session",
+            },
+            {
+                "id": "task-usage-filtered-2",
+                "session_id": "session-usage-filtered-2",
+                "prompt": "retrieval suite dashboard row",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 8,
+                        "completion_tokens": 12,
+                        "cost_estimate": 0.03,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": json.dumps(
+                    [
+                        {
+                            "id": "trace-usage-filtered-2",
+                            "type": "thought",
+                            "content": "retrieval constrained task",
+                            "seq": 1,
+                            "meta": {
+                                "tool_registry_profile": "retrieval_only",
+                                "tool_registry_provider_source": "retrieval_suite",
+                                "allowed_tool_names": ["task_retrieve"],
+                                "allowed_tool_labels": ["Knowledge Retrieval Suite"],
+                            },
+                        }
+                    ]
+                ),
+                "created_at": "2026-06-09T11:00:00",
+                "updated_at": "2026-06-09T11:05:00",
+                "session_title": "Retrieval Session",
+            },
+        ]
+
+        class FakeCursor:
+            def __init__(self, payload: list[dict]):
+                self._payload = payload
+
+            def fetchall(self) -> list[dict]:
+                return self._payload
+
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return FakeCursor(rows)
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            payload = chat_persistence_module.get_tasks_usage_dashboard(
+                "user-usage-filtered",
+                tool_registry_profile_filter="planning_only",
+                tool_registry_provider_source_filter="planning_suite",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        self.assertEqual(payload["summary"]["tasks_with_usage"], 1)
+        self.assertEqual(len(payload["by_session"]), 1)
+        self.assertEqual(payload["by_session"][0]["session_id"], "session-usage-filtered-1")
+        self.assertEqual(len(payload["top_tasks"]), 1)
+        self.assertEqual(payload["top_tasks"][0]["task_id"], "task-usage-filtered-1")
+
+    def test_get_tasks_usage_dashboard_route_forwards_governance_filters(self) -> None:
+        original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
+        captured: dict[str, object] = {}
+        try:
+            def fake_get_tasks_usage_dashboard(user_id, **kwargs):
+                captured["user_id"] = user_id
+                captured.update(kwargs)
+                return {
+                    "window_days": 14,
+                    "summary": {
+                        "tasks_total": 0,
+                        "tasks_with_usage": 0,
+                        "source_tasks_provider": 0,
+                        "source_tasks_estimated": 0,
+                        "source_tasks_mixed": 0,
+                        "source_tasks_legacy": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "avg_total_tokens": None,
+                        "avg_cost_estimate": None,
+                    },
+                    "trend": [],
+                    "by_session": [],
+                    "top_tasks": [],
+                }
+
+            task_routes_module.get_tasks_usage_dashboard = fake_get_tasks_usage_dashboard
+
+            task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=10,
+                top_tasks=14,
+                source_kind="all",
+                tool_registry_profile="planning_only",
+                tool_registry_provider_source="planning_suite",
+                current_user={"id": "user-usage-filtered"},
+            )
+        finally:
+            task_routes_module.get_tasks_usage_dashboard = original_get_tasks_usage_dashboard
+
+        self.assertEqual(captured["user_id"], "user-usage-filtered")
+        self.assertEqual(captured["tool_registry_profile_filter"], "planning_only")
+        self.assertEqual(
+            captured["tool_registry_provider_source_filter"],
+            "planning_suite",
         )
 
     def test_build_task_export_markdown_includes_registry_governance_summary(self) -> None:

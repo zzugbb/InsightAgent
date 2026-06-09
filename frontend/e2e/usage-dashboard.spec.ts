@@ -241,6 +241,62 @@ test("usage dashboard source filter request and table alignments are stable", as
   await expect(page.getByTestId("usage-source-trend-block")).toBeVisible();
 });
 
+test("usage dashboard governance filters drive backend request params", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  const savedPayload = await saveToolRegistryProfile(page, "planning_only", {
+    source: "planning_suite",
+  });
+  expect(savedPayload.tool_registry_profile).toBe("planning_only");
+  expect(savedPayload.tool_registry_provider_source).toBe("planning_suite");
+
+  await runTaskToDone(
+    request,
+    auth.access_token,
+    "usage dashboard governance filter request contract [kb:usage] [calc:2+3]",
+  );
+  await waitUsageReady(request, auth.access_token);
+
+  await openSettingsMenu(page);
+  await page.getByTestId("settings-menu-usage").click();
+  await expect(page.locator(".usage-dashboard-ant-modal")).toBeVisible();
+
+  const profileResponse = page.waitForResponse((response) => {
+    if (!response.url().includes("/api/tasks/usage/dashboard")) {
+      return false;
+    }
+    const url = new URL(response.url());
+    return url.searchParams.get("tool_registry_profile") === "planning_only";
+  });
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "usage-governance-profile-filter",
+    value: "planning_only",
+  });
+  await profileResponse;
+
+  const sourceResponse = page.waitForResponse((response) => {
+    if (!response.url().includes("/api/tasks/usage/dashboard")) {
+      return false;
+    }
+    const url = new URL(response.url());
+    return (
+      url.searchParams.get("tool_registry_profile") === "planning_only"
+      && url.searchParams.get("tool_registry_provider_source") === "planning_suite"
+    );
+  });
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "usage-governance-source-filter",
+    value: "planning_suite",
+  });
+  await sourceResponse;
+});
+
 test("settings menu governance entries open expected modals @smoke", async ({
   page,
   request,
@@ -633,6 +689,42 @@ test("saved planning suite source propagates through runtime and export governan
   const taskPayload = (await taskResponse.json()) as { session_id: string };
   expect(taskPayload.session_id.trim()).not.toBe("");
 
+  const openTaskCenter = page.getByTestId("chat-open-task-center");
+  await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
+  await openTaskCenter.click();
+  await expect(page.getByTestId("task-center-shell")).toBeVisible({
+    timeout: 20_000,
+  });
+  const taskKeywordFilter = page.getByTestId("task-center-keyword-filter");
+  const taskQueryResponsePromise = page.waitForResponse((response) => {
+    if (response.request().method() !== "GET") {
+      return false;
+    }
+    try {
+      const url = new URL(response.url());
+      return (
+        url.pathname === "/api/tasks"
+        && url.searchParams.get("query") === "planning_suite"
+      );
+    } catch {
+      return false;
+    }
+  });
+  await taskKeywordFilter.fill("planning_suite");
+  const taskQueryResponse = await taskQueryResponsePromise;
+  expect(taskQueryResponse.ok()).toBeTruthy();
+  const taskCenterGovernance = page.getByTestId("task-center-governance-summary");
+  await expect
+    .poll(() => taskCenterGovernance.count(), {
+      timeout: 20_000,
+      intervals: [200, 400, 800],
+    })
+    .toBe(1);
+  await expect(taskCenterGovernance.first()).toContainText("planning_only");
+  await expect(taskCenterGovernance.first()).toContainText("planning_suite");
+  await expect(taskCenterGovernance.first()).toContainText("Task Planner Suite");
+  await taskKeywordFilter.fill(taskId);
+
   const detailPage = await openTaskDetailFromTaskCenter(page, taskId);
   const detailAllowedToolsMeta = detailPage
     .getByTestId("task-detail-trace-card-meta")
@@ -702,7 +794,26 @@ test("saved planning suite source propagates through runtime and export governan
     "Task Planner Suite",
   );
 
+  await waitUsageReady(request, auth.access_token);
   await detailPage.close();
+  await page.getByTestId("task-center-close").click();
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-usage").click();
+  await expect(page.locator(".usage-dashboard-ant-modal")).toBeVisible();
+  const usageSessionGovernance = page.getByTestId("usage-session-governance-summary");
+  await expect(usageSessionGovernance.first()).toContainText("planning_only");
+  await expect(usageSessionGovernance.first()).toContainText("planning_suite");
+  await expect(usageSessionGovernance.first()).toContainText("Task Planner Suite");
+  await page
+    .locator(".usage-bottom-head .ant-segmented-item")
+    .filter({ hasText: "Top tasks" })
+    .click();
+  const usageTaskGovernance = page.getByTestId("usage-task-governance-summary");
+  await expect(usageTaskGovernance.first()).toContainText("planning_only");
+  await expect(usageTaskGovernance.first()).toContainText("planning_suite");
+  await expect(usageTaskGovernance.first()).toContainText("Task Planner Suite");
+
+  await page.keyboard.press("Escape");
 });
 
 test("saved retrieval suite source propagates through runtime and export governance", async ({

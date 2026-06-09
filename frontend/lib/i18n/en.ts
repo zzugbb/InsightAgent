@@ -294,6 +294,9 @@ export const en: Messages = {
       sourceEstimated: "Estimated",
       sourceMixed: "Mixed",
       sourceLegacy: "Legacy",
+      governanceFilterTitle: "Governance filters",
+      governanceProfileFilterAll: "All profiles",
+      governanceSourceFilterAll: "All sources",
       sourceCoverage: (labeled: number, total: number) =>
         `Source labeled ${labeled} / ${total}`,
       sourceLegacyHint: (n: number) =>
@@ -314,6 +317,8 @@ export const en: Messages = {
       tableUpdatedAt: "Updated at",
       tableNoData: "No usage data to display.",
       promptEmpty: "No prompt excerpt",
+      governanceProfilesLabel: "Profiles",
+      governanceSourcesLabel: "Provider sources",
     },
     knowledgeBase: {
       title: "Knowledge base governance",
@@ -570,7 +575,7 @@ export const en: Messages = {
     taskSortLatest: "Latest",
     taskSortOldest: "Oldest",
     taskPinFailed: "Failed first",
-    taskSearchPlaceholder: "Search by task title or ID",
+    taskSearchPlaceholder: "Search by task title, ID, or governance keyword",
     taskFailureHint: "Failure hint",
     taskVisibleCount: (shown: number, total: number) =>
       `Showing ${shown} of ${total}`,

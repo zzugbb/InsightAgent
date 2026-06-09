@@ -316,18 +316,40 @@ def count_sessions(user_id: str) -> int:
     return int(row["n"]) if row else 0
 
 
-def count_tasks(user_id: str, session_id: str | None = None) -> int:
+def _build_task_search_clause(
+    query: str | None,
+    params: list[object],
+) -> str:
+    normalized = (query or "").strip().lower()
+    if not normalized:
+        return ""
+    like = f"%{normalized}%"
+    params.extend((like, like, like))
+    return """
+        AND (
+            LOWER(prompt) LIKE ?
+            OR LOWER(id) LIKE ?
+            OR LOWER(COALESCE(trace_json, '')) LIKE ?
+        )
+    """
+
+
+def count_tasks(
+    user_id: str,
+    session_id: str | None = None,
+    query: str | None = None,
+) -> int:
     with get_db_connection() as connection:
+        params: list[object] = [user_id]
+        session_clause = ""
         if session_id:
-            row = connection.execute(
-                "SELECT COUNT(*) AS n FROM tasks WHERE user_id = ? AND session_id = ?",
-                (user_id, session_id),
-            ).fetchone()
-        else:
-            row = connection.execute(
-                "SELECT COUNT(*) AS n FROM tasks WHERE user_id = ?",
-                (user_id,),
-            ).fetchone()
+            session_clause = " AND session_id = ?"
+            params.append(session_id)
+        search_clause = _build_task_search_clause(query, params)
+        row = connection.execute(
+            f"SELECT COUNT(*) AS n FROM tasks WHERE user_id = ?{session_clause}{search_clause}",
+            tuple(params),
+        ).fetchone()
     return int(row["n"]) if row else 0
 
 
@@ -399,30 +421,26 @@ def list_tasks(
     limit: int = 20,
     session_id: str | None = None,
     offset: int = 0,
+    query: str | None = None,
 ) -> list[dict]:
     with get_db_connection() as connection:
+        params: list[object] = [user_id]
+        session_clause = ""
         if session_id:
-            rows = connection.execute(
-                """
+            session_clause = " AND session_id = ?"
+            params.append(session_id)
+        search_clause = _build_task_search_clause(query, params)
+        params.extend((limit, offset))
+        rows = connection.execute(
+            f"""
                 SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
                 FROM tasks
-                WHERE user_id = ? AND session_id = ?
+                WHERE user_id = ?{session_clause}{search_clause}
                 ORDER BY updated_at DESC
                 LIMIT ? OFFSET ?
-                """,
-                (user_id, session_id, limit, offset),
-            ).fetchall()
-        else:
-            rows = connection.execute(
-                """
-                SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
-                FROM tasks
-                WHERE user_id = ?
-                ORDER BY updated_at DESC
-                LIMIT ? OFFSET ?
-                """,
-                (user_id, limit, offset),
-            ).fetchall()
+            """,
+            tuple(params),
+        ).fetchall()
 
     return [dict(row) for row in rows]
 
@@ -684,11 +702,122 @@ def _excerpt_prompt(value: object, limit: int = 90) -> str:
     return f"{normalized[:limit].rstrip()}..."
 
 
+def _extract_task_governance_from_trace_json(
+    trace_json: object,
+) -> dict[str, object] | None:
+    if not isinstance(trace_json, str) or not trace_json.strip():
+        return None
+    try:
+        raw = json.loads(trace_json)
+    except Exception:
+        return None
+    if not isinstance(raw, list):
+        return None
+
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        meta = item.get("meta")
+        if not isinstance(meta, dict):
+            continue
+
+        profile = (
+            meta.get("tool_registry_profile").strip()
+            if isinstance(meta.get("tool_registry_profile"), str)
+            and meta.get("tool_registry_profile").strip()
+            else None
+        )
+        provider_source = (
+            meta.get("tool_registry_provider_source").strip()
+            if isinstance(meta.get("tool_registry_provider_source"), str)
+            and meta.get("tool_registry_provider_source").strip()
+            else None
+        )
+        allowed_tool_names = [
+            value.strip()
+            for value in meta.get("allowed_tool_names", [])
+            if isinstance(value, str) and value.strip()
+        ]
+        allowed_tool_labels = [
+            value.strip()
+            for value in meta.get("allowed_tool_labels", [])
+            if isinstance(value, str) and value.strip()
+        ]
+        if (
+            profile is None
+            and provider_source is None
+            and not allowed_tool_names
+            and not allowed_tool_labels
+        ):
+            continue
+        return {
+            "profile": profile,
+            "provider_source": provider_source,
+            "allowed_tool_names": allowed_tool_names,
+            "allowed_tool_labels": allowed_tool_labels,
+        }
+    return None
+
+
+def _normalize_governance_filter(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    return normalized or None
+
+
+def _merge_session_governance_summary(
+    current: dict[str, object] | None,
+    task_governance: dict[str, object] | None,
+) -> dict[str, object] | None:
+    if task_governance is None:
+        return current
+
+    profiles = set(current.get("profiles", []) if isinstance(current, dict) else [])
+    provider_sources = set(
+        current.get("provider_sources", []) if isinstance(current, dict) else []
+    )
+    allowed_tool_names = set(
+        current.get("allowed_tool_names", []) if isinstance(current, dict) else []
+    )
+    allowed_tool_labels = set(
+        current.get("allowed_tool_labels", []) if isinstance(current, dict) else []
+    )
+
+    profile = task_governance.get("profile")
+    if isinstance(profile, str) and profile.strip():
+        profiles.add(profile.strip())
+
+    provider_source = task_governance.get("provider_source")
+    if isinstance(provider_source, str) and provider_source.strip():
+        provider_sources.add(provider_source.strip())
+
+    for item in task_governance.get("allowed_tool_names", []):
+        if isinstance(item, str) and item.strip():
+            allowed_tool_names.add(item.strip())
+
+    for item in task_governance.get("allowed_tool_labels", []):
+        if isinstance(item, str) and item.strip():
+            allowed_tool_labels.add(item.strip())
+
+    if not profiles and not provider_sources and not allowed_tool_names and not allowed_tool_labels:
+        return current
+
+    return {
+        "profiles": sorted(profiles),
+        "provider_sources": sorted(provider_sources),
+        "allowed_tool_names": sorted(allowed_tool_names),
+        "allowed_tool_labels": sorted(allowed_tool_labels),
+    }
+
+
 def get_tasks_usage_dashboard(
     user_id: str,
     *,
     session_id: str | None = None,
     source_filter: str | None = None,
+    tool_registry_profile_filter: str | None = None,
+    tool_registry_provider_source_filter: str | None = None,
     window_days: int = 14,
     top_sessions: int = 8,
     top_tasks: int = 12,
@@ -703,6 +832,10 @@ def get_tasks_usage_dashboard(
     safe_window_days = max(1, min(int(window_days), 90))
     safe_top_sessions = max(1, min(int(top_sessions), 30))
     safe_top_tasks = max(1, min(int(top_tasks), 50))
+    safe_profile_filter = _normalize_governance_filter(tool_registry_profile_filter)
+    safe_provider_source_filter = _normalize_governance_filter(
+        tool_registry_provider_source_filter
+    )
 
     with get_db_connection() as connection:
         if session_id:
@@ -713,6 +846,7 @@ def get_tasks_usage_dashboard(
                     t.session_id,
                     t.prompt,
                     t.usage_json,
+                    t.trace_json,
                     t.created_at,
                     t.updated_at,
                     s.title AS session_title
@@ -732,6 +866,7 @@ def get_tasks_usage_dashboard(
                     t.session_id,
                     t.prompt,
                     t.usage_json,
+                    t.trace_json,
                     t.created_at,
                     t.updated_at,
                     s.title AS session_title
@@ -788,6 +923,27 @@ def get_tasks_usage_dashboard(
         source_kind = _classify_usage_source(payload)
         if safe_source_filter is not None and source_kind != safe_source_filter:
             continue
+        task_governance = _extract_task_governance_from_trace_json(row["trace_json"])
+        governance_profile = (
+            task_governance.get("profile")
+            if isinstance(task_governance, dict)
+            else None
+        )
+        governance_provider_source = (
+            task_governance.get("provider_source")
+            if isinstance(task_governance, dict)
+            else None
+        )
+        if safe_profile_filter is not None:
+            if not isinstance(governance_profile, str):
+                continue
+            if governance_profile.strip().lower() != safe_profile_filter:
+                continue
+        if safe_provider_source_filter is not None:
+            if not isinstance(governance_provider_source, str):
+                continue
+            if governance_provider_source.strip().lower() != safe_provider_source_filter:
+                continue
 
         tasks_with_usage += 1
         if source_kind == "provider":
@@ -843,11 +999,16 @@ def get_tasks_usage_dashboard(
                 "total_tokens": 0,
                 "cost_estimate": 0.0,
                 "last_task_at": row["updated_at"],
+                "governance": None,
             }
             session_map[sid] = bucket
         bucket["tasks_with_usage"] = int(bucket["tasks_with_usage"]) + 1
         bucket["total_tokens"] = int(bucket["total_tokens"]) + total_tokens_int
         bucket["cost_estimate"] = float(bucket["cost_estimate"]) + cost_value
+        bucket["governance"] = _merge_session_governance_summary(
+            bucket.get("governance") if isinstance(bucket, dict) else None,
+            task_governance,
+        )
         last_task_at = bucket.get("last_task_at")
         if isinstance(row["updated_at"], str) and (
             not isinstance(last_task_at, str) or row["updated_at"] > last_task_at
@@ -864,6 +1025,9 @@ def get_tasks_usage_dashboard(
                 "cost_estimate": cost_value,
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
+                "source_kind": source_kind,
+                "governance": task_governance,
+                "trace_json": row["trace_json"],
             },
         )
 

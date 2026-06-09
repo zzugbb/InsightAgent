@@ -8,7 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import {
@@ -111,6 +111,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [taskCenterScope, setTaskCenterScope] = useState<"session" | "global">(
     "session",
   );
+  const [taskSearchQuery, setTaskSearchQuery] = useState("");
   const [prompt, setPrompt] = useState("");
   const [liveRegionText, setLiveRegionText] = useState("");
   const [sessionExporting, setSessionExporting] = useState<
@@ -251,10 +252,11 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
   });
 
-const TASK_PAGE_SESSION = 50;
-const TASK_PAGE_GLOBAL = 50;
+  const TASK_PAGE_SESSION = 50;
+  const TASK_PAGE_GLOBAL = 50;
   const taskScopeSessionId =
     taskCenterScope === "session" ? activeSessionId : null;
+  const deferredTaskSearchQuery = useDeferredValue(taskSearchQuery.trim());
 
   const tasksQuery = useInfiniteQuery({
     queryKey: [
@@ -262,6 +264,7 @@ const TASK_PAGE_GLOBAL = 50;
       "paged",
       taskCenterScope,
       taskScopeSessionId ?? "__global__",
+      deferredTaskSearchQuery,
     ],
     initialPageParam: 0,
     enabled: taskCenterScope === "global" || Boolean(taskScopeSessionId),
@@ -269,9 +272,12 @@ const TASK_PAGE_GLOBAL = 50;
       const limit =
         taskCenterScope === "session" ? TASK_PAGE_SESSION : TASK_PAGE_GLOBAL;
       const base = `${API_BASE_URL}/api/tasks?limit=${limit}&offset=${pageParam}`;
-      const url = taskScopeSessionId
+      const withSession = taskScopeSessionId
         ? `${base}&session_id=${encodeURIComponent(taskScopeSessionId)}`
         : base;
+      const url = deferredTaskSearchQuery
+        ? `${withSession}&query=${encodeURIComponent(deferredTaskSearchQuery)}`
+        : withSession;
       return apiJson<PaginatedList<TaskSummary>>(url);
     },
     getNextPageParam: (lastPage) =>
@@ -1475,6 +1481,8 @@ const TASK_PAGE_GLOBAL = 50;
           activeSessionId={activeSessionId}
           activeTaskId={activeTaskIdScoped}
           recentTasks={recentTasks}
+          taskSearchQuery={taskSearchQuery}
+          onTaskSearchQueryChange={setTaskSearchQuery}
           tasksLoading={tasksQuery.isLoading}
           onSelectTask={handleSelectTask}
           onClose={() => setTaskCenterDrawerOpen(false)}

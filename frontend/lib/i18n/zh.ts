@@ -288,6 +288,9 @@ export const zh: Messages = {
       sourceEstimated: "估算",
       sourceMixed: "混合",
       sourceLegacy: "旧数据",
+      governanceFilterTitle: "治理筛选",
+      governanceProfileFilterAll: "全部 Profiles",
+      governanceSourceFilterAll: "全部 Sources",
       sourceCoverage: (labeled: number, total: number) =>
         `来源已标注 ${labeled} / ${total}`,
       sourceLegacyHint: (n: number) =>
@@ -308,6 +311,8 @@ export const zh: Messages = {
       tableUpdatedAt: "更新时间",
       tableNoData: "暂无可展示用量数据。",
       promptEmpty: "无任务摘要",
+      governanceProfilesLabel: "Profiles",
+      governanceSourcesLabel: "Provider sources",
     },
     knowledgeBase: {
       title: "知识库治理",
@@ -557,7 +562,7 @@ export const zh: Messages = {
     taskSortLatest: "最新优先",
     taskSortOldest: "最早优先",
     taskPinFailed: "失败置顶",
-    taskSearchPlaceholder: "按任务标题或 ID 搜索",
+    taskSearchPlaceholder: "按任务标题、ID 或治理关键词搜索",
     taskFailureHint: "失败提示",
     taskVisibleCount: (shown: number, total: number) =>
       `显示 ${shown} / ${total}`,
