@@ -112,6 +112,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     "session",
   );
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
+  const [taskGovernanceProfileFilter, setTaskGovernanceProfileFilter] =
+    useState<string>("__all__");
+  const [taskGovernanceProviderSourceFilter, setTaskGovernanceProviderSourceFilter] =
+    useState<string>("__all__");
   const [prompt, setPrompt] = useState("");
   const [liveRegionText, setLiveRegionText] = useState("");
   const [sessionExporting, setSessionExporting] = useState<
@@ -257,6 +261,12 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const taskScopeSessionId =
     taskCenterScope === "session" ? activeSessionId : null;
   const deferredTaskSearchQuery = useDeferredValue(taskSearchQuery.trim());
+  const deferredTaskGovernanceProfileFilter = useDeferredValue(
+    taskGovernanceProfileFilter,
+  );
+  const deferredTaskGovernanceProviderSourceFilter = useDeferredValue(
+    taskGovernanceProviderSourceFilter,
+  );
 
   const tasksQuery = useInfiniteQuery({
     queryKey: [
@@ -265,6 +275,8 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       taskCenterScope,
       taskScopeSessionId ?? "__global__",
       deferredTaskSearchQuery,
+      deferredTaskGovernanceProfileFilter,
+      deferredTaskGovernanceProviderSourceFilter,
     ],
     initialPageParam: 0,
     enabled: taskCenterScope === "global" || Boolean(taskScopeSessionId),
@@ -275,9 +287,21 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       const withSession = taskScopeSessionId
         ? `${base}&session_id=${encodeURIComponent(taskScopeSessionId)}`
         : base;
-      const url = deferredTaskSearchQuery
+      const searchUrl = deferredTaskSearchQuery
         ? `${withSession}&query=${encodeURIComponent(deferredTaskSearchQuery)}`
         : withSession;
+      const withProfileFilter =
+        deferredTaskGovernanceProfileFilter !== "__all__"
+          ? `${searchUrl}&tool_registry_profile=${encodeURIComponent(
+              deferredTaskGovernanceProfileFilter,
+            )}`
+          : searchUrl;
+      const url =
+        deferredTaskGovernanceProviderSourceFilter !== "__all__"
+          ? `${withProfileFilter}&tool_registry_provider_source=${encodeURIComponent(
+              deferredTaskGovernanceProviderSourceFilter,
+            )}`
+          : withProfileFilter;
       return apiJson<PaginatedList<TaskSummary>>(url);
     },
     getNextPageParam: (lastPage) =>
@@ -1483,6 +1507,18 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           recentTasks={recentTasks}
           taskSearchQuery={taskSearchQuery}
           onTaskSearchQueryChange={setTaskSearchQuery}
+          taskGovernanceProfileFilter={taskGovernanceProfileFilter}
+          onTaskGovernanceProfileFilterChange={setTaskGovernanceProfileFilter}
+          taskGovernanceProviderSourceFilter={taskGovernanceProviderSourceFilter}
+          onTaskGovernanceProviderSourceFilterChange={
+            setTaskGovernanceProviderSourceFilter
+          }
+          availableToolRegistryProfiles={
+            settingsQuery.data?.available_tool_registry_profiles ?? []
+          }
+          availableToolRegistryProviderSources={
+            settingsQuery.data?.available_tool_registry_provider_sources ?? []
+          }
           tasksLoading={tasksQuery.isLoading}
           onSelectTask={handleSelectTask}
           onClose={() => setTaskCenterDrawerOpen(false)}

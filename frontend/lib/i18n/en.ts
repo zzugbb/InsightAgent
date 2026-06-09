@@ -118,6 +118,8 @@ export const en: Messages = {
     scopeSession: "Current session",
     scopeGlobal: "All tasks",
     sessionRequired: "Select a session first, or switch to all tasks.",
+    governanceProfileFilterAll: "All profiles",
+    governanceSourceFilterAll: "All sources",
     tableTask: "Task",
     tableStatus: "Status",
     tableUsageSource: "Usage Source",

@@ -726,7 +726,16 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             )
 
-            def fake_list_tasks(*, user_id, limit, session_id=None, offset=0, query=None):
+            def fake_list_tasks(
+                *,
+                user_id,
+                limit,
+                session_id=None,
+                offset=0,
+                query=None,
+                tool_registry_profile_filter=None,
+                tool_registry_provider_source_filter=None,
+            ):
                 calls.append(("list", query))
                 return [
                     {
@@ -741,7 +750,13 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     }
                 ]
 
-            def fake_count_tasks(user_id, session_id=None, query=None):
+            def fake_count_tasks(
+                user_id,
+                session_id=None,
+                query=None,
+                tool_registry_profile_filter=None,
+                tool_registry_provider_source_filter=None,
+            ):
                 calls.append(("count", query))
                 return 1
 
@@ -763,6 +778,97 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(calls, [("list", "planning_suite"), ("count", "planning_suite")])
         self.assertEqual(payload.total, 1)
         self.assertEqual(len(payload.items), 1)
+
+    def test_get_tasks_forwards_governance_filters_to_list_and_count(self) -> None:
+        original_get_session = task_routes_module.get_session
+        original_list_tasks = task_routes_module.list_tasks
+        original_count_tasks = task_routes_module.count_tasks
+        captured: dict[str, object] = {}
+        try:
+            task_routes_module.get_session = (
+                lambda session_id, user_id: {
+                    "id": session_id,
+                    "user_id": user_id,
+                    "title": "Governance Session",
+                }
+            )
+
+            def fake_list_tasks(
+                *,
+                user_id,
+                limit,
+                session_id=None,
+                offset=0,
+                query=None,
+                tool_registry_profile_filter=None,
+                tool_registry_provider_source_filter=None,
+            ):
+                captured["list"] = {
+                    "user_id": user_id,
+                    "limit": limit,
+                    "session_id": session_id,
+                    "offset": offset,
+                    "query": query,
+                    "tool_registry_profile_filter": tool_registry_profile_filter,
+                    "tool_registry_provider_source_filter": tool_registry_provider_source_filter,
+                }
+                return []
+
+            def fake_count_tasks(
+                user_id,
+                session_id=None,
+                query=None,
+                tool_registry_profile_filter=None,
+                tool_registry_provider_source_filter=None,
+            ):
+                captured["count"] = {
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "query": query,
+                    "tool_registry_profile_filter": tool_registry_profile_filter,
+                    "tool_registry_provider_source_filter": tool_registry_provider_source_filter,
+                }
+                return 0
+
+            task_routes_module.list_tasks = fake_list_tasks
+            task_routes_module.count_tasks = fake_count_tasks
+
+            task_routes_module.get_tasks(
+                limit=20,
+                offset=0,
+                session_id="session-governance",
+                query=None,
+                tool_registry_profile="planning_only",
+                tool_registry_provider_source="planning_suite",
+                current_user={"id": "user-governance"},
+            )
+        finally:
+            task_routes_module.get_session = original_get_session
+            task_routes_module.list_tasks = original_list_tasks
+            task_routes_module.count_tasks = original_count_tasks
+
+        self.assertEqual(
+            captured["list"],
+            {
+                "user_id": "user-governance",
+                "limit": 20,
+                "session_id": "session-governance",
+                "offset": 0,
+                "query": None,
+                "tool_registry_profile_filter": "planning_only",
+                "tool_registry_provider_source_filter": "planning_suite",
+            },
+        )
+        self.assertEqual(
+            captured["count"],
+            {
+                "user_id": "user-governance",
+                "session_id": "session-governance",
+                "query": None,
+                "tool_registry_profile_filter": "planning_only",
+                "tool_registry_provider_source_filter": "planning_suite",
+            },
+        )
 
     def test_list_tasks_applies_query_to_prompt_id_and_trace_json(self) -> None:
         captured: dict[str, object] = {}
@@ -812,6 +918,100 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "%planning_suite%",
                 20,
                 40,
+            ),
+        )
+
+    def test_list_tasks_applies_governance_filters_to_trace_json(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeCursor:
+            def fetchall(self) -> list[dict]:
+                return []
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["query"] = query
+                captured["params"] = tuple(params)
+                return FakeCursor()
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module.list_tasks(
+                user_id="user-governance",
+                limit=20,
+                session_id="session-governance",
+                offset=0,
+                tool_registry_profile_filter="planning_only",
+                tool_registry_provider_source_filter="planning_suite",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        rendered_query = str(captured.get("query", ""))
+        rendered_params = tuple(captured.get("params", ()))
+        self.assertIn("LOWER(COALESCE(trace_json, '')) LIKE ?", rendered_query)
+        self.assertEqual(
+            rendered_params,
+            (
+                "user-governance",
+                "session-governance",
+                '%"tool_registry_profile": "planning_only"%',
+                '%"tool_registry_provider_source": "planning_suite"%',
+                20,
+                0,
+            ),
+        )
+
+    def test_count_tasks_applies_governance_filters_to_trace_json(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeCursor:
+            def fetchone(self) -> dict[str, int]:
+                return {"n": 0}
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["query"] = query
+                captured["params"] = tuple(params)
+                return FakeCursor()
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module.count_tasks(
+                user_id="user-governance",
+                session_id="session-governance",
+                tool_registry_profile_filter="planning_only",
+                tool_registry_provider_source_filter="planning_suite",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        rendered_query = str(captured.get("query", ""))
+        rendered_params = tuple(captured.get("params", ()))
+        self.assertIn("LOWER(COALESCE(trace_json, '')) LIKE ?", rendered_query)
+        self.assertEqual(
+            rendered_params,
+            (
+                "user-governance",
+                "session-governance",
+                '%"tool_registry_profile": "planning_only"%',
+                '%"tool_registry_provider_source": "planning_suite"%',
             ),
         )
 

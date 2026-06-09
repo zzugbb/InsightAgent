@@ -334,10 +334,35 @@ def _build_task_search_clause(
     """
 
 
+def _build_task_governance_filter_clause(
+    tool_registry_profile_filter: str | None,
+    tool_registry_provider_source_filter: str | None,
+    params: list[object],
+) -> str:
+    clauses: list[str] = []
+    normalized_profile = (tool_registry_profile_filter or "").strip().lower()
+    if normalized_profile:
+        clauses.append("LOWER(COALESCE(trace_json, '')) LIKE ?")
+        params.append(f'%\"tool_registry_profile\": \"{normalized_profile}\"%')
+    normalized_provider_source = (
+        (tool_registry_provider_source_filter or "").strip().lower()
+    )
+    if normalized_provider_source:
+        clauses.append("LOWER(COALESCE(trace_json, '')) LIKE ?")
+        params.append(
+            f'%\"tool_registry_provider_source\": \"{normalized_provider_source}\"%'
+        )
+    if not clauses:
+        return ""
+    return "\n        AND (" + " AND ".join(clauses) + ")"
+
+
 def count_tasks(
     user_id: str,
     session_id: str | None = None,
     query: str | None = None,
+    tool_registry_profile_filter: str | None = None,
+    tool_registry_provider_source_filter: str | None = None,
 ) -> int:
     with get_db_connection() as connection:
         params: list[object] = [user_id]
@@ -346,8 +371,13 @@ def count_tasks(
             session_clause = " AND session_id = ?"
             params.append(session_id)
         search_clause = _build_task_search_clause(query, params)
+        governance_clause = _build_task_governance_filter_clause(
+            tool_registry_profile_filter,
+            tool_registry_provider_source_filter,
+            params,
+        )
         row = connection.execute(
-            f"SELECT COUNT(*) AS n FROM tasks WHERE user_id = ?{session_clause}{search_clause}",
+            f"SELECT COUNT(*) AS n FROM tasks WHERE user_id = ?{session_clause}{search_clause}{governance_clause}",
             tuple(params),
         ).fetchone()
     return int(row["n"]) if row else 0
@@ -422,6 +452,8 @@ def list_tasks(
     session_id: str | None = None,
     offset: int = 0,
     query: str | None = None,
+    tool_registry_profile_filter: str | None = None,
+    tool_registry_provider_source_filter: str | None = None,
 ) -> list[dict]:
     with get_db_connection() as connection:
         params: list[object] = [user_id]
@@ -430,12 +462,17 @@ def list_tasks(
             session_clause = " AND session_id = ?"
             params.append(session_id)
         search_clause = _build_task_search_clause(query, params)
+        governance_clause = _build_task_governance_filter_clause(
+            tool_registry_profile_filter,
+            tool_registry_provider_source_filter,
+            params,
+        )
         params.extend((limit, offset))
         rows = connection.execute(
             f"""
                 SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
                 FROM tasks
-                WHERE user_id = ?{session_clause}{search_clause}
+                WHERE user_id = ?{session_clause}{search_clause}{governance_clause}
                 ORDER BY updated_at DESC
                 LIMIT ? OFFSET ?
             """,

@@ -806,10 +806,31 @@ def get_tasks(
         default=None,
         description="可选关键词搜索；匹配 prompt、task id 与治理 trace 元数据",
     ),
+    tool_registry_profile: str | None = Query(
+        default=None,
+        description="可选：按 tool registry profile 精确过滤任务列表",
+    ),
+    tool_registry_provider_source: str | None = Query(
+        default=None,
+        description="可选：按 tool registry provider source 精确过滤任务列表",
+    ),
     current_user: dict = Depends(get_current_user),
 ) -> TaskListResponse:
     user_id = str(current_user["id"])
     search_query = query.strip() if query is not None and query.strip() else None
+    profile_filter = (
+        tool_registry_profile.strip()
+        if isinstance(tool_registry_profile, str) and tool_registry_profile.strip()
+        else None
+    )
+    provider_source_filter = (
+        tool_registry_provider_source.strip()
+        if (
+            isinstance(tool_registry_provider_source, str)
+            and tool_registry_provider_source.strip()
+        )
+        else None
+    )
     if session_id is not None and session_id.strip():
         sid = session_id.strip()
         if get_session(sid, user_id) is None:
@@ -820,16 +841,32 @@ def get_tasks(
             session_id=sid,
             offset=offset,
             query=search_query,
+            tool_registry_profile_filter=profile_filter,
+            tool_registry_provider_source_filter=provider_source_filter,
         )
-        total = count_tasks(user_id, sid, search_query)
+        total = count_tasks(
+            user_id,
+            sid,
+            search_query,
+            tool_registry_profile_filter=profile_filter,
+            tool_registry_provider_source_filter=provider_source_filter,
+        )
     else:
         tasks = list_tasks(
             user_id=user_id,
             limit=limit,
             offset=offset,
             query=search_query,
+            tool_registry_profile_filter=profile_filter,
+            tool_registry_provider_source_filter=provider_source_filter,
         )
-        total = count_tasks(user_id, None, search_query)
+        total = count_tasks(
+            user_id,
+            None,
+            search_query,
+            tool_registry_profile_filter=profile_filter,
+            tool_registry_provider_source_filter=provider_source_filter,
+        )
     n = len(tasks)
     return TaskListResponse(
         items=[_build_task_response(task) for task in tasks],

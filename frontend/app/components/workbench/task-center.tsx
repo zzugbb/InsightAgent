@@ -29,6 +29,12 @@ type TaskCenterProps = {
   recentTasks: TaskSummary[];
   taskSearchQuery: string;
   onTaskSearchQueryChange: (value: string) => void;
+  taskGovernanceProfileFilter: string;
+  onTaskGovernanceProfileFilterChange: (value: string) => void;
+  taskGovernanceProviderSourceFilter: string;
+  onTaskGovernanceProviderSourceFilterChange: (value: string) => void;
+  availableToolRegistryProfiles: string[];
+  availableToolRegistryProviderSources: string[];
   tasksLoading: boolean;
   onSelectTask: (task: TaskSummary) => void;
   onClose: () => void;
@@ -64,6 +70,12 @@ export function TaskCenter({
   recentTasks,
   taskSearchQuery,
   onTaskSearchQueryChange,
+  taskGovernanceProfileFilter,
+  onTaskGovernanceProfileFilterChange,
+  taskGovernanceProviderSourceFilter,
+  onTaskGovernanceProviderSourceFilterChange,
+  availableToolRegistryProfiles,
+  availableToolRegistryProviderSources,
   tasksLoading,
   onSelectTask,
   onClose,
@@ -73,6 +85,7 @@ export function TaskCenter({
 }: TaskCenterProps) {
   const t = useMessages();
   const { localeTag } = usePreferences();
+  const allGovernanceFilterValue = "__all__";
   const [taskStatusFilter, setTaskStatusFilter] = useState<
     "all" | "running" | "completed" | "failed"
   >("all");
@@ -327,6 +340,42 @@ export function TaskCenter({
               onChange={(e) => onTaskSearchQueryChange(e.target.value)}
               placeholder={t.inspector.taskSearchPlaceholder}
             />
+            <Select
+              data-testid="task-center-governance-profile-filter"
+              showSearch
+              optionFilterProp="label"
+              value={taskGovernanceProfileFilter}
+              onChange={onTaskGovernanceProfileFilterChange}
+              options={[
+                {
+                  label: t.taskCenter.governanceProfileFilterAll,
+                  value: allGovernanceFilterValue,
+                },
+                ...availableToolRegistryProfiles.map((value) => ({
+                  label: value,
+                  value,
+                })),
+              ]}
+              placeholder={t.taskCenter.governanceProfileFilterAll}
+            />
+            <Select
+              data-testid="task-center-governance-source-filter"
+              showSearch
+              optionFilterProp="label"
+              value={taskGovernanceProviderSourceFilter}
+              onChange={onTaskGovernanceProviderSourceFilterChange}
+              options={[
+                {
+                  label: t.taskCenter.governanceSourceFilterAll,
+                  value: allGovernanceFilterValue,
+                },
+                ...availableToolRegistryProviderSources.map((value) => ({
+                  label: value,
+                  value,
+                })),
+              ]}
+              placeholder={t.taskCenter.governanceSourceFilterAll}
+            />
           </div>
           <div className="task-center-filter-row task-center-filter-row--secondary">
             <Select
@@ -349,6 +398,10 @@ export function TaskCenter({
                 setTaskStatusFilter("all");
                 setTaskSortOrder("latest");
                 onTaskSearchQueryChange("");
+                onTaskGovernanceProfileFilterChange(allGovernanceFilterValue);
+                onTaskGovernanceProviderSourceFilterChange(
+                  allGovernanceFilterValue,
+                );
               }}
             >
               {t.sidebar.audit.filterReset}

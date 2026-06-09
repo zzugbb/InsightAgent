@@ -115,6 +115,8 @@ export const zh: Messages = {
     scopeSession: "当前会话",
     scopeGlobal: "全局任务",
     sessionRequired: "请先选择会话，或切换到全局任务。",
+    governanceProfileFilterAll: "全部 Profiles",
+    governanceSourceFilterAll: "全部 Sources",
     tableTask: "任务",
     tableStatus: "状态",
     tableUsageSource: "用量来源",
