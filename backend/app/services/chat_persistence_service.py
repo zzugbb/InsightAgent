@@ -43,6 +43,78 @@ def _normalize_trace_steps(trace_steps: list[dict]) -> list[dict]:
     return normalized_steps
 
 
+def _extract_task_governance_from_trace_steps(
+    trace_steps: list[dict],
+) -> dict[str, object] | None:
+    for item in trace_steps:
+        if not isinstance(item, dict):
+            continue
+        meta = item.get("meta")
+        if not isinstance(meta, dict):
+            continue
+
+        profile = (
+            meta.get("tool_registry_profile").strip()
+            if isinstance(meta.get("tool_registry_profile"), str)
+            and meta.get("tool_registry_profile").strip()
+            else None
+        )
+        provider_source = (
+            meta.get("tool_registry_provider_source").strip()
+            if isinstance(meta.get("tool_registry_provider_source"), str)
+            and meta.get("tool_registry_provider_source").strip()
+            else None
+        )
+        allowed_tool_names = [
+            value.strip()
+            for value in meta.get("allowed_tool_names", [])
+            if isinstance(value, str) and value.strip()
+        ]
+        allowed_tool_labels = [
+            value.strip()
+            for value in meta.get("allowed_tool_labels", [])
+            if isinstance(value, str) and value.strip()
+        ]
+        if (
+            profile is None
+            and provider_source is None
+            and not allowed_tool_names
+            and not allowed_tool_labels
+        ):
+            continue
+        return {
+            "profile": profile,
+            "provider_source": provider_source,
+            "allowed_tool_names": allowed_tool_names,
+            "allowed_tool_labels": allowed_tool_labels,
+        }
+    return None
+
+
+def _serialize_task_governance_columns(
+    trace_steps: list[dict],
+) -> tuple[str | None, str | None, str | None, str | None]:
+    governance = _extract_task_governance_from_trace_steps(trace_steps)
+    if governance is None:
+        return None, None, None, None
+    allowed_tool_names = governance.get("allowed_tool_names", [])
+    allowed_tool_labels = governance.get("allowed_tool_labels", [])
+    return (
+        governance.get("profile")
+        if isinstance(governance.get("profile"), str)
+        else None,
+        governance.get("provider_source")
+        if isinstance(governance.get("provider_source"), str)
+        else None,
+        json.dumps(allowed_tool_names, ensure_ascii=False)
+        if isinstance(allowed_tool_names, list)
+        else None,
+        json.dumps(allowed_tool_labels, ensure_ascii=False)
+        if isinstance(allowed_tool_labels, list)
+        else None,
+    )
+
+
 def ensure_session(prompt: str, user_id: str, session_id: str | None = None) -> str:
     current_time = _now_iso()
     resolved_session_id = session_id or str(uuid4())
@@ -186,17 +258,33 @@ def update_task_trace_steps(task_id: str, trace_steps: list[dict], user_id: str)
     """流式执行过程中写入部分 trace（不改变任务状态）。"""
     current_time = _now_iso()
     normalized_trace_steps = _normalize_trace_steps(trace_steps)
+    (
+        tool_registry_profile,
+        tool_registry_provider_source,
+        allowed_tool_names_json,
+        allowed_tool_labels_json,
+    ) = _serialize_task_governance_columns(normalized_trace_steps)
 
     with get_db_connection() as connection:
         connection.execute(
             """
             UPDATE tasks
-            SET trace_json = ?, updated_at = ?
+            SET
+                trace_json = ?,
+                updated_at = ?,
+                tool_registry_profile = ?,
+                tool_registry_provider_source = ?,
+                allowed_tool_names_json = ?,
+                allowed_tool_labels_json = ?
             WHERE id = ? AND user_id = ?
             """,
             (
                 json.dumps(normalized_trace_steps, ensure_ascii=False),
                 current_time,
+                tool_registry_profile,
+                tool_registry_provider_source,
+                allowed_tool_names_json,
+                allowed_tool_labels_json,
                 task_id,
                 user_id,
             ),
@@ -214,12 +302,26 @@ def complete_task(
     current_time = _now_iso()
     normalized_trace_steps = _normalize_trace_steps(trace_steps)
     usage_blob = json.dumps(usage, ensure_ascii=False) if usage is not None else None
+    (
+        tool_registry_profile,
+        tool_registry_provider_source,
+        allowed_tool_names_json,
+        allowed_tool_labels_json,
+    ) = _serialize_task_governance_columns(normalized_trace_steps)
 
     with get_db_connection() as connection:
         connection.execute(
             """
             UPDATE tasks
-            SET status = ?, trace_json = ?, usage_json = ?, updated_at = ?
+            SET
+                status = ?,
+                trace_json = ?,
+                usage_json = ?,
+                updated_at = ?,
+                tool_registry_profile = ?,
+                tool_registry_provider_source = ?,
+                allowed_tool_names_json = ?,
+                allowed_tool_labels_json = ?
             WHERE id = ? AND user_id = ?
             """,
             (
@@ -227,6 +329,10 @@ def complete_task(
                 json.dumps(normalized_trace_steps, ensure_ascii=False),
                 usage_blob,
                 current_time,
+                tool_registry_profile,
+                tool_registry_provider_source,
+                allowed_tool_names_json,
+                allowed_tool_labels_json,
                 task_id,
                 user_id,
             ),
@@ -342,16 +448,14 @@ def _build_task_governance_filter_clause(
     clauses: list[str] = []
     normalized_profile = (tool_registry_profile_filter or "").strip().lower()
     if normalized_profile:
-        clauses.append("LOWER(COALESCE(trace_json, '')) LIKE ?")
-        params.append(f'%\"tool_registry_profile\": \"{normalized_profile}\"%')
+        clauses.append("LOWER(COALESCE(tool_registry_profile, '')) = ?")
+        params.append(normalized_profile)
     normalized_provider_source = (
         (tool_registry_provider_source_filter or "").strip().lower()
     )
     if normalized_provider_source:
-        clauses.append("LOWER(COALESCE(trace_json, '')) LIKE ?")
-        params.append(
-            f'%\"tool_registry_provider_source\": \"{normalized_provider_source}\"%'
-        )
+        clauses.append("LOWER(COALESCE(tool_registry_provider_source, '')) = ?")
+        params.append(normalized_provider_source)
     if not clauses:
         return ""
     return "\n        AND (" + " AND ".join(clauses) + ")"
@@ -433,7 +537,19 @@ def get_task(task_id: str, user_id: str) -> dict | None:
     with get_db_connection() as connection:
         row = connection.execute(
             """
-            SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
+            SELECT
+                id,
+                session_id,
+                prompt,
+                status,
+                trace_json,
+                usage_json,
+                tool_registry_profile,
+                tool_registry_provider_source,
+                allowed_tool_names_json,
+                allowed_tool_labels_json,
+                created_at,
+                updated_at
             FROM tasks
             WHERE id = ? AND user_id = ?
             """,
@@ -470,7 +586,19 @@ def list_tasks(
         params.extend((limit, offset))
         rows = connection.execute(
             f"""
-                SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
+                SELECT
+                    id,
+                    session_id,
+                    prompt,
+                    status,
+                    trace_json,
+                    usage_json,
+                    tool_registry_profile,
+                    tool_registry_provider_source,
+                    allowed_tool_names_json,
+                    allowed_tool_labels_json,
+                    created_at,
+                    updated_at
                 FROM tasks
                 WHERE user_id = ?{session_clause}{search_clause}{governance_clause}
                 ORDER BY updated_at DESC
@@ -486,7 +614,19 @@ def get_session_tasks(session_id: str, user_id: str) -> list[dict]:
     with get_db_connection() as connection:
         rows = connection.execute(
             """
-            SELECT id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
+            SELECT
+                id,
+                session_id,
+                prompt,
+                status,
+                trace_json,
+                usage_json,
+                tool_registry_profile,
+                tool_registry_provider_source,
+                allowed_tool_names_json,
+                allowed_tool_labels_json,
+                created_at,
+                updated_at
             FROM tasks
             WHERE user_id = ? AND session_id = ?
             ORDER BY created_at ASC
@@ -751,49 +891,9 @@ def _extract_task_governance_from_trace_json(
     if not isinstance(raw, list):
         return None
 
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        meta = item.get("meta")
-        if not isinstance(meta, dict):
-            continue
-
-        profile = (
-            meta.get("tool_registry_profile").strip()
-            if isinstance(meta.get("tool_registry_profile"), str)
-            and meta.get("tool_registry_profile").strip()
-            else None
-        )
-        provider_source = (
-            meta.get("tool_registry_provider_source").strip()
-            if isinstance(meta.get("tool_registry_provider_source"), str)
-            and meta.get("tool_registry_provider_source").strip()
-            else None
-        )
-        allowed_tool_names = [
-            value.strip()
-            for value in meta.get("allowed_tool_names", [])
-            if isinstance(value, str) and value.strip()
-        ]
-        allowed_tool_labels = [
-            value.strip()
-            for value in meta.get("allowed_tool_labels", [])
-            if isinstance(value, str) and value.strip()
-        ]
-        if (
-            profile is None
-            and provider_source is None
-            and not allowed_tool_names
-            and not allowed_tool_labels
-        ):
-            continue
-        return {
-            "profile": profile,
-            "provider_source": provider_source,
-            "allowed_tool_names": allowed_tool_names,
-            "allowed_tool_labels": allowed_tool_labels,
-        }
-    return None
+    return _extract_task_governance_from_trace_steps(
+        [item for item in raw if isinstance(item, dict)]
+    )
 
 
 def _normalize_governance_filter(value: str | None) -> str | None:

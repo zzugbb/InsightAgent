@@ -17,6 +17,7 @@ import app.services.chat_execution_service as chat_execution_module  # type: ign
 import app.services.chat_persistence_service as chat_persistence_module  # type: ignore[import-not-found]
 import app.api.routes.tasks as task_routes_module  # type: ignore[import-not-found]
 import app.api.routes.sessions as session_routes_module  # type: ignore[import-not-found]
+import app.db as db_module  # type: ignore[import-not-found]
 from app.api.routes.settings import (  # type: ignore[import-not-found]
     _apply_tool_registry_preview_to_validate_response,
     _build_settings_summary_response,
@@ -712,6 +713,36 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["Task Planner Suite"],
         )
 
+    def test_build_task_response_prefers_persisted_governance_columns(self) -> None:
+        task = {
+            "id": "task-response-governance-columns",
+            "session_id": "session-response-governance-columns",
+            "prompt": "task response governance columns summary",
+            "status": "completed",
+            "created_at": "2026-06-09T10:00:00",
+            "updated_at": "2026-06-09T10:05:00",
+            "tool_registry_profile": "planning_only",
+            "tool_registry_provider_source": "planning_suite",
+            "allowed_tool_names_json": json.dumps(["task_plan"]),
+            "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+            "trace_json": None,
+            "usage_json": None,
+        }
+
+        payload = task_routes_module._build_task_response(  # type: ignore[attr-defined]
+            task,
+        )
+
+        self.assertIsNotNone(payload.governance)
+        assert payload.governance is not None
+        self.assertEqual(payload.governance.profile, "planning_only")
+        self.assertEqual(payload.governance.provider_source, "planning_suite")
+        self.assertEqual(payload.governance.allowed_tool_names, ["task_plan"])
+        self.assertEqual(
+            payload.governance.allowed_tool_labels,
+            ["Task Planner Suite"],
+        )
+
     def test_get_tasks_forwards_query_to_list_and_count(self) -> None:
         original_get_session = task_routes_module.get_session
         original_list_tasks = task_routes_module.list_tasks
@@ -921,7 +952,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
-    def test_list_tasks_applies_governance_filters_to_trace_json(self) -> None:
+    def test_list_tasks_applies_governance_filters_to_persisted_columns(self) -> None:
         captured: dict[str, object] = {}
 
         class FakeCursor:
@@ -957,20 +988,24 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         rendered_query = str(captured.get("query", ""))
         rendered_params = tuple(captured.get("params", ()))
-        self.assertIn("LOWER(COALESCE(trace_json, '')) LIKE ?", rendered_query)
+        self.assertIn("LOWER(COALESCE(tool_registry_profile, '')) = ?", rendered_query)
+        self.assertIn(
+            "LOWER(COALESCE(tool_registry_provider_source, '')) = ?",
+            rendered_query,
+        )
         self.assertEqual(
             rendered_params,
             (
                 "user-governance",
                 "session-governance",
-                '%"tool_registry_profile": "planning_only"%',
-                '%"tool_registry_provider_source": "planning_suite"%',
+                "planning_only",
+                "planning_suite",
                 20,
                 0,
             ),
         )
 
-    def test_count_tasks_applies_governance_filters_to_trace_json(self) -> None:
+    def test_count_tasks_applies_governance_filters_to_persisted_columns(self) -> None:
         captured: dict[str, object] = {}
 
         class FakeCursor:
@@ -1004,16 +1039,167 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         rendered_query = str(captured.get("query", ""))
         rendered_params = tuple(captured.get("params", ()))
-        self.assertIn("LOWER(COALESCE(trace_json, '')) LIKE ?", rendered_query)
+        self.assertIn("LOWER(COALESCE(tool_registry_profile, '')) = ?", rendered_query)
+        self.assertIn(
+            "LOWER(COALESCE(tool_registry_provider_source, '')) = ?",
+            rendered_query,
+        )
         self.assertEqual(
             rendered_params,
             (
                 "user-governance",
                 "session-governance",
-                '%"tool_registry_profile": "planning_only"%',
-                '%"tool_registry_provider_source": "planning_suite"%',
+                "planning_only",
+                "planning_suite",
             ),
         )
+
+    def test_update_task_trace_steps_persists_governance_columns(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["query"] = query
+                captured["params"] = tuple(params)
+                return SimpleNamespace(rowcount=1)
+
+            def commit(self) -> None:
+                captured["committed"] = True
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module.update_task_trace_steps(
+                "task-governance-columns",
+                [
+                    {
+                        "id": "trace-1",
+                        "type": "thought",
+                        "content": "planner constrained tools",
+                        "seq": 1,
+                        "meta": {
+                            "tool_registry_profile": "planning_only",
+                            "tool_registry_provider_source": "planning_suite",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                    }
+                ],
+                "user-governance-columns",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        rendered_query = str(captured.get("query", ""))
+        rendered_params = tuple(captured.get("params", ()))
+        self.assertIn("tool_registry_profile = ?", rendered_query)
+        self.assertIn("tool_registry_provider_source = ?", rendered_query)
+        self.assertIn("allowed_tool_names_json = ?", rendered_query)
+        self.assertIn("allowed_tool_labels_json = ?", rendered_query)
+        self.assertEqual(rendered_params[2], "planning_only")
+        self.assertEqual(rendered_params[3], "planning_suite")
+        self.assertEqual(json.loads(str(rendered_params[4])), ["task_plan"])
+        self.assertEqual(json.loads(str(rendered_params[5])), ["Task Planner Suite"])
+
+    def test_complete_task_persists_governance_columns(self) -> None:
+        captured: dict[str, object] = {}
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["query"] = query
+                captured["params"] = tuple(params)
+                return SimpleNamespace(rowcount=1)
+
+            def commit(self) -> None:
+                captured["committed"] = True
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module.complete_task(
+                "task-complete-governance-columns",
+                [
+                    {
+                        "id": "trace-1",
+                        "type": "thought",
+                        "content": "planner constrained tools",
+                        "seq": 1,
+                        "meta": {
+                            "tool_registry_profile": "planning_only",
+                            "tool_registry_provider_source": "planning_suite",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                    }
+                ],
+                "user-governance-columns",
+                usage={"prompt_tokens": 1, "completion_tokens": 2},
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        rendered_query = str(captured.get("query", ""))
+        rendered_params = tuple(captured.get("params", ()))
+        self.assertIn("tool_registry_profile = ?", rendered_query)
+        self.assertIn("tool_registry_provider_source = ?", rendered_query)
+        self.assertIn("allowed_tool_names_json = ?", rendered_query)
+        self.assertIn("allowed_tool_labels_json = ?", rendered_query)
+        self.assertEqual(rendered_params[4], "planning_only")
+        self.assertEqual(rendered_params[5], "planning_suite")
+        self.assertEqual(json.loads(str(rendered_params[6])), ["task_plan"])
+        self.assertEqual(json.loads(str(rendered_params[7])), ["Task Planner Suite"])
+
+    def test_initialize_postgres_database_ensures_task_governance_columns(self) -> None:
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return SimpleNamespace(rowcount=0)
+
+            def commit(self) -> None:
+                return None
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = db_module.get_db_connection
+        original_ensure_column = db_module._ensure_postgres_column
+        original_ensure_indexes = db_module._ensure_common_indexes
+        calls: list[tuple[str, str, str]] = []
+        try:
+            db_module.get_db_connection = lambda: FakeContextManager()
+            db_module._ensure_postgres_column = (
+                lambda connection, table, column, definition: calls.append(
+                    (table, column, definition)
+                )
+            )
+            db_module._ensure_common_indexes = lambda connection: None
+            db_module.initialize_postgres_database()
+        finally:
+            db_module.get_db_connection = original_get_db_connection
+            db_module._ensure_postgres_column = original_ensure_column
+            db_module._ensure_common_indexes = original_ensure_indexes
+
+        self.assertIn(("tasks", "tool_registry_profile", "TEXT"), calls)
+        self.assertIn(("tasks", "tool_registry_provider_source", "TEXT"), calls)
+        self.assertIn(("tasks", "allowed_tool_names_json", "TEXT"), calls)
+        self.assertIn(("tasks", "allowed_tool_labels_json", "TEXT"), calls)
 
     def test_collect_task_governance_from_trace_json_returns_summary(self) -> None:
         trace_json = json.dumps(

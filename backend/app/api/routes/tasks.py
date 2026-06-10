@@ -456,13 +456,57 @@ def _collect_task_governance_from_trace_json(
     return TaskGovernanceSummary(**governance.model_dump())
 
 
+def _collect_task_governance_from_task(
+    task: dict,
+) -> TaskGovernanceSummary | None:
+    raw_profile = task.get("tool_registry_profile")
+    raw_provider_source = task.get("tool_registry_provider_source")
+    raw_allowed_names = task.get("allowed_tool_names_json")
+    raw_allowed_labels = task.get("allowed_tool_labels_json")
+    profile = (
+        raw_profile.strip()
+        if isinstance(raw_profile, str) and raw_profile.strip()
+        else None
+    )
+    provider_source = (
+        raw_provider_source.strip()
+        if isinstance(raw_provider_source, str) and raw_provider_source.strip()
+        else None
+    )
+
+    def parse_string_list_blob(value: object) -> list[str]:
+        if not isinstance(value, str) or not value.strip():
+            return []
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            return []
+        if not isinstance(parsed, list):
+            return []
+        return [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
+
+    allowed_tool_names = parse_string_list_blob(raw_allowed_names)
+    allowed_tool_labels = parse_string_list_blob(raw_allowed_labels)
+    if (
+        profile is None
+        and provider_source is None
+        and not allowed_tool_names
+        and not allowed_tool_labels
+    ):
+        return _collect_task_governance_from_trace_json(task.get("trace_json"))
+    return TaskGovernanceSummary(
+        profile=profile,
+        provider_source=provider_source,
+        allowed_tool_names=allowed_tool_names,
+        allowed_tool_labels=allowed_tool_labels,
+    )
+
+
 def _build_task_response(task: dict) -> TaskResponse:
     task_with_status = _with_status_meta(task)
     return TaskResponse(
         **task_with_status,
-        governance=_collect_task_governance_from_trace_json(
-            task_with_status.get("trace_json")
-        ),
+        governance=_collect_task_governance_from_task(task_with_status),
     )
 
 

@@ -224,6 +224,10 @@ def initialize_postgres_database() -> None:
                 status TEXT NOT NULL,
                 trace_json TEXT,
                 usage_json TEXT,
+                tool_registry_profile TEXT,
+                tool_registry_provider_source TEXT,
+                allowed_tool_names_json TEXT,
+                allowed_tool_labels_json TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -260,6 +264,15 @@ def initialize_postgres_database() -> None:
             """
         )
         _ensure_postgres_column(connection, "tasks", "usage_json", "TEXT")
+        _ensure_postgres_column(connection, "tasks", "tool_registry_profile", "TEXT")
+        _ensure_postgres_column(
+            connection,
+            "tasks",
+            "tool_registry_provider_source",
+            "TEXT",
+        )
+        _ensure_postgres_column(connection, "tasks", "allowed_tool_names_json", "TEXT")
+        _ensure_postgres_column(connection, "tasks", "allowed_tool_labels_json", "TEXT")
         _ensure_postgres_column(connection, "sessions", "user_id", "TEXT")
         _ensure_postgres_column(connection, "tasks", "user_id", "TEXT")
         _ensure_postgres_column(connection, "messages", "user_id", "TEXT")

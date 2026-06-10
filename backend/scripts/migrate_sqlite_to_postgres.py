@@ -132,6 +132,10 @@ def _ensure_postgres_schema(pg_connection) -> None:
             status TEXT NOT NULL,
             trace_json TEXT,
             usage_json TEXT,
+            tool_registry_profile TEXT,
+            tool_registry_provider_source TEXT,
+            allowed_tool_names_json TEXT,
+            allowed_tool_labels_json TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -247,6 +251,10 @@ def main() -> None:
             "status",
             "trace_json",
             "usage_json",
+            "tool_registry_profile",
+            "tool_registry_provider_source",
+            "allowed_tool_names_json",
+            "allowed_tool_labels_json",
             "created_at",
             "updated_at",
         ],
@@ -355,9 +363,12 @@ def main() -> None:
             pg_connection.execute(
                 """
                 INSERT INTO tasks(
-                    id, user_id, session_id, prompt, status, trace_json, usage_json, created_at, updated_at
+                    id, user_id, session_id, prompt, status, trace_json, usage_json,
+                    tool_registry_profile, tool_registry_provider_source,
+                    allowed_tool_names_json, allowed_tool_labels_json,
+                    created_at, updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     user_id = EXCLUDED.user_id,
                     session_id = EXCLUDED.session_id,
@@ -365,6 +376,10 @@ def main() -> None:
                     status = EXCLUDED.status,
                     trace_json = EXCLUDED.trace_json,
                     usage_json = EXCLUDED.usage_json,
+                    tool_registry_profile = EXCLUDED.tool_registry_profile,
+                    tool_registry_provider_source = EXCLUDED.tool_registry_provider_source,
+                    allowed_tool_names_json = EXCLUDED.allowed_tool_names_json,
+                    allowed_tool_labels_json = EXCLUDED.allowed_tool_labels_json,
                     updated_at = EXCLUDED.updated_at
                 """,
                 (
@@ -375,6 +390,10 @@ def main() -> None:
                     row["status"],
                     row["trace_json"],
                     row["usage_json"],
+                    row.get("tool_registry_profile"),
+                    row.get("tool_registry_provider_source"),
+                    row.get("allowed_tool_names_json"),
+                    row.get("allowed_tool_labels_json"),
                     row["created_at"],
                     row["updated_at"],
                 ),
