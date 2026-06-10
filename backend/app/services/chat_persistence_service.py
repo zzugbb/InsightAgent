@@ -115,6 +115,54 @@ def _serialize_task_governance_columns(
     )
 
 
+def _parse_task_governance_json_list_blob(value: object) -> list[str]:
+    if not isinstance(value, str) or not value.strip():
+        return []
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
+
+
+def _extract_task_governance_from_task_row(
+    task: dict[str, object],
+) -> dict[str, object] | None:
+    raw_profile = task.get("tool_registry_profile")
+    raw_provider_source = task.get("tool_registry_provider_source")
+    profile = (
+        raw_profile.strip()
+        if isinstance(raw_profile, str) and raw_profile.strip()
+        else None
+    )
+    provider_source = (
+        raw_provider_source.strip()
+        if isinstance(raw_provider_source, str) and raw_provider_source.strip()
+        else None
+    )
+    allowed_tool_names = _parse_task_governance_json_list_blob(
+        task.get("allowed_tool_names_json")
+    )
+    allowed_tool_labels = _parse_task_governance_json_list_blob(
+        task.get("allowed_tool_labels_json")
+    )
+    if (
+        profile is None
+        and provider_source is None
+        and not allowed_tool_names
+        and not allowed_tool_labels
+    ):
+        return _extract_task_governance_from_trace_json(task.get("trace_json"))
+    return {
+        "profile": profile,
+        "provider_source": provider_source,
+        "allowed_tool_names": allowed_tool_names,
+        "allowed_tool_labels": allowed_tool_labels,
+    }
+
+
 def ensure_session(prompt: str, user_id: str, session_id: str | None = None) -> str:
     current_time = _now_iso()
     resolved_session_id = session_id or str(uuid4())
@@ -984,6 +1032,10 @@ def get_tasks_usage_dashboard(
                     t.prompt,
                     t.usage_json,
                     t.trace_json,
+                    t.tool_registry_profile,
+                    t.tool_registry_provider_source,
+                    t.allowed_tool_names_json,
+                    t.allowed_tool_labels_json,
                     t.created_at,
                     t.updated_at,
                     s.title AS session_title
@@ -1004,6 +1056,10 @@ def get_tasks_usage_dashboard(
                     t.prompt,
                     t.usage_json,
                     t.trace_json,
+                    t.tool_registry_profile,
+                    t.tool_registry_provider_source,
+                    t.allowed_tool_names_json,
+                    t.allowed_tool_labels_json,
                     t.created_at,
                     t.updated_at,
                     s.title AS session_title
@@ -1060,7 +1116,7 @@ def get_tasks_usage_dashboard(
         source_kind = _classify_usage_source(payload)
         if safe_source_filter is not None and source_kind != safe_source_filter:
             continue
-        task_governance = _extract_task_governance_from_trace_json(row["trace_json"])
+        task_governance = _extract_task_governance_from_task_row(dict(row))
         governance_profile = (
             task_governance.get("profile")
             if isinstance(task_governance, dict)

@@ -1308,6 +1308,71 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_get_tasks_usage_dashboard_top_task_prefers_persisted_governance_columns(self) -> None:
+        rows = [
+            {
+                "id": "task-usage-governance-columns-1",
+                "session_id": "session-usage-governance-columns",
+                "prompt": "usage dashboard governance task with persisted columns",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 12,
+                        "completion_tokens": 34,
+                        "cost_estimate": 0.12,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": None,
+                "tool_registry_profile": "planning_only",
+                "tool_registry_provider_source": "planning_suite",
+                "allowed_tool_names_json": json.dumps(["task_plan"]),
+                "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                "created_at": "2026-06-10T10:00:00",
+                "updated_at": "2026-06-10T10:05:00",
+                "session_title": "Usage Governance Columns Session",
+            }
+        ]
+
+        class FakeCursor:
+            def __init__(self, payload: list[dict]):
+                self._payload = payload
+
+            def fetchall(self) -> list[dict]:
+                return self._payload
+
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return FakeCursor(rows)
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            payload = chat_persistence_module.get_tasks_usage_dashboard(
+                "user-usage-governance-columns",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        top_tasks = payload["top_tasks"]
+        self.assertEqual(len(top_tasks), 1)
+        row = top_tasks[0]
+        self.assertEqual(
+            row["governance"],
+            {
+                "profile": "planning_only",
+                "provider_source": "planning_suite",
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner Suite"],
+            },
+        )
+
     def test_get_tasks_usage_dashboard_route_surfaces_top_task_governance_summary(self) -> None:
         original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
         try:
@@ -1438,6 +1503,71 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(len(by_session), 1)
         row = by_session[0]
         self.assertEqual(row["session_id"], "session-usage-governance")
+        self.assertEqual(
+            row["governance"],
+            {
+                "profiles": ["planning_only"],
+                "provider_sources": ["planning_suite"],
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner Suite"],
+            },
+        )
+
+    def test_get_tasks_usage_dashboard_by_session_prefers_persisted_governance_columns(self) -> None:
+        rows = [
+            {
+                "id": "task-usage-session-governance-columns-1",
+                "session_id": "session-usage-governance-columns",
+                "prompt": "usage session governance task with persisted columns",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 20,
+                        "completion_tokens": 30,
+                        "cost_estimate": 0.15,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": None,
+                "tool_registry_profile": "planning_only",
+                "tool_registry_provider_source": "planning_suite",
+                "allowed_tool_names_json": json.dumps(["task_plan"]),
+                "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                "created_at": "2026-06-10T10:00:00",
+                "updated_at": "2026-06-10T10:05:00",
+                "session_title": "Usage Governance Columns Session",
+            }
+        ]
+
+        class FakeCursor:
+            def __init__(self, payload: list[dict]):
+                self._payload = payload
+
+            def fetchall(self) -> list[dict]:
+                return self._payload
+
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return FakeCursor(rows)
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            payload = chat_persistence_module.get_tasks_usage_dashboard(
+                "user-usage-session-governance-columns",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        by_session = payload["by_session"]
+        self.assertEqual(len(by_session), 1)
+        row = by_session[0]
         self.assertEqual(
             row["governance"],
             {
@@ -1609,6 +1739,93 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload["by_session"][0]["session_id"], "session-usage-filtered-1")
         self.assertEqual(len(payload["top_tasks"]), 1)
         self.assertEqual(payload["top_tasks"][0]["task_id"], "task-usage-filtered-1")
+
+    def test_get_tasks_usage_dashboard_filters_by_persisted_profile_and_provider_source(self) -> None:
+        rows = [
+            {
+                "id": "task-usage-filtered-columns-1",
+                "session_id": "session-usage-filtered-columns-1",
+                "prompt": "planning suite dashboard row with persisted columns",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 15,
+                        "cost_estimate": 0.05,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": None,
+                "tool_registry_profile": "planning_only",
+                "tool_registry_provider_source": "planning_suite",
+                "allowed_tool_names_json": json.dumps(["task_plan"]),
+                "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                "created_at": "2026-06-10T10:00:00",
+                "updated_at": "2026-06-10T10:05:00",
+                "session_title": "Planning Session",
+            },
+            {
+                "id": "task-usage-filtered-columns-2",
+                "session_id": "session-usage-filtered-columns-2",
+                "prompt": "retrieval suite dashboard row with persisted columns",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 8,
+                        "completion_tokens": 12,
+                        "cost_estimate": 0.03,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": None,
+                "tool_registry_profile": "retrieval_only",
+                "tool_registry_provider_source": "retrieval_suite",
+                "allowed_tool_names_json": json.dumps(["task_retrieve"]),
+                "allowed_tool_labels_json": json.dumps(["Knowledge Retrieval Suite"]),
+                "created_at": "2026-06-10T11:00:00",
+                "updated_at": "2026-06-10T11:05:00",
+                "session_title": "Retrieval Session",
+            },
+        ]
+
+        class FakeCursor:
+            def __init__(self, payload: list[dict]):
+                self._payload = payload
+
+            def fetchall(self) -> list[dict]:
+                return self._payload
+
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return FakeCursor(rows)
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            payload = chat_persistence_module.get_tasks_usage_dashboard(
+                "user-usage-filtered-columns",
+                tool_registry_profile_filter="planning_only",
+                tool_registry_provider_source_filter="planning_suite",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+
+        self.assertEqual(payload["summary"]["tasks_with_usage"], 1)
+        self.assertEqual(len(payload["by_session"]), 1)
+        self.assertEqual(
+            payload["by_session"][0]["session_id"],
+            "session-usage-filtered-columns-1",
+        )
+        self.assertEqual(len(payload["top_tasks"]), 1)
+        self.assertEqual(
+            payload["top_tasks"][0]["task_id"],
+            "task-usage-filtered-columns-1",
+        )
 
     def test_get_tasks_usage_dashboard_route_forwards_governance_filters(self) -> None:
         original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
