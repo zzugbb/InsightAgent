@@ -304,6 +304,52 @@ def _build_session_task_summary(
     return summary, len(parsed_steps), rag_hit_count
 
 
+def _parse_task_governance_json_list_blob(value: object) -> list[str]:
+    if not isinstance(value, str) or not value.strip():
+        return []
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
+
+
+def _collect_task_governance_from_task_row(task: dict) -> dict[str, list[str] | str | None] | None:
+    raw_profile = task.get("tool_registry_profile")
+    raw_provider_source = task.get("tool_registry_provider_source")
+    profile = (
+        raw_profile.strip()
+        if isinstance(raw_profile, str) and raw_profile.strip()
+        else None
+    )
+    provider_source = (
+        raw_provider_source.strip()
+        if isinstance(raw_provider_source, str) and raw_provider_source.strip()
+        else None
+    )
+    allowed_tool_names = _parse_task_governance_json_list_blob(
+        task.get("allowed_tool_names_json")
+    )
+    allowed_tool_labels = _parse_task_governance_json_list_blob(
+        task.get("allowed_tool_labels_json")
+    )
+    if (
+        profile is None
+        and provider_source is None
+        and not allowed_tool_names
+        and not allowed_tool_labels
+    ):
+        return None
+    return {
+        "profile": profile,
+        "provider_source": provider_source,
+        "allowed_tool_names": allowed_tool_names,
+        "allowed_tool_labels": allowed_tool_labels,
+    }
+
+
 def _collect_session_governance_summary(
     tasks: list[dict],
 ) -> SessionExportGovernanceSummary | None:
@@ -313,6 +359,26 @@ def _collect_session_governance_summary(
     allowed_tool_labels: set[str] = set()
 
     for task in tasks:
+        task_governance = _collect_task_governance_from_task_row(task)
+        if task_governance is not None:
+            raw_profile = task_governance.get("profile")
+            if isinstance(raw_profile, str) and raw_profile.strip():
+                profiles.add(raw_profile.strip())
+            raw_provider_source = task_governance.get("provider_source")
+            if isinstance(raw_provider_source, str) and raw_provider_source.strip():
+                provider_sources.add(raw_provider_source.strip())
+            raw_allowed_names = task_governance.get("allowed_tool_names")
+            if isinstance(raw_allowed_names, list):
+                for item in raw_allowed_names:
+                    if isinstance(item, str) and item.strip():
+                        allowed_tool_names.add(item.strip())
+            raw_allowed_labels = task_governance.get("allowed_tool_labels")
+            if isinstance(raw_allowed_labels, list):
+                for item in raw_allowed_labels:
+                    if isinstance(item, str) and item.strip():
+                        allowed_tool_labels.add(item.strip())
+            continue
+
         raw_trace = task.get("trace_json")
         if not isinstance(raw_trace, str) or not raw_trace.strip():
             continue

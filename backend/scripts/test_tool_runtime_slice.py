@@ -2019,6 +2019,81 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["Knowledge Retrieval", "Task Planner"],
         )
 
+    def test_build_session_export_payload_prefers_persisted_governance_columns(self) -> None:
+        session = {
+            "id": "session-export-governance-columns",
+            "title": "Governance Columns Session",
+            "created_at": "2026-06-10T10:00:00",
+            "updated_at": "2026-06-10T10:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 2,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-columns-1",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-10T10:00:00",
+                    "updated_at": "2026-06-10T10:01:00",
+                    "usage_json": None,
+                    "trace_json": None,
+                    "tool_registry_profile": "planning_only",
+                    "tool_registry_provider_source": "default",
+                    "allowed_tool_names_json": json.dumps(["task_plan"]),
+                    "allowed_tool_labels_json": json.dumps(["Task Planner"]),
+                },
+                {
+                    "id": "task-columns-2",
+                    "prompt": "task two",
+                    "status": "completed",
+                    "created_at": "2026-06-10T10:02:00",
+                    "updated_at": "2026-06-10T10:03:00",
+                    "usage_json": None,
+                    "trace_json": None,
+                    "tool_registry_profile": "retrieval_only",
+                    "tool_registry_provider_source": "suite_a",
+                    "allowed_tool_names_json": json.dumps(["task_retrieve"]),
+                    "allowed_tool_labels_json": json.dumps(["Knowledge Retrieval"]),
+                },
+            ]
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-session-governance-columns",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+
+        self.assertIsNotNone(payload.governance)
+        assert payload.governance is not None
+        self.assertEqual(
+            payload.governance.profiles,
+            ["planning_only", "retrieval_only"],
+        )
+        self.assertEqual(payload.governance.provider_sources, ["default", "suite_a"])
+        self.assertEqual(
+            payload.governance.allowed_tool_labels,
+            ["Knowledge Retrieval", "Task Planner"],
+        )
+
     def test_build_session_export_markdown_includes_governance_summary(self) -> None:
         session = {
             "id": "session-export-governance-md",
@@ -2074,6 +2149,64 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
                 session,
                 "user-session-governance",
+            )
+            markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+                payload,
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+
+        self.assertIn("## Tool Registry Governance", markdown)
+        self.assertIn("- Profiles: calculator_only", markdown)
+        self.assertIn("- Provider Sources: default", markdown)
+        self.assertIn("- Allowed Tools: calc_eval", markdown)
+
+    def test_build_session_export_markdown_includes_persisted_governance_summary(self) -> None:
+        session = {
+            "id": "session-export-governance-columns-md",
+            "title": "Governance Columns Session",
+            "created_at": "2026-06-10T10:00:00",
+            "updated_at": "2026-06-10T10:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-columns-md-1",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-10T10:00:00",
+                    "updated_at": "2026-06-10T10:01:00",
+                    "usage_json": None,
+                    "trace_json": None,
+                    "tool_registry_profile": "calculator_only",
+                    "tool_registry_provider_source": "default",
+                    "allowed_tool_names_json": json.dumps(["calc_eval"]),
+                    "allowed_tool_labels_json": json.dumps(["calc_eval"]),
+                },
+            ]
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-session-governance-columns",
             )
             markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
                 payload,
