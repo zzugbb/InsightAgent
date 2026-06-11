@@ -516,7 +516,7 @@ def _build_task_usage_top_task_row(row: dict) -> TaskUsageTopTaskRow:
     governance = (
         TaskGovernanceSummary(**governance_raw)
         if isinstance(governance_raw, dict)
-        else _collect_task_governance_from_trace_json(row.get("trace_json"))
+        else _collect_task_governance_from_task(row)
     )
     return TaskUsageTopTaskRow(
         task_id=str(row.get("task_id", "")),
@@ -643,6 +643,15 @@ def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonRespon
     parsed_steps = parse_trace_steps(raw_steps)
     rag_hit_count, rag_knowledge_base_ids, rag_chunks = _collect_rag_export(parsed_steps)
     governance = _collect_trace_governance_export(parsed_steps)
+    if governance is None:
+        governance = _collect_task_governance_from_task(task)
+        if governance is not None:
+            governance = TaskExportGovernance(
+                profile=governance.profile,
+                provider_source=governance.provider_source,
+                allowed_tool_names=list(governance.allowed_tool_names),
+                allowed_tool_labels=list(governance.allowed_tool_labels),
+            )
     return TaskExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),

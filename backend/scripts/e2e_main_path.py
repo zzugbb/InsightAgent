@@ -9,6 +9,13 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from scripts.e2e_export_assertions import (
+    assert_task_export_governance_json,
+    assert_task_export_governance_markdown,
+    assert_session_export_task_level_governance_json,
+    assert_session_export_task_level_governance_markdown,
+)
+
 
 @dataclass
 class HttpResult:
@@ -466,18 +473,7 @@ def main() -> None:
         str(export_task_json.json_body.get("task", {}).get("id", "")) == task_id,
         "task export json task.id mismatch",
     )
-    governance = export_task_json.json_body.get("trace", {}).get("governance", {})
-    _assert(
-        isinstance(governance, dict)
-        and isinstance(governance.get("profile"), str)
-        and isinstance(governance.get("provider_source"), str),
-        f"task export json governance missing: {export_task_json.json_body}",
-    )
-    _assert(
-        isinstance(governance.get("allowed_tool_labels"), list)
-        and len(governance["allowed_tool_labels"]) >= 1,
-        f"task export json allowed_tool_labels missing: {export_task_json.json_body}",
-    )
+    task_governance = assert_task_export_governance_json(export_task_json.json_body)
     export_task_md = _request(
         method="GET",
         url=f"{base_url}/api/tasks/{task_id}/export/markdown",
@@ -500,7 +496,8 @@ def main() -> None:
         "- Allowed Tools: " in export_task_md.text,
         "task export markdown governance allowed tools missing",
     )
-    print("  - OK: task exports")
+    assert_task_export_governance_markdown(export_task_md.text, task_governance)
+    print("  - OK: task exports + governance")
 
     print("[7/8] 会话导出（JSON/Markdown）")
     export_session_json = _request(
@@ -526,6 +523,9 @@ def main() -> None:
         and isinstance(session_governance.get("provider_sources"), list)
         and isinstance(session_governance.get("allowed_tool_labels"), list),
         f"session export json governance missing: {export_session_json.json_body}",
+    )
+    task_governance_task_id, task_governance = (
+        assert_session_export_task_level_governance_json(export_session_json.json_body)
     )
     export_session_md = _request(
         method="GET",
@@ -553,7 +553,15 @@ def main() -> None:
         "- Allowed Tools: " in export_session_md.text,
         "session export markdown governance allowed tools missing",
     )
-    print("  - OK: session exports")
+    _assert(
+        task_governance_task_id in export_session_md.text,
+        "session export markdown missing task id for task-level governance section",
+    )
+    assert_session_export_task_level_governance_markdown(
+        export_session_md.text,
+        task_governance,
+    )
+    print("  - OK: session exports + task-level governance")
 
     print("[8/8] usage 汇总检查")
     usage_global = _request(

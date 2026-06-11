@@ -1436,6 +1436,33 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(row.governance.allowed_tool_names, ["task_plan"])
         self.assertEqual(row.governance.allowed_tool_labels, ["Task Planner Suite"])
 
+    def test_build_task_usage_top_task_row_prefers_persisted_governance_columns(self) -> None:
+        row = task_routes_module._build_task_usage_top_task_row(  # type: ignore[attr-defined]
+            {
+                "task_id": "task-usage-top-columns-1",
+                "session_id": "session-usage-top-columns",
+                "session_title": "Usage Governance Columns Session",
+                "prompt_excerpt": "usage dashboard governance task",
+                "total_tokens": 46,
+                "cost_estimate": 0.12,
+                "created_at": "2026-06-11T10:00:00",
+                "updated_at": "2026-06-11T10:05:00",
+                "source_kind": "provider",
+                "tool_registry_profile": "planning_only",
+                "tool_registry_provider_source": "planning_suite",
+                "allowed_tool_names_json": json.dumps(["task_plan"]),
+                "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                "trace_json": None,
+            }
+        )
+
+        self.assertIsNotNone(row.governance)
+        assert row.governance is not None
+        self.assertEqual(row.governance.profile, "planning_only")
+        self.assertEqual(row.governance.provider_source, "planning_suite")
+        self.assertEqual(row.governance.allowed_tool_names, ["task_plan"])
+        self.assertEqual(row.governance.allowed_tool_labels, ["Task Planner Suite"])
+
     def test_get_tasks_usage_dashboard_by_session_surfaces_governance_summary(self) -> None:
         rows = [
             {
@@ -1922,6 +1949,81 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("- Tool Registry Source: default", markdown)
         self.assertIn("- Allowed Tools: Knowledge Retrieval", markdown)
 
+    def test_build_task_export_payload_prefers_persisted_governance_columns(self) -> None:
+        task = {
+            "id": "task-export-governance-columns",
+            "session_id": "session-export-governance-columns",
+            "prompt": "export governance summary from persisted columns",
+            "status": "completed",
+            "created_at": "2026-06-11T10:00:00",
+            "updated_at": "2026-06-11T10:05:00",
+            "tool_registry_profile": "planning_only",
+            "tool_registry_provider_source": "planning_suite",
+            "allowed_tool_names_json": json.dumps(["task_plan"]),
+            "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+            "trace_json": None,
+            "usage_json": None,
+        }
+        original_get_task_trace = task_routes_module.get_task_trace
+        original_get_task_messages = task_routes_module.get_task_messages
+        try:
+            task_routes_module.get_task_trace = lambda *_args, **_kwargs: []
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []
+
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                task,
+                "user-export-governance-columns",
+            )
+        finally:
+            task_routes_module.get_task_trace = original_get_task_trace
+            task_routes_module.get_task_messages = original_get_task_messages
+
+        self.assertIsNotNone(payload.trace.governance)
+        assert payload.trace.governance is not None
+        self.assertEqual(payload.trace.governance.profile, "planning_only")
+        self.assertEqual(payload.trace.governance.provider_source, "planning_suite")
+        self.assertEqual(payload.trace.governance.allowed_tool_names, ["task_plan"])
+        self.assertEqual(
+            payload.trace.governance.allowed_tool_labels,
+            ["Task Planner Suite"],
+        )
+
+    def test_build_task_export_markdown_includes_persisted_governance_summary(self) -> None:
+        task = {
+            "id": "task-export-governance-columns-md",
+            "session_id": "session-export-governance-columns-md",
+            "prompt": "export markdown governance summary from persisted columns",
+            "status": "completed",
+            "created_at": "2026-06-11T10:00:00",
+            "updated_at": "2026-06-11T10:05:00",
+            "tool_registry_profile": "retrieval_only",
+            "tool_registry_provider_source": "default",
+            "allowed_tool_names_json": json.dumps(["task_retrieve"]),
+            "allowed_tool_labels_json": json.dumps(["Knowledge Retrieval"]),
+            "trace_json": None,
+            "usage_json": None,
+        }
+        original_get_task_trace = task_routes_module.get_task_trace
+        original_get_task_messages = task_routes_module.get_task_messages
+        try:
+            task_routes_module.get_task_trace = lambda *_args, **_kwargs: []
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []
+
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                task,
+                "user-export-governance-columns",
+            )
+            markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+                payload,
+            )
+        finally:
+            task_routes_module.get_task_trace = original_get_task_trace
+            task_routes_module.get_task_messages = original_get_task_messages
+
+        self.assertIn("- Tool Registry Profile: retrieval_only", markdown)
+        self.assertIn("- Tool Registry Source: default", markdown)
+        self.assertIn("- Allowed Tools: Knowledge Retrieval", markdown)
+
     def test_build_session_export_payload_surfaces_governance_summary(self) -> None:
         session = {
             "id": "session-export-governance",
@@ -2093,6 +2195,22 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             payload.governance.allowed_tool_labels,
             ["Knowledge Retrieval", "Task Planner"],
         )
+        self.assertEqual(len(payload.tasks), 2)
+        self.assertIsNotNone(payload.tasks[0].governance)
+        assert payload.tasks[0].governance is not None
+        self.assertEqual(payload.tasks[0].governance.profile, "planning_only")
+        self.assertEqual(payload.tasks[0].governance.provider_source, "default")
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["task_plan"])
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Task Planner"])
+        self.assertIsNotNone(payload.tasks[1].governance)
+        assert payload.tasks[1].governance is not None
+        self.assertEqual(payload.tasks[1].governance.profile, "retrieval_only")
+        self.assertEqual(payload.tasks[1].governance.provider_source, "suite_a")
+        self.assertEqual(payload.tasks[1].governance.allowed_tool_names, ["task_retrieve"])
+        self.assertEqual(
+            payload.tasks[1].governance.allowed_tool_labels,
+            ["Knowledge Retrieval"],
+        )
 
     def test_build_session_export_markdown_includes_governance_summary(self) -> None:
         session = {
@@ -2220,6 +2338,110 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("- Profiles: calculator_only", markdown)
         self.assertIn("- Provider Sources: default", markdown)
         self.assertIn("- Allowed Tools: calc_eval", markdown)
+        self.assertIn("- Tool Registry Profile: calculator_only", markdown)
+        self.assertIn("- Tool Registry Source: default", markdown)
+
+    def test_export_assertions_require_session_task_level_governance_json(self) -> None:
+        import importlib
+
+        export_assertions_module = importlib.import_module("scripts.e2e_export_assertions")
+        payload = {
+            "session": {"id": "session-e2e-governance"},
+            "tasks": [
+                {
+                    "id": "task-e2e-governance",
+                    "governance": {
+                        "profile": "planning_only",
+                        "provider_source": "suite_a",
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner"],
+                    },
+                },
+            ],
+        }
+
+        task_id, governance = (
+            export_assertions_module.assert_session_export_task_level_governance_json(payload)
+        )
+
+        self.assertEqual(task_id, "task-e2e-governance")
+        self.assertEqual(governance["profile"], "planning_only")
+        self.assertEqual(governance["provider_source"], "suite_a")
+        self.assertEqual(governance["allowed_tool_names"], ["task_plan"])
+        self.assertEqual(governance["allowed_tool_labels"], ["Task Planner"])
+
+    def test_export_assertions_require_session_task_level_governance_markdown(self) -> None:
+        import importlib
+
+        export_assertions_module = importlib.import_module("scripts.e2e_export_assertions")
+        governance = {
+            "profile": "planning_only",
+            "provider_source": "suite_a",
+            "allowed_tool_names": ["task_plan"],
+            "allowed_tool_labels": ["Task Planner"],
+        }
+        markdown = "\n".join(
+            [
+                "# InsightAgent Session Export",
+                "## Tasks",
+                "### Task 1: task-e2e-governance",
+                "- Tool Registry Profile: planning_only",
+                "- Tool Registry Source: suite_a",
+                "- Allowed Tools: Task Planner",
+            ]
+        )
+
+        export_assertions_module.assert_session_export_task_level_governance_markdown(
+            markdown,
+            governance,
+        )
+
+    def test_export_assertions_require_task_export_governance_json(self) -> None:
+        import importlib
+
+        export_assertions_module = importlib.import_module("scripts.e2e_export_assertions")
+        payload = {
+            "trace": {
+                "governance": {
+                    "profile": "calculator_only",
+                    "provider_source": "default",
+                    "allowed_tool_names": ["calc_eval"],
+                    "allowed_tool_labels": ["Calculator"],
+                }
+            }
+        }
+
+        governance = export_assertions_module.assert_task_export_governance_json(payload)
+
+        self.assertEqual(governance["profile"], "calculator_only")
+        self.assertEqual(governance["provider_source"], "default")
+        self.assertEqual(governance["allowed_tool_names"], ["calc_eval"])
+        self.assertEqual(governance["allowed_tool_labels"], ["Calculator"])
+
+    def test_export_assertions_require_task_export_governance_markdown(self) -> None:
+        import importlib
+
+        export_assertions_module = importlib.import_module("scripts.e2e_export_assertions")
+        governance = {
+            "profile": "calculator_only",
+            "provider_source": "default",
+            "allowed_tool_names": ["calc_eval"],
+            "allowed_tool_labels": ["Calculator"],
+        }
+        markdown = "\n".join(
+            [
+                "# InsightAgent Task Export",
+                "## Trace Summary",
+                "- Tool Registry Profile: calculator_only",
+                "- Tool Registry Source: default",
+                "- Allowed Tools: Calculator",
+            ]
+        )
+
+        export_assertions_module.assert_task_export_governance_markdown(
+            markdown,
+            governance,
+        )
 
     def test_stream_task_execution_uses_stored_registry_settings_for_planning_and_preflight(
         self,

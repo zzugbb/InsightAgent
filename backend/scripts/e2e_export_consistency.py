@@ -9,6 +9,13 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from scripts.e2e_export_assertions import (
+    assert_task_export_governance_json,
+    assert_task_export_governance_markdown,
+    assert_session_export_task_level_governance_json,
+    assert_session_export_task_level_governance_markdown,
+)
+
 
 @dataclass
 class HttpResult:
@@ -309,10 +316,8 @@ def main() -> None:
 
     trace_steps = trace_obj.get("steps")
     rag_chunks = trace_obj.get("rag_chunks")
-    governance = trace_obj.get("governance")
     _assert(isinstance(trace_steps, list), "task export trace.steps must be list")
     _assert(isinstance(rag_chunks, list), "task export trace.rag_chunks must be list")
-    _assert(isinstance(governance, dict), "task export trace.governance must be dict")
     _assert(
         int(trace_obj.get("step_count", -1)) == len(trace_steps),
         f"task export trace.step_count mismatch: {trace_obj}",
@@ -321,20 +326,7 @@ def main() -> None:
         int(trace_obj.get("rag_hit_count", -1)) == len(rag_chunks),
         f"task export trace.rag_hit_count mismatch: {trace_obj}",
     )
-    _assert(
-        isinstance(governance.get("profile"), str) and bool(str(governance["profile"]).strip()),
-        f"task export trace.governance.profile missing: {governance}",
-    )
-    _assert(
-        isinstance(governance.get("provider_source"), str)
-        and bool(str(governance["provider_source"]).strip()),
-        f"task export trace.governance.provider_source missing: {governance}",
-    )
-    allowed_tool_labels = governance.get("allowed_tool_labels")
-    _assert(
-        isinstance(allowed_tool_labels, list) and len(allowed_tool_labels) >= 1,
-        f"task export trace.governance.allowed_tool_labels missing: {governance}",
-    )
+    task_governance = assert_task_export_governance_json(task_payload)
 
     task_export_md = _request(
         method="GET",
@@ -361,6 +353,10 @@ def main() -> None:
         "- Allowed Tools: " in task_export_md.text,
         "task export markdown governance allowed tools missing",
     )
+    assert_task_export_governance_markdown(
+        task_export_md.text,
+        task_governance,
+    )
 
     task_export_json_download = _request(
         method="GET",
@@ -379,7 +375,7 @@ def main() -> None:
     _assert(task_export_md_download.status == 200, "task export markdown download failed")
     _require_content_type(task_export_md_download, "text/markdown")
     _require_attachment_header(task_export_md_download, ".md")
-    print("  - OK: task export json/markdown consistency + download")
+    print("  - OK: task export json/markdown consistency + governance + download")
 
     print("[5/7] 会话导出一致性")
     session_export_json = _request(
@@ -451,6 +447,9 @@ def main() -> None:
         isinstance(governance_obj.get("allowed_tool_labels"), list),
         f"session export governance.allowed_tool_labels invalid: {governance_obj}",
     )
+    task_governance_task_id, task_governance = (
+        assert_session_export_task_level_governance_json(session_payload)
+    )
 
     session_export_md = _request(
         method="GET",
@@ -485,6 +484,14 @@ def main() -> None:
         "- Allowed Tools: " in session_export_md.text,
         "session export markdown governance allowed tools missing",
     )
+    _assert(
+        task_governance_task_id in session_export_md.text,
+        "session export markdown missing task id for task-level governance section",
+    )
+    assert_session_export_task_level_governance_markdown(
+        session_export_md.text,
+        task_governance,
+    )
 
     session_export_json_download = _request(
         method="GET",
@@ -503,7 +510,7 @@ def main() -> None:
     _assert(session_export_md_download.status == 200, "session export markdown download failed")
     _require_content_type(session_export_md_download, "text/markdown")
     _require_attachment_header(session_export_md_download, ".md")
-    print("  - OK: session export json/markdown consistency + download")
+    print("  - OK: session export json/markdown consistency + task-level governance + download")
 
     print("[6/7] 负例：跨用户导出隔离")
     task_cross_user = _request(
@@ -541,8 +548,8 @@ def main() -> None:
 
     print("")
     print("E2E export consistency passed:")
-    print("- task export json/markdown schema and summary consistency")
-    print("- session export json/markdown stats consistency")
+    print("- task export json/markdown schema, governance and summary consistency")
+    print("- session export json/markdown stats consistency + task-level governance consistency")
     print("- download=true content-disposition headers")
     print("- shared-rag role semantics remain compatible with export flow")
     print("- cross-user export isolation responses")
