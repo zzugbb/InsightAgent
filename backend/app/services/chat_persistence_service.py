@@ -82,12 +82,14 @@ def _extract_task_governance_from_trace_steps(
             and not allowed_tool_labels
         ):
             continue
-        return {
-            "profile": profile,
-            "provider_source": provider_source,
-            "allowed_tool_names": allowed_tool_names,
-            "allowed_tool_labels": allowed_tool_labels,
-        }
+        return _normalize_task_governance_dict(
+            {
+                "profile": profile,
+                "provider_source": provider_source,
+                "allowed_tool_names": allowed_tool_names,
+                "allowed_tool_labels": allowed_tool_labels,
+            }
+        )
     return None
 
 
@@ -155,11 +157,55 @@ def _extract_task_governance_from_task_row(
         and not allowed_tool_labels
     ):
         return _extract_task_governance_from_trace_json(task.get("trace_json"))
+    return _normalize_task_governance_dict(
+        {
+            "profile": profile,
+            "provider_source": provider_source,
+            "allowed_tool_names": allowed_tool_names,
+            "allowed_tool_labels": allowed_tool_labels,
+        }
+    )
+
+
+def _normalize_task_governance_dict(
+    governance: object,
+) -> dict[str, object] | None:
+    if not isinstance(governance, dict):
+        return None
     return {
-        "profile": profile,
-        "provider_source": provider_source,
-        "allowed_tool_names": allowed_tool_names,
-        "allowed_tool_labels": allowed_tool_labels,
+        "profile": governance.get("profile")
+        if isinstance(governance.get("profile"), str)
+        else None,
+        "provider_source": governance.get("provider_source")
+        if isinstance(governance.get("provider_source"), str)
+        else None,
+        "allowed_tool_names": list(governance.get("allowed_tool_names", []))
+        if isinstance(governance.get("allowed_tool_names"), list)
+        else [],
+        "allowed_tool_labels": list(governance.get("allowed_tool_labels", []))
+        if isinstance(governance.get("allowed_tool_labels"), list)
+        else [],
+    }
+
+
+def _normalize_session_governance_summary_dict(
+    governance: object,
+) -> dict[str, object] | None:
+    if not isinstance(governance, dict):
+        return None
+    return {
+        "profiles": list(governance.get("profiles", []))
+        if isinstance(governance.get("profiles"), list)
+        else [],
+        "provider_sources": list(governance.get("provider_sources", []))
+        if isinstance(governance.get("provider_sources"), list)
+        else [],
+        "allowed_tool_names": list(governance.get("allowed_tool_names", []))
+        if isinstance(governance.get("allowed_tool_names"), list)
+        else [],
+        "allowed_tool_labels": list(governance.get("allowed_tool_labels", []))
+        if isinstance(governance.get("allowed_tool_labels"), list)
+        else [],
     }
 
 
@@ -494,12 +540,12 @@ def _build_task_governance_filter_clause(
     params: list[object],
 ) -> str:
     clauses: list[str] = []
-    normalized_profile = (tool_registry_profile_filter or "").strip().lower()
+    normalized_profile = _normalize_governance_filter(tool_registry_profile_filter)
     if normalized_profile:
         clauses.append("LOWER(COALESCE(tool_registry_profile, '')) = ?")
         params.append(normalized_profile)
-    normalized_provider_source = (
-        (tool_registry_provider_source_filter or "").strip().lower()
+    normalized_provider_source = _normalize_governance_filter(
+        tool_registry_provider_source_filter
     )
     if normalized_provider_source:
         clauses.append("LOWER(COALESCE(tool_registry_provider_source, '')) = ?")
@@ -955,38 +1001,50 @@ def _merge_session_governance_summary(
     current: dict[str, object] | None,
     task_governance: dict[str, object] | None,
 ) -> dict[str, object] | None:
-    if task_governance is None:
-        return current
+    normalized_current = _normalize_session_governance_summary_dict(current)
+    normalized_task = _normalize_task_governance_dict(task_governance)
+    if normalized_task is None:
+        return normalized_current
 
-    profiles = set(current.get("profiles", []) if isinstance(current, dict) else [])
-    provider_sources = set(
-        current.get("provider_sources", []) if isinstance(current, dict) else []
+    profiles = set(
+        normalized_current.get("profiles", [])
+        if isinstance(normalized_current, dict)
+        else []
     )
     allowed_tool_names = set(
-        current.get("allowed_tool_names", []) if isinstance(current, dict) else []
+        normalized_current.get("allowed_tool_names", [])
+        if isinstance(normalized_current, dict)
+        else []
     )
     allowed_tool_labels = set(
-        current.get("allowed_tool_labels", []) if isinstance(current, dict) else []
+        normalized_current.get("allowed_tool_labels", [])
+        if isinstance(normalized_current, dict)
+        else []
+    )
+    provider_sources = set(
+        normalized_current.get("provider_sources", [])
+        if isinstance(normalized_current, dict)
+        else []
     )
 
-    profile = task_governance.get("profile")
+    profile = normalized_task.get("profile")
     if isinstance(profile, str) and profile.strip():
         profiles.add(profile.strip())
 
-    provider_source = task_governance.get("provider_source")
+    provider_source = normalized_task.get("provider_source")
     if isinstance(provider_source, str) and provider_source.strip():
         provider_sources.add(provider_source.strip())
 
-    for item in task_governance.get("allowed_tool_names", []):
+    for item in normalized_task.get("allowed_tool_names", []):
         if isinstance(item, str) and item.strip():
             allowed_tool_names.add(item.strip())
 
-    for item in task_governance.get("allowed_tool_labels", []):
+    for item in normalized_task.get("allowed_tool_labels", []):
         if isinstance(item, str) and item.strip():
             allowed_tool_labels.add(item.strip())
 
     if not profiles and not provider_sources and not allowed_tool_names and not allowed_tool_labels:
-        return current
+        return normalized_current
 
     return {
         "profiles": sorted(profiles),
@@ -1128,14 +1186,22 @@ def get_tasks_usage_dashboard(
             else None
         )
         if safe_profile_filter is not None:
-            if not isinstance(governance_profile, str):
+            normalized_governance_profile = _normalize_governance_filter(
+                governance_profile if isinstance(governance_profile, str) else None
+            )
+            if normalized_governance_profile is None:
                 continue
-            if governance_profile.strip().lower() != safe_profile_filter:
+            if normalized_governance_profile != safe_profile_filter:
                 continue
         if safe_provider_source_filter is not None:
-            if not isinstance(governance_provider_source, str):
+            normalized_governance_provider_source = _normalize_governance_filter(
+                governance_provider_source
+                if isinstance(governance_provider_source, str)
+                else None
+            )
+            if normalized_governance_provider_source is None:
                 continue
-            if governance_provider_source.strip().lower() != safe_provider_source_filter:
+            if normalized_governance_provider_source != safe_provider_source_filter:
                 continue
 
         tasks_with_usage += 1

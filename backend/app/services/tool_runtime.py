@@ -5,6 +5,7 @@ import re
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Callable, Iterator, Protocol
 
 from app.config import get_settings
@@ -473,6 +474,13 @@ def normalize_tool_registry_names(names: tuple[str, ...] | list[str] | set[str])
     return tuple(normalized_names)
 
 
+def _normalize_named_tool_registry_component_name(name: object | None) -> str | None:
+    if not isinstance(name, str):
+        return None
+    normalized = name.strip().lower()
+    return normalized or None
+
+
 def get_tool_display_name(
     name: str,
     *,
@@ -619,7 +627,9 @@ def _annotate_provider_factory_profile(
 
 
 def resolve_named_tool_registry_loader(name: str) -> ToolRegistryLoader | None:
-    normalized = name.strip().lower()
+    normalized = _normalize_named_tool_registry_component_name(name)
+    if normalized is None:
+        return None
     if normalized == "default":
         return get_default_tool_registry
     return None
@@ -631,7 +641,9 @@ def resolve_named_tool_registry_provider_reference(
     named_providers: dict[str, ToolRegistryProvider] | None = None,
     named_sources: dict[str, ToolRegistryProvider] | None = None,
 ) -> ToolRegistryProvider | None:
-    normalized = name.strip().lower()
+    normalized = _normalize_named_tool_registry_component_name(name)
+    if normalized is None:
+        return None
     if normalized == "default":
         return get_default_tool_registry_provider()
     if named_providers and normalized in named_providers:
@@ -645,7 +657,9 @@ def resolve_named_tool_registry_loader_factory(
     *,
     named_loader_factories: dict[str, ToolRegistryLoaderFactory] | None = None,
 ) -> ToolRegistryLoaderFactory | None:
-    normalized = name.strip().lower()
+    normalized = _normalize_named_tool_registry_component_name(name)
+    if normalized is None:
+        return None
     if named_loader_factories and normalized in named_loader_factories:
         return named_loader_factories[normalized]
     if normalized == "default":
@@ -665,7 +679,9 @@ def resolve_named_tool_registry_provider_factory(
     *,
     named_provider_factories: dict[str, ToolRegistryProviderFactory] | None = None,
 ) -> ToolRegistryProviderFactory | None:
-    normalized = name.strip().lower()
+    normalized = _normalize_named_tool_registry_component_name(name)
+    if normalized is None:
+        return None
     if named_provider_factories and normalized in named_provider_factories:
         return named_provider_factories[normalized]
     if normalized == "default":
@@ -687,9 +703,7 @@ def get_tool_registry_provider_source_name_from_settings(
     if settings is None:
         settings = get_settings()
     raw_source_name = getattr(settings, "tool_registry_provider_source", None)
-    if not isinstance(raw_source_name, str):
-        return "default"
-    normalized = raw_source_name.strip().lower()
+    normalized = _normalize_named_tool_registry_component_name(raw_source_name)
     return normalized or "default"
 
 
@@ -697,9 +711,7 @@ def get_tool_registry_profile_name_from_settings(*, settings: object | None = No
     if settings is None:
         settings = get_settings()
     raw_profile_name = getattr(settings, "tool_registry_profile", None)
-    if not isinstance(raw_profile_name, str):
-        return "default"
-    normalized = raw_profile_name.strip().lower()
+    normalized = _normalize_named_tool_registry_component_name(raw_profile_name)
     return normalized or "default"
 
 
@@ -873,7 +885,11 @@ def _build_tool_registry_from_file_registry(
     if not any(key in payload for key in manifest_keys):
         return build_tool_registry_extra_tools_from_specs(extra_tool_specs=payload)
 
-    profile_name = str(payload.get("profile", "default")).strip().lower() or "default"
+    profile_name = get_tool_registry_profile_name_from_settings(
+        settings=SimpleNamespace(
+            tool_registry_profile=payload.get("profile", "default"),
+        )
+    )
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
     disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = payload.get("disabled_tool_names")
@@ -894,7 +910,11 @@ def _build_tool_registry_from_file_registry(
                 or not child_registry_source.strip()
             ):
                 continue
-            normalized_source_name = child_registry_source.strip().lower()
+            normalized_source_name = get_tool_registry_provider_source_name_from_settings(
+                settings=SimpleNamespace(
+                    tool_registry_provider_source=child_registry_source,
+                )
+            )
             if normalized_source_name in _visited_sources:
                 _diagnostics["skipped_registry_sources"].append(normalized_source_name)
                 continue
@@ -1141,10 +1161,17 @@ def build_tool_registry_loaders_from_settings_artifacts(
     for loader_name, spec in loader_specs.items():
         if not isinstance(loader_name, str) or not isinstance(spec, dict):
             continue
-        normalized_loader_name = loader_name.strip().lower()
+        normalized_loader_name = _normalize_named_tool_registry_component_name(
+            loader_name
+        )
+        if normalized_loader_name is None:
+            continue
         diagnostics = _empty_tool_registry_file_diagnostics()
         registry_file = spec.get("registry_file")
         loader_reference = spec.get("loader")
+        normalized_loader_reference = _normalize_named_tool_registry_component_name(
+            loader_reference
+        )
         if isinstance(registry_file, str) and registry_file.strip():
             diagnostics = _merge_tool_registry_file_diagnostics(
                 diagnostics,
@@ -1154,12 +1181,12 @@ def build_tool_registry_loaders_from_settings_artifacts(
                 )["diagnostics"],
             )
         elif (
-            isinstance(loader_reference, str)
-            and loader_reference.strip().lower() in loader_diagnostics
+            normalized_loader_reference is not None
+            and normalized_loader_reference in loader_diagnostics
         ):
             diagnostics = _merge_tool_registry_file_diagnostics(
                 diagnostics,
-                loader_diagnostics[loader_reference.strip().lower()],
+                loader_diagnostics[normalized_loader_reference],
             )
         loader = build_tool_registry_loader_adapter(
             spec=spec,
@@ -1196,6 +1223,11 @@ def build_tool_registry_loader_factories_from_settings(
     for factory_name, spec in factory_specs.items():
         if not isinstance(factory_name, str) or not isinstance(spec, dict):
             continue
+        normalized_factory_name = _normalize_named_tool_registry_component_name(
+            factory_name
+        )
+        if normalized_factory_name is None:
+            continue
         registry_file = spec.get("registry_file")
         if isinstance(registry_file, str) and registry_file.strip():
             loader = build_tool_registry_loader_from_file(
@@ -1204,7 +1236,7 @@ def build_tool_registry_loader_factories_from_settings(
             )
             if loader is None:
                 continue
-            factories[factory_name.strip().lower()] = (
+            factories[normalized_factory_name] = (
                 lambda settings=None, loader=loader: loader
             )
             continue
@@ -1217,13 +1249,13 @@ def build_tool_registry_loader_factories_from_settings(
         )
         if resolved is None:
             continue
-        target_normalized = target_name.strip().lower()
+        target_normalized = _normalize_named_tool_registry_component_name(target_name)
         if target_normalized in _TOOL_REGISTRY_PROFILE_CONFIGS:
             resolved = _annotate_loader_factory_profile(
                 resolved,
                 profile_name=target_normalized,
             )
-        factories[factory_name.strip().lower()] = resolved
+        factories[normalized_factory_name] = resolved
     return factories
 
 
@@ -1247,6 +1279,11 @@ def build_tool_registry_provider_factories_from_settings(
     for factory_name, spec in factory_specs.items():
         if not isinstance(factory_name, str) or not isinstance(spec, dict):
             continue
+        normalized_factory_name = _normalize_named_tool_registry_component_name(
+            factory_name
+        )
+        if normalized_factory_name is None:
+            continue
         registry_file = spec.get("registry_file")
         if isinstance(registry_file, str) and registry_file.strip():
             provider = build_tool_registry_provider_from_file(
@@ -1255,7 +1292,7 @@ def build_tool_registry_provider_factories_from_settings(
             )
             if provider is None:
                 continue
-            factories[factory_name.strip().lower()] = (
+            factories[normalized_factory_name] = (
                 lambda settings=None, provider=provider: provider
             )
             continue
@@ -1268,13 +1305,13 @@ def build_tool_registry_provider_factories_from_settings(
         )
         if resolved is None:
             continue
-        target_normalized = target_name.strip().lower()
+        target_normalized = _normalize_named_tool_registry_component_name(target_name)
         if target_normalized in _TOOL_REGISTRY_PROFILE_CONFIGS:
             resolved = _annotate_provider_factory_profile(
                 resolved,
                 profile_name=target_normalized,
             )
-        factories[factory_name.strip().lower()] = resolved
+        factories[normalized_factory_name] = resolved
     return factories
 
 
@@ -1290,7 +1327,11 @@ def build_tool_registry_loader_adapter(
     known_base_registry: dict[str, ToolRegistration] | None = None
     implicit_profile_name = "default"
     if isinstance(loader_factory_name, str) and loader_factory_name.strip():
-        normalized_loader_factory_name = loader_factory_name.strip().lower()
+        normalized_loader_factory_name = _normalize_named_tool_registry_component_name(
+            loader_factory_name
+        )
+        if normalized_loader_factory_name is None:
+            return None
         named_loader_factories = build_tool_registry_loader_factories_from_settings(
             settings=settings
         )
@@ -1304,11 +1345,20 @@ def build_tool_registry_loader_adapter(
         profile_name_hint = getattr(loader_factory, "_tool_registry_profile_name", None)
         if profile_name_hint:
             known_base_registry = get_default_tool_registry()
-            implicit_profile_name = str(profile_name_hint).strip().lower() or "default"
+            implicit_profile_name = get_tool_registry_profile_name_from_settings(
+                settings=SimpleNamespace(
+                    tool_registry_profile=profile_name_hint,
+                )
+            )
     elif isinstance(loader_name, str) and loader_name.strip():
         base_loader = resolve_named_tool_registry_loader(loader_name)
-        if base_loader is None and named_loaders is not None:
-            base_loader = named_loaders.get(loader_name.strip().lower())
+        normalized_loader_name = _normalize_named_tool_registry_component_name(loader_name)
+        if (
+            base_loader is None
+            and named_loaders is not None
+            and normalized_loader_name is not None
+        ):
+            base_loader = named_loaders.get(normalized_loader_name)
         if base_loader is None:
             return None
         known_base_registry = dict(base_loader())
@@ -1324,7 +1374,11 @@ def build_tool_registry_loader_adapter(
         base_loader = get_default_tool_registry
         known_base_registry = get_default_tool_registry()
 
-    profile_name = str(spec.get("profile", implicit_profile_name)).strip().lower() or "default"
+    profile_name = get_tool_registry_profile_name_from_settings(
+        settings=SimpleNamespace(
+            tool_registry_profile=spec.get("profile", implicit_profile_name),
+        )
+    )
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
     disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = spec.get("disabled_tool_names")
@@ -1378,9 +1432,14 @@ def build_tool_registry_provider_adapter(
     base_provider: ToolRegistryProvider | None = None
     base_loader: ToolRegistryLoader | None = None
     known_base_registry: dict[str, ToolRegistration] | None = None
+    implicit_profile_name = "default"
 
     if isinstance(provider_factory_name, str) and provider_factory_name.strip():
-        normalized_provider_factory_name = provider_factory_name.strip().lower()
+        normalized_provider_factory_name = _normalize_named_tool_registry_component_name(
+            provider_factory_name
+        )
+        if normalized_provider_factory_name is None:
+            return None
         named_provider_factories = build_tool_registry_provider_factories_from_settings(
             settings=settings
         )
@@ -1394,6 +1453,11 @@ def build_tool_registry_provider_adapter(
         profile_name_hint = getattr(provider_factory, "_tool_registry_profile_name", None)
         if profile_name_hint:
             known_base_registry = get_default_tool_registry()
+            implicit_profile_name = get_tool_registry_profile_name_from_settings(
+                settings=SimpleNamespace(
+                    tool_registry_profile=profile_name_hint,
+                )
+            )
     elif isinstance(provider_name, str) and provider_name.strip():
         base_provider = resolve_named_tool_registry_provider_reference(
             provider_name,
@@ -1405,8 +1469,13 @@ def build_tool_registry_provider_adapter(
         known_base_registry = dict(base_provider.load_tool_registry())
     elif isinstance(loader_name, str) and loader_name.strip():
         base_loader = resolve_named_tool_registry_loader(loader_name)
-        if base_loader is None and named_loaders is not None:
-            base_loader = named_loaders.get(loader_name.strip().lower())
+        normalized_loader_name = _normalize_named_tool_registry_component_name(loader_name)
+        if (
+            base_loader is None
+            and named_loaders is not None
+            and normalized_loader_name is not None
+        ):
+            base_loader = named_loaders.get(normalized_loader_name)
         if base_loader is None:
             return None
         known_base_registry = dict(base_loader())
@@ -1422,7 +1491,11 @@ def build_tool_registry_provider_adapter(
         base_provider = get_default_tool_registry_provider()
         known_base_registry = get_default_tool_registry()
 
-    profile_name = str(spec.get("profile", "default")).strip().lower() or "default"
+    profile_name = get_tool_registry_profile_name_from_settings(
+        settings=SimpleNamespace(
+            tool_registry_profile=spec.get("profile", implicit_profile_name),
+        )
+    )
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
     disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = spec.get("disabled_tool_names")
@@ -1499,11 +1572,21 @@ def build_tool_registry_providers_from_settings_artifacts(
     for provider_name, spec in provider_specs.items():
         if not isinstance(provider_name, str) or not isinstance(spec, dict):
             continue
-        normalized_provider_name = provider_name.strip().lower()
+        normalized_provider_name = _normalize_named_tool_registry_component_name(
+            provider_name
+        )
+        if normalized_provider_name is None:
+            continue
         diagnostics = _empty_tool_registry_file_diagnostics()
         registry_file = spec.get("registry_file")
         provider_reference = spec.get("provider")
         loader_reference = spec.get("loader")
+        normalized_provider_reference = _normalize_named_tool_registry_component_name(
+            provider_reference
+        )
+        normalized_loader_reference = _normalize_named_tool_registry_component_name(
+            loader_reference
+        )
         if isinstance(registry_file, str) and registry_file.strip():
             diagnostics = _merge_tool_registry_file_diagnostics(
                 diagnostics,
@@ -1513,20 +1596,20 @@ def build_tool_registry_providers_from_settings_artifacts(
                 )["diagnostics"],
             )
         elif (
-            isinstance(provider_reference, str)
-            and provider_reference.strip().lower() in provider_diagnostics
+            normalized_provider_reference is not None
+            and normalized_provider_reference in provider_diagnostics
         ):
             diagnostics = _merge_tool_registry_file_diagnostics(
                 diagnostics,
-                provider_diagnostics[provider_reference.strip().lower()],
+                provider_diagnostics[normalized_provider_reference],
             )
         elif (
-            isinstance(loader_reference, str)
-            and loader_reference.strip().lower() in loader_diagnostics
+            normalized_loader_reference is not None
+            and normalized_loader_reference in loader_diagnostics
         ):
             diagnostics = _merge_tool_registry_file_diagnostics(
                 diagnostics,
-                loader_diagnostics[loader_reference.strip().lower()],
+                loader_diagnostics[normalized_loader_reference],
             )
         provider = build_tool_registry_provider_adapter(
             spec=spec,
@@ -1608,7 +1691,11 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
     for source_name, spec in source_specs.items():
         if not isinstance(source_name, str) or not isinstance(spec, dict):
             continue
-        normalized_source_name = source_name.strip().lower()
+        normalized_source_name = get_tool_registry_provider_source_name_from_settings(
+            settings=SimpleNamespace(
+                tool_registry_provider_source=source_name,
+            )
+        )
         adapter_keys = {
             "provider_factory",
             "provider",
@@ -1624,6 +1711,12 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
             registry_file = spec.get("registry_file")
             provider_reference = spec.get("provider")
             loader_reference = spec.get("loader")
+            normalized_provider_reference = _normalize_named_tool_registry_component_name(
+                provider_reference
+            )
+            normalized_loader_reference = _normalize_named_tool_registry_component_name(
+                loader_reference
+            )
             if isinstance(registry_file, str) and registry_file.strip():
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
@@ -1633,20 +1726,20 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                     )["diagnostics"],
                 )
             elif (
-                isinstance(provider_reference, str)
-                and provider_reference.strip().lower() in provider_diagnostics
+                normalized_provider_reference is not None
+                and normalized_provider_reference in provider_diagnostics
             ):
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
-                    provider_diagnostics[provider_reference.strip().lower()],
+                    provider_diagnostics[normalized_provider_reference],
                 )
             elif (
-                isinstance(loader_reference, str)
-                and loader_reference.strip().lower() in loader_diagnostics
+                normalized_loader_reference is not None
+                and normalized_loader_reference in loader_diagnostics
             ):
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
-                    loader_diagnostics[loader_reference.strip().lower()],
+                    loader_diagnostics[normalized_loader_reference],
                 )
             provider = build_tool_registry_provider_adapter(
                 spec=spec,

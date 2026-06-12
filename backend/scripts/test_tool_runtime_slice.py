@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 import app.services.tool_runtime as tool_runtime_module  # type: ignore[import-not-found]
 import app.services.chat_execution_service as chat_execution_module  # type: ignore[import-not-found]
 import app.services.chat_persistence_service as chat_persistence_module  # type: ignore[import-not-found]
+import app.api.routes.settings as settings_routes_module  # type: ignore[import-not-found]
 import app.api.routes.tasks as task_routes_module  # type: ignore[import-not-found]
 import app.api.routes.sessions as session_routes_module  # type: ignore[import-not-found]
 import app.db as db_module  # type: ignore[import-not-found]
@@ -624,6 +625,86 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_settings_update_request_reuses_shared_governance_filter_normalizer(
+        self,
+    ) -> None:
+        original_normalize_governance_filter = (
+            chat_persistence_module._normalize_governance_filter
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_governance_filter(value):
+                captured.append(value)
+                if value == " Planning_Only ":
+                    return "profile::normalized"
+                if value == " Planning_Suite ":
+                    return "provider::normalized"
+                return None
+
+            chat_persistence_module._normalize_governance_filter = (
+                fake_normalize_governance_filter
+            )
+            payload = settings_routes_module.SettingsUpdateRequest(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url=" https://example.invalid/v1 ",
+                api_key=" secret ",
+                tool_registry_profile=" Planning_Only ",
+                tool_registry_provider_source=" Planning_Suite ",
+            )
+        finally:
+            chat_persistence_module._normalize_governance_filter = (
+                original_normalize_governance_filter
+            )
+
+        self.assertEqual(captured, [" Planning_Only ", " Planning_Suite "])
+        self.assertEqual(payload.tool_registry_profile, "profile::normalized")
+        self.assertEqual(
+            payload.tool_registry_provider_source,
+            "provider::normalized",
+        )
+
+    def test_provider_source_option_details_reuse_shared_profile_name_helper(
+        self,
+    ) -> None:
+        original_get_tool_registry_profile_name_from_settings = (
+            settings_routes_module.get_tool_registry_profile_name_from_settings
+        )
+        captured: list[object] = []
+        try:
+            def fake_get_tool_registry_profile_name_from_settings(*, settings=None):
+                captured.append(getattr(settings, "tool_registry_profile", None))
+                if getattr(settings, "tool_registry_profile", None) == " Planning_Only ":
+                    return "profile::normalized"
+                return original_get_tool_registry_profile_name_from_settings(
+                    settings=settings
+                )
+
+            settings_routes_module.get_tool_registry_profile_name_from_settings = (
+                fake_get_tool_registry_profile_name_from_settings
+            )
+            details = settings_routes_module._build_tool_registry_provider_source_option_details(
+                effective_settings=SimpleNamespace(
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "suite_a": {
+                                "provider": "default",
+                                "profile": " Planning_Only ",
+                            }
+                        }
+                    )
+                )
+            )
+        finally:
+            settings_routes_module.get_tool_registry_profile_name_from_settings = (
+                original_get_tool_registry_profile_name_from_settings
+            )
+
+        suite_a = next(detail for detail in details if detail.name == "suite_a")
+        self.assertIn(" Planning_Only ", captured)
+        self.assertEqual(suite_a.base_profile, "profile::normalized")
+
     def test_build_task_export_payload_surfaces_registry_governance_summary(self) -> None:
         task = {
             "id": "task-export-governance",
@@ -741,6 +822,138 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             payload.governance.allowed_tool_labels,
             ["Task Planner Suite"],
+        )
+
+    def test_extract_task_governance_from_trace_steps_reuses_shared_normalizer(self) -> None:
+        original_normalizer = chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
+        try:
+            chat_persistence_module._normalize_task_governance_dict = lambda _governance: {  # type: ignore[attr-defined]
+                "profile": "normalized_profile",
+                "provider_source": "normalized_source",
+                "allowed_tool_names": ["normalized_tool"],
+                "allowed_tool_labels": ["Normalized Tool"],
+            }
+            payload = chat_persistence_module._extract_task_governance_from_trace_steps(  # type: ignore[attr-defined]
+                [
+                    {
+                        "id": "trace-normalized-1",
+                        "type": "thought",
+                        "content": "normalized governance",
+                        "meta": {
+                            "tool_registry_profile": "planning_only",
+                            "tool_registry_provider_source": "planning_suite",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                    }
+                ]
+            )
+        finally:
+            chat_persistence_module._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload,
+            {
+                "profile": "normalized_profile",
+                "provider_source": "normalized_source",
+                "allowed_tool_names": ["normalized_tool"],
+                "allowed_tool_labels": ["Normalized Tool"],
+            },
+        )
+
+    def test_extract_task_governance_from_task_row_reuses_shared_normalizer(self) -> None:
+        original_normalizer = chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
+        try:
+            chat_persistence_module._normalize_task_governance_dict = lambda _governance: {  # type: ignore[attr-defined]
+                "profile": "normalized_profile",
+                "provider_source": "normalized_source",
+                "allowed_tool_names": ["normalized_tool"],
+                "allowed_tool_labels": ["Normalized Tool"],
+            }
+            payload = chat_persistence_module._extract_task_governance_from_task_row(  # type: ignore[attr-defined]
+                {
+                    "tool_registry_profile": "planning_only",
+                    "tool_registry_provider_source": "planning_suite",
+                    "allowed_tool_names_json": json.dumps(["task_plan"]),
+                    "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                    "trace_json": None,
+                }
+            )
+        finally:
+            chat_persistence_module._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload,
+            {
+                "profile": "normalized_profile",
+                "provider_source": "normalized_source",
+                "allowed_tool_names": ["normalized_tool"],
+                "allowed_tool_labels": ["Normalized Tool"],
+            },
+        )
+
+    def test_merge_session_governance_summary_reuses_shared_task_normalizer(self) -> None:
+        original_task_normalizer = chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
+        try:
+            chat_persistence_module._normalize_task_governance_dict = lambda _governance: {  # type: ignore[attr-defined]
+                "profile": "normalized_profile",
+                "provider_source": "normalized_source",
+                "allowed_tool_names": ["normalized_tool"],
+                "allowed_tool_labels": ["Normalized Tool"],
+            }
+            payload = chat_persistence_module._merge_session_governance_summary(  # type: ignore[attr-defined]
+                None,
+                {
+                    "profile": "planning_only",
+                    "provider_source": "planning_suite",
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner Suite"],
+                },
+            )
+        finally:
+            chat_persistence_module._normalize_task_governance_dict = original_task_normalizer  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload,
+            {
+                "profiles": ["normalized_profile"],
+                "provider_sources": ["normalized_source"],
+                "allowed_tool_names": ["normalized_tool"],
+                "allowed_tool_labels": ["Normalized Tool"],
+            },
+        )
+
+    def test_merge_session_governance_summary_reuses_shared_session_normalizer(self) -> None:
+        original_session_normalizer = chat_persistence_module._normalize_session_governance_summary_dict  # type: ignore[attr-defined]
+        try:
+            chat_persistence_module._normalize_session_governance_summary_dict = (
+                lambda _governance: {
+                    "profiles": ["normalized_current_profile"],
+                    "provider_sources": ["normalized_current_source"],
+                    "allowed_tool_names": ["normalized_current_tool"],
+                    "allowed_tool_labels": ["Normalized Current Tool"],
+                }
+            )
+            payload = chat_persistence_module._merge_session_governance_summary(  # type: ignore[attr-defined]
+                {
+                    "profiles": ["planning_only"],
+                    "provider_sources": ["planning_suite"],
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner Suite"],
+                },
+                None,
+            )
+        finally:
+            chat_persistence_module._normalize_session_governance_summary_dict = original_session_normalizer  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload,
+            {
+                "profiles": ["normalized_current_profile"],
+                "provider_sources": ["normalized_current_source"],
+                "allowed_tool_names": ["normalized_current_tool"],
+                "allowed_tool_labels": ["Normalized Current Tool"],
+            },
         )
 
     def test_get_tasks_forwards_query_to_list_and_count(self) -> None:
@@ -901,6 +1114,118 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_get_tasks_reuses_shared_governance_filter_normalizer(self) -> None:
+        original_get_session = task_routes_module.get_session
+        original_list_tasks = task_routes_module.list_tasks
+        original_count_tasks = task_routes_module.count_tasks
+        original_normalize_governance_filter = (
+            chat_persistence_module._normalize_governance_filter
+        )
+        captured: dict[str, object] = {"normalize_inputs": []}
+        try:
+            task_routes_module.get_session = (
+                lambda session_id, user_id: {
+                    "id": session_id,
+                    "user_id": user_id,
+                    "title": "Governance Session",
+                }
+            )
+
+            def fake_normalize_governance_filter(value):
+                captured["normalize_inputs"].append(value)
+                if value == " Planning_Only ":
+                    return "profile::normalized"
+                if value == " Planning_Suite ":
+                    return "provider::normalized"
+                return None
+
+            def fake_list_tasks(
+                *,
+                user_id,
+                limit,
+                session_id=None,
+                offset=0,
+                query=None,
+                tool_registry_profile_filter=None,
+                tool_registry_provider_source_filter=None,
+            ):
+                captured["list"] = {
+                    "user_id": user_id,
+                    "limit": limit,
+                    "session_id": session_id,
+                    "offset": offset,
+                    "query": query,
+                    "tool_registry_profile_filter": tool_registry_profile_filter,
+                    "tool_registry_provider_source_filter": tool_registry_provider_source_filter,
+                }
+                return []
+
+            def fake_count_tasks(
+                user_id,
+                session_id=None,
+                query=None,
+                tool_registry_profile_filter=None,
+                tool_registry_provider_source_filter=None,
+            ):
+                captured["count"] = {
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "query": query,
+                    "tool_registry_profile_filter": tool_registry_profile_filter,
+                    "tool_registry_provider_source_filter": tool_registry_provider_source_filter,
+                }
+                return 0
+
+            chat_persistence_module._normalize_governance_filter = (
+                fake_normalize_governance_filter
+            )
+            task_routes_module.list_tasks = fake_list_tasks
+            task_routes_module.count_tasks = fake_count_tasks
+
+            task_routes_module.get_tasks(
+                limit=20,
+                offset=0,
+                session_id="session-governance",
+                query=None,
+                tool_registry_profile=" Planning_Only ",
+                tool_registry_provider_source=" Planning_Suite ",
+                current_user={"id": "user-governance"},
+            )
+        finally:
+            task_routes_module.get_session = original_get_session
+            task_routes_module.list_tasks = original_list_tasks
+            task_routes_module.count_tasks = original_count_tasks
+            chat_persistence_module._normalize_governance_filter = (
+                original_normalize_governance_filter
+            )
+
+        self.assertEqual(
+            captured["normalize_inputs"],
+            [" Planning_Only ", " Planning_Suite "],
+        )
+        self.assertEqual(
+            captured["list"],
+            {
+                "user_id": "user-governance",
+                "limit": 20,
+                "session_id": "session-governance",
+                "offset": 0,
+                "query": None,
+                "tool_registry_profile_filter": "profile::normalized",
+                "tool_registry_provider_source_filter": "provider::normalized",
+            },
+        )
+        self.assertEqual(
+            captured["count"],
+            {
+                "user_id": "user-governance",
+                "session_id": "session-governance",
+                "query": None,
+                "tool_registry_profile_filter": "profile::normalized",
+                "tool_registry_provider_source_filter": "provider::normalized",
+            },
+        )
+
     def test_list_tasks_applies_query_to_prompt_id_and_trace_json(self) -> None:
         captured: dict[str, object] = {}
 
@@ -1051,6 +1376,115 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "session-governance",
                 "planning_only",
                 "planning_suite",
+            ),
+        )
+
+    def test_task_list_queries_reuse_shared_governance_filter_normalizer(self) -> None:
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        original_normalize_governance_filter = (
+            chat_persistence_module._normalize_governance_filter
+        )
+        captured: dict[str, object] = {
+            "normalize_inputs": [],
+            "queries": [],
+        }
+
+        class FakeListCursor:
+            def fetchall(self) -> list[dict]:
+                return []
+
+        class FakeCountCursor:
+            def fetchone(self) -> dict[str, int]:
+                return {"n": 0}
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["queries"].append((str(query), tuple(params)))
+                if "COUNT(*) AS n" in str(query):
+                    return FakeCountCursor()
+                return FakeListCursor()
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        try:
+            def fake_normalize_governance_filter(value):
+                captured["normalize_inputs"].append(value)
+                if value == " Planning_Only ":
+                    return "profile::normalized"
+                if value == " Planning_Suite ":
+                    return "provider::normalized"
+                return None
+
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module._normalize_governance_filter = (
+                fake_normalize_governance_filter
+            )
+
+            chat_persistence_module.list_tasks(
+                user_id="user-governance",
+                limit=20,
+                session_id="session-governance",
+                offset=0,
+                tool_registry_profile_filter=" Planning_Only ",
+                tool_registry_provider_source_filter=" Planning_Suite ",
+            )
+            chat_persistence_module.count_tasks(
+                user_id="user-governance",
+                session_id="session-governance",
+                tool_registry_profile_filter=" Planning_Only ",
+                tool_registry_provider_source_filter=" Planning_Suite ",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+            chat_persistence_module._normalize_governance_filter = (
+                original_normalize_governance_filter
+            )
+
+        self.assertEqual(
+            captured["normalize_inputs"],
+            [
+                " Planning_Only ",
+                " Planning_Suite ",
+                " Planning_Only ",
+                " Planning_Suite ",
+            ],
+        )
+        self.assertEqual(len(captured["queries"]), 2)
+        list_query, list_params = captured["queries"][0]
+        count_query, count_params = captured["queries"][1]
+        self.assertIn("LOWER(COALESCE(tool_registry_profile, '')) = ?", list_query)
+        self.assertIn(
+            "LOWER(COALESCE(tool_registry_provider_source, '')) = ?",
+            list_query,
+        )
+        self.assertEqual(
+            list_params,
+            (
+                "user-governance",
+                "session-governance",
+                "profile::normalized",
+                "provider::normalized",
+                20,
+                0,
+            ),
+        )
+        self.assertIn("LOWER(COALESCE(tool_registry_profile, '')) = ?", count_query)
+        self.assertIn(
+            "LOWER(COALESCE(tool_registry_provider_source, '')) = ?",
+            count_query,
+        )
+        self.assertEqual(
+            count_params,
+            (
+                "user-governance",
+                "session-governance",
+                "profile::normalized",
+                "provider::normalized",
             ),
         )
 
@@ -1229,6 +1663,106 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.provider_source, "planning_suite")
         self.assertEqual(payload.allowed_tool_names, ["task_plan"])
         self.assertEqual(payload.allowed_tool_labels, ["Task Planner Suite"])
+
+    def test_collect_task_governance_from_trace_json_reuses_shared_service_parser(self) -> None:
+        original_parser = (
+            task_routes_module.chat_persistence_service._extract_task_governance_from_trace_json
+        )
+        try:
+            task_routes_module.chat_persistence_service._extract_task_governance_from_trace_json = (
+                lambda _trace_json: {
+                    "profile": "shared_trace_profile",
+                    "provider_source": "shared_trace_source",
+                    "allowed_tool_names": ["shared_trace_tool"],
+                    "allowed_tool_labels": ["Shared Trace Tool"],
+                }
+            )
+            payload = task_routes_module._collect_task_governance_from_trace_json(  # type: ignore[attr-defined]
+                "[]"
+            )
+        finally:
+            task_routes_module.chat_persistence_service._extract_task_governance_from_trace_json = (
+                original_parser
+            )
+
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload.profile, "shared_trace_profile")
+        self.assertEqual(payload.provider_source, "shared_trace_source")
+        self.assertEqual(payload.allowed_tool_names, ["shared_trace_tool"])
+        self.assertEqual(payload.allowed_tool_labels, ["Shared Trace Tool"])
+
+    def test_build_task_response_reuses_governance_summary_builder(self) -> None:
+        original_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
+        try:
+            task_routes_module._build_task_governance_summary_from_dict = lambda _governance: task_routes_module.TaskGovernanceSummary(  # type: ignore[attr-defined]
+                profile="builder_profile",
+                provider_source="builder_source",
+                allowed_tool_names=["builder_tool"],
+                allowed_tool_labels=["Builder Tool"],
+            )
+            response = task_routes_module._build_task_response(  # type: ignore[attr-defined]
+                {
+                    "id": "task-builder-governance-route",
+                    "session_id": "session-builder-governance-route",
+                    "prompt": "builder governance route task",
+                    "status": "completed",
+                    "trace_json": None,
+                    "usage_json": None,
+                    "tool_registry_profile": "planning_only",
+                    "tool_registry_provider_source": "default",
+                    "allowed_tool_names_json": json.dumps(["task_plan"]),
+                    "allowed_tool_labels_json": json.dumps(["Task Planner"]),
+                    "created_at": "2026-06-11T15:00:00",
+                    "updated_at": "2026-06-11T15:01:00",
+                }
+            )
+        finally:
+            task_routes_module._build_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(response.governance)
+        assert response.governance is not None
+        self.assertEqual(response.governance.profile, "builder_profile")
+        self.assertEqual(response.governance.provider_source, "builder_source")
+        self.assertEqual(response.governance.allowed_tool_names, ["builder_tool"])
+        self.assertEqual(response.governance.allowed_tool_labels, ["Builder Tool"])
+
+    def test_build_task_response_reuses_shared_task_governance_normalizer(self) -> None:
+        original_normalizer = task_routes_module.chat_persistence_service._normalize_task_governance_dict  # type: ignore[attr-defined]
+        try:
+            task_routes_module.chat_persistence_service._normalize_task_governance_dict = (
+                lambda _governance: {
+                    "profile": "normalized_profile",
+                    "provider_source": "normalized_source",
+                    "allowed_tool_names": ["normalized_tool"],
+                    "allowed_tool_labels": ["Normalized Tool"],
+                }
+            )
+            response = task_routes_module._build_task_response(  # type: ignore[attr-defined]
+                {
+                    "id": "task-normalized-governance-route",
+                    "session_id": "session-normalized-governance-route",
+                    "prompt": "normalized governance route task",
+                    "status": "completed",
+                    "trace_json": None,
+                    "usage_json": None,
+                    "tool_registry_profile": "planning_only",
+                    "tool_registry_provider_source": "default",
+                    "allowed_tool_names_json": json.dumps(["task_plan"]),
+                    "allowed_tool_labels_json": json.dumps(["Task Planner"]),
+                    "created_at": "2026-06-11T16:00:00",
+                    "updated_at": "2026-06-11T16:01:00",
+                }
+            )
+        finally:
+            task_routes_module.chat_persistence_service._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(response.governance)
+        assert response.governance is not None
+        self.assertEqual(response.governance.profile, "normalized_profile")
+        self.assertEqual(response.governance.provider_source, "normalized_source")
+        self.assertEqual(response.governance.allowed_tool_names, ["normalized_tool"])
+        self.assertEqual(response.governance.allowed_tool_labels, ["Normalized Tool"])
 
     def test_get_tasks_usage_dashboard_top_task_surfaces_governance_summary(self) -> None:
         rows = [
@@ -1463,6 +1997,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(row.governance.allowed_tool_names, ["task_plan"])
         self.assertEqual(row.governance.allowed_tool_labels, ["Task Planner Suite"])
 
+    def test_build_task_usage_top_task_row_reuses_governance_summary_builder(self) -> None:
+        original_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
+        try:
+            task_routes_module._build_task_governance_summary_from_dict = lambda _governance: task_routes_module.TaskGovernanceSummary(  # type: ignore[attr-defined]
+                profile="builder_profile",
+                provider_source="builder_source",
+                allowed_tool_names=["builder_tool"],
+                allowed_tool_labels=["Builder Tool"],
+            )
+            row = task_routes_module._build_task_usage_top_task_row(  # type: ignore[attr-defined]
+                {
+                    "task_id": "task-usage-top-builder-1",
+                    "session_id": "session-usage-top-builder",
+                    "session_title": "Usage Governance Builder Session",
+                    "prompt_excerpt": "usage dashboard governance task",
+                    "total_tokens": 46,
+                    "cost_estimate": 0.12,
+                    "created_at": "2026-06-11T10:00:00",
+                    "updated_at": "2026-06-11T10:05:00",
+                    "source_kind": "provider",
+                    "governance": {
+                        "profile": "planning_only",
+                        "provider_source": "planning_suite",
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner Suite"],
+                    },
+                    "trace_json": None,
+                }
+            )
+        finally:
+            task_routes_module._build_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(row.governance)
+        assert row.governance is not None
+        self.assertEqual(row.governance.profile, "builder_profile")
+        self.assertEqual(row.governance.provider_source, "builder_source")
+        self.assertEqual(row.governance.allowed_tool_names, ["builder_tool"])
+        self.assertEqual(row.governance.allowed_tool_labels, ["Builder Tool"])
+
     def test_get_tasks_usage_dashboard_by_session_surfaces_governance_summary(self) -> None:
         rows = [
             {
@@ -1664,6 +2237,78 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(row.governance.allowed_tool_names, ["task_plan"])
         self.assertEqual(row.governance.allowed_tool_labels, ["Task Planner Suite"])
 
+    def test_build_task_usage_by_session_row_reuses_governance_summary_builder(self) -> None:
+        original_builder = task_routes_module._build_task_usage_session_governance_summary_from_dict  # type: ignore[attr-defined]
+        try:
+            task_routes_module._build_task_usage_session_governance_summary_from_dict = lambda _governance: task_routes_module.TaskUsageSessionGovernanceSummary(  # type: ignore[attr-defined]
+                profiles=["builder_profile"],
+                provider_sources=["builder_source"],
+                allowed_tool_names=["builder_tool"],
+                allowed_tool_labels=["Builder Tool"],
+            )
+            row = task_routes_module._build_task_usage_by_session_row(  # type: ignore[attr-defined]
+                {
+                    "session_id": "session-usage-builder",
+                    "session_title": "Usage Governance Builder Session",
+                    "tasks_with_usage": 1,
+                    "total_tokens": 50,
+                    "cost_estimate": 0.15,
+                    "last_task_at": "2026-06-09T10:05:00",
+                    "governance": {
+                        "profiles": ["planning_only"],
+                        "provider_sources": ["planning_suite"],
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner Suite"],
+                    },
+                }
+            )
+        finally:
+            task_routes_module._build_task_usage_session_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(row.governance)
+        assert row.governance is not None
+        self.assertEqual(row.governance.profiles, ["builder_profile"])
+        self.assertEqual(row.governance.provider_sources, ["builder_source"])
+        self.assertEqual(row.governance.allowed_tool_names, ["builder_tool"])
+        self.assertEqual(row.governance.allowed_tool_labels, ["Builder Tool"])
+
+    def test_build_task_usage_by_session_row_reuses_shared_session_governance_normalizer(self) -> None:
+        original_normalizer = task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict  # type: ignore[attr-defined]
+        try:
+            task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict = (
+                lambda _governance: {
+                    "profiles": ["normalized_profile"],
+                    "provider_sources": ["normalized_source"],
+                    "allowed_tool_names": ["normalized_tool"],
+                    "allowed_tool_labels": ["Normalized Tool"],
+                }
+            )
+            row = task_routes_module._build_task_usage_by_session_row(  # type: ignore[attr-defined]
+                {
+                    "session_id": "session-usage-normalized",
+                    "session_title": "Usage Governance Normalized Session",
+                    "tasks_with_usage": 1,
+                    "total_tokens": 50,
+                    "cost_estimate": 0.15,
+                    "last_task_at": "2026-06-09T10:05:00",
+                    "governance": {
+                        "profiles": ["planning_only"],
+                        "provider_sources": ["planning_suite"],
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner Suite"],
+                    },
+                }
+            )
+        finally:
+            task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict = original_normalizer  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(row.governance)
+        assert row.governance is not None
+        self.assertEqual(row.governance.profiles, ["normalized_profile"])
+        self.assertEqual(row.governance.provider_sources, ["normalized_source"])
+        self.assertEqual(row.governance.allowed_tool_names, ["normalized_tool"])
+        self.assertEqual(row.governance.allowed_tool_labels, ["Normalized Tool"])
+
     def test_get_tasks_usage_dashboard_filters_by_profile_and_provider_source(self) -> None:
         rows = [
             {
@@ -1854,6 +2499,93 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "task-usage-filtered-columns-1",
         )
 
+    def test_get_tasks_usage_dashboard_reuses_shared_governance_filter_normalizer_for_task_match(
+        self,
+    ) -> None:
+        rows = [
+            {
+                "id": "task-usage-filtered-normalizer-1",
+                "session_id": "session-usage-filtered-normalizer-1",
+                "prompt": "planning suite dashboard row with shared normalizer",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 15,
+                        "cost_estimate": 0.05,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": None,
+                "tool_registry_profile": "planning_only",
+                "tool_registry_provider_source": "planning_suite",
+                "allowed_tool_names_json": json.dumps(["task_plan"]),
+                "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                "created_at": "2026-06-10T10:00:00",
+                "updated_at": "2026-06-10T10:05:00",
+                "session_title": "Planning Session",
+            }
+        ]
+
+        class FakeCursor:
+            def __init__(self, payload: list[dict]):
+                self._payload = payload
+
+            def fetchall(self) -> list[dict]:
+                return self._payload
+
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return FakeCursor(rows)
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        original_normalize_governance_filter = (
+            chat_persistence_module._normalize_governance_filter
+        )
+        captured: dict[str, object] = {"normalize_inputs": []}
+        try:
+            def fake_normalize_governance_filter(value):
+                captured["normalize_inputs"].append(value)
+                if value in {" Planning_Only ", "planning_only"}:
+                    return "profile::normalized"
+                if value in {" Planning_Suite ", "planning_suite"}:
+                    return "provider::normalized"
+                return None
+
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module._normalize_governance_filter = (
+                fake_normalize_governance_filter
+            )
+            payload = chat_persistence_module.get_tasks_usage_dashboard(
+                "user-usage-filtered-normalizer",
+                tool_registry_profile_filter=" Planning_Only ",
+                tool_registry_provider_source_filter=" Planning_Suite ",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+            chat_persistence_module._normalize_governance_filter = (
+                original_normalize_governance_filter
+            )
+
+        self.assertEqual(
+            captured["normalize_inputs"],
+            [
+                " Planning_Only ",
+                " Planning_Suite ",
+                "planning_only",
+                "planning_suite",
+            ],
+        )
+        self.assertEqual(payload["summary"]["tasks_with_usage"], 1)
+        self.assertEqual(len(payload["by_session"]), 1)
+        self.assertEqual(len(payload["top_tasks"]), 1)
+
     def test_get_tasks_usage_dashboard_route_forwards_governance_filters(self) -> None:
         original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
         captured: dict[str, object] = {}
@@ -2024,6 +2756,44 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("- Tool Registry Source: default", markdown)
         self.assertIn("- Allowed Tools: Knowledge Retrieval", markdown)
 
+    def test_build_task_response_reuses_shared_task_governance_row_parser(self) -> None:
+        self.assertTrue(hasattr(task_routes_module, "chat_persistence_service"))
+        original_parser = (
+            task_routes_module.chat_persistence_service._extract_task_governance_from_task_row
+        )
+        try:
+            task_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                lambda _task: {
+                    "profile": "shared_profile",
+                    "provider_source": "shared_source",
+                    "allowed_tool_names": ["shared_tool"],
+                    "allowed_tool_labels": ["Shared Tool"],
+                }
+            )
+            response = task_routes_module._build_task_response(  # type: ignore[attr-defined]
+                {
+                    "id": "task-shared-governance-route",
+                    "session_id": "session-shared-governance-route",
+                    "prompt": "shared governance route task",
+                    "status": "completed",
+                    "trace_json": None,
+                    "usage_json": None,
+                    "created_at": "2026-06-11T12:00:00",
+                    "updated_at": "2026-06-11T12:01:00",
+                }
+            )
+        finally:
+            task_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                original_parser
+            )
+
+        self.assertIsNotNone(response.governance)
+        assert response.governance is not None
+        self.assertEqual(response.governance.profile, "shared_profile")
+        self.assertEqual(response.governance.provider_source, "shared_source")
+        self.assertEqual(response.governance.allowed_tool_names, ["shared_tool"])
+        self.assertEqual(response.governance.allowed_tool_labels, ["Shared Tool"])
+
     def test_build_session_export_payload_surfaces_governance_summary(self) -> None:
         session = {
             "id": "session-export-governance",
@@ -2120,6 +2890,223 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             payload.governance.allowed_tool_labels,
             ["Knowledge Retrieval", "Task Planner"],
         )
+
+    def test_build_session_export_payload_reuses_shared_trace_governance_parser(self) -> None:
+        session = {
+            "id": "session-shared-trace-governance",
+            "title": "Shared Trace Governance Session",
+            "created_at": "2026-06-11T13:00:00",
+            "updated_at": "2026-06-11T13:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_parser = (
+            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps
+        )
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-shared-trace-governance",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-11T13:00:00",
+                    "updated_at": "2026-06-11T13:01:00",
+                    "usage_json": None,
+                    "trace_json": json.dumps(
+                        [
+                            {
+                                "id": "trace-shared-governance-1",
+                                "type": "thought",
+                                "content": "trace governance",
+                                "seq": 1,
+                                "meta": {},
+                            }
+                        ]
+                    ),
+                },
+            ]
+            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps = (
+                lambda _trace_steps: {
+                    "profile": "shared_trace_profile",
+                    "provider_source": "shared_trace_source",
+                    "allowed_tool_names": ["shared_trace_tool"],
+                    "allowed_tool_labels": ["Shared Trace Tool"],
+                }
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-shared-trace-governance",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps = (
+                original_parser
+            )
+
+        self.assertIsNotNone(payload.governance)
+        assert payload.governance is not None
+        self.assertEqual(payload.governance.profiles, ["shared_trace_profile"])
+        self.assertEqual(payload.governance.provider_sources, ["shared_trace_source"])
+        self.assertEqual(payload.governance.allowed_tool_names, ["shared_trace_tool"])
+        self.assertEqual(payload.governance.allowed_tool_labels, ["Shared Trace Tool"])
+        self.assertIsNotNone(payload.tasks[0].governance)
+        assert payload.tasks[0].governance is not None
+        self.assertEqual(payload.tasks[0].governance.profile, "shared_trace_profile")
+        self.assertEqual(payload.tasks[0].governance.provider_source, "shared_trace_source")
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["shared_trace_tool"])
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Shared Trace Tool"])
+
+    def test_build_session_export_payload_reuses_shared_governance_summary_merger(self) -> None:
+        session = {
+            "id": "session-shared-governance-summary",
+            "title": "Shared Governance Summary Session",
+            "created_at": "2026-06-11T14:00:00",
+            "updated_at": "2026-06-11T14:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_merge = session_routes_module.chat_persistence_service._merge_session_governance_summary
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-shared-governance-summary",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-11T14:00:00",
+                    "updated_at": "2026-06-11T14:01:00",
+                    "usage_json": None,
+                    "trace_json": None,
+                    "tool_registry_profile": "planning_only",
+                    "tool_registry_provider_source": "default",
+                    "allowed_tool_names_json": json.dumps(["task_plan"]),
+                    "allowed_tool_labels_json": json.dumps(["Task Planner"]),
+                },
+            ]
+            session_routes_module.chat_persistence_service._merge_session_governance_summary = (
+                lambda _current, _task_governance: {
+                    "profiles": ["shared_summary_profile"],
+                    "provider_sources": ["shared_summary_source"],
+                    "allowed_tool_names": ["shared_summary_tool"],
+                    "allowed_tool_labels": ["Shared Summary Tool"],
+                }
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-shared-governance-summary",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            session_routes_module.chat_persistence_service._merge_session_governance_summary = (
+                original_merge
+            )
+
+        self.assertIsNotNone(payload.governance)
+        assert payload.governance is not None
+        self.assertEqual(payload.governance.profiles, ["shared_summary_profile"])
+        self.assertEqual(payload.governance.provider_sources, ["shared_summary_source"])
+        self.assertEqual(payload.governance.allowed_tool_names, ["shared_summary_tool"])
+        self.assertEqual(payload.governance.allowed_tool_labels, ["Shared Summary Tool"])
+
+    def test_build_session_export_payload_reuses_task_governance_summary_builder(self) -> None:
+        session = {
+            "id": "session-builder-governance-summary",
+            "title": "Builder Governance Summary Session",
+            "created_at": "2026-06-11T15:00:00",
+            "updated_at": "2026-06-11T15:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_builder = session_routes_module._build_session_export_task_governance_summary_from_dict  # type: ignore[attr-defined]
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-builder-governance-session",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-11T15:00:00",
+                    "updated_at": "2026-06-11T15:01:00",
+                    "usage_json": None,
+                    "trace_json": None,
+                    "tool_registry_profile": "planning_only",
+                    "tool_registry_provider_source": "default",
+                    "allowed_tool_names_json": json.dumps(["task_plan"]),
+                    "allowed_tool_labels_json": json.dumps(["Task Planner"]),
+                },
+            ]
+            session_routes_module._build_session_export_task_governance_summary_from_dict = lambda _governance: session_routes_module.SessionExportTaskGovernanceSummary(  # type: ignore[attr-defined]
+                profile="builder_profile",
+                provider_source="builder_source",
+                allowed_tool_names=["builder_tool"],
+                allowed_tool_labels=["Builder Tool"],
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-builder-governance-session",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            session_routes_module._build_session_export_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(payload.tasks[0].governance)
+        assert payload.tasks[0].governance is not None
+        self.assertEqual(payload.tasks[0].governance.profile, "builder_profile")
+        self.assertEqual(payload.tasks[0].governance.provider_source, "builder_source")
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["builder_tool"])
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Builder Tool"])
 
     def test_build_session_export_payload_prefers_persisted_governance_columns(self) -> None:
         session = {
@@ -2340,6 +3327,80 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("- Allowed Tools: calc_eval", markdown)
         self.assertIn("- Tool Registry Profile: calculator_only", markdown)
         self.assertIn("- Tool Registry Source: default", markdown)
+
+    def test_build_session_export_payload_reuses_shared_task_governance_row_parser(self) -> None:
+        self.assertTrue(hasattr(session_routes_module, "chat_persistence_service"))
+        session = {
+            "id": "session-shared-governance-columns",
+            "title": "Shared Governance Session",
+            "created_at": "2026-06-11T12:00:00",
+            "updated_at": "2026-06-11T12:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_parser = (
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row
+        )
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-shared-governance-session",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-11T12:00:00",
+                    "updated_at": "2026-06-11T12:01:00",
+                    "usage_json": None,
+                    "trace_json": None,
+                },
+            ]
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                lambda _task: {
+                    "profile": "shared_profile",
+                    "provider_source": "shared_source",
+                    "allowed_tool_names": ["shared_tool"],
+                    "allowed_tool_labels": ["Shared Tool"],
+                }
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-shared-governance-session",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                original_parser
+            )
+
+        self.assertIsNotNone(payload.governance)
+        assert payload.governance is not None
+        self.assertEqual(payload.governance.profiles, ["shared_profile"])
+        self.assertEqual(payload.governance.provider_sources, ["shared_source"])
+        self.assertEqual(payload.governance.allowed_tool_names, ["shared_tool"])
+        self.assertEqual(payload.governance.allowed_tool_labels, ["Shared Tool"])
+        self.assertIsNotNone(payload.tasks[0].governance)
+        assert payload.tasks[0].governance is not None
+        self.assertEqual(payload.tasks[0].governance.profile, "shared_profile")
+        self.assertEqual(payload.tasks[0].governance.provider_source, "shared_source")
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["shared_tool"])
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Shared Tool"])
 
     def test_export_assertions_require_session_task_level_governance_json(self) -> None:
         import importlib
@@ -3552,6 +4613,104 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
 
+    def test_build_tool_registry_loaders_from_settings_reuses_shared_profile_name_helper(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "profile": " Planning_Only ",
+                    }
+                }
+            )
+        )
+        original_get_tool_registry_profile_name_from_settings = (
+            tool_runtime_module.get_tool_registry_profile_name_from_settings
+        )
+        captured: list[object] = []
+        try:
+            def fake_get_tool_registry_profile_name_from_settings(*, settings=None):
+                captured.append(getattr(settings, "tool_registry_profile", None))
+                if getattr(settings, "tool_registry_profile", None) == " Planning_Only ":
+                    return "calculator_only"
+                return original_get_tool_registry_profile_name_from_settings(
+                    settings=settings
+                )
+
+            tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                fake_get_tool_registry_profile_name_from_settings
+            )
+            loaders = build_tool_registry_loaders_from_settings(settings=settings)
+        finally:
+            tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                original_get_tool_registry_profile_name_from_settings
+            )
+
+        self.assertEqual(tuple(sorted(loaders)), ("planning_loader",))
+        self.assertIn(" Planning_Only ", captured)
+        self.assertEqual(
+            tuple(sorted(loaders["planning_loader"]())),
+            ("calc_eval",),
+        )
+
+    def test_build_tool_registry_loaders_from_settings_reuses_shared_profile_name_helper_for_factory_hint(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "loader_factory": "custom_factory",
+                    }
+                }
+            )
+        )
+        original_get_tool_registry_profile_name_from_settings = (
+            tool_runtime_module.get_tool_registry_profile_name_from_settings
+        )
+        original_build_tool_registry_loader_factories_from_settings = (
+            tool_runtime_module.build_tool_registry_loader_factories_from_settings
+        )
+        captured: list[object] = []
+        try:
+            def fake_get_tool_registry_profile_name_from_settings(*, settings=None):
+                captured.append(getattr(settings, "tool_registry_profile", None))
+                if getattr(settings, "tool_registry_profile", None) == " Planning_Only ":
+                    return "calculator_only"
+                return original_get_tool_registry_profile_name_from_settings(
+                    settings=settings
+                )
+
+            def fake_build_tool_registry_loader_factories_from_settings(*, settings=None):
+                def factory(_settings=None):
+                    return tool_runtime_module.get_default_tool_registry
+
+                setattr(factory, "_tool_registry_profile_name", " Planning_Only ")
+                return {"custom_factory": factory}
+
+            tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                fake_get_tool_registry_profile_name_from_settings
+            )
+            tool_runtime_module.build_tool_registry_loader_factories_from_settings = (
+                fake_build_tool_registry_loader_factories_from_settings
+            )
+            loaders = build_tool_registry_loaders_from_settings(settings=settings)
+        finally:
+            tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                original_get_tool_registry_profile_name_from_settings
+            )
+            tool_runtime_module.build_tool_registry_loader_factories_from_settings = (
+                original_build_tool_registry_loader_factories_from_settings
+            )
+
+        self.assertEqual(tuple(sorted(loaders)), ("planning_loader",))
+        self.assertIn(" Planning_Only ", captured)
+        self.assertEqual(
+            tuple(sorted(loaders["planning_loader"]())),
+            ("calc_eval",),
+        )
+
     def test_build_tool_registry_loader_factories_from_settings_supports_named_factory_alias(self) -> None:
         settings = SimpleNamespace(
             tool_registry_loader_factories_json=json.dumps(
@@ -3569,6 +4728,51 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tuple(sorted(factories)), ("planning_factory",))
         self.assertEqual(
             tuple(sorted(planning_registry)),
+            ("task_plan",),
+        )
+
+    def test_build_tool_registry_loader_factories_from_settings_reuse_shared_reference_normalizer_for_factory_key(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loader_factories_json=json.dumps(
+                {
+                    " Planning_Factory ": {
+                        "factory": "planning_only",
+                    }
+                }
+            )
+        )
+        original_normalize_named_tool_registry_component_name = getattr(
+            tool_runtime_module,
+            "_normalize_named_tool_registry_component_name",
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_named_tool_registry_component_name(
+                name: object | None,
+            ) -> str | None:
+                captured.append(name)
+                if name == " Planning_Factory ":
+                    return "planning_factory_shadow"
+                if not isinstance(name, str):
+                    return None
+                normalized = name.strip().lower()
+                return normalized or None
+
+            tool_runtime_module._normalize_named_tool_registry_component_name = (
+                fake_normalize_named_tool_registry_component_name
+            )
+            factories = build_tool_registry_loader_factories_from_settings(settings=settings)
+        finally:
+            tool_runtime_module._normalize_named_tool_registry_component_name = (
+                original_normalize_named_tool_registry_component_name
+            )
+
+        self.assertIn(" Planning_Factory ", captured)
+        self.assertEqual(tuple(sorted(factories)), ("planning_factory_shadow",))
+        self.assertEqual(
+            tuple(sorted(factories["planning_factory_shadow"](settings)())),
             ("task_plan",),
         )
 
@@ -3985,6 +5189,74 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             tuple(sorted(registry)),
             ("calc_eval", "calc_eval_fast", "task_plan"),
+        )
+        self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_from_file_reuses_shared_provider_source_name_helper_for_registry_sources(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": [" Planning_Suite "],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "planning_suite_shadow": {
+                            "provider_factory": "planning_only",
+                            "overrides": {
+                                "calc_eval": {
+                                    "enabled": True,
+                                    "label": "Planning Calculator",
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+            original_get_tool_registry_provider_source_name_from_settings = (
+                tool_runtime_module.get_tool_registry_provider_source_name_from_settings
+            )
+            captured: list[object] = []
+            try:
+                def fake_get_tool_registry_provider_source_name_from_settings(
+                    *,
+                    settings=None,
+                ):
+                    captured.append(
+                        getattr(settings, "tool_registry_provider_source", None)
+                    )
+                    if (
+                        getattr(settings, "tool_registry_provider_source", None)
+                        == " Planning_Suite "
+                    ):
+                        return "planning_suite_shadow"
+                    return original_get_tool_registry_provider_source_name_from_settings(
+                        settings=settings
+                    )
+
+                tool_runtime_module.get_tool_registry_provider_source_name_from_settings = (
+                    fake_get_tool_registry_provider_source_name_from_settings
+                )
+                registry = build_tool_registry_from_file(
+                    registry_file=str(root_file),
+                    settings=settings,
+                )
+            finally:
+                tool_runtime_module.get_tool_registry_provider_source_name_from_settings = (
+                    original_get_tool_registry_provider_source_name_from_settings
+                )
+
+        self.assertIn(" Planning_Suite ", captured)
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
@@ -4500,6 +5772,111 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             tuple(sorted(artifacts["sources"]["file_source"].load_tool_registry())),
+            ("calc_eval_fast",),
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_artifacts_reuse_shared_reference_normalizer_for_named_provider_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_dir = Path(tmpdir) / "missing-registry-dir"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_dirs": [str(missing_dir)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "planning_provider_shadow": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "planning_suite": {
+                            "provider": " Planning_Provider ",
+                        }
+                    }
+                ),
+            )
+            original_resolve_named_tool_registry_provider_reference = (
+                tool_runtime_module.resolve_named_tool_registry_provider_reference
+            )
+            original_normalize_named_tool_registry_component_name = getattr(
+                tool_runtime_module,
+                "_normalize_named_tool_registry_component_name",
+                None,
+            )
+            captured: list[object] = []
+            try:
+                def fake_normalize_named_tool_registry_component_name(
+                    name: object | None,
+                ) -> str | None:
+                    captured.append(name)
+                    if name == " Planning_Provider ":
+                        return "planning_provider_shadow"
+                    if not isinstance(name, str):
+                        return None
+                    normalized = name.strip().lower()
+                    return normalized or None
+
+                def fake_resolve_named_tool_registry_provider_reference(
+                    name: str,
+                    *,
+                    named_providers=None,
+                    named_sources=None,
+                ):
+                    if name == " Planning_Provider " and named_providers is not None:
+                        return named_providers.get("planning_provider_shadow")
+                    return original_resolve_named_tool_registry_provider_reference(
+                        name,
+                        named_providers=named_providers,
+                        named_sources=named_sources,
+                    )
+
+                tool_runtime_module._normalize_named_tool_registry_component_name = (
+                    fake_normalize_named_tool_registry_component_name
+                )
+                tool_runtime_module.resolve_named_tool_registry_provider_reference = (
+                    fake_resolve_named_tool_registry_provider_reference
+                )
+                artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
+                    settings=settings
+                )
+            finally:
+                tool_runtime_module.resolve_named_tool_registry_provider_reference = (
+                    original_resolve_named_tool_registry_provider_reference
+                )
+                if original_normalize_named_tool_registry_component_name is None:
+                    delattr(
+                        tool_runtime_module,
+                        "_normalize_named_tool_registry_component_name",
+                    )
+                else:
+                    tool_runtime_module._normalize_named_tool_registry_component_name = (
+                        original_normalize_named_tool_registry_component_name
+                    )
+
+        self.assertIn(" Planning_Provider ", captured)
+        self.assertEqual(tuple(sorted(artifacts["sources"])), ("planning_suite",))
+        self.assertEqual(
+            artifacts["source_diagnostics"]["planning_suite"]["missing_registry_dirs"],
+            (str(missing_dir.resolve()),),
+        )
+        self.assertEqual(
+            tuple(sorted(artifacts["sources"]["planning_suite"].load_tool_registry())),
             ("calc_eval_fast",),
         )
 
@@ -11168,6 +12545,63 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Planning Calculator",
         )
 
+    def test_build_tool_registry_providers_from_settings_reuses_shared_profile_name_helper_for_factory_hint(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "provider_factory": "custom_factory",
+                    }
+                }
+            )
+        )
+        original_get_tool_registry_profile_name_from_settings = (
+            tool_runtime_module.get_tool_registry_profile_name_from_settings
+        )
+        original_build_tool_registry_provider_factories_from_settings = (
+            tool_runtime_module.build_tool_registry_provider_factories_from_settings
+        )
+        captured: list[object] = []
+        try:
+            def fake_get_tool_registry_profile_name_from_settings(*, settings=None):
+                captured.append(getattr(settings, "tool_registry_profile", None))
+                if getattr(settings, "tool_registry_profile", None) == " Planning_Only ":
+                    return "calculator_only"
+                return original_get_tool_registry_profile_name_from_settings(
+                    settings=settings
+                )
+
+            def fake_build_tool_registry_provider_factories_from_settings(*, settings=None):
+                def factory(_settings=None):
+                    return tool_runtime_module.get_default_tool_registry_provider()
+
+                setattr(factory, "_tool_registry_profile_name", " Planning_Only ")
+                return {"custom_factory": factory}
+
+            tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                fake_get_tool_registry_profile_name_from_settings
+            )
+            tool_runtime_module.build_tool_registry_provider_factories_from_settings = (
+                fake_build_tool_registry_provider_factories_from_settings
+            )
+            providers = build_tool_registry_providers_from_settings(settings=settings)
+        finally:
+            tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                original_get_tool_registry_profile_name_from_settings
+            )
+            tool_runtime_module.build_tool_registry_provider_factories_from_settings = (
+                original_build_tool_registry_provider_factories_from_settings
+            )
+
+        self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
+        self.assertIn(" Planning_Only ", captured)
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=providers["planning_provider"]),
+            ("calc_eval",),
+        )
+
     def test_build_tool_registry_loaders_from_settings_accepts_named_loader_factory_reference(self) -> None:
         settings = SimpleNamespace(
             tool_registry_loader_factories_json=json.dumps(
@@ -11202,6 +12636,72 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         planning_registry = loaders["planning_loader"]()
 
         self.assertEqual(tuple(sorted(planning_registry)), ("calc_eval", "calc_eval_fast", "task_plan"))
+        self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_loaders_from_settings_reuse_shared_reference_normalizer_for_loader_factory_reference(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loader_factories_json=json.dumps(
+                {
+                    "planning_factory_shadow": {
+                        "factory": "planning_only",
+                    }
+                }
+            ),
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader": {
+                        "loader_factory": " Planning_Factory ",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+        original_normalize_named_tool_registry_component_name = getattr(
+            tool_runtime_module,
+            "_normalize_named_tool_registry_component_name",
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_named_tool_registry_component_name(
+                name: object | None,
+            ) -> str | None:
+                captured.append(name)
+                if name == " Planning_Factory ":
+                    return "planning_factory_shadow"
+                if not isinstance(name, str):
+                    return None
+                normalized = name.strip().lower()
+                return normalized or None
+
+            tool_runtime_module._normalize_named_tool_registry_component_name = (
+                fake_normalize_named_tool_registry_component_name
+            )
+            loaders = build_tool_registry_loaders_from_settings(settings=settings)
+            planning_registry = loaders["planning_loader"]()
+        finally:
+            tool_runtime_module._normalize_named_tool_registry_component_name = (
+                original_normalize_named_tool_registry_component_name
+            )
+
+        self.assertIn(" Planning_Factory ", captured)
+        self.assertEqual(tuple(sorted(loaders)), ("planning_loader",))
+        self.assertEqual(
+            tuple(sorted(planning_registry)),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
+        )
         self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
 
     def test_build_tool_registry_providers_from_settings_accepts_named_provider_factory_reference(self) -> None:
@@ -11240,6 +12740,76 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             get_registered_tool_names(registry_provider=providers["planning_provider"]),
             ("calc_eval", "calc_eval_fast", "task_plan"),
+        )
+
+    def test_build_tool_registry_providers_from_settings_reuse_shared_reference_normalizer_for_named_loader_reference(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "planning_loader_shadow": {
+                        "loader": "default",
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "loader": " Planning_Loader ",
+                        "disabled_tool_names": ["mock_plan"],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+        original_normalize_named_tool_registry_component_name = getattr(
+            tool_runtime_module,
+            "_normalize_named_tool_registry_component_name",
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_named_tool_registry_component_name(
+                name: object | None,
+            ) -> str | None:
+                captured.append(name)
+                if name == " Planning_Loader ":
+                    return "planning_loader_shadow"
+                if not isinstance(name, str):
+                    return None
+                normalized = name.strip().lower()
+                return normalized or None
+
+            tool_runtime_module._normalize_named_tool_registry_component_name = (
+                fake_normalize_named_tool_registry_component_name
+            )
+            providers = build_tool_registry_providers_from_settings(settings=settings)
+        finally:
+            tool_runtime_module._normalize_named_tool_registry_component_name = (
+                original_normalize_named_tool_registry_component_name
+            )
+
+        self.assertIn(" Planning_Loader ", captured)
+        self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=providers["planning_provider"]),
+            ("calc_eval", "calc_eval_fast"),
+        )
+        self.assertEqual(
+            providers["planning_provider"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
         )
 
     def test_build_tool_registry_loaders_from_settings_accepts_registry_file_shape(self) -> None:
@@ -11368,6 +12938,79 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval", "calc_eval_fast", "mock_plan_brief", "task_plan"),
         )
         self.assertEqual(file_registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_loaders_from_settings_reuse_shared_profile_name_helper_for_registry_manifest(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry-manifest.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "profile": " Planning_Only ",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loaders_json=json.dumps(
+                    {
+                        "file_loader": {
+                            "registry_file": str(registry_file),
+                            "extra_tools": {
+                                "mock_plan_brief": {
+                                    "template": "mock_plan",
+                                    "label": "Brief Planner",
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+            original_get_tool_registry_profile_name_from_settings = (
+                tool_runtime_module.get_tool_registry_profile_name_from_settings
+            )
+            captured: list[object] = []
+            try:
+                def fake_get_tool_registry_profile_name_from_settings(*, settings=None):
+                    captured.append(getattr(settings, "tool_registry_profile", None))
+                    if (
+                        getattr(settings, "tool_registry_profile", None)
+                        == " Planning_Only "
+                    ):
+                        return "calculator_only"
+                    return original_get_tool_registry_profile_name_from_settings(
+                        settings=settings
+                    )
+
+                tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                    fake_get_tool_registry_profile_name_from_settings
+                )
+                loaders = build_tool_registry_loaders_from_settings(settings=settings)
+                file_registry = loaders["file_loader"]()
+            finally:
+                tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                    original_get_tool_registry_profile_name_from_settings
+                )
+
+        self.assertEqual(tuple(sorted(loaders)), ("file_loader",))
+        self.assertIn(" Planning_Only ", captured)
+        self.assertEqual(
+            tuple(sorted(file_registry)),
+            ("calc_eval", "calc_eval_fast", "mock_plan_brief"),
+        )
 
     def test_build_tool_registry_providers_from_settings_accepts_registry_file_manifest_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -11762,6 +13405,97 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             sources["planning_suite"].load_tool_registry()["calc_eval"].label,
             "Planning Calculator",
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_reuses_shared_profile_name_helper(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "profile": " Planning_Only ",
+                    }
+                }
+            )
+        )
+        original_get_tool_registry_profile_name_from_settings = (
+            tool_runtime_module.get_tool_registry_profile_name_from_settings
+        )
+        captured: list[object] = []
+        try:
+            def fake_get_tool_registry_profile_name_from_settings(*, settings=None):
+                captured.append(getattr(settings, "tool_registry_profile", None))
+                if getattr(settings, "tool_registry_profile", None) == " Planning_Only ":
+                    return "calculator_only"
+                return original_get_tool_registry_profile_name_from_settings(
+                    settings=settings
+                )
+
+            tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                fake_get_tool_registry_profile_name_from_settings
+            )
+            sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+        finally:
+            tool_runtime_module.get_tool_registry_profile_name_from_settings = (
+                original_get_tool_registry_profile_name_from_settings
+            )
+
+        self.assertEqual(tuple(sorted(sources)), ("planning_suite",))
+        self.assertIn(" Planning_Only ", captured)
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["planning_suite"]),
+            ("calc_eval",),
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_reuses_shared_provider_source_name_helper(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    " Planning_Suite ": {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                }
+            )
+        )
+        original_get_tool_registry_provider_source_name_from_settings = (
+            tool_runtime_module.get_tool_registry_provider_source_name_from_settings
+        )
+        captured: list[object] = []
+        try:
+            def fake_get_tool_registry_provider_source_name_from_settings(
+                *,
+                settings=None,
+            ):
+                captured.append(getattr(settings, "tool_registry_provider_source", None))
+                if (
+                    getattr(settings, "tool_registry_provider_source", None)
+                    == " Planning_Suite "
+                ):
+                    return "planning_suite_shadow"
+                return original_get_tool_registry_provider_source_name_from_settings(
+                    settings=settings
+                )
+
+            tool_runtime_module.get_tool_registry_provider_source_name_from_settings = (
+                fake_get_tool_registry_provider_source_name_from_settings
+            )
+            sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+        finally:
+            tool_runtime_module.get_tool_registry_provider_source_name_from_settings = (
+                original_get_tool_registry_provider_source_name_from_settings
+            )
+
+        self.assertIn(" Planning_Suite ", captured)
+        self.assertEqual(tuple(sorted(sources)), ("planning_suite_shadow",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["planning_suite_shadow"]),
+            ("calc_eval_fast",),
         )
 
     def test_build_tool_registry_providers_from_settings_ignores_unknown_loader_name(self) -> None:
@@ -12212,6 +13946,49 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             get_tool_registry_provider_source_name_from_settings(settings=settings),
             "default",
         )
+
+    def test_tool_registry_profile_and_source_helpers_reuse_shared_reference_normalizer(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_profile=" Planning_Only ",
+            tool_registry_provider_source=" Planning_Suite ",
+        )
+        original_normalize_named_tool_registry_component_name = getattr(
+            tool_runtime_module,
+            "_normalize_named_tool_registry_component_name",
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_named_tool_registry_component_name(
+                name: object | None,
+            ) -> str | None:
+                captured.append(name)
+                if name == " Planning_Only ":
+                    return "calculator_only"
+                if name == " Planning_Suite ":
+                    return "planning_suite_shadow"
+                if not isinstance(name, str):
+                    return None
+                normalized = name.strip().lower()
+                return normalized or None
+
+            tool_runtime_module._normalize_named_tool_registry_component_name = (
+                fake_normalize_named_tool_registry_component_name
+            )
+            profile_name = get_tool_registry_profile_name_from_settings(settings=settings)
+            provider_source_name = get_tool_registry_provider_source_name_from_settings(
+                settings=settings
+            )
+        finally:
+            tool_runtime_module._normalize_named_tool_registry_component_name = (
+                original_normalize_named_tool_registry_component_name
+            )
+
+        self.assertIn(" Planning_Only ", captured)
+        self.assertIn(" Planning_Suite ", captured)
+        self.assertEqual(profile_name, "calculator_only")
+        self.assertEqual(provider_source_name, "planning_suite_shadow")
 
     def test_load_tool_registry_returns_isolated_default_snapshot(self) -> None:
         registry = load_tool_registry()

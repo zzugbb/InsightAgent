@@ -11,6 +11,7 @@ from app.api.deps import get_current_user
 from app.config import get_settings
 from app.db import get_database_locator
 from app.services.audit_service import safe_record_audit_event
+import app.services.chat_persistence_service as chat_persistence_service
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 from app.services.tool_runtime import (
     build_tool_registry_provider_sources_from_settings,
@@ -61,15 +62,13 @@ class SettingsUpdateRequest(BaseModel):
         self.model = self.model.strip()
         self.base_url = self.base_url.strip() if self.base_url else None
         self.api_key = self.api_key.strip() if self.api_key else None
-        self.tool_registry_profile = (
-            self.tool_registry_profile.strip().lower()
-            if self.tool_registry_profile
-            else None
+        self.tool_registry_profile = chat_persistence_service._normalize_governance_filter(
+            self.tool_registry_profile
         )
         self.tool_registry_provider_source = (
-            self.tool_registry_provider_source.strip().lower()
-            if self.tool_registry_provider_source
-            else None
+            chat_persistence_service._normalize_governance_filter(
+                self.tool_registry_provider_source
+            )
         )
 
         if self.mode not in {"mock", "remote"}:
@@ -250,11 +249,16 @@ def _build_tool_registry_provider_source_option_details(
             provider_registry[tool_name].label for tool_name in enabled_tool_names
         ]
         source_spec = source_specs.get(source_name, {})
-        base_profile = (
-            str(source_spec.get("profile", "default")).strip().lower()
-            if isinstance(source_spec, dict)
-            else "default"
-        ) or "default"
+        base_profile = get_tool_registry_profile_name_from_settings(
+            settings=_clone_settings_with_updates(
+                settings=effective_settings,
+                tool_registry_profile=(
+                    source_spec.get("profile", "default")
+                    if isinstance(source_spec, dict)
+                    else "default"
+                ),
+            )
+        )
         details.append(
             ToolRegistryProviderSourceOptionResponse(
                 name=source_name,
