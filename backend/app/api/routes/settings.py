@@ -218,6 +218,18 @@ def _build_tool_registry_provider_source_option_details(
         )
     except json.JSONDecodeError:
         source_specs = {}
+    normalized_source_specs: dict[str, dict[str, object]] = {}
+    if isinstance(source_specs, dict):
+        for raw_source_name, raw_source_spec in source_specs.items():
+            normalized_source_name = get_tool_registry_provider_source_name_from_settings(
+                settings=_clone_settings_with_updates(
+                    settings=effective_settings,
+                    tool_registry_provider_source=raw_source_name,
+                )
+            )
+            if normalized_source_name == "default" or not isinstance(raw_source_spec, dict):
+                continue
+            normalized_source_specs[normalized_source_name] = raw_source_spec
     details: list[ToolRegistryProviderSourceOptionResponse] = []
     for source_name in get_available_tool_registry_provider_source_names(
         settings=effective_settings
@@ -248,7 +260,7 @@ def _build_tool_registry_provider_source_option_details(
         enabled_tool_labels = [
             provider_registry[tool_name].label for tool_name in enabled_tool_names
         ]
-        source_spec = source_specs.get(source_name, {})
+        source_spec = normalized_source_specs.get(source_name, {})
         base_profile = get_tool_registry_profile_name_from_settings(
             settings=_clone_settings_with_updates(
                 settings=effective_settings,
@@ -361,6 +373,33 @@ def _merge_runtime_settings_for_summary(
     return SimpleNamespace(**merged_values)
 
 
+def _resolve_effective_tool_registry_selection(
+    *,
+    payload: SettingsUpdateRequest,
+    existing: StoredSettings,
+    runtime_settings: object | None = None,
+) -> tuple[str, str]:
+    default_settings = get_settings() if runtime_settings is None else runtime_settings
+    effective_settings = SimpleNamespace(
+        tool_registry_profile=(
+            payload.tool_registry_profile
+            or existing.tool_registry_profile
+            or getattr(default_settings, "tool_registry_profile", None)
+        ),
+        tool_registry_provider_source=(
+            payload.tool_registry_provider_source
+            or existing.tool_registry_provider_source
+            or getattr(default_settings, "tool_registry_provider_source", None)
+        ),
+    )
+    return (
+        get_tool_registry_profile_name_from_settings(settings=effective_settings),
+        get_tool_registry_provider_source_name_from_settings(
+            settings=effective_settings
+        ),
+    )
+
+
 def _build_settings_summary_response(
     *,
     settings: StoredSettings,
@@ -429,15 +468,11 @@ def update_settings(
     else:
         effective_api_key = payload.api_key or existing.api_key
         effective_base_url = payload.base_url
-    effective_tool_registry_profile = (
-        payload.tool_registry_profile
-        or existing.tool_registry_profile
-        or get_settings().tool_registry_profile
-    )
-    effective_tool_registry_provider_source = (
-        payload.tool_registry_provider_source
-        or existing.tool_registry_provider_source
-        or get_settings().tool_registry_provider_source
+    effective_tool_registry_profile, effective_tool_registry_provider_source = (
+        _resolve_effective_tool_registry_selection(
+            payload=payload,
+            existing=existing,
+        )
     )
     if effective_tool_registry_profile not in get_available_tool_registry_profile_names():
         raise HTTPException(
@@ -500,15 +535,11 @@ def validate_settings(
     existing = get_stored_settings(user_id)
     effective_api_key = payload.api_key or existing.api_key
     effective_base_url = payload.base_url
-    effective_tool_registry_profile = (
-        payload.tool_registry_profile
-        or existing.tool_registry_profile
-        or get_settings().tool_registry_profile
-    )
-    effective_tool_registry_provider_source = (
-        payload.tool_registry_provider_source
-        or existing.tool_registry_provider_source
-        or get_settings().tool_registry_provider_source
+    effective_tool_registry_profile, effective_tool_registry_provider_source = (
+        _resolve_effective_tool_registry_selection(
+            payload=payload,
+            existing=existing,
+        )
     )
     effective_runtime_settings = _merge_runtime_settings_for_summary(
         settings=StoredSettings(

@@ -51,6 +51,65 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   显式点击，`saveToolRegistryProfile()` 关闭 modal 从键盘 `Escape` 改为显式点击 `.ant-modal-close`。这一步直接针对
   CI chromium 上 `retrieval_suite / calculator_suite / planning_suite` 选项点击超时，以及 `calculator_only`
   保存后 modal 仍可见的失败链路。
+- 阶段 5 协同（2026-06-12，settings 默认回退治理单源化）：后端 `PUT /api/settings` 与
+  `POST /api/settings/validate` 的默认 profile/source 回退现已并入 shared
+  `get_tool_registry_profile_name_from_settings()` /
+  `get_tool_registry_provider_source_name_from_settings()` 主干。当前前端模型设置页无需改协议或补额外兼容；
+  当 payload 与 user-stored settings 都未显式给出 `tool_registry_profile / tool_registry_provider_source`
+  时，settings summary / validate preview 也会稳定看到规范化后的默认值。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`393/393`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-12，task governance 摘要单源化）：后端
+  `chat_persistence_service._normalize_task_governance_dict()` 现已把 trace/task row 中抽出的
+  `tool_registry_profile / tool_registry_provider_source` 统一退回到 shared
+  `_normalize_governance_filter()`。当前前端任务详情、导出、usage dashboard 与 session/task 治理摘要无需改协议，
+  但读到的 governance profile/source 已开始和 settings 保存入口、task filter、usage compare 共用同一套规范化口径。
+  校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`394/394`），
+  `cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-12，session governance 摘要单源化）：后端
+  `chat_persistence_service._normalize_session_governance_summary_dict()` 现已把 session governance summary
+  里的 `profiles / provider_sources` 列表逐项退回到 shared `_normalize_governance_filter()`。当前前端 session
+  详情、会话导出、任务中心 session governance 聚合无需改协议，但读到的 profiles/source 列表已开始和 task governance、
+  task filter、usage compare、settings 保存入口共用同一套规范化口径。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`395/395`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-12，usage dashboard route 治理单源化）：后端
+  `GET /api/tasks/usage/dashboard` route 现已在进入 service 前先规范化
+  `tool_registry_profile / tool_registry_provider_source` query params。当前前端 usage dashboard 无需改协议，
+  但从页面筛选器发出的 profile/source 条件现在会和 task list route、service compare/filter、task/session governance
+  摘要链共用同一套规范化入口。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`395/395`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-12，task governance 提取入口单源化）：后端
+  `_extract_task_governance_from_trace_steps()` 与 `_extract_task_governance_from_task_row()` 现已把 raw
+  profile/source 直接交给 shared task governance normalizer。当前前端任务详情、任务导出、会话导出、usage dashboard、
+  session/task governance 摘要无需改协议，但这些页面读到的治理值已开始更完整地和 settings 保存入口、task list route、
+  usage route、service compare/filter 共用同一套规范化主干。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`397/397`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-12，session governance merge 单源化）：后端
+  `_merge_session_governance_summary()` 现已在合并 task governance 到 session summary 时，对
+  `profile / provider_source` 也复用 shared governance normalizer。当前前端 session summary、会话导出、
+  usage dashboard、任务中心 session governance 聚合无需改协议，但这些页面读到的合并后治理值已开始更完整地和
+  task/session governance 摘要、task list/usage route、service compare/filter、settings 保存入口共用同一套规范化口径。
+  校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`398/398`），
+  `cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-12，allowed-tool 列表单源化）：后端现已把
+  `allowed_tool_names / allowed_tool_labels` 这条 sibling 链也并到 shared
+  `_normalize_governance_string_list()` 上。当前前端任务详情、任务导出、会话导出、usage dashboard、
+  session/task governance 摘要无需改协议，但这些页面读到的 allowed-tool 列表已经开始更完整地和 profile/source
+  治理主干共用同一类单源化结构。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`400/400`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-12，session governance summary 列表稳定化）：后端
+  `chat_persistence_service._normalize_session_governance_summary_dict()` 现已把 session governance summary
+  里的 `profiles / provider_sources / allowed_tool_names / allowed_tool_labels` 统一收口为“去重 + 稳定排序”的列表输出。
+  当前前端 session 详情、会话导出、任务中心 session governance 聚合与 usage dashboard 无需改协议，但这些页面读到的治理摘要顺序
+  会更稳定，更适合直接展示与导出比对。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`401/401`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-12，session export trace fallback 单源化）：后端 `sessions` 导出链在 task
+  没有持久化治理列时，现已优先复用 shared trace governance parser，而不再在 route 里自己
+  `json.loads + parseTrace` 一遍。当前前端会话导出 JSON/Markdown 无需改协议，但 task-level governance 与
+  session-level governance summary 会更稳定地和 persistence service 的 trace parser 主干保持一致。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`402/402`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - 阶段 5 协同（2026-05-14，service-effects helper）：后端已继续把单个 tool 的高层 service 消费结果归并到 `build_tool_plan_item_service_effects()`，统一承接 trace 追加、observation delta、seq delta 与 terminal return 信息；当前前端可见的 SSE/trace 契约保持不变。focused 回归脚本已扩展到 69 条兼容测试，且交接文档已同步到当前真实状态，便于后续会话延续推进
 - 阶段 5 协同（2026-05-14，service-effects follow-up）：后端已继续把单个 tool 的 service 消费结果抬高成更明确的 runtime 指令对象，`build_tool_plan_item_service_effects()` 现已直接暴露 `trace_writes` 与 `continue_update`，前者承接 trace append/SSE/persist 节奏，后者承接 success path 的 observation/seq 增量；当前前端可见的 SSE/trace 契约保持不变，focused 回归脚本仍为 69 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过
 - 阶段 5 协同（2026-05-14，next-action helper）：后端已继续把单个 tool 的“继续流转 / 终止返回”分支选择上提到 `build_tool_plan_item_next_action()`，`chat_execution_service.py` 现通过 `next_action(kind=continue|return)` 统一消费 success/terminal 两种内部路径；当前前端可见的 SSE/trace 契约保持不变，focused 回归脚本仍为 69 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过
@@ -774,3 +833,4 @@ npm run test:e2e:smoke:matrix
 - named factory alias 注册口径继续收稳（2026-06-12）：本轮前端依然没有新增新的页面控件，重点是把后端 loader/provider factory alias 在 settings-backed 注册时对 `factory_name / target_name` 的归一化入口也收口到 shared helper。对前端来说，这意味着当前模型设置说明链背后依赖的 named registry 结构，以及 task center / usage dashboard 间接消费到的 configured runtime shape，在 named resolver、diagnostics 关联和 factory alias 注册三段已经开始更完整地共用同一套 reference 归一化规则；后续继续抬高整链治理回归时，因为命名注册链 sibling 入口分叉导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`388/388`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - adapter named reference lookup 口径继续收稳（2026-06-12）：本轮前端依然没有新增新的页面控件，重点是把后端 loader/provider adapter 在 runtime 应用时对 `loader_factory / provider_factory / named loader` 的 lookup 归一化入口也收口到 shared helper。对前端来说，这意味着当前模型设置说明链背后依赖的 named registry 结构，以及 task center / usage dashboard 间接消费到的 configured runtime shape，在 named resolver、diagnostics 关联、factory alias 注册和 adapter lookup 四段已经开始更完整地共用同一套 reference 归一化规则；后续继续抬高整链治理回归时，因为命名 lookup sibling 入口分叉导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`390/390`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - profile/source shared helper 口径继续收稳（2026-06-12）：本轮前端依然没有新增新的页面控件，重点是把后端 `tool_registry_profile / tool_registry_provider_source` 两条 shared helper 自己的字符串归一化入口也收口到同一条 shared helper。对前端来说，这意味着当前模型设置保存、说明展示、task center / usage dashboard 筛选，以及 named registry runtime 解析链背后依赖的 profile/source 主干 helper，已经开始和 named resolver、diagnostics 关联、factory alias 注册、adapter lookup 共用同一套 reference 归一化规则；后续继续抬高整链治理回归时，因为主干 helper 与下游命名链分叉导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`391/391`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- settings source detail spec-lookup 口径继续收稳（2026-06-12）：本轮前端依然没有新增新的页面控件，重点是把后端 settings summary / validate preview 里 provider source detail 在查 raw source spec 时的 key 归一化入口也收口到 shared source helper。对前端来说，这意味着当前模型设置说明链里 `base_profile` 的展示，不只 source runtime 解析和 source 名称枚举走同一套规则，连 raw spec key 查找也开始共用同一套 `get_tool_registry_provider_source_name_from_settings()` 归一化口径；后续继续抬高模型设置说明回归时，因为展示态与运行态 source key lookup 分叉导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`392/392`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。

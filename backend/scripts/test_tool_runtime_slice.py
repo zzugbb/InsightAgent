@@ -665,6 +665,135 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "provider::normalized",
         )
 
+    def test_update_settings_reuses_shared_registry_helpers_for_default_fallbacks(
+        self,
+    ) -> None:
+        payload = settings_routes_module.SettingsUpdateRequest(
+            mode="remote",
+            provider="openai",
+            model="gpt-4.1-mini",
+            base_url="https://example.invalid/v1",
+            api_key="secret",
+        )
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_settings = settings_routes_module.get_settings
+        original_get_tool_registry_profile_name_from_settings = (
+            settings_routes_module.get_tool_registry_profile_name_from_settings
+        )
+        original_get_tool_registry_provider_source_name_from_settings = (
+            settings_routes_module.get_tool_registry_provider_source_name_from_settings
+        )
+        original_get_available_tool_registry_profile_names = (
+            settings_routes_module.get_available_tool_registry_profile_names
+        )
+        original_get_available_tool_registry_provider_source_names = (
+            settings_routes_module.get_available_tool_registry_provider_source_names
+        )
+        original_save_settings = settings_routes_module.save_settings
+        original_build_settings_summary_response = (
+            settings_routes_module._build_settings_summary_response
+        )
+        original_safe_record_audit_event = settings_routes_module.safe_record_audit_event
+        captured_profiles: list[object] = []
+        captured_sources: list[object] = []
+        saved_settings: list[StoredSettings] = []
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url="https://example.invalid/v1",
+                api_key="secret",
+                tool_registry_profile=None,
+                tool_registry_provider_source=None,
+            )
+            settings_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_profile=" Planning_Only ",
+                tool_registry_provider_source=" Planning_Suite ",
+            )
+
+            def fake_get_tool_registry_profile_name_from_settings(*, settings=None):
+                captured_profiles.append(getattr(settings, "tool_registry_profile", None))
+                if getattr(settings, "tool_registry_profile", None) == " Planning_Only ":
+                    return "profile::normalized"
+                return original_get_tool_registry_profile_name_from_settings(
+                    settings=settings
+                )
+
+            def fake_get_tool_registry_provider_source_name_from_settings(
+                *,
+                settings=None,
+            ):
+                captured_sources.append(
+                    getattr(settings, "tool_registry_provider_source", None)
+                )
+                if (
+                    getattr(settings, "tool_registry_provider_source", None)
+                    == " Planning_Suite "
+                ):
+                    return "source::normalized"
+                return original_get_tool_registry_provider_source_name_from_settings(
+                    settings=settings
+                )
+
+            settings_routes_module.get_tool_registry_profile_name_from_settings = (
+                fake_get_tool_registry_profile_name_from_settings
+            )
+            settings_routes_module.get_tool_registry_provider_source_name_from_settings = (
+                fake_get_tool_registry_provider_source_name_from_settings
+            )
+            settings_routes_module.get_available_tool_registry_profile_names = (
+                lambda: ("default", "profile::normalized")
+            )
+            settings_routes_module.get_available_tool_registry_provider_source_names = (
+                lambda *, settings=None: ("default", "source::normalized")
+            )
+            settings_routes_module.save_settings = lambda _user_id, settings: (
+                saved_settings.append(settings) or settings
+            )
+            settings_routes_module._build_settings_summary_response = (
+                lambda *, settings, runtime_settings=None, database_locator=None: settings
+            )
+            settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
+
+            result = settings_routes_module.update_settings(
+                payload,
+                current_user={"id": "user-1"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_settings = original_get_settings
+            settings_routes_module.get_tool_registry_profile_name_from_settings = (
+                original_get_tool_registry_profile_name_from_settings
+            )
+            settings_routes_module.get_tool_registry_provider_source_name_from_settings = (
+                original_get_tool_registry_provider_source_name_from_settings
+            )
+            settings_routes_module.get_available_tool_registry_profile_names = (
+                original_get_available_tool_registry_profile_names
+            )
+            settings_routes_module.get_available_tool_registry_provider_source_names = (
+                original_get_available_tool_registry_provider_source_names
+            )
+            settings_routes_module.save_settings = original_save_settings
+            settings_routes_module._build_settings_summary_response = (
+                original_build_settings_summary_response
+            )
+            settings_routes_module.safe_record_audit_event = (
+                original_safe_record_audit_event
+            )
+
+        self.assertIn(" Planning_Only ", captured_profiles)
+        self.assertIn(" Planning_Suite ", captured_sources)
+        self.assertEqual(len(saved_settings), 1)
+        self.assertEqual(saved_settings[0].tool_registry_profile, "profile::normalized")
+        self.assertEqual(
+            saved_settings[0].tool_registry_provider_source,
+            "source::normalized",
+        )
+        self.assertEqual(result.tool_registry_profile, "profile::normalized")
+        self.assertEqual(result.tool_registry_provider_source, "source::normalized")
+
     def test_provider_source_option_details_reuse_shared_profile_name_helper(
         self,
     ) -> None:
@@ -703,6 +832,73 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         suite_a = next(detail for detail in details if detail.name == "suite_a")
         self.assertIn(" Planning_Only ", captured)
+        self.assertEqual(suite_a.base_profile, "profile::normalized")
+
+    def test_provider_source_option_details_reuse_shared_provider_source_name_helper_for_spec_lookup(
+        self,
+    ) -> None:
+        original_get_tool_registry_provider_source_name_from_settings = (
+            settings_routes_module.get_tool_registry_provider_source_name_from_settings
+        )
+        original_get_tool_registry_profile_name_from_settings = (
+            settings_routes_module.get_tool_registry_profile_name_from_settings
+        )
+        captured_sources: list[object] = []
+        captured_profiles: list[object] = []
+        try:
+            def fake_get_tool_registry_provider_source_name_from_settings(
+                *,
+                settings=None,
+            ):
+                captured_sources.append(
+                    getattr(settings, "tool_registry_provider_source", None)
+                )
+                if (
+                    getattr(settings, "tool_registry_provider_source", None)
+                    == " Suite_A "
+                ):
+                    return "suite_a"
+                return original_get_tool_registry_provider_source_name_from_settings(
+                    settings=settings
+                )
+
+            def fake_get_tool_registry_profile_name_from_settings(*, settings=None):
+                captured_profiles.append(getattr(settings, "tool_registry_profile", None))
+                if getattr(settings, "tool_registry_profile", None) == " Planning_Only ":
+                    return "profile::normalized"
+                return original_get_tool_registry_profile_name_from_settings(
+                    settings=settings
+                )
+
+            settings_routes_module.get_tool_registry_provider_source_name_from_settings = (
+                fake_get_tool_registry_provider_source_name_from_settings
+            )
+            settings_routes_module.get_tool_registry_profile_name_from_settings = (
+                fake_get_tool_registry_profile_name_from_settings
+            )
+            details = settings_routes_module._build_tool_registry_provider_source_option_details(
+                effective_settings=SimpleNamespace(
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            " Suite_A ": {
+                                "provider": "default",
+                                "profile": " Planning_Only ",
+                            }
+                        }
+                    )
+                )
+            )
+        finally:
+            settings_routes_module.get_tool_registry_provider_source_name_from_settings = (
+                original_get_tool_registry_provider_source_name_from_settings
+            )
+            settings_routes_module.get_tool_registry_profile_name_from_settings = (
+                original_get_tool_registry_profile_name_from_settings
+            )
+
+        suite_a = next(detail for detail in details if detail.name == "suite_a")
+        self.assertIn(" Suite_A ", captured_sources)
+        self.assertIn(" Planning_Only ", captured_profiles)
         self.assertEqual(suite_a.base_profile, "profile::normalized")
 
     def test_build_task_export_payload_surfaces_registry_governance_summary(self) -> None:
@@ -861,6 +1057,106 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_extract_task_governance_from_trace_steps_forwards_raw_governance_values_to_shared_normalizer(
+        self,
+    ) -> None:
+        original_normalizer = (
+            chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_task_governance_dict(governance):
+                captured.append(governance)
+                return {
+                    "profile": "normalized_profile",
+                    "provider_source": "normalized_source",
+                    "allowed_tool_names": ["normalized_tool"],
+                    "allowed_tool_labels": ["Normalized Tool"],
+                }
+
+            chat_persistence_module._normalize_task_governance_dict = (  # type: ignore[attr-defined]
+                fake_normalize_task_governance_dict
+            )
+            chat_persistence_module._extract_task_governance_from_trace_steps(  # type: ignore[attr-defined]
+                [
+                    {
+                        "id": "trace-normalized-raw-1",
+                        "type": "thought",
+                        "content": "normalized governance",
+                        "meta": {
+                            "tool_registry_profile": " Planning_Only ",
+                            "tool_registry_provider_source": " Planning_Suite ",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                    }
+                ]
+            )
+        finally:
+            chat_persistence_module._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            captured,
+            [
+                {
+                    "profile": " Planning_Only ",
+                    "provider_source": " Planning_Suite ",
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner Suite"],
+                }
+            ],
+        )
+
+    def test_extract_task_governance_from_trace_steps_forwards_raw_allowed_tool_values_to_shared_normalizer(
+        self,
+    ) -> None:
+        original_normalizer = (
+            chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_task_governance_dict(governance):
+                captured.append(governance)
+                return {
+                    "profile": "normalized_profile",
+                    "provider_source": "normalized_source",
+                    "allowed_tool_names": ["normalized_tool"],
+                    "allowed_tool_labels": ["Normalized Tool"],
+                }
+
+            chat_persistence_module._normalize_task_governance_dict = (  # type: ignore[attr-defined]
+                fake_normalize_task_governance_dict
+            )
+            chat_persistence_module._extract_task_governance_from_trace_steps(  # type: ignore[attr-defined]
+                [
+                    {
+                        "id": "trace-normalized-raw-tools-1",
+                        "type": "thought",
+                        "content": "normalized governance",
+                        "meta": {
+                            "tool_registry_profile": "planning_only",
+                            "tool_registry_provider_source": "planning_suite",
+                            "allowed_tool_names": [" task_plan "],
+                            "allowed_tool_labels": [" Task Planner Suite "],
+                        },
+                    }
+                ]
+            )
+        finally:
+            chat_persistence_module._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            captured,
+            [
+                {
+                    "profile": "planning_only",
+                    "provider_source": "planning_suite",
+                    "allowed_tool_names": [" task_plan "],
+                    "allowed_tool_labels": [" Task Planner Suite "],
+                }
+            ],
+        )
+
     def test_extract_task_governance_from_task_row_reuses_shared_normalizer(self) -> None:
         original_normalizer = chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
         try:
@@ -892,6 +1188,216 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_extract_task_governance_from_task_row_forwards_raw_governance_values_to_shared_normalizer(
+        self,
+    ) -> None:
+        original_normalizer = (
+            chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_task_governance_dict(governance):
+                captured.append(governance)
+                return {
+                    "profile": "normalized_profile",
+                    "provider_source": "normalized_source",
+                    "allowed_tool_names": ["normalized_tool"],
+                    "allowed_tool_labels": ["Normalized Tool"],
+                }
+
+            chat_persistence_module._normalize_task_governance_dict = (  # type: ignore[attr-defined]
+                fake_normalize_task_governance_dict
+            )
+            chat_persistence_module._extract_task_governance_from_task_row(  # type: ignore[attr-defined]
+                {
+                    "tool_registry_profile": " Planning_Only ",
+                    "tool_registry_provider_source": " Planning_Suite ",
+                    "allowed_tool_names_json": json.dumps(["task_plan"]),
+                    "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                    "trace_json": None,
+                }
+            )
+        finally:
+            chat_persistence_module._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            captured,
+            [
+                {
+                    "profile": " Planning_Only ",
+                    "provider_source": " Planning_Suite ",
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner Suite"],
+                }
+            ],
+        )
+
+    def test_extract_task_governance_from_task_row_forwards_raw_allowed_tool_values_to_shared_normalizer(
+        self,
+    ) -> None:
+        original_normalizer = (
+            chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_task_governance_dict(governance):
+                captured.append(governance)
+                return {
+                    "profile": "normalized_profile",
+                    "provider_source": "normalized_source",
+                    "allowed_tool_names": ["normalized_tool"],
+                    "allowed_tool_labels": ["Normalized Tool"],
+                }
+
+            chat_persistence_module._normalize_task_governance_dict = (  # type: ignore[attr-defined]
+                fake_normalize_task_governance_dict
+            )
+            chat_persistence_module._extract_task_governance_from_task_row(  # type: ignore[attr-defined]
+                {
+                    "tool_registry_profile": "planning_only",
+                    "tool_registry_provider_source": "planning_suite",
+                    "allowed_tool_names_json": json.dumps([" task_plan "]),
+                    "allowed_tool_labels_json": json.dumps([" Task Planner Suite "]),
+                    "trace_json": None,
+                }
+            )
+        finally:
+            chat_persistence_module._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            captured,
+            [
+                {
+                    "profile": "planning_only",
+                    "provider_source": "planning_suite",
+                    "allowed_tool_names": [" task_plan "],
+                    "allowed_tool_labels": [" Task Planner Suite "],
+                }
+            ],
+        )
+
+    def test_normalize_task_governance_dict_reuses_shared_governance_filter_normalizer(
+        self,
+    ) -> None:
+        original_normalize_governance_filter = (
+            chat_persistence_module._normalize_governance_filter  # type: ignore[attr-defined]
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_governance_filter(value):
+                captured.append(value)
+                if value == " Planning_Only ":
+                    return "profile::normalized"
+                if value == " Planning_Suite ":
+                    return "source::normalized"
+                if not isinstance(value, str):
+                    return None
+                normalized = value.strip().lower()
+                return normalized or None
+
+            chat_persistence_module._normalize_governance_filter = (  # type: ignore[attr-defined]
+                fake_normalize_governance_filter
+            )
+            payload = chat_persistence_module._normalize_task_governance_dict(  # type: ignore[attr-defined]
+                {
+                    "profile": " Planning_Only ",
+                    "provider_source": " Planning_Suite ",
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner"],
+                }
+            )
+        finally:
+            chat_persistence_module._normalize_governance_filter = (  # type: ignore[attr-defined]
+                original_normalize_governance_filter
+            )
+
+        self.assertEqual(captured, [" Planning_Only ", " Planning_Suite "])
+        self.assertEqual(
+            payload,
+            {
+                "profile": "profile::normalized",
+                "provider_source": "source::normalized",
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner"],
+            },
+        )
+
+    def test_normalize_session_governance_summary_reuses_shared_governance_filter_normalizer(
+        self,
+    ) -> None:
+        original_normalize_governance_filter = (
+            chat_persistence_module._normalize_governance_filter  # type: ignore[attr-defined]
+        )
+        captured: list[object] = []
+        try:
+            def fake_normalize_governance_filter(value):
+                captured.append(value)
+                if value == " Planning_Only ":
+                    return "profile::normalized"
+                if value == " Planning_Suite ":
+                    return "source::normalized"
+                if not isinstance(value, str):
+                    return None
+                normalized = value.strip().lower()
+                return normalized or None
+
+            chat_persistence_module._normalize_governance_filter = (  # type: ignore[attr-defined]
+                fake_normalize_governance_filter
+            )
+            payload = chat_persistence_module._normalize_session_governance_summary_dict(  # type: ignore[attr-defined]
+                {
+                    "profiles": [" Planning_Only "],
+                    "provider_sources": [" Planning_Suite "],
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner"],
+                }
+            )
+        finally:
+            chat_persistence_module._normalize_governance_filter = (  # type: ignore[attr-defined]
+                original_normalize_governance_filter
+            )
+
+        self.assertEqual(captured, [" Planning_Only ", " Planning_Suite "])
+        self.assertEqual(
+            payload,
+            {
+                "profiles": ["profile::normalized"],
+                "provider_sources": ["source::normalized"],
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner"],
+            },
+        )
+
+    def test_normalize_session_governance_summary_deduplicates_and_sorts_list_fields(
+        self,
+    ) -> None:
+        payload = chat_persistence_module._normalize_session_governance_summary_dict(  # type: ignore[attr-defined]
+            {
+                "profiles": [" Planning_Only ", "analysis_only", "planning_only"],
+                "provider_sources": [
+                    " Retrieval_Suite ",
+                    "analysis_suite",
+                    "retrieval_suite",
+                ],
+                "allowed_tool_names": [" task_plan ", "calc_eval", "task_plan"],
+                "allowed_tool_labels": [
+                    " Task Planner ",
+                    "Calculator",
+                    "Task Planner",
+                ],
+            }
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "profiles": ["analysis_only", "planning_only"],
+                "provider_sources": ["analysis_suite", "retrieval_suite"],
+                "allowed_tool_names": ["calc_eval", "task_plan"],
+                "allowed_tool_labels": ["Calculator", "Task Planner"],
+            },
+        )
+
     def test_merge_session_governance_summary_reuses_shared_task_normalizer(self) -> None:
         original_task_normalizer = chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
         try:
@@ -920,6 +1426,64 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "provider_sources": ["normalized_source"],
                 "allowed_tool_names": ["normalized_tool"],
                 "allowed_tool_labels": ["Normalized Tool"],
+            },
+        )
+
+    def test_merge_session_governance_summary_reuses_shared_governance_filter_normalizer(
+        self,
+    ) -> None:
+        original_task_normalizer = (
+            chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
+        )
+        original_normalize_governance_filter = (
+            chat_persistence_module._normalize_governance_filter  # type: ignore[attr-defined]
+        )
+        captured: list[object] = []
+        try:
+            chat_persistence_module._normalize_task_governance_dict = lambda _governance: {  # type: ignore[attr-defined]
+                "profile": " Planning_Only ",
+                "provider_source": " Planning_Suite ",
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner"],
+            }
+
+            def fake_normalize_governance_filter(value):
+                captured.append(value)
+                if value == " Planning_Only ":
+                    return "profile::normalized"
+                if value == " Planning_Suite ":
+                    return "source::normalized"
+                if not isinstance(value, str):
+                    return None
+                normalized = value.strip().lower()
+                return normalized or None
+
+            chat_persistence_module._normalize_governance_filter = (  # type: ignore[attr-defined]
+                fake_normalize_governance_filter
+            )
+            payload = chat_persistence_module._merge_session_governance_summary(  # type: ignore[attr-defined]
+                None,
+                {
+                    "profile": "ignored",
+                    "provider_source": "ignored",
+                    "allowed_tool_names": ["ignored"],
+                    "allowed_tool_labels": ["ignored"],
+                },
+            )
+        finally:
+            chat_persistence_module._normalize_task_governance_dict = original_task_normalizer  # type: ignore[attr-defined]
+            chat_persistence_module._normalize_governance_filter = (  # type: ignore[attr-defined]
+                original_normalize_governance_filter
+            )
+
+        self.assertEqual(captured, [" Planning_Only ", " Planning_Suite "])
+        self.assertEqual(
+            payload,
+            {
+                "profiles": ["profile::normalized"],
+                "provider_sources": ["source::normalized"],
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner"],
             },
         )
 
@@ -2552,9 +3116,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         try:
             def fake_normalize_governance_filter(value):
                 captured["normalize_inputs"].append(value)
-                if value in {" Planning_Only ", "planning_only"}:
+                if value in {
+                    " Planning_Only ",
+                    "planning_only",
+                    "profile::normalized",
+                }:
                     return "profile::normalized"
-                if value in {" Planning_Suite ", "planning_suite"}:
+                if value in {
+                    " Planning_Suite ",
+                    "planning_suite",
+                    "provider::normalized",
+                }:
                     return "provider::normalized"
                 return None
 
@@ -2573,8 +3145,9 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 original_normalize_governance_filter
             )
 
+        normalize_inputs = list(captured["normalize_inputs"])
         self.assertEqual(
-            captured["normalize_inputs"],
+            normalize_inputs[:4],
             [
                 " Planning_Only ",
                 " Planning_Suite ",
@@ -2582,13 +3155,19 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "planning_suite",
             ],
         )
+        self.assertGreaterEqual(normalize_inputs.count("profile::normalized"), 1)
+        self.assertGreaterEqual(normalize_inputs.count("provider::normalized"), 1)
         self.assertEqual(payload["summary"]["tasks_with_usage"], 1)
         self.assertEqual(len(payload["by_session"]), 1)
         self.assertEqual(len(payload["top_tasks"]), 1)
 
     def test_get_tasks_usage_dashboard_route_forwards_governance_filters(self) -> None:
         original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
+        original_normalize_governance_filter = (
+            task_routes_module.chat_persistence_service._normalize_governance_filter  # type: ignore[attr-defined]
+        )
         captured: dict[str, object] = {}
+        captured_normalize_inputs: list[object] = []
         try:
             def fake_get_tasks_usage_dashboard(user_id, **kwargs):
                 captured["user_id"] = user_id
@@ -2614,7 +3193,21 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "top_tasks": [],
                 }
 
+            def fake_normalize_governance_filter(value):
+                captured_normalize_inputs.append(value)
+                if value == " Planning_Only ":
+                    return "profile::normalized"
+                if value == " Planning_Suite ":
+                    return "source::normalized"
+                if not isinstance(value, str):
+                    return None
+                normalized = value.strip().lower()
+                return normalized or None
+
             task_routes_module.get_tasks_usage_dashboard = fake_get_tasks_usage_dashboard
+            task_routes_module.chat_persistence_service._normalize_governance_filter = (  # type: ignore[attr-defined]
+                fake_normalize_governance_filter
+            )
 
             task_routes_module.get_tasks_usage_dashboard_route(
                 session_id=None,
@@ -2622,18 +3215,25 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 top_sessions=10,
                 top_tasks=14,
                 source_kind="all",
-                tool_registry_profile="planning_only",
-                tool_registry_provider_source="planning_suite",
+                tool_registry_profile=" Planning_Only ",
+                tool_registry_provider_source=" Planning_Suite ",
                 current_user={"id": "user-usage-filtered"},
             )
         finally:
             task_routes_module.get_tasks_usage_dashboard = original_get_tasks_usage_dashboard
+            task_routes_module.chat_persistence_service._normalize_governance_filter = (  # type: ignore[attr-defined]
+                original_normalize_governance_filter
+            )
 
         self.assertEqual(captured["user_id"], "user-usage-filtered")
-        self.assertEqual(captured["tool_registry_profile_filter"], "planning_only")
+        self.assertEqual(
+            captured_normalize_inputs,
+            [" Planning_Only ", " Planning_Suite "],
+        )
+        self.assertEqual(captured["tool_registry_profile_filter"], "profile::normalized")
         self.assertEqual(
             captured["tool_registry_provider_source_filter"],
-            "planning_suite",
+            "source::normalized",
         )
 
     def test_build_task_export_markdown_includes_registry_governance_summary(self) -> None:
@@ -3401,6 +4001,91 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.tasks[0].governance.provider_source, "shared_source")
         self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["shared_tool"])
         self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Shared Tool"])
+
+    def test_build_session_export_payload_reuses_shared_task_governance_trace_json_parser(
+        self,
+    ) -> None:
+        self.assertTrue(hasattr(session_routes_module, "chat_persistence_service"))
+        session = {
+            "id": "session-shared-governance-trace",
+            "title": "Shared Trace Governance Session",
+            "created_at": "2026-06-12T12:00:00",
+            "updated_at": "2026-06-12T12:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_row_parser = (
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row
+        )
+        original_trace_json_parser = (
+            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_json
+        )
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-shared-governance-trace",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-12T12:00:00",
+                    "updated_at": "2026-06-12T12:01:00",
+                    "usage_json": None,
+                    "trace_json": "[]",
+                },
+            ]
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                lambda _task: None
+            )
+            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_json = (
+                lambda _trace_json: {
+                    "profile": "shared_trace_profile",
+                    "provider_source": "shared_trace_source",
+                    "allowed_tool_names": ["shared_trace_tool"],
+                    "allowed_tool_labels": ["Shared Trace Tool"],
+                }
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-shared-governance-trace",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                original_row_parser
+            )
+            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_json = (
+                original_trace_json_parser
+            )
+
+        self.assertIsNotNone(payload.governance)
+        assert payload.governance is not None
+        self.assertEqual(payload.governance.profiles, ["shared_trace_profile"])
+        self.assertEqual(payload.governance.provider_sources, ["shared_trace_source"])
+        self.assertEqual(payload.governance.allowed_tool_names, ["shared_trace_tool"])
+        self.assertEqual(payload.governance.allowed_tool_labels, ["Shared Trace Tool"])
+        self.assertIsNotNone(payload.tasks[0].governance)
+        assert payload.tasks[0].governance is not None
+        self.assertEqual(payload.tasks[0].governance.profile, "shared_trace_profile")
+        self.assertEqual(payload.tasks[0].governance.provider_source, "shared_trace_source")
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["shared_trace_tool"])
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Shared Trace Tool"])
 
     def test_export_assertions_require_session_task_level_governance_json(self) -> None:
         import importlib

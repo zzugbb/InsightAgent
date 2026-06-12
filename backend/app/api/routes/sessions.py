@@ -365,6 +365,14 @@ def _collect_task_governance_from_task_row(task: dict) -> dict[str, list[str] | 
     governance = chat_persistence_service._extract_task_governance_from_task_row(task)
     if not isinstance(governance, dict):
         return None
+    return _clone_task_governance_dict(governance)
+
+
+def _clone_task_governance_dict(
+    governance: object,
+) -> dict[str, list[str] | str | None] | None:
+    if not isinstance(governance, dict):
+        return None
     return {
         "profile": governance.get("profile")
         if isinstance(governance.get("profile"), str)
@@ -391,22 +399,7 @@ def _collect_task_governance_from_trace_steps(
             if hasattr(step, "model_dump")
         ]
     )
-    if not isinstance(governance, dict):
-        return None
-    return {
-        "profile": governance.get("profile")
-        if isinstance(governance.get("profile"), str)
-        else None,
-        "provider_source": governance.get("provider_source")
-        if isinstance(governance.get("provider_source"), str)
-        else None,
-        "allowed_tool_names": list(governance.get("allowed_tool_names", []))
-        if isinstance(governance.get("allowed_tool_names"), list)
-        else [],
-        "allowed_tool_labels": list(governance.get("allowed_tool_labels", []))
-        if isinstance(governance.get("allowed_tool_labels"), list)
-        else [],
-    }
+    return _clone_task_governance_dict(governance)
 
 
 def _collect_task_governance_from_task(
@@ -417,17 +410,17 @@ def _collect_task_governance_from_task(
     if governance is not None:
         return governance
     resolved_steps = parsed_steps
+    raw_trace = task.get("trace_json")
+    if (
+        isinstance(raw_trace, str)
+        and raw_trace.strip()
+        and (resolved_steps is None or not resolved_steps)
+    ):
+        return _clone_task_governance_dict(
+            chat_persistence_service._extract_task_governance_from_trace_json(raw_trace)
+        )
     if resolved_steps is None:
-        raw_trace = task.get("trace_json")
-        if not isinstance(raw_trace, str) or not raw_trace.strip():
-            return None
-        try:
-            loaded = json.loads(raw_trace)
-        except Exception:
-            return None
-        if not isinstance(loaded, list):
-            return None
-        resolved_steps = parse_trace_steps([x for x in loaded if isinstance(x, dict)])
+        return None
     return _collect_task_governance_from_trace_steps(resolved_steps)
 
 

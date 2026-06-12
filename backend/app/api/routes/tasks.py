@@ -958,6 +958,12 @@ def get_tasks_usage_dashboard_route(
     if sid and get_session(sid, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
     source_normalized = source_kind.strip().lower()
+    profile_filter = chat_persistence_service._normalize_governance_filter(
+        tool_registry_profile
+    )
+    provider_source_filter = chat_persistence_service._normalize_governance_filter(
+        tool_registry_provider_source
+    )
     if source_normalized not in {"all", "provider", "estimated", "mixed", "legacy"}:
         raise HTTPException(
             status_code=422,
@@ -967,8 +973,8 @@ def get_tasks_usage_dashboard_route(
         user_id,
         session_id=sid,
         source_filter=None if source_normalized == "all" else source_normalized,
-        tool_registry_profile_filter=tool_registry_profile,
-        tool_registry_provider_source_filter=tool_registry_provider_source,
+        tool_registry_profile_filter=profile_filter,
+        tool_registry_provider_source_filter=provider_source_filter,
         window_days=window_days,
         top_sessions=top_sessions,
         top_tasks=top_tasks,

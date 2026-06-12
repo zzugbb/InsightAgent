@@ -54,24 +54,24 @@ def _extract_task_governance_from_trace_steps(
             continue
 
         profile = (
-            meta.get("tool_registry_profile").strip()
+            meta.get("tool_registry_profile")
             if isinstance(meta.get("tool_registry_profile"), str)
             and meta.get("tool_registry_profile").strip()
             else None
         )
         provider_source = (
-            meta.get("tool_registry_provider_source").strip()
+            meta.get("tool_registry_provider_source")
             if isinstance(meta.get("tool_registry_provider_source"), str)
             and meta.get("tool_registry_provider_source").strip()
             else None
         )
         allowed_tool_names = [
-            value.strip()
+            value
             for value in meta.get("allowed_tool_names", [])
             if isinstance(value, str) and value.strip()
         ]
         allowed_tool_labels = [
-            value.strip()
+            value
             for value in meta.get("allowed_tool_labels", [])
             if isinstance(value, str) and value.strip()
         ]
@@ -126,7 +126,30 @@ def _parse_task_governance_json_list_blob(value: object) -> list[str]:
         return []
     if not isinstance(parsed, list):
         return []
-    return [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
+    return [item for item in parsed if isinstance(item, str) and item.strip()]
+
+
+def _normalize_governance_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _normalize_governance_summary_string_list(value: object) -> list[str]:
+    return sorted(set(_normalize_governance_string_list(value)))
+
+
+def _normalize_governance_filter_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized_values = {
+        normalized
+        for item in value
+        if isinstance(item, str)
+        for normalized in [_normalize_governance_filter(item)]
+        if normalized is not None
+    }
+    return sorted(normalized_values)
 
 
 def _extract_task_governance_from_task_row(
@@ -134,13 +157,9 @@ def _extract_task_governance_from_task_row(
 ) -> dict[str, object] | None:
     raw_profile = task.get("tool_registry_profile")
     raw_provider_source = task.get("tool_registry_provider_source")
-    profile = (
-        raw_profile.strip()
-        if isinstance(raw_profile, str) and raw_profile.strip()
-        else None
-    )
+    profile = raw_profile if isinstance(raw_profile, str) and raw_profile.strip() else None
     provider_source = (
-        raw_provider_source.strip()
+        raw_provider_source
         if isinstance(raw_provider_source, str) and raw_provider_source.strip()
         else None
     )
@@ -173,18 +192,20 @@ def _normalize_task_governance_dict(
     if not isinstance(governance, dict):
         return None
     return {
-        "profile": governance.get("profile")
+        "profile": _normalize_governance_filter(governance.get("profile"))
         if isinstance(governance.get("profile"), str)
         else None,
-        "provider_source": governance.get("provider_source")
+        "provider_source": _normalize_governance_filter(
+            governance.get("provider_source")
+        )
         if isinstance(governance.get("provider_source"), str)
         else None,
-        "allowed_tool_names": list(governance.get("allowed_tool_names", []))
-        if isinstance(governance.get("allowed_tool_names"), list)
-        else [],
-        "allowed_tool_labels": list(governance.get("allowed_tool_labels", []))
-        if isinstance(governance.get("allowed_tool_labels"), list)
-        else [],
+        "allowed_tool_names": _normalize_governance_string_list(
+            governance.get("allowed_tool_names")
+        ),
+        "allowed_tool_labels": _normalize_governance_string_list(
+            governance.get("allowed_tool_labels")
+        ),
     }
 
 
@@ -194,18 +215,16 @@ def _normalize_session_governance_summary_dict(
     if not isinstance(governance, dict):
         return None
     return {
-        "profiles": list(governance.get("profiles", []))
-        if isinstance(governance.get("profiles"), list)
-        else [],
-        "provider_sources": list(governance.get("provider_sources", []))
-        if isinstance(governance.get("provider_sources"), list)
-        else [],
-        "allowed_tool_names": list(governance.get("allowed_tool_names", []))
-        if isinstance(governance.get("allowed_tool_names"), list)
-        else [],
-        "allowed_tool_labels": list(governance.get("allowed_tool_labels", []))
-        if isinstance(governance.get("allowed_tool_labels"), list)
-        else [],
+        "profiles": _normalize_governance_filter_list(governance.get("profiles")),
+        "provider_sources": _normalize_governance_filter_list(
+            governance.get("provider_sources")
+        ),
+        "allowed_tool_names": _normalize_governance_summary_string_list(
+            governance.get("allowed_tool_names")
+        ),
+        "allowed_tool_labels": _normalize_governance_summary_string_list(
+            governance.get("allowed_tool_labels")
+        ),
     }
 
 
@@ -1028,20 +1047,26 @@ def _merge_session_governance_summary(
     )
 
     profile = normalized_task.get("profile")
-    if isinstance(profile, str) and profile.strip():
-        profiles.add(profile.strip())
+    if isinstance(profile, str):
+        normalized_profile = _normalize_governance_filter(profile)
+        if normalized_profile is not None:
+            profiles.add(normalized_profile)
 
     provider_source = normalized_task.get("provider_source")
-    if isinstance(provider_source, str) and provider_source.strip():
-        provider_sources.add(provider_source.strip())
+    if isinstance(provider_source, str):
+        normalized_provider_source = _normalize_governance_filter(provider_source)
+        if normalized_provider_source is not None:
+            provider_sources.add(normalized_provider_source)
 
-    for item in normalized_task.get("allowed_tool_names", []):
-        if isinstance(item, str) and item.strip():
-            allowed_tool_names.add(item.strip())
+    for item in _normalize_governance_string_list(
+        normalized_task.get("allowed_tool_names")
+    ):
+        allowed_tool_names.add(item)
 
-    for item in normalized_task.get("allowed_tool_labels", []):
-        if isinstance(item, str) and item.strip():
-            allowed_tool_labels.add(item.strip())
+    for item in _normalize_governance_string_list(
+        normalized_task.get("allowed_tool_labels")
+    ):
+        allowed_tool_labels.add(item)
 
     if not profiles and not provider_sources and not allowed_tool_names and not allowed_tool_labels:
         return normalized_current
@@ -1049,8 +1074,12 @@ def _merge_session_governance_summary(
     return {
         "profiles": sorted(profiles),
         "provider_sources": sorted(provider_sources),
-        "allowed_tool_names": sorted(allowed_tool_names),
-        "allowed_tool_labels": sorted(allowed_tool_labels),
+        "allowed_tool_names": _normalize_governance_summary_string_list(
+            list(allowed_tool_names)
+        ),
+        "allowed_tool_labels": _normalize_governance_summary_string_list(
+            list(allowed_tool_labels)
+        ),
     }
 
 
