@@ -263,7 +263,7 @@ def _task_status_meta(task: dict) -> dict[str, object]:
 def _build_session_export_task_governance_summary_from_dict(
     governance: object,
 ) -> SessionExportTaskGovernanceSummary | None:
-    normalized = chat_persistence_service._clone_task_governance_dict(governance)
+    normalized = _clone_task_governance(governance)
     return _build_session_export_task_governance_summary_from_clone(normalized)
 
 
@@ -291,9 +291,7 @@ def _build_session_export_task_governance_summary_from_clone(
 def _build_session_export_governance_summary_from_dict(
     governance: object,
 ) -> SessionExportGovernanceSummary | None:
-    normalized = chat_persistence_service._clone_session_governance_summary_dict(
-        governance
-    )
+    normalized = _clone_session_governance_summary(governance)
     return _build_session_export_governance_summary_from_clone(normalized)
 
 
@@ -379,6 +377,12 @@ def _clone_task_governance(
     return chat_persistence_service._clone_task_governance_dict(governance)
 
 
+def _clone_session_governance_summary(
+    governance: object,
+) -> dict[str, list[str]] | None:
+    return chat_persistence_service._clone_session_governance_summary_dict(governance)
+
+
 def _collect_task_governance_from_task_row(task: dict) -> dict[str, list[str] | str | None] | None:
     governance = chat_persistence_service._extract_task_governance_from_task_row(task)
     return _clone_task_governance(governance)
@@ -441,7 +445,7 @@ def _collect_session_governance_summary(
 
     if not isinstance(summary, dict):
         return None
-    return _build_session_export_governance_summary_from_clone(summary)
+    return _build_session_export_governance_summary_from_dict(summary)
 
 
 def _append_fenced_block(lines: list[str], content: str, language: str = "text") -> None:

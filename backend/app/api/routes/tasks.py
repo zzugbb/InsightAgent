@@ -442,16 +442,21 @@ def _parse_task_usage_blob(task: dict) -> dict[str, object] | None:
 def _collect_task_governance_from_trace_json(
     trace_json: str | None,
 ) -> TaskGovernanceSummary | None:
-    governance = chat_persistence_service._extract_task_governance_from_trace_json(
-        trace_json
+    governance = _clone_task_governance(
+        chat_persistence_service._extract_task_governance_from_trace_json(trace_json)
     )
     return _build_task_governance_summary_from_clone(governance)
+
+
+def _clone_task_governance(governance: object) -> dict[str, object] | None:
+    cloned = chat_persistence_service._clone_task_governance_dict(governance)
+    return cloned if isinstance(cloned, dict) else None
 
 
 def _build_task_governance_summary_from_dict(
     governance: object,
 ) -> TaskGovernanceSummary | None:
-    normalized = chat_persistence_service._clone_task_governance_dict(governance)
+    normalized = _clone_task_governance(governance)
     return _build_task_governance_summary_from_clone(normalized)
 
 
@@ -479,7 +484,9 @@ def _build_task_governance_summary_from_clone(
 def _collect_task_governance_from_task(
     task: dict,
 ) -> TaskGovernanceSummary | None:
-    governance = chat_persistence_service._extract_task_governance_from_task_row(task)
+    governance = _clone_task_governance(
+        chat_persistence_service._extract_task_governance_from_task_row(task)
+    )
     return _build_task_governance_summary_from_clone(governance)
 
 
@@ -495,7 +502,7 @@ def _build_task_usage_top_task_row(row: dict) -> TaskUsageTopTaskRow:
     session_title = row.get("session_title")
     governance_raw = row.get("governance")
     governance = (
-        _build_task_governance_summary_from_clone(governance_raw)
+        _build_task_governance_summary_from_dict(governance_raw)
         if isinstance(governance_raw, dict)
         else _collect_task_governance_from_task(row)
     )
@@ -516,10 +523,15 @@ def _build_task_usage_top_task_row(row: dict) -> TaskUsageTopTaskRow:
 def _build_task_usage_session_governance_summary_from_dict(
     governance: object,
 ) -> TaskUsageSessionGovernanceSummary | None:
-    normalized = chat_persistence_service._clone_session_governance_summary_dict(
-        governance
-    )
+    normalized = _clone_session_governance_summary(governance)
     return _build_task_usage_session_governance_summary_from_clone(normalized)
+
+
+def _clone_session_governance_summary(
+    governance: object,
+) -> dict[str, list[str]] | None:
+    cloned = chat_persistence_service._clone_session_governance_summary_dict(governance)
+    return cloned if isinstance(cloned, dict) else None
 
 
 def _build_task_usage_session_governance_summary_from_clone(
@@ -546,7 +558,7 @@ def _build_task_usage_session_governance_summary_from_clone(
 def _build_task_usage_by_session_row(row: dict) -> TaskUsageBySessionRow:
     session_title = row.get("session_title")
     governance_raw = row.get("governance")
-    governance = _build_task_usage_session_governance_summary_from_clone(governance_raw)
+    governance = _build_task_usage_session_governance_summary_from_dict(governance_raw)
     return TaskUsageBySessionRow(
         session_id=str(row.get("session_id", "")),
         session_title=session_title if isinstance(session_title, str) else None,
@@ -608,8 +620,10 @@ def _collect_trace_governance_export(
 def _collect_task_governance_summary_from_trace_steps(
     steps: list[TraceStep],
 ) -> TaskGovernanceSummary | None:
-    governance = chat_persistence_service._extract_task_governance_from_trace_steps(
-        [step.model_dump(exclude_none=True) for step in steps]
+    governance = _clone_task_governance(
+        chat_persistence_service._extract_task_governance_from_trace_steps(
+            [step.model_dump(exclude_none=True) for step in steps]
+        )
     )
     return _build_task_governance_summary_from_clone(governance)
 
