@@ -263,21 +263,27 @@ def _task_status_meta(task: dict) -> dict[str, object]:
 def _build_session_export_task_governance_summary_from_dict(
     governance: object,
 ) -> SessionExportTaskGovernanceSummary | None:
-    normalized = chat_persistence_service._normalize_task_governance_dict(governance)
-    if not isinstance(normalized, dict):
+    normalized = chat_persistence_service._clone_task_governance_dict(governance)
+    return _build_session_export_task_governance_summary_from_clone(normalized)
+
+
+def _build_session_export_task_governance_summary_from_clone(
+    governance: dict[str, list[str] | str | None] | None,
+) -> SessionExportTaskGovernanceSummary | None:
+    if not isinstance(governance, dict):
         return None
     return SessionExportTaskGovernanceSummary(
-        profile=normalized.get("profile")
-        if isinstance(normalized.get("profile"), str)
+        profile=governance.get("profile")
+        if isinstance(governance.get("profile"), str)
         else None,
-        provider_source=normalized.get("provider_source")
-        if isinstance(normalized.get("provider_source"), str)
+        provider_source=governance.get("provider_source")
+        if isinstance(governance.get("provider_source"), str)
         else None,
-        allowed_tool_names=list(normalized.get("allowed_tool_names", []))
-        if isinstance(normalized.get("allowed_tool_names"), list)
+        allowed_tool_names=list(governance.get("allowed_tool_names", []))
+        if isinstance(governance.get("allowed_tool_names"), list)
         else [],
-        allowed_tool_labels=list(normalized.get("allowed_tool_labels", []))
-        if isinstance(normalized.get("allowed_tool_labels"), list)
+        allowed_tool_labels=list(governance.get("allowed_tool_labels", []))
+        if isinstance(governance.get("allowed_tool_labels"), list)
         else [],
     )
 
@@ -285,23 +291,29 @@ def _build_session_export_task_governance_summary_from_dict(
 def _build_session_export_governance_summary_from_dict(
     governance: object,
 ) -> SessionExportGovernanceSummary | None:
-    normalized = chat_persistence_service._normalize_session_governance_summary_dict(
+    normalized = chat_persistence_service._clone_session_governance_summary_dict(
         governance
     )
-    if not isinstance(normalized, dict):
+    return _build_session_export_governance_summary_from_clone(normalized)
+
+
+def _build_session_export_governance_summary_from_clone(
+    governance: dict[str, list[str]] | None,
+) -> SessionExportGovernanceSummary | None:
+    if not isinstance(governance, dict):
         return None
     return SessionExportGovernanceSummary(
-        profiles=list(normalized.get("profiles", []))
-        if isinstance(normalized.get("profiles"), list)
+        profiles=list(governance.get("profiles", []))
+        if isinstance(governance.get("profiles"), list)
         else [],
-        provider_sources=list(normalized.get("provider_sources", []))
-        if isinstance(normalized.get("provider_sources"), list)
+        provider_sources=list(governance.get("provider_sources", []))
+        if isinstance(governance.get("provider_sources"), list)
         else [],
-        allowed_tool_names=list(normalized.get("allowed_tool_names", []))
-        if isinstance(normalized.get("allowed_tool_names"), list)
+        allowed_tool_names=list(governance.get("allowed_tool_names", []))
+        if isinstance(governance.get("allowed_tool_names"), list)
         else [],
-        allowed_tool_labels=list(normalized.get("allowed_tool_labels", []))
-        if isinstance(normalized.get("allowed_tool_labels"), list)
+        allowed_tool_labels=list(governance.get("allowed_tool_labels", []))
+        if isinstance(governance.get("allowed_tool_labels"), list)
         else [],
     )
 
@@ -356,37 +368,20 @@ def _build_session_task_summary(
         trace_step_count=len(parsed_steps),
         rag_hit_count=rag_hit_count,
         trace_preview=preview_steps,
-        governance=_build_session_export_task_governance_summary_from_dict(task_governance),
+        governance=_build_session_export_task_governance_summary_from_clone(task_governance),
     )
     return summary, len(parsed_steps), rag_hit_count
 
 
-def _collect_task_governance_from_task_row(task: dict) -> dict[str, list[str] | str | None] | None:
-    governance = chat_persistence_service._extract_task_governance_from_task_row(task)
-    if not isinstance(governance, dict):
-        return None
-    return _clone_task_governance_dict(governance)
-
-
-def _clone_task_governance_dict(
+def _clone_task_governance(
     governance: object,
 ) -> dict[str, list[str] | str | None] | None:
-    if not isinstance(governance, dict):
-        return None
-    return {
-        "profile": governance.get("profile")
-        if isinstance(governance.get("profile"), str)
-        else None,
-        "provider_source": governance.get("provider_source")
-        if isinstance(governance.get("provider_source"), str)
-        else None,
-        "allowed_tool_names": list(governance.get("allowed_tool_names", []))
-        if isinstance(governance.get("allowed_tool_names"), list)
-        else [],
-        "allowed_tool_labels": list(governance.get("allowed_tool_labels", []))
-        if isinstance(governance.get("allowed_tool_labels"), list)
-        else [],
-    }
+    return chat_persistence_service._clone_task_governance_dict(governance)
+
+
+def _collect_task_governance_from_task_row(task: dict) -> dict[str, list[str] | str | None] | None:
+    governance = chat_persistence_service._extract_task_governance_from_task_row(task)
+    return _clone_task_governance(governance)
 
 
 def _collect_task_governance_from_trace_steps(
@@ -399,7 +394,16 @@ def _collect_task_governance_from_trace_steps(
             if hasattr(step, "model_dump")
         ]
     )
-    return _clone_task_governance_dict(governance)
+    return _clone_task_governance(governance)
+
+
+def _collect_task_governance_from_trace_json(
+    trace_json: object,
+) -> dict[str, list[str] | str | None] | None:
+    governance = chat_persistence_service._extract_task_governance_from_trace_json(
+        trace_json
+    )
+    return _clone_task_governance(governance)
 
 
 def _collect_task_governance_from_task(
@@ -416,9 +420,7 @@ def _collect_task_governance_from_task(
         and raw_trace.strip()
         and (resolved_steps is None or not resolved_steps)
     ):
-        return _clone_task_governance_dict(
-            chat_persistence_service._extract_task_governance_from_trace_json(raw_trace)
-        )
+        return _collect_task_governance_from_trace_json(raw_trace)
     if resolved_steps is None:
         return None
     return _collect_task_governance_from_trace_steps(resolved_steps)
@@ -439,7 +441,7 @@ def _collect_session_governance_summary(
 
     if not isinstance(summary, dict):
         return None
-    return _build_session_export_governance_summary_from_dict(summary)
+    return _build_session_export_governance_summary_from_clone(summary)
 
 
 def _append_fenced_block(lines: list[str], content: str, language: str = "text") -> None:

@@ -445,27 +445,33 @@ def _collect_task_governance_from_trace_json(
     governance = chat_persistence_service._extract_task_governance_from_trace_json(
         trace_json
     )
-    return _build_task_governance_summary_from_dict(governance)
+    return _build_task_governance_summary_from_clone(governance)
 
 
 def _build_task_governance_summary_from_dict(
     governance: object,
 ) -> TaskGovernanceSummary | None:
-    normalized = chat_persistence_service._normalize_task_governance_dict(governance)
-    if not isinstance(normalized, dict):
+    normalized = chat_persistence_service._clone_task_governance_dict(governance)
+    return _build_task_governance_summary_from_clone(normalized)
+
+
+def _build_task_governance_summary_from_clone(
+    governance: dict[str, object] | None,
+) -> TaskGovernanceSummary | None:
+    if not isinstance(governance, dict):
         return None
     return TaskGovernanceSummary(
-        profile=normalized.get("profile")
-        if isinstance(normalized.get("profile"), str)
+        profile=governance.get("profile")
+        if isinstance(governance.get("profile"), str)
         else None,
-        provider_source=normalized.get("provider_source")
-        if isinstance(normalized.get("provider_source"), str)
+        provider_source=governance.get("provider_source")
+        if isinstance(governance.get("provider_source"), str)
         else None,
-        allowed_tool_names=list(normalized.get("allowed_tool_names", []))
-        if isinstance(normalized.get("allowed_tool_names"), list)
+        allowed_tool_names=list(governance.get("allowed_tool_names", []))
+        if isinstance(governance.get("allowed_tool_names"), list)
         else [],
-        allowed_tool_labels=list(normalized.get("allowed_tool_labels", []))
-        if isinstance(normalized.get("allowed_tool_labels"), list)
+        allowed_tool_labels=list(governance.get("allowed_tool_labels", []))
+        if isinstance(governance.get("allowed_tool_labels"), list)
         else [],
     )
 
@@ -474,7 +480,7 @@ def _collect_task_governance_from_task(
     task: dict,
 ) -> TaskGovernanceSummary | None:
     governance = chat_persistence_service._extract_task_governance_from_task_row(task)
-    return _build_task_governance_summary_from_dict(governance)
+    return _build_task_governance_summary_from_clone(governance)
 
 
 def _build_task_response(task: dict) -> TaskResponse:
@@ -489,7 +495,7 @@ def _build_task_usage_top_task_row(row: dict) -> TaskUsageTopTaskRow:
     session_title = row.get("session_title")
     governance_raw = row.get("governance")
     governance = (
-        _build_task_governance_summary_from_dict(governance_raw)
+        _build_task_governance_summary_from_clone(governance_raw)
         if isinstance(governance_raw, dict)
         else _collect_task_governance_from_task(row)
     )
@@ -510,23 +516,29 @@ def _build_task_usage_top_task_row(row: dict) -> TaskUsageTopTaskRow:
 def _build_task_usage_session_governance_summary_from_dict(
     governance: object,
 ) -> TaskUsageSessionGovernanceSummary | None:
-    normalized = chat_persistence_service._normalize_session_governance_summary_dict(
+    normalized = chat_persistence_service._clone_session_governance_summary_dict(
         governance
     )
-    if not isinstance(normalized, dict):
+    return _build_task_usage_session_governance_summary_from_clone(normalized)
+
+
+def _build_task_usage_session_governance_summary_from_clone(
+    governance: dict[str, list[str]] | None,
+) -> TaskUsageSessionGovernanceSummary | None:
+    if not isinstance(governance, dict):
         return None
     return TaskUsageSessionGovernanceSummary(
-        profiles=list(normalized.get("profiles", []))
-        if isinstance(normalized.get("profiles"), list)
+        profiles=list(governance.get("profiles", []))
+        if isinstance(governance.get("profiles"), list)
         else [],
-        provider_sources=list(normalized.get("provider_sources", []))
-        if isinstance(normalized.get("provider_sources"), list)
+        provider_sources=list(governance.get("provider_sources", []))
+        if isinstance(governance.get("provider_sources"), list)
         else [],
-        allowed_tool_names=list(normalized.get("allowed_tool_names", []))
-        if isinstance(normalized.get("allowed_tool_names"), list)
+        allowed_tool_names=list(governance.get("allowed_tool_names", []))
+        if isinstance(governance.get("allowed_tool_names"), list)
         else [],
-        allowed_tool_labels=list(normalized.get("allowed_tool_labels", []))
-        if isinstance(normalized.get("allowed_tool_labels"), list)
+        allowed_tool_labels=list(governance.get("allowed_tool_labels", []))
+        if isinstance(governance.get("allowed_tool_labels"), list)
         else [],
     )
 
@@ -534,7 +546,7 @@ def _build_task_usage_session_governance_summary_from_dict(
 def _build_task_usage_by_session_row(row: dict) -> TaskUsageBySessionRow:
     session_title = row.get("session_title")
     governance_raw = row.get("governance")
-    governance = _build_task_usage_session_governance_summary_from_dict(governance_raw)
+    governance = _build_task_usage_session_governance_summary_from_clone(governance_raw)
     return TaskUsageBySessionRow(
         session_id=str(row.get("session_id", "")),
         session_title=session_title if isinstance(session_title, str) else None,
@@ -588,32 +600,33 @@ def _collect_rag_export(steps: list[TraceStep]) -> tuple[int, list[str], list[Ta
 def _collect_trace_governance_export(
     steps: list[TraceStep],
 ) -> TaskExportGovernance | None:
+    return _build_task_export_governance_from_summary(
+        _collect_task_governance_summary_from_trace_steps(steps)
+    )
+
+
+def _collect_task_governance_summary_from_trace_steps(
+    steps: list[TraceStep],
+) -> TaskGovernanceSummary | None:
     governance = chat_persistence_service._extract_task_governance_from_trace_steps(
         [step.model_dump(exclude_none=True) for step in steps]
     )
-    return _build_task_export_governance_from_dict(governance)
+    return _build_task_governance_summary_from_clone(governance)
 
 
 def _build_task_export_governance_from_dict(
     governance: object,
 ) -> TaskExportGovernance | None:
-    normalized = chat_persistence_service._normalize_task_governance_dict(governance)
-    if not isinstance(normalized, dict):
+    summary = _build_task_governance_summary_from_dict(governance)
+    return _build_task_export_governance_from_summary(summary)
+
+
+def _build_task_export_governance_from_summary(
+    summary: TaskGovernanceSummary | None,
+) -> TaskExportGovernance | None:
+    if summary is None:
         return None
-    return TaskExportGovernance(
-        profile=normalized.get("profile")
-        if isinstance(normalized.get("profile"), str)
-        else None,
-        provider_source=normalized.get("provider_source")
-        if isinstance(normalized.get("provider_source"), str)
-        else None,
-        allowed_tool_names=list(normalized.get("allowed_tool_names", []))
-        if isinstance(normalized.get("allowed_tool_names"), list)
-        else [],
-        allowed_tool_labels=list(normalized.get("allowed_tool_labels", []))
-        if isinstance(normalized.get("allowed_tool_labels"), list)
-        else [],
-    )
+    return TaskExportGovernance(**summary.model_dump(exclude_none=True))
 
 
 def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonResponse:
@@ -623,11 +636,9 @@ def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonRespon
     rag_hit_count, rag_knowledge_base_ids, rag_chunks = _collect_rag_export(parsed_steps)
     governance = _collect_trace_governance_export(parsed_steps)
     if governance is None:
-        governance = _collect_task_governance_from_task(task)
-        if governance is not None:
-            governance = _build_task_export_governance_from_dict(
-                governance.model_dump(exclude_none=True)
-            )
+        governance = _build_task_export_governance_from_summary(
+            _collect_task_governance_from_task(task)
+        )
     return TaskExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
