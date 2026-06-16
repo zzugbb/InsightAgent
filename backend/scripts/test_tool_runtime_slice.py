@@ -949,7 +949,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["Task Planner"],
         )
 
-    def test_build_task_response_surfaces_registry_governance_summary(self) -> None:
+    def test_get_task_detail_surfaces_registry_governance_summary(self) -> None:
         task = {
             "id": "task-response-governance",
             "session_id": "session-response-governance",
@@ -975,10 +975,15 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
             "usage_json": None,
         }
-
-        payload = task_routes_module._build_task_response(  # type: ignore[attr-defined]
-            task,
-        )
+        original_get_task = task_routes_module.get_task
+        try:
+            task_routes_module.get_task = lambda _task_id, _user_id: task
+            payload = task_routes_module.get_task_detail(
+                "task-response-governance",
+                current_user={"id": "user-response-governance"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
 
         self.assertIsNotNone(payload.governance)
         assert payload.governance is not None
@@ -990,7 +995,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["Task Planner Suite"],
         )
 
-    def test_build_task_response_prefers_persisted_governance_columns(self) -> None:
+    def test_get_task_detail_prefers_persisted_governance_columns(self) -> None:
         task = {
             "id": "task-response-governance-columns",
             "session_id": "session-response-governance-columns",
@@ -1005,10 +1010,15 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "trace_json": None,
             "usage_json": None,
         }
-
-        payload = task_routes_module._build_task_response(  # type: ignore[attr-defined]
-            task,
-        )
+        original_get_task = task_routes_module.get_task
+        try:
+            task_routes_module.get_task = lambda _task_id, _user_id: task
+            payload = task_routes_module.get_task_detail(
+                "task-response-governance-columns",
+                current_user={"id": "user-response-governance-columns"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
 
         self.assertIsNotNone(payload.governance)
         assert payload.governance is not None
@@ -1020,11 +1030,18 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["Task Planner Suite"],
         )
 
-    def test_serialize_task_governance_columns_reuses_shared_clone_helper(self) -> None:
+    def test_serialize_task_governance_columns_does_not_reuse_shared_clone_helper(
+        self,
+    ) -> None:
         original_extractor = (
             chat_persistence_module._extract_task_governance_from_trace_steps
         )
-        original_cloner = chat_persistence_module._clone_task_governance_dict
+        original_normalizer = chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
+        original_cloner = getattr(
+            chat_persistence_module,
+            "_clone_task_governance_dict",
+            None,
+        )
         captured: list[object] = []
         try:
             chat_persistence_module._extract_task_governance_from_trace_steps = (
@@ -1035,15 +1052,23 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "allowed_tool_labels": ["Task Planner Suite"],
                 }
             )
-            chat_persistence_module._clone_task_governance_dict = (
+            chat_persistence_module._normalize_task_governance_dict = (  # type: ignore[attr-defined]
                 lambda governance: captured.append(governance)
                 or {
-                    "profile": "clone_profile",
-                    "provider_source": "clone_source",
-                    "allowed_tool_names": ["clone_tool"],
-                    "allowed_tool_labels": ["Clone Tool"],
+                    "profile": "normalized_profile",
+                    "provider_source": "normalized_source",
+                    "allowed_tool_names": ["normalized_tool"],
+                    "allowed_tool_labels": ["Normalized Tool"],
                 }
             )
+            if original_cloner is not None:
+                chat_persistence_module._clone_task_governance_dict = (  # type: ignore[attr-defined]
+                    lambda _governance: (_ for _ in ()).throw(
+                        AssertionError(
+                            "task governance column serializer should not depend on the shared clone helper"
+                        )
+                    )
+                )
             payload = chat_persistence_module._serialize_task_governance_columns(
                 [{"id": "trace-governance-1"}]
             )
@@ -1051,7 +1076,12 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             chat_persistence_module._extract_task_governance_from_trace_steps = (
                 original_extractor
             )
-            chat_persistence_module._clone_task_governance_dict = original_cloner
+            chat_persistence_module._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+            if original_cloner is None:
+                if hasattr(chat_persistence_module, "_clone_task_governance_dict"):
+                    delattr(chat_persistence_module, "_clone_task_governance_dict")
+            else:
+                chat_persistence_module._clone_task_governance_dict = original_cloner  # type: ignore[attr-defined]
 
         self.assertEqual(
             captured,
@@ -1067,10 +1097,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             payload,
             (
-                "clone_profile",
-                "clone_source",
-                json.dumps(["clone_tool"], ensure_ascii=False),
-                json.dumps(["Clone Tool"], ensure_ascii=False),
+                "normalized_profile",
+                "normalized_source",
+                json.dumps(["normalized_tool"], ensure_ascii=False),
+                json.dumps(["Normalized Tool"], ensure_ascii=False),
             ),
         )
 
@@ -2487,33 +2517,49 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn(("tasks", "allowed_tool_names_json", "TEXT"), calls)
         self.assertIn(("tasks", "allowed_tool_labels_json", "TEXT"), calls)
 
-    def test_build_task_response_reuses_governance_summary_dict_builder(self) -> None:
+    def test_get_task_detail_reuses_governance_summary_dict_builder(self) -> None:
+        original_get_task = task_routes_module.get_task
         original_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
+        original_response_builder = getattr(task_routes_module, "_build_task_response", None)
         try:
+            if original_response_builder is not None:
+                task_routes_module._build_task_response = lambda _task: (_ for _ in ()).throw(  # type: ignore[attr-defined]
+                    AssertionError(
+                        "get_task_detail should route governance through the shared dict-builder directly"
+                    )
+                )
+            task_routes_module.get_task = lambda _task_id, _user_id: {
+                "id": "task-builder-governance-route",
+                "session_id": "session-builder-governance-route",
+                "prompt": "builder governance route task",
+                "status": "completed",
+                "trace_json": None,
+                "usage_json": None,
+                "tool_registry_profile": "planning_only",
+                "tool_registry_provider_source": "default",
+                "allowed_tool_names_json": json.dumps(["task_plan"]),
+                "allowed_tool_labels_json": json.dumps(["Task Planner"]),
+                "created_at": "2026-06-11T15:00:00",
+                "updated_at": "2026-06-11T15:01:00",
+            }
             task_routes_module._build_task_governance_summary_from_dict = lambda _governance: task_routes_module.TaskGovernanceSummary(  # type: ignore[attr-defined]
                 profile="builder_profile",
                 provider_source="builder_source",
                 allowed_tool_names=["builder_tool"],
                 allowed_tool_labels=["Builder Tool"],
             )
-            response = task_routes_module._build_task_response(  # type: ignore[attr-defined]
-                {
-                    "id": "task-builder-governance-route",
-                    "session_id": "session-builder-governance-route",
-                    "prompt": "builder governance route task",
-                    "status": "completed",
-                    "trace_json": None,
-                    "usage_json": None,
-                    "tool_registry_profile": "planning_only",
-                    "tool_registry_provider_source": "default",
-                    "allowed_tool_names_json": json.dumps(["task_plan"]),
-                    "allowed_tool_labels_json": json.dumps(["Task Planner"]),
-                    "created_at": "2026-06-11T15:00:00",
-                    "updated_at": "2026-06-11T15:01:00",
-                }
+            response = task_routes_module.get_task_detail(
+                "task-builder-governance-route",
+                current_user={"id": "user-builder-governance-route"},
             )
         finally:
+            task_routes_module.get_task = original_get_task
             task_routes_module._build_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+            if original_response_builder is None:
+                if hasattr(task_routes_module, "_build_task_response"):
+                    delattr(task_routes_module, "_build_task_response")
+            else:
+                task_routes_module._build_task_response = original_response_builder  # type: ignore[attr-defined]
 
         self.assertIsNotNone(response.governance)
         assert response.governance is not None
@@ -2522,70 +2568,24 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(response.governance.allowed_tool_names, ["builder_tool"])
         self.assertEqual(response.governance.allowed_tool_labels, ["Builder Tool"])
 
-    def test_collect_task_governance_from_task_reuses_governance_summary_dict_builder(
-        self,
-    ) -> None:
-        original_parser = (
-            task_routes_module.chat_persistence_service._extract_task_governance_from_task_row
-        )
-        original_dict_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
-        captured: list[object] = []
-        try:
-            task_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
-                lambda _task: {
-                    "profile": "shared_profile",
-                    "provider_source": "shared_source",
-                    "allowed_tool_names": ["shared_tool"],
-                    "allowed_tool_labels": ["Shared Tool"],
-                }
-            )
-            task_routes_module._build_task_governance_summary_from_dict = lambda governance: captured.append(  # type: ignore[attr-defined]
-                governance
-            ) or task_routes_module.TaskGovernanceSummary(
-                profile="dict_profile",
-                provider_source="dict_source",
-                allowed_tool_names=["dict_tool"],
-                allowed_tool_labels=["Dict Tool"],
-            )
-            payload = task_routes_module._collect_task_governance_from_task(  # type: ignore[attr-defined]
-                {
-                    "id": "task-collect-governance-clone-route",
-                    "session_id": "session-collect-governance-clone-route",
-                    "prompt": "shared governance route task",
-                    "status": "completed",
-                    "trace_json": None,
-                    "usage_json": None,
-                    "created_at": "2026-06-11T12:00:00",
-                    "updated_at": "2026-06-11T12:01:00",
-                }
-            )
-        finally:
-            task_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
-                original_parser
-            )
-            task_routes_module._build_task_governance_summary_from_dict = original_dict_builder  # type: ignore[attr-defined]
-
-        self.assertEqual(
-            captured,
-            [
-                {
-                    "profile": "shared_profile",
-                    "provider_source": "shared_source",
-                    "allowed_tool_names": ["shared_tool"],
-                    "allowed_tool_labels": ["Shared Tool"],
-                }
-            ],
-        )
-        self.assertIsNotNone(payload)
-        assert payload is not None
-        self.assertEqual(payload.profile, "dict_profile")
-        self.assertEqual(payload.provider_source, "dict_source")
-        self.assertEqual(payload.allowed_tool_names, ["dict_tool"])
-        self.assertEqual(payload.allowed_tool_labels, ["Dict Tool"])
-
-    def test_build_task_response_reuses_shared_task_governance_normalizer(self) -> None:
+    def test_get_task_detail_reuses_shared_task_governance_normalizer(self) -> None:
+        original_get_task = task_routes_module.get_task
         original_normalizer = task_routes_module.chat_persistence_service._normalize_task_governance_dict  # type: ignore[attr-defined]
         try:
+            task_routes_module.get_task = lambda _task_id, _user_id: {
+                "id": "task-normalized-governance-route",
+                "session_id": "session-normalized-governance-route",
+                "prompt": "normalized governance route task",
+                "status": "completed",
+                "trace_json": None,
+                "usage_json": None,
+                "tool_registry_profile": "planning_only",
+                "tool_registry_provider_source": "default",
+                "allowed_tool_names_json": json.dumps(["task_plan"]),
+                "allowed_tool_labels_json": json.dumps(["Task Planner"]),
+                "created_at": "2026-06-11T16:00:00",
+                "updated_at": "2026-06-11T16:01:00",
+            }
             task_routes_module.chat_persistence_service._normalize_task_governance_dict = (
                 lambda _governance: {
                     "profile": "normalized_profile",
@@ -2594,23 +2594,12 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "allowed_tool_labels": ["Normalized Tool"],
                 }
             )
-            response = task_routes_module._build_task_response(  # type: ignore[attr-defined]
-                {
-                    "id": "task-normalized-governance-route",
-                    "session_id": "session-normalized-governance-route",
-                    "prompt": "normalized governance route task",
-                    "status": "completed",
-                    "trace_json": None,
-                    "usage_json": None,
-                    "tool_registry_profile": "planning_only",
-                    "tool_registry_provider_source": "default",
-                    "allowed_tool_names_json": json.dumps(["task_plan"]),
-                    "allowed_tool_labels_json": json.dumps(["Task Planner"]),
-                    "created_at": "2026-06-11T16:00:00",
-                    "updated_at": "2026-06-11T16:01:00",
-                }
+            response = task_routes_module.get_task_detail(
+                "task-normalized-governance-route",
+                current_user={"id": "user-normalized-governance-route"},
             )
         finally:
+            task_routes_module.get_task = original_get_task
             task_routes_module.chat_persistence_service._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
 
         self.assertIsNotNone(response.governance)
@@ -2620,13 +2609,18 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(response.governance.allowed_tool_names, ["normalized_tool"])
         self.assertEqual(response.governance.allowed_tool_labels, ["Normalized Tool"])
 
-    def test_build_task_governance_summary_from_dict_reuses_shared_clone_helper(
+    def test_build_task_governance_summary_from_dict_reuses_shared_task_governance_normalizer(
         self,
     ) -> None:
-        original_cloner = task_routes_module.chat_persistence_service._clone_task_governance_dict  # type: ignore[attr-defined]
+        original_normalizer = task_routes_module.chat_persistence_service._normalize_task_governance_dict  # type: ignore[attr-defined]
+        original_cloner = getattr(
+            task_routes_module.chat_persistence_service,
+            "_clone_task_governance_dict",
+            None,
+        )
         captured: list[object] = []
         try:
-            task_routes_module.chat_persistence_service._clone_task_governance_dict = (
+            task_routes_module.chat_persistence_service._normalize_task_governance_dict = (
                 lambda governance: captured.append(governance)
                 or {
                     "profile": "shared_profile",
@@ -2635,6 +2629,14 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "allowed_tool_labels": ["Shared Tool"],
                 }
             )
+            if original_cloner is not None:
+                task_routes_module.chat_persistence_service._clone_task_governance_dict = (  # type: ignore[attr-defined]
+                    lambda _governance: (_ for _ in ()).throw(
+                        AssertionError(
+                            "task governance summary builder should not depend on the shared clone helper"
+                        )
+                    )
+                )
             payload = task_routes_module._build_task_governance_summary_from_dict(  # type: ignore[attr-defined]
                 {
                     "profile": " Planning_Only ",
@@ -2644,9 +2646,18 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             )
         finally:
-            task_routes_module.chat_persistence_service._clone_task_governance_dict = (
-                original_cloner
-            )
+            task_routes_module.chat_persistence_service._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+            if original_cloner is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "_clone_task_governance_dict",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "_clone_task_governance_dict",
+                    )
+            else:
+                task_routes_module.chat_persistence_service._clone_task_governance_dict = original_cloner  # type: ignore[attr-defined]
 
         self.assertEqual(
             captured,
@@ -2665,6 +2676,48 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.provider_source, "shared_source")
         self.assertEqual(payload.allowed_tool_names, ["shared_tool"])
         self.assertEqual(payload.allowed_tool_labels, ["Shared Tool"])
+
+    def test_build_task_governance_summary_from_dict_trusts_normalized_dict_shape(
+        self,
+    ) -> None:
+        class GuardedGovernanceDict(dict):
+            def get(self, *_args, **_kwargs):
+                raise AssertionError(
+                    "task governance summary builder should construct outward model directly from normalized dict"
+                )
+
+        original_normalizer = task_routes_module.chat_persistence_service._normalize_task_governance_dict  # type: ignore[attr-defined]
+        try:
+            task_routes_module.chat_persistence_service._normalize_task_governance_dict = (
+                lambda _governance: GuardedGovernanceDict(
+                    profile="guarded_profile",
+                    provider_source="guarded_source",
+                    allowed_tool_names=["guarded_tool"],
+                    allowed_tool_labels=["Guarded Tool"],
+                )
+            )
+            payload = task_routes_module._build_task_governance_summary_from_dict(  # type: ignore[attr-defined]
+                {"profile": "planning_only"}
+            )
+        finally:
+            task_routes_module.chat_persistence_service._normalize_task_governance_dict = original_normalizer  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload.profile, "guarded_profile")
+        self.assertEqual(payload.provider_source, "guarded_source")
+        self.assertEqual(payload.allowed_tool_names, ["guarded_tool"])
+        self.assertEqual(payload.allowed_tool_labels, ["Guarded Tool"])
+
+    def test_chat_persistence_service_no_longer_exposes_governance_clone_helpers(
+        self,
+    ) -> None:
+        self.assertFalse(
+            hasattr(chat_persistence_module, "_clone_task_governance_dict")
+        )
+        self.assertFalse(
+            hasattr(chat_persistence_module, "_clone_session_governance_summary_dict")
+        )
 
     def test_task_route_module_does_not_expose_dead_clone_builders(self) -> None:
         self.assertFalse(
@@ -2686,10 +2739,34 @@ class ToolRuntimeSliceTests(unittest.TestCase):
     ) -> None:
         self.assertFalse(hasattr(task_routes_module, "_collect_task_governance_from_trace_json"))
 
+    def test_task_route_module_does_not_expose_dead_task_response_builder(
+        self,
+    ) -> None:
+        self.assertFalse(hasattr(task_routes_module, "_build_task_response"))
+
+    def test_task_route_module_does_not_expose_dead_task_governance_collector(
+        self,
+    ) -> None:
+        self.assertFalse(hasattr(task_routes_module, "_collect_task_governance_from_task"))
+
     def test_task_route_module_does_not_expose_dead_trace_governance_export_helper(
         self,
     ) -> None:
         self.assertFalse(hasattr(task_routes_module, "_collect_trace_governance_export"))
+
+    def test_task_route_module_does_not_expose_dead_usage_row_builders(self) -> None:
+        self.assertFalse(hasattr(task_routes_module, "_build_task_usage_top_task_row"))
+        self.assertFalse(hasattr(task_routes_module, "_build_task_usage_by_session_row"))
+
+    def test_task_route_module_does_not_expose_dead_task_export_governance_helpers(
+        self,
+    ) -> None:
+        self.assertFalse(
+            hasattr(task_routes_module, "_collect_task_governance_summary_from_trace_steps")
+        )
+        self.assertFalse(
+            hasattr(task_routes_module, "_build_task_export_governance_from_summary")
+        )
 
     def test_get_tasks_usage_dashboard_top_task_surfaces_governance_summary(self) -> None:
         rows = [
@@ -2897,78 +2974,52 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(row.governance.allowed_tool_names, ["task_plan"])
         self.assertEqual(row.governance.allowed_tool_labels, ["Task Planner Suite"])
 
-    def test_build_task_usage_top_task_row_prefers_persisted_governance_columns(self) -> None:
-        row = task_routes_module._build_task_usage_top_task_row(  # type: ignore[attr-defined]
-            {
-                "task_id": "task-usage-top-columns-1",
-                "session_id": "session-usage-top-columns",
-                "session_title": "Usage Governance Columns Session",
-                "prompt_excerpt": "usage dashboard governance task",
-                "total_tokens": 46,
-                "cost_estimate": 0.12,
-                "created_at": "2026-06-11T10:00:00",
-                "updated_at": "2026-06-11T10:05:00",
-                "source_kind": "provider",
-                "tool_registry_profile": "planning_only",
-                "tool_registry_provider_source": "planning_suite",
-                "allowed_tool_names_json": json.dumps(["task_plan"]),
-                "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
-                "trace_json": None,
-            }
-        )
-
-        self.assertIsNotNone(row.governance)
-        assert row.governance is not None
-        self.assertEqual(row.governance.profile, "planning_only")
-        self.assertEqual(row.governance.provider_source, "planning_suite")
-        self.assertEqual(row.governance.allowed_tool_names, ["task_plan"])
-        self.assertEqual(row.governance.allowed_tool_labels, ["Task Planner Suite"])
-
-    def test_build_task_usage_top_task_row_reuses_governance_summary_builder(self) -> None:
-        original_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
-        try:
-            task_routes_module._build_task_governance_summary_from_dict = lambda _governance: task_routes_module.TaskGovernanceSummary(  # type: ignore[attr-defined]
-                profile="builder_profile",
-                provider_source="builder_source",
-                allowed_tool_names=["builder_tool"],
-                allowed_tool_labels=["Builder Tool"],
-            )
-            row = task_routes_module._build_task_usage_top_task_row(  # type: ignore[attr-defined]
-                {
-                    "task_id": "task-usage-top-builder-1",
-                    "session_id": "session-usage-top-builder",
-                    "session_title": "Usage Governance Builder Session",
-                    "prompt_excerpt": "usage dashboard governance task",
-                    "total_tokens": 46,
-                    "cost_estimate": 0.12,
-                    "created_at": "2026-06-11T10:00:00",
-                    "updated_at": "2026-06-11T10:05:00",
-                    "source_kind": "provider",
-                    "governance": {
-                        "profile": "planning_only",
-                        "provider_source": "planning_suite",
-                        "allowed_tool_names": ["task_plan"],
-                        "allowed_tool_labels": ["Task Planner Suite"],
-                    },
-                    "trace_json": None,
-                }
-            )
-        finally:
-            task_routes_module._build_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
-
-        self.assertIsNotNone(row.governance)
-        assert row.governance is not None
-        self.assertEqual(row.governance.profile, "builder_profile")
-        self.assertEqual(row.governance.provider_source, "builder_source")
-        self.assertEqual(row.governance.allowed_tool_names, ["builder_tool"])
-        self.assertEqual(row.governance.allowed_tool_labels, ["Builder Tool"])
-
-    def test_build_task_usage_top_task_row_reuses_governance_summary_dict_builder(
+    def test_get_tasks_usage_dashboard_route_reuses_task_governance_summary_dict_builder(
         self,
     ) -> None:
+        original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
         original_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
         captured: list[object] = []
         try:
+            task_routes_module.get_tasks_usage_dashboard = lambda *_args, **_kwargs: {
+                "window_days": 14,
+                "summary": {
+                    "tasks_total": 1,
+                    "tasks_with_usage": 1,
+                    "source_tasks_provider": 1,
+                    "source_tasks_estimated": 0,
+                    "source_tasks_mixed": 0,
+                    "source_tasks_legacy": 0,
+                    "prompt_tokens": 12,
+                    "completion_tokens": 34,
+                    "total_tokens": 46,
+                    "cost_estimate": 0.12,
+                    "avg_total_tokens": 46.0,
+                    "avg_cost_estimate": 0.12,
+                },
+                "trend": [],
+                "by_session": [],
+                "top_tasks": [
+                    {
+                        "task_id": "task-usage-top-dict-builder-1",
+                        "session_id": "session-usage-top-dict-builder",
+                        "session_title": "Usage Governance Dict Builder Session",
+                        "prompt_excerpt": "usage dashboard governance task",
+                        "total_tokens": 46,
+                        "cost_estimate": 0.12,
+                        "created_at": "2026-06-15T18:00:00",
+                        "updated_at": "2026-06-15T18:05:00",
+                        "source_kind": "provider",
+                        "governance": {
+                            "profile": "planning_only",
+                            "provider_source": "planning_suite",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                        "trace_json": None,
+                    }
+                ],
+            }
             task_routes_module._build_task_governance_summary_from_dict = lambda governance: captured.append(  # type: ignore[attr-defined]
                 governance
             ) or task_routes_module.TaskGovernanceSummary(
@@ -2977,27 +3028,16 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 allowed_tool_names=["builder_tool"],
                 allowed_tool_labels=["Builder Tool"],
             )
-            row = task_routes_module._build_task_usage_top_task_row(  # type: ignore[attr-defined]
-                {
-                    "task_id": "task-usage-top-dict-builder-1",
-                    "session_id": "session-usage-top-dict-builder",
-                    "session_title": "Usage Governance Dict Builder Session",
-                    "prompt_excerpt": "usage dashboard governance task",
-                    "total_tokens": 46,
-                    "cost_estimate": 0.12,
-                    "created_at": "2026-06-15T18:00:00",
-                    "updated_at": "2026-06-15T18:05:00",
-                    "source_kind": "provider",
-                    "governance": {
-                        "profile": "planning_only",
-                        "provider_source": "planning_suite",
-                        "allowed_tool_names": ["task_plan"],
-                        "allowed_tool_labels": ["Task Planner Suite"],
-                    },
-                    "trace_json": None,
-                }
+            payload = task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=10,
+                top_tasks=14,
+                source_kind="all",
+                current_user={"id": "user-usage-top-dict-builder"},
             )
         finally:
+            task_routes_module.get_tasks_usage_dashboard = original_get_tasks_usage_dashboard
             task_routes_module._build_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
 
         self.assertEqual(
@@ -3011,12 +3051,120 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             ],
         )
-        self.assertIsNotNone(row.governance)
-        assert row.governance is not None
-        self.assertEqual(row.governance.profile, "builder_profile")
-        self.assertEqual(row.governance.provider_source, "builder_source")
-        self.assertEqual(row.governance.allowed_tool_names, ["builder_tool"])
-        self.assertEqual(row.governance.allowed_tool_labels, ["Builder Tool"])
+        self.assertIsNotNone(payload.top_tasks[0].governance)
+        assert payload.top_tasks[0].governance is not None
+        self.assertEqual(payload.top_tasks[0].governance.profile, "builder_profile")
+        self.assertEqual(
+            payload.top_tasks[0].governance.provider_source, "builder_source"
+        )
+        self.assertEqual(
+            payload.top_tasks[0].governance.allowed_tool_names, ["builder_tool"]
+        )
+        self.assertEqual(
+            payload.top_tasks[0].governance.allowed_tool_labels, ["Builder Tool"]
+        )
+
+    def test_get_tasks_usage_dashboard_route_reuses_task_governance_summary_dict_builder_for_persisted_fallback(
+        self,
+    ) -> None:
+        original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
+        original_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
+        original_collector = getattr(
+            task_routes_module, "_collect_task_governance_from_task", None
+        )
+        captured: list[object] = []
+        try:
+            task_routes_module.get_tasks_usage_dashboard = lambda *_args, **_kwargs: {
+                "window_days": 14,
+                "summary": {
+                    "tasks_total": 1,
+                    "tasks_with_usage": 1,
+                    "source_tasks_provider": 1,
+                    "source_tasks_estimated": 0,
+                    "source_tasks_mixed": 0,
+                    "source_tasks_legacy": 0,
+                    "prompt_tokens": 12,
+                    "completion_tokens": 34,
+                    "total_tokens": 46,
+                    "cost_estimate": 0.12,
+                    "avg_total_tokens": 46.0,
+                    "avg_cost_estimate": 0.12,
+                },
+                "trend": [],
+                "by_session": [],
+                "top_tasks": [
+                    {
+                        "task_id": "task-usage-top-persisted-builder-1",
+                        "session_id": "session-usage-top-persisted-builder",
+                        "session_title": "Usage Persisted Governance Session",
+                        "prompt_excerpt": "usage dashboard governance task",
+                        "total_tokens": 46,
+                        "cost_estimate": 0.12,
+                        "created_at": "2026-06-16T18:00:00",
+                        "updated_at": "2026-06-16T18:05:00",
+                        "source_kind": "provider",
+                        "tool_registry_profile": "planning_only",
+                        "tool_registry_provider_source": "planning_suite",
+                        "allowed_tool_names_json": json.dumps(["task_plan"]),
+                        "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                        "trace_json": None,
+                    }
+                ],
+            }
+            if original_collector is not None:
+                task_routes_module._collect_task_governance_from_task = lambda _task: (_ for _ in ()).throw(  # type: ignore[attr-defined]
+                    AssertionError(
+                        "usage top-task persisted fallback should use the shared dict-builder directly"
+                    )
+                )
+            task_routes_module._build_task_governance_summary_from_dict = lambda governance: captured.append(  # type: ignore[attr-defined]
+                governance
+            ) or task_routes_module.TaskGovernanceSummary(
+                profile="builder_profile",
+                provider_source="builder_source",
+                allowed_tool_names=["builder_tool"],
+                allowed_tool_labels=["Builder Tool"],
+            )
+            payload = task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=10,
+                top_tasks=14,
+                source_kind="all",
+                current_user={"id": "user-usage-top-persisted-builder"},
+            )
+        finally:
+            task_routes_module.get_tasks_usage_dashboard = original_get_tasks_usage_dashboard
+            task_routes_module._build_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+            if original_collector is None:
+                if hasattr(task_routes_module, "_collect_task_governance_from_task"):
+                    delattr(task_routes_module, "_collect_task_governance_from_task")
+            else:
+                task_routes_module._collect_task_governance_from_task = original_collector  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            captured,
+            [
+                {
+                    "profile": "planning_only",
+                    "provider_source": "planning_suite",
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner Suite"],
+                }
+            ],
+        )
+        self.assertIsNotNone(payload.top_tasks[0].governance)
+        assert payload.top_tasks[0].governance is not None
+        self.assertEqual(payload.top_tasks[0].governance.profile, "builder_profile")
+        self.assertEqual(
+            payload.top_tasks[0].governance.provider_source, "builder_source"
+        )
+        self.assertEqual(
+            payload.top_tasks[0].governance.allowed_tool_names, ["builder_tool"]
+        )
+        self.assertEqual(
+            payload.top_tasks[0].governance.allowed_tool_labels, ["Builder Tool"]
+        )
 
     def test_get_tasks_usage_dashboard_by_session_surfaces_governance_summary(self) -> None:
         rows = [
@@ -3219,126 +3367,121 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(row.governance.allowed_tool_names, ["task_plan"])
         self.assertEqual(row.governance.allowed_tool_labels, ["Task Planner Suite"])
 
-    def test_build_task_usage_by_session_row_reuses_governance_summary_builder(self) -> None:
-        original_builder = task_routes_module._build_task_usage_session_governance_summary_from_dict  # type: ignore[attr-defined]
-        try:
-            task_routes_module._build_task_usage_session_governance_summary_from_dict = lambda _governance: task_routes_module.TaskUsageSessionGovernanceSummary(  # type: ignore[attr-defined]
-                profiles=["builder_profile"],
-                provider_sources=["builder_source"],
-                allowed_tool_names=["builder_tool"],
-                allowed_tool_labels=["Builder Tool"],
-            )
-            row = task_routes_module._build_task_usage_by_session_row(  # type: ignore[attr-defined]
-                {
-                    "session_id": "session-usage-builder",
-                    "session_title": "Usage Governance Builder Session",
-                    "tasks_with_usage": 1,
-                    "total_tokens": 50,
-                    "cost_estimate": 0.15,
-                    "last_task_at": "2026-06-09T10:05:00",
-                    "governance": {
-                        "profiles": ["planning_only"],
-                        "provider_sources": ["planning_suite"],
-                        "allowed_tool_names": ["task_plan"],
-                        "allowed_tool_labels": ["Task Planner Suite"],
-                    },
-                }
-            )
-        finally:
-            task_routes_module._build_task_usage_session_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
-
-        self.assertIsNotNone(row.governance)
-        assert row.governance is not None
-        self.assertEqual(row.governance.profiles, ["builder_profile"])
-        self.assertEqual(row.governance.provider_sources, ["builder_source"])
-        self.assertEqual(row.governance.allowed_tool_names, ["builder_tool"])
-        self.assertEqual(row.governance.allowed_tool_labels, ["Builder Tool"])
-
-    def test_build_task_usage_session_governance_summary_from_dict_reuses_shared_clone_helper(
+    def test_get_tasks_usage_dashboard_route_reuses_shared_session_governance_normalizer(
         self,
     ) -> None:
+        original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
+        original_builder = getattr(
+            task_routes_module, "_build_task_usage_session_governance_summary_from_dict", None
+        )
         original_clone_helper = getattr(
             task_routes_module.chat_persistence_service,
             "_clone_session_governance_summary_dict",
             None,
         )
-        captured: list[object] = []
-        try:
-            task_routes_module.chat_persistence_service._clone_session_governance_summary_dict = (  # type: ignore[attr-defined]
-                lambda governance: captured.append(governance) or {
-                    "profiles": ["clone_profile"],
-                    "provider_sources": ["clone_source"],
-                    "allowed_tool_names": ["clone_tool"],
-                    "allowed_tool_labels": ["Clone Tool"],
-                }
-            )
-            payload = task_routes_module._build_task_usage_session_governance_summary_from_dict(  # type: ignore[attr-defined]
-                {
-                    "profiles": ["planning_only"],
-                    "provider_sources": ["planning_suite"],
-                    "allowed_tool_names": ["task_plan"],
-                    "allowed_tool_labels": ["Task Planner Suite"],
-                }
-            )
-        finally:
-            if original_clone_helper is None:
-                delattr(
-                    task_routes_module.chat_persistence_service,
-                    "_clone_session_governance_summary_dict",
-                )
-            else:
-                task_routes_module.chat_persistence_service._clone_session_governance_summary_dict = original_clone_helper  # type: ignore[attr-defined]
-
-        self.assertEqual(
-            captured,
-            [
-                {
-                    "profiles": ["planning_only"],
-                    "provider_sources": ["planning_suite"],
-                    "allowed_tool_names": ["task_plan"],
-                    "allowed_tool_labels": ["Task Planner Suite"],
-                }
-            ],
+        original_normalizer = getattr(
+            task_routes_module.chat_persistence_service,
+            "_normalize_session_governance_summary_dict",
+            None,
         )
-        self.assertIsNotNone(payload)
-        assert payload is not None
-        self.assertEqual(payload.profiles, ["clone_profile"])
-        self.assertEqual(payload.provider_sources, ["clone_source"])
-        self.assertEqual(payload.allowed_tool_names, ["clone_tool"])
-        self.assertEqual(payload.allowed_tool_labels, ["Clone Tool"])
-
-    def test_build_task_usage_by_session_row_reuses_governance_summary_dict_builder(
-        self,
-    ) -> None:
-        original_builder = task_routes_module._build_task_usage_session_governance_summary_from_dict  # type: ignore[attr-defined]
         captured: list[object] = []
         try:
-            task_routes_module._build_task_usage_session_governance_summary_from_dict = lambda governance: captured.append(  # type: ignore[attr-defined]
-                governance
-            ) or task_routes_module.TaskUsageSessionGovernanceSummary(
-                profiles=["builder_profile"],
-                provider_sources=["builder_source"],
-                allowed_tool_names=["builder_tool"],
-                allowed_tool_labels=["Builder Tool"],
-            )
-            row = task_routes_module._build_task_usage_by_session_row(  # type: ignore[attr-defined]
-                {
-                    "session_id": "session-usage-dict-builder",
-                    "session_title": "Usage Governance Dict Builder Session",
+            task_routes_module.get_tasks_usage_dashboard = lambda *_args, **_kwargs: {
+                "window_days": 14,
+                "summary": {
+                    "tasks_total": 1,
                     "tasks_with_usage": 1,
+                    "source_tasks_provider": 1,
+                    "source_tasks_estimated": 0,
+                    "source_tasks_mixed": 0,
+                    "source_tasks_legacy": 0,
+                    "prompt_tokens": 20,
+                    "completion_tokens": 30,
                     "total_tokens": 50,
                     "cost_estimate": 0.15,
-                    "last_task_at": "2026-06-15T18:05:00",
-                    "governance": {
-                        "profiles": ["planning_only"],
-                        "provider_sources": ["planning_suite"],
-                        "allowed_tool_names": ["task_plan"],
-                        "allowed_tool_labels": ["Task Planner Suite"],
-                    },
+                    "avg_total_tokens": 50.0,
+                    "avg_cost_estimate": 0.15,
+                },
+                "trend": [],
+                "by_session": [
+                    {
+                        "session_id": "session-usage-dict-builder",
+                        "session_title": "Usage Governance Dict Builder Session",
+                        "tasks_with_usage": 1,
+                        "total_tokens": 50,
+                        "cost_estimate": 0.15,
+                        "last_task_at": "2026-06-15T18:05:00",
+                        "governance": {
+                            "profiles": ["planning_only"],
+                            "provider_sources": ["planning_suite"],
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                    }
+                ],
+                "top_tasks": [],
+            }
+            if original_builder is not None:
+                task_routes_module._build_task_usage_session_governance_summary_from_dict = lambda _governance: (_ for _ in ()).throw(  # type: ignore[attr-defined]
+                    AssertionError(
+                        "usage by-session route should build governance directly from the shared session normalizer"
+                    )
+                )
+            if original_clone_helper is not None:
+                task_routes_module.chat_persistence_service._clone_session_governance_summary_dict = (  # type: ignore[attr-defined]
+                    lambda _governance: (_ for _ in ()).throw(
+                        AssertionError(
+                            "usage by-session route should not depend on the shared clone helper"
+                        )
+                    )
+                )
+            task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict = (  # type: ignore[attr-defined]
+                lambda governance: captured.append(governance) or {
+                    "profiles": ["builder_profile"],
+                    "provider_sources": ["builder_source"],
+                    "allowed_tool_names": ["builder_tool"],
+                    "allowed_tool_labels": ["Builder Tool"],
                 }
             )
+            payload = task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=10,
+                top_tasks=14,
+                source_kind="all",
+                current_user={"id": "user-usage-session-dict-builder"},
+            )
         finally:
-            task_routes_module._build_task_usage_session_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+            task_routes_module.get_tasks_usage_dashboard = original_get_tasks_usage_dashboard
+            if original_builder is None:
+                if hasattr(
+                    task_routes_module,
+                    "_build_task_usage_session_governance_summary_from_dict",
+                ):
+                    delattr(
+                        task_routes_module,
+                        "_build_task_usage_session_governance_summary_from_dict",
+                    )
+            else:
+                task_routes_module._build_task_usage_session_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+            if original_clone_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "_clone_session_governance_summary_dict",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "_clone_session_governance_summary_dict",
+                    )
+            else:
+                task_routes_module.chat_persistence_service._clone_session_governance_summary_dict = original_clone_helper  # type: ignore[attr-defined]
+            if original_normalizer is None:
+                delattr(
+                    task_routes_module.chat_persistence_service,
+                    "_normalize_session_governance_summary_dict",
+                )
+            else:
+                task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict = original_normalizer  # type: ignore[attr-defined]
 
         self.assertEqual(
             captured,
@@ -3351,43 +3494,103 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             ],
         )
-        self.assertIsNotNone(row.governance)
-        assert row.governance is not None
-        self.assertEqual(row.governance.profiles, ["builder_profile"])
-        self.assertEqual(row.governance.provider_sources, ["builder_source"])
-        self.assertEqual(row.governance.allowed_tool_names, ["builder_tool"])
-        self.assertEqual(row.governance.allowed_tool_labels, ["Builder Tool"])
+        self.assertIsNotNone(payload.by_session[0].governance)
 
-    def test_build_task_usage_session_governance_summary_from_dict_reuses_shared_session_governance_normalizer(
+    def test_get_tasks_usage_dashboard_route_trusts_normalized_session_governance_shape(
         self,
     ) -> None:
-        original_normalizer = task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict  # type: ignore[attr-defined]
+        class GuardedSessionGovernanceDict(dict):
+            def get(self, *_args, **_kwargs):
+                raise AssertionError(
+                    "usage by-session route should construct outward model directly from normalized session governance dict"
+                )
+
+        original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
+        original_normalizer = getattr(
+            task_routes_module.chat_persistence_service,
+            "_normalize_session_governance_summary_dict",
+            None,
+        )
         try:
-            task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict = (
-                lambda _governance: {
-                    "profiles": ["normalized_profile"],
-                    "provider_sources": ["normalized_source"],
-                    "allowed_tool_names": ["normalized_tool"],
-                    "allowed_tool_labels": ["Normalized Tool"],
-                }
+            task_routes_module.get_tasks_usage_dashboard = lambda *_args, **_kwargs: {
+                "window_days": 14,
+                "summary": {
+                    "tasks_total": 1,
+                    "tasks_with_usage": 1,
+                    "source_tasks_provider": 1,
+                    "source_tasks_estimated": 0,
+                    "source_tasks_mixed": 0,
+                    "source_tasks_legacy": 0,
+                    "prompt_tokens": 20,
+                    "completion_tokens": 30,
+                    "total_tokens": 50,
+                    "cost_estimate": 0.15,
+                    "avg_total_tokens": 50.0,
+                    "avg_cost_estimate": 0.15,
+                },
+                "trend": [],
+                "by_session": [
+                    {
+                        "session_id": "session-usage-guarded-dict",
+                        "session_title": "Usage Guarded Governance Session",
+                        "tasks_with_usage": 1,
+                        "total_tokens": 50,
+                        "cost_estimate": 0.15,
+                        "last_task_at": "2026-06-16T22:00:00",
+                        "governance": {"profiles": ["planning_only"]},
+                    }
+                ],
+                "top_tasks": [],
+            }
+            task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict = (  # type: ignore[attr-defined]
+                lambda _governance: GuardedSessionGovernanceDict(
+                    profiles=["guarded_profile"],
+                    provider_sources=["guarded_source"],
+                    allowed_tool_names=["guarded_tool"],
+                    allowed_tool_labels=["Guarded Tool"],
+                )
             )
-            payload = task_routes_module._build_task_usage_session_governance_summary_from_dict(  # type: ignore[attr-defined]
-                {
-                    "profiles": ["planning_only"],
-                    "provider_sources": ["planning_suite"],
-                    "allowed_tool_names": ["task_plan"],
-                    "allowed_tool_labels": ["Task Planner Suite"],
-                }
+            payload = task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=10,
+                top_tasks=14,
+                source_kind="all",
+                current_user={"id": "user-usage-guarded-dict"},
             )
         finally:
-            task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict = original_normalizer  # type: ignore[attr-defined]
+            task_routes_module.get_tasks_usage_dashboard = original_get_tasks_usage_dashboard
+            if original_normalizer is None:
+                delattr(
+                    task_routes_module.chat_persistence_service,
+                    "_normalize_session_governance_summary_dict",
+                )
+            else:
+                task_routes_module.chat_persistence_service._normalize_session_governance_summary_dict = original_normalizer  # type: ignore[attr-defined]
 
-        self.assertIsNotNone(payload)
-        assert payload is not None
-        self.assertEqual(payload.profiles, ["normalized_profile"])
-        self.assertEqual(payload.provider_sources, ["normalized_source"])
-        self.assertEqual(payload.allowed_tool_names, ["normalized_tool"])
-        self.assertEqual(payload.allowed_tool_labels, ["Normalized Tool"])
+        self.assertEqual(len(payload.by_session), 1)
+        self.assertIsNotNone(payload.by_session[0].governance)
+        assert payload.by_session[0].governance is not None
+        self.assertEqual(payload.by_session[0].governance.profiles, ["guarded_profile"])
+        self.assertEqual(
+            payload.by_session[0].governance.provider_sources, ["guarded_source"]
+        )
+        self.assertEqual(
+            payload.by_session[0].governance.allowed_tool_names, ["guarded_tool"]
+        )
+        self.assertEqual(
+            payload.by_session[0].governance.allowed_tool_labels, ["Guarded Tool"]
+        )
+
+    def test_task_route_module_does_not_expose_dead_usage_session_governance_summary_builder(
+        self,
+    ) -> None:
+        self.assertFalse(
+            hasattr(
+                task_routes_module,
+                "_build_task_usage_session_governance_summary_from_dict",
+            )
+        )
 
     def test_get_tasks_usage_dashboard_filters_by_profile_and_provider_source(self) -> None:
         rows = [
@@ -4003,201 +4206,167 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("- Tool Registry Source: default", markdown)
         self.assertIn("- Allowed Tools: Knowledge Retrieval", markdown)
 
-    def test_build_task_export_payload_reuses_task_export_governance_summary_helper_for_persisted_fallback(
+    def test_build_task_export_payload_reuses_shared_trace_governance_parser(
         self,
     ) -> None:
         task = {
-            "id": "task-export-governance-fallback-helper",
-            "session_id": "session-export-governance-fallback-helper",
-            "prompt": "export governance summary helper fallback",
+            "id": "task-export-shared-trace-governance",
+            "session_id": "session-export-shared-trace-governance",
+            "prompt": "export shared trace governance",
             "status": "completed",
-            "created_at": "2026-06-15T10:00:00",
-            "updated_at": "2026-06-15T10:05:00",
+            "created_at": "2026-06-16T12:00:00",
+            "updated_at": "2026-06-16T12:05:00",
             "trace_json": None,
             "usage_json": None,
         }
         original_get_task_trace = task_routes_module.get_task_trace
         original_get_task_messages = task_routes_module.get_task_messages
-        original_collect_trace_summary = task_routes_module._collect_task_governance_summary_from_trace_steps  # type: ignore[attr-defined]
-        original_collect_task_governance_from_task = task_routes_module._collect_task_governance_from_task  # type: ignore[attr-defined]
-        original_build_from_summary = task_routes_module._build_task_export_governance_from_summary  # type: ignore[attr-defined]
-        captured: list[object] = []
+        original_extractor = (
+            task_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps
+        )
+        fake_step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="trace-export-shared-step",
+            type="thought",
+            content="trace helper",
+            seq=1,
+        )
         try:
-            task_routes_module.get_task_trace = lambda *_args, **_kwargs: []
+            task_routes_module.get_task_trace = lambda *_args, **_kwargs: [
+                fake_step.model_dump(exclude_none=True)
+            ]
             task_routes_module.get_task_messages = lambda *_args, **_kwargs: []
-            task_routes_module._collect_task_governance_summary_from_trace_steps = lambda _steps: None  # type: ignore[attr-defined]
-            task_routes_module._collect_task_governance_from_task = lambda _task: task_routes_module.TaskGovernanceSummary(  # type: ignore[attr-defined]
-                profile="summary_profile",
-                provider_source="summary_source",
-                allowed_tool_names=["summary_tool"],
-                allowed_tool_labels=["Summary Tool"],
-            )
-            task_routes_module._build_task_export_governance_from_summary = lambda summary: captured.append(  # type: ignore[attr-defined]
-                summary
-            ) or (
-                None
-                if summary is None
-                else task_routes_module.TaskExportGovernance(
-                    profile="export_profile",
-                    provider_source="export_source",
-                    allowed_tool_names=["export_tool"],
-                    allowed_tool_labels=["Export Tool"],
-                )
+            task_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps = (
+                lambda steps: {
+                    "profile": "shared_trace_profile",
+                    "provider_source": "shared_trace_source",
+                    "allowed_tool_names": ["shared_trace_tool"],
+                    "allowed_tool_labels": ["Shared Trace Tool"],
+                }
             )
             payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
                 task,
-                "user-export-governance-fallback-helper",
+                "user-export-shared-trace-governance",
             )
         finally:
             task_routes_module.get_task_trace = original_get_task_trace
             task_routes_module.get_task_messages = original_get_task_messages
-            task_routes_module._collect_task_governance_summary_from_trace_steps = original_collect_trace_summary  # type: ignore[attr-defined]
-            task_routes_module._collect_task_governance_from_task = original_collect_task_governance_from_task  # type: ignore[attr-defined]
-            task_routes_module._build_task_export_governance_from_summary = original_build_from_summary  # type: ignore[attr-defined]
+            task_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps = original_extractor  # type: ignore[attr-defined]
 
-        summaries = [
-            summary
-            for summary in captured
-            if isinstance(summary, task_routes_module.TaskGovernanceSummary)
-        ]
-        self.assertGreaterEqual(len(summaries), 1)
-        summary = summaries[-1]
-        self.assertIsInstance(summary, task_routes_module.TaskGovernanceSummary)
-        assert isinstance(summary, task_routes_module.TaskGovernanceSummary)
-        self.assertEqual(summary.profile, "summary_profile")
-        self.assertEqual(summary.provider_source, "summary_source")
-        self.assertEqual(summary.allowed_tool_names, ["summary_tool"])
-        self.assertEqual(summary.allowed_tool_labels, ["Summary Tool"])
         self.assertIsNotNone(payload.trace.governance)
         assert payload.trace.governance is not None
-        self.assertEqual(payload.trace.governance.profile, "export_profile")
-        self.assertEqual(payload.trace.governance.provider_source, "export_source")
-        self.assertEqual(payload.trace.governance.allowed_tool_names, ["export_tool"])
-        self.assertEqual(payload.trace.governance.allowed_tool_labels, ["Export Tool"])
-
-    def test_collect_trace_governance_export_reuses_trace_summary_helper(self) -> None:
-        original_collect_summary = task_routes_module._collect_task_governance_summary_from_trace_steps  # type: ignore[attr-defined]
-        original_build_from_summary = task_routes_module._build_task_export_governance_from_summary  # type: ignore[attr-defined]
-        captured_steps: list[object] = []
-        captured_summary: list[object] = []
-        fake_step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
-            id="trace-export-helper-step",
-            type="thought",
-            content="trace helper",
-            seq=1,
+        self.assertEqual(payload.trace.governance.profile, "shared_trace_profile")
+        self.assertEqual(
+            payload.trace.governance.provider_source, "shared_trace_source"
         )
-        try:
-            task_routes_module._collect_task_governance_summary_from_trace_steps = lambda steps: captured_steps.append(  # type: ignore[attr-defined]
-                steps
-            ) or task_routes_module.TaskGovernanceSummary(
-                profile="trace_summary_profile",
-                provider_source="trace_summary_source",
-                allowed_tool_names=["trace_summary_tool"],
-                allowed_tool_labels=["Trace Summary Tool"],
-            )
-            task_routes_module._build_task_export_governance_from_summary = lambda summary: captured_summary.append(  # type: ignore[attr-defined]
-                summary
-            ) or task_routes_module.TaskExportGovernance(
-                profile="trace_export_profile",
-                provider_source="trace_export_source",
-                allowed_tool_names=["trace_export_tool"],
-                allowed_tool_labels=["Trace Export Tool"],
-            )
-            payload = task_routes_module._build_task_export_governance_from_summary(  # type: ignore[attr-defined]
-                task_routes_module._collect_task_governance_summary_from_trace_steps(  # type: ignore[attr-defined]
-                    [fake_step]
-                )
-            )
-        finally:
-            task_routes_module._collect_task_governance_summary_from_trace_steps = original_collect_summary  # type: ignore[attr-defined]
-            task_routes_module._build_task_export_governance_from_summary = original_build_from_summary  # type: ignore[attr-defined]
+        self.assertEqual(payload.trace.governance.allowed_tool_names, ["shared_trace_tool"])
+        self.assertEqual(
+            payload.trace.governance.allowed_tool_labels, ["Shared Trace Tool"]
+        )
 
-        self.assertEqual(captured_steps, [[fake_step]])
-        self.assertEqual(len(captured_summary), 1)
-        summary = captured_summary[0]
-        self.assertIsInstance(summary, task_routes_module.TaskGovernanceSummary)
-        assert isinstance(summary, task_routes_module.TaskGovernanceSummary)
-        self.assertEqual(summary.profile, "trace_summary_profile")
-        self.assertEqual(summary.provider_source, "trace_summary_source")
-        self.assertEqual(summary.allowed_tool_names, ["trace_summary_tool"])
-        self.assertEqual(summary.allowed_tool_labels, ["Trace Summary Tool"])
-        self.assertIsNotNone(payload)
-        assert payload is not None
-        self.assertEqual(payload.profile, "trace_export_profile")
-        self.assertEqual(payload.provider_source, "trace_export_source")
-        self.assertEqual(payload.allowed_tool_names, ["trace_export_tool"])
-        self.assertEqual(payload.allowed_tool_labels, ["Trace Export Tool"])
-
-    def test_collect_task_governance_summary_from_trace_steps_reuses_governance_summary_dict_builder(
+    def test_build_task_export_payload_reuses_task_governance_summary_dict_builder_for_persisted_fallback(
         self,
     ) -> None:
+        task = {
+            "id": "task-export-builder-persisted-governance",
+            "session_id": "session-export-builder-persisted-governance",
+            "prompt": "export builder governance fallback",
+            "status": "completed",
+            "created_at": "2026-06-16T13:00:00",
+            "updated_at": "2026-06-16T13:05:00",
+            "tool_registry_profile": "planning_only",
+            "tool_registry_provider_source": "planning_suite",
+            "allowed_tool_names_json": json.dumps(["task_plan"]),
+            "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+            "trace_json": None,
+            "usage_json": None,
+        }
+        original_get_task_trace = task_routes_module.get_task_trace
+        original_get_task_messages = task_routes_module.get_task_messages
+        original_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
         original_extractor = (
             task_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps
         )
-        original_dict_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
-        captured_steps: list[object] = []
-        captured_governance: list[object] = []
-        fake_step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
-            id="trace-governance-clone-step",
-            type="thought",
-            content="trace helper",
-            seq=1,
+        original_collector = getattr(
+            task_routes_module, "_collect_task_governance_from_task", None
         )
+        captured: list[object] = []
         try:
+            task_routes_module.get_task_trace = lambda *_args, **_kwargs: []
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []
             task_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps = (
-                lambda steps: captured_steps.append(steps)
-                or {
-                    "profile": "shared_trace_profile",
-                    "provider_source": "shared_trace_source",
-                    "allowed_tool_names": ["shared_trace_tool"],
-                    "allowed_tool_labels": ["Shared Trace Tool"],
-                }
+                lambda _steps: None
             )
-            task_routes_module._build_task_governance_summary_from_dict = lambda governance: captured_governance.append(  # type: ignore[attr-defined]
+            if original_collector is not None:
+                task_routes_module._collect_task_governance_from_task = lambda _task: (_ for _ in ()).throw(  # type: ignore[attr-defined]
+                    AssertionError(
+                        "task export persisted fallback should use the shared dict-builder directly"
+                    )
+                )
+            task_routes_module._build_task_governance_summary_from_dict = lambda governance: captured.append(  # type: ignore[attr-defined]
                 governance
-            ) or task_routes_module.TaskGovernanceSummary(
-                profile="dict_profile",
-                provider_source="dict_source",
-                allowed_tool_names=["dict_tool"],
-                allowed_tool_labels=["Dict Tool"],
+            ) or (
+                None
+                if governance is None
+                else task_routes_module.TaskGovernanceSummary(
+                    profile="builder_profile",
+                    provider_source="builder_source",
+                    allowed_tool_names=["builder_tool"],
+                    allowed_tool_labels=["Builder Tool"],
+                )
             )
-            payload = task_routes_module._collect_task_governance_summary_from_trace_steps(  # type: ignore[attr-defined]
-                [fake_step]
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                task,
+                "user-export-builder-persisted-governance",
             )
         finally:
-            task_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps = (  # type: ignore[attr-defined]
-                original_extractor
-            )
-            task_routes_module._build_task_governance_summary_from_dict = original_dict_builder  # type: ignore[attr-defined]
+            task_routes_module.get_task_trace = original_get_task_trace
+            task_routes_module.get_task_messages = original_get_task_messages
+            task_routes_module._build_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+            task_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps = original_extractor  # type: ignore[attr-defined]
+            if original_collector is None:
+                if hasattr(task_routes_module, "_collect_task_governance_from_task"):
+                    delattr(task_routes_module, "_collect_task_governance_from_task")
+            else:
+                task_routes_module._collect_task_governance_from_task = original_collector  # type: ignore[attr-defined]
 
         self.assertEqual(
-            captured_steps,
-            [[fake_step.model_dump(exclude_none=True)]],
-        )
-        self.assertEqual(
-            captured_governance,
+            captured,
             [
+                None,
                 {
-                    "profile": "shared_trace_profile",
-                    "provider_source": "shared_trace_source",
-                    "allowed_tool_names": ["shared_trace_tool"],
-                    "allowed_tool_labels": ["Shared Trace Tool"],
-                }
+                    "profile": "planning_only",
+                    "provider_source": "planning_suite",
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner Suite"],
+                },
             ],
         )
-        self.assertIsNotNone(payload)
-        assert payload is not None
-        self.assertEqual(payload.profile, "dict_profile")
-        self.assertEqual(payload.provider_source, "dict_source")
-        self.assertEqual(payload.allowed_tool_names, ["dict_tool"])
-        self.assertEqual(payload.allowed_tool_labels, ["Dict Tool"])
+        self.assertIsNotNone(payload.trace.governance)
+        assert payload.trace.governance is not None
+        self.assertEqual(payload.trace.governance.profile, "builder_profile")
+        self.assertEqual(payload.trace.governance.provider_source, "builder_source")
+        self.assertEqual(payload.trace.governance.allowed_tool_names, ["builder_tool"])
+        self.assertEqual(
+            payload.trace.governance.allowed_tool_labels, ["Builder Tool"]
+        )
 
-    def test_build_task_response_reuses_shared_task_governance_row_parser(self) -> None:
+    def test_get_task_detail_reuses_shared_task_governance_row_parser(self) -> None:
         self.assertTrue(hasattr(task_routes_module, "chat_persistence_service"))
+        original_get_task = task_routes_module.get_task
         original_parser = (
             task_routes_module.chat_persistence_service._extract_task_governance_from_task_row
         )
         try:
+            task_routes_module.get_task = lambda _task_id, _user_id: {
+                "id": "task-shared-governance-route",
+                "session_id": "session-shared-governance-route",
+                "prompt": "shared governance route task",
+                "status": "completed",
+                "trace_json": None,
+                "usage_json": None,
+                "created_at": "2026-06-11T12:00:00",
+                "updated_at": "2026-06-11T12:01:00",
+            }
             task_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
                 lambda _task: {
                     "profile": "shared_profile",
@@ -4206,19 +4375,12 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "allowed_tool_labels": ["Shared Tool"],
                 }
             )
-            response = task_routes_module._build_task_response(  # type: ignore[attr-defined]
-                {
-                    "id": "task-shared-governance-route",
-                    "session_id": "session-shared-governance-route",
-                    "prompt": "shared governance route task",
-                    "status": "completed",
-                    "trace_json": None,
-                    "usage_json": None,
-                    "created_at": "2026-06-11T12:00:00",
-                    "updated_at": "2026-06-11T12:01:00",
-                }
+            response = task_routes_module.get_task_detail(
+                "task-shared-governance-route",
+                current_user={"id": "user-shared-governance-route"},
             )
         finally:
+            task_routes_module.get_task = original_get_task
             task_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
                 original_parser
             )
@@ -4230,58 +4392,78 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(response.governance.allowed_tool_names, ["shared_tool"])
         self.assertEqual(response.governance.allowed_tool_labels, ["Shared Tool"])
 
-    def test_build_session_export_governance_summary_from_dict_reuses_shared_clone_helper(
+    def test_get_tasks_route_reuses_governance_summary_dict_builder_for_items(
         self,
     ) -> None:
-        original_clone_helper = getattr(
-            session_routes_module.chat_persistence_service,
-            "_clone_session_governance_summary_dict",
-            None,
-        )
-        captured: list[object] = []
+        original_get_session = task_routes_module.get_session
+        original_list_tasks = task_routes_module.list_tasks
+        original_count_tasks = task_routes_module.count_tasks
+        original_builder = task_routes_module._build_task_governance_summary_from_dict  # type: ignore[attr-defined]
+        original_response_builder = getattr(task_routes_module, "_build_task_response", None)
         try:
-            session_routes_module.chat_persistence_service._clone_session_governance_summary_dict = (  # type: ignore[attr-defined]
-                lambda governance: captured.append(governance) or {
-                    "profiles": ["clone_profile"],
-                    "provider_sources": ["clone_source"],
-                    "allowed_tool_names": ["clone_tool"],
-                    "allowed_tool_labels": ["Clone Tool"],
-                }
-            )
-            payload = session_routes_module._build_session_export_governance_summary_from_dict(  # type: ignore[attr-defined]
+            if original_response_builder is not None:
+                task_routes_module._build_task_response = lambda _task: (_ for _ in ()).throw(  # type: ignore[attr-defined]
+                    AssertionError(
+                        "get_tasks should build item governance directly from the shared dict-builder"
+                    )
+                )
+            task_routes_module.get_session = lambda session_id, user_id: {
+                "id": session_id,
+                "user_id": user_id,
+                "title": "Task Builder Session",
+            }
+            task_routes_module.list_tasks = lambda **_kwargs: [
                 {
-                    "profiles": ["planning_only"],
-                    "provider_sources": ["planning_suite"],
-                    "allowed_tool_names": ["task_plan"],
-                    "allowed_tool_labels": ["Task Planner Suite"],
+                    "id": "task-list-builder-governance",
+                    "session_id": "session-list-builder-governance",
+                    "prompt": "builder governance list task",
+                    "status": "completed",
+                    "trace_json": None,
+                    "usage_json": None,
+                    "tool_registry_profile": "planning_only",
+                    "tool_registry_provider_source": "default",
+                    "allowed_tool_names_json": json.dumps(["task_plan"]),
+                    "allowed_tool_labels_json": json.dumps(["Task Planner"]),
+                    "created_at": "2026-06-16T19:00:00",
+                    "updated_at": "2026-06-16T19:01:00",
                 }
+            ]
+            task_routes_module.count_tasks = lambda *_args, **_kwargs: 1
+            task_routes_module._build_task_governance_summary_from_dict = lambda _governance: task_routes_module.TaskGovernanceSummary(  # type: ignore[attr-defined]
+                profile="builder_profile",
+                provider_source="builder_source",
+                allowed_tool_names=["builder_tool"],
+                allowed_tool_labels=["Builder Tool"],
+            )
+            payload = task_routes_module.get_tasks(
+                limit=20,
+                offset=0,
+                session_id="session-list-builder-governance",
+                query=None,
+                tool_registry_profile=None,
+                tool_registry_provider_source=None,
+                current_user={"id": "user-list-builder-governance"},
             )
         finally:
-            if original_clone_helper is None:
-                delattr(
-                    session_routes_module.chat_persistence_service,
-                    "_clone_session_governance_summary_dict",
-                )
+            task_routes_module.get_session = original_get_session
+            task_routes_module.list_tasks = original_list_tasks
+            task_routes_module.count_tasks = original_count_tasks
+            task_routes_module._build_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+            if original_response_builder is None:
+                if hasattr(task_routes_module, "_build_task_response"):
+                    delattr(task_routes_module, "_build_task_response")
             else:
-                session_routes_module.chat_persistence_service._clone_session_governance_summary_dict = original_clone_helper  # type: ignore[attr-defined]
+                task_routes_module._build_task_response = original_response_builder  # type: ignore[attr-defined]
 
+        self.assertEqual(len(payload.items), 1)
+        self.assertIsNotNone(payload.items[0].governance)
+        assert payload.items[0].governance is not None
+        self.assertEqual(payload.items[0].governance.profile, "builder_profile")
+        self.assertEqual(payload.items[0].governance.provider_source, "builder_source")
+        self.assertEqual(payload.items[0].governance.allowed_tool_names, ["builder_tool"])
         self.assertEqual(
-            captured,
-            [
-                {
-                    "profiles": ["planning_only"],
-                    "provider_sources": ["planning_suite"],
-                    "allowed_tool_names": ["task_plan"],
-                    "allowed_tool_labels": ["Task Planner Suite"],
-                }
-            ],
+            payload.items[0].governance.allowed_tool_labels, ["Builder Tool"]
         )
-        self.assertIsNotNone(payload)
-        assert payload is not None
-        self.assertEqual(payload.profiles, ["clone_profile"])
-        self.assertEqual(payload.provider_sources, ["clone_source"])
-        self.assertEqual(payload.allowed_tool_names, ["clone_tool"])
-        self.assertEqual(payload.allowed_tool_labels, ["Clone Tool"])
 
     def test_build_session_export_payload_surfaces_governance_summary(self) -> None:
         session = {
@@ -4559,228 +4741,47 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             hasattr(session_routes_module, "_collect_task_governance_from_trace_json")
         )
 
-    def test_collect_session_governance_summary_reuses_dict_builder(self) -> None:
-        original_collect = session_routes_module._collect_task_governance_from_task  # type: ignore[attr-defined]
-        original_merge = session_routes_module.chat_persistence_service._merge_session_governance_summary
-        original_builder = session_routes_module._build_session_export_governance_summary_from_dict  # type: ignore[attr-defined]
-        captured: list[object] = []
-        try:
-            session_routes_module._collect_task_governance_from_task = lambda _task, _parsed_steps=None: {  # type: ignore[attr-defined]
-                "profile": "task_profile",
-                "provider_source": "task_source",
-                "allowed_tool_names": ["task_tool"],
-                "allowed_tool_labels": ["Task Tool"],
-            }
-            session_routes_module.chat_persistence_service._merge_session_governance_summary = (
-                lambda _current, _task_governance: {
-                    "profiles": ["merged_profile"],
-                    "provider_sources": ["merged_source"],
-                    "allowed_tool_names": ["merged_tool"],
-                    "allowed_tool_labels": ["Merged Tool"],
-                }
-            )
-            session_routes_module._build_session_export_governance_summary_from_dict = lambda governance: captured.append(  # type: ignore[attr-defined]
-                governance
-            ) or session_routes_module.SessionExportGovernanceSummary(
-                profiles=["builder_profile"],
-                provider_sources=["builder_source"],
-                allowed_tool_names=["builder_tool"],
-                allowed_tool_labels=["Builder Tool"],
-            )
-            payload = session_routes_module._collect_session_governance_summary(  # type: ignore[attr-defined]
-                [{"id": "task-1"}]
-            )
-        finally:
-            session_routes_module._collect_task_governance_from_task = original_collect  # type: ignore[attr-defined]
-            session_routes_module.chat_persistence_service._merge_session_governance_summary = original_merge
-            session_routes_module._build_session_export_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
-
-        self.assertEqual(
-            captured,
-            [
-                {
-                    "profiles": ["merged_profile"],
-                    "provider_sources": ["merged_source"],
-                    "allowed_tool_names": ["merged_tool"],
-                    "allowed_tool_labels": ["Merged Tool"],
-                }
-            ],
-        )
-        self.assertIsNotNone(payload)
-        assert payload is not None
-        self.assertEqual(payload.profiles, ["builder_profile"])
-        self.assertEqual(payload.provider_sources, ["builder_source"])
-        self.assertEqual(payload.allowed_tool_names, ["builder_tool"])
-        self.assertEqual(payload.allowed_tool_labels, ["Builder Tool"])
-
-    def test_build_session_export_payload_reuses_task_governance_summary_dict_builder(
+    def test_session_route_module_does_not_expose_dead_task_row_governance_collector(
         self,
     ) -> None:
-        session = {
-            "id": "session-builder-governance-summary",
-            "title": "Builder Governance Summary Session",
-            "created_at": "2026-06-11T15:00:00",
-            "updated_at": "2026-06-11T15:05:00",
-        }
-        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
-        original_get_session_messages = session_routes_module.get_session_messages
-        original_get_session_tasks = session_routes_module.get_session_tasks
-        original_builder = session_routes_module._build_session_export_task_governance_summary_from_dict  # type: ignore[attr-defined]
-        try:
-            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
-                "tasks_total": 1,
-                "tasks_with_usage": 0,
-                "source_tasks_provider": 0,
-                "source_tasks_estimated": 0,
-                "source_tasks_mixed": 0,
-                "source_tasks_legacy": 0,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-                "cost_estimate": 0.0,
-                "avg_total_tokens": None,
-                "avg_cost_estimate": None,
-            }
-            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
-            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
-                {
-                    "id": "task-builder-governance-session",
-                    "prompt": "task one",
-                    "status": "completed",
-                    "created_at": "2026-06-11T15:00:00",
-                    "updated_at": "2026-06-11T15:01:00",
-                    "usage_json": None,
-                    "trace_json": None,
-                    "tool_registry_profile": "planning_only",
-                    "tool_registry_provider_source": "default",
-                    "allowed_tool_names_json": json.dumps(["task_plan"]),
-                    "allowed_tool_labels_json": json.dumps(["Task Planner"]),
-                },
-            ]
-            session_routes_module._build_session_export_task_governance_summary_from_dict = lambda _governance: session_routes_module.SessionExportTaskGovernanceSummary(  # type: ignore[attr-defined]
-                profile="builder_profile",
-                provider_source="builder_source",
-                allowed_tool_names=["builder_tool"],
-                allowed_tool_labels=["Builder Tool"],
-            )
-            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
-                session,
-                "user-builder-governance-session",
-            )
-        finally:
-            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
-            session_routes_module.get_session_messages = original_get_session_messages
-            session_routes_module.get_session_tasks = original_get_session_tasks
-            session_routes_module._build_session_export_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
+        self.assertFalse(
+            hasattr(session_routes_module, "_collect_task_governance_from_task_row")
+        )
 
-        self.assertIsNotNone(payload.tasks[0].governance)
-        assert payload.tasks[0].governance is not None
-        self.assertEqual(payload.tasks[0].governance.profile, "builder_profile")
-        self.assertEqual(payload.tasks[0].governance.provider_source, "builder_source")
-        self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["builder_tool"])
-        self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Builder Tool"])
-
-    def test_build_session_export_task_governance_summary_from_dict_reuses_shared_clone_helper(
+    def test_session_route_module_does_not_expose_dead_trace_steps_governance_collector(
         self,
     ) -> None:
-        original_cloner = session_routes_module.chat_persistence_service._clone_task_governance_dict  # type: ignore[attr-defined]
-        captured: list[object] = []
-        try:
-            session_routes_module.chat_persistence_service._clone_task_governance_dict = (
-                lambda governance: captured.append(governance)
-                or {
-                    "profile": "shared_session_profile",
-                    "provider_source": "shared_session_source",
-                    "allowed_tool_names": ["shared_session_tool"],
-                    "allowed_tool_labels": ["Shared Session Tool"],
-                }
-            )
-            payload = session_routes_module._build_session_export_task_governance_summary_from_dict(  # type: ignore[attr-defined]
-                {
-                    "profile": " Planning_Only ",
-                    "provider_source": " Default ",
-                    "allowed_tool_names": [" task_plan "],
-                    "allowed_tool_labels": [" Task Planner "],
-                }
-            )
-        finally:
-            session_routes_module.chat_persistence_service._clone_task_governance_dict = (
-                original_cloner
-            )
-
-        self.assertEqual(
-            captured,
-            [
-                {
-                    "profile": " Planning_Only ",
-                    "provider_source": " Default ",
-                    "allowed_tool_names": [" task_plan "],
-                    "allowed_tool_labels": [" Task Planner "],
-                }
-            ],
+        self.assertFalse(
+            hasattr(session_routes_module, "_collect_task_governance_from_trace_steps")
         )
-        self.assertIsNotNone(payload)
-        assert payload is not None
-        self.assertEqual(payload.profile, "shared_session_profile")
-        self.assertEqual(payload.provider_source, "shared_session_source")
-        self.assertEqual(payload.allowed_tool_names, ["shared_session_tool"])
-        self.assertEqual(payload.allowed_tool_labels, ["Shared Session Tool"])
 
-    def test_build_session_task_summary_reuses_task_governance_summary_dict_builder(
+    def test_session_route_module_does_not_expose_dead_session_export_assembly_helpers(
         self,
     ) -> None:
-        original_collect = session_routes_module._collect_task_governance_from_task  # type: ignore[attr-defined]
-        original_builder = session_routes_module._build_session_export_task_governance_summary_from_dict  # type: ignore[attr-defined]
-        captured: list[object] = []
-        try:
-            session_routes_module._collect_task_governance_from_task = lambda _task, _parsed_steps=None: {  # type: ignore[attr-defined]
-                "profile": "clone_profile",
-                "provider_source": "clone_source",
-                "allowed_tool_names": ["clone_tool"],
-                "allowed_tool_labels": ["Clone Tool"],
-            }
-            session_routes_module._build_session_export_task_governance_summary_from_dict = lambda governance: captured.append(  # type: ignore[attr-defined]
-                governance
-            ) or session_routes_module.SessionExportTaskGovernanceSummary(
-                profile="builder_profile",
-                provider_source="builder_source",
-                allowed_tool_names=["builder_tool"],
-                allowed_tool_labels=["Builder Tool"],
-            )
-            summary, trace_step_count, rag_hit_count = session_routes_module._build_session_task_summary(  # type: ignore[attr-defined]
-                {
-                    "id": "task-session-clone-builder",
-                    "prompt": "task one",
-                    "status": "completed",
-                    "created_at": "2026-06-15T11:00:00",
-                    "updated_at": "2026-06-15T11:01:00",
-                    "usage_json": None,
-                    "trace_json": None,
-                }
-            )
-        finally:
-            session_routes_module._collect_task_governance_from_task = original_collect  # type: ignore[attr-defined]
-            session_routes_module._build_session_export_task_governance_summary_from_dict = original_builder  # type: ignore[attr-defined]
-
-        self.assertEqual(
-            captured,
-            [
-                {
-                    "profile": "clone_profile",
-                    "provider_source": "clone_source",
-                    "allowed_tool_names": ["clone_tool"],
-                    "allowed_tool_labels": ["Clone Tool"],
-                }
-            ],
+        self.assertFalse(hasattr(session_routes_module, "_build_session_task_summary"))
+        self.assertFalse(
+            hasattr(session_routes_module, "_collect_session_governance_summary")
         )
-        self.assertEqual(trace_step_count, 0)
-        self.assertEqual(rag_hit_count, 0)
-        self.assertIsNotNone(summary.governance)
-        assert summary.governance is not None
-        self.assertEqual(summary.governance.profile, "builder_profile")
-        self.assertEqual(summary.governance.provider_source, "builder_source")
-        self.assertEqual(summary.governance.allowed_tool_names, ["builder_tool"])
-        self.assertEqual(summary.governance.allowed_tool_labels, ["Builder Tool"])
+
+    def test_session_route_module_does_not_expose_dead_session_export_governance_helpers(
+        self,
+    ) -> None:
+        self.assertFalse(
+            hasattr(
+                session_routes_module,
+                "_build_session_export_task_governance_summary_from_dict",
+            )
+        )
+        self.assertFalse(
+            hasattr(
+                session_routes_module,
+                "_build_session_export_governance_summary_from_dict",
+            )
+        )
+        self.assertFalse(
+            hasattr(session_routes_module, "_collect_task_governance_from_task")
+        )
+
 
     def test_build_session_export_payload_prefers_persisted_governance_columns(self) -> None:
         session = {
@@ -5076,6 +5077,99 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["shared_tool"])
         self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Shared Tool"])
 
+    def test_build_session_export_payload_does_not_reuse_task_governance_clone_helper_for_row_parser(
+        self,
+    ) -> None:
+        session = {
+            "id": "session-no-clone-governance-row",
+            "title": "No Clone Governance Session",
+            "created_at": "2026-06-16T12:00:00",
+            "updated_at": "2026-06-16T12:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_row_parser = (
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row
+        )
+        original_clone_helper = getattr(
+            session_routes_module.chat_persistence_service,
+            "_clone_task_governance_dict",
+            None,
+        )
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-no-clone-row",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-16T12:00:00",
+                    "updated_at": "2026-06-16T12:01:00",
+                    "usage_json": None,
+                    "trace_json": None,
+                },
+            ]
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                lambda _task: {
+                    "profile": "shared_profile",
+                    "provider_source": "shared_source",
+                    "allowed_tool_names": ["shared_tool"],
+                    "allowed_tool_labels": ["Shared Tool"],
+                }
+            )
+            if original_clone_helper is not None:
+                session_routes_module.chat_persistence_service._clone_task_governance_dict = (  # type: ignore[attr-defined]
+                    lambda _governance: (_ for _ in ()).throw(
+                        AssertionError(
+                            "session export row parser path should not depend on the shared clone helper"
+                        )
+                    )
+                )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-no-clone-governance-row",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                original_row_parser
+            )
+            if original_clone_helper is None:
+                if hasattr(
+                    session_routes_module.chat_persistence_service,
+                    "_clone_task_governance_dict",
+                ):
+                    delattr(
+                        session_routes_module.chat_persistence_service,
+                        "_clone_task_governance_dict",
+                    )
+            else:
+                session_routes_module.chat_persistence_service._clone_task_governance_dict = original_clone_helper  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(payload.tasks[0].governance)
+        assert payload.tasks[0].governance is not None
+        self.assertEqual(payload.tasks[0].governance.profile, "shared_profile")
+        self.assertEqual(payload.tasks[0].governance.provider_source, "shared_source")
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["shared_tool"])
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Shared Tool"])
+
     def test_build_session_export_payload_reuses_shared_task_governance_trace_json_parser(
         self,
     ) -> None:
@@ -5156,89 +5250,215 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.governance.allowed_tool_labels, ["Shared Trace Tool"])
         self.assertIsNotNone(payload.tasks[0].governance)
         assert payload.tasks[0].governance is not None
+
+    def test_build_session_export_payload_trusts_normalized_governance_dict_shapes(
+        self,
+    ) -> None:
+        class GuardedTaskGovernanceDict(dict):
+            def get(self, *_args, **_kwargs):
+                raise AssertionError(
+                    "session export task governance should construct outward model directly from normalized task governance dict"
+                )
+
+        class GuardedSessionGovernanceDict(dict):
+            def get(self, *_args, **_kwargs):
+                raise AssertionError(
+                    "session export governance summary should construct outward model directly from normalized session governance dict"
+                )
+
+        session = {
+            "id": "session-guarded-governance-shape",
+            "title": "Guarded Governance Shape Session",
+            "created_at": "2026-06-16T23:00:00",
+            "updated_at": "2026-06-16T23:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_row_parser = (
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row
+        )
+        original_merger = session_routes_module.chat_persistence_service._merge_session_governance_summary
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-guarded-governance-shape",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-16T23:00:00",
+                    "updated_at": "2026-06-16T23:01:00",
+                    "usage_json": None,
+                    "trace_json": None,
+                },
+            ]
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                lambda _task: GuardedTaskGovernanceDict(
+                    profile="guarded_profile",
+                    provider_source="guarded_source",
+                    allowed_tool_names=["guarded_tool"],
+                    allowed_tool_labels=["Guarded Tool"],
+                )
+            )
+            session_routes_module.chat_persistence_service._merge_session_governance_summary = (  # type: ignore[attr-defined]
+                lambda _current, _task_governance: GuardedSessionGovernanceDict(
+                    profiles=["guarded_profile"],
+                    provider_sources=["guarded_source"],
+                    allowed_tool_names=["guarded_tool"],
+                    allowed_tool_labels=["Guarded Tool"],
+                )
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-guarded-governance-shape",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                original_row_parser
+            )
+            session_routes_module.chat_persistence_service._merge_session_governance_summary = (
+                original_merger
+            )
+
+        self.assertIsNotNone(payload.tasks[0].governance)
+        assert payload.tasks[0].governance is not None
+        self.assertEqual(payload.tasks[0].governance.profile, "guarded_profile")
+        self.assertEqual(payload.tasks[0].governance.provider_source, "guarded_source")
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["guarded_tool"])
+        self.assertEqual(
+            payload.tasks[0].governance.allowed_tool_labels, ["Guarded Tool"]
+        )
+        self.assertIsNotNone(payload.governance)
+        assert payload.governance is not None
+        self.assertEqual(payload.governance.profiles, ["guarded_profile"])
+        self.assertEqual(payload.governance.provider_sources, ["guarded_source"])
+        self.assertEqual(payload.governance.allowed_tool_names, ["guarded_tool"])
+        self.assertEqual(payload.governance.allowed_tool_labels, ["Guarded Tool"])
+
+    def test_build_session_export_payload_does_not_reuse_task_governance_clone_helper_for_trace_fallback(
+        self,
+    ) -> None:
+        session = {
+            "id": "session-no-clone-governance-trace",
+            "title": "No Clone Trace Governance Session",
+            "created_at": "2026-06-16T13:00:00",
+            "updated_at": "2026-06-16T13:05:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_row_parser = (
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row
+        )
+        original_trace_json_parser = (
+            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_json
+        )
+        original_clone_helper = getattr(
+            session_routes_module.chat_persistence_service,
+            "_clone_task_governance_dict",
+            None,
+        )
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: [
+                {
+                    "id": "task-no-clone-trace",
+                    "prompt": "task one",
+                    "status": "completed",
+                    "created_at": "2026-06-16T13:00:00",
+                    "updated_at": "2026-06-16T13:01:00",
+                    "usage_json": None,
+                    "trace_json": "[]",
+                },
+            ]
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                lambda _task: None
+            )
+            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_json = (
+                lambda _trace_json: {
+                    "profile": "shared_trace_profile",
+                    "provider_source": "shared_trace_source",
+                    "allowed_tool_names": ["shared_trace_tool"],
+                    "allowed_tool_labels": ["Shared Trace Tool"],
+                }
+            )
+            if original_clone_helper is not None:
+                session_routes_module.chat_persistence_service._clone_task_governance_dict = (  # type: ignore[attr-defined]
+                    lambda _governance: (_ for _ in ()).throw(
+                        AssertionError(
+                            "session export trace fallback should not depend on the shared clone helper"
+                        )
+                    )
+                )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-no-clone-governance-trace",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            session_routes_module.chat_persistence_service._extract_task_governance_from_task_row = (
+                original_row_parser
+            )
+            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_json = (
+                original_trace_json_parser
+            )
+            if original_clone_helper is None:
+                if hasattr(
+                    session_routes_module.chat_persistence_service,
+                    "_clone_task_governance_dict",
+                ):
+                    delattr(
+                        session_routes_module.chat_persistence_service,
+                        "_clone_task_governance_dict",
+                    )
+            else:
+                session_routes_module.chat_persistence_service._clone_task_governance_dict = original_clone_helper  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(payload.tasks[0].governance)
+        assert payload.tasks[0].governance is not None
+        self.assertEqual(payload.tasks[0].governance.profile, "shared_trace_profile")
+        self.assertEqual(payload.tasks[0].governance.provider_source, "shared_trace_source")
+        self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["shared_trace_tool"])
+        self.assertEqual(
+            payload.tasks[0].governance.allowed_tool_labels, ["Shared Trace Tool"]
+        )
         self.assertEqual(payload.tasks[0].governance.profile, "shared_trace_profile")
         self.assertEqual(payload.tasks[0].governance.provider_source, "shared_trace_source")
         self.assertEqual(payload.tasks[0].governance.allowed_tool_names, ["shared_trace_tool"])
         self.assertEqual(payload.tasks[0].governance.allowed_tool_labels, ["Shared Trace Tool"])
-
-    def test_collect_session_task_governance_from_trace_steps_reuses_shared_clone_helper(
-        self,
-    ) -> None:
-        original_extractor = (
-            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps
-        )
-        original_clone_helper = (
-            session_routes_module.chat_persistence_service._clone_task_governance_dict
-        )
-        captured_steps: list[object] = []
-        captured_governance: list[object] = []
-
-        class FakeStep:
-            def model_dump(self, *, exclude_none: bool = False) -> dict[str, object]:
-                self_exclude_none = exclude_none
-                return {
-                    "id": "session-trace-step-clone",
-                    "type": "thought",
-                    "content": "trace helper",
-                    "seq": 1,
-                    "exclude_none": self_exclude_none,
-                }
-
-        fake_step = FakeStep()
-        try:
-            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps = (
-                lambda steps: captured_steps.append(steps)
-                or {
-                    "profile": "shared_trace_profile",
-                    "provider_source": "shared_trace_source",
-                    "allowed_tool_names": ["shared_trace_tool"],
-                    "allowed_tool_labels": ["Shared Trace Tool"],
-                }
-            )
-            session_routes_module.chat_persistence_service._clone_task_governance_dict = (
-                lambda governance: captured_governance.append(governance)
-                or {
-                    "profile": "clone_profile",
-                    "provider_source": "clone_source",
-                    "allowed_tool_names": ["clone_tool"],
-                    "allowed_tool_labels": ["Clone Tool"],
-                }
-            )
-            payload = session_routes_module._collect_task_governance_from_trace_steps(  # type: ignore[attr-defined]
-                [fake_step]
-            )
-        finally:
-            session_routes_module.chat_persistence_service._extract_task_governance_from_trace_steps = (  # type: ignore[attr-defined]
-                original_extractor
-            )
-            session_routes_module.chat_persistence_service._clone_task_governance_dict = (
-                original_clone_helper
-            )
-
-        self.assertEqual(
-            captured_steps,
-            [[fake_step.model_dump(exclude_none=True)]],
-        )
-        self.assertEqual(
-            captured_governance,
-            [
-                {
-                    "profile": "shared_trace_profile",
-                    "provider_source": "shared_trace_source",
-                    "allowed_tool_names": ["shared_trace_tool"],
-                    "allowed_tool_labels": ["Shared Trace Tool"],
-                }
-            ],
-        )
-        self.assertEqual(
-            payload,
-            {
-                "profile": "clone_profile",
-                "provider_source": "clone_source",
-                "allowed_tool_names": ["clone_tool"],
-                "allowed_tool_labels": ["Clone Tool"],
-            },
-        )
 
     def test_export_assertions_require_session_task_level_governance_json(self) -> None:
         import importlib

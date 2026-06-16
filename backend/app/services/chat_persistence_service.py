@@ -90,7 +90,7 @@ def _extract_task_governance_from_trace_steps(
 def _serialize_task_governance_columns(
     trace_steps: list[dict],
 ) -> tuple[str | None, str | None, str | None, str | None]:
-    governance = _clone_task_governance_dict(
+    governance = _normalize_task_governance_dict(
         _extract_task_governance_from_trace_steps(trace_steps)
     )
     if governance is None:
@@ -240,28 +240,6 @@ def _normalize_task_governance_dict(
     return normalized
 
 
-def _clone_task_governance_dict(
-    governance: object,
-) -> dict[str, list[str] | str | None] | None:
-    normalized = _normalize_task_governance_dict(governance)
-    if not isinstance(normalized, dict):
-        return None
-    return {
-        "profile": normalized.get("profile")
-        if isinstance(normalized.get("profile"), str)
-        else None,
-        "provider_source": normalized.get("provider_source")
-        if isinstance(normalized.get("provider_source"), str)
-        else None,
-        "allowed_tool_names": list(normalized.get("allowed_tool_names", []))
-        if isinstance(normalized.get("allowed_tool_names"), list)
-        else [],
-        "allowed_tool_labels": list(normalized.get("allowed_tool_labels", []))
-        if isinstance(normalized.get("allowed_tool_labels"), list)
-        else [],
-    }
-
-
 def _normalize_session_governance_summary_dict(
     governance: object,
 ) -> dict[str, object] | None:
@@ -282,28 +260,6 @@ def _normalize_session_governance_summary_dict(
     if not _has_session_governance_values(normalized):
         return None
     return normalized
-
-
-def _clone_session_governance_summary_dict(
-    governance: object,
-) -> dict[str, list[str]] | None:
-    normalized = _normalize_session_governance_summary_dict(governance)
-    if not isinstance(normalized, dict):
-        return None
-    return {
-        "profiles": list(normalized.get("profiles", []))
-        if isinstance(normalized.get("profiles"), list)
-        else [],
-        "provider_sources": list(normalized.get("provider_sources", []))
-        if isinstance(normalized.get("provider_sources"), list)
-        else [],
-        "allowed_tool_names": list(normalized.get("allowed_tool_names", []))
-        if isinstance(normalized.get("allowed_tool_names"), list)
-        else [],
-        "allowed_tool_labels": list(normalized.get("allowed_tool_labels", []))
-        if isinstance(normalized.get("allowed_tool_labels"), list)
-        else [],
-    }
 
 
 def ensure_session(prompt: str, user_id: str, session_id: str | None = None) -> str:

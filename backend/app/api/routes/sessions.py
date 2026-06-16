@@ -259,166 +259,6 @@ def _task_status_meta(task: dict) -> dict[str, object]:
         "status_rank": task_status_rank(status),
     }
 
-
-def _build_session_export_task_governance_summary_from_dict(
-    governance: object,
-) -> SessionExportTaskGovernanceSummary | None:
-    normalized = chat_persistence_service._clone_task_governance_dict(governance)
-    if not isinstance(normalized, dict):
-        return None
-    return SessionExportTaskGovernanceSummary(
-        profile=normalized.get("profile")
-        if isinstance(normalized.get("profile"), str)
-        else None,
-        provider_source=normalized.get("provider_source")
-        if isinstance(normalized.get("provider_source"), str)
-        else None,
-        allowed_tool_names=list(normalized.get("allowed_tool_names", []))
-        if isinstance(normalized.get("allowed_tool_names"), list)
-        else [],
-        allowed_tool_labels=list(normalized.get("allowed_tool_labels", []))
-        if isinstance(normalized.get("allowed_tool_labels"), list)
-        else [],
-    )
-
-
-def _build_session_export_governance_summary_from_dict(
-    governance: object,
-) -> SessionExportGovernanceSummary | None:
-    normalized = chat_persistence_service._clone_session_governance_summary_dict(
-        governance
-    )
-    if not isinstance(normalized, dict):
-        return None
-    return SessionExportGovernanceSummary(
-        profiles=list(normalized.get("profiles", []))
-        if isinstance(normalized.get("profiles"), list)
-        else [],
-        provider_sources=list(normalized.get("provider_sources", []))
-        if isinstance(normalized.get("provider_sources"), list)
-        else [],
-        allowed_tool_names=list(normalized.get("allowed_tool_names", []))
-        if isinstance(normalized.get("allowed_tool_names"), list)
-        else [],
-        allowed_tool_labels=list(normalized.get("allowed_tool_labels", []))
-        if isinstance(normalized.get("allowed_tool_labels"), list)
-        else [],
-    )
-
-
-def _build_session_task_summary(
-    task: dict,
-) -> tuple[SessionExportTaskSummary, int, int]:
-    raw_trace = task.get("trace_json")
-    parsed_steps: list[Any] = []
-    if isinstance(raw_trace, str) and raw_trace.strip():
-        try:
-            loaded = json.loads(raw_trace)
-            if isinstance(loaded, list):
-                parsed_steps = parse_trace_steps([x for x in loaded if isinstance(x, dict)])
-        except Exception:
-            parsed_steps = []
-
-    rag_hit_count = 0
-    preview_steps: list[SessionExportTracePreviewStep] = []
-    for step in parsed_steps:
-        rag_meta = getattr(step, "meta", None)
-        rag_obj = getattr(rag_meta, "rag", None) if rag_meta is not None else None
-        if isinstance(rag_obj, dict):
-            chunks = rag_obj.get("chunks")
-            if isinstance(chunks, list):
-                rag_hit_count += sum(1 for chunk in chunks if isinstance(chunk, str) and chunk.strip())
-
-    for step in parsed_steps[-3:]:
-        content = getattr(step, "content", "") or ""
-        preview_steps.append(
-            SessionExportTracePreviewStep(
-                id=str(getattr(step, "id", "")),
-                seq=getattr(step, "seq", None),
-                type=str(getattr(step, "type", "")),
-                title=_trace_step_title(step),
-                content_excerpt=_normalize_excerpt(str(content), limit=120),
-            ),
-        )
-
-    status_meta = _task_status_meta(task)
-    task_governance = _collect_task_governance_from_task(task, parsed_steps)
-    summary = SessionExportTaskSummary(
-        id=str(task["id"]),
-        prompt=str(task.get("prompt", "")),
-        status=str(task.get("status", "")),
-        status_normalized=str(status_meta["status_normalized"]),
-        status_label=str(status_meta["status_label"]),
-        status_rank=int(status_meta["status_rank"]),
-        created_at=str(task.get("created_at", "")),
-        updated_at=str(task.get("updated_at", "")),
-        usage=_parse_usage_blob(task.get("usage_json")),
-        trace_step_count=len(parsed_steps),
-        rag_hit_count=rag_hit_count,
-        trace_preview=preview_steps,
-        governance=_build_session_export_task_governance_summary_from_dict(task_governance),
-    )
-    return summary, len(parsed_steps), rag_hit_count
-
-
-def _collect_task_governance_from_task_row(task: dict) -> dict[str, list[str] | str | None] | None:
-    governance = chat_persistence_service._extract_task_governance_from_task_row(task)
-    return chat_persistence_service._clone_task_governance_dict(governance)
-
-
-def _collect_task_governance_from_trace_steps(
-    parsed_steps: list[Any],
-) -> dict[str, list[str] | str | None] | None:
-    governance = chat_persistence_service._extract_task_governance_from_trace_steps(
-        [
-            step.model_dump(exclude_none=True)
-            for step in parsed_steps
-            if hasattr(step, "model_dump")
-        ]
-    )
-    return chat_persistence_service._clone_task_governance_dict(governance)
-
-def _collect_task_governance_from_task(
-    task: dict,
-    parsed_steps: list[Any] | None = None,
-) -> dict[str, list[str] | str | None] | None:
-    governance = _collect_task_governance_from_task_row(task)
-    if governance is not None:
-        return governance
-    resolved_steps = parsed_steps
-    raw_trace = task.get("trace_json")
-    if (
-        isinstance(raw_trace, str)
-        and raw_trace.strip()
-        and (resolved_steps is None or not resolved_steps)
-    ):
-        governance = chat_persistence_service._extract_task_governance_from_trace_json(
-            raw_trace
-        )
-        return chat_persistence_service._clone_task_governance_dict(governance)
-    if resolved_steps is None:
-        return None
-    return _collect_task_governance_from_trace_steps(resolved_steps)
-
-
-def _collect_session_governance_summary(
-    tasks: list[dict],
-) -> SessionExportGovernanceSummary | None:
-    summary: dict[str, object] | None = None
-    for task in tasks:
-        task_governance = _collect_task_governance_from_task(task)
-        if task_governance is None:
-            continue
-        summary = chat_persistence_service._merge_session_governance_summary(
-            summary,
-            task_governance,
-        )
-
-    if not isinstance(summary, dict):
-        return None
-    return _build_session_export_governance_summary_from_dict(summary)
-
-
 def _append_fenced_block(lines: list[str], content: str, language: str = "text") -> None:
     text = content.rstrip("\n")
     fence = "```"
@@ -549,12 +389,105 @@ def _build_session_export_payload(
     task_summaries: list[SessionExportTaskSummary] = []
     trace_step_total = 0
     rag_hit_total = 0
+    governance_summary: dict[str, object] | None = None
     for task_row in task_rows:
-        summary, trace_count, rag_count = _build_session_task_summary(task_row)
+        raw_trace = task_row.get("trace_json")
+        parsed_steps: list[Any] = []
+        if isinstance(raw_trace, str) and raw_trace.strip():
+            try:
+                loaded = json.loads(raw_trace)
+                if isinstance(loaded, list):
+                    parsed_steps = parse_trace_steps(
+                        [x for x in loaded if isinstance(x, dict)]
+                    )
+            except Exception:
+                parsed_steps = []
+
+        rag_hit_count = 0
+        preview_steps: list[SessionExportTracePreviewStep] = []
+        for step in parsed_steps:
+            rag_meta = getattr(step, "meta", None)
+            rag_obj = getattr(rag_meta, "rag", None) if rag_meta is not None else None
+            if isinstance(rag_obj, dict):
+                chunks = rag_obj.get("chunks")
+                if isinstance(chunks, list):
+                    rag_hit_count += sum(
+                        1
+                        for chunk in chunks
+                        if isinstance(chunk, str) and chunk.strip()
+                    )
+
+        for step in parsed_steps[-3:]:
+            content = getattr(step, "content", "") or ""
+            preview_steps.append(
+                SessionExportTracePreviewStep(
+                    id=str(getattr(step, "id", "")),
+                    seq=getattr(step, "seq", None),
+                    type=str(getattr(step, "type", "")),
+                    title=_trace_step_title(step),
+                    content_excerpt=_normalize_excerpt(str(content), limit=120),
+                ),
+            )
+
+        task_governance = chat_persistence_service._extract_task_governance_from_task_row(
+            task_row
+        )
+        if task_governance is None:
+            raw_trace = task_row.get("trace_json")
+            if (
+                isinstance(raw_trace, str)
+                and raw_trace.strip()
+                and not parsed_steps
+            ):
+                task_governance = (
+                    chat_persistence_service._extract_task_governance_from_trace_json(
+                        raw_trace
+                    )
+                )
+            else:
+                task_governance = (
+                    chat_persistence_service._extract_task_governance_from_trace_steps(
+                        [
+                            step.model_dump(exclude_none=True)
+                            for step in parsed_steps
+                            if hasattr(step, "model_dump")
+                        ]
+                    )
+                )
+        if task_governance is not None:
+            governance_summary = chat_persistence_service._merge_session_governance_summary(
+                governance_summary,
+                task_governance,
+            )
+
+        status_meta = _task_status_meta(task_row)
+        summary = SessionExportTaskSummary(
+            id=str(task_row["id"]),
+            prompt=str(task_row.get("prompt", "")),
+            status=str(task_row.get("status", "")),
+            status_normalized=str(status_meta["status_normalized"]),
+            status_label=str(status_meta["status_label"]),
+            status_rank=int(status_meta["status_rank"]),
+            created_at=str(task_row.get("created_at", "")),
+            updated_at=str(task_row.get("updated_at", "")),
+            usage=_parse_usage_blob(task_row.get("usage_json")),
+            trace_step_count=len(parsed_steps),
+            rag_hit_count=rag_hit_count,
+            trace_preview=preview_steps,
+            governance=(
+                SessionExportTaskGovernanceSummary(**task_governance)
+                if isinstance(task_governance, dict)
+                else None
+            ),
+        )
         task_summaries.append(summary)
-        trace_step_total += trace_count
-        rag_hit_total += rag_count
-    governance = _collect_session_governance_summary(task_rows)
+        trace_step_total += len(parsed_steps)
+        rag_hit_total += rag_hit_count
+    governance = (
+        SessionExportGovernanceSummary(**governance_summary)
+        if isinstance(governance_summary, dict)
+        else None
+    )
 
     return SessionExportJsonResponse(
         version="1.0",
