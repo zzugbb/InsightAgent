@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 from app.db import get_db_connection
+from app.schemas.trace import TraceStep, parse_trace_steps
 
 
 def _now_iso() -> str:
@@ -41,6 +42,34 @@ def _normalize_trace_steps(trace_steps: list[dict]) -> list[dict]:
         )
         normalized_steps.append(normalized_step)
     return normalized_steps
+
+
+def _load_trace_steps_from_trace_json(trace_json: object) -> list[dict]:
+    if not isinstance(trace_json, str) or not trace_json.strip():
+        return []
+    try:
+        loaded = json.loads(trace_json)
+    except Exception:
+        return []
+    if not isinstance(loaded, list):
+        return []
+    return _normalize_trace_steps([item for item in loaded if isinstance(item, dict)])
+
+
+def _load_parsed_trace_steps_from_trace_json(trace_json: object) -> list[TraceStep]:
+    return parse_trace_steps(_load_trace_steps_from_trace_json(trace_json))
+
+
+def _parse_usage_json_blob(raw: object) -> dict[str, object] | None:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
 
 
 def _extract_task_governance_from_trace_steps(
@@ -87,22 +116,26 @@ def _extract_task_governance_from_trace_steps(
     return None
 
 
+def _extract_task_governance_from_parsed_trace_steps(
+    trace_steps: list[TraceStep],
+) -> dict[str, object] | None:
+    return _extract_task_governance_from_trace_steps(
+        [step.model_dump(exclude_none=True) for step in trace_steps]
+    )
+
+
 def _serialize_task_governance_columns(
     trace_steps: list[dict],
 ) -> tuple[str | None, str | None, str | None, str | None]:
-    governance = _normalize_task_governance_dict(
-        _extract_task_governance_from_trace_steps(trace_steps)
-    )
+    governance = _extract_task_governance_from_trace_steps(trace_steps)
     if governance is None:
         return None, None, None, None
-    allowed_tool_names = governance.get("allowed_tool_names", [])
-    allowed_tool_labels = governance.get("allowed_tool_labels", [])
+    allowed_tool_names = governance["allowed_tool_names"]
+    allowed_tool_labels = governance["allowed_tool_labels"]
     return (
-        governance.get("profile")
-        if isinstance(governance.get("profile"), str)
-        else None,
-        governance.get("provider_source")
-        if isinstance(governance.get("provider_source"), str)
+        governance["profile"] if isinstance(governance["profile"], str) else None,
+        governance["provider_source"]
+        if isinstance(governance["provider_source"], str)
         else None,
         json.dumps(allowed_tool_names, ensure_ascii=False)
         if isinstance(allowed_tool_names, list)
@@ -784,55 +817,34 @@ def get_session_tasks(session_id: str, user_id: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def get_task_trace(task_id: str, user_id: str) -> list[dict]:
-    task = get_task(task_id, user_id)
-    if task is None or not task["trace_json"]:
+def get_task_trace_steps_from_task(task: dict) -> list[TraceStep]:
+    if not task.get("trace_json"):
         return []
-    return _normalize_trace_steps(json.loads(task["trace_json"]))
+    return _load_parsed_trace_steps_from_trace_json(task["trace_json"])
 
 
-def get_task_trace_delta_from_task(
+def get_task_trace_steps(task_id: str, user_id: str) -> list[TraceStep]:
+    task = get_task(task_id, user_id)
+    if task is None:
+        return []
+    return get_task_trace_steps_from_task(task)
+
+
+def get_task_trace_delta_steps_from_task(
     task: dict,
     *,
     after_seq: int = 0,
     limit: int = 200,
-) -> tuple[list[dict], int, bool]:
+) -> tuple[list[TraceStep], int, bool]:
     bounded_limit = max(1, int(limit))
-    trace_json = task.get("trace_json")
-    raw_steps: list[dict] = []
-    if isinstance(trace_json, str) and trace_json.strip():
-        try:
-            loaded = json.loads(trace_json)
-            if isinstance(loaded, list):
-                raw_steps = [x for x in loaded if isinstance(x, dict)]
-        except Exception:
-            raw_steps = []
-    trace_steps = _normalize_trace_steps(raw_steps)
-    all_delta_steps = [
-        step for step in trace_steps if int(step.get("seq", 0)) > after_seq
-    ]
+    trace_steps = get_task_trace_steps_from_task(task)
+    all_delta_steps = [step for step in trace_steps if int(step.seq or 0) > after_seq]
     delta_steps = all_delta_steps[:bounded_limit]
-    next_cursor = after_seq if not delta_steps else int(delta_steps[-1]["seq"])
+    next_cursor = after_seq if not delta_steps else int(delta_steps[-1].seq or 0)
     status = str(task.get("status", ""))
     still_running = status in ("pending", "running")
     has_more = len(all_delta_steps) > len(delta_steps) or still_running
     return delta_steps, next_cursor, has_more
-
-
-def get_task_trace_delta(
-    task_id: str,
-    user_id: str,
-    after_seq: int = 0,
-    limit: int = 200,
-) -> tuple[list[dict], int, bool]:
-    task = get_task(task_id, user_id)
-    if task is None:
-        return [], after_seq, False
-    return get_task_trace_delta_from_task(
-        task,
-        after_seq=after_seq,
-        limit=limit,
-    )
 
 
 def get_tasks_usage_summary(
@@ -889,13 +901,7 @@ def get_tasks_usage_summary(
     cost_task_count = 0
 
     for row in rows:
-        usage_json = row["usage_json"]
-        if not usage_json or not str(usage_json).strip():
-            continue
-        try:
-            payload = json.loads(usage_json)
-        except Exception:  # noqa: BLE001
-            continue
+        payload = _parse_usage_json_blob(row["usage_json"])
         if not isinstance(payload, dict):
             continue
 
@@ -1029,18 +1035,10 @@ def _excerpt_prompt(value: object, limit: int = 90) -> str:
 def _extract_task_governance_from_trace_json(
     trace_json: object,
 ) -> dict[str, object] | None:
-    if not isinstance(trace_json, str) or not trace_json.strip():
+    trace_steps = _load_trace_steps_from_trace_json(trace_json)
+    if not trace_steps:
         return None
-    try:
-        raw = json.loads(trace_json)
-    except Exception:
-        return None
-    if not isinstance(raw, list):
-        return None
-
-    return _extract_task_governance_from_trace_steps(
-        [item for item in raw if isinstance(item, dict)]
-    )
+    return _extract_task_governance_from_trace_steps(trace_steps)
 
 
 def _normalize_governance_filter(value: str | None) -> str | None:
@@ -1245,13 +1243,7 @@ def get_tasks_usage_dashboard(
     top_task_rows: list[dict[str, object]] = []
 
     for row in rows:
-        usage_json = row["usage_json"]
-        if not usage_json or not str(usage_json).strip():
-            continue
-        try:
-            payload = json.loads(usage_json)
-        except Exception:  # noqa: BLE001
-            continue
+        payload = _parse_usage_json_blob(row["usage_json"])
         if not isinstance(payload, dict):
             continue
 

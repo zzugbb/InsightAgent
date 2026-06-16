@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field, field_validator
 from starlette.responses import PlainTextResponse
 
 from app.api.deps import get_current_user
-from app.schemas.trace import parse_trace_steps
 from app.services.chroma_memory_service import (
     add_session_memory_text,
     cleanup_session_memory_collection,
@@ -216,18 +215,6 @@ def _build_session_export_filename(session: dict, ext: str) -> str:
     return f"insightagent-session-{sid}{suffix}.{ext}"
 
 
-def _parse_usage_blob(raw: object) -> dict[str, object] | None:
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    try:
-        parsed = json.loads(raw)
-    except Exception:
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    return parsed
-
-
 def _normalize_excerpt(text: str, limit: int = 140) -> str:
     normalized = " ".join((text or "").strip().split())
     if not normalized:
@@ -392,16 +379,9 @@ def _build_session_export_payload(
     governance_summary: dict[str, object] | None = None
     for task_row in task_rows:
         raw_trace = task_row.get("trace_json")
-        parsed_steps: list[Any] = []
-        if isinstance(raw_trace, str) and raw_trace.strip():
-            try:
-                loaded = json.loads(raw_trace)
-                if isinstance(loaded, list):
-                    parsed_steps = parse_trace_steps(
-                        [x for x in loaded if isinstance(x, dict)]
-                    )
-            except Exception:
-                parsed_steps = []
+        parsed_steps: list[Any] = chat_persistence_service.get_task_trace_steps_from_task(
+            task_row
+        )
 
         rag_hit_count = 0
         preview_steps: list[SessionExportTracePreviewStep] = []
@@ -446,12 +426,8 @@ def _build_session_export_payload(
                 )
             else:
                 task_governance = (
-                    chat_persistence_service._extract_task_governance_from_trace_steps(
-                        [
-                            step.model_dump(exclude_none=True)
-                            for step in parsed_steps
-                            if hasattr(step, "model_dump")
-                        ]
+                    chat_persistence_service._extract_task_governance_from_parsed_trace_steps(
+                        parsed_steps
                     )
                 )
         if task_governance is not None:
@@ -470,7 +446,9 @@ def _build_session_export_payload(
             status_rank=int(status_meta["status_rank"]),
             created_at=str(task_row.get("created_at", "")),
             updated_at=str(task_row.get("updated_at", "")),
-            usage=_parse_usage_blob(task_row.get("usage_json")),
+            usage=chat_persistence_service._parse_usage_json_blob(
+                task_row.get("usage_json")
+            ),
             trace_step_count=len(parsed_steps),
             rag_hit_count=rag_hit_count,
             trace_preview=preview_steps,
