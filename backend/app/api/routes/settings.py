@@ -11,7 +11,6 @@ from app.api.deps import get_current_user
 from app.config import get_settings
 from app.db import get_database_locator
 from app.services.audit_service import safe_record_audit_event
-import app.services.chat_persistence_service as chat_persistence_service
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 from app.services.tool_runtime import (
     build_tool_registry_provider_sources_from_settings,
@@ -62,15 +61,6 @@ class SettingsUpdateRequest(BaseModel):
         self.model = self.model.strip()
         self.base_url = self.base_url.strip() if self.base_url else None
         self.api_key = self.api_key.strip() if self.api_key else None
-        self.tool_registry_profile = chat_persistence_service._normalize_governance_filter(
-            self.tool_registry_profile
-        )
-        self.tool_registry_provider_source = (
-            chat_persistence_service._normalize_governance_filter(
-                self.tool_registry_provider_source
-            )
-        )
-
         if self.mode not in {"mock", "remote"}:
             raise ValueError("mode must be either 'mock' or 'remote'")
 
@@ -380,14 +370,20 @@ def _resolve_effective_tool_registry_selection(
     runtime_settings: object | None = None,
 ) -> tuple[str, str]:
     default_settings = get_settings() if runtime_settings is None else runtime_settings
+    requested_profile = payload.tool_registry_profile
+    requested_provider_source = payload.tool_registry_provider_source
+    if isinstance(requested_profile, str) and not requested_profile.strip():
+        requested_profile = None
+    if isinstance(requested_provider_source, str) and not requested_provider_source.strip():
+        requested_provider_source = None
     effective_settings = SimpleNamespace(
         tool_registry_profile=(
-            payload.tool_registry_profile
+            requested_profile
             or existing.tool_registry_profile
             or getattr(default_settings, "tool_registry_profile", None)
         ),
         tool_registry_provider_source=(
-            payload.tool_registry_provider_source
+            requested_provider_source
             or existing.tool_registry_provider_source
             or getattr(default_settings, "tool_registry_provider_source", None)
         ),

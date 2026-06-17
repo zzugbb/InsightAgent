@@ -26,11 +26,9 @@ from app.services.chat_persistence_service import (
     ensure_session,
     get_session,
     get_task_messages,
-    get_task_trace_steps,
     get_tasks_usage_dashboard,
     get_tasks_usage_summary,
     get_task,
-    get_task_trace_delta_steps_from_task,
     update_task_status,
     list_tasks,
 )
@@ -55,13 +53,6 @@ def _parse_last_event_id(value: str | None) -> int | None:
     except ValueError:
         return None
     return parsed if parsed >= 0 else None
-
-
-def _latest_seq_from_task(task: dict) -> int:
-    steps = chat_persistence_service.get_task_trace_steps_from_task(task)
-    if not steps:
-        return 0
-    return max((s.seq or 0) for s in steps)
 
 
 async def stream_running_task_reconnect(
@@ -118,10 +109,12 @@ async def stream_running_task_reconnect(
             )
             return
 
-        parsed_steps, next_cursor, _ = get_task_trace_delta_steps_from_task(
-            task,
-            after_seq=cursor,
-            limit=200,
+        parsed_steps, next_cursor, _, _latest_seq, latest_step_id = (
+            chat_persistence_service.get_task_trace_delta_snapshot_from_task(
+                task,
+                after_seq=cursor,
+                limit=200,
+            )
         )
         if parsed_steps:
             for step in parsed_steps:
@@ -143,13 +136,9 @@ async def stream_running_task_reconnect(
         status = str(task.get("status", "running"))
         if status in {"completed", "failed"}:
             if last_emitted_step_id is None:
-                full_steps = get_task_trace_steps(task_id, user_id)
-                if full_steps:
-                    last_emitted_step_id = full_steps[-1].id
+                last_emitted_step_id = latest_step_id
             if status == "completed":
-                usage_payload = chat_persistence_service._parse_usage_json_blob(
-                    task.get("usage_json")
-                )
+                usage_payload = chat_persistence_service.get_task_usage_from_task(task)
                 yield sse_event(
                     "done",
                     {
@@ -407,50 +396,22 @@ def _build_task_export_filename(task: dict, ext: str) -> str:
     )
     return f"insightagent-task-{task_id_part}-session-{session_id_part}.{ext}"
 
-def _collect_rag_export(steps: list[TraceStep]) -> tuple[int, list[str], list[TaskExportRagChunk]]:
-    rag_hit_count = 0
-    rag_knowledge_base_ids: list[str] = []
-    rag_chunks: list[TaskExportRagChunk] = []
-    seen_kb_ids: set[str] = set()
-
-    for step in steps:
-        rag_meta = step.meta.rag if step.meta else None
-        if not isinstance(rag_meta, dict):
-            continue
-        raw_chunks = rag_meta.get("chunks")
-        kb_id = rag_meta.get("knowledge_base_id")
-        kb_id_text = kb_id.strip() if isinstance(kb_id, str) and kb_id.strip() else None
-        if kb_id_text and kb_id_text not in seen_kb_ids:
-            seen_kb_ids.add(kb_id_text)
-            rag_knowledge_base_ids.append(kb_id_text)
-        if isinstance(raw_chunks, list):
-            for chunk in raw_chunks:
-                if not isinstance(chunk, str):
-                    continue
-                chunk_text = chunk.strip()
-                if not chunk_text:
-                    continue
-                rag_hit_count += 1
-                rag_chunks.append(
-                    TaskExportRagChunk(
-                        step_id=step.id,
-                        knowledge_base_id=kb_id_text,
-                        content=chunk_text,
-                    ),
-                )
-
-    return rag_hit_count, rag_knowledge_base_ids, rag_chunks
-
 def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonResponse:
     task_id = str(task["id"])
     parsed_steps = chat_persistence_service.get_task_trace_steps_from_task(task)
-    rag_hit_count, rag_knowledge_base_ids, rag_chunks = _collect_rag_export(parsed_steps)
-    governance_dict = (
-        chat_persistence_service._extract_task_governance_from_task_with_parsed_trace_steps(
-            task,
-            parsed_steps,
-        )
-    )
+    rag_summary = chat_persistence_service.get_trace_rag_export_summary(parsed_steps)
+    rag_hit_count = int(rag_summary.get("rag_hit_count", 0) or 0)
+    rag_knowledge_base_ids = [
+        str(item)
+        for item in rag_summary.get("rag_knowledge_base_ids", [])
+        if isinstance(item, str)
+    ]
+    rag_chunks = [
+        TaskExportRagChunk(**row)
+        for row in rag_summary.get("rag_chunks", [])
+        if isinstance(row, dict)
+    ]
+    governance_dict = task.get("governance")
     governance = (
         TaskExportGovernance(**governance_dict)
         if isinstance(governance_dict, dict)
@@ -460,7 +421,7 @@ def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonRespon
         version="1.0",
         exported_at=datetime.now().isoformat(),
         task=TaskExportTask(**_with_status_meta(task)),
-        usage=chat_persistence_service._parse_usage_json_blob(task.get("usage_json")),
+        usage=chat_persistence_service.get_task_usage_from_task(task),
         messages=[
             TaskExportMessage(
                 id=row["id"],
@@ -675,12 +636,6 @@ def get_tasks(
 ) -> TaskListResponse:
     user_id = str(current_user["id"])
     search_query = query.strip() if query is not None and query.strip() else None
-    profile_filter = chat_persistence_service._normalize_governance_filter(
-        tool_registry_profile
-    )
-    provider_source_filter = chat_persistence_service._normalize_governance_filter(
-        tool_registry_provider_source
-    )
     if session_id is not None and session_id.strip():
         sid = session_id.strip()
         if get_session(sid, user_id) is None:
@@ -691,15 +646,15 @@ def get_tasks(
             session_id=sid,
             offset=offset,
             query=search_query,
-            tool_registry_profile_filter=profile_filter,
-            tool_registry_provider_source_filter=provider_source_filter,
+            tool_registry_profile_filter=tool_registry_profile,
+            tool_registry_provider_source_filter=tool_registry_provider_source,
         )
         total = count_tasks(
             user_id,
             sid,
             search_query,
-            tool_registry_profile_filter=profile_filter,
-            tool_registry_provider_source_filter=provider_source_filter,
+            tool_registry_profile_filter=tool_registry_profile,
+            tool_registry_provider_source_filter=tool_registry_provider_source,
         )
     else:
         tasks = list_tasks(
@@ -707,35 +662,36 @@ def get_tasks(
             limit=limit,
             offset=offset,
             query=search_query,
-            tool_registry_profile_filter=profile_filter,
-            tool_registry_provider_source_filter=provider_source_filter,
+            tool_registry_profile_filter=tool_registry_profile,
+            tool_registry_provider_source_filter=tool_registry_provider_source,
         )
         total = count_tasks(
             user_id,
             None,
             search_query,
-            tool_registry_profile_filter=profile_filter,
-            tool_registry_provider_source_filter=provider_source_filter,
+            tool_registry_profile_filter=tool_registry_profile,
+            tool_registry_provider_source_filter=tool_registry_provider_source,
         )
     n = len(tasks)
-    return TaskListResponse(
-        items=[
+    items: list[TaskResponse] = []
+    for task in tasks:
+        task_with_status = _with_status_meta(task)
+        task_governance = task_with_status.get("governance")
+        task_payload = {
+            key: value for key, value in task_with_status.items() if key != "governance"
+        }
+        items.append(
             TaskResponse(
-                **task_with_status,
+                **task_payload,
                 governance=(
                     TaskGovernanceSummary(**task_governance)
                     if isinstance(task_governance, dict)
                     else None
                 ),
             )
-            for task in tasks
-            for task_with_status in [_with_status_meta(task)]
-            for task_governance in [
-                chat_persistence_service._extract_task_governance_from_task_row(
-                    task_with_status
-                )
-            ]
-        ],
+        )
+    return TaskListResponse(
+        items=items,
         total=total,
         limit=limit,
         offset=offset,
@@ -802,12 +758,6 @@ def get_tasks_usage_dashboard_route(
     if sid and get_session(sid, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
     source_normalized = source_kind.strip().lower()
-    profile_filter = chat_persistence_service._normalize_governance_filter(
-        tool_registry_profile
-    )
-    provider_source_filter = chat_persistence_service._normalize_governance_filter(
-        tool_registry_provider_source
-    )
     if source_normalized not in {"all", "provider", "estimated", "mixed", "legacy"}:
         raise HTTPException(
             status_code=422,
@@ -817,8 +767,8 @@ def get_tasks_usage_dashboard_route(
         user_id,
         session_id=sid,
         source_filter=None if source_normalized == "all" else source_normalized,
-        tool_registry_profile_filter=profile_filter,
-        tool_registry_provider_source_filter=provider_source_filter,
+        tool_registry_profile_filter=tool_registry_profile,
+        tool_registry_provider_source_filter=tool_registry_provider_source,
         window_days=window_days,
         top_sessions=top_sessions,
         top_tasks=top_tasks,
@@ -844,17 +794,12 @@ def get_tasks_usage_dashboard_route(
                     else None
                 ),
                 governance=(
-                    TaskUsageSessionGovernanceSummary(**normalized_governance)
-                    if isinstance(normalized_governance, dict)
+                    TaskUsageSessionGovernanceSummary(**row.get("governance"))
+                    if isinstance(row.get("governance"), dict)
                     else None
                 ),
             )
             for row in payload["by_session"]
-            for normalized_governance in [
-                chat_persistence_service._normalize_session_governance_summary_dict(
-                    row.get("governance")
-                )
-            ]
         ],
         top_tasks=[
             TaskUsageTopTaskRow(
@@ -872,19 +817,12 @@ def get_tasks_usage_dashboard_route(
                 updated_at=str(row.get("updated_at", "")),
                 source_kind=str(row.get("source_kind", "legacy") or "legacy"),
                 governance=(
-                    TaskGovernanceSummary(**task_governance)
-                    if isinstance(task_governance, dict)
+                    TaskGovernanceSummary(**row.get("governance"))
+                    if isinstance(row.get("governance"), dict)
                     else None
                 ),
             )
             for row in payload["top_tasks"]
-            for task_governance in [
-                row.get("governance")
-                if isinstance(row.get("governance"), dict)
-                else chat_persistence_service._extract_task_governance_from_task_row(
-                    row
-                )
-            ]
         ],
     )
 
@@ -898,11 +836,12 @@ def get_task_detail(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     task_with_status = _with_status_meta(task)
-    task_governance = chat_persistence_service._extract_task_governance_from_task_row(
-        task_with_status
-    )
+    task_governance = task_with_status.get("governance")
+    task_payload = {
+        key: value for key, value in task_with_status.items() if key != "governance"
+    }
     return TaskResponse(
-        **task_with_status,
+        **task_payload,
         governance=(
             TaskGovernanceSummary(**task_governance)
             if isinstance(task_governance, dict)
@@ -1013,7 +952,7 @@ def get_task_trace_detail(
     status = str(task["status"])
     return TaskTraceResponse(
         task_id=task_id,
-        steps=get_task_trace_steps(task_id, user_id),
+        steps=chat_persistence_service.get_task_trace_steps_from_task(task),
         status=status,
         status_normalized=normalize_task_status(status),
         status_label=task_status_label(status),
@@ -1037,12 +976,14 @@ def get_task_trace_delta_detail(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    parsed_steps, next_cursor, has_more = get_task_trace_delta_steps_from_task(
-        task,
-        after_seq=after_seq,
-        limit=limit,
+    parsed_steps, next_cursor, has_more, latest_seq, _latest_step_id = (
+        chat_persistence_service.get_task_trace_delta_snapshot_from_task(
+            task,
+            after_seq=after_seq,
+            limit=limit,
+        )
     )
-    lag_seq = max(0, _latest_seq_from_task(task) - next_cursor)
+    lag_seq = max(0, latest_seq - next_cursor)
     return TaskTraceDeltaResponse(
         task_id=task_id,
         steps=parsed_steps,

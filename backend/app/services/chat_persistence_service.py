@@ -115,30 +115,6 @@ def _extract_task_governance_from_trace_steps(
         return normalized
     return None
 
-
-def _extract_task_governance_from_parsed_trace_steps(
-    trace_steps: list[TraceStep],
-) -> dict[str, object] | None:
-    return _extract_task_governance_from_trace_steps(
-        [step.model_dump(exclude_none=True) for step in trace_steps]
-    )
-
-
-def _extract_task_governance_from_task_with_parsed_trace_steps(
-    task: dict[str, object],
-    trace_steps: list[TraceStep],
-) -> dict[str, object] | None:
-    governance = _extract_task_governance_from_task_row(task)
-    if governance is not None:
-        return governance
-    if trace_steps:
-        return _extract_task_governance_from_parsed_trace_steps(trace_steps)
-    raw_trace = task.get("trace_json")
-    if isinstance(raw_trace, str) and raw_trace.strip():
-        return _extract_task_governance_from_trace_json(raw_trace)
-    return None
-
-
 def _serialize_task_governance_columns(
     trace_steps: list[dict],
 ) -> tuple[str | None, str | None, str | None, str | None]:
@@ -259,7 +235,28 @@ def _extract_task_governance_from_task_row(
     )
     if normalized is not None:
         return normalized
-    return _extract_task_governance_from_trace_json(task.get("trace_json"))
+    trace_steps = _load_trace_steps_from_trace_json(task.get("trace_json"))
+    if not trace_steps:
+        return None
+    return _extract_task_governance_from_trace_steps(trace_steps)
+
+
+def _with_task_governance(task: dict[str, object]) -> dict[str, object]:
+    governance = _extract_task_governance_from_task_row(task)
+    return {
+        **{
+            key: value
+            for key, value in task.items()
+            if key
+            not in {
+                "tool_registry_profile",
+                "tool_registry_provider_source",
+                "allowed_tool_names_json",
+                "allowed_tool_labels_json",
+            }
+        },
+        "governance": governance,
+    }
 
 
 def _normalize_task_governance_dict(
@@ -754,7 +751,7 @@ def get_task(task_id: str, user_id: str) -> dict | None:
     if row is None:
         return None
 
-    return dict(row)
+    return _with_task_governance(dict(row))
 
 
 def list_tasks(
@@ -802,7 +799,7 @@ def list_tasks(
             tuple(params),
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    return [_with_task_governance(dict(row)) for row in rows]
 
 
 def get_session_tasks(session_id: str, user_id: str) -> list[dict]:
@@ -829,7 +826,7 @@ def get_session_tasks(session_id: str, user_id: str) -> list[dict]:
             (user_id, session_id),
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    return [_with_task_governance(dict(row)) for row in rows]
 
 
 def get_task_trace_steps_from_task(task: dict) -> list[TraceStep]:
@@ -838,28 +835,133 @@ def get_task_trace_steps_from_task(task: dict) -> list[TraceStep]:
     return _load_parsed_trace_steps_from_trace_json(task["trace_json"])
 
 
-def get_task_trace_steps(task_id: str, user_id: str) -> list[TraceStep]:
-    task = get_task(task_id, user_id)
-    if task is None:
-        return []
-    return get_task_trace_steps_from_task(task)
+def get_task_usage_from_task(task: dict) -> dict[str, object] | None:
+    return _parse_usage_json_blob(task.get("usage_json"))
 
 
-def get_task_trace_delta_steps_from_task(
+def _normalize_trace_preview_excerpt(text: str, limit: int = 120) -> str:
+    normalized = " ".join((text or "").strip().split())
+    if not normalized:
+        return ""
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[:limit]}..."
+
+
+def _trace_preview_title(step: TraceStep) -> str:
+    meta = getattr(step, "meta", None)
+    label = getattr(meta, "label", None) if meta is not None else None
+    if isinstance(label, str) and label.strip():
+        return label.strip()
+    step_type = getattr(meta, "step_type", None) if meta is not None else None
+    if isinstance(step_type, str) and step_type.strip():
+        return step_type.strip().replace("_", " ")
+    raw_type = getattr(step, "type", None)
+    if isinstance(raw_type, str) and raw_type.strip():
+        return raw_type.strip().replace("_", " ")
+    return "step"
+
+
+def get_task_trace_preview_summary_from_task(
+    task: dict,
+    *,
+    preview_limit: int = 3,
+) -> dict[str, object]:
+    trace_steps = get_task_trace_steps_from_task(task)
+    rag_hit_count = 0
+    for step in trace_steps:
+        rag_meta = getattr(step, "meta", None)
+        rag_obj = getattr(rag_meta, "rag", None) if rag_meta is not None else None
+        if not isinstance(rag_obj, dict):
+            continue
+        chunks = rag_obj.get("chunks")
+        if isinstance(chunks, list):
+            rag_hit_count += sum(
+                1 for chunk in chunks if isinstance(chunk, str) and chunk.strip()
+            )
+
+    preview_steps: list[dict[str, object]] = []
+    bounded_limit = max(0, int(preview_limit))
+    for step in trace_steps[-bounded_limit:] if bounded_limit else []:
+        content = getattr(step, "content", "") or ""
+        preview_steps.append(
+            {
+                "id": str(getattr(step, "id", "")),
+                "seq": getattr(step, "seq", None),
+                "type": str(getattr(step, "type", "")),
+                "title": _trace_preview_title(step),
+                "content_excerpt": _normalize_trace_preview_excerpt(
+                    str(content),
+                    limit=120,
+                ),
+            }
+        )
+
+    return {
+        "trace_step_count": len(trace_steps),
+        "rag_hit_count": rag_hit_count,
+        "trace_preview": preview_steps,
+    }
+
+
+def get_trace_rag_export_summary(
+    trace_steps: list[TraceStep],
+) -> dict[str, object]:
+    rag_hit_count = 0
+    rag_knowledge_base_ids: list[str] = []
+    rag_chunks: list[dict[str, object]] = []
+    seen_kb_ids: set[str] = set()
+
+    for step in trace_steps:
+        rag_meta = step.meta.rag if step.meta else None
+        if not isinstance(rag_meta, dict):
+            continue
+        raw_chunks = rag_meta.get("chunks")
+        kb_id = rag_meta.get("knowledge_base_id")
+        kb_id_text = kb_id.strip() if isinstance(kb_id, str) and kb_id.strip() else None
+        if kb_id_text and kb_id_text not in seen_kb_ids:
+            seen_kb_ids.add(kb_id_text)
+            rag_knowledge_base_ids.append(kb_id_text)
+        if isinstance(raw_chunks, list):
+            for chunk in raw_chunks:
+                if not isinstance(chunk, str):
+                    continue
+                chunk_text = chunk.strip()
+                if not chunk_text:
+                    continue
+                rag_hit_count += 1
+                rag_chunks.append(
+                    {
+                        "step_id": step.id,
+                        "knowledge_base_id": kb_id_text,
+                        "content": chunk_text,
+                    }
+                )
+
+    return {
+        "rag_hit_count": rag_hit_count,
+        "rag_knowledge_base_ids": rag_knowledge_base_ids,
+        "rag_chunks": rag_chunks,
+    }
+
+
+def get_task_trace_delta_snapshot_from_task(
     task: dict,
     *,
     after_seq: int = 0,
     limit: int = 200,
-) -> tuple[list[TraceStep], int, bool]:
+) -> tuple[list[TraceStep], int, bool, int, str | None]:
     bounded_limit = max(1, int(limit))
     trace_steps = get_task_trace_steps_from_task(task)
+    latest_seq = max((int(step.seq or 0) for step in trace_steps), default=0)
+    latest_step_id = trace_steps[-1].id if trace_steps else None
     all_delta_steps = [step for step in trace_steps if int(step.seq or 0) > after_seq]
     delta_steps = all_delta_steps[:bounded_limit]
     next_cursor = after_seq if not delta_steps else int(delta_steps[-1].seq or 0)
     status = str(task.get("status", ""))
     still_running = status in ("pending", "running")
     has_more = len(all_delta_steps) > len(delta_steps) or still_running
-    return delta_steps, next_cursor, has_more
+    return delta_steps, next_cursor, has_more, latest_seq, latest_step_id
 
 
 def get_tasks_usage_summary(
@@ -1047,15 +1149,6 @@ def _excerpt_prompt(value: object, limit: int = 90) -> str:
     return f"{normalized[:limit].rstrip()}..."
 
 
-def _extract_task_governance_from_trace_json(
-    trace_json: object,
-) -> dict[str, object] | None:
-    trace_steps = _load_trace_steps_from_trace_json(trace_json)
-    if not trace_steps:
-        return None
-    return _extract_task_governance_from_trace_steps(trace_steps)
-
-
 def _normalize_governance_filter(value: str | None) -> str | None:
     if not isinstance(value, str):
         return None
@@ -1149,6 +1242,21 @@ def _merge_session_governance_summary(
             list(allowed_tool_labels)
         ),
     }
+
+
+def get_task_rows_governance_summary(
+    task_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+) -> dict[str, object] | None:
+    governance_summary: dict[str, object] | None = None
+    for task_row in task_rows:
+        task_governance = task_row.get("governance")
+        if not isinstance(task_governance, dict):
+            continue
+        governance_summary = _merge_session_governance_summary(
+            governance_summary,
+            task_governance,
+        )
+    return governance_summary
 
 
 def get_tasks_usage_dashboard(
@@ -1258,14 +1366,17 @@ def get_tasks_usage_dashboard(
     top_task_rows: list[dict[str, object]] = []
 
     for row in rows:
-        payload = _parse_usage_json_blob(row["usage_json"])
+        task_row = _with_task_governance(dict(row))
+        payload = _parse_usage_json_blob(task_row.get("usage_json"))
         if not isinstance(payload, dict):
             continue
 
         source_kind = _classify_usage_source(payload)
         if safe_source_filter is not None and source_kind != safe_source_filter:
             continue
-        task_governance = _extract_task_governance_from_task_row(dict(row))
+        task_governance = (
+            task_row.get("governance") if isinstance(task_row.get("governance"), dict) else None
+        )
         if not _task_governance_matches_filters(
             task_governance,
             safe_profile_filter,
@@ -1302,7 +1413,7 @@ def get_tasks_usage_dashboard(
             cost_sum += cost_num
             cost_task_count += 1
 
-        created_day = _extract_iso_day(row["created_at"])
+        created_day = _extract_iso_day(task_row.get("created_at"))
         if created_day is not None and trend_start <= created_day <= today:
             bucket = trend_map[created_day.isoformat()]
             bucket["tasks_with_usage"] = int(bucket["tasks_with_usage"]) + 1
@@ -1317,16 +1428,16 @@ def get_tasks_usage_dashboard(
             bucket["total_tokens"] = int(bucket["total_tokens"]) + total_tokens_int
             bucket["cost_estimate"] = float(bucket["cost_estimate"]) + cost_value
 
-        sid = str(row["session_id"])
+        sid = str(task_row["session_id"])
         bucket = session_map.get(sid)
         if bucket is None:
             bucket = {
                 "session_id": sid,
-                "session_title": row["session_title"],
+                "session_title": task_row.get("session_title"),
                 "tasks_with_usage": 0,
                 "total_tokens": 0,
                 "cost_estimate": 0.0,
-                "last_task_at": row["updated_at"],
+                "last_task_at": task_row.get("updated_at"),
                 "governance": None,
             }
             session_map[sid] = bucket
@@ -1338,24 +1449,24 @@ def get_tasks_usage_dashboard(
             task_governance,
         )
         last_task_at = bucket.get("last_task_at")
-        if isinstance(row["updated_at"], str) and (
-            not isinstance(last_task_at, str) or row["updated_at"] > last_task_at
+        if isinstance(task_row.get("updated_at"), str) and (
+            not isinstance(last_task_at, str)
+            or task_row["updated_at"] > last_task_at
         ):
-            bucket["last_task_at"] = row["updated_at"]
+            bucket["last_task_at"] = task_row["updated_at"]
 
         top_task_rows.append(
             {
-                "task_id": str(row["id"]),
+                "task_id": str(task_row["id"]),
                 "session_id": sid,
-                "session_title": row["session_title"],
-                "prompt_excerpt": _excerpt_prompt(row["prompt"]),
+                "session_title": task_row.get("session_title"),
+                "prompt_excerpt": _excerpt_prompt(task_row.get("prompt")),
                 "total_tokens": total_tokens_int,
                 "cost_estimate": cost_value,
-                "created_at": row["created_at"],
-                "updated_at": row["updated_at"],
+                "created_at": str(task_row["created_at"]),
+                "updated_at": str(task_row["updated_at"]),
                 "source_kind": source_kind,
                 "governance": task_governance,
-                "trace_json": row["trace_json"],
             },
         )
 

@@ -116,6 +116,159 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   这些 session-level governance 列表在两条页面消费链上的输出形状会更稳，更不容易再出现 route 层 sibling copy 分叉。
   校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`404/404`），
   `cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，usage dashboard governance outward 单源化收尾）：后端
+  `GET /api/tasks/usage/dashboard` route 现在会直接信任 service 已产出的 `by_session / top_tasks governance`
+  dict，不再在 route 层重复做 session governance normalizer，也不再补 top-task 的 task-row fallback。当前前端
+  usage dashboard 无需改协议，但会话榜与任务榜读到的治理摘要会更稳定地沿用 service 主干输出，继续降低
+  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  这类榜单回归里因为 route-level sibling 分叉导致的细小漂移风险。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`453/453`），
+  `cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，governance filter normalize 单源化收尾）：后端 `GET /api/tasks`
+  与 `GET /api/tasks/usage/dashboard` route 现已不再先对 profile/source filter 做一遍 route-level normalize，
+  而是把 raw filter 直接透传给 service 层继续走 shared governance filter normalizer。当前前端任务中心与
+  usage dashboard 无需改协议，但筛选器发出的 `tool_registry_profile / tool_registry_provider_source` 条件会更稳定地
+  和 service compare/filter 主干对齐，继续降低
+  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  以及任务列表治理筛选回归里因为 route/service 双重规范化导致的细小漂移风险。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`453/453`），
+  `cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，settings registry selection 单源化续推）：后端 `PUT /api/settings` /
+  `POST /api/settings/validate` 现已不再在 request model 阶段预规范化
+  `tool_registry_profile / tool_registry_provider_source`；前端模型设置弹窗提交的非空 raw profile/source 会先保留原样，
+  只有空白字符串会在后端 `_resolve_effective_tool_registry_selection()` 里被视为缺失值，再统一交给 shared registry
+  name helper 解析成 canonical 选择结果。当前前端无需改协议或控件，但 settings 保存/校验链与任务中心、usage dashboard、
+  governance 摘要主干之间因为 route 侧预处理不同步造成的细小漂移风险会继续下降，尤其有利于后续围绕
+  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  抬高设置与榜单联动回归时保持稳定。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`456/456`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，dead parsed-trace governance helper 清理）：后端这轮没有新增页面控件或协议字段，而是把
+  `chat_persistence_service` 里已经没有 route 调用的
+  `_extract_task_governance_from_task_with_parsed_trace_steps()` 彻底删除，并把 focused tests 改成直接锁定这条 legacy helper
+  不再暴露。对前端来说，当前任务详情、任务导出、会话导出与 usage dashboard 的 outward 形状都保持不变，但后端治理解析主干会更干净，
+  后续继续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  抬高整链稳定性时，也更不容易再被 service 内残留的过期 fallback 分叉干扰。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`456/456`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，dead parsed-trace governance adapter 再收薄一层）：后端这轮仍然没有新增页面控件或协议字段，而是继续把
+  `chat_persistence_service` 里只剩测试覆盖、生产代码已不再使用的
+  `_extract_task_governance_from_parsed_trace_steps()` 也一并删除，并把 focused tests 改成直接锁定这条 legacy parsed-trace adapter
+  不再暴露。对前端来说，当前任务详情、任务导出、会话导出与 usage dashboard 的 outward 形状继续保持不变，但 service 内与旧 trace 适配有关的过期分叉会更少，
+  后续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做整链稳定性验收时，也更不容易再被历史 helper 误导。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`456/456`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，trace-json governance wrapper 再并回 task-row 主干）：后端这轮依旧没有新增页面控件或协议字段，而是把
+  `chat_persistence_service` 里只剩一处生产调用的 `_extract_task_governance_from_trace_json()` 也收掉，让
+  `_extract_task_governance_from_task_row()` 在需要 trace fallback 时直接复用 shared trace loader 和 governance extractor。对前端来说，
+  当前任务详情、任务导出、会话导出与 usage dashboard 的 outward 形状继续保持不变，但 service 内围绕旧 trace fallback 的薄 wrapper 又少一层，
+  后续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做整链稳定性验收时，也更不容易被历史 helper 名字干扰判断。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`456/456`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，usage dashboard top-tasks dead trace payload 清理）：后端这轮依旧没有新增页面控件或协议字段，而是把
+  `get_tasks_usage_dashboard()` 产出的 `top_tasks` 行里已经不再被 route 消费的 `trace_json` 一并去掉。对前端来说，当前
+  usage dashboard 榜单 outward 形状里本来就没有这份字段，因此页面与 e2e 契约保持不变；但 service 内部返回给 route 的 payload 会更干净，
+  后续继续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做稳定性验收时，也更不容易被内部残留 trace 负担干扰判断。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`457/457`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，service task-row payload 裁掉 raw governance source columns）：后端这轮依旧没有新增页面控件或协议字段，而是让
+  `get_task / list_tasks / get_session_tasks` 这三条 service task-row 返回链在补完 `governance` 后，不再继续携带
+  `tool_registry_profile / tool_registry_provider_source / allowed_tool_*_json` 这组内部 raw 列。对前端来说，当前任务中心、任务详情、
+  任务导出、会话导出与 usage dashboard 的 outward 契约保持不变，但 service 传给 route 的 task-row payload 会更干净，
+  后续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做整链验收时，也更不容易被内部源列和最终治理摘要混在一起干扰判断。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`458/458`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，usage dashboard 也并回 shared task-row helper）：后端这轮依旧没有新增页面控件或协议字段，而是让
+  `get_tasks_usage_dashboard()` 这条 service 聚合链也统一改成先走 `_with_task_governance()`，再消费其中的规范化 `governance`，
+  不再自己单独重走 row parser。对前端来说，当前 usage dashboard 的 outward 契约保持不变，但 service 内部的榜单聚合路径会和 task row 主干更一致，
+  后续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做稳定性验收时，也更不容易再被 service 内部 sibling 解析分叉干扰判断。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`459/459`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，reconnect stream terminal step-id 补全不再重查全量 trace）：后端这轮没有新增页面控件或协议字段，而是把
+  reconnect stream 在终态补 `step_id` 时的一次内部全量 trace 重查收掉了。现在 `stream_running_task_reconnect()` 会直接复用当前
+  `task` row 走 shared `get_task_trace_steps_from_task(task)`，不再再按 task id 重新拉一遍全量 trace。对前端来说，`done/error`
+  的 SSE outward 形状保持不变，但 running-task-recovery / reconnect 这条内部路径会更轻，也更不容易被重复读取带来的时序细节干扰。
+  校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`460/460`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，task trace detail 也不再按 task id 重读 trace）：后端这轮没有新增页面控件或协议字段，而是让
+  `GET /api/tasks/{task_id}/trace` 这条 route 在已经拿到 `task` row 后，直接复用 shared `get_task_trace_steps_from_task(task)`，
+  不再再按 task id 重新拉一遍 trace。对前端来说，任务详情页与 Inspector trace 详情读取到的 outward 契约保持不变，但 route 内部的读取路径更短，
+  后续做 trace 详情稳定性验收时，也更不容易被重复读取带来的细小时序差异干扰。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`461/461`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，dead `get_task_trace_steps(task_id, user_id)` helper 退场）：后端这轮没有新增页面控件或协议字段，而是把
+  只剩历史兼容意义、生产调用已经归零的 `chat_persistence_service.get_task_trace_steps(task_id, user_id)` 正式删掉了。对前端来说，
+  当前 task export / session export / reconnect / trace detail 消费到的 outward trace 形状都保持不变，但这些链路在已经拿到
+  `task` row 后会更一致地统一复用 shared `get_task_trace_steps_from_task(task)`，后续围绕
+  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做稳定性验收时，也更不容易被同一份 trace 的双轨读取路径干扰。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`461/461`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，session export governance summary 退回 shared task-row helper）：后端这轮没有新增页面控件或协议字段，而是把
+  session export 对治理摘要的汇总也继续从 route 内部分叉收回 shared service。现在
+  `backend/app/api/routes/sessions.py:_build_session_export_payload()` 会直接复用
+  `chat_persistence_service.get_task_rows_governance_summary(task_rows)`，不再在 route 层逐个 `task_row`
+  调私有 merger。对前端来说，session export JSON / Markdown 里的治理摘要 outward 形状保持不变，但后续围绕
+  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做稳定性验收时，session export 与 task-row/service 主干之间的治理口径会更一致。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`462/462`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，trace delta route 不再双读整份 trace）：后端这轮没有新增页面控件或协议字段，而是把
+  `GET /api/tasks/{task_id}/trace/delta` 这条 route 内部为了计算 `lag_seq` 而重复读取整份 trace 的分叉收掉了。现在
+  route 会直接复用新的 shared `chat_persistence_service.get_task_trace_delta_snapshot_from_task(task)`，单次读取就能拿到
+  `delta steps + next_cursor + has_more + latest_seq`，不再在 route 层额外走 `_latest_seq_from_task()`。对前端来说，
+  trace delta outward 契约保持不变，但任务详情与恢复场景里依赖 delta 的内部路径会更轻，也更不容易被重复读取带来的细小时序差异干扰。
+  校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`464/464`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，reconnect terminal step-id 也退回 shared delta snapshot helper）：后端这轮没有新增页面控件或协议字段，而是把
+  reconnect 路径里“先拿 delta、任务结束后又为了补终态 `step_id` 再重读整份 trace”这条分叉也收掉了。现在
+  `stream_running_task_reconnect()` 会直接复用扩展后的 shared
+  `chat_persistence_service.get_task_trace_delta_snapshot_from_task(task)`，单次读取就拿到
+  `delta steps + next_cursor + has_more + latest_seq + latest_step_id`，不再在 route 层额外重读 full trace。
+  对前端来说，running-task recovery / reconnect 的 SSE outward 契约保持不变，但终态 `done/error` 的内部补步路径会更轻，也更不容易被双读 trace 的细小时序差异干扰。
+  校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`465/465`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，route 层 usage 解析退回 shared task-row helper）：后端这轮没有新增页面控件或协议字段，而是把
+  `task export`、`session export` 和 reconnect 终态 `done` 事件里剩下的 usage 解析，也一起从 route 侧私有 parser 调用收回 shared service。
+  现在这些路径都会统一复用 `chat_persistence_service.get_task_usage_from_task(task)`，不再直接触碰
+  `_parse_usage_json_blob(...)`。对前端来说，export JSON / Markdown 与 reconnect SSE 里的 usage outward 形状保持不变，但 route/service
+  之间的 usage 读取口径会更一致，后续围绕
+  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做稳定性验收时，也更不容易被 route 私有解析分叉干扰。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`467/467`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，dead `get_task_trace_delta_steps_from_task()` helper 退场）：后端这轮没有新增页面控件或协议字段，而是把
+  只剩历史兼容意义、生产调用已经归零的 `chat_persistence_service.get_task_trace_delta_steps_from_task()` 正式删掉了。对前端来说，
+  当前 trace delta / reconnect 消费到的 outward trace 形状都保持不变，但内部读取路径会更明确地统一停在
+  `get_task_trace_delta_snapshot_from_task(task)` 这条 shared snapshot 主干，后续围绕
+  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做稳定性验收时，也更不容易再被 legacy trace helper 的双轨误用干扰。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`467/467`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，session export trace preview / RAG 统计退回 shared service）：后端这轮没有新增页面控件或协议字段，而是把
+  session export 里剩下的一段 `TraceStep` 手工拆解也从 route 层收回了 shared service。现在
+  `backend/app/api/routes/sessions.py:_build_session_export_payload()` 会直接复用
+  `chat_persistence_service.get_task_trace_preview_summary_from_task(task)`，统一得到
+  `trace_step_count + rag_hit_count + trace_preview`，不再在 route 层自己循环 `TraceStep[]`。对前端来说，session export JSON / Markdown
+  outward 结构保持不变，但围绕 trace preview / RAG hit 的内部口径会和 shared trace service 更一致，后续围绕
+  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做稳定性验收时，也更不容易被 route 内部 trace 解析分叉干扰。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`469/469`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 协同（2026-06-17，task export RAG 拆解退回 shared service）：后端这轮没有新增页面控件或协议字段，而是把 task export 里剩下的
+  RAG trace 拆解也从 route 层收回了 shared service。现在
+  `backend/app/api/routes/tasks.py:_build_task_export_payload()` 会直接复用
+  `chat_persistence_service.get_trace_rag_export_summary(trace_steps)`，统一得到
+  `rag_hit_count + rag_knowledge_base_ids + rag_chunks`，不再在 route 层自己循环 `TraceStep[]`。对前端来说，task export JSON / Markdown
+  outward 结构保持不变，但围绕 task export RAG 统计的内部口径会和 shared trace service 更一致，后续围绕
+  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
+  做稳定性验收时，也更不容易被 route 内部 trace 解析分叉干扰。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`471/471`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - 阶段 5 协同（2026-05-14，service-effects helper）：后端已继续把单个 tool 的高层 service 消费结果归并到 `build_tool_plan_item_service_effects()`，统一承接 trace 追加、observation delta、seq delta 与 terminal return 信息；当前前端可见的 SSE/trace 契约保持不变。focused 回归脚本已扩展到 69 条兼容测试，且交接文档已同步到当前真实状态，便于后续会话延续推进
 - 阶段 5 协同（2026-05-14，service-effects follow-up）：后端已继续把单个 tool 的 service 消费结果抬高成更明确的 runtime 指令对象，`build_tool_plan_item_service_effects()` 现已直接暴露 `trace_writes` 与 `continue_update`，前者承接 trace append/SSE/persist 节奏，后者承接 success path 的 observation/seq 增量；当前前端可见的 SSE/trace 契约保持不变，focused 回归脚本仍为 69 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过
 - 阶段 5 协同（2026-05-14，next-action helper）：后端已继续把单个 tool 的“继续流转 / 终止返回”分支选择上提到 `build_tool_plan_item_next_action()`，`chat_execution_service.py` 现通过 `next_action(kind=continue|return)` 统一消费 success/terminal 两种内部路径；当前前端可见的 SSE/trace 契约保持不变，focused 回归脚本仍为 69 条兼容测试，`bash scripts/test_ci_e2e_tooling.sh common` 已再次通过
@@ -898,3 +1051,6 @@ npm run test:e2e:smoke:matrix
 - parsed trace governance 主干继续收稳（2026-06-16）：本轮前端依然没有新增页面控件，重点是把后端 task export / session export 在做治理提取时，对 `TraceStep[]` 的处理也继续收口到 shared service helper。对前端来说，这意味着当前 task export、session export 消费到的 governance outward 形状都保持不变，但 route/export 层已经不再各自把 `TraceStep` dump 回 dict 再提 governance，而是统一走 `chat_persistence_service._extract_task_governance_from_parsed_trace_steps()`；后续继续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts) 抬高 trace / export 整链回归时，因为 route/export 各自做 parsed-governance 中转的双轨并存导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`450/450`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - session export governance fallback 主干继续收稳（2026-06-16）：本轮前端依然没有新增页面控件，重点是把后端 session export 在决定 task governance 来源时，对 persisted row / parsed trace / raw trace 的 fallback 决策也收口到 shared service helper。对前端来说，这意味着当前 session export 消费到的 task governance outward 形状都保持不变，但 route 层已经不再自己判断 row parser / parsed steps / trace json 三选一，而是统一走 `chat_persistence_service._extract_task_governance_from_task_with_parsed_trace_steps()`；后续继续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts) 抬高 session export / trace 整链回归时，因为 route 侧 fallback 分叉与 service 主干双轨并存导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`451/451`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - task export trace / governance 主干继续收稳（2026-06-16）：本轮前端依然没有新增页面控件，重点是把后端 task export 在读取 trace 与决定 governance 来源时的两段 route 内部分叉也一起收回 shared service 主干。对前端来说，这意味着当前 task export JSON / Markdown 消费到的 `trace.steps` 与 `trace.governance` outward 形状都保持不变，但 route 层已经不再按 `task_id` 二次重读 trace，也不再自己判断 parsed-trace / persisted-row fallback，而是统一走 `chat_persistence_service.get_task_trace_steps_from_task()` 与 `_extract_task_governance_from_task_with_parsed_trace_steps()`；后续继续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts) 抬高 task export / trace 整链回归时，因为 export route 重读 trace 与本地 fallback 分叉双轨并存导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`452/452`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- task row governance 主干继续收稳（2026-06-17）：本轮前端依然没有新增页面控件，重点是把后端 task row governance 的产出进一步下沉到 persistence service。对前端来说，这意味着当前 task center、task detail，以及后续会复用同类 task row 的页面，消费到的 `governance` outward 形状都保持不变，但 `GET /api/tasks` / `GET /api/tasks/{task_id}` 背后的 route 已不再自己做 task-row governance fallback，而是直接信任 service 返回的 `governance`。后续继续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts) 抬高任务中心与治理展示整链回归时，因为 service/route 双侧重复解析导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`454/454`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- session export governance 主干继续收稳（2026-06-17）：本轮前端依然没有新增页面控件，重点是把后端 session export 这条 sibling 链里的 task-level governance 来源决策也继续下沉到 persistence service。对前端来说，这意味着当前 session export JSON / Markdown 消费到的 `tasks[].governance` 与顶层 `governance` outward 形状都保持不变，但 `backend/app/api/routes/sessions.py` 已不再自己按 parsed-trace / persisted-row 做 fallback，而是直接信任 `get_session_tasks()` 返回的 `governance`。后续继续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts) 抬高导出链与治理展示整链回归时，因为 service/route 双侧重复解析导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`454/454`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- task export governance 主干继续收稳（2026-06-17）：本轮前端依然没有新增页面控件，重点是把后端 task export 这条 sibling 链里的 governance 来源决策也继续下沉到 persistence service。对前端来说，这意味着当前 task export JSON / Markdown 消费到的 `trace.governance` outward 形状都保持不变，但 `backend/app/api/routes/tasks.py` 已不再自己按 parsed-trace / persisted-row 做 fallback，而是直接信任 task row 上已有的 `governance`。后续继续围绕 [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts) 抬高导出链与治理展示整链回归时，因为 service/route 双侧重复解析导致的细小差异风险会继续下降。当前页面契约与交互保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`454/454`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。

@@ -106,6 +106,154 @@
   在 session-level governance outward 形状上也开始共用同一套 clone 主干，同时保持外部 SSE / trace / e2e 契约不变。校验结果：
   `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`404/404`），`cd frontend && npm run lint`
   通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，usage dashboard governance outward 单源化收尾）：`backend/app/api/routes/tasks.py`
+  的 `GET /api/tasks/usage/dashboard` route 现在会直接信任
+  `chat_persistence_service.get_tasks_usage_dashboard()` 已产出的 `by_session / top_tasks governance` dict，
+  不再在 route 层重复走 `_normalize_session_governance_summary_dict()`，也不再为 top-task governance
+  追加 `_extract_task_governance_from_task_row()` fallback。这样 usage dashboard route 的 outward 组装口径进一步
+  和 service 层治理主干对齐，同时保持外部 SSE / trace / e2e 契约不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`453/453`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，governance filter normalize 单源化收尾）：`backend/app/api/routes/tasks.py`
+  的 `GET /api/tasks` 与 `GET /api/tasks/usage/dashboard` route 现已不再先对
+  `tool_registry_profile / tool_registry_provider_source` 做 route-level normalize，而是直接把 raw filter
+  透传给 `list_tasks / count_tasks / get_tasks_usage_dashboard`，统一交给 service 层继续走 shared
+  `_normalize_governance_filter()` 主干。这样任务列表与 usage dashboard 两条治理筛选入口，也进一步和 service
+  侧的 compare/filter 口径对齐，同时保持外部 SSE / trace / e2e 契约不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`453/453`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，settings registry selection 单源化续推）：`backend/app/api/routes/settings.py`
+  的 `SettingsUpdateRequest` 现已不再在 request model 阶段直接调用 shared `_normalize_governance_filter()`
+  预规范化 `tool_registry_profile / tool_registry_provider_source`；非空 raw payload 会原样保留，只有空白字符串会在
+  `_resolve_effective_tool_registry_selection()` 里被视为缺失值，再统一交给
+  `get_tool_registry_profile_name_from_settings()` /
+  `get_tool_registry_provider_source_name_from_settings()` 解析成 canonical registry selection。这样 settings
+  保存/校验入口也继续向“route 只负责缺失值决策，shared registry helper 负责命名规范化”的主干收口，同时保持外部
+  SSE / trace / e2e 契约不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`456/456`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，dead parsed-trace governance helper 清理）：在
+  `tasks / sessions / settings` 三条 route 主链都不再复用旧的 task+parsed-trace governance fallback 之后，
+  `backend/app/services/chat_persistence_service.py` 里残留的
+  `_extract_task_governance_from_task_with_parsed_trace_steps()` 也已正式删除；focused tests 同步改为直接断言这条
+  legacy helper 不再暴露。这样治理解析主干不仅在 route 层完成收口，也避免 service 内继续保留失效 sibling 分叉误导后续开发。
+  外部 SSE / trace / e2e 契约保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`456/456`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，dead parsed-trace governance adapter 再收薄一层）：在删除
+  `_extract_task_governance_from_task_with_parsed_trace_steps()` 之后，
+  `backend/app/services/chat_persistence_service.py` 里只剩测试覆盖、生产代码已不再使用的
+  `_extract_task_governance_from_parsed_trace_steps()` 也已正式删除；focused tests 同步改为直接断言这条
+  legacy parsed-trace adapter 不再暴露。这样 service 内与 parsed-trace governance 相关的过期 helper 再少一层，继续降低后续误把旧 trace
+  适配分支当成活主干的风险。外部 SSE / trace / e2e 契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`456/456`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，trace-json governance wrapper 再并回 task-row 主干）：在删掉 parsed-trace adapter 之后，
+  `backend/app/services/chat_persistence_service.py` 里只剩一处生产调用的 `_extract_task_governance_from_trace_json()` 也已不再单独保留；
+  `_extract_task_governance_from_task_row()` 在 governance columns 没拿到值时，现在会直接复用 shared
+  `_load_trace_steps_from_trace_json()` + `_extract_task_governance_from_trace_steps()` 完成 fallback，而不是再经过一层 legacy
+  `trace_json -> governance` wrapper。focused tests 同步改为直接断言这条 helper 不再暴露。这样 service 内围绕 trace fallback 的
+  治理解析主干又少一层薄适配，继续降低后续误把旧 wrapper 当成活主干的风险。外部 SSE / trace / e2e 契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`456/456`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，usage dashboard top-tasks dead trace payload 清理）：
+  `backend/app/services/chat_persistence_service.py:get_tasks_usage_dashboard()` 在组装 `top_tasks` 行时，已不再继续携带内部 dead
+  `trace_json` 字段；当前 route 侧已经不再消费这份 trace payload，因此 focused tests 先新增 1 条红灯，锁定 `top_tasks`
+  不该再暴露 `trace_json`，随后实现上直接删除这份多余字段。这样 usage dashboard 的 service payload 也继续向“只返回 route 仍在消费的
+  治理/用量摘要”收口。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`457/457`），
+  `cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，service task-row payload 裁掉 raw governance source columns）：
+  `backend/app/services/chat_persistence_service.py:_with_task_governance()` 在补完规范化 `governance` 之后，现已不再继续把
+  `tool_registry_profile / tool_registry_provider_source / allowed_tool_names_json / allowed_tool_labels_json`
+  这组内部 raw 治理源列往上传播给 `get_task / list_tasks / get_session_tasks` 的返回 row。focused tests 先新增 1 条红灯，
+  锁定这条 payload 不该再暴露 raw governance source columns，再做最小实现收口。这样 service task-row payload 也继续向
+  “外层只消费规范化治理摘要、内部源列留在 persistence 边界内”推进。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`458/458`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，usage dashboard 也并回 shared task-row helper）：
+  `backend/app/services/chat_persistence_service.py:get_tasks_usage_dashboard()` 现已不再自己直连
+  `_extract_task_governance_from_task_row(dict(row))` 做 governance 解析，而是先统一走 `_with_task_governance(dict(row))`，
+  再消费其中的规范化 `governance`。focused tests 先新增 1 条红灯，锁定 dashboard 不该再跳过 shared task-row helper 直接重走 row parser；
+  随后实现上把 dashboard 的 by-session / top-tasks 聚合一起并回这条主干。这样 usage dashboard 也开始共享同一份 task-row 规范化与 raw 列裁剪结果，
+  继续降低 service 内 sibling 解析分叉。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`459/459`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，reconnect stream terminal step-id 补全不再重查全量 trace）：
+  `backend/app/api/routes/tasks.py:stream_running_task_reconnect()` 在任务已结束、且本轮轮询没有新 trace step 导致
+  `last_emitted_step_id` 仍为空时，现已不再额外调用 `get_task_trace_steps(task_id, user_id)` 按 task id 重查一次全量 trace；
+  而是直接复用手头这份 `task` row 走 shared `get_task_trace_steps_from_task(task)` 来补终态 `done/error` 事件里的 `step_id`。focused tests
+  先新增 1 条红灯，锁定 reconnect stream 不该再重复按 task id 拉全量 trace，再做最小实现收口。外部 SSE/trace/e2e 契约保持不变。
+  校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`460/460`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，task trace detail 也不再按 task id 重读 trace）：
+  `backend/app/api/routes/tasks.py:get_task_trace_detail()` 在已经拿到 `task` row 的前提下，现已不再继续走
+  `get_task_trace_steps(task_id, user_id)` 按 task id 再读一次 trace，而是直接复用 shared
+  `chat_persistence_service.get_task_trace_steps_from_task(task)`。focused tests 先新增 1 条红灯，锁定 trace detail route 不该再做这次重复读取，
+  再做最小实现收口。外部 `GET /api/tasks/{task_id}/trace` 响应契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`461/461`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，dead `get_task_trace_steps(task_id, user_id)` helper 退场）：
+  `backend/app/services/chat_persistence_service.py` 里只剩历史兼容意义、生产调用已经归零的
+  `get_task_trace_steps(task_id, user_id)` 现已正式删除；当前 task export、session export、reconnect 与 trace detail
+  这些链路在已经拿到 `task` row 后，统一直接复用 shared `get_task_trace_steps_from_task(task)`。focused tests 先补红灯，
+  锁定 service 与 route module 都不该再继续暴露这条 dead helper，再做最小实现收口。外部 SSE/trace/e2e 契约保持不变。
+  校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`461/461`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，session export governance summary 退回 shared task-row helper）：
+  `backend/app/api/routes/sessions.py:_build_session_export_payload()` 现已不再在 route 层自己循环每个 `task_row`
+  调 `_merge_session_governance_summary(...)` 汇总 session governance，而是统一复用
+  `chat_persistence_service.get_task_rows_governance_summary(task_rows)`。focused tests 先补红灯，锁定 service 要提供这条 helper，
+  且 session export route 要直接走它而不是逐行 merge；随后再做最小实现收口。这样 session export 这条治理摘要链也开始和 shared task-row/service 主干站到同一处，
+  同时保持外部 session export / SSE / trace / e2e 契约不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`462/462`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，trace delta route 不再双读整份 trace）：
+  `backend/app/api/routes/tasks.py:get_task_trace_delta_detail()` 现已不再先调
+  `get_task_trace_delta_steps_from_task(task)` 再额外走 `_latest_seq_from_task(task)` 把整份 trace 再读一遍来算 `lag_seq`；
+  当前改为统一复用新的 shared `chat_persistence_service.get_task_trace_delta_snapshot_from_task(task)`，单次读取就返回
+  `delta steps + next_cursor + has_more + latest_seq`，同时 route 侧 dead helper `_latest_seq_from_task()` 也已退场。focused tests
+  先补红灯，锁定 route 不该再分开重算 delta 与 latest seq，再做最小实现收口。外部 `GET /api/tasks/{task_id}/trace/delta`
+  契约保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`464/464`），
+  `cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，reconnect terminal step-id 也退回 shared delta snapshot helper）：
+  `backend/app/api/routes/tasks.py:stream_running_task_reconnect()` 现已不再先调一次
+  `get_task_trace_delta_steps_from_task(task)`，然后在任务已结束且当前轮询没有新 step 时，再额外走
+  `get_task_trace_steps_from_task(task)` 重读整份 trace 来补终态 `step_id`；当前改为统一复用扩展后的 shared
+  `chat_persistence_service.get_task_trace_delta_snapshot_from_task(task)`，单次读取就直接返回
+  `delta steps + next_cursor + has_more + latest_seq + latest_step_id`，同时 `tasks.py` 里那条只剩直引意义的
+  `get_task_trace_delta_steps_from_task` 也已退场。focused tests 先补红灯，锁定 reconnect 不该再双读 trace，再做最小实现收口。
+  外部 SSE / trace / e2e 契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`465/465`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，route 层 usage 解析退回 shared task-row helper）：
+  `backend/app/api/routes/tasks.py` 与 `backend/app/api/routes/sessions.py` 里剩下的三处
+  `_parse_usage_json_blob(...)` 直连已经一起收回 shared service。当前
+  `chat_persistence_service.get_task_usage_from_task(task)` 统一承接 `task export`、`session export` 与
+  `stream_running_task_reconnect()` 终态 `done` 事件里的 usage 读取，route 不再直接依赖 persistence 私有 usage parser。focused tests
+  先补红灯，锁定 service 要提供 shared usage helper，且三条 route 路径都必须复用它，再做最小实现收口。外部
+  export / SSE / trace / e2e 契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`467/467`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，dead `get_task_trace_delta_steps_from_task()` helper 退场）：
+  `backend/app/services/chat_persistence_service.py` 里只剩历史兼容意义、生产调用已经归零的
+  `get_task_trace_delta_steps_from_task()` 现已正式删除。当前 route 侧 trace delta / reconnect 已统一停在
+  `get_task_trace_delta_snapshot_from_task(task)` 主干，focused tests 也同步补红灯，锁定 service 不该再继续暴露这条 dead helper，
+  再做最小实现收口。外部 SSE / trace / e2e 契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`467/467`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，session export trace preview / RAG 统计退回 shared service）：
+  `backend/app/api/routes/sessions.py:_build_session_export_payload()` 现已不再在 route 层自己读取 `TraceStep[]` 后手工循环计算
+  `rag_hit_count` 与 `trace_preview`；当前改为统一复用新的
+  `chat_persistence_service.get_task_trace_preview_summary_from_task(task)`，由 shared service 统一返回
+  `trace_step_count + rag_hit_count + trace_preview` 摘要。focused tests 先补红灯，锁定 service 要提供这条 helper，且 session export route
+  必须直接走它而不是继续自己拆 `TraceStep`，再做最小实现收口。外部 session export / SSE / trace / e2e 契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`469/469`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-17，task export RAG 拆解退回 shared service）：
+  `backend/app/api/routes/tasks.py:_build_task_export_payload()` 现已不再在 route 层自己循环 `TraceStep[]` 手工提取
+  `rag_hit_count / rag_knowledge_base_ids / rag_chunks`；当前改为统一复用新的
+  `chat_persistence_service.get_trace_rag_export_summary(trace_steps)`，由 shared service 统一返回 task export 需要的 RAG 摘要。focused tests
+  先补红灯，锁定 service 要提供这条 helper，且 task export route 必须直接走它而不是继续调用本地 `_collect_rag_export(...)`，
+  再做最小实现收口。外部 task export / SSE / trace / e2e 契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`471/471`），`cd frontend && npm run lint`
+  通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - 会话命名补充：空会话在首条消息发送时，若仍为占位标题则自动改为首条消息前缀
 - 会话命名规则补充：仅在“无历史消息 + 占位标题”条件下自动命名，不覆盖用户手动重命名
 - 协同进展（前端侧）：已完成登录表单填充态样式优化、密码显隐图标可见性与切换修复、登录页左侧文案（主页叙事 + 关键信息）收口、退出入口并入左下角设置模块
@@ -1074,3 +1222,6 @@ docker compose up -d chroma
 - parsed trace-step governance extractor 已收口到 service 主干（2026-06-16）：本轮继续把 parsed-trace 单源化从“只负责读取 `TraceStep[]`”推进到“直接承接 `TraceStep[] -> governance`”：1) 先在 `backend/scripts/test_tool_runtime_slice.py` 新增 3 条 focused failing tests，分别锁定 `backend/app/services/chat_persistence_service.py` 必须提供 `_extract_task_governance_from_parsed_trace_steps()`，以及 `backend/app/api/routes/tasks.py:_build_task_export_payload()` 与 `backend/app/api/routes/sessions.py:_build_session_export_payload()` 的 parsed-trace path 都必须复用它；2) 实现上在 `chat_persistence_service.py` 新增 `_extract_task_governance_from_parsed_trace_steps()`，统一承接 `TraceStep[] -> dict[] -> governance` 这段中转，随后把 task export 与 session export parsed-trace fallback 一起切回这条 shared helper；3) 本轮完成后，route/export 层又少了一批 `TraceStep[] -> dict[] -> governance` 的重复中转，slice 基线升到 `450/450`。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`450/450`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - session export task-governance fallback 已收口到 service 主干（2026-06-16）：本轮继续把 parsed-trace / governance 单源化从“共享 extractor”推进到“共享 fallback 决策”：1) 先在 `backend/scripts/test_tool_runtime_slice.py` 新增 2 条 focused failing tests，分别锁定 `backend/app/services/chat_persistence_service.py` 必须提供 `_extract_task_governance_from_task_with_parsed_trace_steps()`，以及 `backend/app/api/routes/sessions.py:_build_session_export_payload()` 的 task-governance fallback 必须复用这条 helper；2) 实现上在 `chat_persistence_service.py` 新增 `_extract_task_governance_from_task_with_parsed_trace_steps()`，统一承接 `persisted governance row -> parsed trace steps -> raw trace json` 这段 fallback 主链，随后把 `sessions.py:_build_session_export_payload()` 的 task summary governance 解析直接退回这条 shared helper；3) 本轮完成后，session export route 又少了一段 row parser / parsed steps / trace json 三选一的本地分叉，slice 基线升到 `451/451`。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`451/451`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - task export 也退回 shared task-trace / governance helper（2026-06-16）：本轮继续把 parsed trace/governance 单源化从 session export sibling 链再推进回 `backend/app/api/routes/tasks.py:_build_task_export_payload()`：1) 先在 `backend/scripts/test_tool_runtime_slice.py` 新增 4 条 focused failing tests，并同步改红既有 task export cases，分别锁定 task export 不能再按 `task_id` 重读 trace，而必须直接复用 `chat_persistence_service.get_task_trace_steps_from_task(task)`，同时 task export governance 也必须统一退回 `chat_persistence_service._extract_task_governance_from_task_with_parsed_trace_steps(task, parsed_steps)`，不再在 route 里自己判断 parsed-trace / persisted-row fallback；2) 实现上 `_build_task_export_payload()` 已改成直接从 task row 读取 parsed `TraceStep[]`，并把 task-governance fallback 决策完全收回 shared service helper；3) 本轮完成后，task export route 又少了一段按 `task_id` 二次查询 trace 的旁支和一段本地 governance fallback 分叉，slice 基线升到 `452/452`。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`452/452`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- task row governance 产出继续下沉到 service（2026-06-17）：本轮继续沿主线收 task list / detail 这两条 route-level governance 旁支。`backend/app/services/chat_persistence_service.py` 的 `get_task()`、`list_tasks()` 与 `get_session_tasks()` 现在都会直接在返回的 task row 上补齐规范化 `governance`；对应 `backend/app/api/routes/tasks.py` 的 `GET /api/tasks` 与 `GET /api/tasks/{task_id}` 已改为只消费 service 提供的 `governance`，不再自己调用 `_extract_task_governance_from_task_row()` 做 fallback。这样 task row governance 的解析责任继续下沉回 persistence service，而 focused 护栏也同步锁定“route 信任 service、缺失时不再自行回退解析”这一停止点。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`454/454`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- session export task governance 也信任 service task row（2026-06-17）：本轮继续沿同一主线把 `backend/app/api/routes/sessions.py:_build_session_export_payload()` 里的 task-governance 来源决策收回到 service。当前 session export 已不再在 route 层调用 `_extract_task_governance_from_task_with_parsed_trace_steps()` 做 fallback，而是直接消费 `get_session_tasks()` 返回 task row 上已有的 `governance`，只保留 trace preview / RAG 统计 / session-level governance merge 这些最近邻组装职责。focused 护栏同步锁定“route 信任 service task-row governance、缺失时不再自行回退解析”这一停止点。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`454/454`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- task export governance 也信任 service task row（2026-06-17）：本轮继续沿同一主线把 `backend/app/api/routes/tasks.py:_build_task_export_payload()` 里的 export-governance 来源决策也收回到 service。当前 task export 已不再在 route 层调用 `_extract_task_governance_from_task_with_parsed_trace_steps()` 做 parsed-trace / persisted-row fallback，而是直接消费 task row 上已有的 `governance`，只保留 parsed trace 读取、RAG 导出统计与 outward export model 组装这些最近邻职责。focused 护栏同步锁定“route 信任 service task-row governance、缺失时不再自行回退解析”这一停止点。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`454/454`），`cd frontend && npm run lint` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
