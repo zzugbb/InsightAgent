@@ -124,6 +124,21 @@ def _extract_task_governance_from_parsed_trace_steps(
     )
 
 
+def _extract_task_governance_from_task_with_parsed_trace_steps(
+    task: dict[str, object],
+    trace_steps: list[TraceStep],
+) -> dict[str, object] | None:
+    governance = _extract_task_governance_from_task_row(task)
+    if governance is not None:
+        return governance
+    if trace_steps:
+        return _extract_task_governance_from_parsed_trace_steps(trace_steps)
+    raw_trace = task.get("trace_json")
+    if isinstance(raw_trace, str) and raw_trace.strip():
+        return _extract_task_governance_from_trace_json(raw_trace)
+    return None
+
+
 def _serialize_task_governance_columns(
     trace_steps: list[dict],
 ) -> tuple[str | None, str | None, str | None, str | None]:

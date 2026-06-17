@@ -409,27 +409,10 @@ def _build_session_export_payload(
                 ),
             )
 
-        task_governance = chat_persistence_service._extract_task_governance_from_task_row(
-            task_row
+        task_governance = chat_persistence_service._extract_task_governance_from_task_with_parsed_trace_steps(
+            task_row,
+            parsed_steps,
         )
-        if task_governance is None:
-            raw_trace = task_row.get("trace_json")
-            if (
-                isinstance(raw_trace, str)
-                and raw_trace.strip()
-                and not parsed_steps
-            ):
-                task_governance = (
-                    chat_persistence_service._extract_task_governance_from_trace_json(
-                        raw_trace
-                    )
-                )
-            else:
-                task_governance = (
-                    chat_persistence_service._extract_task_governance_from_parsed_trace_steps(
-                        parsed_steps
-                    )
-                )
         if task_governance is not None:
             governance_summary = chat_persistence_service._merge_session_governance_summary(
                 governance_summary,

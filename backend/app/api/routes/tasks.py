@@ -443,15 +443,14 @@ def _collect_rag_export(steps: list[TraceStep]) -> tuple[int, list[str], list[Ta
 
 def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonResponse:
     task_id = str(task["id"])
-    parsed_steps = get_task_trace_steps(task_id, user_id)
+    parsed_steps = chat_persistence_service.get_task_trace_steps_from_task(task)
     rag_hit_count, rag_knowledge_base_ids, rag_chunks = _collect_rag_export(parsed_steps)
-    governance_dict = chat_persistence_service._extract_task_governance_from_parsed_trace_steps(
-        parsed_steps
-    )
-    if not isinstance(governance_dict, dict):
-        governance_dict = chat_persistence_service._extract_task_governance_from_task_row(
-            task
+    governance_dict = (
+        chat_persistence_service._extract_task_governance_from_task_with_parsed_trace_steps(
+            task,
+            parsed_steps,
         )
+    )
     governance = (
         TaskExportGovernance(**governance_dict)
         if isinstance(governance_dict, dict)
