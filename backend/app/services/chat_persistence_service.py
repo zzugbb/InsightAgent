@@ -945,6 +945,26 @@ def get_trace_rag_export_summary(
     }
 
 
+def get_task_trace_export_summary_from_task(task: dict) -> dict[str, object]:
+    trace_steps = get_task_trace_steps_from_task(task)
+    rag_summary = get_trace_rag_export_summary(trace_steps)
+    rag_knowledge_base_ids = [
+        str(item)
+        for item in rag_summary.get("rag_knowledge_base_ids", [])
+        if isinstance(item, str)
+    ]
+    rag_chunks = [
+        row for row in rag_summary.get("rag_chunks", []) if isinstance(row, dict)
+    ]
+    return {
+        "steps": trace_steps,
+        "step_count": len(trace_steps),
+        "rag_hit_count": int(rag_summary.get("rag_hit_count", 0) or 0),
+        "rag_knowledge_base_ids": rag_knowledge_base_ids,
+        "rag_chunks": rag_chunks,
+    }
+
+
 def get_task_trace_delta_snapshot_from_task(
     task: dict,
     *,

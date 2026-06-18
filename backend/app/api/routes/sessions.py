@@ -36,6 +36,10 @@ from app.services.task_status_service import (
 router = APIRouter()
 
 
+def _plain_clone_dict(value: object) -> object:
+    return dict(value) if isinstance(value, dict) else value
+
+
 class SessionResponse(BaseModel):
     id: str
     title: str | None = None
@@ -224,23 +228,10 @@ def _normalize_excerpt(text: str, limit: int = 140) -> str:
     return f"{normalized[:limit]}..."
 
 
-def _trace_step_title(step: Any) -> str:
-    meta = getattr(step, "meta", None)
-    label = getattr(meta, "label", None) if meta is not None else None
-    if isinstance(label, str) and label.strip():
-        return label.strip()
-    step_type = getattr(meta, "step_type", None) if meta is not None else None
-    if isinstance(step_type, str) and step_type.strip():
-        return step_type.strip().replace("_", " ")
-    raw_type = getattr(step, "type", None)
-    if isinstance(raw_type, str) and raw_type.strip():
-        return raw_type.strip().replace("_", " ")
-    return "step"
-
-
 def _task_status_meta(task: dict) -> dict[str, object]:
     status = str(task.get("status", ""))
     return {
+        "governance": _plain_clone_dict(task.get("governance")),
         "status_normalized": normalize_task_status(status),
         "status_label": task_status_label(status),
         "status_rank": task_status_rank(status),
@@ -388,8 +379,6 @@ def _build_session_export_payload(
             if isinstance(row, dict)
         ]
 
-        task_governance = task_row.get("governance")
-
         status_meta = _task_status_meta(task_row)
         summary = SessionExportTaskSummary(
             id=str(task_row["id"]),
@@ -404,11 +393,7 @@ def _build_session_export_payload(
             trace_step_count=int(trace_summary.get("trace_step_count", 0) or 0),
             rag_hit_count=rag_hit_count,
             trace_preview=preview_steps,
-            governance=(
-                SessionExportTaskGovernanceSummary(**task_governance)
-                if isinstance(task_governance, dict)
-                else None
-            ),
+            governance=status_meta.get("governance"),
         )
         task_summaries.append(summary)
         trace_step_total += int(trace_summary.get("trace_step_count", 0) or 0)
@@ -416,11 +401,7 @@ def _build_session_export_payload(
     governance_summary = chat_persistence_service.get_task_rows_governance_summary(
         task_rows
     )
-    governance = (
-        SessionExportGovernanceSummary(**governance_summary)
-        if isinstance(governance_summary, dict)
-        else None
-    )
+    governance = _plain_clone_dict(governance_summary)
 
     return SessionExportJsonResponse(
         version="1.0",

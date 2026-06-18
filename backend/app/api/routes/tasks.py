@@ -55,6 +55,10 @@ def _parse_last_event_id(value: str | None) -> int | None:
     return parsed if parsed >= 0 else None
 
 
+def _plain_clone_dict(value: object) -> object:
+    return dict(value) if isinstance(value, dict) else value
+
+
 async def stream_running_task_reconnect(
     task_id: str,
     user_id: str,
@@ -251,6 +255,7 @@ def _with_status_meta(item: dict) -> dict:
     status = str(item.get("status", ""))
     return {
         **item,
+        "governance": _plain_clone_dict(item.get("governance")),
         "status_normalized": normalize_task_status(status),
         "status_label": task_status_label(status),
         "status_rank": task_status_rank(status),
@@ -398,25 +403,25 @@ def _build_task_export_filename(task: dict, ext: str) -> str:
 
 def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonResponse:
     task_id = str(task["id"])
-    parsed_steps = chat_persistence_service.get_task_trace_steps_from_task(task)
-    rag_summary = chat_persistence_service.get_trace_rag_export_summary(parsed_steps)
-    rag_hit_count = int(rag_summary.get("rag_hit_count", 0) or 0)
+    trace_summary = chat_persistence_service.get_task_trace_export_summary_from_task(task)
+    parsed_steps = [
+        step
+        for step in trace_summary.get("steps", [])
+        if isinstance(step, TraceStep)
+    ]
+    step_count = int(trace_summary.get("step_count", len(parsed_steps)) or 0)
+    rag_hit_count = int(trace_summary.get("rag_hit_count", 0) or 0)
     rag_knowledge_base_ids = [
         str(item)
-        for item in rag_summary.get("rag_knowledge_base_ids", [])
+        for item in trace_summary.get("rag_knowledge_base_ids", [])
         if isinstance(item, str)
     ]
     rag_chunks = [
         TaskExportRagChunk(**row)
-        for row in rag_summary.get("rag_chunks", [])
+        for row in trace_summary.get("rag_chunks", [])
         if isinstance(row, dict)
     ]
     governance_dict = task.get("governance")
-    governance = (
-        TaskExportGovernance(**governance_dict)
-        if isinstance(governance_dict, dict)
-        else None
-    )
     return TaskExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
@@ -432,8 +437,8 @@ def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonRespon
             for row in get_task_messages(task_id, user_id)
         ],
         trace=TaskExportTrace(
-            governance=governance,
-            step_count=len(parsed_steps),
+            governance=_plain_clone_dict(governance_dict),
+            step_count=step_count,
             rag_hit_count=rag_hit_count,
             rag_knowledge_base_ids=rag_knowledge_base_ids,
             rag_chunks=rag_chunks,
@@ -675,21 +680,7 @@ def get_tasks(
     n = len(tasks)
     items: list[TaskResponse] = []
     for task in tasks:
-        task_with_status = _with_status_meta(task)
-        task_governance = task_with_status.get("governance")
-        task_payload = {
-            key: value for key, value in task_with_status.items() if key != "governance"
-        }
-        items.append(
-            TaskResponse(
-                **task_payload,
-                governance=(
-                    TaskGovernanceSummary(**task_governance)
-                    if isinstance(task_governance, dict)
-                    else None
-                ),
-            )
-        )
+        items.append(TaskResponse(**_with_status_meta(task)))
     return TaskListResponse(
         items=items,
         total=total,
@@ -793,11 +784,7 @@ def get_tasks_usage_dashboard_route(
                     if isinstance(row.get("last_task_at"), str)
                     else None
                 ),
-                governance=(
-                    TaskUsageSessionGovernanceSummary(**row.get("governance"))
-                    if isinstance(row.get("governance"), dict)
-                    else None
-                ),
+                governance=_plain_clone_dict(row.get("governance")),
             )
             for row in payload["by_session"]
         ],
@@ -816,11 +803,7 @@ def get_tasks_usage_dashboard_route(
                 created_at=str(row.get("created_at", "")),
                 updated_at=str(row.get("updated_at", "")),
                 source_kind=str(row.get("source_kind", "legacy") or "legacy"),
-                governance=(
-                    TaskGovernanceSummary(**row.get("governance"))
-                    if isinstance(row.get("governance"), dict)
-                    else None
-                ),
+                governance=_plain_clone_dict(row.get("governance")),
             )
             for row in payload["top_tasks"]
         ],
@@ -835,19 +818,7 @@ def get_task_detail(
     task = get_task(task_id, str(current_user["id"]))
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    task_with_status = _with_status_meta(task)
-    task_governance = task_with_status.get("governance")
-    task_payload = {
-        key: value for key, value in task_with_status.items() if key != "governance"
-    }
-    return TaskResponse(
-        **task_payload,
-        governance=(
-            TaskGovernanceSummary(**task_governance)
-            if isinstance(task_governance, dict)
-            else None
-        ),
-    )
+    return TaskResponse(**_with_status_meta(task))
 
 
 @router.post("/{task_id}/cancel", response_model=TaskCancelResponse)

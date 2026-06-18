@@ -707,6 +707,37 @@ def get_tool_registry_provider_source_name_from_settings(
     return normalized or "default"
 
 
+def get_tool_registry_provider_source_specs_from_settings(
+    *,
+    settings: object | None = None,
+) -> dict[str, dict[str, object]]:
+    if settings is None:
+        settings = get_settings()
+    raw_sources = getattr(settings, "tool_registry_provider_sources_json", None)
+    if not isinstance(raw_sources, str) or not raw_sources.strip():
+        return {}
+    try:
+        source_specs = json.loads(raw_sources)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(source_specs, dict):
+        return {}
+
+    normalized_source_specs: dict[str, dict[str, object]] = {}
+    for source_name, spec in source_specs.items():
+        if not isinstance(source_name, str) or not isinstance(spec, dict):
+            continue
+        normalized_source_name = get_tool_registry_provider_source_name_from_settings(
+            settings=SimpleNamespace(
+                tool_registry_provider_source=source_name,
+            )
+        )
+        if normalized_source_name == "default":
+            continue
+        normalized_source_specs[normalized_source_name] = spec
+    return normalized_source_specs
+
+
 def get_tool_registry_profile_name_from_settings(*, settings: object | None = None) -> str:
     if settings is None:
         settings = get_settings()
