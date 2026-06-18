@@ -867,18 +867,12 @@ def get_task_trace_preview_summary_from_task(
     *,
     preview_limit: int = 3,
 ) -> dict[str, object]:
-    trace_steps = get_task_trace_steps_from_task(task)
-    rag_hit_count = 0
-    for step in trace_steps:
-        rag_meta = getattr(step, "meta", None)
-        rag_obj = getattr(rag_meta, "rag", None) if rag_meta is not None else None
-        if not isinstance(rag_obj, dict):
-            continue
-        chunks = rag_obj.get("chunks")
-        if isinstance(chunks, list):
-            rag_hit_count += sum(
-                1 for chunk in chunks if isinstance(chunk, str) and chunk.strip()
-            )
+    trace_summary = get_task_trace_export_summary_from_task(task)
+    trace_steps = [
+        step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
+    ]
+    trace_step_count = int(trace_summary.get("step_count", len(trace_steps)) or 0)
+    rag_hit_count = int(trace_summary.get("rag_hit_count", 0) or 0)
 
     preview_steps: list[dict[str, object]] = []
     bounded_limit = max(0, int(preview_limit))
@@ -898,7 +892,7 @@ def get_task_trace_preview_summary_from_task(
         )
 
     return {
-        "trace_step_count": len(trace_steps),
+        "trace_step_count": trace_step_count,
         "rag_hit_count": rag_hit_count,
         "trace_preview": preview_steps,
     }
@@ -962,6 +956,29 @@ def get_task_trace_export_summary_from_task(task: dict) -> dict[str, object]:
         "rag_hit_count": int(rag_summary.get("rag_hit_count", 0) or 0),
         "rag_knowledge_base_ids": rag_knowledge_base_ids,
         "rag_chunks": rag_chunks,
+    }
+
+
+def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
+    trace_summary = get_task_trace_export_summary_from_task(task)
+    return {
+        "usage": get_task_usage_from_task(task),
+        "governance": task.get("governance")
+        if isinstance(task.get("governance"), dict)
+        else None,
+        "steps": [
+            step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
+        ],
+        "step_count": int(trace_summary.get("step_count", 0) or 0),
+        "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
+        "rag_knowledge_base_ids": [
+            str(item)
+            for item in trace_summary.get("rag_knowledge_base_ids", [])
+            if isinstance(item, str)
+        ],
+        "rag_chunks": [
+            row for row in trace_summary.get("rag_chunks", []) if isinstance(row, dict)
+        ],
     }
 
 
@@ -1277,6 +1294,102 @@ def get_task_rows_governance_summary(
             task_governance,
         )
     return governance_summary
+
+
+def get_task_rows_trace_preview_summary(
+    task_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+    *,
+    preview_limit: int = 3,
+) -> dict[str, object]:
+    task_summaries: list[dict[str, object]] = []
+    trace_step_total = 0
+    rag_hit_total = 0
+    for task_row in task_rows:
+        preview_summary = get_task_trace_preview_summary_from_task(
+            task_row,
+            preview_limit=preview_limit,
+        )
+        trace_step_count = int(preview_summary.get("trace_step_count", 0) or 0)
+        rag_hit_count = int(preview_summary.get("rag_hit_count", 0) or 0)
+        task_summaries.append(
+            {
+                "task_id": str(task_row.get("id", "")),
+                "trace_step_count": trace_step_count,
+                "rag_hit_count": rag_hit_count,
+                "trace_preview": [
+                    row
+                    for row in preview_summary.get("trace_preview", [])
+                    if isinstance(row, dict)
+                ],
+            }
+        )
+        trace_step_total += trace_step_count
+        rag_hit_total += rag_hit_count
+
+    return {
+        "tasks": task_summaries,
+        "trace_step_count": trace_step_total,
+        "rag_hit_count": rag_hit_total,
+    }
+
+
+def get_task_rows_export_summary(
+    task_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+    *,
+    preview_limit: int = 3,
+) -> dict[str, object]:
+    trace_summary = get_task_rows_trace_preview_summary(
+        task_rows,
+        preview_limit=preview_limit,
+    )
+    return {
+        "tasks": [
+            row for row in trace_summary.get("tasks", []) if isinstance(row, dict)
+        ],
+        "trace_step_count": int(trace_summary.get("trace_step_count", 0) or 0),
+        "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
+        "governance": get_task_rows_governance_summary(task_rows),
+    }
+
+
+def get_task_rows_session_export_summary(
+    task_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+    *,
+    preview_limit: int = 3,
+) -> dict[str, object]:
+    export_summary = get_task_rows_export_summary(task_rows, preview_limit=preview_limit)
+    trace_summary_by_task_id = {
+        str(row.get("task_id", "")): row
+        for row in export_summary.get("tasks", [])
+        if isinstance(row, dict)
+    }
+    task_summaries: list[dict[str, object]] = []
+    for task_row in task_rows:
+        task_id = str(task_row.get("id", ""))
+        trace_summary = trace_summary_by_task_id.get(task_id, {})
+        task_summaries.append(
+            {
+                "task_id": task_id,
+                "usage": get_task_usage_from_task(task_row),
+                "governance": task_row.get("governance")
+                if isinstance(task_row.get("governance"), dict)
+                else None,
+                "trace_step_count": int(trace_summary.get("trace_step_count", 0) or 0),
+                "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
+                "trace_preview": [
+                    row
+                    for row in trace_summary.get("trace_preview", [])
+                    if isinstance(row, dict)
+                ],
+            }
+        )
+
+    return {
+        "tasks": task_summaries,
+        "trace_step_count": int(export_summary.get("trace_step_count", 0) or 0),
+        "rag_hit_count": int(export_summary.get("rag_hit_count", 0) or 0),
+        "governance": export_summary.get("governance"),
+    }
 
 
 def get_tasks_usage_dashboard(

@@ -231,7 +231,6 @@ def _normalize_excerpt(text: str, limit: int = 140) -> str:
 def _task_status_meta(task: dict) -> dict[str, object]:
     status = str(task.get("status", ""))
     return {
-        "governance": _plain_clone_dict(task.get("governance")),
         "status_normalized": normalize_task_status(status),
         "status_label": task_status_label(status),
         "status_rank": task_status_rank(status),
@@ -364,14 +363,18 @@ def _build_session_export_payload(
     )
     message_rows = get_session_messages(session_id, user_id)
     task_rows = get_session_tasks(session_id, user_id)
+    export_summary = chat_persistence_service.get_task_rows_session_export_summary(
+        task_rows,
+        preview_limit=3,
+    )
+    trace_summary_by_task_id = {
+        str(row.get("task_id", "")): row
+        for row in export_summary.get("tasks", [])
+        if isinstance(row, dict)
+    }
     task_summaries: list[SessionExportTaskSummary] = []
-    trace_step_total = 0
-    rag_hit_total = 0
     for task_row in task_rows:
-        trace_summary = chat_persistence_service.get_task_trace_preview_summary_from_task(
-            task_row,
-            preview_limit=3,
-        )
+        trace_summary = trace_summary_by_task_id.get(str(task_row.get("id", "")), {})
         rag_hit_count = int(trace_summary.get("rag_hit_count", 0) or 0)
         preview_steps = [
             SessionExportTracePreviewStep(**row)
@@ -389,18 +392,14 @@ def _build_session_export_payload(
             status_rank=int(status_meta["status_rank"]),
             created_at=str(task_row.get("created_at", "")),
             updated_at=str(task_row.get("updated_at", "")),
-            usage=chat_persistence_service.get_task_usage_from_task(task_row),
+            usage=trace_summary.get("usage"),
             trace_step_count=int(trace_summary.get("trace_step_count", 0) or 0),
             rag_hit_count=rag_hit_count,
             trace_preview=preview_steps,
-            governance=status_meta.get("governance"),
+            governance=_plain_clone_dict(trace_summary.get("governance")),
         )
         task_summaries.append(summary)
-        trace_step_total += int(trace_summary.get("trace_step_count", 0) or 0)
-        rag_hit_total += rag_hit_count
-    governance_summary = chat_persistence_service.get_task_rows_governance_summary(
-        task_rows
-    )
+    governance_summary = export_summary.get("governance")
     governance = _plain_clone_dict(governance_summary)
 
     return SessionExportJsonResponse(
@@ -412,8 +411,8 @@ def _build_session_export_payload(
         stats=SessionExportStats(
             task_count=len(task_rows),
             message_count=len(message_rows),
-            trace_step_count=trace_step_total,
-            rag_hit_count=rag_hit_total,
+            trace_step_count=int(export_summary.get("trace_step_count", 0) or 0),
+            rag_hit_count=int(export_summary.get("rag_hit_count", 0) or 0),
         ),
         messages=[
             SessionExportMessage(

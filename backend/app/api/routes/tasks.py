@@ -403,30 +403,30 @@ def _build_task_export_filename(task: dict, ext: str) -> str:
 
 def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonResponse:
     task_id = str(task["id"])
-    trace_summary = chat_persistence_service.get_task_trace_export_summary_from_task(task)
+    export_summary = chat_persistence_service.get_task_export_summary_from_task(task)
     parsed_steps = [
         step
-        for step in trace_summary.get("steps", [])
+        for step in export_summary.get("steps", [])
         if isinstance(step, TraceStep)
     ]
-    step_count = int(trace_summary.get("step_count", len(parsed_steps)) or 0)
-    rag_hit_count = int(trace_summary.get("rag_hit_count", 0) or 0)
+    step_count = int(export_summary.get("step_count", len(parsed_steps)) or 0)
+    rag_hit_count = int(export_summary.get("rag_hit_count", 0) or 0)
     rag_knowledge_base_ids = [
         str(item)
-        for item in trace_summary.get("rag_knowledge_base_ids", [])
+        for item in export_summary.get("rag_knowledge_base_ids", [])
         if isinstance(item, str)
     ]
     rag_chunks = [
         TaskExportRagChunk(**row)
-        for row in trace_summary.get("rag_chunks", [])
+        for row in export_summary.get("rag_chunks", [])
         if isinstance(row, dict)
     ]
-    governance_dict = task.get("governance")
+    governance_dict = export_summary.get("governance")
     return TaskExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
         task=TaskExportTask(**_with_status_meta(task)),
-        usage=chat_persistence_service.get_task_usage_from_task(task),
+        usage=export_summary.get("usage"),
         messages=[
             TaskExportMessage(
                 id=row["id"],
@@ -921,9 +921,12 @@ def get_task_trace_detail(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     status = str(task["status"])
+    trace_summary = chat_persistence_service.get_task_trace_export_summary_from_task(task)
     return TaskTraceResponse(
         task_id=task_id,
-        steps=chat_persistence_service.get_task_trace_steps_from_task(task),
+        steps=[
+            step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
+        ],
         status=status,
         status_normalized=normalize_task_status(status),
         status_label=task_status_label(status),
