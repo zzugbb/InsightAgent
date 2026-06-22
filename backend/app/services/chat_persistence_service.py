@@ -6,6 +6,11 @@ from uuid import uuid4
 
 from app.db import get_db_connection
 from app.schemas.trace import TraceStep, parse_trace_steps
+from app.services.task_status_service import (
+    normalize_task_status,
+    task_status_label,
+    task_status_rank,
+)
 
 
 def _now_iso() -> str:
@@ -959,26 +964,146 @@ def get_task_trace_export_summary_from_task(task: dict) -> dict[str, object]:
     }
 
 
-def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
+def _get_task_status_summary_from_task(task: dict) -> dict[str, object]:
+    status = str(task.get("status", ""))
+    return {
+        "status": status,
+        "status_normalized": normalize_task_status(status),
+        "status_label": task_status_label(status),
+        "status_rank": task_status_rank(status),
+    }
+
+
+def get_task_trace_response_summary_from_task(task: dict) -> dict[str, object]:
     trace_summary = get_task_trace_export_summary_from_task(task)
     return {
-        "usage": get_task_usage_from_task(task),
-        "governance": task.get("governance")
-        if isinstance(task.get("governance"), dict)
-        else None,
         "steps": [
             step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
         ],
-        "step_count": int(trace_summary.get("step_count", 0) or 0),
-        "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
-        "rag_knowledge_base_ids": [
-            str(item)
-            for item in trace_summary.get("rag_knowledge_base_ids", [])
-            if isinstance(item, str)
+        **_get_task_status_summary_from_task(task),
+    }
+
+
+def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
+    governance = task.get("governance")
+    return {
+        "id": str(task.get("id", "")),
+        "session_id": str(task.get("session_id", "")),
+        "prompt": str(task.get("prompt", "")),
+        **_get_task_status_summary_from_task(task),
+        "governance": dict(governance) if isinstance(governance, dict) else governance,
+        "trace_json": task.get("trace_json"),
+        "usage_json": task.get("usage_json"),
+        "created_at": str(task.get("created_at", "")),
+        "updated_at": str(task.get("updated_at", "")),
+    }
+
+
+def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
+    trace_summary = get_task_trace_export_summary_from_task(task)
+    return {
+        "task": {
+            "id": str(task.get("id", "")),
+            "session_id": str(task.get("session_id", "")),
+            "prompt": str(task.get("prompt", "")),
+            **_get_task_status_summary_from_task(task),
+            "created_at": str(task.get("created_at", "")),
+            "updated_at": str(task.get("updated_at", "")),
+        },
+        "usage": get_task_usage_from_task(task),
+        "trace": {
+            "governance": task.get("governance")
+            if isinstance(task.get("governance"), dict)
+            else None,
+            "steps": [
+                step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
+            ],
+            "step_count": int(trace_summary.get("step_count", 0) or 0),
+            "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
+            "rag_knowledge_base_ids": [
+                str(item)
+                for item in trace_summary.get("rag_knowledge_base_ids", [])
+                if isinstance(item, str)
+            ],
+            "rag_chunks": [
+                row for row in trace_summary.get("rag_chunks", []) if isinstance(row, dict)
+            ],
+        },
+    }
+
+
+def get_task_export_payload_summary(
+    task: dict,
+    message_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+) -> dict[str, object]:
+    export_summary = get_task_export_summary_from_task(task)
+    return {
+        "task": export_summary.get("task"),
+        "usage": export_summary.get("usage"),
+        "trace": export_summary.get("trace"),
+        "messages": [
+            {
+                "id": str(row.get("id", "")),
+                "role": str(row.get("role", "")),
+                "content": str(row.get("content", "")),
+                "created_at": str(row.get("created_at", "")),
+            }
+            for row in message_rows
+            if isinstance(row, dict)
         ],
-        "rag_chunks": [
-            row for row in trace_summary.get("rag_chunks", []) if isinstance(row, dict)
+    }
+
+
+def get_task_export_response_summary(
+    task: dict,
+    message_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+) -> dict[str, object]:
+    payload_summary = get_task_export_payload_summary(task, message_rows)
+    task_summary = (
+        payload_summary.get("task")
+        if isinstance(payload_summary.get("task"), dict)
+        else {}
+    )
+    trace_summary = (
+        payload_summary.get("trace")
+        if isinstance(payload_summary.get("trace"), dict)
+        else {}
+    )
+    trace_steps = [
+        step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
+    ]
+    return {
+        "task": {
+            "id": str(task_summary.get("id", "")),
+            "session_id": str(task_summary.get("session_id", "")),
+            "prompt": str(task_summary.get("prompt", "")),
+            "status": str(task_summary.get("status", "")),
+            "status_normalized": str(task_summary.get("status_normalized", "")),
+            "status_label": str(task_summary.get("status_label", "")),
+            "status_rank": int(task_summary.get("status_rank", 0) or 0),
+            "created_at": str(task_summary.get("created_at", "")),
+            "updated_at": str(task_summary.get("updated_at", "")),
+        },
+        "usage": payload_summary.get("usage"),
+        "messages": [
+            row for row in payload_summary.get("messages", []) if isinstance(row, dict)
         ],
+        "trace": {
+            "governance": dict(trace_summary.get("governance"))
+            if isinstance(trace_summary.get("governance"), dict)
+            else None,
+            "step_count": int(trace_summary.get("step_count", len(trace_steps)) or 0),
+            "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
+            "rag_knowledge_base_ids": [
+                str(item)
+                for item in trace_summary.get("rag_knowledge_base_ids", [])
+                if isinstance(item, str)
+            ],
+            "rag_chunks": [
+                row for row in trace_summary.get("rag_chunks", []) if isinstance(row, dict)
+            ],
+            "steps": trace_steps,
+        },
     }
 
 
@@ -1369,26 +1494,148 @@ def get_task_rows_session_export_summary(
         trace_summary = trace_summary_by_task_id.get(task_id, {})
         task_summaries.append(
             {
-                "task_id": task_id,
+                "task": {
+                    "id": task_id,
+                    "prompt": str(task_row.get("prompt", "")),
+                    **_get_task_status_summary_from_task(task_row),
+                    "created_at": str(task_row.get("created_at", "")),
+                    "updated_at": str(task_row.get("updated_at", "")),
+                },
                 "usage": get_task_usage_from_task(task_row),
-                "governance": task_row.get("governance")
-                if isinstance(task_row.get("governance"), dict)
-                else None,
-                "trace_step_count": int(trace_summary.get("trace_step_count", 0) or 0),
-                "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
-                "trace_preview": [
-                    row
-                    for row in trace_summary.get("trace_preview", [])
-                    if isinstance(row, dict)
-                ],
+                "trace": {
+                    "governance": task_row.get("governance")
+                    if isinstance(task_row.get("governance"), dict)
+                    else None,
+                    "step_count": int(trace_summary.get("trace_step_count", 0) or 0),
+                    "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
+                    "preview": [
+                        row
+                        for row in trace_summary.get("trace_preview", [])
+                        if isinstance(row, dict)
+                    ],
+                },
             }
         )
 
+    trace_step_count = int(export_summary.get("trace_step_count", 0) or 0)
+    rag_hit_count = int(export_summary.get("rag_hit_count", 0) or 0)
     return {
         "tasks": task_summaries,
-        "trace_step_count": int(export_summary.get("trace_step_count", 0) or 0),
-        "rag_hit_count": int(export_summary.get("rag_hit_count", 0) or 0),
+        "stats": {
+            "task_count": len(task_summaries),
+            "trace_step_count": trace_step_count,
+            "rag_hit_count": rag_hit_count,
+        },
         "governance": export_summary.get("governance"),
+    }
+
+
+def get_session_export_payload_summary(
+    *,
+    usage_summary: dict[str, object],
+    task_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+    message_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+    preview_limit: int = 3,
+) -> dict[str, object]:
+    export_summary = get_task_rows_session_export_summary(
+        task_rows,
+        preview_limit=preview_limit,
+    )
+    task_summaries = [
+        row for row in export_summary.get("tasks", []) if isinstance(row, dict)
+    ]
+    stats_summary = (
+        export_summary.get("stats") if isinstance(export_summary.get("stats"), dict) else {}
+    )
+    message_summaries = [
+        {
+            "id": str(row.get("id", "")),
+            "task_id": str(row.get("task_id", ""))
+            if row.get("task_id") is not None
+            else None,
+            "role": str(row.get("role", "")),
+            "content": str(row.get("content", "")),
+            "created_at": str(row.get("created_at", "")),
+        }
+        for row in message_rows
+        if isinstance(row, dict)
+    ]
+    return {
+        "usage_summary": usage_summary,
+        "tasks": task_summaries,
+        "stats": {
+            "task_count": int(stats_summary.get("task_count", len(task_summaries)) or 0),
+            "message_count": len(message_summaries),
+            "trace_step_count": int(stats_summary.get("trace_step_count", 0) or 0),
+            "rag_hit_count": int(stats_summary.get("rag_hit_count", 0) or 0),
+        },
+        "governance": export_summary.get("governance"),
+        "messages": message_summaries,
+    }
+
+
+def get_session_export_response_summary(
+    *,
+    usage_summary: dict[str, object],
+    task_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+    message_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+    preview_limit: int = 3,
+) -> dict[str, object]:
+    payload_summary = get_session_export_payload_summary(
+        usage_summary=usage_summary,
+        task_rows=task_rows,
+        message_rows=message_rows,
+        preview_limit=preview_limit,
+    )
+    task_summaries: list[dict[str, object]] = []
+    for row in payload_summary.get("tasks", []):
+        if not isinstance(row, dict):
+            continue
+        task_summary = row.get("task") if isinstance(row.get("task"), dict) else {}
+        trace_summary = row.get("trace") if isinstance(row.get("trace"), dict) else {}
+        task_summaries.append(
+            {
+                "id": str(task_summary.get("id", "")),
+                "prompt": str(task_summary.get("prompt", "")),
+                "status": str(task_summary.get("status", "")),
+                "status_normalized": str(task_summary.get("status_normalized", "")),
+                "status_label": str(task_summary.get("status_label", "")),
+                "status_rank": int(task_summary.get("status_rank", 0) or 0),
+                "created_at": str(task_summary.get("created_at", "")),
+                "updated_at": str(task_summary.get("updated_at", "")),
+                "usage": row.get("usage"),
+                "trace_step_count": int(trace_summary.get("step_count", 0) or 0),
+                "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
+                "trace_preview": [
+                    item
+                    for item in trace_summary.get("preview", [])
+                    if isinstance(item, dict)
+                ],
+                "governance": dict(trace_summary.get("governance"))
+                if isinstance(trace_summary.get("governance"), dict)
+                else None,
+            }
+        )
+    stats_summary = (
+        payload_summary.get("stats")
+        if isinstance(payload_summary.get("stats"), dict)
+        else {}
+    )
+    return {
+        "usage_summary": payload_summary.get("usage_summary"),
+        "tasks": task_summaries,
+        "stats": {
+            "task_count": int(stats_summary.get("task_count", len(task_summaries)) or 0),
+            "message_count": int(stats_summary.get("message_count", 0) or 0),
+            "trace_step_count": int(stats_summary.get("trace_step_count", 0) or 0),
+            "rag_hit_count": int(stats_summary.get("rag_hit_count", 0) or 0),
+        },
+        "governance": dict(payload_summary.get("governance"))
+        if isinstance(payload_summary.get("governance"), dict)
+        else payload_summary.get("governance"),
+        "messages": [
+            row for row in payload_summary.get("messages", []) if isinstance(row, dict)
+        ],
     }
 
 
@@ -1662,4 +1909,61 @@ def get_tasks_usage_dashboard(
         "trend": trend,
         "by_session": by_session,
         "top_tasks": top_tasks_sorted,
+    }
+
+
+def get_tasks_usage_dashboard_response_summary(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "window_days": int(payload.get("window_days", 0) or 0),
+        "summary": payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
+        "trend": [
+            row for row in payload.get("trend", []) if isinstance(row, dict)
+        ],
+        "by_session": [
+            {
+                "session_id": str(row.get("session_id", "")),
+                "session_title": (
+                    row.get("session_title")
+                    if isinstance(row.get("session_title"), str)
+                    else None
+                ),
+                "tasks_with_usage": int(row.get("tasks_with_usage", 0) or 0),
+                "total_tokens": int(row.get("total_tokens", 0) or 0),
+                "cost_estimate": float(row.get("cost_estimate", 0.0) or 0.0),
+                "last_task_at": (
+                    str(row.get("last_task_at"))
+                    if isinstance(row.get("last_task_at"), str)
+                    else None
+                ),
+                "governance": dict(row.get("governance"))
+                if isinstance(row.get("governance"), dict)
+                else row.get("governance"),
+            }
+            for row in payload.get("by_session", [])
+            if isinstance(row, dict)
+        ],
+        "top_tasks": [
+            {
+                "task_id": str(row.get("task_id", "")),
+                "session_id": str(row.get("session_id", "")),
+                "session_title": (
+                    row.get("session_title")
+                    if isinstance(row.get("session_title"), str)
+                    else None
+                ),
+                "prompt_excerpt": str(row.get("prompt_excerpt", "")),
+                "total_tokens": int(row.get("total_tokens", 0) or 0),
+                "cost_estimate": float(row.get("cost_estimate", 0.0) or 0.0),
+                "created_at": str(row.get("created_at", "")),
+                "updated_at": str(row.get("updated_at", "")),
+                "source_kind": str(row.get("source_kind", "legacy") or "legacy"),
+                "governance": dict(row.get("governance"))
+                if isinstance(row.get("governance"), dict)
+                else row.get("governance"),
+            }
+            for row in payload.get("top_tasks", [])
+            if isinstance(row, dict)
+        ],
     }

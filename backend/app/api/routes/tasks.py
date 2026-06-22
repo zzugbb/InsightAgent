@@ -54,11 +54,6 @@ def _parse_last_event_id(value: str | None) -> int | None:
         return None
     return parsed if parsed >= 0 else None
 
-
-def _plain_clone_dict(value: object) -> object:
-    return dict(value) if isinstance(value, dict) else value
-
-
 async def stream_running_task_reconnect(
     task_id: str,
     user_id: str,
@@ -250,18 +245,6 @@ class TaskTraceDeltaResponse(BaseModel):
     lag_seq: int = Field(description="当前游标到最新 seq 的差值")
     dropped: bool = Field(description="是否发生服务端丢步（当前实现恒为 false）")
 
-
-def _with_status_meta(item: dict) -> dict:
-    status = str(item.get("status", ""))
-    return {
-        **item,
-        "governance": _plain_clone_dict(item.get("governance")),
-        "status_normalized": normalize_task_status(status),
-        "status_label": task_status_label(status),
-        "status_rank": task_status_rank(status),
-    }
-
-
 class TaskListResponse(BaseModel):
     items: list[TaskResponse]
     total: int = Field(description="符合条件的任务总数（全局或指定 session_id）")
@@ -403,46 +386,61 @@ def _build_task_export_filename(task: dict, ext: str) -> str:
 
 def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonResponse:
     task_id = str(task["id"])
-    export_summary = chat_persistence_service.get_task_export_summary_from_task(task)
-    parsed_steps = [
-        step
-        for step in export_summary.get("steps", [])
-        if isinstance(step, TraceStep)
-    ]
-    step_count = int(export_summary.get("step_count", len(parsed_steps)) or 0)
-    rag_hit_count = int(export_summary.get("rag_hit_count", 0) or 0)
-    rag_knowledge_base_ids = [
-        str(item)
-        for item in export_summary.get("rag_knowledge_base_ids", [])
-        if isinstance(item, str)
-    ]
-    rag_chunks = [
-        TaskExportRagChunk(**row)
-        for row in export_summary.get("rag_chunks", [])
-        if isinstance(row, dict)
-    ]
-    governance_dict = export_summary.get("governance")
+    message_rows = get_task_messages(task_id, user_id)
+    export_summary = chat_persistence_service.get_task_export_response_summary(
+        task,
+        message_rows,
+    )
+    task_summary = (
+        export_summary.get("task") if isinstance(export_summary.get("task"), dict) else {}
+    )
+    trace_summary = (
+        export_summary.get("trace")
+        if isinstance(export_summary.get("trace"), dict)
+        else {}
+    )
     return TaskExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
-        task=TaskExportTask(**_with_status_meta(task)),
+        task=TaskExportTask(
+            id=str(task_summary.get("id", "")),
+            session_id=str(task_summary.get("session_id", "")),
+            prompt=str(task_summary.get("prompt", "")),
+            status=str(task_summary.get("status", "")),
+            status_normalized=str(task_summary.get("status_normalized", "")),
+            status_label=str(task_summary.get("status_label", "")),
+            status_rank=int(task_summary.get("status_rank", 0) or 0),
+            created_at=str(task_summary.get("created_at", "")),
+            updated_at=str(task_summary.get("updated_at", "")),
+        ),
         usage=export_summary.get("usage"),
         messages=[
             TaskExportMessage(
-                id=row["id"],
-                role=row["role"],
-                content=row["content"],
-                created_at=row["created_at"],
+                id=str(row.get("id", "")),
+                role=str(row.get("role", "")),
+                content=str(row.get("content", "")),
+                created_at=str(row.get("created_at", "")),
             )
-            for row in get_task_messages(task_id, user_id)
+            for row in export_summary.get("messages", [])
+            if isinstance(row, dict)
         ],
         trace=TaskExportTrace(
-            governance=_plain_clone_dict(governance_dict),
-            step_count=step_count,
-            rag_hit_count=rag_hit_count,
-            rag_knowledge_base_ids=rag_knowledge_base_ids,
-            rag_chunks=rag_chunks,
-            steps=parsed_steps,
+            governance=trace_summary.get("governance"),
+            step_count=int(trace_summary.get("step_count", 0) or 0),
+            rag_hit_count=int(trace_summary.get("rag_hit_count", 0) or 0),
+            rag_knowledge_base_ids=[
+                str(item)
+                for item in trace_summary.get("rag_knowledge_base_ids", [])
+                if isinstance(item, str)
+            ],
+            rag_chunks=[
+                TaskExportRagChunk(**row)
+                for row in trace_summary.get("rag_chunks", [])
+                if isinstance(row, dict)
+            ],
+            steps=[
+                step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
+            ],
         ),
     )
 
@@ -680,7 +678,11 @@ def get_tasks(
     n = len(tasks)
     items: list[TaskResponse] = []
     for task in tasks:
-        items.append(TaskResponse(**_with_status_meta(task)))
+        items.append(
+            TaskResponse(
+                **chat_persistence_service.get_task_response_summary_from_task(task)
+            )
+        )
     return TaskListResponse(
         items=items,
         total=total,
@@ -764,48 +766,20 @@ def get_tasks_usage_dashboard_route(
         top_sessions=top_sessions,
         top_tasks=top_tasks,
     )
+    response_summary = chat_persistence_service.get_tasks_usage_dashboard_response_summary(
+        payload
+    )
     return TaskUsageDashboardResponse(
-        window_days=int(payload["window_days"]),
-        summary=TaskUsageSummaryResponse(**payload["summary"]),
-        trend=[TaskUsageTrendPoint(**row) for row in payload["trend"]],
+        window_days=int(response_summary["window_days"]),
+        summary=TaskUsageSummaryResponse(**response_summary["summary"]),
+        trend=[TaskUsageTrendPoint(**row) for row in response_summary["trend"]],
         by_session=[
-            TaskUsageBySessionRow(
-                session_id=str(row.get("session_id", "")),
-                session_title=(
-                    row.get("session_title")
-                    if isinstance(row.get("session_title"), str)
-                    else None
-                ),
-                tasks_with_usage=int(row.get("tasks_with_usage", 0) or 0),
-                total_tokens=int(row.get("total_tokens", 0) or 0),
-                cost_estimate=float(row.get("cost_estimate", 0.0) or 0.0),
-                last_task_at=(
-                    str(row.get("last_task_at"))
-                    if isinstance(row.get("last_task_at"), str)
-                    else None
-                ),
-                governance=_plain_clone_dict(row.get("governance")),
-            )
-            for row in payload["by_session"]
+            TaskUsageBySessionRow(**row)
+            for row in response_summary["by_session"]
         ],
         top_tasks=[
-            TaskUsageTopTaskRow(
-                task_id=str(row.get("task_id", "")),
-                session_id=str(row.get("session_id", "")),
-                session_title=(
-                    row.get("session_title")
-                    if isinstance(row.get("session_title"), str)
-                    else None
-                ),
-                prompt_excerpt=str(row.get("prompt_excerpt", "")),
-                total_tokens=int(row.get("total_tokens", 0) or 0),
-                cost_estimate=float(row.get("cost_estimate", 0.0) or 0.0),
-                created_at=str(row.get("created_at", "")),
-                updated_at=str(row.get("updated_at", "")),
-                source_kind=str(row.get("source_kind", "legacy") or "legacy"),
-                governance=_plain_clone_dict(row.get("governance")),
-            )
-            for row in payload["top_tasks"]
+            TaskUsageTopTaskRow(**row)
+            for row in response_summary["top_tasks"]
         ],
     )
 
@@ -818,7 +792,9 @@ def get_task_detail(
     task = get_task(task_id, str(current_user["id"]))
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return TaskResponse(**_with_status_meta(task))
+    return TaskResponse(
+        **chat_persistence_service.get_task_response_summary_from_task(task)
+    )
 
 
 @router.post("/{task_id}/cancel", response_model=TaskCancelResponse)
@@ -920,17 +896,16 @@ def get_task_trace_detail(
     task = get_task(task_id, user_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    status = str(task["status"])
-    trace_summary = chat_persistence_service.get_task_trace_export_summary_from_task(task)
+    trace_summary = chat_persistence_service.get_task_trace_response_summary_from_task(task)
     return TaskTraceResponse(
         task_id=task_id,
         steps=[
             step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
         ],
-        status=status,
-        status_normalized=normalize_task_status(status),
-        status_label=task_status_label(status),
-        status_rank=task_status_rank(status),
+        status=str(trace_summary.get("status", "")),
+        status_normalized=str(trace_summary.get("status_normalized", "")),
+        status_label=str(trace_summary.get("status_label", "")),
+        status_rank=int(trace_summary.get("status_rank", 0) or 0),
     )
 
 

@@ -26,19 +26,9 @@ from app.services.chat_persistence_service import (
     list_sessions,
     update_session_title,
 )
-from app.services.task_status_service import (
-    normalize_task_status,
-    task_status_label,
-    task_status_rank,
-)
 
 
 router = APIRouter()
-
-
-def _plain_clone_dict(value: object) -> object:
-    return dict(value) if isinstance(value, dict) else value
-
 
 class SessionResponse(BaseModel):
     id: str
@@ -228,14 +218,6 @@ def _normalize_excerpt(text: str, limit: int = 140) -> str:
     return f"{normalized[:limit]}..."
 
 
-def _task_status_meta(task: dict) -> dict[str, object]:
-    status = str(task.get("status", ""))
-    return {
-        "status_normalized": normalize_task_status(status),
-        "status_label": task_status_label(status),
-        "status_rank": task_status_rank(status),
-    }
-
 def _append_fenced_block(lines: list[str], content: str, language: str = "text") -> None:
     text = content.rstrip("\n")
     fence = "```"
@@ -358,71 +340,76 @@ def _build_session_export_payload(
     user_id: str,
 ) -> SessionExportJsonResponse:
     session_id = str(session["id"])
-    usage_summary = SessionUsageSummaryResponse(
-        **get_session_usage_summary(session_id, user_id=user_id),
-    )
+    usage_summary_payload = get_session_usage_summary(session_id, user_id=user_id)
     message_rows = get_session_messages(session_id, user_id)
     task_rows = get_session_tasks(session_id, user_id)
-    export_summary = chat_persistence_service.get_task_rows_session_export_summary(
-        task_rows,
+    export_summary = chat_persistence_service.get_session_export_response_summary(
+        usage_summary=usage_summary_payload,
+        task_rows=task_rows,
+        message_rows=message_rows,
         preview_limit=3,
     )
-    trace_summary_by_task_id = {
-        str(row.get("task_id", "")): row
-        for row in export_summary.get("tasks", [])
-        if isinstance(row, dict)
-    }
+    usage_summary = SessionUsageSummaryResponse(
+        **(
+            export_summary.get("usage_summary")
+            if isinstance(export_summary.get("usage_summary"), dict)
+            else {}
+        ),
+    )
     task_summaries: list[SessionExportTaskSummary] = []
-    for task_row in task_rows:
-        trace_summary = trace_summary_by_task_id.get(str(task_row.get("id", "")), {})
-        rag_hit_count = int(trace_summary.get("rag_hit_count", 0) or 0)
-        preview_steps = [
-            SessionExportTracePreviewStep(**row)
-            for row in trace_summary.get("trace_preview", [])
-            if isinstance(row, dict)
-        ]
-
-        status_meta = _task_status_meta(task_row)
-        summary = SessionExportTaskSummary(
-            id=str(task_row["id"]),
-            prompt=str(task_row.get("prompt", "")),
-            status=str(task_row.get("status", "")),
-            status_normalized=str(status_meta["status_normalized"]),
-            status_label=str(status_meta["status_label"]),
-            status_rank=int(status_meta["status_rank"]),
-            created_at=str(task_row.get("created_at", "")),
-            updated_at=str(task_row.get("updated_at", "")),
-            usage=trace_summary.get("usage"),
-            trace_step_count=int(trace_summary.get("trace_step_count", 0) or 0),
-            rag_hit_count=rag_hit_count,
-            trace_preview=preview_steps,
-            governance=_plain_clone_dict(trace_summary.get("governance")),
+    for row in export_summary.get("tasks", []):
+        if not isinstance(row, dict):
+            continue
+        task_summaries.append(
+            SessionExportTaskSummary(
+                id=str(row.get("id", "")),
+                prompt=str(row.get("prompt", "")),
+                status=str(row.get("status", "")),
+                status_normalized=str(row.get("status_normalized", "")),
+                status_label=str(row.get("status_label", "")),
+                status_rank=int(row.get("status_rank", 0) or 0),
+                created_at=str(row.get("created_at", "")),
+                updated_at=str(row.get("updated_at", "")),
+                usage=row.get("usage"),
+                trace_step_count=int(row.get("trace_step_count", 0) or 0),
+                rag_hit_count=int(row.get("rag_hit_count", 0) or 0),
+                trace_preview=[
+                    SessionExportTracePreviewStep(**item)
+                    for item in row.get("trace_preview", [])
+                    if isinstance(item, dict)
+                ],
+                governance=row.get("governance"),
+            )
         )
-        task_summaries.append(summary)
-    governance_summary = export_summary.get("governance")
-    governance = _plain_clone_dict(governance_summary)
-
+    stats_summary = (
+        export_summary.get("stats") if isinstance(export_summary.get("stats"), dict) else {}
+    )
     return SessionExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
         session=SessionResponse(**session),
         usage_summary=usage_summary,
-        governance=governance,
+        governance=export_summary.get("governance"),
         stats=SessionExportStats(
-            task_count=len(task_rows),
-            message_count=len(message_rows),
-            trace_step_count=int(export_summary.get("trace_step_count", 0) or 0),
-            rag_hit_count=int(export_summary.get("rag_hit_count", 0) or 0),
+            task_count=int(stats_summary.get("task_count", 0) or 0),
+            message_count=int(stats_summary.get("message_count", 0) or 0),
+            trace_step_count=int(stats_summary.get("trace_step_count", 0) or 0),
+            rag_hit_count=int(stats_summary.get("rag_hit_count", 0) or 0),
         ),
         messages=[
             SessionExportMessage(
-                id=row["id"],
-                task_id=row["task_id"],
-                role=row["role"],
-                content=row["content"],
-                created_at=row["created_at"],
+                id=str(row.get("id", "")),
+                task_id=(
+                    str(row.get("task_id", ""))
+                    if row.get("task_id") is not None
+                    else None
+                ),
+                role=str(row.get("role", "")),
+                content=str(row.get("content", "")),
+                created_at=str(row.get("created_at", "")),
             )
-            for row in message_rows
+            for row in export_summary.get("messages", [])
+            if isinstance(row, dict)
         ],
         tasks=task_summaries,
     )
