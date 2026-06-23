@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import {
+  API_BASE_URL,
   ensureWorkbenchReady,
   ingestKnowledgeSnippet,
   registerViaApi,
@@ -25,6 +26,10 @@ async function openSettingsMenu(page: Parameters<typeof ensureWorkbenchReady>[0]
   await expect(page.getByTestId("sidebar-settings-menu-popover")).toBeVisible();
 }
 
+function exactText(value: string): RegExp {
+  return new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+}
+
 async function selectVisibleAntdOption(
   page: Page,
   args: {
@@ -33,11 +38,24 @@ async function selectVisibleAntdOption(
   },
 ): Promise<void> {
   await page.getByTestId(args.triggerTestId).click();
-  const dropdown = page.locator(".ant-select-dropdown:visible").last();
+  const dropdown = page
+    .locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")
+    .last();
   await expect(dropdown).toBeVisible({ timeout: 10_000 });
-  const option = dropdown.getByRole("option", { name: args.value, exact: true });
-  await expect(option).toBeVisible({ timeout: 10_000 });
-  await option.click();
+  const visibleOption = dropdown
+    .locator(".ant-select-item-option")
+    .filter({ hasText: exactText(args.value) })
+    .last();
+  if (await visibleOption.isVisible().catch(() => false)) {
+    await visibleOption.click();
+    return;
+  }
+
+  const visibleOptionText = dropdown.getByText(args.value, {
+    exact: true,
+  }).last();
+  await expect(visibleOptionText).toBeVisible({ timeout: 10_000 });
+  await visibleOptionText.click();
 }
 
 async function closeModelSettingsModal(page: Page): Promise<void> {
@@ -129,10 +147,13 @@ async function openTaskDetailFromTaskCenter(
   page: Page,
   taskId: string,
 ): Promise<Page> {
+  const taskCenterShell = page.getByTestId("task-center-shell");
   const openTaskCenter = page.getByTestId("chat-open-task-center");
-  await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
-  await openTaskCenter.click();
-  await expect(page.getByTestId("task-center-shell")).toBeVisible({
+  if (!(await taskCenterShell.isVisible().catch(() => false))) {
+    await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
+    await openTaskCenter.click();
+  }
+  await expect(taskCenterShell).toBeVisible({
     timeout: 20_000,
   });
   const taskKeywordFilter = page.getByTestId("task-center-keyword-filter");

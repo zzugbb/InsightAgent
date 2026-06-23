@@ -17,6 +17,13 @@ class StoredSettings(BaseModel):
     api_key: str | None = None
     tool_registry_profile: str | None = None
     tool_registry_provider_source: str | None = None
+    tool_registry_overrides_json: str | None = None
+    tool_registry_extra_tools_json: str | None = None
+    tool_registry_loaders_json: str | None = None
+    tool_registry_loader_factories_json: str | None = None
+    tool_registry_providers_json: str | None = None
+    tool_registry_provider_factories_json: str | None = None
+    tool_registry_provider_sources_json: str | None = None
 
 
 def _now_iso() -> str:
@@ -33,6 +40,13 @@ def _default_settings() -> StoredSettings:
         api_key=settings.api_key,
         tool_registry_profile=settings.tool_registry_profile,
         tool_registry_provider_source=settings.tool_registry_provider_source,
+        tool_registry_overrides_json=settings.tool_registry_overrides_json,
+        tool_registry_extra_tools_json=settings.tool_registry_extra_tools_json,
+        tool_registry_loaders_json=settings.tool_registry_loaders_json,
+        tool_registry_loader_factories_json=settings.tool_registry_loader_factories_json,
+        tool_registry_providers_json=settings.tool_registry_providers_json,
+        tool_registry_provider_factories_json=settings.tool_registry_provider_factories_json,
+        tool_registry_provider_sources_json=settings.tool_registry_provider_sources_json,
     )
 
 
@@ -52,14 +66,16 @@ def get_stored_settings(user_id: str) -> StoredSettings:
     if row is None:
         return defaults
 
-    return StoredSettings(
-        mode=row["mode"],
-        provider=row["provider"],
-        model=row["model"],
-        base_url=row["base_url"],
-        api_key=decrypt_secret(row["api_key_enc"]),
-        tool_registry_profile=row["tool_registry_profile"],
-        tool_registry_provider_source=row["tool_registry_provider_source"],
+    return defaults.model_copy(
+        update={
+            "mode": row["mode"],
+            "provider": row["provider"],
+            "model": row["model"],
+            "base_url": row["base_url"],
+            "api_key": decrypt_secret(row["api_key_enc"]),
+            "tool_registry_profile": row["tool_registry_profile"],
+            "tool_registry_provider_source": row["tool_registry_provider_source"],
+        }
     )
 
 

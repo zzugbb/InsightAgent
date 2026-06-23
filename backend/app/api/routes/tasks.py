@@ -32,11 +32,7 @@ from app.services.chat_persistence_service import (
     update_task_status,
     list_tasks,
 )
-from app.services.task_status_service import (
-    normalize_task_status,
-    task_status_label,
-    task_status_rank,
-)
+from app.services.task_status_service import normalize_task_status
 
 
 router = APIRouter()
@@ -391,57 +387,13 @@ def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonRespon
         task,
         message_rows,
     )
-    task_summary = (
-        export_summary.get("task") if isinstance(export_summary.get("task"), dict) else {}
-    )
-    trace_summary = (
-        export_summary.get("trace")
-        if isinstance(export_summary.get("trace"), dict)
-        else {}
-    )
     return TaskExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
-        task=TaskExportTask(
-            id=str(task_summary.get("id", "")),
-            session_id=str(task_summary.get("session_id", "")),
-            prompt=str(task_summary.get("prompt", "")),
-            status=str(task_summary.get("status", "")),
-            status_normalized=str(task_summary.get("status_normalized", "")),
-            status_label=str(task_summary.get("status_label", "")),
-            status_rank=int(task_summary.get("status_rank", 0) or 0),
-            created_at=str(task_summary.get("created_at", "")),
-            updated_at=str(task_summary.get("updated_at", "")),
-        ),
+        task=export_summary.get("task", {}),
         usage=export_summary.get("usage"),
-        messages=[
-            TaskExportMessage(
-                id=str(row.get("id", "")),
-                role=str(row.get("role", "")),
-                content=str(row.get("content", "")),
-                created_at=str(row.get("created_at", "")),
-            )
-            for row in export_summary.get("messages", [])
-            if isinstance(row, dict)
-        ],
-        trace=TaskExportTrace(
-            governance=trace_summary.get("governance"),
-            step_count=int(trace_summary.get("step_count", 0) or 0),
-            rag_hit_count=int(trace_summary.get("rag_hit_count", 0) or 0),
-            rag_knowledge_base_ids=[
-                str(item)
-                for item in trace_summary.get("rag_knowledge_base_ids", [])
-                if isinstance(item, str)
-            ],
-            rag_chunks=[
-                TaskExportRagChunk(**row)
-                for row in trace_summary.get("rag_chunks", [])
-                if isinstance(row, dict)
-            ],
-            steps=[
-                step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
-            ],
-        ),
+        messages=export_summary.get("messages", []),
+        trace=export_summary.get("trace", {}),
     )
 
 
@@ -600,14 +552,12 @@ def create_task_entry(
             "prompt_length": len(payload.user_input.strip()),
         },
     )
-    return TaskCreateResponse(
+    response_summary = chat_persistence_service.get_task_create_response_summary(
         task_id=task_id,
         session_id=resolved_session_id,
         status="pending",
-        status_normalized=normalize_task_status("pending"),
-        status_label=task_status_label("pending"),
-        status_rank=task_status_rank("pending"),
     )
+    return TaskCreateResponse(**response_summary)
 
 
 @router.get("", response_model=TaskListResponse)
@@ -676,15 +626,11 @@ def get_tasks(
             tool_registry_provider_source_filter=tool_registry_provider_source,
         )
     n = len(tasks)
-    items: list[TaskResponse] = []
-    for task in tasks:
-        items.append(
-            TaskResponse(
-                **chat_persistence_service.get_task_response_summary_from_task(task)
-            )
-        )
     return TaskListResponse(
-        items=items,
+        items=[
+            chat_persistence_service.get_task_response_summary_from_task(task)
+            for task in tasks
+        ],
         total=total,
         limit=limit,
         offset=offset,
@@ -769,19 +715,7 @@ def get_tasks_usage_dashboard_route(
     response_summary = chat_persistence_service.get_tasks_usage_dashboard_response_summary(
         payload
     )
-    return TaskUsageDashboardResponse(
-        window_days=int(response_summary["window_days"]),
-        summary=TaskUsageSummaryResponse(**response_summary["summary"]),
-        trend=[TaskUsageTrendPoint(**row) for row in response_summary["trend"]],
-        by_session=[
-            TaskUsageBySessionRow(**row)
-            for row in response_summary["by_session"]
-        ],
-        top_tasks=[
-            TaskUsageTopTaskRow(**row)
-            for row in response_summary["top_tasks"]
-        ],
-    )
+    return TaskUsageDashboardResponse(**response_summary)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -815,7 +749,13 @@ def cancel_task(
         update_task_status(task_id=task_id, status="cancelled", user_id=user_id)
         task = get_task(task_id, user_id) or {**task, "status": "cancelled"}
 
-    current_status = str(task.get("status", ""))
+    response_summary = (
+        chat_persistence_service.get_task_cancel_response_summary_from_task(
+            task,
+            previous_status=previous_status,
+            already_terminal=already_terminal,
+        )
+    )
     safe_record_audit_event(
         user_id=user_id,
         event_type="task_cancel",
@@ -823,19 +763,11 @@ def cancel_task(
             "task_id": task_id,
             "session_id": str(task.get("session_id", "")) or None,
             "previous_status": previous_status,
-            "status": current_status,
+            "status": str(response_summary.get("status", "")),
             "already_terminal": already_terminal,
         },
     )
-    return TaskCancelResponse(
-        task_id=task_id,
-        previous_status=previous_status,
-        status=current_status,
-        status_normalized=normalize_task_status(current_status),
-        status_label=task_status_label(current_status),
-        status_rank=task_status_rank(current_status),
-        already_terminal=already_terminal,
-    )
+    return TaskCancelResponse(**response_summary)
 
 
 @router.get("/{task_id}/export/json", response_model=TaskExportJsonResponse)
@@ -897,16 +829,7 @@ def get_task_trace_detail(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     trace_summary = chat_persistence_service.get_task_trace_response_summary_from_task(task)
-    return TaskTraceResponse(
-        task_id=task_id,
-        steps=[
-            step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
-        ],
-        status=str(trace_summary.get("status", "")),
-        status_normalized=str(trace_summary.get("status_normalized", "")),
-        status_label=str(trace_summary.get("status_label", "")),
-        status_rank=int(trace_summary.get("status_rank", 0) or 0),
-    )
+    return TaskTraceResponse(task_id=task_id, **trace_summary)
 
 
 @router.get("/{task_id}/trace/delta", response_model=TaskTraceDeltaResponse)
@@ -925,22 +848,15 @@ def get_task_trace_delta_detail(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    parsed_steps, next_cursor, has_more, latest_seq, _latest_step_id = (
-        chat_persistence_service.get_task_trace_delta_snapshot_from_task(
-            task,
-            after_seq=after_seq,
-            limit=limit,
-        )
+    delta_summary = chat_persistence_service.get_task_trace_delta_response_summary_from_task(
+        task,
+        after_seq=after_seq,
+        limit=limit,
     )
-    lag_seq = max(0, latest_seq - next_cursor)
     return TaskTraceDeltaResponse(
         task_id=task_id,
-        steps=parsed_steps,
-        next_cursor=next_cursor,
-        has_more=has_more,
         server_time=datetime.now().isoformat(),
-        lag_seq=lag_seq,
-        dropped=False,
+        **delta_summary,
     )
 
 

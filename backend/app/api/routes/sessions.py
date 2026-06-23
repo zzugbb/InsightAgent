@@ -349,69 +349,15 @@ def _build_session_export_payload(
         message_rows=message_rows,
         preview_limit=3,
     )
-    usage_summary = SessionUsageSummaryResponse(
-        **(
-            export_summary.get("usage_summary")
-            if isinstance(export_summary.get("usage_summary"), dict)
-            else {}
-        ),
-    )
-    task_summaries: list[SessionExportTaskSummary] = []
-    for row in export_summary.get("tasks", []):
-        if not isinstance(row, dict):
-            continue
-        task_summaries.append(
-            SessionExportTaskSummary(
-                id=str(row.get("id", "")),
-                prompt=str(row.get("prompt", "")),
-                status=str(row.get("status", "")),
-                status_normalized=str(row.get("status_normalized", "")),
-                status_label=str(row.get("status_label", "")),
-                status_rank=int(row.get("status_rank", 0) or 0),
-                created_at=str(row.get("created_at", "")),
-                updated_at=str(row.get("updated_at", "")),
-                usage=row.get("usage"),
-                trace_step_count=int(row.get("trace_step_count", 0) or 0),
-                rag_hit_count=int(row.get("rag_hit_count", 0) or 0),
-                trace_preview=[
-                    SessionExportTracePreviewStep(**item)
-                    for item in row.get("trace_preview", [])
-                    if isinstance(item, dict)
-                ],
-                governance=row.get("governance"),
-            )
-        )
-    stats_summary = (
-        export_summary.get("stats") if isinstance(export_summary.get("stats"), dict) else {}
-    )
     return SessionExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
-        session=SessionResponse(**session),
-        usage_summary=usage_summary,
+        session=session,
+        usage_summary=export_summary.get("usage_summary"),
         governance=export_summary.get("governance"),
-        stats=SessionExportStats(
-            task_count=int(stats_summary.get("task_count", 0) or 0),
-            message_count=int(stats_summary.get("message_count", 0) or 0),
-            trace_step_count=int(stats_summary.get("trace_step_count", 0) or 0),
-            rag_hit_count=int(stats_summary.get("rag_hit_count", 0) or 0),
-        ),
-        messages=[
-            SessionExportMessage(
-                id=str(row.get("id", "")),
-                task_id=(
-                    str(row.get("task_id", ""))
-                    if row.get("task_id") is not None
-                    else None
-                ),
-                role=str(row.get("role", "")),
-                content=str(row.get("content", "")),
-                created_at=str(row.get("created_at", "")),
-            )
-            for row in export_summary.get("messages", [])
-            if isinstance(row, dict)
-        ],
-        tasks=task_summaries,
+        stats=export_summary.get("stats"),
+        messages=export_summary.get("messages", []),
+        tasks=export_summary.get("tasks", []),
     )
 
 
@@ -440,7 +386,7 @@ def get_sessions(
     total = count_sessions(user_id=user_id)
     n = len(sessions)
     return SessionListResponse(
-        items=[SessionResponse(**session) for session in sessions],
+        items=sessions,
         total=total,
         limit=limit,
         offset=offset,
@@ -550,8 +496,8 @@ def get_session_messages_detail(
         raise HTTPException(status_code=404, detail="Session not found")
     messages = get_session_messages(session_id, user_id)
     return SessionMessagesResponse(
-        session=SessionResponse(**session),
-        messages=[MessageResponse(**message) for message in messages],
+        session=session,
+        messages=messages,
     )
 
 

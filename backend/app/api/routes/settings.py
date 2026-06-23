@@ -163,9 +163,7 @@ def _build_tool_registry_options_bundle(
     effective_settings: object,
 ) -> dict[str, object]:
     available_tool_registry_profiles = list(get_available_tool_registry_profile_names())
-    available_tool_registry_profile_details: list[
-        ToolRegistryProfileOptionResponse
-    ] = []
+    available_tool_registry_profile_details: list[dict[str, object]] = []
     for profile_name in available_tool_registry_profiles:
         preview_fields = _build_tool_registry_preview_fields(
             effective_settings=_clone_settings_with_updates(
@@ -177,15 +175,27 @@ def _build_tool_registry_options_bundle(
         ordered_tool_names = _order_tool_names_for_display(
             list(preview_fields["enabled_tool_names"])
         )
+        preview_label_by_tool_name = dict(
+            zip(
+                list(preview_fields["enabled_tool_names"]),
+                list(preview_fields["enabled_tool_labels"]),
+                strict=False,
+            )
+        )
         available_tool_registry_profile_details.append(
-            ToolRegistryProfileOptionResponse(
-                name=profile_name,
-                enabled_tool_names=ordered_tool_names,
-                enabled_tool_labels=[
-                    get_tool_display_name(tool_name)
+            {
+                "name": profile_name,
+                "enabled_tool_names": ordered_tool_names,
+                "enabled_tool_labels": [
+                    str(
+                        preview_label_by_tool_name.get(
+                            tool_name,
+                            get_tool_display_name(tool_name),
+                        )
+                    )
                     for tool_name in ordered_tool_names
                 ],
-            )
+            }
         )
 
     named_sources = build_tool_registry_provider_sources_from_settings(
@@ -198,9 +208,7 @@ def _build_tool_registry_options_bundle(
     available_tool_registry_provider_sources.extend(
         name for name in sorted(named_sources) if name and name != "default"
     )
-    available_tool_registry_provider_source_details: list[
-        ToolRegistryProviderSourceOptionResponse
-    ] = []
+    available_tool_registry_provider_source_details: list[dict[str, object]] = []
     for source_name in available_tool_registry_provider_sources:
         if source_name == "default":
             preview_fields = _build_tool_registry_preview_fields(
@@ -210,12 +218,12 @@ def _build_tool_registry_options_bundle(
                 )
             )
             available_tool_registry_provider_source_details.append(
-                ToolRegistryProviderSourceOptionResponse(
-                    name="default",
-                    base_profile="default",
-                    enabled_tool_names=list(preview_fields["enabled_tool_names"]),
-                    enabled_tool_labels=list(preview_fields["enabled_tool_labels"]),
-                )
+                {
+                    "name": "default",
+                    "base_profile": "default",
+                    "enabled_tool_names": list(preview_fields["enabled_tool_names"]),
+                    "enabled_tool_labels": list(preview_fields["enabled_tool_labels"]),
+                }
             )
             continue
         provider = named_sources.get(source_name)
@@ -240,12 +248,12 @@ def _build_tool_registry_options_bundle(
             )
         )
         available_tool_registry_provider_source_details.append(
-            ToolRegistryProviderSourceOptionResponse(
-                name=source_name,
-                base_profile=base_profile,
-                enabled_tool_names=enabled_tool_names,
-                enabled_tool_labels=enabled_tool_labels,
-            )
+            {
+                "name": source_name,
+                "base_profile": base_profile,
+                "enabled_tool_names": enabled_tool_names,
+                "enabled_tool_labels": enabled_tool_labels,
+            }
         )
     return {
         "available_tool_registry_profiles": available_tool_registry_profiles,
@@ -272,15 +280,16 @@ def _apply_tool_registry_preview_to_validate_response(
     option_bundle = _build_tool_registry_options_bundle(
         effective_settings=effective_settings
     )
-    return result.model_copy(
-        update={
+    return SettingsValidateResponse(
+        **{
+            **result.model_dump(),
             **preview_fields,
-            "available_tool_registry_profile_details": (
-                option_bundle["available_tool_registry_profile_details"]
-            ),
-            "available_tool_registry_provider_source_details": (
-                option_bundle["available_tool_registry_provider_source_details"]
-            ),
+            "available_tool_registry_profile_details": option_bundle[
+                "available_tool_registry_profile_details"
+            ],
+            "available_tool_registry_provider_source_details": option_bundle[
+                "available_tool_registry_provider_source_details"
+            ],
         }
     )
 
@@ -384,6 +393,33 @@ def _resolve_effective_tool_registry_selection(
     )
 
 
+def _validate_tool_registry_selection(
+    *,
+    effective_settings: object,
+    tool_registry_profile: str,
+    tool_registry_provider_source: str,
+) -> None:
+    option_bundle = _build_tool_registry_options_bundle(
+        effective_settings=effective_settings
+    )
+    available_tool_registry_profiles = option_bundle[
+        "available_tool_registry_profiles"
+    ]
+    if tool_registry_profile not in available_tool_registry_profiles:
+        raise HTTPException(
+            status_code=422,
+            detail="tool_registry_profile is invalid",
+        )
+    available_tool_registry_provider_sources = option_bundle[
+        "available_tool_registry_provider_sources"
+    ]
+    if tool_registry_provider_source not in available_tool_registry_provider_sources:
+        raise HTTPException(
+            status_code=422,
+            detail="tool_registry_provider_source is invalid",
+        )
+
+
 def _build_settings_summary_response(
     *,
     settings: StoredSettings,
@@ -447,31 +483,19 @@ def update_settings(
     else:
         effective_api_key = payload.api_key or existing.api_key
         effective_base_url = payload.base_url
+    runtime_settings = get_settings()
     effective_tool_registry_profile, effective_tool_registry_provider_source = (
         _resolve_effective_tool_registry_selection(
             payload=payload,
             existing=existing,
+            runtime_settings=runtime_settings,
         )
     )
-    option_bundle = _build_tool_registry_options_bundle(
-        effective_settings=get_settings()
+    _validate_tool_registry_selection(
+        effective_settings=runtime_settings,
+        tool_registry_profile=effective_tool_registry_profile,
+        tool_registry_provider_source=effective_tool_registry_provider_source,
     )
-    available_tool_registry_profiles = option_bundle[
-        "available_tool_registry_profiles"
-    ]
-    if effective_tool_registry_profile not in available_tool_registry_profiles:
-        raise HTTPException(
-            status_code=422,
-            detail="tool_registry_profile is invalid",
-        )
-    available_tool_registry_provider_sources = option_bundle[
-        "available_tool_registry_provider_sources"
-    ]
-    if effective_tool_registry_provider_source not in available_tool_registry_provider_sources:
-        raise HTTPException(
-            status_code=422,
-            detail="tool_registry_provider_source is invalid",
-        )
     if payload.mode == "remote" and not effective_api_key:
         raise HTTPException(
             status_code=422,
@@ -520,10 +544,12 @@ def validate_settings(
     existing = get_stored_settings(user_id)
     effective_api_key = payload.api_key or existing.api_key
     effective_base_url = payload.base_url
+    runtime_settings = get_settings()
     effective_tool_registry_profile, effective_tool_registry_provider_source = (
         _resolve_effective_tool_registry_selection(
             payload=payload,
             existing=existing,
+            runtime_settings=runtime_settings,
         )
     )
     effective_runtime_settings = _merge_runtime_settings_for_summary(
@@ -555,6 +581,28 @@ def validate_settings(
             },
         )
         return result
+
+    try:
+        _validate_tool_registry_selection(
+            effective_settings=runtime_settings,
+            tool_registry_profile=effective_tool_registry_profile,
+            tool_registry_provider_source=effective_tool_registry_provider_source,
+        )
+    except HTTPException as exc:
+        return _audit_validate(
+            _apply_tool_registry_preview_to_validate_response(
+                result=SettingsValidateResponse(
+                    ok=False,
+                    mode=payload.mode,
+                    provider=payload.provider,
+                    model=payload.model,
+                    message="tool registry selection is invalid.",
+                    error=str(exc.detail),
+                    error_code="tool_registry_selection_invalid",
+                ),
+                effective_settings=effective_runtime_settings,
+            )
+        )
 
     if payload.mode == "remote" and not effective_api_key:
         return _audit_validate(

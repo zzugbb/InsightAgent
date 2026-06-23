@@ -873,9 +873,7 @@ def get_task_trace_preview_summary_from_task(
     preview_limit: int = 3,
 ) -> dict[str, object]:
     trace_summary = get_task_trace_export_summary_from_task(task)
-    trace_steps = [
-        step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
-    ]
+    trace_steps = _coerce_export_trace_steps(trace_summary.get("steps"))
     trace_step_count = int(trace_summary.get("step_count", len(trace_steps)) or 0)
     rag_hit_count = int(trace_summary.get("rag_hit_count", 0) or 0)
 
@@ -977,21 +975,40 @@ def _get_task_status_summary_from_task(task: dict) -> dict[str, object]:
 def get_task_trace_response_summary_from_task(task: dict) -> dict[str, object]:
     trace_summary = get_task_trace_export_summary_from_task(task)
     return {
-        "steps": [
-            step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
-        ],
+        "steps": _coerce_export_trace_steps(trace_summary.get("steps")),
         **_get_task_status_summary_from_task(task),
     }
 
 
+def get_task_trace_delta_response_summary_from_task(
+    task: dict,
+    *,
+    after_seq: int = 0,
+    limit: int = 200,
+) -> dict[str, object]:
+    parsed_steps, next_cursor, has_more, latest_seq, _latest_step_id = (
+        get_task_trace_delta_snapshot_from_task(
+            task,
+            after_seq=after_seq,
+            limit=limit,
+        )
+    )
+    return {
+        "steps": parsed_steps,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+        "lag_seq": max(0, latest_seq - next_cursor),
+        "dropped": False,
+    }
+
+
 def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
-    governance = task.get("governance")
     return {
         "id": str(task.get("id", "")),
         "session_id": str(task.get("session_id", "")),
         "prompt": str(task.get("prompt", "")),
         **_get_task_status_summary_from_task(task),
-        "governance": dict(governance) if isinstance(governance, dict) else governance,
+        "governance": _coerce_payload_mapping_or_original(task.get("governance")),
         "trace_json": task.get("trace_json"),
         "usage_json": task.get("usage_json"),
         "created_at": str(task.get("created_at", "")),
@@ -999,8 +1016,36 @@ def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
     }
 
 
+def get_task_cancel_response_summary_from_task(
+    task: dict,
+    *,
+    previous_status: str,
+    already_terminal: bool,
+) -> dict[str, object]:
+    return {
+        "task_id": str(task.get("id", "")),
+        "previous_status": previous_status,
+        **_get_task_status_summary_from_task(task),
+        "already_terminal": already_terminal,
+    }
+
+
+def get_task_create_response_summary(
+    *,
+    task_id: str,
+    session_id: str,
+    status: str,
+) -> dict[str, object]:
+    return {
+        "task_id": task_id,
+        "session_id": session_id,
+        **_get_task_status_summary_from_task({"status": status}),
+    }
+
+
 def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
     trace_summary = get_task_trace_export_summary_from_task(task)
+    trace_steps = _coerce_export_trace_steps(trace_summary.get("steps"))
     return {
         "task": {
             "id": str(task.get("id", "")),
@@ -1012,12 +1057,8 @@ def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
         },
         "usage": get_task_usage_from_task(task),
         "trace": {
-            "governance": task.get("governance")
-            if isinstance(task.get("governance"), dict)
-            else None,
-            "steps": [
-                step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
-            ],
+            "governance": _coerce_payload_mapping_or_none(task.get("governance")),
+            "steps": trace_steps,
             "step_count": int(trace_summary.get("step_count", 0) or 0),
             "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
             "rag_knowledge_base_ids": [
@@ -1054,44 +1095,72 @@ def get_task_export_payload_summary(
     }
 
 
+def _coerce_export_payload_block_to_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    return {}
+
+
+def _coerce_export_payload_block_list_to_dicts(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    rows: list[dict[str, object]] = []
+    for item in value:
+        row = _coerce_export_payload_block_to_dict(item)
+        if row:
+            rows.append(row)
+    return rows
+
+
+def _coerce_payload_mapping_or_original(value: object) -> object:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dict(dumped)
+    return value
+
+
+def _coerce_payload_mapping_or_none(value: object) -> dict[str, object] | None:
+    mapped = _coerce_payload_mapping_or_original(value)
+    return mapped if isinstance(mapped, dict) else None
+
+
+def _coerce_export_trace_steps(value: object) -> list[TraceStep]:
+    if not isinstance(value, list):
+        return []
+    steps: list[TraceStep] = []
+    for item in value:
+        if isinstance(item, TraceStep):
+            steps.append(item)
+            continue
+        if isinstance(item, dict):
+            steps.append(TraceStep.model_validate(item))
+    return steps
+
+
 def get_task_export_response_summary(
     task: dict,
     message_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
 ) -> dict[str, object]:
     payload_summary = get_task_export_payload_summary(task, message_rows)
-    task_summary = (
-        payload_summary.get("task")
-        if isinstance(payload_summary.get("task"), dict)
-        else {}
-    )
-    trace_summary = (
-        payload_summary.get("trace")
-        if isinstance(payload_summary.get("trace"), dict)
-        else {}
-    )
-    trace_steps = [
-        step for step in trace_summary.get("steps", []) if isinstance(step, TraceStep)
-    ]
+    trace_summary = _coerce_export_payload_block_to_dict(payload_summary.get("trace"))
+    trace_steps = _coerce_export_trace_steps(trace_summary.get("steps"))
     return {
-        "task": {
-            "id": str(task_summary.get("id", "")),
-            "session_id": str(task_summary.get("session_id", "")),
-            "prompt": str(task_summary.get("prompt", "")),
-            "status": str(task_summary.get("status", "")),
-            "status_normalized": str(task_summary.get("status_normalized", "")),
-            "status_label": str(task_summary.get("status_label", "")),
-            "status_rank": int(task_summary.get("status_rank", 0) or 0),
-            "created_at": str(task_summary.get("created_at", "")),
-            "updated_at": str(task_summary.get("updated_at", "")),
-        },
+        "task": payload_summary.get("task"),
         "usage": payload_summary.get("usage"),
-        "messages": [
-            row for row in payload_summary.get("messages", []) if isinstance(row, dict)
-        ],
+        "messages": payload_summary.get("messages", []),
         "trace": {
-            "governance": dict(trace_summary.get("governance"))
-            if isinstance(trace_summary.get("governance"), dict)
-            else None,
+            "governance": _coerce_payload_mapping_or_none(
+                trace_summary.get("governance")
+            ),
             "step_count": int(trace_summary.get("step_count", len(trace_steps)) or 0),
             "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
             "rag_knowledge_base_ids": [
@@ -1574,6 +1643,50 @@ def get_session_export_payload_summary(
     }
 
 
+def _get_session_export_task_response_summary_from_payload_row(
+    row: dict[str, object],
+) -> dict[str, object]:
+    if "task" not in row and "trace" not in row:
+        return {
+            "id": str(row.get("id", "")),
+            "prompt": str(row.get("prompt", "")),
+            "status": str(row.get("status", "")),
+            "status_normalized": str(row.get("status_normalized", "")),
+            "status_label": str(row.get("status_label", "")),
+            "status_rank": int(row.get("status_rank", 0) or 0),
+            "created_at": str(row.get("created_at", "")),
+            "updated_at": str(row.get("updated_at", "")),
+            "usage": row.get("usage"),
+            "trace_step_count": int(row.get("trace_step_count", 0) or 0),
+            "rag_hit_count": int(row.get("rag_hit_count", 0) or 0),
+            "trace_preview": [
+                item for item in row.get("trace_preview", []) if isinstance(item, dict)
+            ],
+            "governance": _coerce_payload_mapping_or_none(row.get("governance")),
+        }
+    task_summary = _coerce_export_payload_block_to_dict(row.get("task"))
+    trace_summary = _coerce_export_payload_block_to_dict(row.get("trace"))
+    return {
+        "id": str(task_summary.get("id", "")),
+        "prompt": str(task_summary.get("prompt", "")),
+        "status": str(task_summary.get("status", "")),
+        "status_normalized": str(task_summary.get("status_normalized", "")),
+        "status_label": str(task_summary.get("status_label", "")),
+        "status_rank": int(task_summary.get("status_rank", 0) or 0),
+        "created_at": str(task_summary.get("created_at", "")),
+        "updated_at": str(task_summary.get("updated_at", "")),
+        "usage": row.get("usage"),
+        "trace_step_count": int(trace_summary.get("step_count", 0) or 0),
+        "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
+        "trace_preview": [
+            item for item in trace_summary.get("preview", []) if isinstance(item, dict)
+        ],
+        "governance": _coerce_payload_mapping_or_none(
+            trace_summary.get("governance")
+        ),
+    }
+
+
 def get_session_export_response_summary(
     *,
     usage_summary: dict[str, object],
@@ -1589,32 +1702,11 @@ def get_session_export_response_summary(
     )
     task_summaries: list[dict[str, object]] = []
     for row in payload_summary.get("tasks", []):
-        if not isinstance(row, dict):
+        row_summary = _coerce_export_payload_block_to_dict(row)
+        if not row_summary:
             continue
-        task_summary = row.get("task") if isinstance(row.get("task"), dict) else {}
-        trace_summary = row.get("trace") if isinstance(row.get("trace"), dict) else {}
         task_summaries.append(
-            {
-                "id": str(task_summary.get("id", "")),
-                "prompt": str(task_summary.get("prompt", "")),
-                "status": str(task_summary.get("status", "")),
-                "status_normalized": str(task_summary.get("status_normalized", "")),
-                "status_label": str(task_summary.get("status_label", "")),
-                "status_rank": int(task_summary.get("status_rank", 0) or 0),
-                "created_at": str(task_summary.get("created_at", "")),
-                "updated_at": str(task_summary.get("updated_at", "")),
-                "usage": row.get("usage"),
-                "trace_step_count": int(trace_summary.get("step_count", 0) or 0),
-                "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
-                "trace_preview": [
-                    item
-                    for item in trace_summary.get("preview", [])
-                    if isinstance(item, dict)
-                ],
-                "governance": dict(trace_summary.get("governance"))
-                if isinstance(trace_summary.get("governance"), dict)
-                else None,
-            }
+            _get_session_export_task_response_summary_from_payload_row(row_summary)
         )
     stats_summary = (
         payload_summary.get("stats")
@@ -1630,12 +1722,10 @@ def get_session_export_response_summary(
             "trace_step_count": int(stats_summary.get("trace_step_count", 0) or 0),
             "rag_hit_count": int(stats_summary.get("rag_hit_count", 0) or 0),
         },
-        "governance": dict(payload_summary.get("governance"))
-        if isinstance(payload_summary.get("governance"), dict)
-        else payload_summary.get("governance"),
-        "messages": [
-            row for row in payload_summary.get("messages", []) if isinstance(row, dict)
-        ],
+        "governance": _coerce_payload_mapping_or_original(
+            payload_summary.get("governance")
+        ),
+        "messages": payload_summary.get("messages", []),
     }
 
 
@@ -1915,12 +2005,13 @@ def get_tasks_usage_dashboard(
 def get_tasks_usage_dashboard_response_summary(
     payload: dict[str, object],
 ) -> dict[str, object]:
+    trend_rows = _coerce_export_payload_block_list_to_dicts(payload.get("trend"))
+    session_rows = _coerce_export_payload_block_list_to_dicts(payload.get("by_session"))
+    top_task_rows = _coerce_export_payload_block_list_to_dicts(payload.get("top_tasks"))
     return {
         "window_days": int(payload.get("window_days", 0) or 0),
-        "summary": payload.get("summary") if isinstance(payload.get("summary"), dict) else {},
-        "trend": [
-            row for row in payload.get("trend", []) if isinstance(row, dict)
-        ],
+        "summary": _coerce_export_payload_block_to_dict(payload.get("summary")),
+        "trend": trend_rows,
         "by_session": [
             {
                 "session_id": str(row.get("session_id", "")),
@@ -1937,12 +2028,11 @@ def get_tasks_usage_dashboard_response_summary(
                     if isinstance(row.get("last_task_at"), str)
                     else None
                 ),
-                "governance": dict(row.get("governance"))
-                if isinstance(row.get("governance"), dict)
-                else row.get("governance"),
+                "governance": _coerce_payload_mapping_or_original(
+                    row.get("governance")
+                ),
             }
-            for row in payload.get("by_session", [])
-            if isinstance(row, dict)
+            for row in session_rows
         ],
         "top_tasks": [
             {
@@ -1959,11 +2049,10 @@ def get_tasks_usage_dashboard_response_summary(
                 "created_at": str(row.get("created_at", "")),
                 "updated_at": str(row.get("updated_at", "")),
                 "source_kind": str(row.get("source_kind", "legacy") or "legacy"),
-                "governance": dict(row.get("governance"))
-                if isinstance(row.get("governance"), dict)
-                else row.get("governance"),
+                "governance": _coerce_payload_mapping_or_original(
+                    row.get("governance")
+                ),
             }
-            for row in payload.get("top_tasks", [])
-            if isinstance(row, dict)
+            for row in top_task_rows
         ],
     }
