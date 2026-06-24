@@ -20,23 +20,24 @@ assert_contains() {
 write_success_log() {
   local file="$1"
   cat > "${file}" <<'LOG'
-[1/7] login and create baseline data
-  - OK: registered users and created baseline task/session
-[2/7] task export json/markdown consistency + download
-  - OK: task export payload and download headers are consistent
-[3/7] shared-* kb role semantics
-  - OK: shared-rag role semantics remain compatible with export flow
-[4/7] session export json/markdown consistency + download
-  - OK: session export payload and download headers are consistent
-[5/7] cross-user export isolation checks
-  - OK: cross-user export isolation checks returned 404 as expected
-[6/7] export not-found responses
-  - OK: export not-found responses returned 404 with expected hints
-[7/7] cleanup and final summary
-  - OK: cleanup completed
+[1/7] 注册并保存 mock 设置
+  - OK: auth + settings
+[2/7] 创建任务并跑完整流
+  - OK: task stream done
+[3/7] shared-* 知识库跨角色语义与导出并存
+  - OK: shared kb role semantics stay compatible with export checks
+[4/7] 任务导出一致性
+  - OK: task export json/markdown consistency + governance + download
+[5/7] 会话导出一致性
+  - OK: session export json/markdown consistency + task-level governance + download
+[6/7] 负例：跨用户导出隔离
+  - OK: cross-user export isolation checks
+[7/7] 负例：跨资源不存在检查
+  - OK: not-found checks
 E2E export consistency passed:
-- task export json/markdown consistency + download
-- session export json/markdown consistency + download
+- task export json/markdown schema, governance and summary consistency
+- session export json/markdown stats consistency + task-level governance consistency
+- download=true content-disposition headers
 - shared-rag role semantics remain compatible with export flow
 - cross-user export isolation checks
 - export not-found responses

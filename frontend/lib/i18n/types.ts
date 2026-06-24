@@ -111,6 +111,8 @@ export type Messages = {
     scopeSession: string;
     scopeGlobal: string;
     sessionRequired: string;
+    governanceProfileFilterAll: string;
+    governanceSourceFilterAll: string;
     tableTask: string;
     tableStatus: string;
     tableUsageSource: string;
@@ -230,6 +232,11 @@ export type Messages = {
       sourceEstimated: string;
       sourceMixed: string;
       sourceLegacy: string;
+      governanceFilterTitle: string;
+      governanceProfileFilterAll: string;
+      governanceSourceFilterAll: string;
+      governanceProfilesLabel: string;
+      governanceSourcesLabel: string;
       sourceCoverage: (labeled: number, total: number) => string;
       sourceLegacyHint: (n: number) => string;
       trendTitle: string;
