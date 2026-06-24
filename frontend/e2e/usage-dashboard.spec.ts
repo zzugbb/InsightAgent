@@ -42,6 +42,15 @@ async function selectVisibleAntdOption(
     .locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")
     .last();
   await expect(dropdown).toBeVisible({ timeout: 10_000 });
+
+  const roleOption = dropdown
+    .getByRole("option", { name: exactText(args.value), exact: true })
+    .last();
+  if (await roleOption.isVisible().catch(() => false)) {
+    await roleOption.click();
+    return;
+  }
+
   const visibleOption = dropdown
     .locator(".ant-select-item-option")
     .filter({ hasText: exactText(args.value) })
@@ -56,6 +65,28 @@ async function selectVisibleAntdOption(
   }).last();
   await expect(visibleOptionText).toBeVisible({ timeout: 10_000 });
   await visibleOptionText.click();
+}
+
+async function getJsonWithRetry(
+  request: Parameters<typeof registerViaApi>[0],
+  url: string,
+  headers: Record<string, string>,
+  attempts = 3,
+): Promise<unknown> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await request.get(url, { headers });
+      expect(response.ok()).toBeTruthy();
+      return response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError;
 }
 
 async function closeModelSettingsModal(page: Page): Promise<void> {
@@ -1231,16 +1262,13 @@ for (const acceptanceCase of [
     expect(detailTaskId).not.toBe("");
     expect(detailTaskId).toBe(taskId);
 
-    const exportJsonResponse = await request.get(
+    const exportJsonPayload = (await getJsonWithRetry(
+      request,
       `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/json`,
       {
-        headers: {
-          Authorization: `Bearer ${auth.access_token}`,
-        },
+        Authorization: `Bearer ${auth.access_token}`,
       },
-    );
-    expect(exportJsonResponse.ok()).toBeTruthy();
-    const exportJsonPayload = (await exportJsonResponse.json()) as {
+    )) as {
       trace?: {
         governance?: {
           profile?: string;

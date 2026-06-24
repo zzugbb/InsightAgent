@@ -1,3 +1,4 @@
+import json
 from functools import lru_cache
 from pathlib import Path
 
@@ -6,6 +7,29 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+_DEFAULT_TOOL_REGISTRY_PROVIDER_SOURCES = {
+    "planning_suite": {
+        "provider": "default",
+        "profile": "planning_only",
+        "overrides": {"task_plan": {"label": "Task Planner Suite"}},
+    },
+    "retrieval_suite": {
+        "provider": "default",
+        "profile": "retrieval_only",
+        "overrides": {"task_retrieve": {"label": "Knowledge Retrieval Suite"}},
+    },
+    "calculator_suite": {
+        "provider": "default",
+        "profile": "calculator_only",
+        "overrides": {"calc_eval": {"label": "Calculator Suite"}},
+    },
+}
+DEFAULT_TOOL_REGISTRY_PROVIDER_SOURCES_JSON = json.dumps(
+    _DEFAULT_TOOL_REGISTRY_PROVIDER_SOURCES,
+    ensure_ascii=False,
+    separators=(",", ":"),
+)
 
 
 class Settings(BaseSettings):
@@ -171,7 +195,7 @@ class Settings(BaseSettings):
         description="Tool registry provider factories JSON；用于定义可复用命名 provider_factory 别名，映射到内建或已声明的 provider_factory，或通过 registry_file 绑定文件型 registry source（支持 pure extra_tools / manifest / registry_files / registry_dirs 几种文件形态）",
     )
     tool_registry_provider_sources_json: str | None = Field(
-        default=None,
+        default=DEFAULT_TOOL_REGISTRY_PROVIDER_SOURCES_JSON,
         alias="INSIGHT_AGENT_TOOL_REGISTRY_PROVIDER_SOURCES_JSON",
         description="Tool registry provider sources JSON；用于定义命名基础 registry source，支持 provider_factory/provider/loader/registry_file/profile/disabled/overrides/extra_tools adapter 形态，并可引用命名 providers 与 named loaders；registry_file 可指向 pure extra_tools 文件、manifest 文件，或带 registry_files/registry_dirs 的 composed manifest",
     )
