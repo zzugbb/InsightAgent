@@ -489,7 +489,15 @@ def get_tool_display_name(
     registration = resolve_tool_registration(name=name, registry_provider=registry_provider)
     if registration is None:
         return name
-    if name in {"mock_plan", "task_plan", "mock_retrieve", "task_retrieve"}:
+    normalized_name = normalize_tool_registry_name(name)
+    if normalized_name in {"task_plan", "task_retrieve"}:
+        return registration.label
+    default_registration = _REGISTERED_TOOLS.get(normalized_name)
+    if (
+        default_registration is not None
+        and registration.label.strip()
+        and registration.label != default_registration.label
+    ):
         return registration.label
     return name
 

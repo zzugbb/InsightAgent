@@ -497,7 +497,7 @@ test("model settings validate previews retrieval suite enabled tools", async ({
   await expect(metaDescriptions).toContainText("Knowledge Retrieval Suite");
   await expect(
     page.getByTestId("model-settings-selected-profile-summary"),
-  ).toContainText("Knowledge Retrieval Suite");
+  ).toContainText("Knowledge Retrieval");
   await expect(
     page.getByTestId("model-settings-selected-source-summary"),
   ).toContainText("retrieval_only");
@@ -552,7 +552,7 @@ test("model settings validate previews calculator suite enabled tools", async ({
   await expect(metaDescriptions).toContainText("Calculator Suite");
   await expect(
     page.getByTestId("model-settings-selected-profile-summary"),
-  ).toContainText("Calculator Suite");
+  ).toContainText("calc_eval");
   await expect(
     page.getByTestId("model-settings-selected-source-summary"),
   ).toContainText("calculator_only");

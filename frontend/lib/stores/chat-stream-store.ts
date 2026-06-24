@@ -102,6 +102,7 @@ export type ResumeTaskStreamOptions = {
   afterSeq?: number;
   sessionId?: string | null;
   onSessionResolved?: (sessionId: string) => void;
+  onStreamConnected?: () => void;
 };
 
 type TaskCreateResponse = {
@@ -805,6 +806,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         );
       }
 
+      options.onStreamConnected?.();
       await consumeSseStream(
         streamResponse,
         get().dispatchSseEvent,

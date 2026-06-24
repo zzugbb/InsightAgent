@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -647,6 +648,99 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             provider.load_tool_registry()["task_plan"].label,
             "Task Planner Suite",
         )
+
+    def test_backend_e2e_scripts_bootstrap_backend_root_before_imports(self) -> None:
+        repo_root = ROOT.parent
+        scripts = (
+            repo_root / "backend" / "scripts" / "e2e_main_path.py",
+            repo_root / "backend" / "scripts" / "e2e_export_consistency.py",
+        )
+
+        for script_path in scripts:
+            with self.subTest(script=script_path.name):
+                result = subprocess.run(
+                    [sys.executable, str(script_path), "--help"],
+                    cwd=repo_root,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(
+                    result.returncode,
+                    0,
+                    msg=(
+                        f"{script_path.name} should import cleanly when executed from repo root.\n"
+                        f"stdout:\n{result.stdout}\n"
+                        f"stderr:\n{result.stderr}"
+                    ),
+                )
+
+    def test_apply_tool_registry_preview_to_validate_response_uses_selected_source_override_label_for_calculator(
+        self,
+    ) -> None:
+        response = _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                message="ok",
+            ),
+            effective_settings=SimpleNamespace(
+                tool_registry_profile="calculator_only",
+                tool_registry_provider_source="calculator_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "calculator_suite": {
+                            "provider": "default",
+                            "profile": "calculator_only",
+                            "overrides": {
+                                "calc_eval": {
+                                    "label": "Calculator Suite",
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        self.assertEqual(response.tool_registry_profile, "calculator_only")
+        self.assertEqual(response.tool_registry_provider_source, "calculator_suite")
+        self.assertEqual(response.enabled_tool_names, ["calc_eval"])
+        self.assertEqual(response.enabled_tool_labels, ["Calculator Suite"])
+
+    def test_build_tool_plan_artifacts_uses_selected_source_override_label_for_calculator(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_provider_source="calculator_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "calculator_suite": {
+                            "provider": "default",
+                            "profile": "calculator_only",
+                            "overrides": {
+                                "calc_eval": {
+                                    "label": "Calculator Suite",
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        )
+
+        artifacts = build_tool_plan_artifacts(
+            "Please calculate [calc:1+2]",
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(artifacts.allowed_tool_names, ("calc_eval",))
+        self.assertEqual(artifacts.allowed_tool_labels, ("Calculator Suite",))
 
     def test_apply_tool_registry_preview_to_validate_response_uses_effective_settings(
         self,

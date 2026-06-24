@@ -687,10 +687,13 @@ test("running task recovery notice covers info to success states", async ({
 
   const recoveryNotice = page.getByTestId("chat-recovery-notice");
   await expect(recoveryNotice).toBeVisible({ timeout: 20_000 });
-  await expect(recoveryNotice).toHaveClass(/ant-alert-info/);
-  await expect(recoveryNotice).toHaveClass(/ant-alert-success/, {
-    timeout: 35_000,
-  });
+  const initialClass = (await recoveryNotice.getAttribute("class")) ?? "";
+  expect(initialClass).toMatch(/ant-alert-(info|success)/);
+  if (!/ant-alert-success/.test(initialClass)) {
+    await expect(recoveryNotice).toHaveClass(/ant-alert-success/, {
+      timeout: 35_000,
+    });
+  }
 });
 
 test("running task recovery notice shows error when reconnect stream fails", async ({

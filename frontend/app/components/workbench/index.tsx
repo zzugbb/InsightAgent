@@ -1016,11 +1016,19 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       type: "info",
       text: t.stream.streamRecoveryStart(runningTaskId),
     });
+    let recoveryConnected = false;
     void resumeTaskStream({
       apiBaseUrl: API_BASE_URL,
       taskId: runningTaskId,
       onSessionResolved: setActiveSessionId,
       sessionId: activeSessionId,
+      onStreamConnected: () => {
+        recoveryConnected = true;
+        setRecoveryNotice({
+          type: "success",
+          text: t.stream.streamRecoveryDone(runningTaskId),
+        });
+      },
     })
       .then((ok) => {
         if (!ok) {
@@ -1029,7 +1037,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             type: "error",
             text: t.stream.streamRecoveryFailed(runningTaskId),
           });
-        } else {
+        } else if (!recoveryConnected) {
           setRecoveryNotice({
             type: "success",
             text: t.stream.streamRecoveryDone(runningTaskId),
@@ -1122,7 +1130,11 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         prompt: text,
         sessionId,
         onSessionResolved: (resolvedSessionId) => {
-          setActiveSessionId(resolvedSessionId);
+          const currentActiveSessionId = activeSessionIdRef.current?.trim() ?? "";
+          const startedSessionId = sessionId.trim();
+          if (!currentActiveSessionId || currentActiveSessionId === startedSessionId) {
+            setActiveSessionId(resolvedSessionId);
+          }
           void queryClient.invalidateQueries({ queryKey: ["tasks"] });
           void queryClient.invalidateQueries({
             queryKey: ["messages", resolvedSessionId],
