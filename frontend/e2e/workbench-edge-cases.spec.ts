@@ -132,10 +132,26 @@ async function selectSessionByTitle(page: Page, title: string): Promise<void> {
 }
 
 async function waitForContextCancelButton(page: Page): Promise<Locator> {
+  const contextTab = page.getByTestId("inspector-tab-context");
   const cancelButton = page
     .locator('[data-testid="inspector-task-cancel"]:visible')
     .first();
-  await expect(cancelButton).toBeVisible({ timeout: 20_000 });
+
+  await expect
+    .poll(
+      async () => {
+        if (await cancelButton.isVisible().catch(() => false)) {
+          return true;
+        }
+        if (await contextTab.isVisible().catch(() => false)) {
+          await contextTab.click();
+        }
+        return cancelButton.isVisible().catch(() => false);
+      },
+      { timeout: 30_000, intervals: [250, 500, 900, 1300] },
+    )
+    .toBeTruthy();
+
   return cancelButton;
 }
 
