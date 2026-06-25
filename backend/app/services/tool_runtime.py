@@ -333,23 +333,79 @@ def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
     return ToolInvocation(name=name, tool_input=tool_input)
 
 
+def _normalize_planned_tool_names(raw_value: object) -> list[str]:
+    if not isinstance(raw_value, list):
+        return []
+    normalized_names: list[str] = []
+    seen_names: set[str] = set()
+    for raw_name in raw_value:
+        canonical_name = normalize_tool_registry_name(str(raw_name).strip())
+        if not canonical_name or canonical_name == "task_plan" or canonical_name in seen_names:
+            continue
+        normalized_names.append(canonical_name)
+        seen_names.add(canonical_name)
+    return normalized_names
+
+
+def _build_task_plan_steps(
+    *,
+    planned_tool_names: list[str],
+    planned_tool_labels: list[str] | None = None,
+) -> list[str]:
+    steps = ["Analyze request"]
+    label_by_name: dict[str, str] = {}
+    if isinstance(planned_tool_labels, list):
+        for idx, raw_label in enumerate(planned_tool_labels):
+            if idx >= len(planned_tool_names):
+                break
+            label = str(raw_label).strip()
+            if label:
+                label_by_name[planned_tool_names[idx]] = label
+
+    for tool_name in planned_tool_names:
+        if tool_name == "task_retrieve":
+            step = "Retrieve supporting context"
+        elif tool_name == "calc_eval":
+            step = "Evaluate calculation"
+        else:
+            display_name = label_by_name.get(tool_name) or tool_name
+            step = f"Run {display_name}"
+        if step not in steps:
+            steps.append(step)
+
+    steps.append("Synthesize final answer")
+    return steps
+
+
 def _run_task_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) -> dict[str, object]:
     del user_id
     prompt_preview = str(tool_input.get("prompt_preview", "")).strip() or prompt.strip()[:120]
-    steps = ["Analyze request"]
-    normalized = prompt.lower()
-    if (
-        "rag" in normalized
-        or "知识" in normalized
-        or "检索" in normalized
-        or "context" in normalized
-        or "[multi-tool]" in normalized
-        or "[mock-multi-tool]" in normalized
+    planned_tool_names = _normalize_planned_tool_names(tool_input.get("planned_tool_names"))
+    if "planned_tool_names" in tool_input and isinstance(
+        tool_input.get("planned_tool_names"), list
     ):
-        steps.append("Retrieve supporting context")
-    if _extract_calc_expression(prompt):
-        steps.append("Evaluate calculation")
-    steps.append("Synthesize final answer")
+        planned_tool_labels = tool_input.get("planned_tool_labels")
+        steps = _build_task_plan_steps(
+            planned_tool_names=planned_tool_names,
+            planned_tool_labels=(
+                planned_tool_labels if isinstance(planned_tool_labels, list) else None
+            ),
+        )
+    else:
+        steps = ["Analyze request"]
+        normalized = prompt.lower()
+        if (
+            "rag" in normalized
+            or "知识" in normalized
+            or "检索" in normalized
+            or "context" in normalized
+            or "[multi-tool]" in normalized
+            or "[mock-multi-tool]" in normalized
+        ):
+            steps.append("Retrieve supporting context")
+        if _extract_calc_expression(prompt):
+            steps.append("Evaluate calculation")
+        steps.append("Synthesize final answer")
     return {
         "plan": " -> ".join(steps),
         "steps": steps,
@@ -455,7 +511,6 @@ _TOOL_NAME_ALIASES: dict[str, str] = {
     "mock_plan": "task_plan",
     "mock_retrieve": "task_retrieve",
 }
-_PLANNING_OPTIONAL_TOOL_NAMES: tuple[str, ...] = ("task_retrieve", "calc_eval")
 
 
 def normalize_tool_registry_name(name: str) -> str:
@@ -481,6 +536,43 @@ def _normalize_named_tool_registry_component_name(name: object | None) -> str | 
     return normalized or None
 
 
+def _normalize_tool_lookup_text(name: object | None) -> str | None:
+    if not isinstance(name, str):
+        return None
+    normalized = " ".join(name.strip().lower().split())
+    return normalized or None
+
+
+def _resolve_provider_tool_name(
+    raw_name: object,
+    *,
+    registry_provider: ToolRegistryProvider | None = None,
+) -> str | None:
+    canonical_name = normalize_tool_registry_name(str(raw_name).strip())
+    if canonical_name and resolve_tool_registration(
+        canonical_name,
+        registry_provider=registry_provider,
+    ) is not None:
+        return canonical_name
+    lookup_text = _normalize_tool_lookup_text(raw_name)
+    if lookup_text is None:
+        return canonical_name or None
+    registry = resolve_tool_registry_provider(
+        registry_provider=registry_provider,
+    ).load_tool_registry()
+    for tool_name, registration in registry.items():
+        candidate_names = {
+            _normalize_tool_lookup_text(tool_name),
+            _normalize_tool_lookup_text(registration.label),
+            _normalize_tool_lookup_text(
+                get_tool_display_name(tool_name, registry_provider=registry_provider)
+            ),
+        }
+        if lookup_text in candidate_names:
+            return tool_name
+    return canonical_name or None
+
+
 def get_tool_display_name(
     name: str,
     *,
@@ -493,6 +585,8 @@ def get_tool_display_name(
     if normalized_name in {"task_plan", "task_retrieve"}:
         return registration.label
     default_registration = _REGISTERED_TOOLS.get(normalized_name)
+    if default_registration is None and registration.label.strip():
+        return registration.label
     if (
         default_registration is not None
         and registration.label.strip()
@@ -520,6 +614,50 @@ def build_tool_plan_summary(
     return "Planned tools: " + ", ".join(names)
 
 
+def _annotate_task_plan_tool_input(
+    tool_plan: list[dict[str, object]],
+    *,
+    registry_provider: ToolRegistryProvider | None = None,
+) -> list[dict[str, object]]:
+    if not tool_plan:
+        return tool_plan
+    planned_tool_names: list[str] = []
+    planned_tool_labels: list[str] = []
+    for item in tool_plan:
+        tool_name = normalize_tool_registry_name(str(item.get("name", "")).strip())
+        if not tool_name or tool_name == "task_plan":
+            continue
+        planned_tool_names.append(tool_name)
+        planned_tool_labels.append(
+            get_tool_display_name(tool_name, registry_provider=registry_provider)
+        )
+
+    annotated_plan: list[dict[str, object]] = []
+    task_plan_annotated = False
+    for item in tool_plan:
+        if task_plan_annotated:
+            annotated_plan.append(item)
+            continue
+        tool_name = normalize_tool_registry_name(str(item.get("name", "")).strip())
+        if tool_name != "task_plan":
+            annotated_plan.append(item)
+            continue
+        tool_input = item.get("input")
+        if not isinstance(tool_input, dict):
+            tool_input = {}
+        annotated_input = dict(tool_input)
+        annotated_input["planned_tool_names"] = list(planned_tool_names)
+        annotated_input["planned_tool_labels"] = list(planned_tool_labels)
+        annotated_plan.append(
+            {
+                **item,
+                "input": annotated_input,
+            }
+        )
+        task_plan_annotated = True
+    return annotated_plan
+
+
 def _is_tool_enabled_for_planning(
     name: str,
     *,
@@ -538,14 +676,37 @@ def _get_enabled_planning_optional_tool_names(
     *,
     registry_provider: ToolRegistryProvider | None = None,
 ) -> tuple[str, ...]:
-    return tuple(
-        name
-        for name in _PLANNING_OPTIONAL_TOOL_NAMES
-        if _is_tool_enabled_for_planning(
+    registry = resolve_tool_registry_provider(
+        registry_provider=registry_provider,
+    ).load_tool_registry()
+    optional_names = [
+        name for name in registry if normalize_tool_registry_name(name) != "task_plan"
+    ]
+    optional_names.sort(
+        key=lambda name: (
+            1 if normalize_tool_registry_name(name) in _REGISTERED_TOOLS else 0,
+        )
+    )
+    return tuple(optional_names)
+
+
+def _get_first_enabled_planning_tool_name_for_kind(
+    kind: str,
+    *,
+    registry_provider: ToolRegistryProvider | None = None,
+) -> str | None:
+    for name in _get_enabled_planning_optional_tool_names(
+        registry_provider=registry_provider,
+    ):
+        registration = resolve_tool_registration(
             name,
             registry_provider=registry_provider,
         )
-    )
+        if registration is None:
+            continue
+        if registration.kind == kind:
+            return name
+    return None
 
 
 def get_enabled_planning_tool_names(
@@ -5605,10 +5766,13 @@ def _build_rule_based_tool_plan(
         "task_plan",
         registry_provider=registry_provider,
     )
-    enabled_optional_tool_names = set(
-        _get_enabled_planning_optional_tool_names(
-            registry_provider=registry_provider,
-        )
+    retrieval_tool_name = _get_first_enabled_planning_tool_name_for_kind(
+        "knowledge_retrieval",
+        registry_provider=registry_provider,
+    )
+    calculator_tool_name = _get_first_enabled_planning_tool_name_for_kind(
+        "local_calculator",
+        registry_provider=registry_provider,
     )
     plan: list[dict[str, object]] = []
     if include_task_plan:
@@ -5622,7 +5786,7 @@ def _build_rule_based_tool_plan(
         )
 
     if (
-        "task_retrieve" in enabled_optional_tool_names
+        retrieval_tool_name is not None
         and (
             "rag" in normalized
             or "知识" in normalized
@@ -5634,7 +5798,7 @@ def _build_rule_based_tool_plan(
     ):
         plan.append(
             {
-                "name": "task_retrieve",
+                "name": retrieval_tool_name,
                 "input": {
                     "query": prompt.strip()[:80] or "default query",
                     "top_k": settings.rag_default_top_k,
@@ -5644,10 +5808,10 @@ def _build_rule_based_tool_plan(
         )
 
     calc_expr = _extract_calc_expression(prompt)
-    if calc_expr and "calc_eval" in enabled_optional_tool_names:
+    if calc_expr and calculator_tool_name is not None:
         plan.append(
             {
-                "name": "calc_eval",
+                "name": calculator_tool_name,
                 "input": {
                     "expression": calc_expr,
                 },
@@ -5666,17 +5830,33 @@ def _build_provider_tool_plan_prompt(
         registry_provider=registry_provider,
     )
     allowed_tool_names_text = ", ".join(allowed_tool_names) if allowed_tool_names else "none"
+    allowed_tool_labels = [
+        get_tool_display_name(name, registry_provider=registry_provider)
+        for name in allowed_tool_names
+    ]
+    allowed_tool_labels_text = ", ".join(allowed_tool_labels) if allowed_tool_labels else "none"
     input_lines: list[str] = []
-    if "task_retrieve" in allowed_tool_names:
-        input_lines.append(
-            "For task_retrieve input, include query, optional top_k, optional knowledge_base_id.\n"
+    for tool_name in allowed_tool_names:
+        registration = resolve_tool_registration(
+            tool_name,
+            registry_provider=registry_provider,
         )
-    if "calc_eval" in allowed_tool_names:
-        input_lines.append("For calc_eval input, include expression.\n")
+        if registration is None:
+            continue
+        if registration.kind == "knowledge_retrieval":
+            input_lines.append(
+                f"For {tool_name} input, include query, optional top_k, optional knowledge_base_id.\n"
+            )
+            continue
+        if registration.kind == "local_calculator":
+            input_lines.append(
+                f"For {tool_name} input, include expression.\n"
+            )
     return (
         "You are the Task Planner for InsightAgent.\n"
         "Return JSON only with shape {\"tools\": [...]}.\n"
         f"Allowed tool names: {allowed_tool_names_text}.\n"
+        f"Allowed tool labels: {allowed_tool_labels_text}.\n"
         "Do not include task_plan in the JSON; it is added automatically.\n"
         + "".join(input_lines)
         + "If no extra tools are needed, return {\"tools\": []}.\n"
@@ -5704,6 +5884,44 @@ def _extract_provider_tool_plan_items(provider_content: str) -> list[object] | N
             if isinstance(tools, list):
                 return tools
     return None
+
+
+def _normalize_provider_tool_plan_item(
+    raw_item: object,
+    *,
+    registry_provider: ToolRegistryProvider | None = None,
+) -> tuple[str, dict[str, object]] | None:
+    if isinstance(raw_item, str):
+        tool_name = _resolve_provider_tool_name(
+            raw_item,
+            registry_provider=registry_provider,
+        )
+        if not tool_name:
+            return None
+        return tool_name, {}
+    if not isinstance(raw_item, dict):
+        return None
+    raw_name = raw_item.get("name", raw_item.get("tool", ""))
+    tool_name = _resolve_provider_tool_name(
+        raw_name,
+        registry_provider=registry_provider,
+    )
+    if not tool_name:
+        return None
+    tool_input = raw_item.get("input")
+    if not isinstance(tool_input, dict):
+        tool_input = raw_item.get("arguments")
+    if not isinstance(tool_input, dict):
+        tool_input = raw_item.get("args")
+    if not isinstance(tool_input, dict):
+        tool_input = {
+            key: value
+            for key, value in raw_item.items()
+            if key not in {"name", "tool", "input", "arguments", "args"}
+        }
+    if not isinstance(tool_input, dict):
+        tool_input = {}
+    return tool_name, dict(tool_input)
 
 
 def _normalize_provider_tool_plan(
@@ -5742,15 +5960,21 @@ def _normalize_provider_tool_plan(
         seen_names.add("task_plan")
 
     for raw_item in raw_items:
-        if not isinstance(raw_item, dict):
+        normalized_item = _normalize_provider_tool_plan_item(
+            raw_item,
+            registry_provider=registry_provider,
+        )
+        if normalized_item is None:
             continue
-        tool_name = normalize_tool_registry_name(str(raw_item.get("name", "")).strip())
-        tool_input = raw_item.get("input")
-        if not isinstance(tool_input, dict):
-            tool_input = {}
+        tool_name, tool_input = normalized_item
         if tool_name in seen_names or tool_name not in enabled_optional_tool_names:
             continue
-        if tool_name == "task_retrieve":
+        registration = resolve_tool_registration(
+            tool_name,
+            registry_provider=registry_provider,
+        )
+        tool_kind = registration.kind if registration is not None else None
+        if tool_kind == "knowledge_retrieval":
             top_k = tool_input.get("top_k")
             if isinstance(top_k, bool):
                 top_k = None
@@ -5762,7 +5986,7 @@ def _normalize_provider_tool_plan(
             )
             normalized_plan.append(
                 {
-                    "name": "task_retrieve",
+                    "name": tool_name,
                     "input": {
                         "query": query,
                         "top_k": top_k,
@@ -5770,9 +5994,9 @@ def _normalize_provider_tool_plan(
                     },
                 }
             )
-            seen_names.add("task_retrieve")
+            seen_names.add(tool_name)
             continue
-        if tool_name == "calc_eval":
+        if tool_kind == "local_calculator":
             expression = tool_input.get("expression")
             if not isinstance(expression, str) or not expression.strip():
                 expression = fallback_calc_expression
@@ -5784,15 +6008,19 @@ def _normalize_provider_tool_plan(
                 continue
             normalized_plan.append(
                 {
-                    "name": "calc_eval",
+                    "name": tool_name,
                     "input": {
                         "expression": expression,
                     },
                 }
             )
-            seen_names.add("calc_eval")
+            seen_names.add(tool_name)
 
-    if not normalized_plan or (len(normalized_plan) == 1 and include_task_plan):
+    if not raw_items:
+        return normalized_plan
+    if include_task_plan and len(normalized_plan) == 1:
+        return None
+    if not include_task_plan and not normalized_plan:
         return None
     return normalized_plan
 
@@ -5863,8 +6091,11 @@ def build_tool_plan_artifacts(
     allowed_tool_labels = get_enabled_planning_tool_labels(
         registry_provider=registry_provider,
     )
-    fallback_plan = _build_rule_based_tool_plan(
-        prompt,
+    fallback_plan = _annotate_task_plan_tool_input(
+        _build_rule_based_tool_plan(
+            prompt,
+            registry_provider=registry_provider,
+        ),
         registry_provider=registry_provider,
     )
     if provider is None:
@@ -5887,9 +6118,13 @@ def build_tool_plan_artifacts(
             allowed_tool_names=allowed_tool_names,
             allowed_tool_labels=allowed_tool_labels,
         )
-    if provider_plan.planning_provider_used and provider_plan.tool_plan:
+    if provider_plan.planning_provider_used:
         return replace(
             provider_plan,
+            tool_plan=_annotate_task_plan_tool_input(
+                provider_plan.tool_plan,
+                registry_provider=registry_provider,
+            ),
             allowed_tool_names=allowed_tool_names,
             allowed_tool_labels=allowed_tool_labels,
         )

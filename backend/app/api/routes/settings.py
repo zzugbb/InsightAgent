@@ -158,6 +158,17 @@ def _clone_settings_with_updates(
     return SimpleNamespace(**merged_values)
 
 
+def _resolve_effective_remote_connection_settings(
+    *,
+    payload: SettingsUpdateRequest,
+    existing: StoredSettings,
+) -> tuple[str | None, str | None]:
+    return (
+        payload.api_key or existing.api_key,
+        payload.base_url or existing.base_url,
+    )
+
+
 def _build_tool_registry_options_bundle(
     *,
     effective_settings: object,
@@ -481,8 +492,12 @@ def update_settings(
         effective_api_key = None
         effective_base_url = None
     else:
-        effective_api_key = payload.api_key or existing.api_key
-        effective_base_url = payload.base_url
+        effective_api_key, effective_base_url = (
+            _resolve_effective_remote_connection_settings(
+                payload=payload,
+                existing=existing,
+            )
+        )
     runtime_settings = get_settings()
     effective_tool_registry_profile, effective_tool_registry_provider_source = (
         _resolve_effective_tool_registry_selection(
@@ -542,8 +557,16 @@ def validate_settings(
 ) -> SettingsValidateResponse:
     user_id = str(current_user["id"])
     existing = get_stored_settings(user_id)
-    effective_api_key = payload.api_key or existing.api_key
-    effective_base_url = payload.base_url
+    if payload.mode == "mock":
+        effective_api_key = None
+        effective_base_url = None
+    else:
+        effective_api_key, effective_base_url = (
+            _resolve_effective_remote_connection_settings(
+                payload=payload,
+                existing=existing,
+            )
+        )
     runtime_settings = get_settings()
     effective_tool_registry_profile, effective_tool_registry_provider_source = (
         _resolve_effective_tool_registry_selection(

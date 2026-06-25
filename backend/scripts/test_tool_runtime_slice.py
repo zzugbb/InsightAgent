@@ -267,6 +267,131 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["task_plan"],
         )
 
+    def test_build_tool_plan_supports_extra_calculator_tool_in_rule_based_planning(
+        self,
+    ) -> None:
+        provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        plan = build_tool_plan(
+            "请帮我计算 [calc:1+2*3]",
+            registry_provider=provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "calc_eval_fast"],
+        )
+        self.assertEqual(
+            plan[1]["input"],
+            {"expression": "1+2*3"},
+        )
+
+    def test_build_tool_plan_supports_extra_retrieval_tool_in_rule_based_planning(
+        self,
+    ) -> None:
+        provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "task_retrieve_hot": {
+                            "template": "task_retrieve",
+                            "label": "Hot Retrieval",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        plan = build_tool_plan(
+            "请先检索背景 [multi-tool] [kb:demo]",
+            registry_provider=provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "task_retrieve_hot"],
+        )
+        self.assertEqual(plan[1]["input"]["knowledge_base_id"], "demo")
+
+    def test_build_tool_plan_prefers_extra_calculator_tool_over_builtin_when_both_enabled(
+        self,
+    ) -> None:
+        provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        plan = build_tool_plan(
+            "请帮我计算 [calc:1+2*3]",
+            registry_provider=provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "calc_eval_fast"],
+        )
+
+    def test_build_tool_plan_prefers_source_extra_retrieval_tool_over_builtin_when_both_enabled(
+        self,
+    ) -> None:
+        provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="hot_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "hot_suite": {
+                            "profile": "default",
+                            "extra_tools": {
+                                "task_retrieve_hot": {
+                                    "template": "task_retrieve",
+                                    "label": "Hot Retrieval",
+                                }
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=None,
+            )
+        )
+
+        plan = build_tool_plan(
+            "请先检索背景 [multi-tool] [kb:demo]",
+            registry_provider=provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "task_retrieve_hot"],
+        )
+
     def test_build_tool_plan_accepts_provider_generated_json_tools(self) -> None:
         class FakeProvider:
             provider = "openai"
@@ -356,6 +481,339 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn("task_retrieve", provider.last_prompt)
         self.assertIn("Allowed tool names: calc_eval.", provider.last_prompt)
+        self.assertEqual(
+            plan[0]["input"].get("planned_tool_names"),
+            ["calc_eval"],
+        )
+        self.assertEqual(
+            plan[0]["input"].get("planned_tool_labels"),
+            ["calc_eval"],
+        )
+
+    def test_build_tool_plan_provider_branch_accepts_extra_tool_from_registry_provider(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+            last_prompt = ""
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                self.last_prompt = prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "calc_eval_fast",
+                                    "input": {"expression": "6/2"},
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+        provider = FakeProvider()
+        plan = build_tool_plan(
+            "请先规划再计算 [calc:1+2]",
+            provider=provider,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "calc_eval_fast"],
+        )
+        self.assertEqual(
+            plan[1]["input"],
+            {"expression": "6/2"},
+        )
+        self.assertIn("Allowed tool names: calc_eval_fast.", provider.last_prompt)
+        self.assertIn("Fast Calculator", provider.last_prompt)
+
+    def test_build_tool_plan_provider_empty_plan_is_respected_without_heuristic_fallback(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content=json.dumps({"tools": []}, ensure_ascii=False),
+                    usage=ProviderUsage(
+                        prompt_tokens=9,
+                        completion_tokens=4,
+                        total_tokens=13,
+                    ),
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[0]["input"].get("planned_tool_names"),
+            [],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[0]["input"].get("planned_tool_labels"),
+            [],
+        )
+        self.assertIsNotNone(artifacts.provider_usage)
+        assert artifacts.provider_usage is not None
+        self.assertEqual(artifacts.provider_usage.total_tokens, 13)
+
+    def test_build_tool_plan_provider_accepts_string_tool_items(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {"tools": ["task_retrieve", "calc_eval"]},
+                        ensure_ascii=False,
+                    )
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "请先检索再计算 [calc:1+2*3] [kb:demo]",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "task_retrieve", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {
+                "query": "请先检索再计算 [calc:1+2*3] [kb:demo]",
+                "top_k": 4,
+                "knowledge_base_id": "demo",
+            },
+        )
+        self.assertEqual(
+            artifacts.tool_plan[2]["input"],
+            {"expression": "1+2*3"},
+        )
+
+    def test_build_tool_plan_provider_accepts_tool_and_arguments_aliases(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "tool": "calc_eval",
+                                    "arguments": {"expression": "6/2"},
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "6/2"},
+        )
+
+    def test_build_tool_plan_provider_accepts_flattened_task_retrieve_fields(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "task_retrieve",
+                                    "query": "深入检索背景",
+                                    "top_k": 2,
+                                    "knowledge_base_id": "kb-flat",
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式检索标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "task_retrieve"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {
+                "query": "深入检索背景",
+                "top_k": 2,
+                "knowledge_base_id": "kb-flat",
+            },
+        )
+
+    def test_build_tool_plan_provider_accepts_flattened_calc_eval_fields(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "calc_eval",
+                                    "expression": "8/4",
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "8/4"},
+        )
+
+    def test_build_tool_plan_provider_accepts_default_tool_labels(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {"tools": ["Knowledge Retrieval"]},
+                        ensure_ascii=False,
+                    )
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式检索标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "task_retrieve"],
+        )
+
+    def test_build_tool_plan_provider_accepts_override_tool_labels(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {"tools": ["Calculator Suite"]},
+                        ensure_ascii=False,
+                    )
+                )
+
+        settings = SimpleNamespace(
+            tool_registry_provider_source="calculator_suite",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "calculator_suite": {
+                        "profile": "calculator_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "label": "Calculator Suite",
+                            }
+                        },
+                    }
+                },
+                ensure_ascii=False,
+            ),
+            tool_registry_profile="default",
+            tool_registry_overrides_json=None,
+            tool_registry_extra_tools_json=None,
+            tool_registry_loaders_json=None,
+            tool_registry_loader_factories_json=None,
+            tool_registry_providers_json=None,
+            tool_registry_provider_factories_json=None,
+        )
+
+        artifacts = build_tool_plan_artifacts(
+            "请计算 [calc:8/4]",
+            provider=FakeProvider(),
+            registry_provider=get_configured_tool_registry_provider(settings=settings),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[0]["input"],
+            {"expression": "8/4"},
+        )
 
     def test_build_tool_plan_artifacts_capture_provider_usage_for_planning(self) -> None:
         class FakeProvider:
@@ -648,6 +1106,175 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             provider.load_tool_registry()["task_plan"].label,
             "Task Planner Suite",
         )
+
+    def test_get_stored_settings_promotes_runtime_defaults_to_remote_when_provider_ready(
+        self,
+    ) -> None:
+        class FakeConnection:
+            def execute(self, *_args, **_kwargs):
+                return self
+
+            def fetchone(self):
+                return None
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, *_args):
+                return False
+
+        original_get_settings = settings_service_module.get_settings
+        original_get_db_connection = settings_service_module.get_db_connection
+        try:
+            settings_service_module.get_settings = lambda: SimpleNamespace(
+                mode="mock",
+                provider="openai",
+                model_name="gpt-4.1-mini",
+                base_url="https://api.openai.com/v1",
+                api_key="sk-demo",
+                tool_registry_profile="default",
+                tool_registry_provider_source="planning_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "planning_suite": {
+                            "profile": "planning_only",
+                            "overrides": {
+                                "task_plan": {
+                                    "label": "Task Planner Suite",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=None,
+                tool_registry_loaders_json=None,
+                tool_registry_loader_factories_json=None,
+                tool_registry_providers_json=None,
+                tool_registry_provider_factories_json=None,
+            )
+            settings_service_module.get_db_connection = lambda: FakeContextManager()
+
+            settings = settings_service_module.get_stored_settings("user-1")
+        finally:
+            settings_service_module.get_settings = original_get_settings
+            settings_service_module.get_db_connection = original_get_db_connection
+
+        self.assertEqual(settings.mode, "remote")
+        self.assertEqual(settings.provider, "openai")
+        self.assertEqual(settings.model, "gpt-4.1-mini")
+        self.assertEqual(settings.base_url, "https://api.openai.com/v1")
+        self.assertEqual(settings.api_key, "sk-demo")
+        self.assertEqual(settings.tool_registry_provider_source, "planning_suite")
+
+    def test_get_stored_settings_keeps_canonical_mock_defaults_when_runtime_provider_is_incomplete(
+        self,
+    ) -> None:
+        class FakeConnection:
+            def execute(self, *_args, **_kwargs):
+                return self
+
+            def fetchone(self):
+                return None
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, *_args):
+                return False
+
+        original_get_settings = settings_service_module.get_settings
+        original_get_db_connection = settings_service_module.get_db_connection
+        try:
+            settings_service_module.get_settings = lambda: SimpleNamespace(
+                mode="mock",
+                provider="openai",
+                model_name="gpt-4.1-mini",
+                base_url="https://api.openai.com/v1",
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=None,
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=None,
+                tool_registry_loaders_json=None,
+                tool_registry_loader_factories_json=None,
+                tool_registry_providers_json=None,
+                tool_registry_provider_factories_json=None,
+            )
+            settings_service_module.get_db_connection = lambda: FakeContextManager()
+
+            settings = settings_service_module.get_stored_settings("user-1")
+        finally:
+            settings_service_module.get_settings = original_get_settings
+            settings_service_module.get_db_connection = original_get_db_connection
+
+        self.assertEqual(settings.mode, "mock")
+        self.assertEqual(settings.provider, "mock")
+        self.assertEqual(settings.model, "mock-gpt")
+        self.assertIsNone(settings.base_url)
+        self.assertIsNone(settings.api_key)
+
+    def test_get_stored_settings_keeps_runtime_remote_connection_defaults_for_existing_remote_row_with_missing_fields(
+        self,
+    ) -> None:
+        row = {
+            "mode": "remote",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "base_url": None,
+            "api_key_enc": None,
+            "tool_registry_profile": "default",
+            "tool_registry_provider_source": "default",
+        }
+
+        class FakeConnection:
+            def execute(self, *_args, **_kwargs):
+                return self
+
+            def fetchone(self):
+                return row
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, *_args):
+                return False
+
+        original_get_settings = settings_service_module.get_settings
+        original_get_db_connection = settings_service_module.get_db_connection
+        try:
+            settings_service_module.get_settings = lambda: SimpleNamespace(
+                mode="mock",
+                provider="openai",
+                model_name="gpt-4.1-mini",
+                base_url="https://api.openai.com/v1",
+                api_key="sk-runtime",
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=None,
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=None,
+                tool_registry_loaders_json=None,
+                tool_registry_loader_factories_json=None,
+                tool_registry_providers_json=None,
+                tool_registry_provider_factories_json=None,
+            )
+            settings_service_module.get_db_connection = lambda: FakeContextManager()
+
+            settings = settings_service_module.get_stored_settings("user-1")
+        finally:
+            settings_service_module.get_settings = original_get_settings
+            settings_service_module.get_db_connection = original_get_db_connection
+
+        self.assertEqual(settings.mode, "remote")
+        self.assertEqual(settings.provider, "openai")
+        self.assertEqual(settings.model, "gpt-4.1-mini")
+        self.assertEqual(settings.base_url, "https://api.openai.com/v1")
+        self.assertEqual(settings.api_key, "sk-runtime")
 
     def test_backend_e2e_scripts_bootstrap_backend_root_before_imports(self) -> None:
         repo_root = ROOT.parent
@@ -1459,6 +2086,64 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result.tool_registry_profile, "planning_only")
         self.assertEqual(result.tool_registry_provider_source, "suite_a")
 
+    def test_update_settings_reuses_existing_remote_base_url_when_payload_omits_it(
+        self,
+    ) -> None:
+        payload = settings_routes_module.SettingsUpdateRequest(
+            mode="remote",
+            provider="openai",
+            model="gpt-4.1-mini",
+            api_key="secret",
+        )
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_settings = settings_routes_module.get_settings
+        original_save_settings = settings_routes_module.save_settings
+        original_build_settings_summary_response = (
+            settings_routes_module._build_settings_summary_response
+        )
+        original_safe_record_audit_event = settings_routes_module.safe_record_audit_event
+        saved_settings: list[StoredSettings] = []
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url="https://runtime.example/v1",
+                api_key="secret",
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.save_settings = lambda _user_id, settings: (
+                saved_settings.append(settings) or settings
+            )
+            settings_routes_module._build_settings_summary_response = (
+                lambda *, settings, runtime_settings=None, database_locator=None: settings
+            )
+            settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
+
+            result = settings_routes_module.update_settings(
+                payload,
+                current_user={"id": "user-1"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_settings = original_get_settings
+            settings_routes_module.save_settings = original_save_settings
+            settings_routes_module._build_settings_summary_response = (
+                original_build_settings_summary_response
+            )
+            settings_routes_module.safe_record_audit_event = (
+                original_safe_record_audit_event
+            )
+
+        self.assertEqual(len(saved_settings), 1)
+        self.assertEqual(saved_settings[0].base_url, "https://runtime.example/v1")
+        self.assertEqual(result.base_url, "https://runtime.example/v1")
+
     def test_validate_settings_reuses_shared_tool_registry_selection_validator(
         self,
     ) -> None:
@@ -1536,6 +2221,64 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertFalse(response.ok)
         self.assertEqual(response.error_code, "tool_registry_selection_invalid")
         self.assertEqual(response.error, "tool_registry_profile is invalid")
+
+    def test_validate_settings_reuses_existing_remote_base_url_when_payload_omits_it(
+        self,
+    ) -> None:
+        payload = settings_routes_module.SettingsUpdateRequest(
+            mode="remote",
+            provider="openai",
+            model="gpt-4.1-mini",
+            api_key="secret",
+        )
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_settings = settings_routes_module.get_settings
+        original_urlopen = settings_routes_module.urlopen
+        original_safe_record_audit_event = settings_routes_module.safe_record_audit_event
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url="https://runtime.example/v1",
+                api_key="secret",
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+
+            class FakeResponse:
+                status = 200
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_args):
+                    return False
+
+            settings_routes_module.urlopen = lambda request, timeout=0: FakeResponse()
+            settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
+
+            response = settings_routes_module.validate_settings(
+                payload,
+                current_user={"id": "user-validate-base-url"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_settings = original_get_settings
+            settings_routes_module.urlopen = original_urlopen
+            settings_routes_module.safe_record_audit_event = (
+                original_safe_record_audit_event
+            )
+
+        self.assertTrue(response.ok)
+        self.assertEqual(response.message, "remote preflight succeeded.")
+        self.assertEqual(response.mode, "remote")
+        self.assertEqual(response.provider, "openai")
+        self.assertEqual(response.model, "gpt-4.1-mini")
 
     def test_tool_registry_profile_option_details_reuse_preview_labels(
         self,
@@ -12750,6 +13493,202 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(meta["tool_registry_provider_source"], "suite_a")
         self.assertEqual(meta["allowed_tool_labels"], ["Task Planner"])
 
+    def test_stream_task_execution_reuses_runtime_provider_identity_when_provider_object_has_no_attrs(
+        self,
+    ) -> None:
+        runtime_settings = StoredSettings(
+            mode="remote",
+            provider="openai",
+            model="gpt-4.1-mini",
+            base_url="https://api.openai.com/v1",
+            api_key="sk-runtime",
+            tool_registry_profile="default",
+            tool_registry_provider_source="default",
+        )
+        preflight_models_seen: list[str] = []
+        iteration_models_seen: list[str] = []
+        completed_trace_steps: list[dict[str, object]] = []
+
+        class ProviderWithoutIdentity:
+            def stream_generate(self, prompt: str):
+                del prompt
+                yield "runtime-backed answer"
+
+        original_get_stored_settings = getattr(
+            chat_execution_module,
+            "get_stored_settings",
+            None,
+        )
+        original_get_llm_provider = chat_execution_module.get_llm_provider
+        original_get_configured_tool_registry_provider = (
+            chat_execution_module.get_configured_tool_registry_provider
+        )
+        original_build_tool_plan_artifacts = chat_execution_module.build_tool_plan_artifacts
+        original_execute_preflight = (
+            chat_execution_module.execute_configured_tool_registry_provider_preflight
+        )
+        original_execute_tool_plan_item_service_execution = (
+            chat_execution_module.execute_tool_plan_item_service_execution
+        )
+        original_execute_tool_plan_item_service_actions = (
+            chat_execution_module.execute_tool_plan_item_service_actions
+        )
+        original_update_task_status = chat_execution_module.update_task_status
+        original_get_task = chat_execution_module.get_task
+        original_update_task_trace_steps = chat_execution_module.update_task_trace_steps
+        original_complete_task = chat_execution_module.complete_task
+        original_create_message = chat_execution_module.create_message
+        original_try_append_task_memory = chat_execution_module.try_append_task_memory
+        original_safe_record_audit_event = chat_execution_module.safe_record_audit_event
+
+        def fake_get_stored_settings(user_id: str) -> StoredSettings:
+            self.assertEqual(user_id, "user-1")
+            return runtime_settings
+
+        def fake_get_llm_provider(user_id: str) -> ProviderWithoutIdentity:
+            self.assertEqual(user_id, "user-1")
+            return ProviderWithoutIdentity()
+
+        def fake_build_tool_plan_artifacts(
+            prompt: str,
+            *,
+            provider: object | None = None,
+            registry_provider: object | None = None,
+        ) -> SimpleNamespace:
+            del prompt, provider, registry_provider
+            return SimpleNamespace(
+                tool_plan=[{"name": "calc_eval", "input": {"expression": "1+2"}}],
+                planning_prompt=None,
+                provider_usage=None,
+                planning_provider_attempted=False,
+                planning_provider_used=False,
+                allowed_tool_names=("calc_eval",),
+                allowed_tool_labels=("Calculator",),
+            )
+
+        def fake_execute_preflight(
+            *,
+            task_id: str,
+            step_id: str,
+            seq: int,
+            model: str,
+            trace_steps: list[dict[str, object]],
+            persist_trace_fn,
+            record_audit_event_fn,
+            settings=None,
+        ) -> dict[str, object]:
+            del task_id, step_id, seq, trace_steps, persist_trace_fn, record_audit_event_fn, settings
+            preflight_models_seen.append(model)
+            return {
+                "provider": StaticToolRegistryProvider(
+                    {"calc_eval": get_default_tool_registry()["calc_eval"]}
+                ),
+                "provider_source_name": "default",
+            }
+
+        def fake_execute_tool_plan_item_service_execution(**kwargs):
+            iteration_models_seen.append(str(kwargs["model"]))
+            yield {
+                "kind": "result",
+                "result": {
+                    "service_actions": [],
+                },
+            }
+
+        def fake_execute_tool_plan_item_service_actions(**kwargs):
+            yield {
+                "kind": "result",
+                "result": {
+                    "seq_cursor": int(kwargs["seq_cursor"]),
+                    "should_return": False,
+                },
+            }
+
+        try:
+            chat_execution_module.get_stored_settings = fake_get_stored_settings
+            chat_execution_module.get_llm_provider = fake_get_llm_provider
+            chat_execution_module.get_configured_tool_registry_provider = (
+                lambda *, settings=None: StaticToolRegistryProvider(
+                    {"calc_eval": get_default_tool_registry()["calc_eval"]}
+                )
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                fake_build_tool_plan_artifacts
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                fake_execute_preflight
+            )
+            chat_execution_module.execute_tool_plan_item_service_execution = (
+                fake_execute_tool_plan_item_service_execution
+            )
+            chat_execution_module.execute_tool_plan_item_service_actions = (
+                fake_execute_tool_plan_item_service_actions
+            )
+            chat_execution_module.update_task_status = lambda *args, **kwargs: None
+            chat_execution_module.get_task = lambda *args, **kwargs: {"status": "running"}
+            chat_execution_module.update_task_trace_steps = lambda *args, **kwargs: None
+            chat_execution_module.complete_task = (
+                lambda *, trace_steps, **kwargs: completed_trace_steps.extend(trace_steps)
+            )
+            chat_execution_module.create_message = lambda *args, **kwargs: None
+            chat_execution_module.try_append_task_memory = lambda *args, **kwargs: None
+            chat_execution_module.safe_record_audit_event = lambda *args, **kwargs: None
+
+            events = list(
+                chat_execution_module.stream_task_execution(
+                    task_id="task-1",
+                    session_id="session-1",
+                    user_id="user-1",
+                    prompt="please calculate with runtime identity fallback",
+                )
+            )
+        finally:
+            if original_get_stored_settings is not None:
+                chat_execution_module.get_stored_settings = original_get_stored_settings
+            chat_execution_module.get_llm_provider = original_get_llm_provider
+            chat_execution_module.get_configured_tool_registry_provider = (
+                original_get_configured_tool_registry_provider
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                original_build_tool_plan_artifacts
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                original_execute_preflight
+            )
+            chat_execution_module.execute_tool_plan_item_service_execution = (
+                original_execute_tool_plan_item_service_execution
+            )
+            chat_execution_module.execute_tool_plan_item_service_actions = (
+                original_execute_tool_plan_item_service_actions
+            )
+            chat_execution_module.update_task_status = original_update_task_status
+            chat_execution_module.get_task = original_get_task
+            chat_execution_module.update_task_trace_steps = original_update_task_trace_steps
+            chat_execution_module.complete_task = original_complete_task
+            chat_execution_module.create_message = original_create_message
+            chat_execution_module.try_append_task_memory = original_try_append_task_memory
+            chat_execution_module.safe_record_audit_event = original_safe_record_audit_event
+
+        start_payload = next(
+            json.loads(event.split("data: ", 1)[1])
+            for event in events
+            if event.startswith("event: start\n")
+        )
+        planning_trace_payload = next(
+            json.loads(event.split("data: ", 1)[1])
+            for event in events
+            if event.startswith("event: trace\n")
+        )
+
+        self.assertEqual(start_payload["provider"], "openai")
+        self.assertEqual(start_payload["model"], "gpt-4.1-mini")
+        self.assertEqual(planning_trace_payload["step"]["meta"]["model"], "gpt-4.1-mini")
+        self.assertEqual(preflight_models_seen, ["gpt-4.1-mini"])
+        self.assertEqual(iteration_models_seen, ["gpt-4.1-mini"])
+        final_answer_step = completed_trace_steps[-1]
+        self.assertEqual(final_answer_step["meta"]["model"], "gpt-4.1-mini")
+        self.assertEqual(final_answer_step["content"], "runtime-backed answer")
+
     def test_build_tool_plan_summary_uses_display_labels(self) -> None:
         plan = build_tool_plan("请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]")
 
@@ -12826,6 +13765,33 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "steps": [
                     "Analyze request",
                     "Retrieve supporting context",
+                    "Evaluate calculation",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "请帮我规划",
+                "echo": True,
+            },
+        )
+
+    def test_run_tool_supports_task_plan_alias_using_actual_planned_tools(self) -> None:
+        output = run_tool(
+            name="task_plan",
+            tool_input={
+                "prompt_preview": "请帮我规划",
+                "planned_tool_names": ["calc_eval"],
+                "planned_tool_labels": ["calc_eval"],
+            },
+            prompt="普通问答，不包含显式计算标记",
+            user_id="user-1",
+            attempt=0,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Evaluate calculation -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
                     "Evaluate calculation",
                     "Synthesize final answer",
                 ],

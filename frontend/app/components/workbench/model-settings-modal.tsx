@@ -226,7 +226,7 @@ export function ModelSettingsModal({
     if (!form.model.trim()) {
       return t.settings.fieldModel;
     }
-    if (!form.base_url.trim()) {
+    if (!form.base_url.trim() && !data?.base_url_configured) {
       return t.settings.fieldBaseUrl;
     }
     if (!form.api_key.trim() && !data?.api_key_configured) {

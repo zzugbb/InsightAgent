@@ -223,6 +223,25 @@ def _merge_usage_payloads(
     return usage_payload
 
 
+def _resolve_provider_identity(
+    *,
+    provider: object,
+    runtime_settings: object,
+) -> tuple[str, str]:
+    provider_name = str(
+        getattr(provider, "provider", None)
+        or getattr(runtime_settings, "provider", None)
+        or "mock"
+    ).strip()
+    model_name = str(
+        getattr(provider, "model", None)
+        or getattr(runtime_settings, "model", None)
+        or getattr(runtime_settings, "model_name", None)
+        or "mock-gpt"
+    ).strip()
+    return (provider_name or "mock", model_name or "mock-gpt")
+
+
 def stream_task_execution(
     *,
     task_id: str,
@@ -363,6 +382,10 @@ def stream_task_execution(
     try:
         runtime_settings = get_stored_settings(user_id)
         provider = get_llm_provider(user_id)
+        provider_name, provider_model = _resolve_provider_identity(
+            provider=provider,
+            runtime_settings=runtime_settings,
+        )
         raise_if_should_abort(force_status_probe=True)
 
         yield sse_event(
@@ -370,8 +393,8 @@ def stream_task_execution(
             {
                 "session_id": session_id,
                 "task_id": task_id,
-                "provider": getattr(provider, "provider", "mock"),
-                "model": getattr(provider, "model", "mock-gpt"),
+                "provider": provider_name,
+                "model": provider_model,
             },
         )
         yield sse_event("state", {"task_id": task_id, "phase": "thinking"})
@@ -393,7 +416,7 @@ def stream_task_execution(
         )
         planning_usage_payload = None
         plan_meta: dict[str, object] = {
-            "model": getattr(provider, "model", "mock-gpt"),
+            "model": provider_model,
             "step_type": "planning",
             "label": "tool_plan",
             "tokens": _estimate_token_count(plan_content),
@@ -443,7 +466,7 @@ def stream_task_execution(
             task_id=task_id,
             step_id=str(uuid4()),
             seq=seq_cursor + 1,
-            model=getattr(provider, "model", "mock-gpt"),
+            model=provider_model,
             trace_steps=trace_steps,
             persist_trace_fn=persist_trace,
             record_audit_event_fn=record_audit_event,
@@ -463,7 +486,7 @@ def stream_task_execution(
                 seq=seq_cursor + 1,
                 name=tool_name,
                 tool_input=tool_input,
-                model=getattr(provider, "model", "mock-gpt"),
+                model=provider_model,
                 label=f"tool_{idx}",
                 token_count=_estimate_token_count(
                     f"{tool_name} {json.dumps(tool_input, ensure_ascii=False)}"
@@ -483,7 +506,7 @@ def stream_task_execution(
                 tool_input=tool_input,
                 prompt=prompt,
                 user_id=user_id,
-                model=getattr(provider, "model", "mock-gpt"),
+                model=provider_model,
                 estimate_token_count=_estimate_token_count,
                 make_step_id=lambda: str(uuid4()),
                 raise_if_should_abort=raise_if_should_abort,
@@ -525,7 +548,7 @@ def stream_task_execution(
             "type": "observation",
             "content": "",
             "meta": {
-                "model": getattr(provider, "model", "mock-gpt"),
+                "model": provider_model,
                 "step_type": "final_answer",
                 "tokens": None,
                 "cost_estimate": None,
