@@ -23,6 +23,7 @@ from app.services.tool_runtime import (
     build_tool_plan_artifacts,
     execute_configured_tool_registry_provider_preflight,
     get_configured_tool_registry_provider,
+    get_tool_display_name,
     get_tool_registry_profile_name_from_settings,
     get_tool_registry_provider_source_name_from_settings,
     build_tool_iteration_context,
@@ -490,6 +491,10 @@ def stream_task_execution(
                 label=f"tool_{idx}",
                 token_count=_estimate_token_count(
                     f"{tool_name} {json.dumps(tool_input, ensure_ascii=False)}"
+                ),
+                display_name=get_tool_display_name(
+                    tool_name,
+                    registry_provider=tool_registry_provider,
                 ),
             )
             action_step = iteration_ctx["action_step"]

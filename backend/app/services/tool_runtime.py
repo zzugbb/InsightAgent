@@ -579,21 +579,7 @@ def get_tool_display_name(
     registry_provider: ToolRegistryProvider | None = None,
 ) -> str:
     registration = resolve_tool_registration(name=name, registry_provider=registry_provider)
-    if registration is None:
-        return name
-    normalized_name = normalize_tool_registry_name(name)
-    if normalized_name in {"task_plan", "task_retrieve"}:
-        return registration.label
-    default_registration = _REGISTERED_TOOLS.get(normalized_name)
-    if default_registration is None and registration.label.strip():
-        return registration.label
-    if (
-        default_registration is not None
-        and registration.label.strip()
-        and registration.label != default_registration.label
-    ):
-        return registration.label
-    return name
+    return get_tool_display_name_from_registration(name=name, registration=registration)
 
 
 def build_tool_plan_summary(
@@ -4117,12 +4103,13 @@ def build_tool_success_meta(
     output: dict[str, object],
     retry_count: int,
     last_error: str | None,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
     return {
         "tool": {
             "name": canonical_name,
-            "label": get_tool_display_name(canonical_name),
+            "label": display_name or get_tool_display_name(canonical_name),
             "input": tool_input,
             "output": output,
             "status": "done",
@@ -4138,12 +4125,13 @@ def build_tool_error_meta(
     tool_input: dict[str, object],
     retry_count: int,
     error_message: str,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
     return {
         "tool": {
             "name": canonical_name,
-            "label": get_tool_display_name(canonical_name),
+            "label": display_name or get_tool_display_name(canonical_name),
             "input": tool_input,
             "status": "error",
             "retry_count": retry_count,
@@ -4159,13 +4147,14 @@ def build_tool_start_payload(
     name: str,
     tool_input: dict[str, object],
     retry_count: int,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
     return {
         "task_id": task_id,
         "step_id": step_id,
         "name": canonical_name,
-        "display_name": get_tool_display_name(canonical_name),
+        "display_name": display_name or get_tool_display_name(canonical_name),
         "input": tool_input,
         "retry_count": retry_count,
     }
@@ -4208,6 +4197,7 @@ def build_action_step_initial_meta(
     model: str,
     label: str,
     token_count: int,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
     return {
@@ -4219,7 +4209,7 @@ def build_action_step_initial_meta(
         "cost_estimate": None,
         "tool": {
             "name": canonical_name,
-            "label": get_tool_display_name(canonical_name),
+            "label": display_name or get_tool_display_name(canonical_name),
             "input": tool_input,
             "status": "running",
             "retry_count": 0,
@@ -4258,6 +4248,7 @@ def build_tool_step_success_update(
     retry_count: int,
     token_count: int,
     last_error: str | None,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
     tool_obj = (
@@ -4265,14 +4256,14 @@ def build_tool_step_success_update(
         if isinstance(tool_meta, dict) and isinstance(tool_meta.get("tool"), dict)
         else None
     )
-    display_name = (
+    resolved_display_name = display_name or (
         str(tool_obj.get("label")).strip()
         if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
         else get_tool_display_name(name)
     )
     return {
         **action_step,
-        "content": f"Tool done: {display_name}",
+        "content": f"Tool done: {resolved_display_name}",
         "meta": {
             **dict(action_step.get("meta", {})),
             "step_type": "tool_call",
@@ -4284,6 +4275,7 @@ def build_tool_step_success_update(
                 output=output,
                 retry_count=retry_count,
                 last_error=last_error,
+                display_name=resolved_display_name,
             ),
         },
     }
@@ -4297,6 +4289,7 @@ def build_tool_step_error_update(
     retry_count: int,
     token_count: int,
     error_message: str,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
     tool_obj = (
@@ -4304,14 +4297,14 @@ def build_tool_step_error_update(
         if isinstance(tool_meta, dict) and isinstance(tool_meta.get("tool"), dict)
         else None
     )
-    display_name = (
+    resolved_display_name = display_name or (
         str(tool_obj.get("label")).strip()
         if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
         else get_tool_display_name(name)
     )
     return {
         **action_step,
-        "content": f"Tool error: {display_name}",
+        "content": f"Tool error: {resolved_display_name}",
         "meta": {
             **dict(action_step.get("meta", {})),
             "step_type": "tool_call",
@@ -4322,6 +4315,7 @@ def build_tool_step_error_update(
                 tool_input=tool_input,
                 retry_count=retry_count,
                 error_message=error_message,
+                display_name=resolved_display_name,
             ),
         },
     }
@@ -4334,6 +4328,7 @@ def build_tool_attempt_start_events(
     name: str,
     tool_input: dict[str, object],
     attempt: int,
+    display_name: str | None = None,
 ) -> dict[str, dict[str, object]]:
     return {
         "tool_start": build_tool_start_payload(
@@ -4342,6 +4337,7 @@ def build_tool_attempt_start_events(
             name=name,
             tool_input=tool_input,
             retry_count=attempt,
+            display_name=display_name,
         ),
         "state": {
             "task_id": task_id,
@@ -4379,6 +4375,10 @@ def build_tool_attempt_bundle(
             name=runtime_ctx.name,
             tool_input=tool_input,
             attempt=attempt,
+            display_name=get_tool_display_name_from_registration(
+                name=runtime_ctx.registration.name,
+                registration=runtime_ctx.registration,
+            ),
         ),
         "runtime_ctx": runtime_ctx,
         "runtime_policy": build_tool_execution_policy(runtime_ctx),
@@ -4815,6 +4815,7 @@ def build_tool_attempt_success_transition(
     retry_count: int,
     token_count: int,
     last_error: str | None,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     return {
         "action_step": build_tool_step_success_update(
@@ -4825,6 +4826,7 @@ def build_tool_attempt_success_transition(
             retry_count=retry_count,
             token_count=token_count,
             last_error=last_error,
+            display_name=display_name,
         ),
         "events": build_tool_attempt_success_events(
             task_id=task_id,
@@ -4846,6 +4848,7 @@ def build_tool_attempt_error_transition(
     tool_input: dict[str, object],
     exc: MockToolExecutionError,
     token_count: int,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     error_message = str(exc)
     retry_count = runtime_ctx.attempt + 1
@@ -4858,6 +4861,7 @@ def build_tool_attempt_error_transition(
             retry_count=retry_count,
             token_count=token_count,
             error_message=error_message,
+            display_name=display_name,
         ),
         "events": {
             **build_tool_attempt_error_events(
@@ -4893,8 +4897,13 @@ def build_tool_step_output(action_step: dict[str, object]) -> dict[str, object] 
     return output if isinstance(output, dict) else None
 
 
-def build_tool_observation_entry(*, name: str, output: dict[str, object] | None) -> str:
-    return f"{get_tool_display_name(name)}: {json.dumps(output, ensure_ascii=False)}"
+def build_tool_observation_entry(
+    *,
+    name: str,
+    output: dict[str, object] | None,
+    display_name: str | None = None,
+) -> str:
+    return f"{display_name or get_tool_display_name(name)}: {json.dumps(output, ensure_ascii=False)}"
 
 
 def build_tool_trace_event(
@@ -4945,12 +4954,14 @@ def build_tool_rag_step(
     chunks: list[str],
     knowledge_base_id: str,
     token_count: int,
+    content: str | None = None,
 ) -> dict[str, object]:
     return {
         "id": step_id,
         "seq": seq,
         "type": "thought",
-        "content": "Knowledge Retrieval returned snippets from the selected knowledge base.",
+        "content": content
+        or "Knowledge Retrieval returned snippets from the selected knowledge base.",
         "meta": {
             "model": model,
             "step_type": "rag_retrieval",
@@ -5006,6 +5017,10 @@ def build_tool_attempt_outcome(
     token_count: int,
     last_error: str | None,
 ) -> dict[str, object]:
+    display_name = get_tool_display_name_from_registration(
+        name=runtime_ctx.registration.name,
+        registration=runtime_ctx.registration,
+    )
     if exc is None:
         assert output is not None
         success_transition = build_tool_attempt_success_transition(
@@ -5018,6 +5033,7 @@ def build_tool_attempt_outcome(
             retry_count=runtime_ctx.attempt,
             token_count=token_count,
             last_error=last_error,
+            display_name=display_name,
         )
         return build_tool_attempt_result(
             outcome="success",
@@ -5037,6 +5053,7 @@ def build_tool_attempt_outcome(
         tool_input=tool_input,
         exc=exc,
         token_count=token_count,
+        display_name=display_name,
     )
     return build_tool_attempt_result(
         outcome="error",
@@ -5057,6 +5074,7 @@ def build_tool_iteration_context(
     model: str,
     label: str,
     token_count: int,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
     return {
@@ -5071,6 +5089,7 @@ def build_tool_iteration_context(
                 model=model,
                 label=label,
                 token_count=token_count,
+                display_name=display_name,
             ),
         ),
     }
@@ -5082,6 +5101,7 @@ def build_tool_iteration_success_artifacts(
     step_id: str,
     action_step: dict[str, object],
     name: str,
+    display_name: str | None = None,
 ) -> dict[str, object]:
     output = build_tool_step_output(action_step)
     canonical_name = normalize_tool_registry_name(name)
@@ -5091,7 +5111,11 @@ def build_tool_iteration_success_artifacts(
             step_id=step_id,
             step=action_step,
         ),
-        "observation": build_tool_observation_entry(name=canonical_name, output=output),
+        "observation": build_tool_observation_entry(
+            name=canonical_name,
+            output=output,
+            display_name=display_name,
+        ),
         "output": output,
     }
 
@@ -5103,15 +5127,25 @@ def build_tool_rag_followup(
     seq: int,
     model: str,
     tool_name: str,
+    tool_kind: str | None = None,
+    display_name: str | None = None,
     output: dict[str, object] | None,
     token_count: int,
 ) -> dict[str, object] | None:
-    if normalize_tool_registry_name(tool_name) != "task_retrieve" or not isinstance(output, dict):
+    if not isinstance(output, dict):
+        return None
+    semantic_kind = tool_kind if isinstance(tool_kind, str) and tool_kind.strip() else None
+    if semantic_kind is None:
+        semantic_kind = get_tool_semantic_kind(name=tool_name)
+    if semantic_kind is None or not semantic_kind.endswith("knowledge_retrieval"):
         return None
     chunks = output.get("chunks")
     if not isinstance(chunks, list):
         return None
     kb = output.get("knowledge_base_id")
+    normalized_display_name = (
+        str(display_name).strip() if isinstance(display_name, str) else ""
+    )
     step = build_tool_rag_step(
         step_id=step_id,
         seq=seq,
@@ -5119,6 +5153,11 @@ def build_tool_rag_followup(
         chunks=[str(x) for x in chunks],
         knowledge_base_id=str(kb) if kb else get_settings().rag_default_knowledge_base_id,
         token_count=token_count,
+        content=(
+            f"{normalized_display_name} returned snippets from the selected knowledge base."
+            if normalized_display_name and normalized_display_name != "Knowledge Retrieval"
+            else None
+        ),
     )
     return {
         "step": step,
@@ -5144,12 +5183,17 @@ def build_tool_iteration_execution(
     token_count: int,
     last_error: str | None,
 ) -> dict[str, object]:
+    display_name = get_tool_display_name_from_registration(
+        name=runtime_ctx.registration.name,
+        registration=runtime_ctx.registration,
+    )
     start_events = build_tool_attempt_start_events(
         task_id=task_id,
         step_id=step_id,
         name=name,
         tool_input=tool_input,
         attempt=runtime_ctx.attempt,
+        display_name=display_name,
     )
     outcome = build_tool_attempt_outcome(
         task_id=task_id,
@@ -5172,6 +5216,7 @@ def build_tool_iteration_execution(
                 step_id=step_id,
                 action_step=outcome["action_step"],
                 name=name,
+                display_name=display_name,
             ),
             "terminal_failure": None,
         }
@@ -5294,9 +5339,17 @@ def build_tool_plan_item_execution(
             seq=int(action_step.get("seq", 0)) + 1,
             model=model,
             tool_name=name,
+            tool_kind=get_tool_semantic_kind(
+                name=runtime_ctx.registration.name,
+                registration=runtime_ctx.registration,
+            ),
+            display_name=get_tool_display_name_from_registration(
+                name=runtime_ctx.registration.name,
+                registration=runtime_ctx.registration,
+            ),
             output=success_output if isinstance(success_output, dict) else None,
             token_count=rag_token_count,
-    )
+        )
     plan_item_result = build_tool_plan_item_execution_result(
         iteration_execution=iteration_execution,
         rag_followup=rag_followup,
@@ -6152,6 +6205,80 @@ def build_tool_plan(
     ).tool_plan
 
 
+def _find_builtin_registration_by_runner(
+    runner: ToolRunner,
+) -> ToolRegistration | None:
+    for registration in _REGISTERED_TOOLS.values():
+        if registration.runner is runner:
+            return registration
+    return None
+
+
+def get_tool_display_name_from_registration(
+    *,
+    name: str,
+    registration: ToolRegistration | None,
+) -> str:
+    if registration is None:
+        return name
+    normalized_name = normalize_tool_registry_name(name)
+    label = registration.label.strip()
+    if normalized_name in {"task_plan", "task_retrieve"} and label:
+        return label
+    default_registration = _REGISTERED_TOOLS.get(normalized_name)
+    if default_registration is None and label:
+        return label
+    if (
+        default_registration is not None
+        and label
+        and label != default_registration.label
+    ):
+        return label
+    return name
+
+
+def get_tool_semantic_kind(
+    *,
+    name: str,
+    registration: ToolRegistration | None = None,
+) -> str | None:
+    if registration is not None:
+        template_registration = _find_builtin_registration_by_runner(registration.runner)
+        if template_registration is not None:
+            return template_registration.kind
+        return registration.kind
+    normalized_name = normalize_tool_registry_name(name)
+    default_registration = _REGISTERED_TOOLS.get(normalized_name)
+    if default_registration is not None:
+        return default_registration.kind
+    return None
+
+
+def normalize_tool_output_for_registration(
+    *,
+    output: dict[str, object],
+    registration: ToolRegistration,
+) -> dict[str, object]:
+    normalized_output = dict(output)
+    if registration.name in _REGISTERED_TOOLS:
+        return normalized_output
+
+    current_kind = normalized_output.get("tool_kind")
+    current_kind_text = str(current_kind).strip() if current_kind is not None else ""
+    if not current_kind_text:
+        normalized_output["tool_kind"] = registration.kind
+        return normalized_output
+
+    template_registration = _find_builtin_registration_by_runner(registration.runner)
+    if (
+        template_registration is not None
+        and current_kind_text == template_registration.kind
+        and registration.kind != template_registration.kind
+    ):
+        normalized_output["tool_kind"] = registration.kind
+    return normalized_output
+
+
 def run_tool(
     *,
     name: str,
@@ -6173,10 +6300,14 @@ def run_tool(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    return ctx.registration.runner(
+    output = ctx.registration.runner(
         tool_input=tool_input,
         prompt=ctx.prompt,
         user_id=ctx.user_id,
+    )
+    return normalize_tool_output_for_registration(
+        output=output,
+        registration=ctx.registration,
     )
 
 

@@ -13848,6 +13848,106 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_run_tool_extra_calc_alias_rewrites_template_tool_kind_to_registration_kind(
+        self,
+    ) -> None:
+        provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                            "kind": "fast_calculator",
+                        }
+                    }
+                ),
+            )
+        )
+
+        output = run_tool(
+            name="calc_eval_fast",
+            tool_input={"expression": "1+2*3"},
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "expression": "1+2*3",
+                "result": 7.0,
+                "tool_kind": "fast_calculator",
+            },
+        )
+
+    def test_run_tool_extra_retrieve_alias_adds_registration_kind_to_output(self) -> None:
+        original_query = tool_runtime_module.query_knowledge_base
+
+        def fake_query_knowledge_base(
+            *,
+            user_id: str,
+            knowledge_base_id: str,
+            query_text: str,
+            top_k: int,
+        ) -> dict[str, object]:
+            self.assertEqual(user_id, "user-1")
+            self.assertEqual(knowledge_base_id, "demo-kb")
+            self.assertEqual(query_text, "hot retrieval")
+            self.assertEqual(top_k, 2)
+            return {
+                "hits": [{"content": "alpha"}],
+                "hit_count": 1,
+                "knowledge_base_id": knowledge_base_id,
+                "collection": "kb_demo-kb",
+            }
+
+        tool_runtime_module.query_knowledge_base = fake_query_knowledge_base
+        try:
+            provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_extra_tools_json=json.dumps(
+                        {
+                            "task_retrieve_hot": {
+                                "template": "task_retrieve",
+                                "label": "Hot Retrieval",
+                                "kind": "hot_knowledge_retrieval",
+                            }
+                        }
+                    ),
+                )
+            )
+            output = run_tool(
+                name="task_retrieve_hot",
+                tool_input={
+                    "query": "hot retrieval",
+                    "knowledge_base_id": "demo-kb",
+                    "top_k": 2,
+                },
+                prompt="检索 demo",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=provider,
+            )
+        finally:
+            tool_runtime_module.query_knowledge_base = original_query
+
+        self.assertEqual(
+            output,
+            {
+                "chunks": ["alpha"],
+                "hits": [{"content": "alpha"}],
+                "hit_count": 1,
+                "knowledge_base_id": "demo-kb",
+                "collection": "kb_demo-kb",
+                "tool_kind": "hot_knowledge_retrieval",
+            },
+        )
+
     def test_run_tool_accepts_custom_registry_override(self) -> None:
         runner_calls: list[tuple[dict[str, object], str, str]] = []
 
@@ -26381,6 +26481,26 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(context["action_step"]["content"], "Tool running: calc_eval")
         self.assertEqual(context["action_step"]["meta"]["tool"]["status"], "running")
 
+    def test_build_tool_iteration_context_uses_explicit_display_name_for_extra_tool(
+        self,
+    ) -> None:
+        context = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval_fast",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Fast Calculator",
+        )
+
+        self.assertEqual(context["action_step"]["content"], "Tool running: Fast Calculator")
+        self.assertEqual(
+            context["action_step"]["meta"]["tool"]["label"],
+            "Fast Calculator",
+        )
+
     def test_build_tool_iteration_success_artifacts_keeps_current_shape(self) -> None:
         action_step = {
             "id": "step-1",
@@ -26470,6 +26590,33 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "step_id": "rag-1",
                 "step": followup["step"],
             },
+        )
+
+    def test_build_tool_rag_followup_supports_extra_retrieval_kind_and_label(self) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="task_retrieve_hot",
+            tool_kind="hot_knowledge_retrieval",
+            display_name="Hot Retrieval",
+            output={
+                "chunks": ["a", "b"],
+                "knowledge_base_id": "demo",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"]["content"],
+            "Hot Retrieval returned snippets from the selected knowledge base.",
+        )
+        self.assertEqual(
+            followup["step"]["meta"]["rag"]["knowledge_base_id"],
+            "demo",
         )
 
     def test_build_tool_iteration_execution_keeps_success_shape(self) -> None:
@@ -26980,6 +27127,85 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             rag_followup["step"]["meta"]["rag"]["knowledge_base_id"],
             "demo-kb",
+        )
+
+    def test_build_tool_plan_item_execution_uses_extra_retrieve_display_and_rag_followup(
+        self,
+    ) -> None:
+        provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "task_retrieve_hot": {
+                            "template": "task_retrieve",
+                            "label": "Hot Retrieval",
+                            "kind": "hot_knowledge_retrieval",
+                        }
+                    }
+                ),
+            )
+        )
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="task_retrieve_hot",
+            tool_input={"query": "demo"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            display_name="Hot Retrieval",
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="task_retrieve_hot",
+            prompt="检索 demo",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+        output = {
+            "chunks": ["alpha", "beta"],
+            "knowledge_base_id": "demo-kb",
+            "hit_count": 2,
+            "tool_kind": "hot_knowledge_retrieval",
+        }
+
+        result = build_tool_plan_item_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="task_retrieve_hot",
+            tool_input={"query": "demo"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-1",
+            rag_token_count=2,
+        )
+
+        success_bundle = result["plan_item_result"]["success_bundle"]
+        self.assertIsNotNone(success_bundle)
+        assert success_bundle is not None
+        self.assertEqual(
+            result["iteration_execution"]["start_events"]["tool_start"]["display_name"],
+            "Hot Retrieval",
+        )
+        self.assertEqual(
+            success_bundle["trace"]["step"]["content"],
+            "Tool done: Hot Retrieval",
+        )
+        self.assertEqual(
+            success_bundle["observation"],
+            'Hot Retrieval: {"chunks": ["alpha", "beta"], "knowledge_base_id": "demo-kb", "hit_count": 2, "tool_kind": "hot_knowledge_retrieval"}',
+        )
+        self.assertIsNotNone(success_bundle["rag_followup"])
+        assert success_bundle["rag_followup"] is not None
+        self.assertEqual(
+            success_bundle["rag_followup"]["step"]["content"],
+            "Hot Retrieval returned snippets from the selected knowledge base.",
         )
 
     def test_build_tool_plan_item_execution_exposes_iteration_execution_bundle(self) -> None:
