@@ -456,6 +456,10 @@ export const zh: Messages = {
     traceFilterTool: "工具",
     traceFilterRag: "RAG",
     traceFilterOther: "其他",
+    traceSemanticFilterAll: "全部语义",
+    traceSemanticFilterPlanner: "Planner",
+    traceSemanticFilterRetrieval: "Retrieval",
+    traceSemanticFilterCalculator: "Calculator",
     traceSearchPlaceholder: "按标题、内容、ID、模型或工具搜索轨迹",
     traceDensityComfortable: "舒适",
     traceDensityCompact: "紧凑",
@@ -599,6 +603,8 @@ export const zh: Messages = {
         `工具 ${name} · ${status}`,
       toolRetry: (count: number) => `重试 ${count} 次`,
       toolError: (message: string) => `错误 ${message}`,
+      toolPreviewKeys: (keys: string[]) => `预览 ${keys.join(", ")}`,
+      toolPreviewDisabled: "预览已禁用",
       ragLine: (chunkCount: number, knowledgeBaseId?: string) =>
         knowledgeBaseId
           ? `RAG · ${chunkCount} 条片段 · ${knowledgeBaseId}`
@@ -739,6 +745,10 @@ export const zh: Messages = {
     governanceSourceLabel: "Source",
     governanceAllowedToolsLabel: "Allowed tools",
     governanceNone: "—",
+    semanticTitle: "工具语义摘要",
+    semanticPlannerLabel: "Planner 轨迹",
+    semanticRetrievalLabel: "Retrieval 轨迹",
+    semanticCalculatorLabel: "Calculator 轨迹",
     taskPromptTitle: "任务输入",
     finalAnswerTitle: "最终回答（摘要）",
     finalAnswerEmpty: "未在轨迹中解析到最终回答。",

@@ -37,6 +37,7 @@ export type TaskSnapshotSummary = {
   stepCount: number;
   ragHitCount: number;
   ragKnowledgeBaseIds: string[];
+  semanticStats: Record<Exclude<TraceStepSemanticFilter, "all">, number>;
   finalAnswer: string | null;
   lastObservation: string | null;
   governance: {
@@ -53,6 +54,12 @@ export type SessionGovernanceSummary = {
   allowedToolNames: string[];
   allowedToolLabels: string[];
 };
+
+export type TraceStepSemanticFilter =
+  | "all"
+  | "planner"
+  | "retrieval"
+  | "calculator";
 
 function parseUsageNumber(v: unknown): number | null {
   if (v === null || v === undefined) {
@@ -427,6 +434,108 @@ export function resolveTraceStepDisplayContent(
   return content ? `${content}\nPreview: ${preview}` : preview;
 }
 
+export function matchesTraceStepSearchQuery(
+  step: TraceStepPayload,
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return true;
+  }
+  const title = getStepTitle(step).toLowerCase();
+  const content = (resolveTraceStepDisplayContent(step) ?? "").toLowerCase();
+  const id = step.id.toLowerCase();
+  const model =
+    typeof step.meta?.model === "string" ? step.meta.model.toLowerCase() : "";
+  const toolName =
+    typeof step.meta?.tool?.name === "string"
+      ? step.meta.tool.name.toLowerCase()
+      : "";
+  const toolLabel =
+    typeof step.meta?.tool?.label === "string"
+      ? step.meta.tool.label.toLowerCase()
+      : "";
+  const toolKind =
+    typeof step.meta?.tool?.kind === "string"
+      ? step.meta.tool.kind.toLowerCase()
+      : "";
+  const toolSemanticKind =
+    typeof step.meta?.tool?.semantic_kind === "string"
+      ? step.meta.tool.semantic_kind.toLowerCase()
+      : "";
+  const previewKeys = Array.isArray(step.meta?.tool?.effective_result_preview_keys)
+    ? step.meta?.tool?.effective_result_preview_keys
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.toLowerCase())
+    : [];
+  return (
+    title.includes(q) ||
+    content.includes(q) ||
+    id.includes(q) ||
+    model.includes(q) ||
+    toolName.includes(q) ||
+    toolLabel.includes(q) ||
+    toolKind.includes(q) ||
+    toolSemanticKind.includes(q) ||
+    previewKeys.some((key) => key.includes(q))
+  );
+}
+
+function resolveTraceStepSemanticCategory(
+  step: TraceStepPayload,
+): Exclude<TraceStepSemanticFilter, "all"> | null {
+  if (step.meta?.rag) {
+    return "retrieval";
+  }
+  const semantic =
+    typeof step.meta?.tool?.semantic_kind === "string" &&
+    step.meta.tool.semantic_kind.trim()
+      ? step.meta.tool.semantic_kind.trim().toLowerCase()
+      : typeof step.meta?.tool?.kind === "string" && step.meta.tool.kind.trim()
+        ? step.meta.tool.kind.trim().toLowerCase()
+        : "";
+  if (!semantic) {
+    return null;
+  }
+  if (semantic === "knowledge_retrieval" || semantic.endsWith("_retrieval")) {
+    return "retrieval";
+  }
+  if (semantic === "local_calculator" || semantic.endsWith("_calculator") || semantic.endsWith("_calc")) {
+    return "calculator";
+  }
+  if (semantic === "task_planner" || semantic.endsWith("_planner")) {
+    return "planner";
+  }
+  return null;
+}
+
+export function matchesTraceStepSemanticFilter(
+  step: TraceStepPayload,
+  filter: TraceStepSemanticFilter,
+): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  return resolveTraceStepSemanticCategory(step) === filter;
+}
+
+export function resolveTraceStepSemanticStats(
+  steps: TraceStepPayload[],
+): Record<Exclude<TraceStepSemanticFilter, "all">, number> {
+  const stats = {
+    planner: 0,
+    retrieval: 0,
+    calculator: 0,
+  };
+  for (const step of steps) {
+    const semantic = resolveTraceStepSemanticCategory(step);
+    if (semantic && semantic in stats) {
+      stats[semantic] += 1;
+    }
+  }
+  return stats;
+}
+
 function sortTraceStepsBySeq(steps: TraceStepPayload[]): TraceStepPayload[] {
   return [...steps]
     .map((step, index) => ({ step, index }))
@@ -536,6 +645,7 @@ export function resolveTaskSnapshotSummary(args: {
     }
   }
 
+  const semanticStats = resolveTraceStepSemanticStats(steps);
   const lastObservation = findLastStepContent(
     steps,
     (step) => normalizeTraceStepKind(step) === "observation",
@@ -633,6 +743,7 @@ export function resolveTaskSnapshotSummary(args: {
     stepCount: steps.length,
     ragHitCount,
     ragKnowledgeBaseIds: [...ragKnowledgeBaseIds],
+    semanticStats,
     finalAnswer,
     lastObservation,
     governance,
@@ -824,6 +935,19 @@ export function formatTraceStepMetaSubtitle(
       const errRaw = meta.tool.error;
       if (typeof errRaw === "string" && errRaw.trim()) {
         parts.push(labels.toolError(errRaw.trim()));
+      }
+      if (meta.tool.supports_result_preview === false) {
+        parts.push(labels.toolPreviewDisabled);
+      } else if (
+        Array.isArray(meta.tool.effective_result_preview_keys)
+        && meta.tool.effective_result_preview_keys.length > 0
+      ) {
+        const previewKeys = meta.tool.effective_result_preview_keys
+          .filter((key): key is string => typeof key === "string" && key.trim().length > 0)
+          .map((key) => key.trim());
+        if (previewKeys.length > 0) {
+          parts.push(labels.toolPreviewKeys(previewKeys));
+        }
       }
     }
   }

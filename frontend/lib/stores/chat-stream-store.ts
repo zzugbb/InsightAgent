@@ -3,7 +3,10 @@ import { create } from "zustand";
 import { authFetch } from "../api-client";
 import { en, type Messages } from "../i18n";
 import { parseSseBlock, parseSseBlocks } from "../sse/parse";
-import { mergeToolEndToolMeta } from "./chat-stream-store-utils";
+import {
+  mergeToolEndToolMeta,
+  mergeToolStartToolMeta,
+} from "./chat-stream-store-utils";
 import type { TraceStepPayload } from "../types/trace";
 
 export type { TraceStepPayload } from "../types/trace";
@@ -533,13 +536,24 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
             meta: {
               ...(state.sseTraceSteps.find((x) => x.id === stepId)?.meta ?? {}),
               step_type: "tool_call",
-              tool: {
-                name: toolName,
-                label: displayName,
-                input: toolInput,
-                status: "running",
-                retry_count: retryCount ?? 0,
-              },
+              tool: mergeToolStartToolMeta(
+                state.sseTraceSteps.find((x) => x.id === stepId)?.meta?.tool &&
+                  typeof state.sseTraceSteps.find((x) => x.id === stepId)?.meta?.tool ===
+                    "object"
+                  ? state.sseTraceSteps.find((x) => x.id === stepId)?.meta?.tool
+                  : undefined,
+                {
+                  name: toolName,
+                  input: toolInput,
+                  retry_count: retryCount,
+                  kind: p.kind,
+                  semantic_kind: p.semantic_kind,
+                  supports_result_preview: p.supports_result_preview,
+                  effective_result_preview_keys:
+                    p.effective_result_preview_keys,
+                },
+                { name: toolName, label: displayName },
+              ),
             },
           }),
           sseMessage: sm.toolStarted(displayName),
@@ -602,6 +616,11 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
                           ? p.output
                           : undefined,
                       output_preview: p.output_preview,
+                      kind: p.kind,
+                      semantic_kind: p.semantic_kind,
+                      supports_result_preview: p.supports_result_preview,
+                      effective_result_preview_keys:
+                        p.effective_result_preview_keys,
                     },
                     { name: toolName, label: toolLabel },
                   ),

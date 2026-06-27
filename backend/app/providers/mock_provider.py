@@ -1,3 +1,4 @@
+import json
 import re
 import time
 from typing import Iterator
@@ -15,10 +16,16 @@ class MockLLMProvider:
         normalized_prompt = prompt.strip() or "empty prompt"
         if "[mock-error]" in normalized_prompt:
             raise RuntimeError("Mock provider forced error for SSE contract testing.")
-        content = (
-            "This is a mock response from InsightAgent. "
-            f"Prompt received: {normalized_prompt}"
-        )
+        base_prompt, tool_observations = _split_tool_observations_prompt(normalized_prompt)
+        prompt_preview = base_prompt or "empty prompt"
+        content = "This is a mock response from InsightAgent. "
+        if tool_observations:
+            observation_summary = _summarize_tool_observations(tool_observations)
+            if observation_summary:
+                content += f"Summary: {observation_summary} "
+            else:
+                content += f"Tool context: {' | '.join(tool_observations)} "
+        content += f"Prompt received: {prompt_preview}"
         usage = ProviderUsage(
             prompt_tokens=_mock_estimate_token_count(normalized_prompt),
             completion_tokens=_mock_estimate_token_count(content),
@@ -53,6 +60,78 @@ def _mock_estimate_token_count(text: str) -> int:
     cjk_units = len(re.findall(r"[\u4e00-\u9fff]", normalized))
     latin_words = len(re.findall(r"[A-Za-z0-9_]+", normalized))
     return max(1, cjk_units + latin_words)
+
+
+def _split_tool_observations_prompt(prompt: str) -> tuple[str, list[str]]:
+    separator_pattern = re.compile(r"\n+Tool observations:\n", re.MULTILINE)
+    parts = separator_pattern.split(prompt, maxsplit=1)
+    if len(parts) != 2:
+        return prompt.strip(), []
+    base_prompt = parts[0].strip()
+    observations = [
+        line.strip()
+        for line in parts[1].splitlines()
+        if line.strip()
+    ]
+    return base_prompt, observations
+
+
+def _summarize_tool_observations(observations: list[str]) -> str | None:
+    summaries: list[str] = []
+    for observation in observations:
+        summary = _summarize_tool_observation(observation)
+        if summary:
+            summaries.append(summary)
+    if not summaries:
+        return None
+    return " ".join(summaries)
+
+
+def _summarize_tool_observation(observation: str) -> str | None:
+    label, payload = _parse_tool_observation(observation)
+    if payload is None:
+        return None
+
+    plan = payload.get("plan")
+    if isinstance(plan, str) and plan.strip():
+        return f"Planned steps - {plan.strip()}."
+
+    expression = payload.get("expression")
+    result = payload.get("result")
+    if isinstance(expression, str) and expression.strip() and result is not None:
+        return f"Calculated {expression.strip()} = {result}."
+
+    hit_count = payload.get("hit_count")
+    knowledge_base_id = payload.get("knowledge_base_id")
+    if isinstance(hit_count, int) and hit_count >= 0:
+        hit_label = "hit" if hit_count == 1 else "hits"
+        if isinstance(knowledge_base_id, str) and knowledge_base_id.strip():
+            return (
+                f"Retrieved {hit_count} {hit_label} from knowledge base "
+                f"{knowledge_base_id.strip()}."
+            )
+        return f"Retrieved {hit_count} {hit_label}."
+
+    if label:
+        return f"{label} completed."
+    return None
+
+
+def _parse_tool_observation(observation: str) -> tuple[str, dict[str, object] | None]:
+    label, separator, raw_payload = observation.partition(":")
+    if not separator:
+        return observation.strip(), None
+    normalized_label = label.strip()
+    normalized_payload = raw_payload.strip()
+    if not normalized_payload:
+        return normalized_label, None
+    try:
+        payload = json.loads(normalized_payload)
+    except json.JSONDecodeError:
+        return normalized_label, None
+    if not isinstance(payload, dict):
+        return normalized_label, None
+    return normalized_label, payload
 
 
 def _mock_stream_delay_seconds(prompt: str) -> float:

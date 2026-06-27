@@ -465,6 +465,10 @@ export const en: Messages = {
     traceFilterTool: "Tool",
     traceFilterRag: "RAG",
     traceFilterOther: "Other",
+    traceSemanticFilterAll: "All semantics",
+    traceSemanticFilterPlanner: "Planner",
+    traceSemanticFilterRetrieval: "Retrieval",
+    traceSemanticFilterCalculator: "Calculator",
     traceSearchPlaceholder: "Search trace by title, content, ID, model, or tool",
     traceDensityComfortable: "Comfortable",
     traceDensityCompact: "Compact",
@@ -612,6 +616,8 @@ export const en: Messages = {
         `Tool ${name} · ${status}`,
       toolRetry: (count: number) => `retry ${count}`,
       toolError: (message: string) => `error ${message}`,
+      toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
+      toolPreviewDisabled: "Preview disabled",
       ragLine: (chunkCount: number, knowledgeBaseId?: string) =>
         knowledgeBaseId
           ? `RAG · ${chunkCount} chunks · ${knowledgeBaseId}`
@@ -757,6 +763,10 @@ export const en: Messages = {
     governanceSourceLabel: "Source",
     governanceAllowedToolsLabel: "Allowed tools",
     governanceNone: "—",
+    semanticTitle: "Tool semantics",
+    semanticPlannerLabel: "Planner traces",
+    semanticRetrievalLabel: "Retrieval traces",
+    semanticCalculatorLabel: "Calculator traces",
     taskPromptTitle: "Task input",
     finalAnswerTitle: "Final answer (summary)",
     finalAnswerEmpty: "No final answer could be parsed from trace.",

@@ -391,6 +391,10 @@ export type Messages = {
     traceFilterTool: string;
     traceFilterRag: string;
     traceFilterOther: string;
+    traceSemanticFilterAll: string;
+    traceSemanticFilterPlanner: string;
+    traceSemanticFilterRetrieval: string;
+    traceSemanticFilterCalculator: string;
     traceSearchPlaceholder: string;
     traceDensityComfortable: string;
     traceDensityCompact: string;
@@ -530,6 +534,8 @@ export type Messages = {
       toolLine: (name: string, status: string) => string;
       toolRetry: (count: number) => string;
       toolError: (message: string) => string;
+      toolPreviewKeys: (keys: string[]) => string;
+      toolPreviewDisabled: string;
       ragLine: (chunkCount: number, knowledgeBaseId?: string) => string;
     };
     /** 轨迹：列表时间线 vs 流程图 */
@@ -666,6 +672,10 @@ export type Messages = {
     governanceSourceLabel: string;
     governanceAllowedToolsLabel: string;
     governanceNone: string;
+    semanticTitle: string;
+    semanticPlannerLabel: string;
+    semanticRetrievalLabel: string;
+    semanticCalculatorLabel: string;
     taskPromptTitle: string;
     finalAnswerTitle: string;
     finalAnswerEmpty: string;

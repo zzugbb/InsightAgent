@@ -28,6 +28,7 @@ from app.api.routes.settings import (  # type: ignore[import-not-found]
     SettingsValidateResponse,
 )
 from app.providers.base import ProviderUsage  # type: ignore[import-not-found]
+from app.providers.mock_provider import MockLLMProvider  # type: ignore[import-not-found]
 from app.services.settings_service import StoredSettings  # type: ignore[import-not-found]
 from app.services.tool_runtime import (  # type: ignore[import-not-found]
     ConfiguredToolRegistryProvider,
@@ -14289,6 +14290,224 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(meta["tool_registry_provider_source"], "suite_a")
         self.assertEqual(meta["allowed_tool_labels"], ["Task Planner"])
 
+    def test_mock_llm_provider_generate_summarizes_tool_observations(self) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Task Planner: {"plan": "Analyze request -> Evaluate calculation -> Synthesize final answer"}\n'
+            'Calculator: {"expression": "1+2", "result": 3.0}\n'
+            'Provider Search: {"hit_count": 2, "knowledge_base_id": "demo-kb"}'
+        )
+
+        self.assertIn("This is a mock response from InsightAgent.", result.content)
+        self.assertIn(
+            "Summary: Planned steps - Analyze request -> Evaluate calculation -> Synthesize final answer. "
+            "Calculated 1+2 = 3.0. Retrieved 2 hits from knowledge base demo-kb.",
+            result.content,
+        )
+        self.assertIn("Prompt received: need answer", result.content)
+        self.assertNotIn("Tool observations:", result.content)
+        self.assertNotIn(
+            'Calculator: {"expression": "1+2", "result": 3.0}',
+            result.content,
+        )
+        self.assertNotIn(
+            'Provider Search: {"hit_count": 2, "knowledge_base_id": "demo-kb"}',
+            result.content,
+        )
+
+    def test_stream_task_execution_with_mock_provider_surfaces_tool_observation_summary_in_final_answer(
+        self,
+    ) -> None:
+        runtime_settings = StoredSettings(
+            mode="mock",
+            provider="mock",
+            model="mock-gpt",
+            tool_registry_profile="default",
+            tool_registry_provider_source="default",
+        )
+        completed_trace_steps: list[dict[str, object]] = []
+
+        original_get_stored_settings = getattr(
+            chat_execution_module,
+            "get_stored_settings",
+            None,
+        )
+        original_get_llm_provider = chat_execution_module.get_llm_provider
+        original_get_configured_tool_registry_provider = (
+            chat_execution_module.get_configured_tool_registry_provider
+        )
+        original_build_tool_plan_artifacts = chat_execution_module.build_tool_plan_artifacts
+        original_execute_preflight = (
+            chat_execution_module.execute_configured_tool_registry_provider_preflight
+        )
+        original_execute_tool_plan_item_service_execution = (
+            chat_execution_module.execute_tool_plan_item_service_execution
+        )
+        original_execute_tool_plan_item_service_actions = (
+            chat_execution_module.execute_tool_plan_item_service_actions
+        )
+        original_update_task_status = chat_execution_module.update_task_status
+        original_get_task = chat_execution_module.get_task
+        original_update_task_trace_steps = chat_execution_module.update_task_trace_steps
+        original_complete_task = chat_execution_module.complete_task
+        original_create_message = chat_execution_module.create_message
+        original_try_append_task_memory = chat_execution_module.try_append_task_memory
+        original_safe_record_audit_event = chat_execution_module.safe_record_audit_event
+
+        def fake_get_stored_settings(user_id: str) -> StoredSettings:
+            self.assertEqual(user_id, "user-1")
+            return runtime_settings
+
+        def fake_get_llm_provider(user_id: str) -> MockLLMProvider:
+            self.assertEqual(user_id, "user-1")
+            return MockLLMProvider()
+
+        def fake_build_tool_plan_artifacts(
+            prompt: str,
+            *,
+            provider: object | None = None,
+            registry_provider: object | None = None,
+        ) -> SimpleNamespace:
+            del prompt, provider, registry_provider
+            return SimpleNamespace(
+                tool_plan=[{"name": "calc_eval", "input": {"expression": "1+2"}}],
+                planning_prompt=None,
+                provider_usage=None,
+                planning_provider_attempted=False,
+                planning_provider_used=False,
+                allowed_tool_names=("calc_eval",),
+                allowed_tool_labels=("Calculator",),
+            )
+
+        def fake_execute_preflight(
+            *,
+            task_id: str,
+            step_id: str,
+            seq: int,
+            model: str,
+            trace_steps: list[dict[str, object]],
+            persist_trace_fn,
+            record_audit_event_fn,
+            settings=None,
+        ) -> dict[str, object]:
+            del task_id, step_id, seq, model, trace_steps, persist_trace_fn, record_audit_event_fn, settings
+            return {
+                "provider": StaticToolRegistryProvider(
+                    {"calc_eval": get_default_tool_registry()["calc_eval"]}
+                ),
+                "provider_source_name": "default",
+            }
+
+        def fake_execute_tool_plan_item_service_execution(**kwargs):
+            del kwargs
+            yield {
+                "kind": "result",
+                "result": {
+                    "service_actions": [],
+                },
+            }
+
+        def fake_execute_tool_plan_item_service_actions(**kwargs):
+            kwargs["tool_observations"].append(
+                'Task Planner: {"plan": "Analyze request -> Evaluate calculation -> Synthesize final answer"}'
+            )
+            kwargs["tool_observations"].append(
+                'Calculator: {"expression": "1+2", "result": 3.0}'
+            )
+            yield {
+                "kind": "result",
+                "result": {
+                    "seq_cursor": int(kwargs["seq_cursor"]),
+                    "should_return": False,
+                },
+            }
+
+        try:
+            chat_execution_module.get_stored_settings = fake_get_stored_settings
+            chat_execution_module.get_llm_provider = fake_get_llm_provider
+            chat_execution_module.get_configured_tool_registry_provider = (
+                lambda *, settings=None: StaticToolRegistryProvider(
+                    {"calc_eval": get_default_tool_registry()["calc_eval"]}
+                )
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                fake_build_tool_plan_artifacts
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                fake_execute_preflight
+            )
+            chat_execution_module.execute_tool_plan_item_service_execution = (
+                fake_execute_tool_plan_item_service_execution
+            )
+            chat_execution_module.execute_tool_plan_item_service_actions = (
+                fake_execute_tool_plan_item_service_actions
+            )
+            chat_execution_module.update_task_status = lambda *args, **kwargs: None
+            chat_execution_module.get_task = lambda *args, **kwargs: {"status": "running"}
+            chat_execution_module.update_task_trace_steps = lambda *args, **kwargs: None
+            chat_execution_module.complete_task = (
+                lambda *, trace_steps, **kwargs: completed_trace_steps.extend(trace_steps)
+            )
+            chat_execution_module.create_message = lambda *args, **kwargs: None
+            chat_execution_module.try_append_task_memory = lambda *args, **kwargs: None
+            chat_execution_module.safe_record_audit_event = lambda *args, **kwargs: None
+
+            list(
+                chat_execution_module.stream_task_execution(
+                    task_id="task-1",
+                    session_id="session-1",
+                    user_id="user-1",
+                    prompt="please calculate with mock tool observations",
+                )
+            )
+        finally:
+            if original_get_stored_settings is not None:
+                chat_execution_module.get_stored_settings = original_get_stored_settings
+            chat_execution_module.get_llm_provider = original_get_llm_provider
+            chat_execution_module.get_configured_tool_registry_provider = (
+                original_get_configured_tool_registry_provider
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                original_build_tool_plan_artifacts
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                original_execute_preflight
+            )
+            chat_execution_module.execute_tool_plan_item_service_execution = (
+                original_execute_tool_plan_item_service_execution
+            )
+            chat_execution_module.execute_tool_plan_item_service_actions = (
+                original_execute_tool_plan_item_service_actions
+            )
+            chat_execution_module.update_task_status = original_update_task_status
+            chat_execution_module.get_task = original_get_task
+            chat_execution_module.update_task_trace_steps = original_update_task_trace_steps
+            chat_execution_module.complete_task = original_complete_task
+            chat_execution_module.create_message = original_create_message
+            chat_execution_module.try_append_task_memory = original_try_append_task_memory
+            chat_execution_module.safe_record_audit_event = original_safe_record_audit_event
+
+        final_answer_step = completed_trace_steps[-1]
+        self.assertIn(
+            "This is a mock response from InsightAgent.",
+            final_answer_step["content"],
+        )
+        self.assertIn(
+            "Summary: Planned steps - Analyze request -> Evaluate calculation -> Synthesize final answer. Calculated 1+2 = 3.0.",
+            final_answer_step["content"],
+        )
+        self.assertIn(
+            "Prompt received: please calculate with mock tool observations",
+            final_answer_step["content"],
+        )
+        self.assertNotIn("Tool observations:", final_answer_step["content"])
+        self.assertNotIn(
+            'Calculator: {"expression": "1+2", "result": 3.0}',
+            final_answer_step["content"],
+        )
+
     def test_stream_task_execution_reuses_runtime_provider_identity_when_provider_object_has_no_attrs(
         self,
     ) -> None:
@@ -26295,6 +26514,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "expression": "1+2*3",
                     "result": 7.0,
                 },
+                "kind": "local_calculator",
+                "semantic_kind": "local_calculator",
+                "supports_result_preview": True,
+                "effective_result_preview_keys": ["expression", "result"],
                 "retry_count": 0,
             },
         )
@@ -26336,6 +26559,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "status": "done",
                 "latency_ms": 48,
                 "output_preview": None,
+                "kind": "custom_lookup",
+                "semantic_kind": "custom_lookup",
+                "supports_result_preview": False,
+                "effective_result_preview_keys": [],
                 "retry_count": 0,
             },
         )
@@ -26405,11 +26632,16 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "name": "calc_eval",
                 "display_name": "calc_eval",
                 "input": {"expression": "1+2*3"},
+                "kind": "local_calculator",
+                "semantic_kind": "local_calculator",
+                "supports_result_preview": True,
+                "effective_result_preview_keys": ["expression", "result"],
                 "retry_count": 0,
             },
         )
         self.assertEqual(
             build_tool_error_payload(
+                name="calc_eval",
                 task_id="task-1",
                 step_id="step-1",
                 error_message="transient",
@@ -26421,6 +26653,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "status": "error",
                 "latency_ms": 12,
                 "output_preview": {"error": "transient"},
+                "kind": "local_calculator",
+                "semantic_kind": "local_calculator",
+                "supports_result_preview": True,
+                "effective_result_preview_keys": ["expression", "result"],
                 "retry_count": 1,
                 "error": "transient",
             },
@@ -26533,6 +26769,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "name": "calc_eval",
                     "display_name": "calc_eval",
                     "input": {"expression": "1+2*3"},
+                    "kind": "local_calculator",
+                    "semantic_kind": "local_calculator",
+                    "supports_result_preview": True,
+                    "effective_result_preview_keys": ["expression", "result"],
                     "retry_count": 0,
                 },
                 "state": {
@@ -26559,6 +26799,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                         "expression": "1+2*3",
                         "result": 7.0,
                     },
+                    "kind": "local_calculator",
+                    "semantic_kind": "local_calculator",
+                    "supports_result_preview": True,
+                    "effective_result_preview_keys": ["expression", "result"],
                     "retry_count": 0,
                 }
             },
@@ -26567,6 +26811,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
     def test_build_tool_attempt_error_events_keep_shape(self) -> None:
         self.assertEqual(
             build_tool_attempt_error_events(
+                name="calc_eval",
                 task_id="task-1",
                 step_id="step-1",
                 error_message="transient",
@@ -26579,6 +26824,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "status": "error",
                     "latency_ms": 12,
                     "output_preview": {"error": "transient"},
+                    "kind": "local_calculator",
+                    "semantic_kind": "local_calculator",
+                    "supports_result_preview": True,
+                    "effective_result_preview_keys": ["expression", "result"],
                     "retry_count": 1,
                     "error": "transient",
                 }
@@ -27081,6 +27330,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "expression": "1+2*3",
                     "result": 7.0,
                 },
+                "kind": "local_calculator",
+                "semantic_kind": "local_calculator",
+                "supports_result_preview": True,
+                "effective_result_preview_keys": ["expression", "result"],
                 "retry_count": 0,
             },
         )
@@ -27136,6 +27389,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "status": "error",
                 "latency_ms": 12,
                 "output_preview": {"error": "transient"},
+                "kind": "local_calculator",
+                "semantic_kind": "local_calculator",
+                "supports_result_preview": True,
+                "effective_result_preview_keys": ["expression", "result"],
                 "retry_count": 1,
                 "error": "transient",
             },
@@ -28095,6 +28352,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "name": "calc_eval",
                     "display_name": "calc_eval",
                     "input": {"expression": "1+2*3"},
+                    "kind": "local_calculator",
+                    "semantic_kind": "local_calculator",
+                    "supports_result_preview": True,
+                    "effective_result_preview_keys": ["expression", "result"],
                     "retry_count": 0,
                 },
                 "state": {
@@ -30080,6 +30341,13 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(first["kind"], "event")
         self.assertEqual(first["event"], "tool_start")
+        self.assertEqual(first["data"]["kind"], "knowledge_retrieval")
+        self.assertEqual(first["data"]["semantic_kind"], "knowledge_retrieval")
+        self.assertTrue(first["data"]["supports_result_preview"])
+        self.assertEqual(
+            first["data"]["effective_result_preview_keys"],
+            ["hit_count", "knowledge_base_id"],
+        )
         self.assertEqual(second["kind"], "event")
         self.assertEqual(second["event"], "state")
         self.assertEqual(third["kind"], "event")

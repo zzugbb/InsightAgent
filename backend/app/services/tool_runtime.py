@@ -4184,6 +4184,10 @@ def build_tool_end_payload(
             output=output,
             registration=resolved_registration,
         ),
+        **build_tool_runtime_semantics_meta(
+            name=canonical_name,
+            registration=resolved_registration,
+        ),
         "retry_count": retry_count,
     }
 
@@ -4257,32 +4261,50 @@ def build_tool_start_payload(
     tool_input: dict[str, object],
     retry_count: int,
     display_name: str | None = None,
+    registration: ToolRegistration | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
+    resolved_registration = registration or resolve_tool_registration(canonical_name)
     return {
         "task_id": task_id,
         "step_id": step_id,
         "name": canonical_name,
         "display_name": display_name or get_tool_display_name(canonical_name),
         "input": tool_input,
+        **build_tool_runtime_semantics_meta(
+            name=canonical_name,
+            registration=resolved_registration,
+        ),
         "retry_count": retry_count,
     }
 
 
 def build_tool_error_payload(
     *,
+    name: str | None = None,
     task_id: str,
     step_id: str,
     error_message: str,
     retry_count: int,
     latency_ms: int = 12,
+    registration: ToolRegistration | None = None,
 ) -> dict[str, object]:
+    semantic_meta: dict[str, object] = {}
+    normalized_name = (
+        normalize_tool_registry_name(name) if isinstance(name, str) and name.strip() else None
+    )
+    if normalized_name is not None:
+        semantic_meta = build_tool_runtime_semantics_meta(
+            name=normalized_name,
+            registration=registration,
+        )
     return {
         "task_id": task_id,
         "step_id": step_id,
         "status": "error",
         "latency_ms": latency_ms,
         "output_preview": {"error": error_message},
+        **semantic_meta,
         "retry_count": retry_count,
         "error": error_message,
     }
@@ -4449,6 +4471,7 @@ def build_tool_attempt_start_events(
     tool_input: dict[str, object],
     attempt: int,
     display_name: str | None = None,
+    registration: ToolRegistration | None = None,
 ) -> dict[str, dict[str, object]]:
     return {
         "tool_start": build_tool_start_payload(
@@ -4458,6 +4481,7 @@ def build_tool_attempt_start_events(
             tool_input=tool_input,
             retry_count=attempt,
             display_name=display_name,
+            registration=registration,
         ),
         "state": {
             "task_id": task_id,
@@ -4499,6 +4523,7 @@ def build_tool_attempt_bundle(
                 name=runtime_ctx.registration.name,
                 registration=runtime_ctx.registration,
             ),
+            registration=runtime_ctx.registration,
         ),
         "runtime_ctx": runtime_ctx,
         "runtime_policy": build_tool_execution_policy(runtime_ctx),
@@ -4911,19 +4936,23 @@ def build_tool_attempt_success_events(
 
 def build_tool_attempt_error_events(
     *,
+    name: str,
     task_id: str,
     step_id: str,
     error_message: str,
     retry_count: int,
     latency_ms: int = 12,
+    registration: ToolRegistration | None = None,
 ) -> dict[str, dict[str, object]]:
     return {
         "tool_end": build_tool_error_payload(
+            name=name,
             task_id=task_id,
             step_id=step_id,
             error_message=error_message,
             retry_count=retry_count,
             latency_ms=latency_ms,
+            registration=registration,
         )
     }
 
@@ -4993,11 +5022,13 @@ def build_tool_attempt_error_transition(
         ),
         "events": {
             **build_tool_attempt_error_events(
+                name=name,
                 task_id=task_id,
                 step_id=step_id,
                 error_message=error_message,
                 retry_count=retry_count,
                 latency_ms=max(1, runtime_ctx.default_timeout_ms // 250),
+                registration=runtime_ctx.registration,
             ),
             "error": {
                 "task_id": task_id,

@@ -353,6 +353,43 @@ export default function TaskDetailPage() {
               </section>
             ) : null}
 
+            {taskSnapshot ? (
+              <section
+                className="inspector-block task-detail-semantic-block"
+                data-testid="task-detail-semantic-summary"
+              >
+                <div className="panel-head">
+                  <div>
+                    <p className="chat-kicker">{t.taskDetail.semanticTitle}</p>
+                    <h3>{t.taskDetail.semanticTitle}</h3>
+                  </div>
+                </div>
+                <div className="task-detail-kpi-grid">
+                  <div
+                    className="inspector-kpi-item"
+                    data-testid="task-detail-semantic-planner"
+                  >
+                    <span>{t.taskDetail.semanticPlannerLabel}</span>
+                    <strong>{taskSnapshot.semanticStats.planner}</strong>
+                  </div>
+                  <div
+                    className="inspector-kpi-item"
+                    data-testid="task-detail-semantic-retrieval"
+                  >
+                    <span>{t.taskDetail.semanticRetrievalLabel}</span>
+                    <strong>{taskSnapshot.semanticStats.retrieval}</strong>
+                  </div>
+                  <div
+                    className="inspector-kpi-item"
+                    data-testid="task-detail-semantic-calculator"
+                  >
+                    <span>{t.taskDetail.semanticCalculatorLabel}</span>
+                    <strong>{taskSnapshot.semanticStats.calculator}</strong>
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
             <section className="task-detail-main-grid">
               <article className="inspector-block task-detail-content-block">
                 <p className="summary-label">{t.taskDetail.taskPromptTitle}</p>

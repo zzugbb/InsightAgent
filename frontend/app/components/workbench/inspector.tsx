@@ -25,7 +25,10 @@ import {
   formatTraceStepMetaSubtitle,
   getStepTitle,
   getTaskLabel,
+  matchesTraceStepSemanticFilter,
+  resolveTraceStepSemanticStats,
   normalizeTraceStepKind,
+  matchesTraceStepSearchQuery,
   resolveTraceStepDisplayContent,
   resolveSessionGovernanceSummary,
   resolveInspectorTaskUsage,
@@ -111,6 +114,9 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   const [traceDensity, setTraceDensity] = useState<"comfortable" | "compact">(
     "comfortable",
   );
+  const [traceSemanticFilter, setTraceSemanticFilter] = useState<
+    "all" | "planner" | "retrieval" | "calculator"
+  >("all");
   const [traceKindFilter, setTraceKindFilter] = useState<
     "all" | "thought" | "action" | "observation" | "tool" | "rag" | "other"
   >("all");
@@ -149,6 +155,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     }
     return stats;
   }, [sseTraceSteps]);
+  const traceSemanticStats = useMemo(
+    () => resolveTraceStepSemanticStats(sseTraceSteps),
+    [sseTraceSteps],
+  );
 
   const filteredTraceSteps = useMemo(() => {
     const q = traceSearchQuery.trim().toLowerCase();
@@ -157,42 +167,12 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       if (traceKindFilter !== "all" && kind !== traceKindFilter) {
         return false;
       }
-      if (!q) {
-        return true;
+      if (!matchesTraceStepSemanticFilter(step, traceSemanticFilter)) {
+        return false;
       }
-      const title = getStepTitle(step).toLowerCase();
-      const content = (resolveTraceStepDisplayContent(step) ?? "").toLowerCase();
-      const id = step.id.toLowerCase();
-      const model =
-        typeof step.meta?.model === "string" ? step.meta.model.toLowerCase() : "";
-      const toolName =
-        typeof step.meta?.tool?.name === "string"
-          ? step.meta.tool.name.toLowerCase()
-          : "";
-      const toolLabel =
-        typeof step.meta?.tool?.label === "string"
-          ? step.meta.tool.label.toLowerCase()
-          : "";
-      const toolKind =
-        typeof step.meta?.tool?.kind === "string"
-          ? step.meta.tool.kind.toLowerCase()
-          : "";
-      const toolSemanticKind =
-        typeof step.meta?.tool?.semantic_kind === "string"
-          ? step.meta.tool.semantic_kind.toLowerCase()
-          : "";
-      return (
-        title.includes(q) ||
-        content.includes(q) ||
-        id.includes(q) ||
-        model.includes(q) ||
-        toolName.includes(q) ||
-        toolLabel.includes(q) ||
-        toolKind.includes(q) ||
-        toolSemanticKind.includes(q)
-      );
+      return matchesTraceStepSearchQuery(step, q);
     });
-  }, [sseTraceSteps, traceKindFilter, traceSearchQuery]);
+  }, [sseTraceSteps, traceKindFilter, traceSemanticFilter, traceSearchQuery]);
 
   const { visibleSteps, hiddenCount } = useMemo(() => {
     const steps = filteredTraceSteps;
@@ -338,6 +318,19 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       <div className="trace-filter-toolbar">
         <Segmented
           size="small"
+          value={traceSemanticFilter}
+          onChange={(v) =>
+            setTraceSemanticFilter(v as "all" | "planner" | "retrieval" | "calculator")
+          }
+          options={[
+            { label: t.inspector.traceSemanticFilterAll, value: "all" },
+            { label: t.inspector.traceSemanticFilterPlanner, value: "planner" },
+            { label: t.inspector.traceSemanticFilterRetrieval, value: "retrieval" },
+            { label: t.inspector.traceSemanticFilterCalculator, value: "calculator" },
+          ]}
+        />
+        <Segmented
+          size="small"
           value={traceKindFilter}
           onChange={(v) =>
             setTraceKindFilter(
@@ -378,6 +371,11 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         <span>{t.inspector.traceFlow.kindTool}: {traceKindStats.tool}</span>
         <span>{t.inspector.traceFlow.kindRag}: {traceKindStats.rag}</span>
         <span>{t.inspector.traceFlow.kindOther}: {traceKindStats.other}</span>
+      </div>
+      <div className="trace-kind-stats">
+        <span>{t.inspector.traceSemanticFilterPlanner}: {traceSemanticStats.planner}</span>
+        <span>{t.inspector.traceSemanticFilterRetrieval}: {traceSemanticStats.retrieval}</span>
+        <span>{t.inspector.traceSemanticFilterCalculator}: {traceSemanticStats.calculator}</span>
       </div>
 
       {traceView === "list" && filteredTraceSteps.length > TRACE_PREVIEW ? (

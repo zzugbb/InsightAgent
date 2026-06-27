@@ -229,6 +229,26 @@ async function assertInspectorSessionGovernance(
   }
 }
 
+async function expectLatestAssistantMessageSummary(
+  page: Page,
+  args: {
+    contains: string[];
+    notContains?: string[];
+  },
+): Promise<void> {
+  const assistantMessage = page
+    .locator("article.message-row.assistant")
+    .filter({ hasText: "This is a mock response from InsightAgent" })
+    .first();
+  await expect(assistantMessage).toBeVisible({ timeout: 20_000 });
+  for (const text of args.contains) {
+    await expect(assistantMessage).toContainText(text);
+  }
+  for (const text of args.notContains ?? []) {
+    await expect(assistantMessage).not.toContainText(text);
+  }
+}
+
 test("usage dashboard source trend is visible @smoke", async ({ page, request }) => {
   const auth = await registerViaApi(request);
   await runTaskToDone(request, auth.access_token, "playwright usage dashboard visual smoke");
@@ -624,12 +644,13 @@ test("saved planning-only profile constrains actual trace allowed tools", async 
   await expect(
     page.getByTestId("trace-card").filter({ hasText: "Task Planner" }).first(),
   ).toBeVisible({ timeout: 20_000 });
-  await expect(
-    page.locator("article.message-row.assistant").filter({
-      hasText: "This is a mock response from InsightAgent",
-    }).first(),
-  ).toBeVisible({ timeout: 20_000 });
-
+  await expectLatestAssistantMessageSummary(page, {
+    contains: [
+      "This is a mock response from InsightAgent",
+      "Summary: Planned steps - Analyze request -> Retrieve supporting context -> Evaluate calculation -> Synthesize final answer.",
+    ],
+    notContains: ['Task Planner: {"plan":'],
+  });
   const traceFeedText = await page.getByTestId("inspector-trace-feed").textContent();
   expect(traceFeedText ?? "").not.toContain("Knowledge Retrieval");
   expect(traceFeedText ?? "").not.toContain("calc_eval");
@@ -674,11 +695,14 @@ test("saved retrieval-only profile executes retrieval without planner or calcula
   await expect(
     page.getByTestId("trace-card").filter({ hasText: "Knowledge Retrieval" }).first(),
   ).toBeVisible({ timeout: 20_000 });
-  await expect(
-    page.locator("article.message-row.assistant").filter({
-      hasText: "This is a mock response from InsightAgent",
-    }).first(),
-  ).toBeVisible({ timeout: 20_000 });
+  await expectLatestAssistantMessageSummary(page, {
+    contains: [
+      "This is a mock response from InsightAgent",
+      "Summary: Retrieved",
+      "Prompt received: Please retrieve project context from the kb and explain the result [kb:demo]",
+    ],
+    notContains: ['Knowledge Retrieval: {"hit_count":'],
+  });
 
   const traceFeedText = await page.getByTestId("inspector-trace-feed").textContent();
   expect(traceFeedText ?? "").toContain("Knowledge Retrieval");
@@ -725,11 +749,14 @@ test("saved calculator-only profile executes calculator without planner or retri
   await expect(
     page.getByTestId("trace-card").filter({ hasText: "calc_eval" }).first(),
   ).toBeVisible({ timeout: 20_000 });
-  await expect(
-    page.locator("article.message-row.assistant").filter({
-      hasText: "This is a mock response from InsightAgent",
-    }).first(),
-  ).toBeVisible({ timeout: 20_000 });
+  await expectLatestAssistantMessageSummary(page, {
+    contains: [
+      "This is a mock response from InsightAgent",
+      "Summary: Calculated 12/3+5 = 9.0.",
+      "Prompt received: Please calculate the result for me [calc:12/3+5]",
+    ],
+    notContains: ['Calculator: {"expression": "12/3+5", "result": 9.0}'],
+  });
 
   const traceFeedText = await page.getByTestId("inspector-trace-feed").textContent();
   expect(traceFeedText ?? "").toContain("calc_eval");
@@ -1175,6 +1202,13 @@ for (const acceptanceCase of [
     expectedAllowed: "Task Planner",
     forbiddenAllowed: ["Knowledge Retrieval", "calc_eval"],
     expectedTraceCard: "Task Planner",
+    expectedSummary: "Summary: Planned steps - Analyze request -> Retrieve supporting context -> Evaluate calculation -> Synthesize final answer.",
+    forbiddenSummaryText: 'Task Planner: {"plan":',
+    expectedSemanticStats: {
+      planner: 1,
+      retrieval: 0,
+      calculator: 0,
+    },
   },
   {
     profile: "retrieval_only" as const,
@@ -1182,6 +1216,13 @@ for (const acceptanceCase of [
     expectedAllowed: "Knowledge Retrieval",
     forbiddenAllowed: ["Task Planner", "calc_eval"],
     expectedTraceCard: "Knowledge Retrieval",
+    expectedSummary: "Summary: Retrieved",
+    forbiddenSummaryText: 'Knowledge Retrieval: {"hit_count":',
+    expectedSemanticStats: {
+      planner: 0,
+      retrieval: 2,
+      calculator: 0,
+    },
   },
   {
     profile: "calculator_only" as const,
@@ -1189,6 +1230,13 @@ for (const acceptanceCase of [
     expectedAllowed: "calc_eval",
     forbiddenAllowed: ["Task Planner", "Knowledge Retrieval"],
     expectedTraceCard: "calc_eval",
+    expectedSummary: "Summary: Calculated 40/5+6 = 14.0.",
+    forbiddenSummaryText: 'Calculator: {"expression": "40/5+6", "result": 14.0}',
+    expectedSemanticStats: {
+      planner: 0,
+      retrieval: 0,
+      calculator: 1,
+    },
   },
 ]) {
   test(`task detail replay preserves ${acceptanceCase.profile} registry trace metadata`, async ({
@@ -1208,11 +1256,13 @@ for (const acceptanceCase of [
       acceptanceCase.prompt,
     );
 
-    await expect(
-      page.locator("article.message-row.assistant").filter({
-        hasText: "This is a mock response from InsightAgent",
-      }).first(),
-    ).toBeVisible({ timeout: 20_000 });
+    await expectLatestAssistantMessageSummary(page, {
+      contains: [
+        "This is a mock response from InsightAgent",
+        acceptanceCase.expectedSummary,
+      ],
+      notContains: [acceptanceCase.forbiddenSummaryText],
+    });
 
     const detailPage = await openTaskDetailFromTaskCenter(page, taskId);
     const allowedToolsMeta = detailPage
@@ -1242,6 +1292,28 @@ for (const acceptanceCase of [
       await expect(governanceSummary).not.toContainText(forbidden);
     }
 
+    const semanticSummary = detailPage.getByTestId("task-detail-semantic-summary");
+    await expect(semanticSummary).toBeVisible({ timeout: 20_000 });
+    await expect(
+      detailPage.getByTestId("task-detail-semantic-planner"),
+    ).toContainText(
+      new RegExp(`Planner traces\\s*${acceptanceCase.expectedSemanticStats.planner}`),
+    );
+    await expect(
+      detailPage.getByTestId("task-detail-semantic-retrieval"),
+    ).toContainText(
+      new RegExp(
+        `Retrieval traces\\s*${acceptanceCase.expectedSemanticStats.retrieval}`,
+      ),
+    );
+    await expect(
+      detailPage.getByTestId("task-detail-semantic-calculator"),
+    ).toContainText(
+      new RegExp(
+        `Calculator traces\\s*${acceptanceCase.expectedSemanticStats.calculator}`,
+      ),
+    );
+
     await expect(
       detailPage
         .getByTestId("task-detail-trace-card")
@@ -1253,6 +1325,8 @@ for (const acceptanceCase of [
       .getByTestId("task-detail-trace-feed")
       .textContent();
     expect(detailTraceText ?? "").toContain(acceptanceCase.expectedTraceCard);
+    expect(detailTraceText ?? "").toContain(acceptanceCase.expectedSummary);
+    expect(detailTraceText ?? "").not.toContain(acceptanceCase.forbiddenSummaryText);
     for (const forbidden of acceptanceCase.forbiddenAllowed) {
       expect(detailTraceText ?? "").not.toContain(forbidden);
     }
