@@ -117,6 +117,7 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
     provider_source_name: str
     tool_count: int
     tool_names: tuple[str, ...]
+    tool_details: tuple[dict[str, object], ...]
     service_action_count: int
     service_action_kinds: tuple[str, ...]
     trace_write_count: int
@@ -131,6 +132,7 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
             "provider_source_name": self.provider_source_name,
             "tool_count": self.tool_count,
             "tool_names": self.tool_names,
+            "tool_details": self.tool_details,
             "service_action_count": self.service_action_count,
             "service_action_kinds": self.service_action_kinds,
             "trace_write_count": self.trace_write_count,
@@ -694,7 +696,13 @@ def _get_first_enabled_planning_tool_name_for_kind(
         )
         if registration is None:
             continue
-        if registration.kind == kind:
+        if (
+            get_tool_semantic_kind(
+                name=name,
+                registration=registration,
+            )
+            == kind
+        ):
             return name
     return None
 
@@ -3311,6 +3319,9 @@ def build_configured_tool_registry_provider_preflight_summary_model_from_parts(
         provider_source_name=provider_source_name,
         tool_count=len(tool_registry),
         tool_names=tuple(sorted(tool_registry)),
+        tool_details=build_configured_tool_registry_provider_preflight_tool_details(
+            provider=provider
+        ),
         service_action_count=len(service_actions),
         service_action_kinds=tuple(action.kind for action in service_actions),
         trace_write_count=trace_write_count,
@@ -4043,11 +4054,17 @@ def build_tool_result_preview(
         return output
     if not resolved_registration.supports_result_preview:
         return None
-    if resolved_registration.result_preview_keys:
+    result_preview_keys = resolved_registration.result_preview_keys
+    if not result_preview_keys:
+        result_preview_keys = _get_default_result_preview_keys_for_semantic_kind(
+            get_tool_semantic_kind(
+                name=name,
+                registration=resolved_registration,
+            )
+        )
+    if result_preview_keys:
         return {
-            key: output[key]
-            for key in resolved_registration.result_preview_keys
-            if key in output
+            key: output[key] for key in result_preview_keys if key in output
         }
     return output
 
@@ -5218,10 +5235,10 @@ def build_tool_rag_followup(
 ) -> dict[str, object] | None:
     if not isinstance(output, dict):
         return None
-    semantic_kind = tool_kind if isinstance(tool_kind, str) and tool_kind.strip() else None
+    semantic_kind = _normalize_tool_semantic_kind(tool_kind)
     if semantic_kind is None:
         semantic_kind = get_tool_semantic_kind(name=tool_name)
-    if semantic_kind is None or not semantic_kind.endswith("knowledge_retrieval"):
+    if semantic_kind != "knowledge_retrieval":
         return None
     chunks = output.get("chunks")
     if not isinstance(chunks, list):
@@ -5985,12 +6002,16 @@ def _build_provider_tool_plan_prompt(
         )
         if registration is None:
             continue
-        if registration.kind == "knowledge_retrieval":
+        semantic_kind = get_tool_semantic_kind(
+            name=tool_name,
+            registration=registration,
+        )
+        if semantic_kind == "knowledge_retrieval":
             input_lines.append(
                 f"For {tool_name} input, include query, optional top_k, optional knowledge_base_id.\n"
             )
             continue
-        if registration.kind == "local_calculator":
+        if semantic_kind == "local_calculator":
             input_lines.append(
                 f"For {tool_name} input, include expression.\n"
             )
@@ -6115,7 +6136,14 @@ def _normalize_provider_tool_plan(
             tool_name,
             registry_provider=registry_provider,
         )
-        tool_kind = registration.kind if registration is not None else None
+        tool_kind = (
+            get_tool_semantic_kind(
+                name=tool_name,
+                registration=registration,
+            )
+            if registration is not None
+            else None
+        )
         if tool_kind == "knowledge_retrieval":
             top_k = tool_input.get("top_k")
             if isinstance(top_k, bool):
@@ -6341,21 +6369,91 @@ def get_tool_observation_display_name_from_registration(
     )
 
 
+def _normalize_tool_semantic_kind(kind: str | None) -> str | None:
+    normalized_kind = str(kind).strip() if isinstance(kind, str) else ""
+    if not normalized_kind:
+        return None
+    if (
+        normalized_kind == "knowledge_retrieval"
+        or normalized_kind.endswith("knowledge_retrieval")
+        or normalized_kind.endswith("_retrieval")
+    ):
+        return "knowledge_retrieval"
+    if (
+        normalized_kind == "local_calculator"
+        or normalized_kind.endswith("_calculator")
+        or normalized_kind.endswith("_calc")
+    ):
+        return "local_calculator"
+    return normalized_kind
+
+
 def get_tool_semantic_kind(
     *,
     name: str,
     registration: ToolRegistration | None = None,
 ) -> str | None:
+    normalized_name = normalize_tool_registry_name(name)
+    default_registration = _REGISTERED_TOOLS.get(normalized_name)
     if registration is not None:
         template_registration = _find_builtin_registration_by_runner(registration.runner)
         if template_registration is not None:
-            return template_registration.kind
-        return registration.kind
-    normalized_name = normalize_tool_registry_name(name)
-    default_registration = _REGISTERED_TOOLS.get(normalized_name)
+            return _normalize_tool_semantic_kind(template_registration.kind)
+        if default_registration is not None:
+            return _normalize_tool_semantic_kind(default_registration.kind)
+        return _normalize_tool_semantic_kind(registration.kind)
     if default_registration is not None:
-        return default_registration.kind
+        return _normalize_tool_semantic_kind(default_registration.kind)
     return None
+
+
+def _get_default_result_preview_keys_for_semantic_kind(
+    semantic_kind: str | None,
+) -> tuple[str, ...]:
+    normalized_semantic_kind = _normalize_tool_semantic_kind(semantic_kind)
+    if normalized_semantic_kind == "knowledge_retrieval":
+        return _REGISTERED_TOOLS["task_retrieve"].result_preview_keys
+    if normalized_semantic_kind == "local_calculator":
+        return _REGISTERED_TOOLS["calc_eval"].result_preview_keys
+    return ()
+
+
+def build_configured_tool_registry_provider_preflight_tool_details(
+    *,
+    provider: ToolRegistryProvider,
+) -> tuple[dict[str, object], ...]:
+    tool_registry = provider.load_tool_registry()
+    details: list[dict[str, object]] = []
+    for tool_name in sorted(tool_registry):
+        registration = tool_registry[tool_name]
+        semantic_kind = get_tool_semantic_kind(
+            name=tool_name,
+            registration=registration,
+        )
+        effective_result_preview_keys: tuple[str, ...] = ()
+        if registration.supports_result_preview:
+            effective_result_preview_keys = (
+                registration.result_preview_keys
+                or _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
+            )
+        label = registration.label.strip() or get_tool_display_name_from_registration(
+            name=tool_name,
+            registration=registration,
+        )
+        details.append(
+            {
+                "name": tool_name,
+                "label": label,
+                "kind": registration.kind,
+                "semantic_kind": semantic_kind,
+                "retryable_by_default": registration.retryable_by_default,
+                "default_timeout_ms": registration.default_timeout_ms,
+                "requires_user_context": registration.requires_user_context,
+                "supports_result_preview": registration.supports_result_preview,
+                "effective_result_preview_keys": effective_result_preview_keys,
+            }
+        )
+    return tuple(details)
 
 
 def normalize_tool_output_for_registration(
@@ -6364,7 +6462,13 @@ def normalize_tool_output_for_registration(
     registration: ToolRegistration,
 ) -> dict[str, object]:
     normalized_output = dict(output)
-    if registration.name in _REGISTERED_TOOLS:
+    normalized_name = normalize_tool_registry_name(registration.name)
+    default_registration = _REGISTERED_TOOLS.get(normalized_name)
+    if (
+        default_registration is not None
+        and registration.runner is default_registration.runner
+        and registration.kind == default_registration.kind
+    ):
         return normalized_output
 
     current_kind = normalized_output.get("tool_kind")
@@ -6378,6 +6482,12 @@ def normalize_tool_output_for_registration(
         template_registration is not None
         and current_kind_text == template_registration.kind
         and registration.kind != template_registration.kind
+    ):
+        normalized_output["tool_kind"] = registration.kind
+    elif (
+        default_registration is not None
+        and current_kind_text == default_registration.kind
+        and registration.kind != default_registration.kind
     ):
         normalized_output["tool_kind"] = registration.kind
     return normalized_output

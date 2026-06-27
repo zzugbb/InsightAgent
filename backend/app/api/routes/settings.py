@@ -12,6 +12,7 @@ from app.db import get_database_locator
 from app.services.audit_service import safe_record_audit_event
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 from app.services.tool_runtime import (
+    build_configured_tool_registry_provider_preflight_tool_details,
     build_tool_registry_provider_sources_from_settings,
     get_available_tool_registry_profile_names,
     get_configured_tool_registry_provider,
@@ -37,11 +38,26 @@ class ToolRegistryProfileOptionResponse(BaseModel):
     enabled_tool_labels: list[str]
 
 
+class ToolRegistryProviderToolDetailResponse(BaseModel):
+    name: str
+    label: str
+    kind: str
+    semantic_kind: str | None = None
+    retryable_by_default: bool
+    default_timeout_ms: int
+    requires_user_context: bool
+    supports_result_preview: bool
+    effective_result_preview_keys: list[str] = Field(default_factory=list)
+
+
 class ToolRegistryProviderSourceOptionResponse(BaseModel):
     name: str
     base_profile: str
     enabled_tool_names: list[str]
     enabled_tool_labels: list[str]
+    tool_details: list[ToolRegistryProviderToolDetailResponse] = Field(
+        default_factory=list
+    )
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -234,6 +250,16 @@ def _build_tool_registry_options_bundle(
                     "base_profile": "default",
                     "enabled_tool_names": list(preview_fields["enabled_tool_names"]),
                     "enabled_tool_labels": list(preview_fields["enabled_tool_labels"]),
+                    "tool_details": list(
+                        build_configured_tool_registry_provider_preflight_tool_details(
+                            provider=get_configured_tool_registry_provider(
+                                settings=_clone_settings_with_updates(
+                                    settings=effective_settings,
+                                    tool_registry_provider_source="default",
+                                )
+                            )
+                        )
+                    ),
                 }
             )
             continue
@@ -264,6 +290,11 @@ def _build_tool_registry_options_bundle(
                 "base_profile": base_profile,
                 "enabled_tool_names": enabled_tool_names,
                 "enabled_tool_labels": enabled_tool_labels,
+                "tool_details": list(
+                    build_configured_tool_registry_provider_preflight_tool_details(
+                        provider=provider
+                    )
+                ),
             }
         )
     return {

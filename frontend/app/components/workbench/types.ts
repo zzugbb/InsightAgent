@@ -9,6 +9,19 @@ export type ToolRegistryProviderSourceOptionDetail = {
   base_profile: string;
   enabled_tool_names: string[];
   enabled_tool_labels: string[];
+  tool_details: ToolRegistryProviderToolDetail[];
+};
+
+export type ToolRegistryProviderToolDetail = {
+  name: string;
+  label: string;
+  kind: string;
+  semantic_kind: string | null;
+  retryable_by_default: boolean;
+  default_timeout_ms: number;
+  requires_user_context: boolean;
+  supports_result_preview: boolean;
+  effective_result_preview_keys: string[];
 };
 
 export type SettingsSummary = {

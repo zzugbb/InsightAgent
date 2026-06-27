@@ -24,6 +24,7 @@ import type {
   SettingsSummary,
   SettingsValidateResponse,
 } from "./types";
+import { resolveModelSettingsSelectionDetails } from "./model-settings-modal-utils";
 import { API_BASE_URL } from "./utils";
 
 const DEFAULT_FORM: SettingsFormState = {
@@ -262,20 +263,16 @@ export function ModelSettingsModal({
     previewSource?.enabled_tool_labels && previewSource.enabled_tool_labels.length > 0
       ? previewSource.enabled_tool_labels.join(", ")
       : "—";
-  const selectedProfileDetail = data?.available_tool_registry_profile_details?.find(
-    (detail) => detail.name === form.tool_registry_profile,
-  );
-  const selectedSourceDetail = data?.available_tool_registry_provider_source_details?.find(
-    (detail) => detail.name === form.tool_registry_provider_source,
-  );
-  const selectedProfileTools =
-    selectedProfileDetail && selectedProfileDetail.enabled_tool_labels.length > 0
-      ? selectedProfileDetail.enabled_tool_labels.join(", ")
-      : "—";
-  const selectedSourceTools =
-    selectedSourceDetail && selectedSourceDetail.enabled_tool_labels.length > 0
-      ? selectedSourceDetail.enabled_tool_labels.join(", ")
-      : "—";
+  const {
+    selectedProfileTools,
+    selectedSourceTools,
+    selectedSourceBaseProfile,
+    selectedSourceToolDetailsSummary,
+  } = resolveModelSettingsSelectionDetails({
+    previewSource,
+    profileName: form.tool_registry_profile,
+    sourceName: form.tool_registry_provider_source,
+  });
 
   return (
     <Modal
@@ -388,8 +385,15 @@ export function ModelSettingsModal({
               style={{ marginTop: 8, marginBottom: 0 }}
             >
               {t.settings.sourceSummaryLabel}: {t.settings.sourceSummaryProfileLabel}{" "}
-              {selectedSourceDetail?.base_profile ?? "—"};{" "}
+              {selectedSourceBaseProfile};{" "}
               {t.settings.sourceSummaryAllowedToolsLabel} {selectedSourceTools}
+            </Typography.Paragraph>
+            <Typography.Paragraph
+              type="secondary"
+              data-testid="model-settings-selected-source-tool-details"
+              style={{ marginTop: 8, marginBottom: 0 }}
+            >
+              {selectedSourceToolDetailsSummary}
             </Typography.Paragraph>
           </Form.Item>
           {isRemoteMode ? (
