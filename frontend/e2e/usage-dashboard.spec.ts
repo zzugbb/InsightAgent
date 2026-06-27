@@ -1209,6 +1209,7 @@ for (const acceptanceCase of [
       retrieval: 0,
       calculator: 0,
     },
+    expectedTaskCenterSemanticSummary: "Planner 1 · Retrieval 0 · Calculator 0",
   },
   {
     profile: "retrieval_only" as const,
@@ -1223,6 +1224,7 @@ for (const acceptanceCase of [
       retrieval: 2,
       calculator: 0,
     },
+    expectedTaskCenterSemanticSummary: "Planner 0 · Retrieval 2 · Calculator 0",
   },
   {
     profile: "calculator_only" as const,
@@ -1237,6 +1239,7 @@ for (const acceptanceCase of [
       retrieval: 0,
       calculator: 1,
     },
+    expectedTaskCenterSemanticSummary: "Planner 0 · Retrieval 0 · Calculator 1",
   },
 ]) {
   test(`task detail replay preserves ${acceptanceCase.profile} registry trace metadata`, async ({
@@ -1265,6 +1268,12 @@ for (const acceptanceCase of [
     });
 
     const detailPage = await openTaskDetailFromTaskCenter(page, taskId);
+    const taskCenterSemanticSummary = page.getByTestId(
+      "task-center-semantic-summary",
+    );
+    await expect(taskCenterSemanticSummary.first()).toContainText(
+      acceptanceCase.expectedTaskCenterSemanticSummary,
+    );
     const allowedToolsMeta = detailPage
       .getByTestId("task-detail-trace-card-meta")
       .filter({ hasText: "Allowed tools" })

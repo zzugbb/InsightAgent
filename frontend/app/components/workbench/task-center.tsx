@@ -16,6 +16,7 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 import type { SessionSummary, TaskSummary } from "./types";
 import {
   extractTaskFailureHint,
+  formatTraceStepSemanticStatsSummary,
   formatTimestamp,
   getTaskLabel,
   isTaskFailedStatus,
@@ -105,6 +106,14 @@ export function TaskCenter({
     return recentTasks.filter((task) => task.session_id === activeSessionId);
   }, [activeSessionId, recentTasks, scopeMode]);
 
+  const taskSnapshots = useMemo(() => {
+    const next = new Map<string, ReturnType<typeof resolveTaskSnapshotSummary>>();
+    for (const task of scopedTasks) {
+      next.set(task.id, resolveTaskSnapshotSummary({ task }));
+    }
+    return next;
+  }, [scopedTasks]);
+
   const filteredTasks = useMemo(() => {
     const q = taskSearchQuery.trim().toLowerCase();
     const statusMatched = scopedTasks.filter((task) => {
@@ -126,7 +135,15 @@ export function TaskCenter({
         : statusMatched.filter((task) => {
             const prompt = task.prompt.trim().toLowerCase();
             const id = task.id.toLowerCase();
-            const governance = resolveTaskSnapshotSummary({ task }).governance;
+            const snapshot = taskSnapshots.get(task.id);
+            const governance = snapshot?.governance;
+            const semanticSummary = snapshot
+              ? formatTraceStepSemanticStatsSummary(snapshot.semanticStats, {
+                  planner: t.taskCenter.semanticPlannerLabel,
+                  retrieval: t.taskCenter.semanticRetrievalLabel,
+                  calculator: t.taskCenter.semanticCalculatorLabel,
+                }).toLowerCase()
+              : "";
             const governanceKeywords = governance
               ? [
                   governance.profile ?? "",
@@ -140,6 +157,7 @@ export function TaskCenter({
             return (
               prompt.includes(q)
               || id.includes(q)
+              || semanticSummary.includes(q)
               || governanceKeywords.some((item) => item.includes(q))
             );
           });
@@ -149,7 +167,7 @@ export function TaskCenter({
       return taskSortOrder === "latest" ? bt - at : at - bt;
     });
     return sorted;
-  }, [scopedTasks, taskSearchQuery, taskSortOrder, taskStatusFilter]);
+  }, [scopedTasks, t.taskCenter, taskSearchQuery, taskSnapshots, taskSortOrder, taskStatusFilter]);
 
   const scopeDisabledSession = !activeSessionId;
 
@@ -170,14 +188,30 @@ export function TaskCenter({
         key: "task",
         render: (_value: unknown, task: TaskSummary) => {
           const failedHint = extractTaskFailureHint(task);
-          const governance = resolveTaskSnapshotSummary({ task }).governance;
+          const snapshot = taskSnapshots.get(task.id);
+          const governance = snapshot?.governance;
           const governanceAllowedTools =
             governance && governance.allowedToolLabels.length > 0
               ? governance.allowedToolLabels
               : governance?.allowedToolNames ?? [];
+          const semanticSummary = snapshot
+            ? formatTraceStepSemanticStatsSummary(snapshot.semanticStats, {
+                planner: t.taskCenter.semanticPlannerLabel,
+                retrieval: t.taskCenter.semanticRetrievalLabel,
+                calculator: t.taskCenter.semanticCalculatorLabel,
+              })
+            : null;
           return (
             <div className="task-center-cell-main">
               <strong>{getTaskLabel(task, t.workbench)}</strong>
+              {semanticSummary ? (
+                <span
+                  className="task-summary-governance"
+                  data-testid="task-center-semantic-summary"
+                >
+                  {semanticSummary}
+                </span>
+              ) : null}
               {governance ? (
                 <span
                   className="task-summary-governance"
@@ -253,7 +287,11 @@ export function TaskCenter({
     ],
     [
       localeTag,
+      taskSnapshots,
       t.inspector,
+      t.taskCenter.semanticCalculatorLabel,
+      t.taskCenter.semanticPlannerLabel,
+      t.taskCenter.semanticRetrievalLabel,
       t.taskCenter.openTaskDetail,
       t.taskCenter.openTaskDetailAria,
       t.taskCenter.tableActions,

@@ -118,6 +118,9 @@ export type Messages = {
     tableUsageSource: string;
     tableUpdatedAt: string;
     tableActions: string;
+    semanticPlannerLabel: string;
+    semanticRetrievalLabel: string;
+    semanticCalculatorLabel: string;
     openTaskDetail: string;
     openTaskDetailAria: string;
   };

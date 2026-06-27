@@ -536,6 +536,17 @@ export function resolveTraceStepSemanticStats(
   return stats;
 }
 
+export function formatTraceStepSemanticStatsSummary(
+  stats: Record<Exclude<TraceStepSemanticFilter, "all">, number>,
+  labels: Record<Exclude<TraceStepSemanticFilter, "all">, string>,
+): string {
+  return [
+    `${labels.planner} ${stats.planner}`,
+    `${labels.retrieval} ${stats.retrieval}`,
+    `${labels.calculator} ${stats.calculator}`,
+  ].join(" · ");
+}
+
 function sortTraceStepsBySeq(steps: TraceStepPayload[]): TraceStepPayload[] {
   return [...steps]
     .map((step, index) => ({ step, index }))

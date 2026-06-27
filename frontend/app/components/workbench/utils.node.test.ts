@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  formatTraceStepSemanticStatsSummary,
   formatTraceStepMetaSubtitle,
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
@@ -374,4 +375,21 @@ test("resolveTaskSnapshotSummary carries semantic stats for task detail snapshot
     retrieval: 2,
     calculator: 1,
   });
+});
+
+test("formatTraceStepSemanticStatsSummary renders compact planner retrieval calculator counts", () => {
+  const content = formatTraceStepSemanticStatsSummary(
+    {
+      planner: 1,
+      retrieval: 2,
+      calculator: 0,
+    },
+    {
+      planner: "Planner",
+      retrieval: "Retrieval",
+      calculator: "Calculator",
+    },
+  );
+
+  assert.equal(content, "Planner 1 · Retrieval 2 · Calculator 0");
 });
