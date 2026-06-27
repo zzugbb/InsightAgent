@@ -499,18 +499,23 @@ def _build_task_export_markdown(payload: TaskExportJsonResponse) -> str:
             seq = step.seq if step.seq is not None else idx
             lines.append(f"### {idx}. seq={seq} · {step.type} · {step.id}")
             lines.append("")
-            if step.meta is not None:
+            step_meta = chat_persistence_service.get_trace_step_markdown_meta(step)
+            if step_meta is not None:
                 _append_fenced_block(
                     lines,
                     json.dumps(
-                        step.meta.model_dump(exclude_none=True),
+                        step_meta,
                         ensure_ascii=False,
                         indent=2,
                     ),
                     "json",
                 )
                 lines.append("")
-            _append_fenced_block(lines, step.content or "", "text")
+            _append_fenced_block(
+                lines,
+                chat_persistence_service.get_trace_step_display_content(step),
+                "text",
+            )
             lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

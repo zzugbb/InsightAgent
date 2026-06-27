@@ -853,6 +853,57 @@ def _normalize_trace_preview_excerpt(text: str, limit: int = 120) -> str:
     return f"{normalized[:limit]}..."
 
 
+def _stringify_trace_tool_output_preview(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (dict, list, int, float, bool)):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return ""
+
+
+def get_trace_step_display_content(step: TraceStep) -> str:
+    content = str(getattr(step, "content", "") or "")
+    meta = getattr(step, "meta", None)
+    tool_meta = getattr(meta, "tool", None) if meta is not None else None
+    if not isinstance(tool_meta, dict):
+        return content
+    preview_text = _stringify_trace_tool_output_preview(
+        tool_meta.get("output_preview")
+    )
+    if not preview_text:
+        return content
+    if preview_text in content:
+        return content
+    if content.strip():
+        return f"{content}\nPreview: {preview_text}"
+    return preview_text
+
+
+def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
+    meta = getattr(step, "meta", None)
+    if meta is None:
+        return None
+    payload = (
+        meta.model_dump(exclude_none=True)
+        if hasattr(meta, "model_dump")
+        else dict(meta)
+        if isinstance(meta, dict)
+        else None
+    )
+    if not isinstance(payload, dict):
+        return None
+    tool_meta = payload.get("tool")
+    if isinstance(tool_meta, dict):
+        sanitized_tool_meta = dict(tool_meta)
+        preview_value = sanitized_tool_meta.get("output_preview")
+        if preview_value is not None:
+            sanitized_tool_meta.pop("output", None)
+        payload["tool"] = sanitized_tool_meta
+    return payload
+
+
 def _trace_preview_title(step: TraceStep) -> str:
     meta = getattr(step, "meta", None)
     label = getattr(meta, "label", None) if meta is not None else None
@@ -880,7 +931,6 @@ def get_task_trace_preview_summary_from_task(
     preview_steps: list[dict[str, object]] = []
     bounded_limit = max(0, int(preview_limit))
     for step in trace_steps[-bounded_limit:] if bounded_limit else []:
-        content = getattr(step, "content", "") or ""
         preview_steps.append(
             {
                 "id": str(getattr(step, "id", "")),
@@ -888,7 +938,7 @@ def get_task_trace_preview_summary_from_task(
                 "type": str(getattr(step, "type", "")),
                 "title": _trace_preview_title(step),
                 "content_excerpt": _normalize_trace_preview_excerpt(
-                    str(content),
+                    get_trace_step_display_content(step),
                     limit=120,
                 ),
             }

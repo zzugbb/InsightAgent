@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { authFetch } from "../api-client";
 import { en, type Messages } from "../i18n";
 import { parseSseBlock, parseSseBlocks } from "../sse/parse";
+import { mergeToolEndToolMeta } from "./chat-stream-store-utils";
 import type { TraceStepPayload } from "../types/trace";
 
 export type { TraceStepPayload } from "../types/trace";
@@ -583,15 +584,27 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
                 latency:
                   typeof p.latency_ms === "number" ? p.latency_ms : undefined,
                 tool: {
-                  ...(prevTool ?? { name: toolName, label: toolLabel }),
-                  output: p.output_preview,
-                  retry_count:
-                    typeof p.retry_count === "number" ? p.retry_count : undefined,
-                  error: typeof p.error === "string" ? p.error : undefined,
-                  status:
-                    status === "running" || status === "error"
-                      ? status
-                      : "done",
+                  ...mergeToolEndToolMeta(
+                    prevTool,
+                    {
+                      status,
+                      retry_count:
+                        typeof p.retry_count === "number"
+                          ? p.retry_count
+                          : undefined,
+                      latency_ms:
+                        typeof p.latency_ms === "number"
+                          ? p.latency_ms
+                          : undefined,
+                      error: typeof p.error === "string" ? p.error : undefined,
+                      output:
+                        Object.prototype.hasOwnProperty.call(p, "output")
+                          ? p.output
+                          : undefined,
+                      output_preview: p.output_preview,
+                    },
+                    { name: toolName, label: toolLabel },
+                  ),
                 },
               },
             }),

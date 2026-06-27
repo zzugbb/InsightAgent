@@ -26,6 +26,7 @@ import {
   getStepTitle,
   getTaskLabel,
   normalizeTraceStepKind,
+  resolveTraceStepDisplayContent,
   resolveSessionGovernanceSummary,
   resolveInspectorTaskUsage,
   resolveTasksUsageAggregate,
@@ -160,7 +161,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         return true;
       }
       const title = getStepTitle(step).toLowerCase();
-      const content = (step.content ?? "").toLowerCase();
+      const content = (resolveTraceStepDisplayContent(step) ?? "").toLowerCase();
       const id = step.id.toLowerCase();
       const model =
         typeof step.meta?.model === "string" ? step.meta.model.toLowerCase() : "";
@@ -437,7 +438,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
                   {metaLine}
                 </p>
               ) : null}
-              <p>{step.content || t.inspector.stepEmpty}</p>
+              <p>{resolveTraceStepDisplayContent(step) || t.inspector.stepEmpty}</p>
             </article>
             );
           })}

@@ -6426,6 +6426,104 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_get_task_trace_preview_summary_appends_tool_output_preview_for_action_steps(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-preview-tool",
+                            "type": "action",
+                            "content": "Tool done: Task Planner",
+                            "seq": 21,
+                            "meta": {
+                                "tool": {
+                                    "name": "task_plan",
+                                    "label": "Task Planner",
+                                    "status": "done",
+                                    "output_preview": {
+                                        "plan": "Analyze request -> synthesize answer",
+                                        "prompt_preview": "trace preview prompt",
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn("Tool done: Task Planner", excerpt)
+        self.assertIn("Analyze request -> synthesize answer", excerpt)
+        self.assertIn("trace preview prompt", excerpt)
+
+    def test_get_task_trace_preview_summary_prefers_output_preview_without_leaking_raw_output(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-preview-tool-safe",
+                            "type": "action",
+                            "content": "Tool done: Hot Retrieval",
+                            "seq": 22,
+                            "meta": {
+                                "tool": {
+                                    "name": "task_retrieve_hot",
+                                    "label": "Hot Retrieval",
+                                    "status": "done",
+                                    "output": {
+                                        "tool_kind": "hot_knowledge_retrieval",
+                                        "knowledge_base_id": "demo-kb",
+                                        "raw_documents": [{"id": "doc-1"}],
+                                    },
+                                    "output_preview": {
+                                        "tool_kind": "hot_knowledge_retrieval",
+                                        "knowledge_base_id": "demo-kb",
+                                        "hit_count": 2,
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn('"knowledge_base_id":"demo-kb"', excerpt)
+        self.assertIn('"hit_count":2', excerpt)
+        self.assertNotIn("raw_documents", excerpt)
+
     def test_get_trace_rag_export_summary_reuses_shared_trace_steps_shape(self) -> None:
         payload = chat_persistence_module.get_trace_rag_export_summary(  # type: ignore[attr-defined]
             [
@@ -9318,6 +9416,244 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("- Tool Registry Profile: retrieval_only", markdown)
         self.assertIn("- Tool Registry Source: default", markdown)
         self.assertIn("- Allowed Tools: Knowledge Retrieval", markdown)
+
+    def test_build_task_export_markdown_appends_tool_output_preview_for_action_steps(
+        self,
+    ) -> None:
+        payload = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-06-27T12:00:00",
+            task=task_routes_module.TaskExportTask(  # type: ignore[attr-defined]
+                id="task-export-preview-md",
+                session_id="session-export-preview-md",
+                prompt="show me the export markdown preview",
+                status="completed",
+                status_normalized="completed",
+                status_label="Completed",
+                status_rank=4,
+                created_at="2026-06-27T11:59:00",
+                updated_at="2026-06-27T12:00:00",
+            ),
+            usage=None,
+            messages=[],
+            trace=task_routes_module.TaskExportTrace(  # type: ignore[attr-defined]
+                governance=None,
+                step_count=1,
+                rag_hit_count=0,
+                rag_knowledge_base_ids=[],
+                rag_chunks=[],
+                steps=[
+                    task_routes_module.TraceStep(  # type: ignore[attr-defined]
+                        id="step-preview-tool",
+                        seq=3,
+                        type="action",
+                        content="Tool done: Hot Retrieval",
+                        meta={
+                            "tool": {
+                                "name": "task_retrieve_hot",
+                                "label": "Hot Retrieval",
+                                "status": "done",
+                                "output_preview": {
+                                    "tool_kind": "hot_knowledge_retrieval",
+                                    "hit_count": 2,
+                                    "knowledge_base_id": "demo-kb",
+                                },
+                            }
+                        },
+                    )
+                ],
+            ),
+        )
+
+        markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn("Tool done: Hot Retrieval", markdown)
+        self.assertIn('"hit_count":2', markdown)
+        self.assertIn('"knowledge_base_id":"demo-kb"', markdown)
+
+    def test_build_task_export_markdown_reuses_shared_trace_display_content_helper(
+        self,
+    ) -> None:
+        payload = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-06-27T12:10:00",
+            task=task_routes_module.TaskExportTask(  # type: ignore[attr-defined]
+                id="task-export-display-helper-md",
+                session_id="session-export-display-helper-md",
+                prompt="reuse trace display helper",
+                status="completed",
+                status_normalized="completed",
+                status_label="Completed",
+                status_rank=4,
+                created_at="2026-06-27T12:05:00",
+                updated_at="2026-06-27T12:10:00",
+            ),
+            usage=None,
+            messages=[],
+            trace=task_routes_module.TaskExportTrace(  # type: ignore[attr-defined]
+                governance=None,
+                step_count=1,
+                rag_hit_count=0,
+                rag_knowledge_base_ids=[],
+                rag_chunks=[],
+                steps=[
+                    task_routes_module.TraceStep(  # type: ignore[attr-defined]
+                        id="step-display-helper",
+                        seq=1,
+                        type="action",
+                        content="Tool done: Helper Check",
+                        meta={},
+                    )
+                ],
+            ),
+        )
+        original_display_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_trace_step_display_content",
+            None,
+        )
+        try:
+            task_routes_module.chat_persistence_service.get_trace_step_display_content = (  # type: ignore[attr-defined]
+                lambda _step: "shared display body"
+            )
+
+            markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+                payload,
+            )
+        finally:
+            if original_display_helper is None:
+                delattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_trace_step_display_content",
+                )
+            else:
+                task_routes_module.chat_persistence_service.get_trace_step_display_content = original_display_helper  # type: ignore[attr-defined]
+
+        self.assertIn("shared display body", markdown)
+
+    def test_build_task_export_markdown_does_not_leak_raw_output_when_preview_exists(
+        self,
+    ) -> None:
+        payload = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-06-27T12:20:00",
+            task=task_routes_module.TaskExportTask(  # type: ignore[attr-defined]
+                id="task-export-sanitized-meta-md",
+                session_id="session-export-sanitized-meta-md",
+                prompt="sanitize export markdown meta",
+                status="completed",
+                status_normalized="completed",
+                status_label="Completed",
+                status_rank=4,
+                created_at="2026-06-27T12:15:00",
+                updated_at="2026-06-27T12:20:00",
+            ),
+            usage=None,
+            messages=[],
+            trace=task_routes_module.TaskExportTrace(  # type: ignore[attr-defined]
+                governance=None,
+                step_count=1,
+                rag_hit_count=0,
+                rag_knowledge_base_ids=[],
+                rag_chunks=[],
+                steps=[
+                    task_routes_module.TraceStep(  # type: ignore[attr-defined]
+                        id="step-sanitized-meta",
+                        seq=2,
+                        type="action",
+                        content="Tool done: Hot Retrieval",
+                        meta={
+                            "tool": {
+                                "name": "task_retrieve_hot",
+                                "label": "Hot Retrieval",
+                                "status": "done",
+                                "output": {
+                                    "tool_kind": "hot_knowledge_retrieval",
+                                    "hit_count": 2,
+                                    "chunks": ["alpha", "beta"],
+                                    "raw_documents": [{"id": "doc-1"}],
+                                },
+                                "output_preview": {
+                                    "tool_kind": "hot_knowledge_retrieval",
+                                    "hit_count": 2,
+                                    "knowledge_base_id": "demo-kb",
+                                },
+                            }
+                        },
+                    )
+                ],
+            ),
+        )
+
+        markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn('"output_preview"', markdown)
+        self.assertNotIn("raw_documents", markdown)
+        self.assertNotIn('"chunks"', markdown)
+
+    def test_build_task_export_markdown_reuses_shared_markdown_meta_helper(
+        self,
+    ) -> None:
+        payload = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-06-27T12:25:00",
+            task=task_routes_module.TaskExportTask(  # type: ignore[attr-defined]
+                id="task-export-meta-helper-md",
+                session_id="session-export-meta-helper-md",
+                prompt="reuse markdown meta helper",
+                status="completed",
+                status_normalized="completed",
+                status_label="Completed",
+                status_rank=4,
+                created_at="2026-06-27T12:20:00",
+                updated_at="2026-06-27T12:25:00",
+            ),
+            usage=None,
+            messages=[],
+            trace=task_routes_module.TaskExportTrace(  # type: ignore[attr-defined]
+                governance=None,
+                step_count=1,
+                rag_hit_count=0,
+                rag_knowledge_base_ids=[],
+                rag_chunks=[],
+                steps=[
+                    task_routes_module.TraceStep(  # type: ignore[attr-defined]
+                        id="step-meta-helper",
+                        seq=1,
+                        type="action",
+                        content="Tool done: Helper Check",
+                        meta={"tool": {"name": "helper_tool", "status": "done"}},
+                    )
+                ],
+            ),
+        )
+        original_meta_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_trace_step_markdown_meta",
+            None,
+        )
+        try:
+            task_routes_module.chat_persistence_service.get_trace_step_markdown_meta = (  # type: ignore[attr-defined]
+                lambda _step: {"sanitized": True}
+            )
+
+            markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+                payload,
+            )
+        finally:
+            if original_meta_helper is None:
+                delattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_trace_step_markdown_meta",
+                )
+            else:
+                task_routes_module.chat_persistence_service.get_trace_step_markdown_meta = original_meta_helper  # type: ignore[attr-defined]
+
+        self.assertIn('"sanitized": true', markdown)
 
     def test_build_task_export_payload_reuses_shared_task_export_summary_helper_for_trace(
         self,
@@ -14541,6 +14877,34 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(extra_tools["calc_eval_fast"].default_timeout_ms, 1_500)
         self.assertFalse(extra_tools["calc_eval_fast"].retryable_by_default)
         self.assertEqual(extra_tools["calc_eval_fast"].kind, "local_calculator")
+
+    def test_build_tool_registry_extra_tools_from_settings_accepts_result_preview_keys(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "task_retrieve_hot": {
+                        "template": "task_retrieve",
+                        "label": "Hot Retrieval",
+                        "result_preview_keys": [
+                            "tool_kind",
+                            "hit_count",
+                            "knowledge_base_id",
+                            "hit_count",
+                            " ",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        self.assertEqual(
+            extra_tools["task_retrieve_hot"].result_preview_keys,
+            ("tool_kind", "hit_count", "knowledge_base_id"),
+        )
 
     def test_build_tool_registry_extra_tools_from_settings_ignores_unknown_template_and_existing_name(self) -> None:
         settings = SimpleNamespace(
@@ -25146,7 +25510,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertTrue(registration.requires_user_context)
         self.assertTrue(registration.supports_result_preview)
 
-    def test_build_tool_result_preview_keeps_current_calc_shape(self) -> None:
+    def test_build_tool_result_preview_governs_builtin_calc_preview_fields(self) -> None:
         output = {
             "expression": "1+2*3",
             "result": 7.0,
@@ -25155,7 +25519,64 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             build_tool_result_preview(name="calc_eval", output=output),
-            output,
+            {
+                "expression": "1+2*3",
+                "result": 7.0,
+            },
+        )
+
+    def test_build_tool_result_preview_governs_builtin_retrieval_preview_fields(
+        self,
+    ) -> None:
+        output = {
+            "chunks": ["alpha", "beta"],
+            "hits": [{"content": "alpha"}],
+            "hit_count": 2,
+            "knowledge_base_id": "demo-kb",
+            "collection": "user-demo-kb",
+        }
+
+        self.assertEqual(
+            build_tool_result_preview(name="task_retrieve", output=output),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "demo-kb",
+            },
+        )
+
+    def test_build_tool_result_preview_uses_explicit_result_preview_keys(self) -> None:
+        output = {
+            "tool_kind": "knowledge_retrieval",
+            "chunks": ["alpha", "beta"],
+            "hit_count": 2,
+            "knowledge_base_id": "demo-kb",
+            "raw_documents": [{"id": "doc-1"}],
+        }
+        registration = ToolRegistration(
+            name="task_retrieve_hot",
+            kind="knowledge_retrieval",
+            label="Hot Retrieval",
+            retryable_by_default=True,
+            default_timeout_ms=5_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+            },
+            result_preview_keys=("tool_kind", "hit_count", "knowledge_base_id"),
+        )
+
+        self.assertEqual(
+            build_tool_result_preview(
+                name="task_retrieve_hot",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "tool_kind": "knowledge_retrieval",
+                "hit_count": 2,
+                "knowledge_base_id": "demo-kb",
+            },
         )
 
     def test_tool_runtime_helpers_expose_current_calc_defaults(self) -> None:
@@ -25282,7 +25703,51 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "step_id": "step-1",
                 "status": "done",
                 "latency_ms": 12,
-                "output_preview": output,
+                "output_preview": {
+                    "expression": "1+2*3",
+                    "result": 7.0,
+                },
+                "retry_count": 0,
+            },
+        )
+
+    def test_build_tool_end_payload_uses_registration_preview_policy_and_timeout(
+        self,
+    ) -> None:
+        output = {
+            "documents": [{"title": "Secret"}],
+            "tool_kind": "custom_lookup",
+        }
+        registration = ToolRegistration(
+            name="custom_lookup",
+            kind="custom_lookup",
+            label="Custom Lookup",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=False,
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+                "prompt": prompt,
+                "user_id": user_id,
+            },
+        )
+
+        self.assertEqual(
+            build_tool_end_payload(
+                name="custom_lookup",
+                task_id="task-1",
+                step_id="step-1",
+                output=output,
+                retry_count=0,
+                registration=registration,
+            ),
+            {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "status": "done",
+                "latency_ms": 48,
+                "output_preview": None,
                 "retry_count": 0,
             },
         )
@@ -25311,6 +25776,13 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(success_meta["tool"]["name"], "calc_eval")
         self.assertEqual(success_meta["tool"]["output"], output)
+        self.assertEqual(
+            success_meta["tool"]["output_preview"],
+            {
+                "expression": "1+2*3",
+                "result": 7.0,
+            },
+        )
         self.assertEqual(success_meta["tool"]["status"], "done")
         self.assertEqual(error_meta["tool"]["name"], "calc_eval")
         self.assertEqual(error_meta["tool"]["status"], "error")
@@ -25474,7 +25946,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "step_id": "step-1",
                     "status": "done",
                     "latency_ms": 12,
-                    "output_preview": output,
+                    "output_preview": {
+                        "expression": "1+2*3",
+                        "result": 7.0,
+                    },
                     "retry_count": 0,
                 }
             },
@@ -25993,7 +26468,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "step_id": "step-1",
                 "status": "done",
                 "latency_ms": 12,
-                "output_preview": output,
+                "output_preview": {
+                    "expression": "1+2*3",
+                    "result": 7.0,
+                },
                 "retry_count": 0,
             },
         )
@@ -26066,6 +26544,69 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_attempt_error_transition_honors_runtime_timeout(self) -> None:
+        base_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool running: Custom Lookup",
+            "meta": {
+                "model": "mock-gpt",
+                "step_type": "tool_call",
+                "label": "tool_1",
+                "retryCount": 0,
+                "tokens": 5,
+                "cost_estimate": None,
+                "tool": {
+                    "name": "custom_lookup",
+                    "label": "Custom Lookup",
+                    "input": {"query": "secret"},
+                    "status": "running",
+                    "retry_count": 0,
+                },
+            },
+        }
+        registry = {
+            "custom_lookup": ToolRegistration(
+                name="custom_lookup",
+                kind="custom_lookup",
+                label="Custom Lookup",
+                retryable_by_default=False,
+                default_timeout_ms=12_000,
+                requires_user_context=False,
+                supports_result_preview=False,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_input": tool_input,
+                },
+            )
+        }
+        ctx = build_tool_runtime_context(
+            name="custom_lookup",
+            prompt="lookup",
+            user_id="user-1",
+            attempt=0,
+            registry=registry,
+        )
+        exc = MockToolExecutionError("fatal", fatal=True)
+
+        transition = build_tool_attempt_error_transition(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=base_step,
+            runtime_ctx=ctx,
+            name="custom_lookup",
+            tool_input={"query": "secret"},
+            exc=exc,
+            token_count=9,
+            display_name="Custom Lookup",
+        )
+
+        self.assertEqual(transition["events"]["tool_end"]["latency_ms"], 48)
+        self.assertEqual(
+            transition["events"]["tool_end"]["output_preview"],
+            {"error": "fatal"},
+        )
+
     def test_build_tool_step_output_returns_output_dict_when_present(self) -> None:
         step = {
             "meta": {
@@ -26079,7 +26620,73 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(build_tool_step_output(step), {"result": 7.0})
 
-    def test_build_tool_observation_entry_keeps_current_shape(self) -> None:
+    def test_build_tool_step_success_update_keeps_raw_output_and_stores_preview(
+        self,
+    ) -> None:
+        base_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool running: Custom Lookup",
+            "meta": {
+                "model": "mock-gpt",
+                "step_type": "tool_call",
+                "label": "tool_1",
+                "retryCount": 0,
+                "tokens": 5,
+                "cost_estimate": None,
+                "tool": {
+                    "name": "custom_lookup",
+                    "label": "Custom Lookup",
+                    "input": {"query": "secret"},
+                    "status": "running",
+                    "retry_count": 0,
+                },
+            },
+        }
+        registration = ToolRegistration(
+            name="custom_lookup",
+            kind="custom_lookup",
+            label="Custom Lookup",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            result_preview_keys=("tool_kind", "hit_count"),
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+                "prompt": prompt,
+                "user_id": user_id,
+            },
+        )
+        output = {
+            "tool_kind": "custom_lookup",
+            "hit_count": 1,
+            "secret": "do-not-preview",
+        }
+
+        success_step = build_tool_step_success_update(
+            action_step=base_step,
+            name="custom_lookup",
+            tool_input={"query": "secret"},
+            output=output,
+            retry_count=0,
+            token_count=7,
+            last_error=None,
+            display_name="Custom Lookup",
+            registration=registration,
+        )
+
+        self.assertEqual(success_step["meta"]["tool"]["output"], output)
+        self.assertEqual(
+            success_step["meta"]["tool"]["output_preview"],
+            {
+                "tool_kind": "custom_lookup",
+                "hit_count": 1,
+            },
+        )
+
+    def test_build_tool_observation_entry_prefers_preview_shape_for_builtin_calculator(self) -> None:
         self.assertEqual(
             build_tool_observation_entry(
                 name="calc_eval",
@@ -26089,7 +26696,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "tool_kind": "local_calculator",
                 },
             ),
-            'calc_eval: {"expression": "1+2*3", "result": 7.0, "tool_kind": "local_calculator"}',
+            'calc_eval: {"expression": "1+2*3", "result": 7.0}',
         )
 
     def test_build_tool_step_updates_and_observation_use_display_label_for_mock_plan(
@@ -26135,7 +26742,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(success_step["meta"]["tool"]["label"], "Task Planner")
         self.assertEqual(
             build_tool_observation_entry(name="mock_plan", output=output),
-            'Task Planner: {"plan": "Analyze request -> retrieve context -> synthesize answer.", "echo": true}',
+            'Task Planner: {"plan": "Analyze request -> retrieve context -> synthesize answer."}',
         )
 
     def test_build_tool_step_updates_observation_and_rag_followup_use_display_label_for_mock_retrieve(
@@ -26191,7 +26798,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(success_step["meta"]["tool"]["name"], "task_retrieve")
         self.assertEqual(
             build_tool_observation_entry(name="mock_retrieve", output=output),
-            'Knowledge Retrieval: {"chunks": ["alpha", "beta"], "knowledge_base_id": "demo-kb", "hit_count": 2}',
+            'Knowledge Retrieval: {"hit_count": 2, "knowledge_base_id": "demo-kb"}',
         )
         self.assertIsNotNone(rag_followup)
         assert rag_followup is not None
@@ -26464,6 +27071,69 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(outcome["action_step"]["content"], "Tool error: calc_eval")
         self.assertEqual(outcome["events"]["tool_end"]["status"], "error")
 
+    def test_build_tool_attempt_outcome_honors_runtime_preview_policy(self) -> None:
+        base_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool running: Custom Lookup",
+            "meta": {
+                "model": "mock-gpt",
+                "step_type": "tool_call",
+                "label": "tool_1",
+                "retryCount": 0,
+                "tokens": 5,
+                "cost_estimate": None,
+                "tool": {
+                    "name": "custom_lookup",
+                    "label": "Custom Lookup",
+                    "input": {"query": "secret"},
+                    "status": "running",
+                    "retry_count": 0,
+                },
+            },
+        }
+        registry = {
+            "custom_lookup": ToolRegistration(
+                name="custom_lookup",
+                kind="custom_lookup",
+                label="Custom Lookup",
+                retryable_by_default=False,
+                default_timeout_ms=12_000,
+                requires_user_context=False,
+                supports_result_preview=False,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "documents": [{"title": "Secret"}],
+                    "tool_kind": "custom_lookup",
+                },
+            )
+        }
+
+        outcome = build_tool_attempt_outcome(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=base_step,
+            runtime_ctx=build_tool_runtime_context(
+                name="custom_lookup",
+                prompt="lookup",
+                user_id="user-1",
+                attempt=0,
+                registry=registry,
+            ),
+            name="custom_lookup",
+            tool_input={"query": "secret"},
+            output={
+                "documents": [{"title": "Secret"}],
+                "tool_kind": "custom_lookup",
+            },
+            exc=None,
+            token_count=7,
+            last_error=None,
+        )
+
+        self.assertEqual(outcome["events"]["tool_end"]["latency_ms"], 48)
+        self.assertIsNone(outcome["events"]["tool_end"]["output_preview"])
+
     def test_build_tool_iteration_context_keeps_current_shape(self) -> None:
         context = build_tool_iteration_context(
             step_id="step-1",
@@ -26501,24 +27171,31 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Fast Calculator",
         )
 
-    def test_build_tool_iteration_success_artifacts_keeps_current_shape(self) -> None:
-        action_step = {
-            "id": "step-1",
-            "seq": 3,
-            "type": "action",
-            "content": "Tool done: calc_eval",
-            "meta": {
-                "tool": {
-                    "name": "calc_eval",
-                    "status": "done",
-                    "output": {
-                        "expression": "1+2*3",
-                        "result": 7.0,
-                        "tool_kind": "local_calculator",
-                    },
-                }
+    def test_build_tool_iteration_success_artifacts_use_preview_aware_observation_shape(self) -> None:
+        action_step = build_tool_step_success_update(
+            action_step={
+                "id": "step-1",
+                "seq": 3,
+                "type": "action",
+                "content": "Tool running: calc_eval",
+                "meta": {
+                    "tool": {
+                        "name": "calc_eval",
+                        "status": "running",
+                    }
+                },
             },
-        }
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output={
+                "expression": "1+2*3",
+                "result": 7.0,
+                "tool_kind": "local_calculator",
+            },
+            retry_count=0,
+            token_count=7,
+            last_error=None,
+        )
 
         artifacts = build_tool_iteration_success_artifacts(
             task_id="task-1",
@@ -26536,8 +27213,15 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
         self.assertEqual(
+            artifacts["trace"]["step"]["meta"]["tool"]["output_preview"],
+            {
+                "expression": "1+2*3",
+                "result": 7.0,
+            },
+        )
+        self.assertEqual(
             artifacts["observation"],
-            'calc_eval: {"expression": "1+2*3", "result": 7.0, "tool_kind": "local_calculator"}',
+            'calc_eval: {"expression": "1+2*3", "result": 7.0}',
         )
         self.assertEqual(
             artifacts["output"],
@@ -26547,6 +27231,75 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "tool_kind": "local_calculator",
             },
         )
+
+    def test_build_tool_iteration_success_artifacts_keep_raw_output_for_observation_and_preview_for_trace(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="task_retrieve_hot",
+            kind="hot_knowledge_retrieval",
+            label="Hot Retrieval",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            result_preview_keys=("tool_kind", "hit_count", "knowledge_base_id"),
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+                "prompt": prompt,
+                "user_id": user_id,
+            },
+        )
+        output = {
+            "tool_kind": "hot_knowledge_retrieval",
+            "hit_count": 2,
+            "knowledge_base_id": "demo-kb",
+            "chunks": ["alpha", "beta"],
+            "raw_documents": [{"id": "doc-1"}],
+        }
+        action_step = build_tool_step_success_update(
+            action_step={
+                "id": "step-2",
+                "seq": 4,
+                "type": "action",
+                "content": "Tool running: Hot Retrieval",
+                "meta": {
+                    "tool": {
+                        "name": "task_retrieve_hot",
+                        "label": "Hot Retrieval",
+                        "status": "running",
+                    }
+                },
+            },
+            name="task_retrieve_hot",
+            tool_input={"query": "hot"},
+            output=output,
+            retry_count=0,
+            token_count=7,
+            last_error=None,
+            display_name="Hot Retrieval",
+            registration=registration,
+        )
+
+        artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-2",
+            action_step=action_step,
+            name="task_retrieve_hot",
+            display_name="Hot Retrieval",
+        )
+
+        self.assertEqual(artifacts["output"], output)
+        self.assertEqual(
+            artifacts["trace"]["step"]["meta"]["tool"]["output_preview"],
+            {
+                "tool_kind": "hot_knowledge_retrieval",
+                "hit_count": 2,
+                "knowledge_base_id": "demo-kb",
+            },
+        )
+        self.assertIn('"chunks": ["alpha", "beta"]', artifacts["observation"])
+        self.assertIn('"raw_documents": [{"id": "doc-1"}]', artifacts["observation"])
 
     def test_build_tool_rag_followup_keeps_current_shape(self) -> None:
         followup = build_tool_rag_followup(
@@ -26683,6 +27436,53 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
         self.assertIsNone(execution["terminal_failure"])
+
+    def test_build_tool_iteration_execution_uses_productized_label_and_preview_for_builtin_calculator_observation(
+        self,
+    ) -> None:
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+        )
+        output = {
+            "expression": "1+2*3",
+            "result": 7.0,
+            "tool_kind": "local_calculator",
+        }
+
+        execution = build_tool_iteration_execution(
+            task_id="task-1",
+            step_id="step-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="calc_eval",
+            tool_input={"expression": "1+2*3"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+        )
+
+        self.assertEqual(
+            execution["success_artifacts"]["observation"],
+            'Calculator: {"expression": "1+2*3", "result": 7.0}',
+        )
+        self.assertEqual(
+            execution["start_events"]["tool_start"]["display_name"],
+            "calc_eval",
+        )
 
     def test_build_tool_iteration_execution_keeps_terminal_error_shape(self) -> None:
         iteration_ctx = build_tool_iteration_context(
@@ -27199,7 +27999,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             success_bundle["observation"],
-            'Hot Retrieval: {"chunks": ["alpha", "beta"], "knowledge_base_id": "demo-kb", "hit_count": 2, "tool_kind": "hot_knowledge_retrieval"}',
+            'Hot Retrieval: {"hit_count": 2, "knowledge_base_id": "demo-kb"}',
         )
         self.assertIsNotNone(success_bundle["rag_followup"])
         assert success_bundle["rag_followup"] is not None
@@ -27297,7 +28097,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(postprocess["trace"], success_artifacts["trace"])
         self.assertEqual(
             postprocess["observation"],
-            'calc_eval: {"expression": "1+2*3", "result": 7.0, "tool_kind": "local_calculator"}',
+            'calc_eval: {"expression": "1+2*3", "result": 7.0}',
         )
         self.assertEqual(postprocess["output"], success_artifacts["output"])
         self.assertIsNone(postprocess["rag_followup"])
@@ -27349,7 +28149,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(effects["trace"]["step"]["content"], "Tool done: calc_eval")
         self.assertEqual(
             effects["observation"],
-            'calc_eval: {"expression": "1+2*3", "result": 7.0, "tool_kind": "local_calculator"}',
+            'calc_eval: {"expression": "1+2*3", "result": 7.0}',
         )
         self.assertIsNone(effects["rag_followup"])
 
@@ -28631,6 +29431,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(final_item["result"]["outcome"], "terminal_failure")
         self.assertTrue(bool(final_item["result"]["should_return"]))
 
+    def test_execute_tool_plan_item_retry_loop_honors_custom_error_timeout(self) -> None:
+        registry = {
+            "custom_lookup": ToolRegistration(
+                name="custom_lookup",
+                kind="custom_lookup",
+                label="Custom Lookup",
+                retryable_by_default=False,
+                default_timeout_ms=12_000,
+                requires_user_context=False,
+                supports_result_preview=False,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_input": tool_input,
+                },
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="custom_lookup",
+            tool_input={"query": "secret"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Custom Lookup",
+        )
+
+        def fake_run_tool(
+            *,
+            name: str,
+            tool_input: dict[str, object],
+            prompt: str,
+            user_id: str,
+            attempt: int,
+        ) -> dict[str, object]:
+            raise MockToolExecutionError("fatal", fatal=True)
+
+        items = list(
+            execute_tool_plan_item_retry_loop(
+                task_id="task-1",
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="custom_lookup",
+                tool_input={"query": "secret"},
+                prompt="lookup",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                run_tool_fn=fake_run_tool,
+                registry=registry,
+            )
+        )
+
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        self.assertEqual(tool_end_event["latency_ms"], 48)
+        self.assertEqual(tool_end_event["output_preview"], {"error": "fatal"})
+
 
     def test_execute_tool_plan_item_service_execution_keeps_success_shape(self) -> None:
         iteration_ctx = build_tool_iteration_context(
@@ -28931,6 +29793,126 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
             "provider_calc",
+        )
+
+    def test_execute_tool_plan_item_service_execution_honors_custom_preview_policy(
+        self,
+    ) -> None:
+        registry = {
+            "custom_lookup": ToolRegistration(
+                name="custom_lookup",
+                kind="custom_lookup",
+                label="Custom Lookup",
+                retryable_by_default=False,
+                default_timeout_ms=12_000,
+                requires_user_context=False,
+                supports_result_preview=False,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "documents": [{"title": "Secret"}],
+                    "tool_kind": "custom_lookup",
+                },
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="custom_lookup",
+            tool_input={"query": "secret"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Custom Lookup",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="custom_lookup",
+                tool_input={"query": "secret"},
+                prompt="lookup",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        self.assertEqual(tool_end_event["latency_ms"], 48)
+        self.assertIsNone(tool_end_event["output_preview"])
+
+    def test_execute_tool_plan_item_service_execution_applies_custom_preview_keys(
+        self,
+    ) -> None:
+        registry = {
+            "task_retrieve_hot": ToolRegistration(
+                name="task_retrieve_hot",
+                kind="knowledge_retrieval",
+                label="Hot Retrieval",
+                retryable_by_default=True,
+                default_timeout_ms=5_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "knowledge_retrieval",
+                    "chunks": ["alpha", "beta"],
+                    "hit_count": 2,
+                    "knowledge_base_id": "demo-kb",
+                    "raw_documents": [{"id": "doc-1"}],
+                },
+                result_preview_keys=("tool_kind", "hit_count", "knowledge_base_id"),
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="task_retrieve_hot",
+            tool_input={"query": "demo"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Hot Retrieval",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="task_retrieve_hot",
+                tool_input={"query": "demo"},
+                prompt="retrieve demo",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-1",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "tool_kind": "knowledge_retrieval",
+                "hit_count": 2,
+                "knowledge_base_id": "demo-kb",
+            },
         )
 
     def test_execute_tool_plan_item_service_actions_keeps_continue_shape(self) -> None:

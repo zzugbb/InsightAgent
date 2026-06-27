@@ -23,6 +23,7 @@ import {
   getStepTitle,
   getTraceFlowKindLabel,
   normalizeTraceStepKind,
+  resolveTraceStepDisplayContent,
 } from "./utils";
 
 const TRACE_NODE_TYPE = "traceStep" as const;
@@ -119,7 +120,7 @@ function TraceFlowInner({ steps, colorMode }: TraceFlowViewProps) {
           kind,
           kindLabel: getTraceFlowKindLabel(kind, t.inspector.traceFlow),
           metaLine: formatTraceStepMetaSubtitle(step, t.inspector.traceMeta),
-          content: typeof step.content === "string" ? step.content : "",
+          content: resolveTraceStepDisplayContent(step) ?? "",
           contentDetailsLabel: t.inspector.traceFlow.contentDetails,
           contentEmpty: t.inspector.traceFlow.contentEmpty,
         },

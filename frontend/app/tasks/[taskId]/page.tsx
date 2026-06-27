@@ -22,6 +22,7 @@ import {
   getTaskLabel,
   normalizeTraceStepKind,
   parseTaskTraceJson,
+  resolveTraceStepDisplayContent,
   resolveTaskSnapshotSummary,
   resolveTaskUsageFromTask,
   shortenId,
@@ -140,7 +141,7 @@ export default function TaskDetailPage() {
         return true;
       }
       const title = getStepTitle(step).toLowerCase();
-      const content = (step.content ?? "").toLowerCase();
+      const content = (resolveTraceStepDisplayContent(step) ?? "").toLowerCase();
       const id = step.id.toLowerCase();
       const model =
         typeof step.meta?.model === "string" ? step.meta.model.toLowerCase() : "";
@@ -473,7 +474,7 @@ export default function TaskDetailPage() {
                           >
                             {metaLine ?? t.taskDetail.traceMetaNone}
                           </p>
-                          <p>{step.content || t.inspector.stepEmpty}</p>
+                          <p>{resolveTraceStepDisplayContent(step) || t.inspector.stepEmpty}</p>
                         </article>
                       );
                     })}

@@ -399,6 +399,34 @@ function normalizeTraceContent(value: unknown): string | null {
   return normalized ? normalized : null;
 }
 
+function stringifyTraceToolOutputPreview(value: unknown): string | null {
+  if (typeof value === "string") {
+    return normalizeTraceContent(value);
+  }
+  if (
+    value !== null &&
+    value !== undefined &&
+    (Array.isArray(value) || typeof value === "object" || typeof value === "number" || typeof value === "boolean")
+  ) {
+    return JSON.stringify(value);
+  }
+  return null;
+}
+
+export function resolveTraceStepDisplayContent(
+  step: TraceStepPayload,
+): string | null {
+  const content = normalizeTraceContent(step.content);
+  const preview = stringifyTraceToolOutputPreview(step.meta?.tool?.output_preview);
+  if (!preview) {
+    return content;
+  }
+  if (content && content.includes(preview)) {
+    return content;
+  }
+  return content ? `${content}\nPreview: ${preview}` : preview;
+}
+
 function sortTraceStepsBySeq(steps: TraceStepPayload[]): TraceStepPayload[] {
   return [...steps]
     .map((step, index) => ({ step, index }))
@@ -473,7 +501,7 @@ function findLastStepContent(
     if (predicate && !predicate(step)) {
       continue;
     }
-    const content = normalizeTraceContent(step.content);
+    const content = resolveTraceStepDisplayContent(step);
     if (content) {
       return content;
     }

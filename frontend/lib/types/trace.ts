@@ -27,6 +27,7 @@ export type TraceStepMeta = {
     label?: string;
     input?: unknown;
     output?: unknown;
+    output_preview?: unknown;
     status: "running" | "done" | "error";
     retry_count?: number;
     error?: string | null;
