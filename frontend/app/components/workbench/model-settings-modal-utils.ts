@@ -62,6 +62,7 @@ export function resolveModelSettingsSelectionDetails(args: {
   sourceName: string;
 }): {
   selectedProfileTools: string;
+  selectedProfileToolDetailsSummary: string;
   selectedSourceTools: string;
   selectedSourceBaseProfile: string;
   selectedSourceToolDetailsSummary: string;
@@ -79,6 +80,9 @@ export function resolveModelSettingsSelectionDetails(args: {
       selectedProfileDetail && selectedProfileDetail.enabled_tool_labels.length > 0
         ? selectedProfileDetail.enabled_tool_labels.join(", ")
         : "—",
+    selectedProfileToolDetailsSummary: formatToolRegistryProviderToolDetailsSummary(
+      selectedProfileDetail?.tool_details,
+    ),
     selectedSourceTools:
       selectedSourceDetail && selectedSourceDetail.enabled_tool_labels.length > 0
         ? selectedSourceDetail.enabled_tool_labels.join(", ")

@@ -4069,6 +4069,33 @@ def build_tool_result_preview(
     return output
 
 
+def build_tool_runtime_semantics_meta(
+    *,
+    name: str,
+    registration: ToolRegistration | None = None,
+) -> dict[str, object]:
+    canonical_name = normalize_tool_registry_name(name)
+    resolved_registration = registration or resolve_tool_registration(canonical_name)
+    if resolved_registration is None:
+        return {}
+    semantic_kind = get_tool_semantic_kind(
+        name=canonical_name,
+        registration=resolved_registration,
+    )
+    effective_result_preview_keys: tuple[str, ...] = ()
+    if resolved_registration.supports_result_preview:
+        effective_result_preview_keys = (
+            resolved_registration.result_preview_keys
+            or _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
+        )
+    return {
+        "kind": resolved_registration.kind,
+        "semantic_kind": semantic_kind,
+        "supports_result_preview": resolved_registration.supports_result_preview,
+        "effective_result_preview_keys": list(effective_result_preview_keys),
+    }
+
+
 def tool_requires_user_context(
     name: str,
     *,
@@ -4187,6 +4214,10 @@ def build_tool_success_meta(
             "status": "done",
             "retry_count": retry_count,
             "error": last_error,
+            **build_tool_runtime_semantics_meta(
+                name=canonical_name,
+                registration=resolved_registration,
+            ),
         },
     }
 
@@ -4198,8 +4229,10 @@ def build_tool_error_meta(
     retry_count: int,
     error_message: str,
     display_name: str | None = None,
+    registration: ToolRegistration | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
+    resolved_registration = registration or resolve_tool_registration(canonical_name)
     return {
         "tool": {
             "name": canonical_name,
@@ -4208,6 +4241,10 @@ def build_tool_error_meta(
             "status": "error",
             "retry_count": retry_count,
             "error": error_message,
+            **build_tool_runtime_semantics_meta(
+                name=canonical_name,
+                registration=resolved_registration,
+            ),
         },
     }
 
@@ -4271,8 +4308,10 @@ def build_action_step_initial_meta(
     label: str,
     token_count: int,
     display_name: str | None = None,
+    registration: ToolRegistration | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
+    resolved_registration = registration or resolve_tool_registration(canonical_name)
     return {
         "model": model,
         "step_type": "tool_call",
@@ -4286,6 +4325,10 @@ def build_action_step_initial_meta(
             "input": tool_input,
             "status": "running",
             "retry_count": 0,
+            **build_tool_runtime_semantics_meta(
+                name=canonical_name,
+                registration=resolved_registration,
+            ),
         },
     }
 
@@ -4365,6 +4408,7 @@ def build_tool_step_error_update(
     token_count: int,
     error_message: str,
     display_name: str | None = None,
+    registration: ToolRegistration | None = None,
 ) -> dict[str, object]:
     tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
     tool_obj = (
@@ -4391,6 +4435,7 @@ def build_tool_step_error_update(
                 retry_count=retry_count,
                 error_message=error_message,
                 display_name=resolved_display_name,
+                registration=registration,
             ),
         },
     }
@@ -4944,6 +4989,7 @@ def build_tool_attempt_error_transition(
             token_count=token_count,
             error_message=error_message,
             display_name=display_name,
+            registration=runtime_ctx.registration,
         ),
         "events": {
             **build_tool_attempt_error_events(
@@ -5174,6 +5220,7 @@ def build_tool_iteration_context(
     label: str,
     token_count: int,
     display_name: str | None = None,
+    registration: ToolRegistration | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
     return {
@@ -5189,6 +5236,7 @@ def build_tool_iteration_context(
                 label=label,
                 token_count=token_count,
                 display_name=display_name,
+                registration=registration,
             ),
         ),
     }

@@ -30,6 +30,7 @@ from app.services.tool_runtime import (
     build_tool_prompt_with_observations,
     execute_tool_plan_item_service_actions,
     execute_tool_plan_item_service_execution,
+    resolve_tool_registration,
 )
 
 
@@ -493,6 +494,10 @@ def stream_task_execution(
                     f"{tool_name} {json.dumps(tool_input, ensure_ascii=False)}"
                 ),
                 display_name=get_tool_display_name(
+                    tool_name,
+                    registry_provider=tool_registry_provider,
+                ),
+                registration=resolve_tool_registration(
                     tool_name,
                     registry_provider=tool_registry_provider,
                 ),

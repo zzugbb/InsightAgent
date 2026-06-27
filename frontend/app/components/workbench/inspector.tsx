@@ -169,12 +169,27 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         typeof step.meta?.tool?.name === "string"
           ? step.meta.tool.name.toLowerCase()
           : "";
+      const toolLabel =
+        typeof step.meta?.tool?.label === "string"
+          ? step.meta.tool.label.toLowerCase()
+          : "";
+      const toolKind =
+        typeof step.meta?.tool?.kind === "string"
+          ? step.meta.tool.kind.toLowerCase()
+          : "";
+      const toolSemanticKind =
+        typeof step.meta?.tool?.semantic_kind === "string"
+          ? step.meta.tool.semantic_kind.toLowerCase()
+          : "";
       return (
         title.includes(q) ||
         content.includes(q) ||
         id.includes(q) ||
         model.includes(q) ||
-        toolName.includes(q)
+        toolName.includes(q) ||
+        toolLabel.includes(q) ||
+        toolKind.includes(q) ||
+        toolSemanticKind.includes(q)
       );
     });
   }, [sseTraceSteps, traceKindFilter, traceSearchQuery]);

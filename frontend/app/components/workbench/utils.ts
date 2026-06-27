@@ -807,7 +807,16 @@ export function formatTraceStepMetaSubtitle(
   if (meta.tool?.name) {
     const name = String(meta.tool.label ?? meta.tool.name).trim();
     if (name) {
-      parts.push(labels.toolLine(name, String(meta.tool.status ?? "")));
+      const semanticKind =
+        typeof meta.tool.semantic_kind === "string" && meta.tool.semantic_kind.trim()
+          ? meta.tool.semantic_kind.trim()
+          : typeof meta.tool.kind === "string" && meta.tool.kind.trim()
+            ? meta.tool.kind.trim()
+            : "";
+      const toolLine = labels.toolLine(name, String(meta.tool.status ?? ""));
+      parts.push(
+        semanticKind ? `${toolLine} [${semanticKind}]` : toolLine,
+      );
       const retryCountRaw = meta.tool.retry_count;
       if (typeof retryCountRaw === "number" && retryCountRaw > 0) {
         parts.push(labels.toolRetry(retryCountRaw));

@@ -25,10 +25,14 @@ export type TraceStepMeta = {
   tool?: {
     name: string;
     label?: string;
+    kind?: string;
+    semantic_kind?: string | null;
     input?: unknown;
     output?: unknown;
     output_preview?: unknown;
     status: "running" | "done" | "error";
+    supports_result_preview?: boolean;
+    effective_result_preview_keys?: string[];
     retry_count?: number;
     error?: string | null;
   };

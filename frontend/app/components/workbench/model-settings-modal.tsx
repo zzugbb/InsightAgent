@@ -265,6 +265,7 @@ export function ModelSettingsModal({
       : "—";
   const {
     selectedProfileTools,
+    selectedProfileToolDetailsSummary,
     selectedSourceTools,
     selectedSourceBaseProfile,
     selectedSourceToolDetailsSummary,
@@ -365,6 +366,13 @@ export function ModelSettingsModal({
               style={{ marginTop: 8, marginBottom: 0 }}
             >
               {t.settings.profileSummaryLabel}: {selectedProfileTools}
+            </Typography.Paragraph>
+            <Typography.Paragraph
+              type="secondary"
+              data-testid="model-settings-selected-profile-tool-details"
+              style={{ marginTop: 8, marginBottom: 0 }}
+            >
+              {selectedProfileToolDetailsSummary}
             </Typography.Paragraph>
           </Form.Item>
           <Form.Item label={t.settings.fieldToolRegistrySource}>

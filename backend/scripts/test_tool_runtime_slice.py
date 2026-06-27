@@ -1174,6 +1174,32 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 ("calculator_only", ("calc_eval",)),
             ],
         )
+        calculator_profile_detail = next(
+            detail
+            for detail in summary.available_tool_registry_profile_details
+            if detail.name == "calculator_only"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    tool.label,
+                    tool.kind,
+                    tool.semantic_kind,
+                    tuple(tool.effective_result_preview_keys),
+                )
+                for tool in calculator_profile_detail.tool_details
+            ],
+            [
+                (
+                    "calc_eval",
+                    "Calculator",
+                    "local_calculator",
+                    "local_calculator",
+                    ("expression", "result"),
+                )
+            ],
+        )
         self.assertEqual(
             [
                 (
@@ -1710,6 +1736,32 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 ("planning_only", ("Task Planner",)),
                 ("retrieval_only", ("Knowledge Retrieval",)),
                 ("calculator_only", ("calc_eval",)),
+            ],
+        )
+        retrieval_profile_detail = next(
+            detail
+            for detail in response.available_tool_registry_profile_details
+            if detail.name == "retrieval_only"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    tool.label,
+                    tool.kind,
+                    tool.semantic_kind,
+                    tuple(tool.effective_result_preview_keys),
+                )
+                for tool in retrieval_profile_detail.tool_details
+            ],
+            [
+                (
+                    "task_retrieve",
+                    "Knowledge Retrieval",
+                    "knowledge_retrieval",
+                    "knowledge_retrieval",
+                    ("hit_count", "knowledge_base_id"),
+                )
             ],
         )
         self.assertEqual(
@@ -2767,6 +2819,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(details[0]["name"], "default")
         self.assertIn("enabled_tool_names", details[0])
         self.assertIn("enabled_tool_labels", details[0])
+        self.assertIn("tool_details", details[0])
 
     def test_tool_registry_options_bundle_returns_raw_provider_source_detail_dicts(
         self,
@@ -26318,8 +26371,22 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "result": 7.0,
             },
         )
+        self.assertEqual(success_meta["tool"]["kind"], "local_calculator")
+        self.assertEqual(success_meta["tool"]["semantic_kind"], "local_calculator")
+        self.assertTrue(success_meta["tool"]["supports_result_preview"])
+        self.assertEqual(
+            success_meta["tool"]["effective_result_preview_keys"],
+            ["expression", "result"],
+        )
         self.assertEqual(success_meta["tool"]["status"], "done")
         self.assertEqual(error_meta["tool"]["name"], "calc_eval")
+        self.assertEqual(error_meta["tool"]["kind"], "local_calculator")
+        self.assertEqual(error_meta["tool"]["semantic_kind"], "local_calculator")
+        self.assertTrue(error_meta["tool"]["supports_result_preview"])
+        self.assertEqual(
+            error_meta["tool"]["effective_result_preview_keys"],
+            ["expression", "result"],
+        )
         self.assertEqual(error_meta["tool"]["status"], "error")
         self.assertEqual(error_meta["tool"]["error"], "transient")
 
@@ -26436,6 +26503,13 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(meta["tool"]["name"], "task_retrieve")
         self.assertEqual(meta["tool"]["label"], "Knowledge Retrieval")
+        self.assertEqual(meta["tool"]["kind"], "knowledge_retrieval")
+        self.assertEqual(meta["tool"]["semantic_kind"], "knowledge_retrieval")
+        self.assertTrue(meta["tool"]["supports_result_preview"])
+        self.assertEqual(
+            meta["tool"]["effective_result_preview_keys"],
+            ["hit_count", "knowledge_base_id"],
+        )
         self.assertEqual(step["content"], "Tool running: Knowledge Retrieval")
 
     def test_build_tool_attempt_start_and_success_events_keep_shape(self) -> None:
@@ -28686,6 +28760,21 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "hit_count": 2,
                 "knowledge_base_id": "demo-kb",
             },
+        )
+        self.assertEqual(
+            success_bundle["trace"]["step"]["meta"]["tool"]["kind"],
+            "provider_retrieval",
+        )
+        self.assertEqual(
+            success_bundle["trace"]["step"]["meta"]["tool"]["semantic_kind"],
+            "knowledge_retrieval",
+        )
+        self.assertTrue(
+            success_bundle["trace"]["step"]["meta"]["tool"]["supports_result_preview"]
+        )
+        self.assertEqual(
+            success_bundle["trace"]["step"]["meta"]["tool"]["effective_result_preview_keys"],
+            ["hit_count", "knowledge_base_id"],
         )
         self.assertEqual(
             success_bundle["observation"],

@@ -2,6 +2,7 @@ export type ToolRegistryProfileOptionDetail = {
   name: string;
   enabled_tool_names: string[];
   enabled_tool_labels: string[];
+  tool_details: ToolRegistryProviderToolDetail[];
 };
 
 export type ToolRegistryProviderSourceOptionDetail = {

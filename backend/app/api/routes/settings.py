@@ -36,6 +36,9 @@ class ToolRegistryProfileOptionResponse(BaseModel):
     name: str
     enabled_tool_names: list[str]
     enabled_tool_labels: list[str]
+    tool_details: list["ToolRegistryProviderToolDetailResponse"] = Field(
+        default_factory=list
+    )
 
 
 class ToolRegistryProviderToolDetailResponse(BaseModel):
@@ -222,6 +225,17 @@ def _build_tool_registry_options_bundle(
                     )
                     for tool_name in ordered_tool_names
                 ],
+                "tool_details": list(
+                    build_configured_tool_registry_provider_preflight_tool_details(
+                        provider=get_configured_tool_registry_provider(
+                            settings=_clone_settings_with_updates(
+                                settings=effective_settings,
+                                tool_registry_profile=profile_name,
+                                tool_registry_provider_source="default",
+                            )
+                        )
+                    )
+                ),
             }
         )
 

@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveTraceStepDisplayContent } from "./utils.ts";
+import {
+  formatTraceStepMetaSubtitle,
+  resolveTraceStepDisplayContent,
+} from "./utils.ts";
 
 test("resolveTraceStepDisplayContent appends tool output preview for action steps", () => {
   const content = resolveTraceStepDisplayContent({
@@ -65,4 +68,50 @@ test("resolveTraceStepDisplayContent falls back to original content without prev
   });
 
   assert.equal(content, "plain trace body");
+});
+
+test("formatTraceStepMetaSubtitle includes tool semantic kind when available", () => {
+  const subtitle = formatTraceStepMetaSubtitle(
+    {
+      id: "step-semantic-kind",
+      type: "action",
+      content: "Tool done: Provider Search",
+      meta: {
+        tool: {
+          name: "provider_search",
+          label: "Provider Search",
+          kind: "provider_retrieval",
+          semantic_kind: "knowledge_retrieval",
+          supports_result_preview: true,
+          effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+          status: "done",
+        },
+      },
+    },
+    {
+      toolLine: (name: string, status: string) => `${name} (${status})`,
+      toolRetry: (count: number) => `Retry ${count}`,
+      toolError: (message: string) => `Error ${message}`,
+      ragLine: (count: number, kb?: string) =>
+        kb ? `RAG ${count} ${kb}` : `RAG ${count}`,
+      model: "Model",
+      stepKind: "Step",
+      planningProviderUsed: "Planning provider used",
+      planningProviderFallback: "Planning provider fallback",
+      planningProviderRuleOnly: "Planning provider rule only",
+      toolRegistryProfile: "Profile",
+      toolRegistrySource: "Source",
+      allowedTools: "Allowed",
+      tokens: "Tokens",
+      promptTokens: "Prompt",
+      completionTokens: "Completion",
+      cost: "Cost",
+      usageSource: "Usage",
+      usageSourceProvider: "provider",
+      usageSourceEstimated: "estimated",
+      usageSourceLegacy: "legacy",
+    },
+  );
+
+  assert.equal(subtitle, "Provider Search (done) [knowledge_retrieval]");
 });

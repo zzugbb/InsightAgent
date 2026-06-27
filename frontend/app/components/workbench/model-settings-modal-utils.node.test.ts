@@ -20,6 +20,19 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
           name: "retrieval_only",
           enabled_tool_names: ["task_retrieve"],
           enabled_tool_labels: ["Knowledge Retrieval"],
+          tool_details: [
+            {
+              name: "task_retrieve",
+              label: "Knowledge Retrieval",
+              kind: "knowledge_retrieval",
+              semantic_kind: "knowledge_retrieval",
+              retryable_by_default: true,
+              default_timeout_ms: 5_000,
+              requires_user_context: true,
+              supports_result_preview: true,
+              effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+            },
+          ],
         },
       ],
       available_tool_registry_provider_source_details: [
@@ -60,6 +73,10 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
   });
 
   assert.equal(result.selectedProfileTools, "Knowledge Retrieval");
+  assert.equal(
+    result.selectedProfileToolDetailsSummary,
+    "Knowledge Retrieval [knowledge_retrieval]: hit_count, knowledge_base_id",
+  );
   assert.equal(result.selectedSourceTools, "Provider Search, Provider Math");
   assert.equal(result.selectedSourceBaseProfile, "retrieval_only");
   assert.equal(
