@@ -191,6 +191,7 @@ test("formatTraceStepMetaSubtitle includes tool output policy when available", (
           label: "Provider Search",
           kind: "provider_retrieval",
           semantic_kind: "provider_search",
+          semantic_family: "knowledge_retrieval",
           supports_result_preview: true,
           effective_result_preview_keys: ["documents_total"],
           effective_result_output_keys: ["documents_total"],
@@ -228,7 +229,7 @@ test("formatTraceStepMetaSubtitle includes tool output policy when available", (
 
   assert.equal(
     subtitle,
-    "Provider Search (done) [provider_search] · Preview documents_total · Output documents_total",
+    "Provider Search (done) [provider_search · knowledge_retrieval] · Preview documents_total · Output documents_total",
   );
 });
 
@@ -292,7 +293,8 @@ test("matchesTraceStepSemanticFilter matches retrieval tool and rag follow-up", 
           name: "provider_search",
           label: "Provider Search",
           kind: "provider_retrieval",
-          semantic_kind: "knowledge_retrieval",
+          semantic_kind: "provider_search",
+          semantic_family: "knowledge_retrieval",
           status: "done",
         },
       },
@@ -343,7 +345,8 @@ test("resolveTraceStepSemanticStats counts planner retrieval and calculator trac
           name: "provider_search",
           label: "Provider Search",
           kind: "provider_retrieval",
-          semantic_kind: "knowledge_retrieval",
+          semantic_kind: "provider_search",
+          semantic_family: "knowledge_retrieval",
           status: "done",
         },
       },
@@ -413,14 +416,15 @@ test("resolveTaskSnapshotSummary carries semantic stats for task detail snapshot
         type: "action",
         content: "Tool done: Provider Search",
         meta: {
-          tool: {
-            name: "provider_search",
-            label: "Provider Search",
-            kind: "provider_retrieval",
-            semantic_kind: "knowledge_retrieval",
-            status: "done",
-          },
+        tool: {
+          name: "provider_search",
+          label: "Provider Search",
+          kind: "provider_retrieval",
+          semantic_kind: "provider_search",
+          semantic_family: "knowledge_retrieval",
+          status: "done",
         },
+      },
       },
       {
         id: "step-rag",

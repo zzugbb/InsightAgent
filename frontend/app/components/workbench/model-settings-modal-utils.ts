@@ -18,6 +18,23 @@ type ModelSettingsPreviewSource = Pick<
     | "available_tool_registry_provider_source_details"
   >;
 
+function formatToolSemanticDescriptor(
+  tool: Pick<ToolRegistryProviderToolDetail, "kind" | "semantic_kind" | "semantic_family">,
+): string {
+  const semanticKind =
+    typeof tool.semantic_kind === "string" && tool.semantic_kind.trim().length > 0
+      ? tool.semantic_kind.trim()
+      : tool.kind;
+  const semanticFamily =
+    typeof tool.semantic_family === "string" && tool.semantic_family.trim().length > 0
+      ? tool.semantic_family.trim()
+      : "";
+  if (!semanticFamily || semanticFamily === semanticKind) {
+    return semanticKind;
+  }
+  return `${semanticKind} · ${semanticFamily}`;
+}
+
 export function formatToolRegistryProviderToolDetailsSummary(
   toolDetails: ToolRegistryProviderToolDetail[] | undefined,
 ): string {
@@ -26,10 +43,7 @@ export function formatToolRegistryProviderToolDetailsSummary(
   }
   return toolDetails
     .map((tool) => {
-      const semanticOrKind =
-        typeof tool.semantic_kind === "string" && tool.semantic_kind.trim().length > 0
-          ? tool.semantic_kind.trim()
-          : tool.kind;
+      const semanticOrKind = formatToolSemanticDescriptor(tool);
       const previewKeys =
         Array.isArray(tool.effective_result_preview_keys)
           ? tool.effective_result_preview_keys.filter((key) => key.trim().length > 0)

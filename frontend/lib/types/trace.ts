@@ -27,6 +27,7 @@ export type TraceStepMeta = {
     label?: string;
     kind?: string;
     semantic_kind?: string | null;
+    semantic_family?: string | null;
     input?: unknown;
     output?: unknown;
     output_preview?: unknown;

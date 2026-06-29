@@ -18,6 +18,7 @@ export type ToolRegistryProviderToolDetail = {
   label: string;
   kind: string;
   semantic_kind: string | null;
+  semantic_family?: string | null;
   retryable_by_default: boolean;
   default_timeout_ms: number;
   requires_user_context: boolean;

@@ -7,6 +7,7 @@ export type LiveToolEndPayload = {
   output_preview?: unknown;
   kind?: unknown;
   semantic_kind?: unknown;
+  semantic_family?: unknown;
   supports_result_preview?: unknown;
   effective_result_preview_keys?: unknown;
   effective_result_output_keys?: unknown;
@@ -18,6 +19,7 @@ export type LiveToolStartPayload = {
   retry_count?: number;
   kind?: unknown;
   semantic_kind?: unknown;
+  semantic_family?: unknown;
   supports_result_preview?: unknown;
   effective_result_preview_keys?: unknown;
   effective_result_output_keys?: unknown;
@@ -39,6 +41,7 @@ type ToolMetaLike = {
   error?: unknown;
   kind?: unknown;
   semantic_kind?: unknown;
+  semantic_family?: unknown;
   supports_result_preview?: unknown;
   effective_result_preview_keys?: unknown;
   effective_result_output_keys?: unknown;
@@ -49,6 +52,7 @@ function normalizeToolSemantics(
   payload: {
     kind?: unknown;
     semantic_kind?: unknown;
+    semantic_family?: unknown;
     supports_result_preview?: unknown;
     effective_result_preview_keys?: unknown;
     effective_result_output_keys?: unknown;
@@ -56,6 +60,7 @@ function normalizeToolSemantics(
 ): {
   kind?: string;
   semantic_kind?: string;
+  semantic_family?: string;
   supports_result_preview?: boolean;
   effective_result_preview_keys?: string[];
   effective_result_output_keys?: string[];
@@ -73,6 +78,13 @@ function normalizeToolSemantics(
         : typeof prevTool?.semantic_kind === "string" &&
             prevTool.semantic_kind.trim()
           ? prevTool.semantic_kind.trim()
+          : undefined,
+    semantic_family:
+      typeof payload.semantic_family === "string" && payload.semantic_family.trim()
+        ? payload.semantic_family.trim()
+        : typeof prevTool?.semantic_family === "string" &&
+            prevTool.semantic_family.trim()
+          ? prevTool.semantic_family.trim()
           : undefined,
     supports_result_preview:
       typeof payload.supports_result_preview === "boolean"
@@ -117,6 +129,7 @@ export function mergeToolStartToolMeta(
   input?: unknown;
   kind?: string;
   semantic_kind?: string;
+  semantic_family?: string;
   supports_result_preview?: boolean;
   effective_result_preview_keys?: string[];
   effective_result_output_keys?: string[];
@@ -152,6 +165,7 @@ export function mergeToolEndToolMeta(
   output_preview?: unknown;
   kind?: string;
   semantic_kind?: string;
+  semantic_family?: string;
   supports_result_preview?: boolean;
   effective_result_preview_keys?: string[];
   effective_result_output_keys?: string[];

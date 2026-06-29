@@ -4251,7 +4251,10 @@ def build_tool_result_output(
     resolved_registration = registration or resolve_tool_registration(name, registry=registry)
     if resolved_registration is None:
         return output
-    result_output_keys = resolved_registration.result_output_keys
+    result_output_keys = get_tool_effective_result_output_keys(
+        name=name,
+        registration=resolved_registration,
+    )
     if not result_output_keys:
         return output
     return {key: output[key] for key in result_output_keys if key in output}
@@ -4270,22 +4273,30 @@ def build_tool_runtime_semantics_meta(
         name=canonical_name,
         registration=resolved_registration,
     )
+    semantic_family = get_tool_semantic_kind(
+        name=canonical_name,
+        registration=resolved_registration,
+    )
     effective_result_preview_keys: tuple[str, ...] = ()
     if resolved_registration.supports_result_preview:
         effective_result_preview_keys = (
             resolved_registration.result_preview_keys
             or _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
         )
+    effective_result_output_keys = get_tool_effective_result_output_keys(
+        name=canonical_name,
+        registration=resolved_registration,
+    )
     meta: dict[str, object] = {
         "kind": resolved_registration.kind,
         "semantic_kind": semantic_kind,
         "supports_result_preview": resolved_registration.supports_result_preview,
         "effective_result_preview_keys": list(effective_result_preview_keys),
     }
-    if resolved_registration.result_output_keys:
-        meta["effective_result_output_keys"] = list(
-            resolved_registration.result_output_keys
-        )
+    if semantic_family and semantic_family != semantic_kind:
+        meta["semantic_family"] = semantic_family
+    if effective_result_output_keys:
+        meta["effective_result_output_keys"] = list(effective_result_output_keys)
     return meta
 
 
@@ -5600,6 +5611,14 @@ def build_tool_iteration_execution(
     token_count: int,
     last_error: str | None,
 ) -> dict[str, object]:
+    normalized_output = (
+        normalize_tool_output_for_registration(
+            output=output,
+            registration=runtime_ctx.registration,
+        )
+        if isinstance(output, dict)
+        else output
+    )
     execution_display_name = get_tool_execution_display_name_from_registration(
         name=runtime_ctx.registration.name,
         registration=runtime_ctx.registration,
@@ -5619,7 +5638,7 @@ def build_tool_iteration_execution(
         runtime_ctx=runtime_ctx,
         name=name,
         tool_input=tool_input,
-        output=output,
+        output=normalized_output,
         exc=exc,
         token_count=token_count,
         last_error=last_error,
@@ -6743,6 +6762,30 @@ def get_tool_runtime_semantic_kind(
     )
 
 
+def get_tool_effective_result_output_keys(
+    *,
+    name: str,
+    registration: ToolRegistration | None = None,
+) -> tuple[str, ...]:
+    normalized_name = normalize_tool_registry_name(name)
+    resolved_registration = registration or resolve_tool_registration(normalized_name)
+    if resolved_registration is None:
+        return ()
+    if resolved_registration.result_output_keys:
+        return resolved_registration.result_output_keys
+    explicit_runtime_semantic_kind = _normalize_runtime_semantic_kind(
+        resolved_registration.runtime_semantic_kind
+    )
+    if explicit_runtime_semantic_kind is None or not resolved_registration.supports_result_preview:
+        return ()
+    return (
+        resolved_registration.result_preview_keys
+        or _get_default_result_preview_keys_for_semantic_kind(
+            explicit_runtime_semantic_kind
+        )
+    )
+
+
 def _get_default_result_preview_keys_for_semantic_kind(
     semantic_kind: str | None,
 ) -> tuple[str, ...]:
@@ -6768,13 +6811,20 @@ def build_configured_tool_registry_provider_preflight_tool_details(
             name=tool_name,
             registration=registration,
         )
+        semantic_family = get_tool_semantic_kind(
+            name=tool_name,
+            registration=registration,
+        )
         effective_result_preview_keys: tuple[str, ...] = ()
         if registration.supports_result_preview:
             effective_result_preview_keys = (
                 registration.result_preview_keys
                 or _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
             )
-        effective_result_output_keys = registration.result_output_keys
+        effective_result_output_keys = get_tool_effective_result_output_keys(
+            name=tool_name,
+            registration=registration,
+        )
         label = registration.label.strip() or get_tool_display_name_from_registration(
             name=tool_name,
             registration=registration,
@@ -6785,6 +6835,11 @@ def build_configured_tool_registry_provider_preflight_tool_details(
                 "label": label,
                 "kind": registration.kind,
                 "semantic_kind": semantic_kind,
+                **(
+                    {"semantic_family": semantic_family}
+                    if semantic_family and semantic_family != semantic_kind
+                    else {}
+                ),
                 "retryable_by_default": registration.retryable_by_default,
                 "default_timeout_ms": registration.default_timeout_ms,
                 "requires_user_context": registration.requires_user_context,
@@ -6808,32 +6863,44 @@ def normalize_tool_output_for_registration(
     normalized_output = dict(output)
     normalized_name = normalize_tool_registry_name(registration.name)
     default_registration = _REGISTERED_TOOLS.get(normalized_name)
+    explicit_runtime_tool_kind = _normalize_runtime_semantic_kind(
+        registration.runtime_semantic_kind
+    )
+    desired_tool_kind = explicit_runtime_tool_kind or registration.kind
     if (
         default_registration is not None
         and registration.runner is default_registration.runner
         and registration.kind == default_registration.kind
+        and desired_tool_kind == registration.kind
     ):
         return normalized_output
 
     current_kind = normalized_output.get("tool_kind")
     current_kind_text = str(current_kind).strip() if current_kind is not None else ""
     if not current_kind_text:
-        normalized_output["tool_kind"] = registration.kind
+        normalized_output["tool_kind"] = desired_tool_kind
+        return normalized_output
+    if current_kind_text == desired_tool_kind:
         return normalized_output
 
     template_registration = _find_builtin_registration_by_runner(registration.runner)
     if (
         template_registration is not None
         and current_kind_text == template_registration.kind
-        and registration.kind != template_registration.kind
+        and desired_tool_kind != template_registration.kind
     ):
-        normalized_output["tool_kind"] = registration.kind
+        normalized_output["tool_kind"] = desired_tool_kind
     elif (
         default_registration is not None
         and current_kind_text == default_registration.kind
-        and registration.kind != default_registration.kind
+        and desired_tool_kind != default_registration.kind
     ):
-        normalized_output["tool_kind"] = registration.kind
+        normalized_output["tool_kind"] = desired_tool_kind
+    elif (
+        current_kind_text == registration.kind
+        and desired_tool_kind != registration.kind
+    ):
+        normalized_output["tool_kind"] = desired_tool_kind
     return normalized_output
 
 

@@ -1515,6 +1515,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     tool.name,
                     tool.kind,
                     tool.semantic_kind,
+                    getattr(tool, "semantic_family", None),
                     tuple(tool.effective_result_preview_keys),
                 )
                 for tool in analytics_detail.tool_details
@@ -1524,6 +1525,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "provider_search",
                     "provider_retrieval",
                     "provider_search",
+                    "knowledge_retrieval",
                     ("documents_total",),
                 )
             ],
@@ -1583,6 +1585,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             [
                 (
                     tool.name,
+                    getattr(tool, "semantic_family", None),
                     tuple(tool.effective_result_preview_keys),
                     tuple(tool.effective_result_output_keys),
                 )
@@ -1591,6 +1594,76 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             [
                 (
                     "provider_search",
+                    "knowledge_retrieval",
+                    ("documents_total",),
+                    ("documents_total",),
+                )
+            ],
+        )
+
+    def test_build_settings_summary_response_falls_back_result_output_keys_to_preview_keys_for_runtime_override_real_tools(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url="https://example.invalid/v1",
+                api_key="secret",
+                tool_registry_profile="default",
+                tool_registry_provider_source="analytics_suite",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "result_preview_keys": ["documents_total"],
+                                    "runtime_semantic_kind": "provider_search",
+                                    "supports_result_preview": True,
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+            database_locator="postgresql://demo",
+        )
+
+        analytics_detail = next(
+            detail
+            for detail in summary.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    getattr(tool, "semantic_family", None),
+                    tuple(tool.effective_result_preview_keys),
+                    tuple(tool.effective_result_output_keys),
+                )
+                for tool in analytics_detail.tool_details
+            ],
+            [
+                (
+                    "provider_search",
+                    "knowledge_retrieval",
                     ("documents_total",),
                     ("documents_total",),
                 )
@@ -2173,6 +2246,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             [
                 (
                     tool.name,
+                    getattr(tool, "semantic_family", None),
                     tuple(tool.effective_result_preview_keys),
                     tuple(tool.effective_result_output_keys),
                 )
@@ -2181,6 +2255,73 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             [
                 (
                     "provider_search",
+                    "knowledge_retrieval",
+                    ("documents_total",),
+                    ("documents_total",),
+                )
+            ],
+        )
+
+    def test_apply_tool_registry_preview_to_validate_response_falls_back_result_output_keys_to_preview_keys_for_runtime_override_real_tools(
+        self,
+    ) -> None:
+        response = _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                message="ok",
+            ),
+            effective_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="analytics_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "result_preview_keys": ["documents_total"],
+                                    "runtime_semantic_kind": "provider_search",
+                                    "supports_result_preview": True,
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        analytics_detail = next(
+            detail
+            for detail in response.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    getattr(tool, "semantic_family", None),
+                    tuple(tool.effective_result_preview_keys),
+                    tuple(tool.effective_result_output_keys),
+                )
+                for tool in analytics_detail.tool_details
+            ],
+            [
+                (
+                    "provider_search",
+                    "knowledge_retrieval",
                     ("documents_total",),
                     ("documents_total",),
                 )
@@ -21596,6 +21737,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "label": "Provider Search",
                     "kind": "provider_retrieval",
                     "semantic_kind": "provider_search",
+                    "semantic_family": "knowledge_retrieval",
+                    "retryable_by_default": False,
+                    "default_timeout_ms": 15_000,
+                    "requires_user_context": False,
+                    "supports_result_preview": True,
+                    "effective_result_preview_keys": ("documents_total",),
+                    "effective_result_output_keys": ("documents_total",),
+                },
+            ),
+        )
+
+    def test_build_configured_tool_registry_provider_preflight_summary_model_falls_back_result_output_keys_to_preview_keys_for_runtime_override_real_tools(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            registry={
+                "provider_search": ToolRegistration(
+                    name="provider_search",
+                    kind="provider_retrieval",
+                    label="Provider Search",
+                    retryable_by_default=False,
+                    default_timeout_ms=15_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    result_preview_keys=("documents_total",),
+                    runtime_semantic_kind="provider_search",
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "query": str(tool_input.get("query", "")),
+                        "documents_total": 1,
+                        "documents": [{"id": "doc-1"}],
+                    },
+                ),
+            }
+        )
+
+        result = build_configured_tool_registry_provider_preflight_summary_model_from_parts(
+            provider=provider,
+            provider_source_name="provider_suite",
+            runtime_artifacts=build_configured_tool_registry_provider_runtime_artifacts_model(
+                task_id="task-1",
+                step_id="step-registry",
+                seq=2,
+                model="mock-gpt",
+                settings=SimpleNamespace(
+                    tool_registry_provider_source="provider_suite",
+                    tool_registry_provider_sources_json=json.dumps({}),
+                ),
+            ),
+            service_actions=(),
+            trace_write_count=0,
+            audit_event_count=0,
+        )
+
+        self.assertEqual(
+            result.tool_details,
+            (
+                {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "kind": "provider_retrieval",
+                    "semantic_kind": "provider_search",
+                    "semantic_family": "knowledge_retrieval",
                     "retryable_by_default": False,
                     "default_timeout_ms": 15_000,
                     "requires_user_context": False,
@@ -27322,6 +27525,11 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             success_meta["tool"]["effective_result_output_keys"],
             ["documents_total"],
         )
+        self.assertEqual(success_meta["tool"]["semantic_kind"], "provider_search")
+        self.assertEqual(
+            success_meta["tool"]["semantic_family"],
+            "knowledge_retrieval",
+        )
 
     def test_build_tool_start_and_error_payload_keep_current_shape(self) -> None:
         self.assertEqual(
@@ -29829,6 +30037,94 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Provider Search returned snippets from the selected knowledge base.",
         )
 
+    def test_build_tool_plan_item_execution_rewrites_manual_real_search_output_to_runtime_semantic_kind(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            registry=build_tool_registry(
+                overrides={
+                    "provider_search": ToolRegistration(
+                        name="provider_search",
+                        kind="provider_retrieval",
+                        label="Provider Search",
+                        retryable_by_default=True,
+                        default_timeout_ms=13_000,
+                        requires_user_context=True,
+                        supports_result_preview=True,
+                        result_preview_keys=("tool_kind", "documents_total"),
+                        runtime_semantic_kind="provider_search",
+                        runner=lambda *, tool_input, prompt, user_id: {
+                            "query": str(tool_input.get("query", "")),
+                            "documents_total": 2,
+                            "documents": [{"id": "doc-1"}],
+                            "knowledge_base_id": "demo-kb",
+                            "chunks": ["alpha", "beta"],
+                        },
+                    )
+                }
+            )
+        )
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "demo"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            display_name="Provider Search",
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="provider_search",
+            prompt="检索 demo",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+        output = {
+            "documents_total": 2,
+            "documents": [{"id": "doc-1"}],
+            "knowledge_base_id": "demo-kb",
+            "chunks": ["alpha", "beta"],
+            "tool_kind": "provider_retrieval",
+        }
+
+        result = build_tool_plan_item_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="provider_search",
+            tool_input={"query": "demo"},
+            output=output,
+            exc=None,
+            token_count=7,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-unused",
+            rag_token_count=2,
+        )
+
+        success_bundle = result["plan_item_result"]["success_bundle"]
+        self.assertIsNotNone(success_bundle)
+        assert success_bundle is not None
+        self.assertEqual(
+            success_bundle["trace"]["step"]["meta"]["tool"]["output_preview"],
+            {
+                "tool_kind": "provider_search",
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            success_bundle["trace"]["step"]["meta"]["tool"]["output"]["tool_kind"],
+            "provider_search",
+        )
+        self.assertEqual(
+            success_bundle["output"]["tool_kind"],
+            "provider_search",
+        )
+        self.assertIsNone(success_bundle["rag_followup"])
+
     def test_build_tool_plan_item_execution_keeps_canonical_override_retrieval_rag_followup_semantics(
         self,
     ) -> None:
@@ -31776,6 +32072,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_run_tool_real_search_override_rewrites_tool_kind_to_runtime_semantic_kind(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "documents_total": 2,
+                    "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                },
+                runtime_semantic_kind="provider_search",
+            )
+        }
+
+        output = run_tool(
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            prompt="search revenue trend",
+            user_id="user-1",
+            attempt=0,
+            registry=registry,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "tool_kind": "provider_search",
+                "documents_total": 2,
+                "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+            },
+        )
+
     def test_execute_tool_plan_item_service_execution_honors_custom_preview_policy(
         self,
     ) -> None:
@@ -31964,6 +32299,14 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(tool_start_event["semantic_kind"], "provider_search")
         self.assertEqual(tool_end_event["semantic_kind"], "provider_search")
         self.assertEqual(
+            tool_start_event["semantic_family"],
+            "knowledge_retrieval",
+        )
+        self.assertEqual(
+            tool_end_event["semantic_family"],
+            "knowledge_retrieval",
+        )
+        self.assertEqual(
             tool_start_event["effective_result_output_keys"],
             ["documents_total"],
         )
@@ -31998,11 +32341,171 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["documents_total"],
         )
         self.assertEqual(
+            final_item["result"]["loop_execution_result"]["loop_result"]["next_action_step"]["meta"]["tool"]["semantic_family"],
+            "knowledge_retrieval",
+        )
+        self.assertEqual(
             [
                 (item["kind"], item.get("trace_step", {}).get("id"))
                 for item in final_item["result"]["service_actions"]
             ],
             [("trace_write", "step-1"), ("continue", None)],
+        )
+
+    def test_execute_tool_plan_item_service_execution_rewrites_real_search_tool_kind_to_runtime_semantic_kind(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "documents_total": 2,
+                    "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                    "chunks": ["internal retrieval stub"],
+                    "knowledge_base_id": "provider-kb",
+                },
+                result_preview_keys=("tool_kind", "documents_total"),
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "tool_kind": "provider_search",
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
+            "provider_search",
+        )
+
+    def test_execute_tool_plan_item_service_execution_falls_back_result_output_keys_to_preview_keys_for_runtime_override_real_search_tool(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "documents_total": 2,
+                    "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                    "chunks": ["internal retrieval stub"],
+                    "knowledge_base_id": "provider-kb",
+                },
+                result_preview_keys=("documents_total",),
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_start_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_start"
+        )
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(
+            tool_start_event["effective_result_output_keys"],
+            ["documents_total"],
+        )
+        self.assertEqual(
+            tool_end_event["effective_result_output_keys"],
+            ["documents_total"],
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["loop_result"]["next_action_step"]["meta"]["tool"]["output"],
+            {
+                "documents_total": 2,
+            },
         )
 
     def test_execute_tool_plan_item_service_actions_keeps_continue_shape(self) -> None:

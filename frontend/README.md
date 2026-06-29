@@ -88,6 +88,26 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   [utils.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/app/components/workbench/utils.ts) 与 trace type
   已同步接住这组字段。当前 Inspector / task detail 无需改主协议，但 running/done 步骤 subtitle、trace 搜索与
   live merge 现在都能直接知道 real tool 最终 outward output 保留哪些字段，而不必只靠 settings 页说明。
+- 阶段 5 协同（2026-06-29，real tool outward tool_kind normalization）：后端现在还会把 real tool 真正写进
+  `tool.output` 的 `tool_kind` 也统一归一到 runtime semantic，而不再保留 `provider_retrieval` 这类模板 kind。
+  当前前端无需改协议，但 Inspector / task detail / export replay 里看到的 raw tool output、preview 与后续搜索过滤，
+  终于会和 `semantic_kind`、output policy 站到同一份 real-tool 语义上，不再出现 meta 已是 `provider_search`、
+  结果体里却仍躺着模板 kind 的割裂状态。
+- 阶段 5 协同（2026-06-29，real tool implicit output projection fallback）：后端现在还支持一层 implicit
+  output projection fallback：当 real tool 已声明 `runtime_semantic_kind` 与 preview keys，但没有再重复声明
+  `result_output_keys` 时，settings/preflight 与执行期 trace 会自动把 preview keys 当成 effective output keys。
+  当前前端模型设置摘要、Inspector 与任务详情无需改协议，但 real tool 的 output policy 现在会更稳定地单源化到同一组字段，
+  不再要求 source 配置里同时维护两份几乎相同的 preview/output key 列表。
+- 阶段 5 协同（2026-06-29，real tool semantic family visible in runtime/settings）：后端现在还会在 real tool 的
+  runtime meta 与 settings/preflight tool details 里，补出一层可选 `semantic_family`。当前前端
+  [chat-stream-store-utils.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/lib/stores/chat-stream-store-utils.ts)、
+  [chat-stream-store.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/lib/stores/chat-stream-store.ts)、
+  [utils.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/app/components/workbench/utils.ts) 与
+  [model-settings-modal-utils.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/app/components/workbench/model-settings-modal-utils.ts)
+  已同步吃下这组字段；因此像 `provider_search` 这类 real tool 现在既能在 trace subtitle / settings 摘要里保留
+  `provider_search` 这层真实执行 identity，又会继续暴露 `knowledge_retrieval` family，供 trace 搜索、semantic
+  filter/stats 与 task snapshot 归类稳定复用。这个切片还顺手补上了 live store 之前漏传
+  `effective_result_output_keys` 的缺口，所以真实页面看到的 running/done tool meta 现在会和 node helper 的语义保持一致。
 - 阶段 5 协同（2026-06-12，settings 默认回退治理单源化）：后端 `PUT /api/settings` 与
   `POST /api/settings/validate` 的默认 profile/source 回退现已并入 shared
   `get_tool_registry_profile_name_from_settings()` /

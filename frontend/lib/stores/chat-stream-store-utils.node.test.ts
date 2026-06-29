@@ -92,7 +92,8 @@ test("mergeToolEndToolMeta keeps runtime semantic metadata from tool_end payload
         knowledge_base_id: "demo-kb",
       },
       kind: "provider_retrieval",
-      semantic_kind: "knowledge_retrieval",
+      semantic_kind: "provider_search",
+      semantic_family: "knowledge_retrieval",
       supports_result_preview: true,
       effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
       effective_result_output_keys: ["documents_total"],
@@ -105,7 +106,8 @@ test("mergeToolEndToolMeta keeps runtime semantic metadata from tool_end payload
   );
 
   assert.equal(meta.kind, "provider_retrieval");
-  assert.equal(meta.semantic_kind, "knowledge_retrieval");
+  assert.equal(meta.semantic_kind, "provider_search");
+  assert.equal(meta.semantic_family, "knowledge_retrieval");
   assert.equal(meta.supports_result_preview, true);
   assert.deepEqual(meta.effective_result_preview_keys, [
     "hit_count",
@@ -123,7 +125,8 @@ test("mergeToolStartToolMeta keeps runtime semantic metadata from tool_start pay
       input: { query: "demo" },
       retry_count: 0,
       kind: "provider_retrieval",
-      semantic_kind: "knowledge_retrieval",
+      semantic_kind: "provider_search",
+      semantic_family: "knowledge_retrieval",
       supports_result_preview: true,
       effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
       effective_result_output_keys: ["documents_total"],
@@ -138,7 +141,8 @@ test("mergeToolStartToolMeta keeps runtime semantic metadata from tool_start pay
   assert.equal(meta.label, "Provider Search");
   assert.deepEqual(meta.input, { query: "demo" });
   assert.equal(meta.kind, "provider_retrieval");
-  assert.equal(meta.semantic_kind, "knowledge_retrieval");
+  assert.equal(meta.semantic_kind, "provider_search");
+  assert.equal(meta.semantic_family, "knowledge_retrieval");
   assert.equal(meta.supports_result_preview, true);
   assert.deepEqual(meta.effective_result_preview_keys, [
     "hit_count",

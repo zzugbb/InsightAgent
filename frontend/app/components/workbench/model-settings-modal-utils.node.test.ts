@@ -46,7 +46,8 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
               name: "provider_search",
               label: "Provider Search",
               kind: "provider_retrieval",
-              semantic_kind: "knowledge_retrieval",
+              semantic_kind: "provider_search",
+              semantic_family: "knowledge_retrieval",
               retryable_by_default: false,
               default_timeout_ms: 21_000,
               requires_user_context: true,
@@ -82,7 +83,7 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
   assert.equal(result.selectedSourceBaseProfile, "retrieval_only");
   assert.equal(
     result.selectedSourceToolDetailsSummary,
-    "Provider Search [knowledge_retrieval]: preview hit_count, knowledge_base_id; output documents_total | Provider Math [local_calculator]: expression, result",
+    "Provider Search [provider_search · knowledge_retrieval]: preview hit_count, knowledge_base_id; output documents_total | Provider Math [local_calculator]: expression, result",
   );
 });
 

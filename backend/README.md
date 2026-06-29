@@ -79,6 +79,31 @@
   real tool 不只在 settings/preflight 可见 output policy，连 live SSE、落库 trace 与 success meta
   也会同步透出这组执行期 outward-result 语义；前端 running/done trace subtitle 与搜索链因此能直接消费。
   校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`623/623`）。
+- 阶段 5 主线续推（2026-06-29，real tool outward tool_kind normalization）：
+  `backend/app/services/tool_runtime.py:normalize_tool_output_for_registration()` 现已不再只按
+  `registration.kind` 重写输出里的 `tool_kind`，而会优先退回到
+  `get_tool_runtime_semantic_kind(...)`；同时 `build_tool_iteration_execution()` 也会对传入的 output dict
+  再做一次统一归一化。这样像 `provider_search` 这类 real tool 即使 runner 仍返回模板 kind
+  `provider_retrieval`，真正进入 `tool.output`、output preview、observation 与 trace meta 主链的 outward kind
+  也会稳定收口到 `provider_search`，而不再泄漏本地模板语义。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`627/627`）。
+- 阶段 5 主线续推（2026-06-29，real tool implicit output projection fallback）：
+  `backend/app/services/tool_runtime.py` 现已新增 shared
+  `get_tool_effective_result_output_keys()`，并让 `build_tool_result_output()`、
+  `build_tool_runtime_semantics_meta()` 与 provider preflight tool details 一起复用。当前当某个 real tool
+  已显式声明 `runtime_semantic_kind`、开启 preview policy，却没有再手写 `result_output_keys` 时，
+  runtime 会默认把 `result_preview_keys`（或该 semantic 的默认 preview keys）当成 effective output keys；
+  因此 settings summary、validate preview、provider preflight 与执行期 `tool.output` / observation / trace meta
+  都会稳定看到同一组 outward 字段，而不必重复写两份 projection 配置。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`631/631`）。
+- 阶段 5 主线续推（2026-06-29，real tool semantic family visible in runtime/settings）：
+  `backend/app/services/tool_runtime.py` 现已继续在 shared runtime semantic meta 与 provider preflight
+  tool details 中补出可选 `semantic_family`，仅在它和 execution-facing `semantic_kind` 不同的时候透出。
+  这样像 `provider_search` 这类显式声明 `runtime_semantic_kind` 的 real tool，当前在 `build_tool_success_meta()`、
+  `tool_start/tool_end`、action-step `meta.tool`、settings summary、validate preview 与 provider preflight
+  里，会同时保留 `semantic_kind=provider_search` 与 `semantic_family=knowledge_retrieval`；因此 runtime outward 终于既能表达
+  “真实执行 identity”，又能继续保留 retrieval/calculator/planner 这层产品语义 family，而不需要回落到本地模板语义。
+  校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`631/631`）。
 - 阶段 5 下一步（2026-06-04，provider-assisted planner 首版）：`chat_execution_service.py` 现已让 `build_tool_plan(prompt, provider=provider)` 在非 `mock` provider 下先尝试远端模型生成受限 JSON tool plan，再把结果约束回 `task_plan / task_retrieve / calc_eval` 这条现有执行 schema；若远端返回无效 JSON、未知工具、非法表达式或直接抛错，则静默回退到规则 planner，因此默认 SSE/trace/tool execution 契约保持不变
 - 阶段 5 下一步（2026-06-04，planning usage / overall usage 对齐）：provider-assisted planner 的调用现已纳入 usage/cost 闭环；planning trace step 会写入该次规划的 token/cost，`done.usage` 额外补充 `planning_*` 与 `overall_*` 字段，而原有 `prompt_tokens / completion_tokens / cost_estimate` 仍保留最终回答语义
 - 阶段 5 协同（2026-06-05，frontend e2e stabilization）：当前轮次优先处理 `frontend/e2e/usage-dashboard.spec.ts` 的 CI

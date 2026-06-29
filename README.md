@@ -94,6 +94,29 @@ meta、step output、observation 与后续 success effects 上优先应用这层
 subtitle / search 都已能同步消费 `effective_result_output_keys`；因此 real tool 不只结果本体已经被投影，
 连运行中/已完成步骤也能直接说明“最终 outward output 保留哪些字段”，而不再只停留在 settings 侧说明文字。
 
+2026-06-29 主线续推（real tool outward tool_kind normalization）：在 runtime semantic override 已进入
+meta、preview 与 output policy 之后，real tool 的 outward `tool.output.tool_kind` 现在也开始同步走这层
+execution-facing semantic。当前像 `provider_search` 这类 retrieval-template real tool，即使 runner 仍返回
+`provider_retrieval` 这类模板 kind，`run_tool()` 与更低层 execution helper 也会在进入 trace/observation/output
+主链前统一把它归一成 `provider_search`；因此结果本体不再偷偷回落到本地模板语义，连绕过 `run_tool()` 的执行入口也会共享
+同一份 real-tool outward kind。
+
+2026-06-29 主线续推（real tool implicit output projection fallback）：在 `runtime_semantic_kind`、
+preview keys 与 output policy 都已经打通之后，real tool 现在还支持一层 implicit outward projection fallback。
+当前如果某个 real tool 已显式声明 `runtime_semantic_kind`，也已经给出了 preview keys，但没有再重复声明
+`result_output_keys`，运行时就会默认把这组 preview keys 当成 effective output keys；因此 settings/validate/preflight
+与执行期 `tool.output` / trace meta / observation 主链，会稳定收口到同一组 outward 字段，而不再要求每个 real tool
+重复写两份几乎相同的 projection 配置。
+
+2026-06-29 主线续推（real tool semantic family visible in runtime/settings）：在 real tool 已经具备
+`runtime_semantic_kind`、output policy 与 outward `tool_kind` 归一之后，当前主链又继续补上了一层
+`semantic_family`。现在像 `provider_search` 这类 real tool，既可以在 settings/preflight、live SSE、
+persisted trace 与前端 subtitle 里保留真实执行语义 `provider_search`，又会额外透出它仍属于
+`knowledge_retrieval` 这类产品语义 family；因此前端 trace 搜索、semantic filter/stats、settings source/profile
+摘要与 live store merge 不再需要在“保留真实 identity”与“继续按 retrieval/calculator 产品语义归类”之间二选一。
+这一步同时还补上了前端 live store 对 `effective_result_output_keys` 的实际透传缺口，继续保持外部 SSE / trace /
+export / e2e 契约不变。
+
 2026-06-04 下一阶段继续推进（provider-assisted planner 首版）：默认 `build_tool_plan()` 已新增可选
 provider 规划分支；当运行在非 `mock` provider 下时，后端会先尝试向远端模型请求受限 JSON tool plan，再将结果约束回
 现有 `task_plan / task_retrieve / calc_eval` schema，若远端返回无效 JSON、未知工具或异常，则静默回退到既有规则 planner。

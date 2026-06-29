@@ -548,9 +548,12 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
                   retry_count: retryCount,
                   kind: p.kind,
                   semantic_kind: p.semantic_kind,
+                  semantic_family: p.semantic_family,
                   supports_result_preview: p.supports_result_preview,
                   effective_result_preview_keys:
                     p.effective_result_preview_keys,
+                  effective_result_output_keys:
+                    p.effective_result_output_keys,
                 },
                 { name: toolName, label: displayName },
               ),
@@ -618,9 +621,12 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
                       output_preview: p.output_preview,
                       kind: p.kind,
                       semantic_kind: p.semantic_kind,
+                      semantic_family: p.semantic_family,
                       supports_result_preview: p.supports_result_preview,
                       effective_result_preview_keys:
                         p.effective_result_preview_keys,
+                      effective_result_output_keys:
+                        p.effective_result_output_keys,
                     },
                     { name: toolName, label: toolLabel },
                   ),

@@ -1,5 +1,5 @@
 import type { Messages } from "../../../lib/i18n/types";
-import type { TraceStepPayload } from "../../../lib/types/trace";
+import type { TraceStepMeta, TraceStepPayload } from "../../../lib/types/trace";
 
 import type { SseTaskUsage } from "../../../lib/stores/chat-stream-store";
 
@@ -463,6 +463,10 @@ export function matchesTraceStepSearchQuery(
     typeof step.meta?.tool?.semantic_kind === "string"
       ? step.meta.tool.semantic_kind.toLowerCase()
       : "";
+  const toolSemanticFamily =
+    typeof step.meta?.tool?.semantic_family === "string"
+      ? step.meta.tool.semantic_family.toLowerCase()
+      : "";
   const previewKeys = Array.isArray(step.meta?.tool?.effective_result_preview_keys)
     ? step.meta?.tool?.effective_result_preview_keys
         .filter((item): item is string => typeof item === "string")
@@ -482,9 +486,14 @@ export function matchesTraceStepSearchQuery(
     toolLabel.includes(q) ||
     toolKind.includes(q) ||
     toolSemanticKind.includes(q) ||
+    toolSemanticFamily.includes(q) ||
     previewKeys.some((key) => key.includes(q)) ||
     outputKeys.some((key) => key.includes(q))
   );
+}
+
+function normalizeTraceToolSemanticValue(value: unknown): string {
+  return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : "";
 }
 
 function resolveTraceStepSemanticCategory(
@@ -494,12 +503,9 @@ function resolveTraceStepSemanticCategory(
     return "retrieval";
   }
   const semantic =
-    typeof step.meta?.tool?.semantic_kind === "string" &&
-    step.meta.tool.semantic_kind.trim()
-      ? step.meta.tool.semantic_kind.trim().toLowerCase()
-      : typeof step.meta?.tool?.kind === "string" && step.meta.tool.kind.trim()
-        ? step.meta.tool.kind.trim().toLowerCase()
-        : "";
+    normalizeTraceToolSemanticValue(step.meta?.tool?.semantic_family) ||
+    normalizeTraceToolSemanticValue(step.meta?.tool?.semantic_kind) ||
+    normalizeTraceToolSemanticValue(step.meta?.tool?.kind);
   if (!semantic) {
     return null;
   }
@@ -551,6 +557,29 @@ export function formatTraceStepSemanticStatsSummary(
     `${labels.retrieval} ${stats.retrieval}`,
     `${labels.calculator} ${stats.calculator}`,
   ].join(" · ");
+}
+
+function formatTraceToolSemanticDescriptor(tool: TraceStepMeta["tool"]): string {
+  if (!tool) {
+    return "";
+  }
+  const semanticKind =
+    typeof tool.semantic_kind === "string" && tool.semantic_kind.trim()
+      ? tool.semantic_kind.trim()
+      : typeof tool.kind === "string" && tool.kind.trim()
+        ? tool.kind.trim()
+        : "";
+  const semanticFamily =
+    typeof tool.semantic_family === "string" && tool.semantic_family.trim()
+      ? tool.semantic_family.trim()
+      : "";
+  if (!semanticKind) {
+    return semanticFamily;
+  }
+  if (!semanticFamily || semanticFamily === semanticKind) {
+    return semanticKind;
+  }
+  return `${semanticKind} · ${semanticFamily}`;
 }
 
 function sortTraceStepsBySeq(steps: TraceStepPayload[]): TraceStepPayload[] {
@@ -935,12 +964,7 @@ export function formatTraceStepMetaSubtitle(
   if (meta.tool?.name) {
     const name = String(meta.tool.label ?? meta.tool.name).trim();
     if (name) {
-      const semanticKind =
-        typeof meta.tool.semantic_kind === "string" && meta.tool.semantic_kind.trim()
-          ? meta.tool.semantic_kind.trim()
-          : typeof meta.tool.kind === "string" && meta.tool.kind.trim()
-            ? meta.tool.kind.trim()
-            : "";
+      const semanticKind = formatTraceToolSemanticDescriptor(meta.tool);
       const toolLine = labels.toolLine(name, String(meta.tool.status ?? ""));
       parts.push(
         semanticKind ? `${toolLine} [${semanticKind}]` : toolLine,
