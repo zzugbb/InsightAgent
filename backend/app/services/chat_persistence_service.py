@@ -11,6 +11,10 @@ from app.services.task_status_service import (
     task_status_label,
     task_status_rank,
 )
+from app.services.tool_runtime import (
+    get_tool_display_name,
+    normalize_tool_registry_name,
+)
 
 
 def _now_iso() -> str:
@@ -179,6 +183,34 @@ def _normalize_governance_filter_list(value: object) -> list[str]:
     return sorted(normalized_values)
 
 
+def _normalize_governance_allowed_tool_labels(
+    allowed_tool_names: object,
+    allowed_tool_labels: object,
+) -> list[str]:
+    normalized_names = _normalize_governance_string_list(allowed_tool_names)
+    normalized_labels = _normalize_governance_string_list(allowed_tool_labels)
+    if not normalized_names:
+        return normalized_labels
+
+    resolved_labels: list[str] = []
+    for index, tool_name in enumerate(normalized_names):
+        current_label = (
+            normalized_labels[index] if index < len(normalized_labels) else None
+        )
+        canonical_label = get_tool_display_name(tool_name)
+        if current_label is None:
+            resolved_labels.append(canonical_label)
+            continue
+        if normalize_tool_registry_name(current_label) == tool_name:
+            resolved_labels.append(canonical_label)
+            continue
+        resolved_labels.append(current_label)
+
+    if len(normalized_labels) > len(normalized_names):
+        resolved_labels.extend(normalized_labels[len(normalized_names) :])
+    return _normalize_governance_string_list(resolved_labels)
+
+
 def _has_task_governance_values(governance: object) -> bool:
     if not isinstance(governance, dict):
         return False
@@ -281,8 +313,9 @@ def _normalize_task_governance_dict(
         "allowed_tool_names": _normalize_governance_string_list(
             governance.get("allowed_tool_names")
         ),
-        "allowed_tool_labels": _normalize_governance_string_list(
-            governance.get("allowed_tool_labels")
+        "allowed_tool_labels": _normalize_governance_allowed_tool_labels(
+            governance.get("allowed_tool_names"),
+            governance.get("allowed_tool_labels"),
         ),
     }
     if not _has_task_governance_values(normalized):
@@ -304,7 +337,10 @@ def _normalize_session_governance_summary_dict(
             governance.get("allowed_tool_names")
         ),
         "allowed_tool_labels": _normalize_governance_summary_string_list(
-            governance.get("allowed_tool_labels")
+            _normalize_governance_allowed_tool_labels(
+                governance.get("allowed_tool_names"),
+                governance.get("allowed_tool_labels"),
+            )
         ),
     }
     if not _has_session_governance_values(normalized):

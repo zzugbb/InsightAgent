@@ -468,6 +468,11 @@ export function matchesTraceStepSearchQuery(
         .filter((item): item is string => typeof item === "string")
         .map((item) => item.toLowerCase())
     : [];
+  const outputKeys = Array.isArray(step.meta?.tool?.effective_result_output_keys)
+    ? step.meta?.tool?.effective_result_output_keys
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.toLowerCase())
+    : [];
   return (
     title.includes(q) ||
     content.includes(q) ||
@@ -477,7 +482,8 @@ export function matchesTraceStepSearchQuery(
     toolLabel.includes(q) ||
     toolKind.includes(q) ||
     toolSemanticKind.includes(q) ||
-    previewKeys.some((key) => key.includes(q))
+    previewKeys.some((key) => key.includes(q)) ||
+    outputKeys.some((key) => key.includes(q))
   );
 }
 
@@ -958,6 +964,17 @@ export function formatTraceStepMetaSubtitle(
           .map((key) => key.trim());
         if (previewKeys.length > 0) {
           parts.push(labels.toolPreviewKeys(previewKeys));
+        }
+      }
+      if (
+        Array.isArray(meta.tool.effective_result_output_keys)
+        && meta.tool.effective_result_output_keys.length > 0
+      ) {
+        const outputKeys = meta.tool.effective_result_output_keys
+          .filter((key): key is string => typeof key === "string" && key.trim().length > 0)
+          .map((key) => key.trim());
+        if (outputKeys.length > 0) {
+          parts.push(labels.toolOutputKeys(outputKeys));
         }
       }
     }

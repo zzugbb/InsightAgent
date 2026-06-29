@@ -95,6 +95,7 @@ test("mergeToolEndToolMeta keeps runtime semantic metadata from tool_end payload
       semantic_kind: "knowledge_retrieval",
       supports_result_preview: true,
       effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+      effective_result_output_keys: ["documents_total"],
       retry_count: 0,
     },
     {
@@ -110,6 +111,7 @@ test("mergeToolEndToolMeta keeps runtime semantic metadata from tool_end payload
     "hit_count",
     "knowledge_base_id",
   ]);
+  assert.deepEqual(meta.effective_result_output_keys, ["documents_total"]);
   assert.equal(meta.status, "done");
 });
 
@@ -124,6 +126,7 @@ test("mergeToolStartToolMeta keeps runtime semantic metadata from tool_start pay
       semantic_kind: "knowledge_retrieval",
       supports_result_preview: true,
       effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+      effective_result_output_keys: ["documents_total"],
     },
     {
       name: "provider_search",
@@ -141,6 +144,7 @@ test("mergeToolStartToolMeta keeps runtime semantic metadata from tool_start pay
     "hit_count",
     "knowledge_base_id",
   ]);
+  assert.deepEqual(meta.effective_result_output_keys, ["documents_total"]);
   assert.equal(meta.retry_count, 0);
   assert.equal(meta.status, "running");
 });

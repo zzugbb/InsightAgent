@@ -33,6 +33,7 @@ export type TraceStepMeta = {
     status: "running" | "done" | "error";
     supports_result_preview?: boolean;
     effective_result_preview_keys?: string[];
+    effective_result_output_keys?: string[];
     retry_count?: number;
     error?: string | null;
   };

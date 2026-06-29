@@ -52,6 +52,7 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
               requires_user_context: true,
               supports_result_preview: true,
               effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+              effective_result_output_keys: ["documents_total"],
             },
             {
               name: "provider_math",
@@ -81,7 +82,7 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
   assert.equal(result.selectedSourceBaseProfile, "retrieval_only");
   assert.equal(
     result.selectedSourceToolDetailsSummary,
-    "Provider Search [knowledge_retrieval]: hit_count, knowledge_base_id | Provider Math [local_calculator]: expression, result",
+    "Provider Search [knowledge_retrieval]: preview hit_count, knowledge_base_id; output documents_total | Provider Math [local_calculator]: expression, result",
   );
 });
 
@@ -101,4 +102,26 @@ test("formatToolRegistryProviderToolDetailsSummary falls back to kind when previ
   ]);
 
   assert.equal(result, "Custom Lookup [custom_lookup]");
+});
+
+test("formatToolRegistryProviderToolDetailsSummary includes output keys when available", () => {
+  const result = formatToolRegistryProviderToolDetailsSummary([
+    {
+      name: "provider_search",
+      label: "Provider Search",
+      kind: "provider_retrieval",
+      semantic_kind: "provider_search",
+      retryable_by_default: false,
+      default_timeout_ms: 21_000,
+      requires_user_context: true,
+      supports_result_preview: true,
+      effective_result_preview_keys: ["documents_total"],
+      effective_result_output_keys: ["documents_total"],
+    },
+  ]);
+
+  assert.equal(
+    result,
+    "Provider Search [provider_search]: preview documents_total; output documents_total",
+  );
 });

@@ -51,6 +51,7 @@ class ToolRegistryProviderToolDetailResponse(BaseModel):
     requires_user_context: bool
     supports_result_preview: bool
     effective_result_preview_keys: list[str] = Field(default_factory=list)
+    effective_result_output_keys: list[str] = Field(default_factory=list)
 
 
 class ToolRegistryProviderSourceOptionResponse(BaseModel):

@@ -46,6 +46,8 @@ class ToolRegistration:
     supports_result_preview: bool
     runner: ToolRunner
     result_preview_keys: tuple[str, ...] = ()
+    result_output_keys: tuple[str, ...] = ()
+    runtime_semantic_kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -354,9 +356,11 @@ def _build_task_plan_steps(
     *,
     planned_tool_names: list[str],
     planned_tool_labels: list[str] | None = None,
+    planned_tool_kinds: list[str] | None = None,
 ) -> list[str]:
     steps = ["Analyze request"]
     label_by_name: dict[str, str] = {}
+    kind_by_name: dict[str, str] = {}
     if isinstance(planned_tool_labels, list):
         for idx, raw_label in enumerate(planned_tool_labels):
             if idx >= len(planned_tool_names):
@@ -364,11 +368,19 @@ def _build_task_plan_steps(
             label = str(raw_label).strip()
             if label:
                 label_by_name[planned_tool_names[idx]] = label
+    if isinstance(planned_tool_kinds, list):
+        for idx, raw_kind in enumerate(planned_tool_kinds):
+            if idx >= len(planned_tool_names):
+                break
+            kind = _normalize_tool_semantic_kind(str(raw_kind).strip())
+            if kind:
+                kind_by_name[planned_tool_names[idx]] = kind
 
     for tool_name in planned_tool_names:
-        if tool_name == "task_retrieve":
+        semantic_kind = kind_by_name.get(tool_name)
+        if semantic_kind == "knowledge_retrieval" or tool_name == "task_retrieve":
             step = "Retrieve supporting context"
-        elif tool_name == "calc_eval":
+        elif semantic_kind == "local_calculator" or tool_name == "calc_eval":
             step = "Evaluate calculation"
         else:
             display_name = label_by_name.get(tool_name) or tool_name
@@ -388,10 +400,14 @@ def _run_task_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) 
         tool_input.get("planned_tool_names"), list
     ):
         planned_tool_labels = tool_input.get("planned_tool_labels")
+        planned_tool_kinds = tool_input.get("planned_tool_kinds")
         steps = _build_task_plan_steps(
             planned_tool_names=planned_tool_names,
             planned_tool_labels=(
                 planned_tool_labels if isinstance(planned_tool_labels, list) else None
+            ),
+            planned_tool_kinds=(
+                planned_tool_kinds if isinstance(planned_tool_kinds, list) else None
             ),
         )
     else:
@@ -600,6 +616,18 @@ def build_tool_plan_summary(
         tool_name = str(item.get("name", "")).strip()
         if not tool_name:
             continue
+        registration = resolve_tool_registration(
+            tool_name,
+            registry_provider=registry_provider,
+        )
+        if (
+            get_tool_semantic_kind(
+                name=tool_name,
+                registration=registration,
+            )
+            == "task_planner"
+        ):
+            continue
         names.append(get_tool_display_name(tool_name, registry_provider=registry_provider))
     if not names:
         return "Planned tools: none"
@@ -617,7 +645,21 @@ def _annotate_task_plan_tool_input(
     planned_tool_labels: list[str] = []
     for item in tool_plan:
         tool_name = normalize_tool_registry_name(str(item.get("name", "")).strip())
-        if not tool_name or tool_name == "task_plan":
+        if not tool_name:
+            continue
+        registration = resolve_tool_registration(
+            name=tool_name,
+            registry_provider=registry_provider,
+        )
+        semantic_kind = (
+            get_tool_semantic_kind(
+                name=tool_name,
+                registration=registration,
+            )
+            if registration is not None
+            else None
+        )
+        if semantic_kind == "task_planner":
             continue
         planned_tool_names.append(tool_name)
         planned_tool_labels.append(
@@ -631,7 +673,19 @@ def _annotate_task_plan_tool_input(
             annotated_plan.append(item)
             continue
         tool_name = normalize_tool_registry_name(str(item.get("name", "")).strip())
-        if tool_name != "task_plan":
+        registration = resolve_tool_registration(
+            name=tool_name,
+            registry_provider=registry_provider,
+        )
+        semantic_kind = (
+            get_tool_semantic_kind(
+                name=tool_name,
+                registration=registration,
+            )
+            if registration is not None
+            else None
+        )
+        if semantic_kind != "task_planner":
             annotated_plan.append(item)
             continue
         tool_input = item.get("input")
@@ -671,15 +725,51 @@ def _get_enabled_planning_optional_tool_names(
     registry = resolve_tool_registry_provider(
         registry_provider=registry_provider,
     ).load_tool_registry()
-    optional_names = [
-        name for name in registry if normalize_tool_registry_name(name) != "task_plan"
-    ]
+    optional_names = []
+    for name, registration in registry.items():
+        if (
+            get_tool_semantic_kind(
+                name=name,
+                registration=registration,
+            )
+            == "task_planner"
+        ):
+            continue
+        optional_names.append(name)
     optional_names.sort(
         key=lambda name: (
             1 if normalize_tool_registry_name(name) in _REGISTERED_TOOLS else 0,
         )
     )
     return tuple(optional_names)
+
+
+def _get_enabled_planning_primary_tool_name(
+    *,
+    registry_provider: ToolRegistryProvider | None = None,
+) -> str | None:
+    registry = resolve_tool_registry_provider(
+        registry_provider=registry_provider,
+    ).load_tool_registry()
+    candidate_names = list(registry)
+    candidate_names.sort(
+        key=lambda name: (
+            1 if normalize_tool_registry_name(name) in _REGISTERED_TOOLS else 0,
+        )
+    )
+    for name in candidate_names:
+        registration = registry.get(name)
+        if registration is None:
+            continue
+        if (
+            get_tool_semantic_kind(
+                name=name,
+                registration=registration,
+            )
+            == "task_planner"
+        ):
+            return name
+    return None
 
 
 def _get_first_enabled_planning_tool_name_for_kind(
@@ -712,11 +802,11 @@ def get_enabled_planning_tool_names(
     registry_provider: ToolRegistryProvider | None = None,
 ) -> tuple[str, ...]:
     names: list[str] = []
-    if _is_tool_enabled_for_planning(
-        "task_plan",
+    primary_planner_name = _get_enabled_planning_primary_tool_name(
         registry_provider=registry_provider,
-    ):
-        names.append("task_plan")
+    )
+    if primary_planner_name:
+        names.append(primary_planner_name)
     names.extend(
         _get_enabled_planning_optional_tool_names(
             registry_provider=registry_provider,
@@ -965,6 +1055,17 @@ def _normalize_result_preview_keys(raw_value: object) -> tuple[str, ...]:
         normalized_keys.append(key)
         seen_keys.add(key)
     return tuple(normalized_keys)
+
+
+def _normalize_result_output_keys(raw_value: object) -> tuple[str, ...]:
+    return _normalize_result_preview_keys(raw_value)
+
+
+def _normalize_runtime_semantic_kind(raw_value: object) -> str | None:
+    if not isinstance(raw_value, str):
+        return None
+    normalized = raw_value.strip()
+    return normalized or None
 
 
 def build_tool_registry_extra_tools_from_file(
@@ -2029,6 +2130,14 @@ def build_tool_registry_extra_tools_from_settings(
                 _normalize_result_preview_keys(spec.get("result_preview_keys"))
                 or template_registration.result_preview_keys
             ),
+            result_output_keys=(
+                _normalize_result_output_keys(spec.get("result_output_keys"))
+                or template_registration.result_output_keys
+            ),
+            runtime_semantic_kind=(
+                _normalize_runtime_semantic_kind(spec.get("runtime_semantic_kind"))
+                or template_registration.runtime_semantic_kind
+            ),
         )
     return extra_tools
 
@@ -2062,6 +2171,8 @@ def _build_registry_overrides_from_specs(
             "requires_user_context",
             "supports_result_preview",
             "result_preview_keys",
+            "result_output_keys",
+            "runtime_semantic_kind",
         }
         if not any(key in spec for key in metadata_keys):
             continue
@@ -2084,6 +2195,14 @@ def _build_registry_overrides_from_specs(
             result_preview_keys=(
                 _normalize_result_preview_keys(spec.get("result_preview_keys"))
                 or base_registration.result_preview_keys
+            ),
+            result_output_keys=(
+                _normalize_result_output_keys(spec.get("result_output_keys"))
+                or base_registration.result_output_keys
+            ),
+            runtime_semantic_kind=(
+                _normalize_runtime_semantic_kind(spec.get("runtime_semantic_kind"))
+                or base_registration.runtime_semantic_kind
             ),
         )
     return overrides, disabled_tool_names
@@ -4042,6 +4161,59 @@ def build_tool_runtime_context(
     )
 
 
+def _normalize_tool_input_for_registration(
+    *,
+    name: str,
+    tool_input: dict[str, object],
+    registration: ToolRegistration,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> dict[str, object]:
+    if get_tool_semantic_kind(name=name, registration=registration) != "task_planner":
+        return tool_input
+    if not isinstance(tool_input.get("planned_tool_names"), list):
+        return tool_input
+    raw_planned_tool_names = _normalize_planned_tool_names(tool_input.get("planned_tool_names"))
+    if not raw_planned_tool_names:
+        return tool_input
+
+    existing_labels = tool_input.get("planned_tool_labels")
+    planned_tool_names: list[str] = []
+    planned_tool_labels: list[str] = []
+    planned_tool_kinds: list[str] = []
+    for idx, planned_tool_name in enumerate(raw_planned_tool_names):
+        planned_registration = resolve_tool_registration(
+            planned_tool_name,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        )
+        semantic_kind = get_tool_semantic_kind(
+            name=planned_tool_name,
+            registration=planned_registration,
+        )
+        if semantic_kind == "task_planner":
+            continue
+        planned_tool_names.append(planned_tool_name)
+        label = ""
+        if isinstance(existing_labels, list) and idx < len(existing_labels):
+            label = str(existing_labels[idx]).strip()
+        if not label:
+            label = get_tool_display_name_from_registration(
+                name=planned_tool_name,
+                registration=planned_registration,
+            )
+        planned_tool_labels.append(label)
+        planned_tool_kinds.append(semantic_kind or "")
+
+    normalized_input = dict(tool_input)
+    normalized_input["planned_tool_names"] = list(planned_tool_names)
+    normalized_input["planned_tool_labels"] = planned_tool_labels
+    normalized_input["planned_tool_kinds"] = planned_tool_kinds
+    return normalized_input
+
+
 def build_tool_result_preview(
     *,
     name: str,
@@ -4057,7 +4229,7 @@ def build_tool_result_preview(
     result_preview_keys = resolved_registration.result_preview_keys
     if not result_preview_keys:
         result_preview_keys = _get_default_result_preview_keys_for_semantic_kind(
-            get_tool_semantic_kind(
+            get_tool_runtime_semantic_kind(
                 name=name,
                 registration=resolved_registration,
             )
@@ -4069,6 +4241,22 @@ def build_tool_result_preview(
     return output
 
 
+def build_tool_result_output(
+    *,
+    name: str,
+    output: dict[str, object],
+    registry: dict[str, ToolRegistration] | None = None,
+    registration: ToolRegistration | None = None,
+) -> dict[str, object]:
+    resolved_registration = registration or resolve_tool_registration(name, registry=registry)
+    if resolved_registration is None:
+        return output
+    result_output_keys = resolved_registration.result_output_keys
+    if not result_output_keys:
+        return output
+    return {key: output[key] for key in result_output_keys if key in output}
+
+
 def build_tool_runtime_semantics_meta(
     *,
     name: str,
@@ -4078,7 +4266,7 @@ def build_tool_runtime_semantics_meta(
     resolved_registration = registration or resolve_tool_registration(canonical_name)
     if resolved_registration is None:
         return {}
-    semantic_kind = get_tool_semantic_kind(
+    semantic_kind = get_tool_runtime_semantic_kind(
         name=canonical_name,
         registration=resolved_registration,
     )
@@ -4088,12 +4276,17 @@ def build_tool_runtime_semantics_meta(
             resolved_registration.result_preview_keys
             or _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
         )
-    return {
+    meta: dict[str, object] = {
         "kind": resolved_registration.kind,
         "semantic_kind": semantic_kind,
         "supports_result_preview": resolved_registration.supports_result_preview,
         "effective_result_preview_keys": list(effective_result_preview_keys),
     }
+    if resolved_registration.result_output_keys:
+        meta["effective_result_output_keys"] = list(
+            resolved_registration.result_output_keys
+        )
+    return meta
 
 
 def tool_requires_user_context(
@@ -4166,6 +4359,11 @@ def build_tool_end_payload(
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
     resolved_registration = registration or resolve_tool_registration(canonical_name)
+    outward_output = build_tool_result_output(
+        name=canonical_name,
+        output=output,
+        registration=resolved_registration,
+    )
     return {
         "task_id": task_id,
         "step_id": step_id,
@@ -4181,7 +4379,7 @@ def build_tool_end_payload(
         ),
         "output_preview": build_tool_result_preview(
             name=canonical_name,
-            output=output,
+            output=outward_output,
             registration=resolved_registration,
         ),
         **build_tool_runtime_semantics_meta(
@@ -4204,15 +4402,24 @@ def build_tool_success_meta(
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
     resolved_registration = registration or resolve_tool_registration(canonical_name)
+    outward_output = build_tool_result_output(
+        name=canonical_name,
+        output=output,
+        registration=resolved_registration,
+    )
     return {
         "tool": {
             "name": canonical_name,
-            "label": display_name or get_tool_display_name(canonical_name),
+            "label": display_name
+            or get_tool_execution_display_name_from_registration(
+                name=canonical_name,
+                registration=resolved_registration,
+            ),
             "input": tool_input,
-            "output": output,
+            "output": outward_output,
             "output_preview": build_tool_result_preview(
                 name=canonical_name,
-                output=output,
+                output=outward_output,
                 registration=resolved_registration,
             ),
             "status": "done",
@@ -4240,7 +4447,11 @@ def build_tool_error_meta(
     return {
         "tool": {
             "name": canonical_name,
-            "label": display_name or get_tool_display_name(canonical_name),
+            "label": display_name
+            or get_tool_execution_display_name_from_registration(
+                name=canonical_name,
+                registration=resolved_registration,
+            ),
             "input": tool_input,
             "status": "error",
             "retry_count": retry_count,
@@ -4269,7 +4480,11 @@ def build_tool_start_payload(
         "task_id": task_id,
         "step_id": step_id,
         "name": canonical_name,
-        "display_name": display_name or get_tool_display_name(canonical_name),
+        "display_name": display_name
+        or get_tool_execution_display_name_from_registration(
+            name=canonical_name,
+            registration=resolved_registration,
+        ),
         "input": tool_input,
         **build_tool_runtime_semantics_meta(
             name=canonical_name,
@@ -4343,7 +4558,11 @@ def build_action_step_initial_meta(
         "cost_estimate": None,
         "tool": {
             "name": canonical_name,
-            "label": display_name or get_tool_display_name(canonical_name),
+            "label": display_name
+            or get_tool_execution_display_name_from_registration(
+                name=canonical_name,
+                registration=resolved_registration,
+            ),
             "input": tool_input,
             "status": "running",
             "retry_count": 0,
@@ -4366,7 +4585,10 @@ def build_action_step_initial_step(
     display_name = (
         str(tool_meta.get("label")).strip()
         if isinstance(tool_meta, dict) and isinstance(tool_meta.get("label"), str)
-        else get_tool_display_name(name)
+        else get_tool_execution_display_name_from_registration(
+            name=name,
+            registration=resolve_tool_registration(name),
+        )
     )
     return {
         "id": step_id,
@@ -4398,7 +4620,10 @@ def build_tool_step_success_update(
     resolved_display_name = display_name or (
         str(tool_obj.get("label")).strip()
         if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
-        else get_tool_display_name(name)
+        else get_tool_execution_display_name_from_registration(
+            name=name,
+            registration=registration or resolve_tool_registration(name),
+        )
     )
     return {
         **action_step,
@@ -4441,7 +4666,10 @@ def build_tool_step_error_update(
     resolved_display_name = display_name or (
         str(tool_obj.get("label")).strip()
         if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
-        else get_tool_display_name(name)
+        else get_tool_execution_display_name_from_registration(
+            name=name,
+            registration=registration or resolve_tool_registration(name),
+        )
     )
     return {
         **action_step,
@@ -4519,7 +4747,7 @@ def build_tool_attempt_bundle(
             name=runtime_ctx.name,
             tool_input=tool_input,
             attempt=attempt,
-            display_name=get_tool_display_name_from_registration(
+            display_name=get_tool_execution_display_name_from_registration(
                 name=runtime_ctx.registration.name,
                 registration=runtime_ctx.registration,
             ),
@@ -5068,15 +5296,24 @@ def build_tool_observation_entry(
     resolved_registration = registration or resolve_tool_registration(canonical_name)
     observation_output = output
     if isinstance(output, dict):
-        preview_output = build_tool_result_preview(
+        observation_output = build_tool_result_output(
             name=canonical_name,
             output=output,
             registration=resolved_registration,
         )
+        preview_output = build_tool_result_preview(
+            name=canonical_name,
+            output=observation_output,
+            registration=resolved_registration,
+        )
         if preview_output is not None:
             observation_output = preview_output
+    resolved_display_name = display_name or get_tool_observation_display_name_from_registration(
+        name=canonical_name,
+        registration=resolved_registration,
+    )
     return (
-        f"{display_name or get_tool_display_name(name)}: "
+        f"{resolved_display_name}: "
         f"{json.dumps(observation_output, ensure_ascii=False)}"
     )
 
@@ -5192,7 +5429,7 @@ def build_tool_attempt_outcome(
     token_count: int,
     last_error: str | None,
 ) -> dict[str, object]:
-    display_name = get_tool_display_name_from_registration(
+    display_name = get_tool_execution_display_name_from_registration(
         name=runtime_ctx.registration.name,
         registration=runtime_ctx.registration,
     )
@@ -5316,7 +5553,7 @@ def build_tool_rag_followup(
         return None
     semantic_kind = _normalize_tool_semantic_kind(tool_kind)
     if semantic_kind is None:
-        semantic_kind = get_tool_semantic_kind(name=tool_name)
+        semantic_kind = get_tool_runtime_semantic_kind(name=tool_name)
     if semantic_kind != "knowledge_retrieval":
         return None
     chunks = output.get("chunks")
@@ -5363,7 +5600,7 @@ def build_tool_iteration_execution(
     token_count: int,
     last_error: str | None,
 ) -> dict[str, object]:
-    display_name = get_tool_display_name_from_registration(
+    execution_display_name = get_tool_execution_display_name_from_registration(
         name=runtime_ctx.registration.name,
         registration=runtime_ctx.registration,
     )
@@ -5373,7 +5610,7 @@ def build_tool_iteration_execution(
         name=name,
         tool_input=tool_input,
         attempt=runtime_ctx.attempt,
-        display_name=display_name,
+        display_name=execution_display_name,
     )
     outcome = build_tool_attempt_outcome(
         task_id=task_id,
@@ -5524,7 +5761,7 @@ def build_tool_plan_item_execution(
             seq=int(action_step.get("seq", 0)) + 1,
             model=model,
             tool_name=name,
-            tool_kind=get_tool_semantic_kind(
+            tool_kind=get_tool_runtime_semantic_kind(
                 name=runtime_ctx.registration.name,
                 registration=runtime_ctx.registration,
             ),
@@ -6000,8 +6237,7 @@ def _build_rule_based_tool_plan(
     knowledge_base_id = (
         _extract_knowledge_base_id(prompt) or settings.rag_default_knowledge_base_id
     )
-    include_task_plan = _is_tool_enabled_for_planning(
-        "task_plan",
+    primary_planner_name = _get_enabled_planning_primary_tool_name(
         registry_provider=registry_provider,
     )
     retrieval_tool_name = _get_first_enabled_planning_tool_name_for_kind(
@@ -6013,10 +6249,10 @@ def _build_rule_based_tool_plan(
         registry_provider=registry_provider,
     )
     plan: list[dict[str, object]] = []
-    if include_task_plan:
+    if primary_planner_name is not None:
         plan.append(
             {
-                "name": "task_plan",
+                "name": primary_planner_name,
                 "input": {
                     "prompt_preview": prompt.strip()[:120],
                 },
@@ -6099,7 +6335,7 @@ def _build_provider_tool_plan_prompt(
         "Return JSON only with shape {\"tools\": [...]}.\n"
         f"Allowed tool names: {allowed_tool_names_text}.\n"
         f"Allowed tool labels: {allowed_tool_labels_text}.\n"
-        "Do not include task_plan in the JSON; it is added automatically.\n"
+        "Do not include planner tools in the JSON; planner is added automatically.\n"
         + "".join(input_lines)
         + "If no extra tools are needed, return {\"tools\": []}.\n"
         + f"User request:\n{prompt.strip() or 'empty prompt'}"
@@ -6179,8 +6415,7 @@ def _normalize_provider_tool_plan(
         _extract_knowledge_base_id(prompt) or settings.rag_default_knowledge_base_id
     )
     fallback_calc_expression = _extract_calc_expression(prompt)
-    include_task_plan = _is_tool_enabled_for_planning(
-        "task_plan",
+    primary_planner_name = _get_enabled_planning_primary_tool_name(
         registry_provider=registry_provider,
     )
     enabled_optional_tool_names = set(
@@ -6190,16 +6425,17 @@ def _normalize_provider_tool_plan(
     )
     normalized_plan: list[dict[str, object]] = []
     seen_names: set[str] = set()
-    if include_task_plan:
+    saw_planner_tool = False
+    if primary_planner_name is not None:
         normalized_plan.append(
             {
-                "name": "task_plan",
+                "name": primary_planner_name,
                 "input": {
                     "prompt_preview": prompt_preview,
                 },
             }
         )
-        seen_names.add("task_plan")
+        seen_names.add(primary_planner_name)
 
     for raw_item in raw_items:
         normalized_item = _normalize_provider_tool_plan_item(
@@ -6223,6 +6459,9 @@ def _normalize_provider_tool_plan(
             if registration is not None
             else None
         )
+        if tool_kind == "task_planner":
+            saw_planner_tool = True
+            continue
         if tool_kind == "knowledge_retrieval":
             top_k = tool_input.get("top_k")
             if isinstance(top_k, bool):
@@ -6267,9 +6506,11 @@ def _normalize_provider_tool_plan(
 
     if not raw_items:
         return normalized_plan
-    if include_task_plan and len(normalized_plan) == 1:
+    if primary_planner_name is not None and len(normalized_plan) == 1:
+        if saw_planner_tool:
+            return normalized_plan
         return None
-    if not include_task_plan and not normalized_plan:
+    if primary_planner_name is None and not normalized_plan:
         return None
     return normalized_plan
 
@@ -6415,22 +6656,22 @@ def get_tool_display_name_from_registration(
     name: str,
     registration: ToolRegistration | None,
 ) -> str:
-    if registration is None:
-        return name
-    normalized_name = normalize_tool_registry_name(name)
-    label = registration.label.strip()
-    if normalized_name in {"task_plan", "task_retrieve"} and label:
-        return label
-    default_registration = _REGISTERED_TOOLS.get(normalized_name)
-    if default_registration is None and label:
-        return label
-    if (
-        default_registration is not None
-        and label
-        and label != default_registration.label
-    ):
-        return label
-    return name
+    if registration is not None:
+        label = registration.label.strip()
+        if label:
+            return label
+    return normalize_tool_registry_name(name)
+
+
+def get_tool_execution_display_name_from_registration(
+    *,
+    name: str,
+    registration: ToolRegistration | None,
+) -> str:
+    return get_tool_display_name_from_registration(
+        name=name,
+        registration=registration,
+    )
 
 
 def get_tool_observation_display_name_from_registration(
@@ -6438,11 +6679,7 @@ def get_tool_observation_display_name_from_registration(
     name: str,
     registration: ToolRegistration | None,
 ) -> str:
-    if registration is not None:
-        label = registration.label.strip()
-        if label:
-            return label
-    return get_tool_display_name_from_registration(
+    return get_tool_execution_display_name_from_registration(
         name=name,
         registration=registration,
     )
@@ -6464,6 +6701,8 @@ def _normalize_tool_semantic_kind(kind: str | None) -> str | None:
         or normalized_kind.endswith("_calc")
     ):
         return "local_calculator"
+    if normalized_kind == "task_planner" or normalized_kind.endswith("_planner"):
+        return "task_planner"
     return normalized_kind
 
 
@@ -6486,10 +6725,30 @@ def get_tool_semantic_kind(
     return None
 
 
+def get_tool_runtime_semantic_kind(
+    *,
+    name: str,
+    registration: ToolRegistration | None = None,
+) -> str | None:
+    explicit_runtime_semantic_kind = (
+        _normalize_runtime_semantic_kind(registration.runtime_semantic_kind)
+        if registration is not None
+        else None
+    )
+    if explicit_runtime_semantic_kind is not None:
+        return explicit_runtime_semantic_kind
+    return get_tool_semantic_kind(
+        name=name,
+        registration=registration,
+    )
+
+
 def _get_default_result_preview_keys_for_semantic_kind(
     semantic_kind: str | None,
 ) -> tuple[str, ...]:
     normalized_semantic_kind = _normalize_tool_semantic_kind(semantic_kind)
+    if normalized_semantic_kind == "task_planner":
+        return _REGISTERED_TOOLS["task_plan"].result_preview_keys
     if normalized_semantic_kind == "knowledge_retrieval":
         return _REGISTERED_TOOLS["task_retrieve"].result_preview_keys
     if normalized_semantic_kind == "local_calculator":
@@ -6505,7 +6764,7 @@ def build_configured_tool_registry_provider_preflight_tool_details(
     details: list[dict[str, object]] = []
     for tool_name in sorted(tool_registry):
         registration = tool_registry[tool_name]
-        semantic_kind = get_tool_semantic_kind(
+        semantic_kind = get_tool_runtime_semantic_kind(
             name=tool_name,
             registration=registration,
         )
@@ -6515,6 +6774,7 @@ def build_configured_tool_registry_provider_preflight_tool_details(
                 registration.result_preview_keys
                 or _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
             )
+        effective_result_output_keys = registration.result_output_keys
         label = registration.label.strip() or get_tool_display_name_from_registration(
             name=tool_name,
             registration=registration,
@@ -6530,6 +6790,11 @@ def build_configured_tool_registry_provider_preflight_tool_details(
                 "requires_user_context": registration.requires_user_context,
                 "supports_result_preview": registration.supports_result_preview,
                 "effective_result_preview_keys": effective_result_preview_keys,
+                **(
+                    {"effective_result_output_keys": effective_result_output_keys}
+                    if effective_result_output_keys
+                    else {}
+                ),
             }
         )
     return tuple(details)
@@ -6593,8 +6858,16 @@ def run_tool(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    output = ctx.registration.runner(
+    normalized_tool_input = _normalize_tool_input_for_registration(
+        name=name,
         tool_input=tool_input,
+        registration=ctx.registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    output = ctx.registration.runner(
+        tool_input=normalized_tool_input,
         prompt=ctx.prompt,
         user_id=ctx.user_id,
     )

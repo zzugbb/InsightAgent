@@ -9,6 +9,7 @@ export type LiveToolEndPayload = {
   semantic_kind?: unknown;
   supports_result_preview?: unknown;
   effective_result_preview_keys?: unknown;
+  effective_result_output_keys?: unknown;
 };
 
 export type LiveToolStartPayload = {
@@ -19,6 +20,7 @@ export type LiveToolStartPayload = {
   semantic_kind?: unknown;
   supports_result_preview?: unknown;
   effective_result_preview_keys?: unknown;
+  effective_result_output_keys?: unknown;
 };
 
 type ToolIdentity = {
@@ -39,6 +41,7 @@ type ToolMetaLike = {
   semantic_kind?: unknown;
   supports_result_preview?: unknown;
   effective_result_preview_keys?: unknown;
+  effective_result_output_keys?: unknown;
 };
 
 function normalizeToolSemantics(
@@ -48,12 +51,14 @@ function normalizeToolSemantics(
     semantic_kind?: unknown;
     supports_result_preview?: unknown;
     effective_result_preview_keys?: unknown;
+    effective_result_output_keys?: unknown;
   },
 ): {
   kind?: string;
   semantic_kind?: string;
   supports_result_preview?: boolean;
   effective_result_preview_keys?: string[];
+  effective_result_output_keys?: string[];
 } {
   return {
     kind:
@@ -87,6 +92,18 @@ function normalizeToolSemantics(
               typeof key === "string" && key.trim().length > 0,
           )
         : undefined,
+    effective_result_output_keys: Array.isArray(
+      payload.effective_result_output_keys,
+    )
+      ? payload.effective_result_output_keys.filter(
+          (key): key is string => typeof key === "string" && key.trim().length > 0,
+        )
+      : Array.isArray(prevTool?.effective_result_output_keys)
+        ? prevTool.effective_result_output_keys.filter(
+            (key): key is string =>
+              typeof key === "string" && key.trim().length > 0,
+          )
+        : undefined,
   };
 }
 
@@ -102,6 +119,7 @@ export function mergeToolStartToolMeta(
   semantic_kind?: string;
   supports_result_preview?: boolean;
   effective_result_preview_keys?: string[];
+  effective_result_output_keys?: string[];
   status: "running";
   retry_count: number;
 } {
@@ -136,6 +154,7 @@ export function mergeToolEndToolMeta(
   semantic_kind?: string;
   supports_result_preview?: boolean;
   effective_result_preview_keys?: string[];
+  effective_result_output_keys?: string[];
   status: "running" | "done" | "error";
   retry_count?: number;
   error?: string | undefined;

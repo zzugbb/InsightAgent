@@ -99,6 +99,7 @@ test("formatTraceStepMetaSubtitle includes tool semantic kind when available", (
       toolError: (message: string) => `Error ${message}`,
       toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
       toolPreviewDisabled: "Preview disabled",
+      toolOutputKeys: (keys: string[]) => `Output ${keys.join(", ")}`,
       ragLine: (count: number, kb?: string) =>
         kb ? `RAG ${count} ${kb}` : `RAG ${count}`,
       model: "Model",
@@ -150,6 +151,7 @@ test("formatTraceStepMetaSubtitle includes tool preview policy when available", 
       toolError: (message: string) => `Error ${message}`,
       toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
       toolPreviewDisabled: "Preview disabled",
+      toolOutputKeys: (keys: string[]) => `Output ${keys.join(", ")}`,
       ragLine: (count: number, kb?: string) =>
         kb ? `RAG ${count} ${kb}` : `RAG ${count}`,
       model: "Model",
@@ -177,6 +179,59 @@ test("formatTraceStepMetaSubtitle includes tool preview policy when available", 
   );
 });
 
+test("formatTraceStepMetaSubtitle includes tool output policy when available", () => {
+  const subtitle = formatTraceStepMetaSubtitle(
+    {
+      id: "step-output-policy",
+      type: "action",
+      content: "Tool done: Provider Search",
+      meta: {
+        tool: {
+          name: "provider_search",
+          label: "Provider Search",
+          kind: "provider_retrieval",
+          semantic_kind: "provider_search",
+          supports_result_preview: true,
+          effective_result_preview_keys: ["documents_total"],
+          effective_result_output_keys: ["documents_total"],
+          status: "done",
+        },
+      },
+    },
+    {
+      toolLine: (name: string, status: string) => `${name} (${status})`,
+      toolRetry: (count: number) => `Retry ${count}`,
+      toolError: (message: string) => `Error ${message}`,
+      toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
+      toolPreviewDisabled: "Preview disabled",
+      toolOutputKeys: (keys: string[]) => `Output ${keys.join(", ")}`,
+      ragLine: (count: number, kb?: string) =>
+        kb ? `RAG ${count} ${kb}` : `RAG ${count}`,
+      model: "Model",
+      stepKind: "Step",
+      planningProviderUsed: "Planning provider used",
+      planningProviderFallback: "Planning provider fallback",
+      planningProviderRuleOnly: "Planning provider rule only",
+      toolRegistryProfile: "Profile",
+      toolRegistrySource: "Source",
+      allowedTools: "Allowed",
+      tokens: "Tokens",
+      promptTokens: "Prompt",
+      completionTokens: "Completion",
+      cost: "Cost",
+      usageSource: "Usage",
+      usageSourceProvider: "provider",
+      usageSourceEstimated: "estimated",
+      usageSourceLegacy: "legacy",
+    },
+  );
+
+  assert.equal(
+    subtitle,
+    "Provider Search (done) [provider_search] · Preview documents_total · Output documents_total",
+  );
+});
+
 test("matchesTraceStepSearchQuery matches preview policy keys for running tool steps", () => {
   const matches = matchesTraceStepSearchQuery(
     {
@@ -196,6 +251,31 @@ test("matchesTraceStepSearchQuery matches preview policy keys for running tool s
       },
     },
     "knowledge_base_id",
+  );
+
+  assert.equal(matches, true);
+});
+
+test("matchesTraceStepSearchQuery matches output policy keys for tool steps", () => {
+  const matches = matchesTraceStepSearchQuery(
+    {
+      id: "step-output-policy-search",
+      type: "action",
+      content: "Tool done: Provider Search",
+      meta: {
+        tool: {
+          name: "provider_search",
+          label: "Provider Search",
+          kind: "provider_retrieval",
+          semantic_kind: "provider_search",
+          supports_result_preview: true,
+          effective_result_preview_keys: ["documents_total"],
+          effective_result_output_keys: ["documents_total"],
+          status: "done",
+        },
+      },
+    },
+    "documents_total",
   );
 
   assert.equal(matches, true);

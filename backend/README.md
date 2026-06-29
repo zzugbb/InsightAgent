@@ -24,6 +24,61 @@
 - 阶段 5 下一步（2026-06-04，canonical runtime outward 收口）：即使旧配置仍通过 `mock_plan / mock_retrieve` 触发兼容执行，runtime outward 的 tool start/meta/trace step 也已统一优先落成 `task_plan / task_retrieve`，避免 legacy `mock_*` 名字继续污染默认可观测结果
 - 阶段 5 下一步（2026-06-04，internal mock semantics 收口）：planner / retrieval 的内部 registration `kind` 与 unknown-tool 文案也已去掉 `mock` 语义；兼容 alias 继续保留，但默认运行时内部语义已切到 `task_planner / knowledge_retrieval`
 - 阶段 5 下一步（2026-06-04，generic runtime markers 收口）：默认开发期 marker 现已切到 `[tool-error] / [tool-fatal] / [multi-tool]`；旧 `[mock-tool-*] / [mock-multi-tool]` 仅继续保留兼容，不再作为默认文档与调试口径
+- 阶段 5 主线续推（2026-06-29，shared tool observation productization）：`backend/app/services/tool_runtime.py`
+  的 shared observation helper 现已默认按 registration label 解析展示名，不再只在完整 iteration execution
+  链里产出产品化 label、却在 success artifacts / postprocess / success effects 这几条 sibling 分支回落到
+  `calc_eval` 这类内部名。当前 built-in calculator 与 extra/real tools 会统一输出 preview-safe observation
+  label，同时保持外部 SSE / trace / export / e2e 契约不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`615/615`）。
+- 阶段 5 主线续推（2026-06-29，execution display label productization）：`backend/app/services/tool_runtime.py`
+  现已新增 execution-display 语义 helper，并让 `build_tool_start_payload()`、`build_action_step_initial_meta()`、
+  `build_tool_step_success_update()`、`build_tool_step_error_update()`、`build_tool_attempt_outcome()` 与
+  `build_tool_iteration_execution()` 统一按 registration label 生成 built-in/extra tools 的执行期展示名。
+  因此默认 calculator 的 `tool_start.display_name`、`Tool running/done/error` trace 文案现在都会稳定显示
+  `Calculator`，不再残留 `calc_eval` 这类 local/internal name；planning summary 与治理筛选口径保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`615/615`）。
+- 阶段 5 主线续推（2026-06-29，calculator user-facing label chain productization）：
+  `backend/app/services/tool_runtime.py:get_tool_display_name_from_registration()` 现已统一按 registration
+  label 输出 built-in/extra tools 的用户可见 display label；`backend/app/services/chat_persistence_service.py`
+  也新增治理 label 归一化逻辑，会把 trace/task row 历史上残留的 `allowed_tool_labels=["calc_eval"]` 这类
+  internal-name 数据升级成 `["Calculator"]`，同时保留 `Calculator Suite` 这类自定义 override/source label。
+  因此 planning summary、planning `allowed_tool_labels / planned_tool_labels`、settings/profile 预览与
+  task/session export governance 摘要现在都会默认显示 `Calculator`，而 canonical `allowed_tool_names`
+  仍保持 `calc_eval` 不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`616/616`）。
+- 阶段 5 主线续推（2026-06-29，real tool runtime semantic override）：
+  `backend/app/services/tool_runtime.py` 现已为 `ToolRegistration` 新增可选
+  `runtime_semantic_kind`，并让 extra-tool / override / provider-source adapter 一起支持解析这层
+  runtime override。当前 `build_tool_runtime_semantics_meta()`、`build_tool_result_preview()`、
+  `build_tool_plan_item_execution()` 的 RAG follow-up 判定，以及 settings/source tool details 的
+  `semantic_kind / effective_result_preview_keys`，都已优先走这层 execution-facing semantic，而不再一律被
+  retrieval/calculator 模板 runner 反推回本地语义。这样像 `provider_search` 这类“可继续按 retrieval 模板被规划，
+  但执行期不应再携带 knowledge-base follow-up 语义”的 extra/real tools，终于可以把规划兼容和运行时语义解耦；
+  外部 SSE / trace / export / e2e 契约保持不变。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
+  通过（`619/619`）。
+- 阶段 5 主线续推（2026-06-29，real tool outward result projection）：
+  `backend/app/services/tool_runtime.py` 现已继续为 `ToolRegistration` 新增可选
+  `result_output_keys`，并让 extra-tool / override 解析一起支持这层 outward result projection。当前
+  `build_tool_end_payload()`、`build_tool_success_meta()`、`build_tool_observation_entry()` 与依赖 action-step
+  `tool.output` 的 success/postprocess/export sibling 链，会在保持 `run_tool()` 内部原始输出不变的前提下，优先把
+  用户可见的结果收口成这组字段；因此像 `provider_search` 这类 real tool 已可以只把 `documents_total`
+  这类产品化摘要暴露到 trace/observation/export 主链，而不再继续把 retrieval 模板 runner 的
+  `chunks/knowledge_base_id` 等本地字段透出。外部 SSE / trace / export / e2e 契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`620/620`）。
+- 阶段 5 主线续推（2026-06-29，real tool output policy visible in settings/preflight）：
+  `backend/app/api/routes/settings.py` 的 provider-source tool details response 现已新增
+  `effective_result_output_keys`，而 `backend/app/services/tool_runtime.py`
+  的 settings summary / validate preview / provider preflight 组装链也会一起透出这组字段。这样
+  `provider_search` 这类 real tool 在 settings 保存、校验与 source 预检时，不只会说明 preview-safe
+  字段，也会明确说明真正写入 outward `tool.output` 的结果字段。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`623/623`）。
+- 阶段 5 主线续推（2026-06-29，real tool output policy visible in runtime trace）：
+  `backend/app/services/tool_runtime.py:build_tool_runtime_semantics_meta()` 现已把
+  `effective_result_output_keys` 一并打进 runtime meta，并让 `build_tool_start_payload()`、
+  `build_tool_end_payload()`、`build_tool_success_meta()` 与 action-step/tool trace meta 统一复用。这样
+  real tool 不只在 settings/preflight 可见 output policy，连 live SSE、落库 trace 与 success meta
+  也会同步透出这组执行期 outward-result 语义；前端 running/done trace subtitle 与搜索链因此能直接消费。
+  校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`623/623`）。
 - 阶段 5 下一步（2026-06-04，provider-assisted planner 首版）：`chat_execution_service.py` 现已让 `build_tool_plan(prompt, provider=provider)` 在非 `mock` provider 下先尝试远端模型生成受限 JSON tool plan，再把结果约束回 `task_plan / task_retrieve / calc_eval` 这条现有执行 schema；若远端返回无效 JSON、未知工具、非法表达式或直接抛错，则静默回退到规则 planner，因此默认 SSE/trace/tool execution 契约保持不变
 - 阶段 5 下一步（2026-06-04，planning usage / overall usage 对齐）：provider-assisted planner 的调用现已纳入 usage/cost 闭环；planning trace step 会写入该次规划的 token/cost，`done.usage` 额外补充 `planning_*` 与 `overall_*` 字段，而原有 `prompt_tokens / completion_tokens / cost_estimate` 仍保留最终回答语义
 - 阶段 5 协同（2026-06-05，frontend e2e stabilization）：当前轮次优先处理 `frontend/e2e/usage-dashboard.spec.ts` 的 CI
@@ -1314,3 +1369,7 @@ docker compose up -d chroma
 - semantic kind 与 rag 语义现也被前端统计直接消费（2026-06-27）：本轮后端没有再新增字段，但还需要记下另一条新的前后端协同停止点：`semantic_kind` 加上 `rag` follow-up 语义，现在不只进入了前端 subtitle、搜索和过滤，还已经进入 Inspector 顶部的语义计数统计。也就是说，backend 当前提供的执行语义已经足够让前端在不解析 raw output 的前提下，直接统计本次任务跑了多少 planner / retrieval / calculator 步骤。校验结果沿用本轮前端 focused 与标准基线：`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 - task snapshot summary 现也开始直接消费既有 trace semantic meta（2026-06-27）：本轮后端没有新增 API 字段，但需要记下一条新的前后端协同停止点：任务详情页的 snapshot 摘要现在也会直接基于现有 trace `semantic_kind` 与 `rag` follow-up 语义，展示 planner / retrieval / calculator 计数。也就是说，backend 当前已经透出的 tool runtime semantic meta，不只足够支撑实时 Inspector 的 subtitle / 搜索 / 过滤 / 统计，还足够让历史 task detail 在不新增 route 字段的前提下复用同一份语义推导主干。校验结果沿用本轮前端 focused 与标准基线：`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`15/15`），`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。
 - task center 列表现也开始直接消费既有 trace semantic meta（2026-06-27）：本轮后端依然没有新增 API 字段，但还需要记下另一条新的前后端协同停止点：任务中心列表现在也会直接基于现有 task row `trace_json` 里的 `semantic_kind` 与 `rag` follow-up 语义，展示 planner / retrieval / calculator 结构摘要，并允许前端用这条摘要做关键词过滤。也就是说，backend 当前已经透出的 tool runtime semantic meta，不只足够支撑实时 Inspector、任务详情页和回放链，还足够让历史任务列表在不新增 route 字段的前提下复用同一份 snapshot 语义推导主干。校验结果沿用本轮前端 focused 与标准基线：`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`16/16`），`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。
+- planner semantic fallback 现也与 retrieval/calculator 站到同一条 runtime 主干（2026-06-29）：本轮后端继续沿“默认工具去 mock 化、真实工具接入”主线，把 extra/real planner 还可能退回原始 kind 和 raw planner payload 的执行本体缺口也收掉。现在 [tool_runtime.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/app/services/tool_runtime.py) 的 `_normalize_tool_semantic_kind()` 会把 `*_planner` 统一归并到 `task_planner`，而 `_get_default_result_preview_keys_for_semantic_kind()` 也开始为这类语义自动回退到 built-in `task_plan` 的 `plan/steps` preview 白名单。对后端来说，这意味着 `provider_planner` 这类 extra/real planner tool 在 trace preview、tool observation 与 runtime semantic meta 上，也终于和 retrieval/calculator 一样共享同一份 productized fallback，不再把 `raw_payload` 直接重新暴露到用户可见链。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`608/608`），`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。
+- extra planner 现也进入 planning 主注入主干（2026-06-29）：本轮后端继续沿“已经能规划 extra planner，但执行入口仍默认把 built-in `task_plan` 当成唯一 planner”这条产品化缺口，进一步把 provider/rule-based planning 的 planner 选择切到 semantic kind。当前先在 `backend/scripts/test_tool_runtime_slice.py` 补 focused failing tests，锁定：1) 当 registry 中存在 `mock_plan_brief` 这类 extra planner 时，`get_enabled_planning_tool_names()` 必须优先把它作为首个主 planner；2) `_build_provider_tool_plan_prompt()` 暴露给 provider 的 optional tools 里不能再混入任何 planner semantic tool；3) `_normalize_provider_tool_plan()` 即使看到 provider 返回 planner tool，也只能保留自动注入的主 planner，并把 `planned_tool_names/planned_tool_labels` 注解到第一条 planner semantic step。随后实现上在 [tool_runtime.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/app/services/tool_runtime.py) 新增 `_get_enabled_planning_primary_tool_name()`，让 `_build_rule_based_tool_plan()` 与 `_normalize_provider_tool_plan()` 都改为注入首个 `task_planner` semantic tool；`_get_enabled_planning_optional_tool_names()` 则开始显式剔除 planner 语义，`_annotate_task_plan_tool_input()` 也改为跟随“第一条 planner semantic step”而不再硬编码 canonical `task_plan`。对后端来说，这意味着 extra/real planner 终于不再只是 provider 可提及的 alias，而是成为 planning 执行本体里真实的主 planner 入口，同时 provider prompt 也不会再把 planner 暴露成普通 optional candidate。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`610/610`），`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`16/16`），`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。
+- task planner 的 `plan/steps` 现也按 extra tool semantic kind 收口到产品化语义（2026-06-29）：本轮后端继续沿“extra/real tools 已经能进入 planning 与 execution，但 `task_plan` 自己生成的步骤文案仍只认 canonical `task_retrieve/calc_eval`”这条执行本体缺口，把 planner 输出本身也切到 runtime semantic kind。当前先在 `backend/scripts/test_tool_runtime_slice.py` 补 focused failing tests，锁定 `run_tool(name=\"task_plan\")` 在 registry 挂载 `task_retrieve_hot / calc_eval_fast` 这类 extra retrieval/calculator 工具时，即使只收到非 canonical `planned_tool_names`，产出的 `plan/steps` 也必须继续落成 `Retrieve supporting context / Evaluate calculation`，而不是退回 `Run task_retrieve_hot / Run calc_eval_fast`。随后实现上在 [tool_runtime.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/app/services/tool_runtime.py) 新增 `_normalize_tool_input_for_registration()`，让 `run_tool()` 在进入 `task_plan` runner 前，按当前 registry 为 `planned_tool_names` 补齐 `planned_tool_labels/planned_tool_kinds`，并让 `_build_task_plan_steps()` 优先按 semantic kind 生成 retrieval/calculator 语义步骤。对后端来说，这意味着 extra/real retrieval/calculator 不只是在 planner 选择阶段已经产品化，连 planner 执行结果里的 `plan`、success observation 与后续 mock-summary 输入链也开始共享同一份真实工具语义。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`612/612`），`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`16/16`），`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。
+- planner 自注入步骤现也从 planning summary 与 planner 输入主干中收掉（2026-06-29）：本轮后端继续沿“extra planner 已变成主 planner 入口，但 `Planned tools` 摘要和 `task_plan.planned_tool_names` 仍会把 planner 自己误当成 execution tool”这条产品化缺口，再把 planning thought 与 task-plan 输入归一化一起收口一层。当前先在 `backend/scripts/test_tool_runtime_slice.py` 补 focused failing tests，锁定：1) `build_tool_plan_summary()` 对默认 `task_plan + task_retrieve + calc_eval` 计划不再显示 `Task Planner`；2) 仅有 planner 而没有额外执行工具时，summary 必须收敛成 `Planned tools: none`；3) extra planner 作为主 planner 时，summary 也不得再把 `Brief Planner` 当成 execution tool；4) 即使外部错误把 planner semantic tool 塞进 `task_plan.planned_tool_names`，运行时也必须在进入 runner 前把它过滤掉。随后实现上在 [tool_runtime.py](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/backend/app/services/tool_runtime.py) 让 `build_tool_plan_summary()` 显式跳过 `task_planner` semantic tools，并在 `_normalize_tool_input_for_registration()` 里把 planner semantic name 从 `planned_tool_names` 中剔除。对后端来说，这意味着 planning thought、planner 自身 `plan/steps` 与后续 mock-summary 输入链终于都不再把“自动注入的 planner”误当成真正待执行工具，extra planner 主入口也不会再混进用户可见计划摘要。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`615/615`），`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`16/16`），`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，`bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。

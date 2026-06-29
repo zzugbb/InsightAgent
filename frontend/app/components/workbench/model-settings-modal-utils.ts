@@ -34,10 +34,20 @@ export function formatToolRegistryProviderToolDetailsSummary(
         Array.isArray(tool.effective_result_preview_keys)
           ? tool.effective_result_preview_keys.filter((key) => key.trim().length > 0)
           : [];
-      if (previewKeys.length === 0) {
+      const outputKeys =
+        Array.isArray(tool.effective_result_output_keys)
+          ? tool.effective_result_output_keys.filter((key) => key.trim().length > 0)
+          : [];
+      if (previewKeys.length === 0 && outputKeys.length === 0) {
         return `${tool.label} [${semanticOrKind}]`;
       }
-      return `${tool.label} [${semanticOrKind}]: ${previewKeys.join(", ")}`;
+      if (previewKeys.length > 0 && outputKeys.length > 0) {
+        return `${tool.label} [${semanticOrKind}]: preview ${previewKeys.join(", ")}; output ${outputKeys.join(", ")}`;
+      }
+      if (previewKeys.length > 0) {
+        return `${tool.label} [${semanticOrKind}]: ${previewKeys.join(", ")}`;
+      }
+      return `${tool.label} [${semanticOrKind}]: output ${outputKeys.join(", ")}`;
     })
     .join(" | ");
 }

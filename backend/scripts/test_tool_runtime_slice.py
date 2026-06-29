@@ -110,6 +110,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     get_tool_registry_profile_name_from_settings,
     load_tool_registry,
     get_registered_tool_names,
+    get_tool_semantic_kind,
     build_tool_registry,
     build_tool_registry_extra_tools_from_settings,
     build_tool_registry_from_file_artifacts,
@@ -131,6 +132,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_registry_diagnostics_summary_model,
     build_tool_registry_diagnostics_trace_service_action_model,
     build_tool_registry_diagnostics_audit_service_action_model,
+    get_enabled_planning_tool_names,
     build_configured_tool_registry_provider_runtime_service_action_model_from_dict,
     build_configured_tool_registry_provider_runtime_artifacts_model_from_dict,
     build_configured_tool_registry_provider_runtime_artifacts_model,
@@ -488,7 +490,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             plan[0]["input"].get("planned_tool_labels"),
-            ["calc_eval"],
+            ["Calculator"],
         )
 
     def test_build_tool_plan_provider_branch_accepts_extra_tool_from_registry_provider(
@@ -545,6 +547,105 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertIn("Allowed tool names: calc_eval_fast.", provider.last_prompt)
         self.assertIn("Fast Calculator", provider.last_prompt)
+
+    def test_get_enabled_planning_tool_names_prefers_extra_planner_and_excludes_builtin_task_plan(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        },
+                        "mock_plan_brief": {
+                            "template": "mock_plan",
+                            "label": "Brief Planner",
+                        },
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        self.assertEqual(
+            get_enabled_planning_tool_names(
+                registry_provider=registry_provider,
+            ),
+            ("mock_plan_brief", "calc_eval_fast"),
+        )
+
+    def test_build_tool_plan_provider_branch_uses_extra_planner_as_primary_and_hides_it_from_optional_prompt(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+            last_prompt = ""
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                self.last_prompt = prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "mock_plan_brief",
+                                    "input": {"prompt_preview": "should-be-ignored"},
+                                },
+                                {
+                                    "name": "calc_eval_fast",
+                                    "input": {"expression": "6/2"},
+                                },
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        },
+                        "mock_plan_brief": {
+                            "template": "mock_plan",
+                            "label": "Brief Planner",
+                        },
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+        provider = FakeProvider()
+
+        plan = build_tool_plan(
+            "请先规划再计算 [calc:1+2]",
+            provider=provider,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["mock_plan_brief", "calc_eval_fast"],
+        )
+        self.assertEqual(
+            plan[0]["input"].get("planned_tool_names"),
+            ["calc_eval_fast"],
+        )
+        self.assertEqual(
+            plan[0]["input"].get("planned_tool_labels"),
+            ["Fast Calculator"],
+        )
+        self.assertIn("Allowed tool names: calc_eval_fast.", provider.last_prompt)
+        self.assertNotIn("mock_plan_brief", provider.last_prompt)
+        self.assertNotIn("Brief Planner", provider.last_prompt)
+        self.assertIn("Do not include planner tools in the JSON", provider.last_prompt)
 
     def test_build_tool_plan_provider_empty_plan_is_respected_without_heuristic_fallback(
         self,
@@ -1027,7 +1128,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             artifacts.allowed_tool_labels,
-            ("Task Planner", "Knowledge Retrieval", "calc_eval"),
+            ("Task Planner", "Knowledge Retrieval", "Calculator"),
         )
         assert artifacts.provider_usage is not None
         self.assertEqual(artifacts.provider_usage.prompt_tokens, 21)
@@ -1107,7 +1208,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             artifacts.allowed_tool_labels,
-            ("Task Planner", "calc_eval"),
+            ("Task Planner", "Calculator"),
         )
         self.assertEqual(
             [item["name"] for item in artifacts.tool_plan],
@@ -1169,10 +1270,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 for detail in summary.available_tool_registry_profile_details
             ],
             [
-                ("default", ("Task Planner", "Knowledge Retrieval", "calc_eval")),
+                ("default", ("Task Planner", "Knowledge Retrieval", "Calculator")),
                 ("planning_only", ("Task Planner",)),
                 ("retrieval_only", ("Knowledge Retrieval",)),
-                ("calculator_only", ("calc_eval",)),
+                ("calculator_only", ("Calculator",)),
             ],
         )
         calculator_profile_detail = next(
@@ -1356,6 +1457,143 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     True,
                     ("hit_count", "knowledge_base_id"),
                 ),
+            ],
+        )
+
+    def test_build_settings_summary_response_uses_runtime_semantic_override_for_real_provider_source_tools(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url="https://example.invalid/v1",
+                api_key="secret",
+                tool_registry_profile="default",
+                tool_registry_provider_source="analytics_suite",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "runtime_semantic_kind": "provider_search",
+                                    "result_preview_keys": ["documents_total"],
+                                    "supports_result_preview": True,
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+            database_locator="postgresql://demo",
+        )
+
+        analytics_detail = next(
+            detail
+            for detail in summary.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    tool.kind,
+                    tool.semantic_kind,
+                    tuple(tool.effective_result_preview_keys),
+                )
+                for tool in analytics_detail.tool_details
+            ],
+            [
+                (
+                    "provider_search",
+                    "provider_retrieval",
+                    "provider_search",
+                    ("documents_total",),
+                )
+            ],
+        )
+
+    def test_build_settings_summary_response_includes_result_output_keys_for_real_provider_source_tools(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url="https://example.invalid/v1",
+                api_key="secret",
+                tool_registry_profile="default",
+                tool_registry_provider_source="analytics_suite",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "result_preview_keys": ["documents_total"],
+                                    "result_output_keys": ["documents_total"],
+                                    "runtime_semantic_kind": "provider_search",
+                                    "supports_result_preview": True,
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+            database_locator="postgresql://demo",
+        )
+
+        analytics_detail = next(
+            detail
+            for detail in summary.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    tuple(tool.effective_result_preview_keys),
+                    tuple(tool.effective_result_output_keys),
+                )
+                for tool in analytics_detail.tool_details
+            ],
+            [
+                (
+                    "provider_search",
+                    ("documents_total",),
+                    ("documents_total",),
+                )
             ],
         )
 
@@ -1733,10 +1971,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 for detail in response.available_tool_registry_profile_details
             ],
             [
-                ("default", ("Task Planner", "Knowledge Retrieval", "calc_eval")),
+                ("default", ("Task Planner", "Knowledge Retrieval", "Calculator")),
                 ("planning_only", ("Task Planner",)),
                 ("retrieval_only", ("Knowledge Retrieval",)),
-                ("calculator_only", ("calc_eval",)),
+                ("calculator_only", ("Calculator",)),
             ],
         )
         retrieval_profile_detail = next(
@@ -1881,6 +2119,71 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "knowledge_retrieval",
                     ("hit_count", "knowledge_base_id"),
                 ),
+            ],
+        )
+
+    def test_apply_tool_registry_preview_to_validate_response_includes_result_output_keys_for_real_provider_source_tools(
+        self,
+    ) -> None:
+        response = _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                message="ok",
+            ),
+            effective_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="analytics_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "result_preview_keys": ["documents_total"],
+                                    "result_output_keys": ["documents_total"],
+                                    "runtime_semantic_kind": "provider_search",
+                                    "supports_result_preview": True,
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        analytics_detail = next(
+            detail
+            for detail in response.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    tuple(tool.effective_result_preview_keys),
+                    tuple(tool.effective_result_output_keys),
+                )
+                for tool in analytics_detail.tool_details
+            ],
+            [
+                (
+                    "provider_search",
+                    ("documents_total",),
+                    ("documents_total",),
+                )
             ],
         )
 
@@ -4351,6 +4654,28 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertIsNone(payload)
+
+    def test_normalize_task_governance_dict_upgrades_builtin_calculator_label_from_internal_name(
+        self,
+    ) -> None:
+        payload = chat_persistence_module._normalize_task_governance_dict(  # type: ignore[attr-defined]
+            {
+                "profile": "calculator_only",
+                "provider_source": "default",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "profile": "calculator_only",
+                "provider_source": "default",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator"],
+            },
+        )
 
     def test_parse_task_governance_json_list_blob_preserves_raw_string_items(
         self,
@@ -13565,7 +13890,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("## Tool Registry Governance", markdown)
         self.assertIn("- Profiles: calculator_only", markdown)
         self.assertIn("- Provider Sources: default", markdown)
-        self.assertIn("- Allowed Tools: calc_eval", markdown)
+        self.assertIn("- Allowed Tools: Calculator", markdown)
 
     def test_build_session_export_markdown_includes_persisted_governance_summary(self) -> None:
         session = {
@@ -13629,7 +13954,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("## Tool Registry Governance", markdown)
         self.assertIn("- Profiles: calculator_only", markdown)
         self.assertIn("- Provider Sources: default", markdown)
-        self.assertIn("- Allowed Tools: calc_eval", markdown)
+        self.assertIn("- Allowed Tools: Calculator", markdown)
         self.assertIn("- Tool Registry Profile: calculator_only", markdown)
         self.assertIn("- Tool Registry Source: default", markdown)
 
@@ -14709,7 +15034,50 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             build_tool_plan_summary(plan),
-            "Planned tools: Task Planner, Knowledge Retrieval, calc_eval",
+            "Planned tools: Knowledge Retrieval, Calculator",
+        )
+
+    def test_build_tool_plan_summary_returns_none_when_only_planner_is_present(self) -> None:
+        plan = build_tool_plan("普通问答，不包含显式工具标记")
+
+        self.assertEqual(
+            build_tool_plan_summary(plan),
+            "Planned tools: none",
+        )
+
+    def test_build_tool_plan_summary_excludes_extra_primary_planner_and_keeps_execution_tools(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        },
+                        "mock_plan_brief": {
+                            "template": "mock_plan",
+                            "label": "Brief Planner",
+                        },
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        plan = build_tool_plan(
+            "请帮我计算 [calc:1+2]",
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            build_tool_plan_summary(
+                plan,
+                registry_provider=registry_provider,
+            ),
+            "Planned tools: Fast Calculator",
         )
 
     def test_build_usage_payload_supports_overall_and_planning_fields(self) -> None:
@@ -14799,6 +15167,136 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             prompt="普通问答，不包含显式计算标记",
             user_id="user-1",
             attempt=0,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Evaluate calculation -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Evaluate calculation",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "请帮我规划",
+                "echo": True,
+            },
+        )
+
+    def test_run_tool_task_plan_uses_registry_semantics_for_extra_retrieval_tool(self) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "task_retrieve_hot": {
+                            "template": "task_retrieve",
+                            "label": "Hot Retrieval",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        output = run_tool(
+            name="task_plan",
+            tool_input={
+                "prompt_preview": "请帮我规划",
+                "planned_tool_names": ["task_retrieve_hot"],
+            },
+            prompt="普通问答，不包含显式检索标记",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Retrieve supporting context -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Retrieve supporting context",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "请帮我规划",
+                "echo": True,
+            },
+        )
+
+    def test_run_tool_task_plan_uses_registry_semantics_for_extra_calculator_tool(self) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        output = run_tool(
+            name="task_plan",
+            tool_input={
+                "prompt_preview": "请帮我规划",
+                "planned_tool_names": ["calc_eval_fast"],
+            },
+            prompt="普通问答，不包含显式计算标记",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Evaluate calculation -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Evaluate calculation",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "请帮我规划",
+                "echo": True,
+            },
+        )
+
+    def test_run_tool_task_plan_filters_planner_tools_from_planned_tool_names(self) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        },
+                        "mock_plan_brief": {
+                            "template": "mock_plan",
+                            "label": "Brief Planner",
+                        },
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        output = run_tool(
+            name="task_plan",
+            tool_input={
+                "prompt_preview": "请帮我规划",
+                "planned_tool_names": ["mock_plan_brief", "calc_eval_fast"],
+            },
+            prompt="普通问答，不包含显式计算标记",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=registry_provider,
         )
 
         self.assertEqual(
@@ -15583,6 +16081,55 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             extra_tools["task_retrieve_hot"].result_preview_keys,
             ("tool_kind", "hit_count", "knowledge_base_id"),
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_accepts_runtime_semantic_kind(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        self.assertEqual(
+            extra_tools["provider_search"].runtime_semantic_kind,
+            "provider_search",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_accepts_result_output_keys(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "result_output_keys": [
+                            "documents_total",
+                            "documents_total",
+                            " ",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        self.assertEqual(
+            extra_tools["provider_search"].result_output_keys,
+            ("documents_total",),
         )
 
     def test_build_tool_registry_extra_tools_from_settings_ignores_unknown_template_and_existing_name(self) -> None:
@@ -20998,6 +21545,67 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
+    def test_build_configured_tool_registry_provider_preflight_summary_model_includes_result_output_keys_for_real_provider_tools(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            registry={
+                "provider_search": ToolRegistration(
+                    name="provider_search",
+                    kind="provider_retrieval",
+                    label="Provider Search",
+                    retryable_by_default=False,
+                    default_timeout_ms=15_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    result_preview_keys=("documents_total",),
+                    result_output_keys=("documents_total",),
+                    runtime_semantic_kind="provider_search",
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "query": str(tool_input.get("query", "")),
+                        "documents_total": 1,
+                        "documents": [{"id": "doc-1"}],
+                    },
+                ),
+            }
+        )
+
+        result = build_configured_tool_registry_provider_preflight_summary_model_from_parts(
+            provider=provider,
+            provider_source_name="provider_suite",
+            runtime_artifacts=build_configured_tool_registry_provider_runtime_artifacts_model(
+                task_id="task-1",
+                step_id="step-registry",
+                seq=2,
+                model="mock-gpt",
+                settings=SimpleNamespace(
+                    tool_registry_provider_source="provider_suite",
+                    tool_registry_provider_sources_json=json.dumps({}),
+                ),
+            ),
+            service_actions=(),
+            trace_write_count=0,
+            audit_event_count=0,
+        )
+
+        self.assertEqual(
+            result.tool_details,
+            (
+                {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "kind": "provider_retrieval",
+                    "semantic_kind": "provider_search",
+                    "retryable_by_default": False,
+                    "default_timeout_ms": 15_000,
+                    "requires_user_context": False,
+                    "supports_result_preview": True,
+                    "effective_result_preview_keys": ("documents_total",),
+                    "effective_result_output_keys": ("documents_total",),
+                },
+            ),
+        )
+
     def test_build_configured_tool_registry_provider_preflight_summary_model_keeps_fields(
         self,
     ) -> None:
@@ -26386,6 +26994,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_get_tool_semantic_kind_normalizes_extra_provider_planner_kind(self) -> None:
+        registration = ToolRegistration(
+            name="provider_plan",
+            kind="provider_planner",
+            label="Provider Planner",
+            retryable_by_default=False,
+            default_timeout_ms=8_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+            },
+        )
+
+        self.assertEqual(
+            get_tool_semantic_kind(
+                name="provider_plan",
+                registration=registration,
+            ),
+            "task_planner",
+        )
+
+    def test_build_tool_result_preview_infers_preview_shape_for_extra_provider_planner_kind(
+        self,
+    ) -> None:
+        output = {
+            "plan": "Analyze request -> Synthesize final answer",
+            "steps": [
+                "Analyze request",
+                "Synthesize final answer",
+            ],
+            "tool_kind": "provider_planner",
+            "raw_payload": {"audit": "keep-raw-only"},
+        }
+        registration = ToolRegistration(
+            name="provider_plan",
+            kind="provider_planner",
+            label="Provider Planner",
+            retryable_by_default=False,
+            default_timeout_ms=8_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+            },
+        )
+
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_plan",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "plan": "Analyze request -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Synthesize final answer",
+                ],
+            },
+        )
+
     def test_tool_runtime_helpers_expose_current_calc_defaults(self) -> None:
         self.assertTrue(tool_requires_user_context("calc_eval"))
         self.assertTrue(is_tool_retryable_by_default("calc_eval"))
@@ -26617,6 +27287,42 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(error_meta["tool"]["status"], "error")
         self.assertEqual(error_meta["tool"]["error"], "transient")
 
+    def test_build_tool_success_meta_includes_effective_result_output_keys_for_real_tool(
+        self,
+    ) -> None:
+        success_meta = build_tool_success_meta(
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            output={
+                "documents_total": 2,
+                "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                "tool_kind": "provider_retrieval",
+            },
+            retry_count=0,
+            last_error=None,
+            registration=ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "documents_total": 2,
+                    "tool_kind": "provider_retrieval",
+                },
+                result_preview_keys=("documents_total",),
+                result_output_keys=("documents_total",),
+                runtime_semantic_kind="provider_search",
+            ),
+        )
+
+        self.assertEqual(
+            success_meta["tool"]["effective_result_output_keys"],
+            ["documents_total"],
+        )
+
     def test_build_tool_start_and_error_payload_keep_current_shape(self) -> None:
         self.assertEqual(
             build_tool_start_payload(
@@ -26630,7 +27336,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "task_id": "task-1",
                 "step_id": "step-1",
                 "name": "calc_eval",
-                "display_name": "calc_eval",
+                "display_name": "Calculator",
                 "input": {"expression": "1+2*3"},
                 "kind": "local_calculator",
                 "semantic_kind": "local_calculator",
@@ -26693,11 +27399,11 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertEqual(meta["tool"]["name"], "calc_eval")
-        self.assertEqual(meta["tool"]["label"], "calc_eval")
+        self.assertEqual(meta["tool"]["label"], "Calculator")
         self.assertEqual(meta["tool"]["status"], "running")
         self.assertEqual(step["id"], "step-1")
         self.assertEqual(step["seq"], 3)
-        self.assertEqual(step["content"], "Tool running: calc_eval")
+        self.assertEqual(step["content"], "Tool running: Calculator")
 
     def test_build_action_step_initial_meta_and_step_use_display_label_for_mock_plan(
         self,
@@ -26767,7 +27473,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "task_id": "task-1",
                     "step_id": "step-1",
                     "name": "calc_eval",
-                    "display_name": "calc_eval",
+                    "display_name": "Calculator",
                     "input": {"expression": "1+2*3"},
                     "kind": "local_calculator",
                     "semantic_kind": "local_calculator",
@@ -27273,9 +27979,9 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             error_message="transient",
         )
 
-        self.assertEqual(success_step["content"], "Tool done: calc_eval")
+        self.assertEqual(success_step["content"], "Tool done: Calculator")
         self.assertEqual(success_step["meta"]["tool"]["status"], "done")
-        self.assertEqual(error_step["content"], "Tool error: calc_eval")
+        self.assertEqual(error_step["content"], "Tool error: Calculator")
         self.assertEqual(error_step["meta"]["tool"]["status"], "error")
 
     def test_build_tool_attempt_success_transition_keeps_current_shape(self) -> None:
@@ -27317,7 +28023,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             last_error=None,
         )
 
-        self.assertEqual(transition["action_step"]["content"], "Tool done: calc_eval")
+        self.assertEqual(transition["action_step"]["content"], "Tool done: Calculator")
         self.assertEqual(transition["action_step"]["meta"]["tool"]["status"], "done")
         self.assertEqual(
             transition["events"]["tool_end"],
@@ -27378,7 +28084,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             token_count=9,
         )
 
-        self.assertEqual(transition["action_step"]["content"], "Tool error: calc_eval")
+        self.assertEqual(transition["action_step"]["content"], "Tool error: Calculator")
         self.assertEqual(transition["action_step"]["meta"]["tool"]["status"], "error")
         self.assertTrue(transition["retryable"])
         self.assertEqual(
@@ -27562,7 +28268,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "tool_kind": "local_calculator",
                 },
             ),
-            'calc_eval: {"expression": "1+2*3", "result": 7.0}',
+            'Calculator: {"expression": "1+2*3", "result": 7.0}',
         )
 
     def test_build_tool_step_updates_and_observation_use_display_label_for_mock_plan(
@@ -27886,7 +28592,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertFalse(outcome["retryable"])
         self.assertIsNone(outcome["error_message"])
         self.assertEqual(outcome["retry_count"], 0)
-        self.assertEqual(outcome["action_step"]["content"], "Tool done: calc_eval")
+        self.assertEqual(outcome["action_step"]["content"], "Tool done: Calculator")
         self.assertEqual(outcome["events"]["tool_end"]["status"], "done")
 
     def test_build_tool_attempt_outcome_keeps_error_shape(self) -> None:
@@ -27934,7 +28640,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertTrue(outcome["retryable"])
         self.assertEqual(outcome["error_message"], "transient")
         self.assertEqual(outcome["retry_count"], 1)
-        self.assertEqual(outcome["action_step"]["content"], "Tool error: calc_eval")
+        self.assertEqual(outcome["action_step"]["content"], "Tool error: Calculator")
         self.assertEqual(outcome["events"]["tool_end"]["status"], "error")
 
     def test_build_tool_attempt_outcome_honors_runtime_preview_policy(self) -> None:
@@ -28014,7 +28720,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(context["step_id"], "step-1")
         self.assertEqual(context["action_step"]["id"], "step-1")
         self.assertEqual(context["action_step"]["seq"], 3)
-        self.assertEqual(context["action_step"]["content"], "Tool running: calc_eval")
+        self.assertEqual(context["action_step"]["content"], "Tool running: Calculator")
         self.assertEqual(context["action_step"]["meta"]["tool"]["status"], "running")
 
     def test_build_tool_iteration_context_uses_explicit_display_name_for_extra_tool(
@@ -28087,7 +28793,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             artifacts["observation"],
-            'calc_eval: {"expression": "1+2*3", "result": 7.0}',
+            'Calculator: {"expression": "1+2*3", "result": 7.0}',
         )
         self.assertEqual(
             artifacts["output"],
@@ -28164,6 +28870,81 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             artifacts["observation"],
             'Provider Math: {"expression": "1+2*3", "result": 7.0}',
+        )
+        self.assertEqual(artifacts["output"], output)
+
+    def test_build_tool_iteration_success_artifacts_infer_preview_shape_for_extra_provider_planner_kind(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_plan",
+            kind="provider_planner",
+            label="Provider Planner",
+            retryable_by_default=False,
+            default_timeout_ms=8_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+                "prompt": prompt,
+                "user_id": user_id,
+            },
+        )
+        output = {
+            "plan": "Analyze request -> Synthesize final answer",
+            "steps": [
+                "Analyze request",
+                "Synthesize final answer",
+            ],
+            "tool_kind": "provider_planner",
+            "raw_payload": {"audit": "keep-raw-only"},
+        }
+        action_step = build_tool_step_success_update(
+            action_step={
+                "id": "step-3",
+                "seq": 5,
+                "type": "action",
+                "content": "Tool running: Provider Planner",
+                "meta": {
+                    "tool": {
+                        "name": "provider_plan",
+                        "label": "Provider Planner",
+                        "status": "running",
+                    }
+                },
+            },
+            name="provider_plan",
+            tool_input={"prompt_preview": "please plan"},
+            output=output,
+            retry_count=0,
+            token_count=7,
+            last_error=None,
+            display_name="Provider Planner",
+            registration=registration,
+        )
+
+        artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-3",
+            action_step=action_step,
+            name="provider_plan",
+            display_name="Provider Planner",
+            registration=registration,
+        )
+
+        self.assertEqual(
+            artifacts["trace"]["step"]["meta"]["tool"]["output_preview"],
+            {
+                "plan": "Analyze request -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Synthesize final answer",
+                ],
+            },
+        )
+        self.assertEqual(
+            artifacts["observation"],
+            'Provider Planner: {"plan": "Analyze request -> Synthesize final answer", "steps": ["Analyze request", "Synthesize final answer"]}',
         )
         self.assertEqual(artifacts["output"], output)
 
@@ -28350,7 +29131,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "task_id": "task-1",
                     "step_id": "step-1",
                     "name": "calc_eval",
-                    "display_name": "calc_eval",
+                    "display_name": "Calculator",
                     "input": {"expression": "1+2*3"},
                     "kind": "local_calculator",
                     "semantic_kind": "local_calculator",
@@ -28420,7 +29201,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             execution["start_events"]["tool_start"]["display_name"],
-            "calc_eval",
+            "Calculator",
         )
 
     def test_build_tool_iteration_execution_keeps_terminal_error_shape(self) -> None:
@@ -28751,7 +29532,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result["start_events"]["state"]["phase"], "tool_running")
         self.assertEqual(
             result["plan_item_result"]["success_bundle"]["trace"]["step"]["content"],
-            "Tool done: calc_eval",
+            "Tool done: Calculator",
         )
         self.assertEqual(result["tool_end_event"]["status"], "done")
         self.assertFalse(bool(result["retryable"]))
@@ -28761,11 +29542,11 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNone(result["terminal_effects"])
         self.assertEqual(
             result["success_effects"]["trace"]["step"]["content"],
-            "Tool done: calc_eval",
+            "Tool done: Calculator",
         )
         self.assertEqual(
             result["next_action_step"]["content"],
-            "Tool done: calc_eval",
+            "Tool done: Calculator",
         )
         self.assertIsNone(result["terminal_failure"])
 
@@ -29211,7 +29992,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(postprocess["trace"], success_artifacts["trace"])
         self.assertEqual(
             postprocess["observation"],
-            'calc_eval: {"expression": "1+2*3", "result": 7.0}',
+            'Calculator: {"expression": "1+2*3", "result": 7.0}',
         )
         self.assertEqual(postprocess["output"], success_artifacts["output"])
         self.assertIsNone(postprocess["rag_followup"])
@@ -29263,7 +30044,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(effects["trace"]["step"]["content"], "Tool done: calc_eval")
         self.assertEqual(
             effects["observation"],
-            'calc_eval: {"expression": "1+2*3", "result": 7.0}',
+            'Calculator: {"expression": "1+2*3", "result": 7.0}',
         )
         self.assertIsNone(effects["rag_followup"])
 
@@ -30481,7 +31262,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNone(final_item["result"]["success_effects"])
         self.assertEqual(
             final_item["result"]["trace_event"]["step"]["content"],
-            "Tool error: calc_eval",
+            "Tool error: Calculator",
         )
         self.assertEqual(
             final_item["result"]["terminal_effects"]["state"]["phase"],
@@ -31113,6 +31894,115 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "hit_count": 2,
                 "knowledge_base_id": "demo-kb",
             },
+        )
+
+    def test_execute_tool_plan_item_service_execution_uses_runtime_semantic_override_for_real_search_tool(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "documents_total": 2,
+                    "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                    "chunks": ["internal retrieval stub"],
+                    "knowledge_base_id": "provider-kb",
+                },
+                result_preview_keys=("documents_total",),
+                result_output_keys=("documents_total",),
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_start_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_start"
+        )
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(tool_start_event["semantic_kind"], "provider_search")
+        self.assertEqual(tool_end_event["semantic_kind"], "provider_search")
+        self.assertEqual(
+            tool_start_event["effective_result_output_keys"],
+            ["documents_total"],
+        )
+        self.assertEqual(
+            tool_end_event["effective_result_output_keys"],
+            ["documents_total"],
+        )
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
+            'Provider Search: {"documents_total": 2}',
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["loop_result"]["next_action_step"]["meta"]["tool"]["output"],
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["loop_result"]["next_action_step"]["meta"]["tool"]["effective_result_output_keys"],
+            ["documents_total"],
+        )
+        self.assertEqual(
+            [
+                (item["kind"], item.get("trace_step", {}).get("id"))
+                for item in final_item["result"]["service_actions"]
+            ],
+            [("trace_write", "step-1"), ("continue", None)],
         )
 
     def test_execute_tool_plan_item_service_actions_keeps_continue_shape(self) -> None:
