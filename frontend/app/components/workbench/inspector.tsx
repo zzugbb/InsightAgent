@@ -21,14 +21,13 @@ import type {
 } from "./types";
 import { TraceFlowView } from "./trace-flow-view";
 import {
+  filterTraceSteps,
   formatTimestamp,
   formatTraceStepMetaSubtitle,
   getStepTitle,
   getTaskLabel,
-  matchesTraceStepSemanticFilter,
   resolveTraceStepSemanticStats,
   normalizeTraceStepKind,
-  matchesTraceStepSearchQuery,
   resolveTraceStepDisplayContent,
   resolveSessionGovernanceSummary,
   resolveInspectorTaskUsage,
@@ -161,16 +160,10 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
   );
 
   const filteredTraceSteps = useMemo(() => {
-    const q = traceSearchQuery.trim().toLowerCase();
-    return sseTraceSteps.filter((step) => {
-      const kind = normalizeTraceStepKind(step);
-      if (traceKindFilter !== "all" && kind !== traceKindFilter) {
-        return false;
-      }
-      if (!matchesTraceStepSemanticFilter(step, traceSemanticFilter)) {
-        return false;
-      }
-      return matchesTraceStepSearchQuery(step, q);
+    return filterTraceSteps(sseTraceSteps, {
+      kindFilter: traceKindFilter,
+      semanticFilter: traceSemanticFilter,
+      searchQuery: traceSearchQuery,
     });
   }, [sseTraceSteps, traceKindFilter, traceSemanticFilter, traceSearchQuery]);
 

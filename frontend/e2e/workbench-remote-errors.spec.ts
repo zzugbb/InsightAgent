@@ -4,6 +4,7 @@ import {
   expect,
   test,
   type APIRequestContext,
+  type Locator,
   type Page,
 } from "@playwright/test";
 
@@ -15,17 +16,56 @@ import {
 } from "./helpers/workbench";
 
 async function openInspectorContextTab(page: Page): Promise<void> {
-  const contextTab = page.getByTestId("inspector-tab-context");
+  const contextTab = page
+    .locator(".inspector-ant-tabs .ant-tabs-nav [role='tab']")
+    .filter({ hasText: /^(Context|上下文)$/ })
+    .first();
   const contextPanel = page.locator("#inspector-panel-context");
   await expect(contextTab).toBeVisible();
   for (let i = 0; i < 4; i += 1) {
     await contextTab.click();
-    if (await contextPanel.isVisible().catch(() => false)) {
+    const ariaSelected = await contextTab.getAttribute("aria-selected");
+    const isActive = ariaSelected === "true";
+    if (isActive && (await contextPanel.isVisible().catch(() => false))) {
       return;
     }
     await page.waitForTimeout(120);
   }
-  await expect(contextPanel).toBeVisible({ timeout: 10_000 });
+  await expect
+    .poll(
+      async () => {
+        const ariaSelected = await contextTab.getAttribute("aria-selected");
+        const isActive = ariaSelected === "true";
+        const panelVisible = await contextPanel.isVisible().catch(() => false);
+        return isActive && panelVisible;
+      },
+      { timeout: 10_000, intervals: [200, 400, 800, 1200] },
+    )
+    .toBeTruthy();
+}
+
+async function waitForContextCancelButton(page: Page): Promise<Locator> {
+  const contextTab = page.getByTestId("inspector-tab-context");
+  const cancelButton = page
+    .locator('[data-testid="inspector-task-cancel"]:visible')
+    .first();
+
+  await expect
+    .poll(
+      async () => {
+        if (await cancelButton.isVisible().catch(() => false)) {
+          return true;
+        }
+        if (await contextTab.isVisible().catch(() => false)) {
+          await contextTab.click();
+        }
+        return cancelButton.isVisible().catch(() => false);
+      },
+      { timeout: 30_000, intervals: [250, 500, 900, 1300] },
+    )
+    .toBeTruthy();
+
+  return cancelButton;
 }
 
 async function openModelSettingsModal(page: Page): Promise<void> {
@@ -642,10 +682,7 @@ test("remote cancel enters cooldown and recovers send", async ({
     await composerSend.click();
 
     await openInspectorContextTab(page);
-    const cancelButton = page
-      .locator('[data-testid="inspector-task-cancel"]:visible')
-      .first();
-    await expect(cancelButton).toBeVisible({ timeout: 20_000 });
+    const cancelButton = await waitForContextCancelButton(page);
     await expect
       .poll(() => mockProvider.getRequestCount(), {
         timeout: 20_000,

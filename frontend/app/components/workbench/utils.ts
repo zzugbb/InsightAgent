@@ -61,6 +61,15 @@ export type TraceStepSemanticFilter =
   | "retrieval"
   | "calculator";
 
+export type TraceStepKindFilter =
+  | "all"
+  | "thought"
+  | "action"
+  | "observation"
+  | "tool"
+  | "rag"
+  | "other";
+
 function parseUsageNumber(v: unknown): number | null {
   if (v === null || v === undefined) {
     return null;
@@ -477,6 +486,15 @@ export function matchesTraceStepSearchQuery(
         .filter((item): item is string => typeof item === "string")
         .map((item) => item.toLowerCase())
     : [];
+  const ragKnowledgeBaseId =
+    typeof step.meta?.rag?.knowledge_base_id === "string"
+      ? step.meta.rag.knowledge_base_id.toLowerCase()
+      : "";
+  const ragChunks = Array.isArray(step.meta?.rag?.chunks)
+    ? step.meta.rag.chunks
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.toLowerCase())
+    : [];
   return (
     title.includes(q) ||
     content.includes(q) ||
@@ -487,6 +505,8 @@ export function matchesTraceStepSearchQuery(
     toolKind.includes(q) ||
     toolSemanticKind.includes(q) ||
     toolSemanticFamily.includes(q) ||
+    ragKnowledgeBaseId.includes(q) ||
+    ragChunks.some((chunk) => chunk.includes(q)) ||
     previewKeys.some((key) => key.includes(q)) ||
     outputKeys.some((key) => key.includes(q))
   );
@@ -529,6 +549,29 @@ export function matchesTraceStepSemanticFilter(
     return true;
   }
   return resolveTraceStepSemanticCategory(step) === filter;
+}
+
+export function filterTraceSteps(
+  steps: TraceStepPayload[],
+  args: {
+    kindFilter?: TraceStepKindFilter;
+    semanticFilter?: TraceStepSemanticFilter;
+    searchQuery?: string;
+  } = {},
+): TraceStepPayload[] {
+  const kindFilter = args.kindFilter ?? "all";
+  const semanticFilter = args.semanticFilter ?? "all";
+  const searchQuery = args.searchQuery ?? "";
+  return steps.filter((step) => {
+    const kind = normalizeTraceStepKind(step);
+    if (kindFilter !== "all" && kind !== kindFilter) {
+      return false;
+    }
+    if (!matchesTraceStepSemanticFilter(step, semanticFilter)) {
+      return false;
+    }
+    return matchesTraceStepSearchQuery(step, searchQuery);
+  });
 }
 
 export function resolveTraceStepSemanticStats(
@@ -580,6 +623,23 @@ function formatTraceToolSemanticDescriptor(tool: TraceStepMeta["tool"]): string 
     return semanticKind;
   }
   return `${semanticKind} · ${semanticFamily}`;
+}
+
+function formatTraceToolDisplayTitle(tool: TraceStepMeta["tool"]): string {
+  if (!tool) {
+    return "";
+  }
+  const toolLabel =
+    typeof tool.label === "string" && tool.label.trim()
+      ? tool.label.trim()
+      : typeof tool.name === "string" && tool.name.trim()
+        ? tool.name.trim()
+        : "";
+  if (!toolLabel) {
+    return "";
+  }
+  const semanticDescriptor = formatTraceToolSemanticDescriptor(tool);
+  return semanticDescriptor ? `${toolLabel} [${semanticDescriptor}]` : toolLabel;
 }
 
 function sortTraceStepsBySeq(steps: TraceStepPayload[]): TraceStepPayload[] {
@@ -913,6 +973,10 @@ export function getTraceFlowKindLabel(
 }
 
 export function getStepTitle(step: TraceStepPayload): string {
+  const toolTitle = formatTraceToolDisplayTitle(step.meta?.tool);
+  if (toolTitle) {
+    return toolTitle;
+  }
   const rawTitle =
     typeof step.meta?.label === "string"
       ? step.meta.label

@@ -16,6 +16,7 @@ import { TraceFlowView } from "../../components/workbench/trace-flow-view";
 import type { TaskSummary } from "../../components/workbench/types";
 import {
   API_BASE_URL,
+  filterTraceSteps,
   formatTimestamp,
   formatTraceStepMetaSubtitle,
   getStepTitle,
@@ -131,46 +132,9 @@ export default function TaskDetailPage() {
   const taskUsage = useMemo(() => (task ? resolveTaskUsageFromTask(task) : null), [task]);
 
   const filteredTraceSteps = useMemo(() => {
-    const q = traceSearchQuery.trim().toLowerCase();
-    return traceSteps.filter((step) => {
-      const kind = normalizeTraceStepKind(step);
-      if (traceKindFilter !== "all" && kind !== traceKindFilter) {
-        return false;
-      }
-      if (!q) {
-        return true;
-      }
-      const title = getStepTitle(step).toLowerCase();
-      const content = (resolveTraceStepDisplayContent(step) ?? "").toLowerCase();
-      const id = step.id.toLowerCase();
-      const model =
-        typeof step.meta?.model === "string" ? step.meta.model.toLowerCase() : "";
-      const toolName =
-        typeof step.meta?.tool?.name === "string"
-          ? step.meta.tool.name.toLowerCase()
-          : "";
-      const toolLabel =
-        typeof step.meta?.tool?.label === "string"
-          ? step.meta.tool.label.toLowerCase()
-          : "";
-      const toolKind =
-        typeof step.meta?.tool?.kind === "string"
-          ? step.meta.tool.kind.toLowerCase()
-          : "";
-      const toolSemanticKind =
-        typeof step.meta?.tool?.semantic_kind === "string"
-          ? step.meta.tool.semantic_kind.toLowerCase()
-          : "";
-      return (
-        title.includes(q) ||
-        content.includes(q) ||
-        id.includes(q) ||
-        model.includes(q) ||
-        toolName.includes(q) ||
-        toolLabel.includes(q) ||
-        toolKind.includes(q) ||
-        toolSemanticKind.includes(q)
-      );
+    return filterTraceSteps(traceSteps, {
+      kindFilter: traceKindFilter,
+      searchQuery: traceSearchQuery,
     });
   }, [traceKindFilter, traceSearchQuery, traceSteps]);
 

@@ -4226,14 +4226,10 @@ def build_tool_result_preview(
         return output
     if not resolved_registration.supports_result_preview:
         return None
-    result_preview_keys = resolved_registration.result_preview_keys
-    if not result_preview_keys:
-        result_preview_keys = _get_default_result_preview_keys_for_semantic_kind(
-            get_tool_runtime_semantic_kind(
-                name=name,
-                registration=resolved_registration,
-            )
-        )
+    result_preview_keys = get_tool_effective_result_preview_keys(
+        name=name,
+        registration=resolved_registration,
+    )
     if result_preview_keys:
         return {
             key: output[key] for key in result_preview_keys if key in output
@@ -4277,12 +4273,10 @@ def build_tool_runtime_semantics_meta(
         name=canonical_name,
         registration=resolved_registration,
     )
-    effective_result_preview_keys: tuple[str, ...] = ()
-    if resolved_registration.supports_result_preview:
-        effective_result_preview_keys = (
-            resolved_registration.result_preview_keys
-            or _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
-        )
+    effective_result_preview_keys = get_tool_effective_result_preview_keys(
+        name=canonical_name,
+        registration=resolved_registration,
+    )
     effective_result_output_keys = get_tool_effective_result_output_keys(
         name=canonical_name,
         registration=resolved_registration,
@@ -6778,12 +6772,37 @@ def get_tool_effective_result_output_keys(
     )
     if explicit_runtime_semantic_kind is None or not resolved_registration.supports_result_preview:
         return ()
-    return (
-        resolved_registration.result_preview_keys
-        or _get_default_result_preview_keys_for_semantic_kind(
-            explicit_runtime_semantic_kind
-        )
+    return get_tool_effective_result_preview_keys(
+        name=normalized_name,
+        registration=resolved_registration,
     )
+
+
+def get_tool_effective_result_preview_keys(
+    *,
+    name: str,
+    registration: ToolRegistration | None = None,
+) -> tuple[str, ...]:
+    normalized_name = normalize_tool_registry_name(name)
+    resolved_registration = registration or resolve_tool_registration(normalized_name)
+    if resolved_registration is None or not resolved_registration.supports_result_preview:
+        return ()
+    if resolved_registration.result_preview_keys:
+        return resolved_registration.result_preview_keys
+    semantic_kind = get_tool_runtime_semantic_kind(
+        name=normalized_name,
+        registration=resolved_registration,
+    )
+    preview_keys = _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
+    if preview_keys:
+        return preview_keys
+    semantic_family = get_tool_semantic_kind(
+        name=normalized_name,
+        registration=resolved_registration,
+    )
+    if semantic_family and semantic_family != semantic_kind:
+        return _get_default_result_preview_keys_for_semantic_kind(semantic_family)
+    return ()
 
 
 def _get_default_result_preview_keys_for_semantic_kind(
@@ -6815,12 +6834,10 @@ def build_configured_tool_registry_provider_preflight_tool_details(
             name=tool_name,
             registration=registration,
         )
-        effective_result_preview_keys: tuple[str, ...] = ()
-        if registration.supports_result_preview:
-            effective_result_preview_keys = (
-                registration.result_preview_keys
-                or _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
-            )
+        effective_result_preview_keys = get_tool_effective_result_preview_keys(
+            name=tool_name,
+            registration=registration,
+        )
         effective_result_output_keys = get_tool_effective_result_output_keys(
             name=tool_name,
             registration=registration,

@@ -104,6 +104,55 @@
   里，会同时保留 `semantic_kind=provider_search` 与 `semantic_family=knowledge_retrieval`；因此 runtime outward 终于既能表达
   “真实执行 identity”，又能继续保留 retrieval/calculator/planner 这层产品语义 family，而不需要回落到本地模板语义。
   校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`631/631`）。
+- 阶段 5 主线续推（2026-06-29，real tool semantic-family preview/output inheritance）：
+  `backend/app/services/tool_runtime.py` 现已新增 shared
+  `get_tool_effective_result_preview_keys()`，并让 `build_tool_result_preview()`、
+  `build_tool_runtime_semantics_meta()`、`build_configured_tool_registry_provider_preflight_tool_details()` 与
+  `get_tool_effective_result_output_keys()` 一起复用。当前当某个 real tool 已显式声明
+  `runtime_semantic_kind=provider_search`、也启用了 preview policy，但没有手写 `result_preview_keys /
+  result_output_keys` 时，runtime 会先尝试 execution semantic 的默认 preview keys；若这层拿不到，再回退到
+  `semantic_family=knowledge_retrieval` 这类产品家族的默认 preview keys，并继续把它们作为 implicit output keys 使用。
+  这样 direct-runtime 执行、settings summary、validate preview、provider preflight 与执行期
+  `tool_start/tool_end` / action-step `tool.output` 都能继续自动收口到 retrieval/calculator 家族的默认摘要字段，
+  而不需要每个 real tool 重复声明一份与 family 默认值等价的 projection 配置。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`634/634`）。
+- 阶段 5 主线续推（2026-06-29，productized tool titles in trace preview/export）：
+  `backend/app/services/chat_persistence_service.py` 现已新增 shared
+  `get_trace_step_display_title()`，并让 trace preview title 与 task export markdown heading 一起复用。当前
+  tool step 不再只回落到 `action / tool_call / tool_result` 这类通用类型名，而会优先按
+  `meta.tool.label/name + [semantic_kind · semantic_family]` 生成标题；因此像 `provider_search` 这类 real tool 在
+  task trace preview、session export trace preview 与 task export markdown 的 Trace Steps 标题里，会直接显示
+  `Provider Search [provider_search · knowledge_retrieval]`，同时正文继续复用 preview-safe `get_trace_step_display_content()`
+  输出。校验结果：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`636/636`）。
+- 阶段 5 主线续推（2026-06-29，session export/live trace title alignment）：
+  `backend/app/api/routes/sessions.py` 现已继续把 session export markdown 的 trace preview 列表并到这条产品化标题链。
+  当前 `_build_session_export_markdown()` 在 `trace_preview.title` 已经明显优于通用 `type` 时，会直接输出
+  `Provider Search [provider_search · knowledge_retrieval]` 这类 shared title，而不再额外前缀 `action` 之类 raw step type；
+  因此 session export markdown 终于和 task export / trace preview 一起统一到了同一份用户可见工具标题语义上，
+  同时保持 session export JSON outward 结构不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`637/637`）。
+- 阶段 5 协同（2026-06-29，full e2e revalidation on productized planner/calculator semantics）：
+  本轮后端没有再扩外部 API 字段，但围绕 `planning_only / calculator_only` 与 task/session governance 的既有产品化语义，
+  又完成了一轮全量前后端回归。当前 usage-dashboard 主链里旧的 `calc_eval` 用户可见断言与旧
+  `planning_only` 四步摘要，已全部对齐到后端持续输出的 `Calculator` 与 planner-only summary；因此
+  live trace、task detail replay、task/session export 与 governance 摘要不需要再为旧文案保兼容分叉。
+  校验结果：`bash scripts/ci_run_backend_e2e.sh --phase main --base-url http://127.0.0.1:8000` 通过，
+  `bash scripts/ci_run_backend_e2e.sh --phase timeout --base-url http://127.0.0.1:8010` 通过，
+  `PLAYWRIGHT_BROWSERS_PATH=$HOME/Library/Caches/ms-playwright bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001`
+  通过（`47/47`），`PLAYWRIGHT_BROWSERS_PATH=$HOME/Library/Caches/ms-playwright bash scripts/ci_run_frontend_e2e.sh --phase smoke --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001`
+  通过（`15/15`），`bash scripts/test_ci_e2e_tooling.sh common` 通过。
+- 阶段 5 主线续推（2026-06-29，mock final-answer semantic bridge for planned/real tools）：
+  `backend/app/providers/mock_provider.py` 现已继续把 mock 最终回答从“识别少数 built-in observation”推进到
+  “继续消费已经产品化的 planner / real-tool 投影结果”。当前 `MockLLMProvider.generate()` 在保留固定 mock 前缀的同时，
+  不只会按 `plan`、`expression/result`、`hit_count/knowledge_base_id` 生成 `Summary: ...`，也会对只带
+  `steps` 的 planner observation 与只带 `documents_total` 的 retrieval/provider-search observation 做最小综合，
+  输出 `Planned steps - ...` 与 `Retrieved N documents.`，而不再退回 `Task Planner Suite completed.`、
+  `Provider Search completed.` 这类默认 stub。这样 extra/real tools 已进入 execution/trace/export 主链后的产品化结果，
+  终于连 mock 最终回答层也能继续消费；外部 SSE / trace / export / e2e 契约保持不变。校验结果：
+  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`639/639`），
+  `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`
+  通过（`22/22`），`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，
+  `bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。
 - 阶段 5 下一步（2026-06-04，provider-assisted planner 首版）：`chat_execution_service.py` 现已让 `build_tool_plan(prompt, provider=provider)` 在非 `mock` provider 下先尝试远端模型生成受限 JSON tool plan，再把结果约束回 `task_plan / task_retrieve / calc_eval` 这条现有执行 schema；若远端返回无效 JSON、未知工具、非法表达式或直接抛错，则静默回退到规则 planner，因此默认 SSE/trace/tool execution 契约保持不变
 - 阶段 5 下一步（2026-06-04，planning usage / overall usage 对齐）：provider-assisted planner 的调用现已纳入 usage/cost 闭环；planning trace step 会写入该次规划的 token/cost，`done.usage` 额外补充 `planning_*` 与 `overall_*` 字段，而原有 `prompt_tokens / completion_tokens / cost_estimate` 仍保留最终回答语义
 - 阶段 5 协同（2026-06-05，frontend e2e stabilization）：当前轮次优先处理 `frontend/e2e/usage-dashboard.spec.ts` 的 CI

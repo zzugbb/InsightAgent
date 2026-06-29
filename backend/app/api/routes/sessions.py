@@ -327,8 +327,17 @@ def _build_session_export_markdown(payload: SessionExportJsonResponse) -> str:
                 lines.append("- Trace Preview:")
                 for preview in task.trace_preview:
                     seq = preview.seq if preview.seq is not None else "-"
+                    preview_type = preview.type.replace("_", " ").strip()
+                    preview_title = preview.title.strip()
+                    preview_heading = (
+                        preview_type
+                        if not preview_title
+                        else preview_title
+                        if preview_title.casefold() != preview_type.casefold()
+                        else preview_type
+                    )
                     lines.append(
-                        f"  - seq={seq} · {preview.type} · {preview.title} · {preview.content_excerpt or '(empty)'}",
+                        f"  - seq={seq} · {preview_heading} · {preview.content_excerpt or '(empty)'}",
                     )
             lines.append("")
 

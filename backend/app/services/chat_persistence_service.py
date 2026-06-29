@@ -899,6 +899,40 @@ def _stringify_trace_tool_output_preview(value: object) -> str:
     return ""
 
 
+def _format_trace_tool_semantic_descriptor(tool_meta: dict[str, object]) -> str:
+    semantic_kind = str(tool_meta.get("semantic_kind") or tool_meta.get("kind") or "").strip()
+    semantic_family = str(tool_meta.get("semantic_family") or "").strip()
+    if not semantic_kind:
+        return semantic_family
+    if not semantic_family or semantic_family == semantic_kind:
+        return semantic_kind
+    return f"{semantic_kind} · {semantic_family}"
+
+
+def get_trace_step_display_title(step: TraceStep) -> str:
+    meta = getattr(step, "meta", None)
+    tool_meta = getattr(meta, "tool", None) if meta is not None else None
+    if isinstance(tool_meta, dict):
+        tool_label = str(tool_meta.get("label") or tool_meta.get("name") or "").strip()
+        semantic_descriptor = _format_trace_tool_semantic_descriptor(tool_meta)
+        if tool_label:
+            return (
+                f"{tool_label} [{semantic_descriptor}]"
+                if semantic_descriptor
+                else tool_label
+            )
+    label = getattr(meta, "label", None) if meta is not None else None
+    if isinstance(label, str) and label.strip():
+        return label.strip()
+    step_type = getattr(meta, "step_type", None) if meta is not None else None
+    if isinstance(step_type, str) and step_type.strip():
+        return step_type.strip().replace("_", " ")
+    raw_type = getattr(step, "type", None)
+    if isinstance(raw_type, str) and raw_type.strip():
+        return raw_type.strip().replace("_", " ")
+    return "step"
+
+
 def get_trace_step_display_content(step: TraceStep) -> str:
     content = str(getattr(step, "content", "") or "")
     meta = getattr(step, "meta", None)
@@ -941,17 +975,7 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
 
 
 def _trace_preview_title(step: TraceStep) -> str:
-    meta = getattr(step, "meta", None)
-    label = getattr(meta, "label", None) if meta is not None else None
-    if isinstance(label, str) and label.strip():
-        return label.strip()
-    step_type = getattr(meta, "step_type", None) if meta is not None else None
-    if isinstance(step_type, str) and step_type.strip():
-        return step_type.strip().replace("_", " ")
-    raw_type = getattr(step, "type", None)
-    if isinstance(raw_type, str) and raw_type.strip():
-        return raw_type.strip().replace("_", " ")
-    return "step"
+    return get_trace_step_display_title(step)
 
 
 def get_task_trace_preview_summary_from_task(

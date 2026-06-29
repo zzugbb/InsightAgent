@@ -497,7 +497,12 @@ def _build_task_export_markdown(payload: TaskExportJsonResponse) -> str:
     else:
         for idx, step in enumerate(payload.trace.steps, start=1):
             seq = step.seq if step.seq is not None else idx
-            lines.append(f"### {idx}. seq={seq} · {step.type} · {step.id}")
+            lines.append(
+                "### "
+                f"{idx}. seq={seq} · "
+                f"{chat_persistence_service.get_trace_step_display_title(step)}"
+                f" · {step.id}"
+            )
             lines.append("")
             step_meta = chat_persistence_service.get_trace_step_markdown_meta(step)
             if step_meta is not None:

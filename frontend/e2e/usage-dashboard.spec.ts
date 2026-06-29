@@ -603,7 +603,7 @@ test("model settings validate previews calculator suite enabled tools", async ({
   await expect(metaDescriptions).toContainText("Calculator Suite");
   await expect(
     page.getByTestId("model-settings-selected-profile-summary"),
-  ).toContainText("calc_eval");
+  ).toContainText("Calculator");
   await expect(
     page.getByTestId("model-settings-selected-source-summary"),
   ).toContainText("calculator_only");
@@ -647,7 +647,7 @@ test("saved planning-only profile constrains actual trace allowed tools", async 
   await expectLatestAssistantMessageSummary(page, {
     contains: [
       "This is a mock response from InsightAgent",
-      "Summary: Planned steps - Analyze request -> Retrieve supporting context -> Evaluate calculation -> Synthesize final answer.",
+      "Summary: Planned steps - Analyze request -> Synthesize final answer.",
     ],
     notContains: ['Task Planner: {"plan":'],
   });
@@ -728,7 +728,7 @@ test("saved calculator-only profile executes calculator without planner or retri
   await ensureWorkbenchReady(page, auth);
   const savedPayload = await saveToolRegistryProfile(page, "calculator_only");
   expect(savedPayload.tool_registry_profile).toBe("calculator_only");
-  expect(savedPayload.enabled_tool_labels).toEqual(["calc_eval"]);
+  expect(savedPayload.enabled_tool_labels).toEqual(["Calculator"]);
 
   await submitPromptAndCaptureTaskId(
     page,
@@ -742,12 +742,12 @@ test("saved calculator-only profile executes calculator without planner or retri
   await expect(allowedToolsMeta).toBeVisible({ timeout: 20_000 });
   await expect(allowedToolsMeta).toContainText("Profile calculator_only");
   await expect(allowedToolsMeta).toContainText("Source default");
-  await expect(allowedToolsMeta).toContainText("calc_eval");
+  await expect(allowedToolsMeta).toContainText("Calculator");
   await expect(allowedToolsMeta).not.toContainText("Task Planner");
   await expect(allowedToolsMeta).not.toContainText("Knowledge Retrieval");
 
   await expect(
-    page.getByTestId("trace-card").filter({ hasText: "calc_eval" }).first(),
+    page.getByTestId("trace-card").filter({ hasText: "Calculator" }).first(),
   ).toBeVisible({ timeout: 20_000 });
   await expectLatestAssistantMessageSummary(page, {
     contains: [
@@ -759,14 +759,14 @@ test("saved calculator-only profile executes calculator without planner or retri
   });
 
   const traceFeedText = await page.getByTestId("inspector-trace-feed").textContent();
-  expect(traceFeedText ?? "").toContain("calc_eval");
+  expect(traceFeedText ?? "").toContain("Calculator");
   expect(traceFeedText ?? "").not.toContain("Task Planner");
   expect(traceFeedText ?? "").not.toContain("Knowledge Retrieval");
 
   await assertInspectorSessionGovernance(page, {
     profile: "calculator_only",
     source: "default",
-    expectedAllowed: "calc_eval",
+    expectedAllowed: "Calculator",
     forbiddenAllowed: ["Task Planner", "Knowledge Retrieval"],
   });
 });
@@ -1202,7 +1202,7 @@ for (const acceptanceCase of [
     expectedAllowed: "Task Planner",
     forbiddenAllowed: ["Knowledge Retrieval", "calc_eval"],
     expectedTraceCard: "Task Planner",
-    expectedSummary: "Summary: Planned steps - Analyze request -> Retrieve supporting context -> Evaluate calculation -> Synthesize final answer.",
+    expectedSummary: "Summary: Planned steps - Analyze request -> Synthesize final answer.",
     forbiddenSummaryText: 'Task Planner: {"plan":',
     expectedSemanticStats: {
       planner: 1,
@@ -1229,9 +1229,9 @@ for (const acceptanceCase of [
   {
     profile: "calculator_only" as const,
     prompt: "Please calculate this for the task detail replay [calc:40/5+6]",
-    expectedAllowed: "calc_eval",
+    expectedAllowed: "Calculator",
     forbiddenAllowed: ["Task Planner", "Knowledge Retrieval"],
-    expectedTraceCard: "calc_eval",
+    expectedTraceCard: "Calculator",
     expectedSummary: "Summary: Calculated 40/5+6 = 14.0.",
     forbiddenSummaryText: 'Calculator: {"expression": "40/5+6", "result": 14.0}',
     expectedSemanticStats: {

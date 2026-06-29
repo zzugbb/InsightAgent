@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  filterTraceSteps,
   formatTraceStepSemanticStatsSummary,
   formatTraceStepMetaSubtitle,
+  getStepTitle,
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
   resolveTaskSnapshotSummary,
@@ -231,6 +233,131 @@ test("formatTraceStepMetaSubtitle includes tool output policy when available", (
     subtitle,
     "Provider Search (done) [provider_search · knowledge_retrieval] · Preview documents_total · Output documents_total",
   );
+});
+
+test("getStepTitle uses productized tool title for real tool steps", () => {
+  const title = getStepTitle({
+    id: "step-productized-title",
+    type: "action",
+    content: "Tool done: Provider Search",
+    meta: {
+      tool: {
+        name: "provider_search",
+        label: "Provider Search",
+        kind: "provider_retrieval",
+        semantic_kind: "provider_search",
+        semantic_family: "knowledge_retrieval",
+        status: "done",
+      },
+    },
+  });
+
+  assert.equal(
+    title,
+    "Provider Search [provider_search · knowledge_retrieval]",
+  );
+});
+
+test("filterTraceSteps matches real tool semantic family and output keys", () => {
+  const filtered = filterTraceSteps(
+    [
+      {
+        id: "step-provider-search",
+        type: "action",
+        content: "Tool done: Provider Search",
+        meta: {
+          tool: {
+            name: "provider_search",
+            label: "Provider Search",
+            kind: "provider_retrieval",
+            semantic_kind: "provider_search",
+            semantic_family: "knowledge_retrieval",
+            supports_result_preview: true,
+            effective_result_preview_keys: ["documents_total"],
+            effective_result_output_keys: ["documents_total"],
+            status: "done",
+          },
+        },
+      },
+      {
+        id: "step-calculator",
+        type: "action",
+        content: "Tool done: Calculator",
+        meta: {
+          tool: {
+            name: "calc_eval",
+            label: "Calculator",
+            kind: "local_calculator",
+            semantic_kind: "local_calculator",
+            supports_result_preview: true,
+            effective_result_preview_keys: ["expression", "result"],
+            effective_result_output_keys: ["expression", "result"],
+            status: "done",
+          },
+        },
+      },
+    ],
+    {
+      kindFilter: "all",
+      searchQuery: "documents_total",
+    },
+  );
+
+  assert.deepEqual(filtered.map((step) => step.id), ["step-provider-search"]);
+});
+
+test("filterTraceSteps applies shared semantic and kind filters", () => {
+  const filtered = filterTraceSteps(
+    [
+      {
+        id: "step-provider-search",
+        type: "action",
+        content: "Tool done: Provider Search",
+        meta: {
+          tool: {
+            name: "provider_search",
+            label: "Provider Search",
+            kind: "provider_retrieval",
+            semantic_kind: "provider_search",
+            semantic_family: "knowledge_retrieval",
+            status: "done",
+          },
+        },
+      },
+      {
+        id: "step-rag-followup",
+        type: "thought",
+        content: "Retrieved snippets",
+        meta: {
+          rag: {
+            chunks: ["alpha"],
+            knowledge_base_id: "demo-kb",
+          },
+        },
+      },
+      {
+        id: "step-calculator",
+        type: "action",
+        content: "Tool done: Calculator",
+        meta: {
+          tool: {
+            name: "calc_eval",
+            label: "Calculator",
+            kind: "local_calculator",
+            semantic_kind: "local_calculator",
+            status: "done",
+          },
+        },
+      },
+    ],
+    {
+      kindFilter: "rag",
+      semanticFilter: "retrieval",
+      searchQuery: "demo-kb",
+    },
+  );
+
+  assert.deepEqual(filtered.map((step) => step.id), ["step-rag-followup"]);
 });
 
 test("matchesTraceStepSearchQuery matches preview policy keys for running tool steps", () => {

@@ -95,6 +95,9 @@ def _summarize_tool_observation(observation: str) -> str | None:
     plan = payload.get("plan")
     if isinstance(plan, str) and plan.strip():
         return f"Planned steps - {plan.strip()}."
+    steps = _normalize_plan_steps(payload.get("steps"))
+    if steps:
+        return f"Planned steps - {' -> '.join(steps)}."
 
     expression = payload.get("expression")
     result = payload.get("result")
@@ -111,6 +114,11 @@ def _summarize_tool_observation(observation: str) -> str | None:
                 f"{knowledge_base_id.strip()}."
             )
         return f"Retrieved {hit_count} {hit_label}."
+
+    documents_total = payload.get("documents_total")
+    if isinstance(documents_total, int) and documents_total >= 0:
+        document_label = "document" if documents_total == 1 else "documents"
+        return f"Retrieved {documents_total} {document_label}."
 
     if label:
         return f"{label} completed."
@@ -132,6 +140,19 @@ def _parse_tool_observation(observation: str) -> tuple[str, dict[str, object] | 
     if not isinstance(payload, dict):
         return normalized_label, None
     return normalized_label, payload
+
+
+def _normalize_plan_steps(raw_steps: object) -> list[str]:
+    if not isinstance(raw_steps, list):
+        return []
+    normalized_steps: list[str] = []
+    for raw_step in raw_steps:
+        if not isinstance(raw_step, str):
+            continue
+        step = raw_step.strip()
+        if step:
+            normalized_steps.append(step)
+    return normalized_steps
 
 
 def _mock_stream_delay_seconds(prompt: str) -> float:

@@ -1670,6 +1670,74 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_build_settings_summary_response_infers_preview_and_output_keys_from_semantic_family_for_runtime_override_real_tools(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url="https://example.invalid/v1",
+                api_key="secret",
+                tool_registry_profile="default",
+                tool_registry_provider_source="analytics_suite",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "runtime_semantic_kind": "provider_search",
+                                    "supports_result_preview": True,
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+            database_locator="postgresql://demo",
+        )
+
+        analytics_detail = next(
+            detail
+            for detail in summary.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    getattr(tool, "semantic_family", None),
+                    tuple(tool.effective_result_preview_keys),
+                    tuple(tool.effective_result_output_keys),
+                )
+                for tool in analytics_detail.tool_details
+            ],
+            [
+                (
+                    "provider_search",
+                    "knowledge_retrieval",
+                    ("hit_count", "knowledge_base_id"),
+                    ("hit_count", "knowledge_base_id"),
+                )
+            ],
+        )
+
     def test_get_stored_settings_merges_runtime_registry_source_specs_for_runtime(
         self,
     ) -> None:
@@ -2324,6 +2392,71 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "knowledge_retrieval",
                     ("documents_total",),
                     ("documents_total",),
+                )
+            ],
+        )
+
+    def test_apply_tool_registry_preview_to_validate_response_infers_preview_and_output_keys_from_semantic_family_for_runtime_override_real_tools(
+        self,
+    ) -> None:
+        response = _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                message="ok",
+            ),
+            effective_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="analytics_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "runtime_semantic_kind": "provider_search",
+                                    "supports_result_preview": True,
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        analytics_detail = next(
+            detail
+            for detail in response.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    getattr(tool, "semantic_family", None),
+                    tuple(tool.effective_result_preview_keys),
+                    tuple(tool.effective_result_output_keys),
+                )
+                for tool in analytics_detail.tool_details
+            ],
+            [
+                (
+                    "provider_search",
+                    "knowledge_retrieval",
+                    ("hit_count", "knowledge_base_id"),
+                    ("hit_count", "knowledge_base_id"),
                 )
             ],
         )
@@ -7451,6 +7584,55 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn('"hit_count":2', excerpt)
         self.assertNotIn("raw_documents", excerpt)
 
+    def test_get_task_trace_preview_summary_uses_productized_tool_title_for_real_tool_steps(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-provider-search",
+                            "type": "action",
+                            "content": "Tool done: Provider Search",
+                            "seq": 23,
+                            "meta": {
+                                "tool": {
+                                    "name": "provider_search",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "semantic_kind": "provider_search",
+                                    "semantic_family": "knowledge_retrieval",
+                                    "status": "done",
+                                    "output_preview": {
+                                        "hit_count": 2,
+                                        "knowledge_base_id": "demo-kb",
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload["trace_preview"][0]["title"],
+            "Provider Search [provider_search · knowledge_retrieval]",
+        )
+
     def test_get_trace_rag_export_summary_reuses_shared_trace_steps_shape(self) -> None:
         payload = chat_persistence_module.get_trace_rag_export_summary(  # type: ignore[attr-defined]
             [
@@ -10459,6 +10641,65 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 task_routes_module.chat_persistence_service.get_trace_step_display_content = original_display_helper  # type: ignore[attr-defined]
 
         self.assertIn("shared display body", markdown)
+
+    def test_build_task_export_markdown_uses_productized_tool_title_for_real_tool_steps(
+        self,
+    ) -> None:
+        payload = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-06-29T12:10:00",
+            task=task_routes_module.TaskExportTask(  # type: ignore[attr-defined]
+                id="task-export-title-helper-md",
+                session_id="session-export-title-helper-md",
+                prompt="reuse trace title helper",
+                status="completed",
+                status_normalized="completed",
+                status_label="Completed",
+                status_rank=4,
+                created_at="2026-06-29T12:05:00",
+                updated_at="2026-06-29T12:10:00",
+            ),
+            usage=None,
+            messages=[],
+            trace=task_routes_module.TaskExportTrace(  # type: ignore[attr-defined]
+                governance=None,
+                step_count=1,
+                rag_hit_count=0,
+                rag_knowledge_base_ids=[],
+                rag_chunks=[],
+                steps=[
+                    task_routes_module.TraceStep(  # type: ignore[attr-defined]
+                        id="step-provider-search",
+                        seq=3,
+                        type="action",
+                        content="Tool done: Provider Search",
+                        meta={
+                            "tool": {
+                                "name": "provider_search",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "semantic_kind": "provider_search",
+                                "semantic_family": "knowledge_retrieval",
+                                "status": "done",
+                                "output_preview": {
+                                    "hit_count": 2,
+                                    "knowledge_base_id": "demo-kb",
+                                },
+                            }
+                        },
+                    )
+                ],
+            ),
+        )
+
+        markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "### 1. seq=3 · Provider Search [provider_search · knowledge_retrieval] · step-provider-search",
+            markdown,
+        )
 
     def test_build_task_export_markdown_does_not_leak_raw_output_when_preview_exists(
         self,
@@ -14099,6 +14340,74 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("- Tool Registry Profile: calculator_only", markdown)
         self.assertIn("- Tool Registry Source: default", markdown)
 
+    def test_build_session_export_markdown_uses_productized_trace_preview_titles_for_real_tools(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-06-29T12:00:00",
+            session=session_routes_module.SessionResponse(
+                id="session-productized-trace-preview",
+                title="Productized Trace Preview Session",
+                created_at="2026-06-29T11:59:00",
+                updated_at="2026-06-29T12:00:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-productized-trace-preview",
+                    prompt="Search the provider index",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-06-29T11:59:30",
+                    updated_at="2026-06-29T12:00:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-provider-search",
+                            seq=3,
+                            type="action",
+                            title="Provider Search [provider_search · knowledge_retrieval]",
+                            content_excerpt='Provider Search: {"documents_total":2}',
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            'seq=3 · Provider Search [provider_search · knowledge_retrieval] · Provider Search: {"documents_total":2}',
+            markdown,
+        )
+        self.assertNotIn("seq=3 · action · Provider Search", markdown)
+
     def test_build_session_export_payload_trusts_service_task_governance_shape(
         self,
     ) -> None:
@@ -14783,6 +15092,33 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result.content,
         )
 
+    def test_mock_llm_provider_generate_summarizes_structured_plan_steps_and_projected_retrieval_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Task Planner Suite: {"steps": ["Analyze request", "Retrieve supporting context", "Synthesize final answer"]}\n'
+            'Provider Search: {"documents_total": 2}'
+        )
+
+        self.assertIn("This is a mock response from InsightAgent.", result.content)
+        self.assertIn(
+            "Summary: Planned steps - Analyze request -> Retrieve supporting context -> Synthesize final answer. "
+            "Retrieved 2 documents.",
+            result.content,
+        )
+        self.assertIn("Prompt received: need answer", result.content)
+        self.assertNotIn(
+            'Task Planner Suite: {"steps": ["Analyze request", "Retrieve supporting context", "Synthesize final answer"]}',
+            result.content,
+        )
+        self.assertNotIn(
+            'Provider Search: {"documents_total": 2}',
+            result.content,
+        )
+
     def test_stream_task_execution_with_mock_provider_surfaces_tool_observation_summary_in_final_answer(
         self,
     ) -> None:
@@ -14971,6 +15307,213 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Tool observations:", final_answer_step["content"])
         self.assertNotIn(
             'Calculator: {"expression": "1+2", "result": 3.0}',
+            final_answer_step["content"],
+        )
+
+    def test_stream_task_execution_with_mock_provider_summarizes_structured_plan_steps_and_projected_real_retrieval_outputs(
+        self,
+    ) -> None:
+        runtime_settings = StoredSettings(
+            mode="mock",
+            provider="mock",
+            model="mock-gpt",
+            tool_registry_profile="default",
+            tool_registry_provider_source="default",
+        )
+        completed_trace_steps: list[dict[str, object]] = []
+
+        original_get_stored_settings = getattr(
+            chat_execution_module,
+            "get_stored_settings",
+            None,
+        )
+        original_get_llm_provider = chat_execution_module.get_llm_provider
+        original_get_configured_tool_registry_provider = (
+            chat_execution_module.get_configured_tool_registry_provider
+        )
+        original_build_tool_plan_artifacts = chat_execution_module.build_tool_plan_artifacts
+        original_execute_preflight = (
+            chat_execution_module.execute_configured_tool_registry_provider_preflight
+        )
+        original_execute_tool_plan_item_service_execution = (
+            chat_execution_module.execute_tool_plan_item_service_execution
+        )
+        original_execute_tool_plan_item_service_actions = (
+            chat_execution_module.execute_tool_plan_item_service_actions
+        )
+        original_update_task_status = chat_execution_module.update_task_status
+        original_get_task = chat_execution_module.get_task
+        original_update_task_trace_steps = chat_execution_module.update_task_trace_steps
+        original_complete_task = chat_execution_module.complete_task
+        original_create_message = chat_execution_module.create_message
+        original_try_append_task_memory = chat_execution_module.try_append_task_memory
+        original_safe_record_audit_event = chat_execution_module.safe_record_audit_event
+
+        def fake_get_stored_settings(user_id: str) -> StoredSettings:
+            self.assertEqual(user_id, "user-1")
+            return runtime_settings
+
+        def fake_get_llm_provider(user_id: str) -> MockLLMProvider:
+            self.assertEqual(user_id, "user-1")
+            return MockLLMProvider()
+
+        def fake_build_tool_plan_artifacts(
+            prompt: str,
+            *,
+            provider: object | None = None,
+            registry_provider: object | None = None,
+        ) -> SimpleNamespace:
+            del prompt, provider, registry_provider
+            return SimpleNamespace(
+                tool_plan=[
+                    {"name": "task_plan", "input": {"prompt_preview": "plan and retrieve"}},
+                    {"name": "provider_search", "input": {"query": "revenue trend"}},
+                ],
+                planning_prompt=None,
+                provider_usage=None,
+                planning_provider_attempted=False,
+                planning_provider_used=False,
+                allowed_tool_names=("task_plan", "provider_search"),
+                allowed_tool_labels=("Task Planner Suite", "Provider Search"),
+            )
+
+        def fake_execute_preflight(
+            *,
+            task_id: str,
+            step_id: str,
+            seq: int,
+            model: str,
+            trace_steps: list[dict[str, object]],
+            persist_trace_fn,
+            record_audit_event_fn,
+            settings=None,
+        ) -> dict[str, object]:
+            del task_id, step_id, seq, model, trace_steps, persist_trace_fn, record_audit_event_fn, settings
+            return {
+                "provider": StaticToolRegistryProvider(
+                    {
+                        "task_plan": get_default_tool_registry()["task_plan"],
+                        "provider_search": ToolRegistration(
+                            name="provider_search",
+                            kind="provider_retrieval",
+                            label="Provider Search",
+                            retryable_by_default=False,
+                            default_timeout_ms=21_000,
+                            requires_user_context=True,
+                            supports_result_preview=True,
+                            runner=lambda *, tool_input, prompt, user_id: {
+                                "tool_kind": "provider_retrieval",
+                                "documents_total": 2,
+                            },
+                            result_preview_keys=("documents_total",),
+                            result_output_keys=("documents_total",),
+                            runtime_semantic_kind="provider_search",
+                        ),
+                    }
+                ),
+                "provider_source_name": "default",
+            }
+
+        def fake_execute_tool_plan_item_service_execution(**kwargs):
+            del kwargs
+            yield {
+                "kind": "result",
+                "result": {
+                    "service_actions": [],
+                },
+            }
+
+        def fake_execute_tool_plan_item_service_actions(**kwargs):
+            kwargs["tool_observations"].append(
+                'Task Planner Suite: {"steps": ["Analyze request", "Retrieve supporting context", "Synthesize final answer"]}'
+            )
+            kwargs["tool_observations"].append(
+                'Provider Search: {"documents_total": 2}'
+            )
+            yield {
+                "kind": "result",
+                "result": {
+                    "seq_cursor": int(kwargs["seq_cursor"]),
+                    "should_return": False,
+                },
+            }
+
+        try:
+            chat_execution_module.get_stored_settings = fake_get_stored_settings
+            chat_execution_module.get_llm_provider = fake_get_llm_provider
+            chat_execution_module.get_configured_tool_registry_provider = (
+                lambda *, settings=None: StaticToolRegistryProvider(
+                    {"task_plan": get_default_tool_registry()["task_plan"]}
+                )
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                fake_build_tool_plan_artifacts
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                fake_execute_preflight
+            )
+            chat_execution_module.execute_tool_plan_item_service_execution = (
+                fake_execute_tool_plan_item_service_execution
+            )
+            chat_execution_module.execute_tool_plan_item_service_actions = (
+                fake_execute_tool_plan_item_service_actions
+            )
+            chat_execution_module.update_task_status = lambda *args, **kwargs: None
+            chat_execution_module.get_task = lambda *args, **kwargs: {"status": "running"}
+            chat_execution_module.update_task_trace_steps = lambda *args, **kwargs: None
+            chat_execution_module.complete_task = (
+                lambda *, trace_steps, **kwargs: completed_trace_steps.extend(trace_steps)
+            )
+            chat_execution_module.create_message = lambda *args, **kwargs: None
+            chat_execution_module.try_append_task_memory = lambda *args, **kwargs: None
+            chat_execution_module.safe_record_audit_event = lambda *args, **kwargs: None
+
+            list(
+                chat_execution_module.stream_task_execution(
+                    task_id="task-1",
+                    session_id="session-1",
+                    user_id="user-1",
+                    prompt="please plan and search with mock tool observations",
+                )
+            )
+        finally:
+            if original_get_stored_settings is not None:
+                chat_execution_module.get_stored_settings = original_get_stored_settings
+            chat_execution_module.get_llm_provider = original_get_llm_provider
+            chat_execution_module.get_configured_tool_registry_provider = (
+                original_get_configured_tool_registry_provider
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                original_build_tool_plan_artifacts
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                original_execute_preflight
+            )
+            chat_execution_module.execute_tool_plan_item_service_execution = (
+                original_execute_tool_plan_item_service_execution
+            )
+            chat_execution_module.execute_tool_plan_item_service_actions = (
+                original_execute_tool_plan_item_service_actions
+            )
+            chat_execution_module.update_task_status = original_update_task_status
+            chat_execution_module.get_task = original_get_task
+            chat_execution_module.update_task_trace_steps = original_update_task_trace_steps
+            chat_execution_module.complete_task = original_complete_task
+            chat_execution_module.create_message = original_create_message
+            chat_execution_module.try_append_task_memory = original_try_append_task_memory
+            chat_execution_module.safe_record_audit_event = original_safe_record_audit_event
+
+        final_answer_step = completed_trace_steps[-1]
+        self.assertIn(
+            "Summary: Planned steps - Analyze request -> Retrieve supporting context -> Synthesize final answer. Retrieved 2 documents.",
+            final_answer_step["content"],
+        )
+        self.assertNotIn(
+            'Task Planner Suite: {"steps": ["Analyze request", "Retrieve supporting context", "Synthesize final answer"]}',
+            final_answer_step["content"],
+        )
+        self.assertNotIn(
+            'Provider Search: {"documents_total": 2}',
             final_answer_step["content"],
         )
 
@@ -32505,6 +33048,111 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             final_item["result"]["loop_execution_result"]["loop_result"]["next_action_step"]["meta"]["tool"]["output"],
             {
                 "documents_total": 2,
+            },
+        )
+
+    def test_execute_tool_plan_item_service_execution_infers_preview_and_output_keys_from_semantic_family_for_runtime_override_real_search_tool(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "hit_count": 2,
+                    "knowledge_base_id": "provider-kb",
+                    "chunks": ["internal retrieval stub"],
+                    "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                },
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_start_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_start"
+        )
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(
+            tool_start_event["effective_result_preview_keys"],
+            ["hit_count", "knowledge_base_id"],
+        )
+        self.assertEqual(
+            tool_end_event["effective_result_preview_keys"],
+            ["hit_count", "knowledge_base_id"],
+        )
+        self.assertEqual(
+            tool_start_event["effective_result_output_keys"],
+            ["hit_count", "knowledge_base_id"],
+        )
+        self.assertEqual(
+            tool_end_event["effective_result_output_keys"],
+            ["hit_count", "knowledge_base_id"],
+        )
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
+            'Provider Search: {"hit_count": 2, "knowledge_base_id": "provider-kb"}',
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["loop_result"]["next_action_step"]["meta"]["tool"]["output"],
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
             },
         )
 
