@@ -429,18 +429,59 @@ function stringifyTraceToolOutputPreview(value: unknown): string | null {
   return null;
 }
 
+function stringifyTraceSafeToolOutput(
+  tool: TraceStepMeta["tool"],
+): string | null {
+  if (!tool) {
+    return null;
+  }
+  const outputKeys = Array.isArray(tool.effective_result_output_keys)
+    ? tool.effective_result_output_keys.filter(
+        (item): item is string => typeof item === "string" && item.trim().length > 0,
+      )
+    : [];
+  if (outputKeys.length === 0) {
+    return null;
+  }
+  const output = tool.output;
+  if (!output || typeof output !== "object" || Array.isArray(output)) {
+    return stringifyTraceToolOutputPreview(output);
+  }
+  const filteredOutput = Object.fromEntries(
+    outputKeys
+      .filter((key) => Object.prototype.hasOwnProperty.call(output, key))
+      .map((key) => [key, output[key as keyof typeof output]]),
+  );
+  return stringifyTraceToolOutputPreview(filteredOutput);
+}
+
 export function resolveTraceStepDisplayContent(
   step: TraceStepPayload,
 ): string | null {
   const content = normalizeTraceContent(step.content);
+  const resultSummary =
+    typeof step.meta?.tool?.result_summary === "string" &&
+    step.meta.tool.result_summary.trim()
+      ? step.meta.tool.result_summary.trim()
+      : null;
+  const primaryContent =
+    resultSummary && (!content || content.startsWith("Tool done:"))
+      ? resultSummary
+      : content;
   const preview = stringifyTraceToolOutputPreview(step.meta?.tool?.output_preview);
-  if (!preview) {
-    return content;
+  const safeOutput = stringifyTraceSafeToolOutput(step.meta?.tool);
+  const previewLine =
+    preview && !(primaryContent && primaryContent.includes(preview))
+      ? `Preview: ${preview}`
+      : null;
+  const outputLine =
+    safeOutput && safeOutput !== preview
+      ? `Output: ${safeOutput}`
+      : null;
+  if (!previewLine && !outputLine) {
+    return primaryContent ?? preview ?? safeOutput;
   }
-  if (content && content.includes(preview)) {
-    return content;
-  }
-  return content ? `${content}\nPreview: ${preview}` : preview;
+  return [primaryContent, previewLine, outputLine].filter(Boolean).join("\n");
 }
 
 export function matchesTraceStepSearchQuery(
@@ -486,6 +527,7 @@ export function matchesTraceStepSearchQuery(
         .filter((item): item is string => typeof item === "string")
         .map((item) => item.toLowerCase())
     : [];
+  const safeOutput = stringifyTraceSafeToolOutput(step.meta?.tool)?.toLowerCase() ?? "";
   const ragKnowledgeBaseId =
     typeof step.meta?.rag?.knowledge_base_id === "string"
       ? step.meta.rag.knowledge_base_id.toLowerCase()
@@ -505,6 +547,7 @@ export function matchesTraceStepSearchQuery(
     toolKind.includes(q) ||
     toolSemanticKind.includes(q) ||
     toolSemanticFamily.includes(q) ||
+    safeOutput.includes(q) ||
     ragKnowledgeBaseId.includes(q) ||
     ragChunks.some((chunk) => chunk.includes(q)) ||
     previewKeys.some((key) => key.includes(q)) ||
@@ -625,16 +668,75 @@ function formatTraceToolSemanticDescriptor(tool: TraceStepMeta["tool"]): string 
   return `${semanticKind} · ${semanticFamily}`;
 }
 
+const TRACE_TOOL_DISPLAY_ACRONYMS: Record<string, string> = {
+  api: "API",
+  csv: "CSV",
+  http: "HTTP",
+  https: "HTTPS",
+  id: "ID",
+  json: "JSON",
+  kb: "KB",
+  llm: "LLM",
+  rag: "RAG",
+  sse: "SSE",
+  sql: "SQL",
+  ui: "UI",
+  url: "URL",
+  ux: "UX",
+};
+
+function normalizeToolRegistryName(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+  return normalized;
+}
+
+function humanizeToolRegistryName(value: string): string {
+  const normalized = normalizeToolRegistryName(value);
+  if (!normalized) {
+    return "";
+  }
+  return normalized
+    .split("_")
+    .filter((part) => part.length > 0)
+    .map((part) => TRACE_TOOL_DISPLAY_ACRONYMS[part] ?? `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function resolveTraceToolDisplayLabel(tool: TraceStepMeta["tool"]): string {
+  if (!tool) {
+    return "";
+  }
+  const rawName =
+    typeof tool.name === "string" && tool.name.trim()
+      ? tool.name.trim()
+      : "";
+  const rawLabel =
+    typeof tool.label === "string" && tool.label.trim()
+      ? tool.label.trim()
+      : "";
+  if (!rawName) {
+    return rawLabel;
+  }
+  const canonicalLabel = humanizeToolRegistryName(rawName);
+  if (!rawLabel) {
+    return canonicalLabel;
+  }
+  if (normalizeToolRegistryName(rawLabel) === normalizeToolRegistryName(rawName)) {
+    return canonicalLabel;
+  }
+  return rawLabel;
+}
+
 function formatTraceToolDisplayTitle(tool: TraceStepMeta["tool"]): string {
   if (!tool) {
     return "";
   }
-  const toolLabel =
-    typeof tool.label === "string" && tool.label.trim()
-      ? tool.label.trim()
-      : typeof tool.name === "string" && tool.name.trim()
-        ? tool.name.trim()
-        : "";
+  const toolLabel = resolveTraceToolDisplayLabel(tool);
   if (!toolLabel) {
     return "";
   }
@@ -977,6 +1079,9 @@ export function getStepTitle(step: TraceStepPayload): string {
   if (toolTitle) {
     return toolTitle;
   }
+  if (step.meta?.rag) {
+    return "Knowledge Retrieval Snippets";
+  }
   const rawTitle =
     typeof step.meta?.label === "string"
       ? step.meta.label
@@ -1026,7 +1131,7 @@ export function formatTraceStepMetaSubtitle(
   }
   const parts: string[] = [];
   if (meta.tool?.name) {
-    const name = String(meta.tool.label ?? meta.tool.name).trim();
+    const name = resolveTraceToolDisplayLabel(meta.tool);
     if (name) {
       const semanticKind = formatTraceToolSemanticDescriptor(meta.tool);
       const toolLine = labels.toolLine(name, String(meta.tool.status ?? ""));
@@ -1078,7 +1183,7 @@ export function formatTraceStepMetaSubtitle(
   if (model) {
     parts.push(`${labels.model} ${model}`);
   }
-  if (stepKind) {
+  if (stepKind && !meta.rag) {
     parts.push(`${labels.stepKind} ${stepKind}`);
   }
   if (typeof meta.planning_provider_attempted === "boolean") {

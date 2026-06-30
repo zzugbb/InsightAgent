@@ -117,6 +117,96 @@ test("mergeToolEndToolMeta keeps runtime semantic metadata from tool_end payload
   assert.equal(meta.status, "done");
 });
 
+test("mergeToolEndToolMeta filters output to effective_result_output_keys from tool_end payload", () => {
+  const meta = mergeToolEndToolMeta(
+    {
+      name: "provider_search",
+      label: "Provider Search",
+      input: { query: "demo" },
+      status: "running",
+    },
+    {
+      status: "done",
+      output: {
+        documents_total: 2,
+        request_id: "req-1",
+        raw_documents: [{ id: "doc-1" }],
+      },
+      effective_result_output_keys: ["documents_total", "request_id"],
+      retry_count: 0,
+    },
+    {
+      name: "provider_search",
+      label: "Provider Search",
+    },
+  );
+
+  assert.deepEqual(meta.output, {
+    documents_total: 2,
+    request_id: "req-1",
+  });
+  assert.equal(meta.status, "done");
+});
+
+test("mergeToolEndToolMeta keeps result summary from tool_end payload", () => {
+  const meta = mergeToolEndToolMeta(
+    {
+      name: "provider_search",
+      label: "Provider Search",
+      input: { query: "demo" },
+      status: "running",
+    },
+    {
+      status: "done",
+      output: {
+        documents_total: 2,
+        request_id: "req-1",
+      },
+      effective_result_output_keys: ["documents_total", "request_id"],
+      result_summary: "Retrieved 2 documents (request id req-1).",
+      retry_count: 0,
+    },
+    {
+      name: "provider_search",
+      label: "Provider Search",
+    },
+  );
+
+  assert.equal(meta.result_summary, "Retrieved 2 documents (request id req-1).");
+  assert.equal(meta.status, "done");
+});
+
+test("mergeToolEndToolMeta reuses previous effective_result_output_keys to filter output", () => {
+  const meta = mergeToolEndToolMeta(
+    {
+      name: "provider_search",
+      label: "Provider Search",
+      input: { query: "demo" },
+      effective_result_output_keys: ["documents_total", "request_id"],
+      status: "running",
+    },
+    {
+      status: "done",
+      output: {
+        documents_total: 2,
+        request_id: "req-1",
+        raw_documents: [{ id: "doc-1" }],
+      },
+      retry_count: 0,
+    },
+    {
+      name: "provider_search",
+      label: "Provider Search",
+    },
+  );
+
+  assert.deepEqual(meta.output, {
+    documents_total: 2,
+    request_id: "req-1",
+  });
+  assert.equal(meta.status, "done");
+});
+
 test("mergeToolStartToolMeta keeps runtime semantic metadata from tool_start payload", () => {
   const meta = mergeToolStartToolMeta(
     undefined,

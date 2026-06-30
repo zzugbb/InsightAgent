@@ -67,6 +67,93 @@ test("resolveTraceStepDisplayContent prefers output preview without leaking raw 
   assert.doesNotMatch(content, /raw_documents/);
 });
 
+test("resolveTraceStepDisplayContent appends safe tool output fields beyond preview when output policy is present", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-output-policy-safe-extra",
+    type: "action",
+    content: "Tool done: Provider Search",
+    meta: {
+      tool: {
+        name: "provider_search",
+        label: "Provider Search",
+        status: "done",
+        effective_result_preview_keys: ["documents_total"],
+        effective_result_output_keys: ["documents_total", "request_id"],
+        output_preview: {
+          documents_total: 2,
+        },
+        output: {
+          documents_total: 2,
+          request_id: "req-1",
+        },
+      },
+    },
+  });
+
+  assert.equal(typeof content, "string");
+  assert.match(content, /Preview: \{"documents_total":2\}/);
+  assert.match(content, /Output: \{"documents_total":2,"request_id":"req-1"\}/);
+});
+
+test("resolveTraceStepDisplayContent prefers tool result summary over generic done content", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-output-policy-result-summary",
+    type: "action",
+    content: "Tool done: Provider Search",
+    meta: {
+      tool: {
+        name: "provider_search",
+        label: "Provider Search",
+        status: "done",
+        result_summary: "Retrieved 2 documents (request id req-1).",
+        effective_result_preview_keys: ["documents_total"],
+        effective_result_output_keys: ["documents_total", "request_id"],
+        output_preview: {
+          documents_total: 2,
+        },
+        output: {
+          documents_total: 2,
+          request_id: "req-1",
+        },
+      },
+    },
+  });
+
+  assert.equal(
+    content,
+    'Retrieved 2 documents (request id req-1).\nPreview: {"documents_total":2}\nOutput: {"documents_total":2,"request_id":"req-1"}',
+  );
+});
+
+test("resolveTraceStepDisplayContent filters safe tool output to effective_result_output_keys subset", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-output-policy-safe-filtered",
+    type: "action",
+    content: "Tool done: Provider Search",
+    meta: {
+      tool: {
+        name: "provider_search",
+        label: "Provider Search",
+        status: "done",
+        effective_result_preview_keys: ["documents_total"],
+        effective_result_output_keys: ["documents_total", "request_id"],
+        output_preview: {
+          documents_total: 2,
+        },
+        output: {
+          documents_total: 2,
+          request_id: "req-1",
+          raw_documents: [{ id: "doc-1" }],
+        },
+      },
+    },
+  });
+
+  assert.equal(typeof content, "string");
+  assert.match(content, /Output: \{"documents_total":2,"request_id":"req-1"\}/);
+  assert.doesNotMatch(content, /raw_documents/);
+});
+
 test("resolveTraceStepDisplayContent falls back to original content without preview", () => {
   const content = resolveTraceStepDisplayContent({
     id: "step-plain",
@@ -255,6 +342,199 @@ test("getStepTitle uses productized tool title for real tool steps", () => {
   assert.equal(
     title,
     "Provider Search [provider_search · knowledge_retrieval]",
+  );
+});
+
+test("matchesTraceStepSearchQuery matches safe tool output values beyond preview when output policy is present", () => {
+  const step = {
+    id: "step-output-policy-search",
+    type: "action",
+    content: "Tool done: Provider Search",
+    meta: {
+      tool: {
+        name: "provider_search",
+        label: "Provider Search",
+        status: "done",
+        effective_result_preview_keys: ["documents_total"],
+        effective_result_output_keys: ["documents_total", "request_id"],
+        output_preview: {
+          documents_total: 2,
+        },
+        output: {
+          documents_total: 2,
+          request_id: "req-1",
+        },
+      },
+    },
+  } as const;
+
+  assert.equal(matchesTraceStepSearchQuery(step, "req-1"), true);
+  assert.equal(matchesTraceStepSearchQuery(step, "documents_total"), true);
+});
+
+test("matchesTraceStepSearchQuery ignores tool output values outside effective_result_output_keys", () => {
+  const step = {
+    id: "step-output-policy-search-filtered",
+    type: "action",
+    content: "Tool done: Provider Search",
+    meta: {
+      tool: {
+        name: "provider_search",
+        label: "Provider Search",
+        status: "done",
+        effective_result_preview_keys: ["documents_total"],
+        effective_result_output_keys: ["documents_total", "request_id"],
+        output_preview: {
+          documents_total: 2,
+        },
+        output: {
+          documents_total: 2,
+          request_id: "req-1",
+          raw_documents: [{ id: "doc-1" }],
+        },
+      },
+    },
+  } as const;
+
+  assert.equal(matchesTraceStepSearchQuery(step, "req-1"), true);
+  assert.equal(matchesTraceStepSearchQuery(step, "raw_documents"), false);
+  assert.equal(matchesTraceStepSearchQuery(step, "doc-1"), false);
+});
+
+test("getStepTitle humanizes unlabeled real tool names for trace steps", () => {
+  const title = getStepTitle({
+    id: "step-productized-title-unlabeled",
+    type: "action",
+    content: "Tool done: provider_search",
+    meta: {
+      tool: {
+        name: "provider_search",
+        kind: "provider_retrieval",
+        semantic_kind: "provider_search",
+        semantic_family: "knowledge_retrieval",
+        status: "done",
+      },
+    },
+  });
+
+  assert.equal(
+    title,
+    "Provider Search [provider_search · knowledge_retrieval]",
+  );
+});
+
+test("getStepTitle uses productized title for rag retrieval follow-up steps", () => {
+  const title = getStepTitle({
+    id: "step-rag-followup-title",
+    type: "thought",
+    content: "Provider Search returned snippets from the selected knowledge base.",
+    meta: {
+      step_type: "rag_retrieval",
+      rag: {
+        chunks: ["alpha", "beta"],
+        knowledge_base_id: "demo-kb",
+      },
+    },
+  });
+
+  assert.equal(title, "Knowledge Retrieval Snippets");
+});
+
+test("formatTraceStepMetaSubtitle hides raw rag step kind when rag summary is present", () => {
+  const subtitle = formatTraceStepMetaSubtitle(
+    {
+      id: "step-rag-followup-subtitle",
+      type: "thought",
+      content: "Provider Search returned snippets from the selected knowledge base.",
+      meta: {
+        step_type: "rag_retrieval",
+        rag: {
+          chunks: ["alpha", "beta"],
+          knowledge_base_id: "demo-kb",
+        },
+        model: "mock-gpt",
+        tokens: 2,
+      },
+    },
+    {
+      toolLine: (name: string, status: string) => `${name} (${status})`,
+      toolRetry: (count: number) => `Retry ${count}`,
+      toolError: (message: string) => `Error ${message}`,
+      toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
+      toolPreviewDisabled: "Preview disabled",
+      toolOutputKeys: (keys: string[]) => `Output ${keys.join(", ")}`,
+      ragLine: (count: number, kb?: string) =>
+        kb ? `RAG ${count} ${kb}` : `RAG ${count}`,
+      model: "Model",
+      stepKind: "Step",
+      planningProviderUsed: "Planning provider used",
+      planningProviderFallback: "Planning provider fallback",
+      planningProviderRuleOnly: "Planning provider rule only",
+      toolRegistryProfile: "Profile",
+      toolRegistrySource: "Source",
+      allowedTools: "Allowed",
+      tokens: "Tokens",
+      promptTokens: "Prompt",
+      completionTokens: "Completion",
+      cost: "Cost",
+      usageSource: "Usage",
+      usageSourceProvider: "provider",
+      usageSourceEstimated: "estimated",
+      usageSourceLegacy: "legacy",
+    },
+  );
+
+  assert.equal(subtitle, "RAG 2 demo-kb · Model mock-gpt · Tokens 2");
+});
+
+test("formatTraceStepMetaSubtitle humanizes unlabeled real tool names", () => {
+  const subtitle = formatTraceStepMetaSubtitle(
+    {
+      id: "step-unlabeled-preview-policy",
+      type: "action",
+      content: "Tool running: provider_search",
+      meta: {
+        tool: {
+          name: "provider_search",
+          kind: "provider_retrieval",
+          semantic_kind: "knowledge_retrieval",
+          supports_result_preview: true,
+          effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+          status: "running",
+        },
+      },
+    },
+    {
+      toolLine: (name: string, status: string) => `${name} (${status})`,
+      toolRetry: (count: number) => `Retry ${count}`,
+      toolError: (message: string) => `Error ${message}`,
+      toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
+      toolPreviewDisabled: "Preview disabled",
+      toolOutputKeys: (keys: string[]) => `Output ${keys.join(", ")}`,
+      ragLine: (count: number, kb?: string) =>
+        kb ? `RAG ${count} ${kb}` : `RAG ${count}`,
+      model: "Model",
+      stepKind: "Step",
+      planningProviderUsed: "Planning provider used",
+      planningProviderFallback: "Planning provider fallback",
+      planningProviderRuleOnly: "Planning provider rule only",
+      toolRegistryProfile: "Profile",
+      toolRegistrySource: "Source",
+      allowedTools: "Allowed",
+      tokens: "Tokens",
+      promptTokens: "Prompt",
+      completionTokens: "Completion",
+      cost: "Cost",
+      usageSource: "Usage",
+      usageSourceProvider: "provider",
+      usageSourceEstimated: "estimated",
+      usageSourceLegacy: "legacy",
+    },
+  );
+
+  assert.equal(
+    subtitle,
+    "Provider Search (running) [knowledge_retrieval] · Preview hit_count, knowledge_base_id",
   );
 });
 

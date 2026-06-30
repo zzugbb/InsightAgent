@@ -51,95 +51,15 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   显式点击，`saveToolRegistryProfile()` 关闭 modal 从键盘 `Escape` 改为显式点击 `.ant-modal-close`。这一步直接针对
   CI chromium 上 `retrieval_suite / calculator_suite / planning_suite` 选项点击超时，以及 `calculator_only`
   保存后 modal 仍可见的失败链路。
-- 阶段 5 协同（2026-06-29，shared tool observation productization）：后端 shared tool observation helper
-  现已统一按 registration label 生成 preview-safe observation 文本，不再在部分 success/postprocess 分支回落到
-  `calc_eval` 这类内部工具名。当前前端 Inspector、trace/observation 展示与
-  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
-  无需改协议，但 execution trace 上来自 built-in / extra / real tools 的 observation label 会更一致。
-- 阶段 5 协同（2026-06-29，execution display label productization）：后端现已把 built-in/extra tools
-  在 `tool_start`、`Tool running`、`Tool done` 与 `Tool error` 这些执行期可见语义里的 display label
-  统一收口到 registration label。当前前端无需改协议，但 Inspector、trace 列表与流式事件里默认 calculator
-  会稳定显示 `Calculator`，不再和 observation 已产品化、执行步骤仍显示 `calc_eval` 的旧状态割裂。
-- 阶段 5 协同（2026-06-29，calculator user-facing label chain productization）：后端现已继续把默认
-  calculator 的用户可见 label 收口到 planning summary、model settings/profile 预览，以及 task/session export
-  的 governance 摘要链；同时对历史 trace/task row 里残留的 `allowed_tool_labels=["calc_eval"]` 做归一化升级。
-  当前前端无需改协议，但 settings 弹窗、Inspector 计划摘要、任务/会话导出与后续 usage/governance 展示会更稳定地统一显示
-  `Calculator`，而不是和 canonical/internal name `calc_eval` 混用。
-- 阶段 5 协同（2026-06-29，real tool runtime semantic override）：后端现已继续把 extra/real tools 的
-  execution-facing semantic 从模板 runner 的本地 retrieval/calculator 语义里解耦出来。当前前端无需改协议，
-  但 settings 弹窗的 provider-source tool details、流式 `tool_start/tool_end` 的 `semantic_kind`、trace/
-  observation 的默认 preview 语义，以及 retrieval 类模板 extra tool 是否继续追加本地 knowledge-base RAG follow-up，
-  已可以按工具自己的 `runtime_semantic_kind` 稳定收口；这对后续围绕
-  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
-  继续抬高 real-tool 展示一致性会更友好。
-- 阶段 5 协同（2026-06-29，real tool outward result projection）：后端现已继续把 extra/real tools 真正进入
-  trace/observation/export 主链的 `tool.output` 结果也做了产品化投影。当前前端无需改协议，但 Inspector、
-  trace 明细与后续导出里看到的 real-tool 结果，已经可以按工具声明的 `result_output_keys` 收口为稳定摘要，
-  不再被 retrieval 模板 runner 的 `chunks/knowledge_base_id` 等本地字段污染；这对后续围绕
-  [`frontend/e2e/usage-dashboard.spec.ts`](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/e2e/usage-dashboard.spec.ts)
-  继续抬高 real-tool 结果展示一致性也更友好。
-- 阶段 5 协同（2026-06-29，real tool output policy visible in settings/preflight）：后端现在会在
-  settings summary、validate preview 与 provider-source preflight tool details 里继续透出
-  `effective_result_output_keys`。当前前端模型设置弹窗无需改协议，但 source/profile 预览摘要已经能同时说明
-  real tool 的 preview-safe 字段与最终 outward output 字段，这对后续继续治理真实工具结果展示语义更友好。
-- 阶段 5 协同（2026-06-29，real tool output policy visible in runtime trace）：后端现在还会把
-  `effective_result_output_keys` 继续打进 live SSE 与 persisted trace 的 tool meta；前端
-  [chat-stream-store-utils.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/lib/stores/chat-stream-store-utils.ts)、
-  [utils.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/app/components/workbench/utils.ts) 与 trace type
-  已同步接住这组字段。当前 Inspector / task detail 无需改主协议，但 running/done 步骤 subtitle、trace 搜索与
-  live merge 现在都能直接知道 real tool 最终 outward output 保留哪些字段，而不必只靠 settings 页说明。
-- 阶段 5 协同（2026-06-29，real tool outward tool_kind normalization）：后端现在还会把 real tool 真正写进
-  `tool.output` 的 `tool_kind` 也统一归一到 runtime semantic，而不再保留 `provider_retrieval` 这类模板 kind。
-  当前前端无需改协议，但 Inspector / task detail / export replay 里看到的 raw tool output、preview 与后续搜索过滤，
-  终于会和 `semantic_kind`、output policy 站到同一份 real-tool 语义上，不再出现 meta 已是 `provider_search`、
-  结果体里却仍躺着模板 kind 的割裂状态。
-- 阶段 5 协同（2026-06-29，real tool implicit output projection fallback）：后端现在还支持一层 implicit
-  output projection fallback：当 real tool 已声明 `runtime_semantic_kind` 与 preview keys，但没有再重复声明
-  `result_output_keys` 时，settings/preflight 与执行期 trace 会自动把 preview keys 当成 effective output keys。
-  当前前端模型设置摘要、Inspector 与任务详情无需改协议，但 real tool 的 output policy 现在会更稳定地单源化到同一组字段，
-  不再要求 source 配置里同时维护两份几乎相同的 preview/output key 列表。
-- 阶段 5 协同（2026-06-29，real tool semantic family visible in runtime/settings）：后端现在还会在 real tool 的
-  runtime meta 与 settings/preflight tool details 里，补出一层可选 `semantic_family`。当前前端
-  [chat-stream-store-utils.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/lib/stores/chat-stream-store-utils.ts)、
-  [chat-stream-store.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/lib/stores/chat-stream-store.ts)、
-  [utils.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/app/components/workbench/utils.ts) 与
-  [model-settings-modal-utils.ts](/Users/gaobingbing/Desktop/code/SuperPod/InsightAgent/frontend/app/components/workbench/model-settings-modal-utils.ts)
-  已同步吃下这组字段；因此像 `provider_search` 这类 real tool 现在既能在 trace subtitle / settings 摘要里保留
-  `provider_search` 这层真实执行 identity，又会继续暴露 `knowledge_retrieval` family，供 trace 搜索、semantic
-  filter/stats 与 task snapshot 归类稳定复用。这个切片还顺手补上了 live store 之前漏传
-  `effective_result_output_keys` 的缺口，所以真实页面看到的 running/done tool meta 现在会和 node helper 的语义保持一致。
-- 阶段 5 协同（2026-06-29，real tool semantic-family preview/output inheritance）：后端现在还会把 real tool 的
-  默认 preview/output key 推导继续回退到 `semantic_family`。当前前端不需要改协议，但当 `provider_search` 这类工具保留
-  `semantic_kind=provider_search`、却没有额外手写 `result_preview_keys / result_output_keys` 时，模型设置摘要、
-  Inspector、任务详情与 live trace 现在仍会自动看到 `hit_count / knowledge_base_id` 这类 retrieval family 默认摘要，
-  而不再因为 execution identity 换成真实 provider 语义就掉回整份 raw output。对页面来说，这意味着 real tool 可以更自然地同时保留
-  “真实执行 identity”和“产品化摘要字段”，后续继续扩真实工具接入时需要手写的重复 source 配置也会更少。
-- 阶段 5 协同（2026-06-29，productized tool titles in trace preview/export）：后端现在还把 trace preview /
-  export 标题也继续产品化了。当前前端主页面协议无需调整，但 session/task export 里那些复用后端 `trace_preview`
-  的摘要标题，不再停留在 `action` 或 `tool_call` 这类通用类型名，而会直接显示 `Provider Search [provider_search · knowledge_retrieval]`
-  这类工具标签 + 语义描述；这让真实工具从 settings、trace subtitle、semantic stats 到导出摘要的用户可见口径更连续。
-- 阶段 5 协同（2026-06-29，live trace/session export title alignment）：这轮继续把同一套标题语义补到前端实时 Trace 本体。
-  当前 `frontend/app/components/workbench/utils.ts:getStepTitle()` 也会优先按 `meta.tool.label/name + [semantic_kind · semantic_family]`
-  生成 Inspector trace card / flow view 标题，因此 live running/done trace 不会再把 real tool 回落成 `action`；
-  同时后端 session export markdown 的 trace preview 列表，也会在已有产品化 `title` 时直接复用它，不再额外前缀 raw type。
-  对前端来说，这意味着 real tool 的标题口径现在已经从 live trace、task detail replay 一直贯通到 session/task export 摘要，
-  页面协议与现有 e2e 消费字段都保持不变。
+- 阶段 5 协同（2026-06-29，real-tool execution semantics productization）：当前把 6 月 29 日这组前后端协同改动按主题合并维护为三件事：1) built-in 与 extra/real tools 的执行期显示名、observation、trace/export 标题、governance label 统一走产品化口径，`calc_eval` 等内部名不再回流到页面主链；2) 前端已完整接住 `runtime_semantic_kind`、`semantic_family`、`effective_result_preview_keys` 与 `effective_result_output_keys`，settings / live trace / task detail / export replay / 搜索过滤统一按这份 safe-output 语义展示；3) usage-dashboard、planning-only / calculator-only 与 trace 过滤相关断言已并到当前产品语义，不再逐条兼容旧文案。
 - 阶段 5 协同（2026-06-29，remote cancel e2e wait-loop alignment）：这轮前端没有新增新的页面协议，而是继续加固
   `frontend/e2e/workbench-remote-errors.spec.ts` 里最接近真实 remote 交互的一条回归。当前
   `openInspectorContextTab()` 已和 `workbench-edge-cases.spec.ts` 对齐到“同时确认 `aria-selected` 与 panel visible”
   的激活判断，并新增 `waitForContextCancelButton()`，会在切到 Context tab 后持续轮询 `inspector-task-cancel`
   是否真正出现，而不再只凭 panel 已可见就断言当前任务卡片已经 ready。对前端来说，这意味着 remote cancel cooldown
   这条用例会更少被 Inspector tab 切换与当前任务卡片异步刷新抖动误伤，且不需要改动任何 SSE / trace / task API 契约。
-- 阶段 5 协同（2026-06-29，mock final-answer semantic bridge for planned/real tools）：后端这轮继续把默认 mock
-  最终回答推进到更像真实 provider 的最小综合。当前当 planner observation 只带结构化 `steps`，或 real retrieval /
-  provider-search observation 已按产品化链路收口成 `documents_total` 时，最终 assistant message 也会继续总结成
-  `Summary: Planned steps ... / Retrieved N documents.`，而不再退回 generic `... completed.` stub。对前端来说，
-  这意味着 usage dashboard、任务详情回放以及后续围绕真实工具的最终回答验收，不只会继续看到 preview-safe summary，
-  还会和 execution trace / observation 的产品化结果保持更一致的语义。校验结果：
-  `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`639/639`），
-  `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`
-  通过（`22/22`），`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，
-  `bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。
+- 阶段 5 协同（2026-06-30，safe output / result summary 收口）：
+  当前把 6 月 30 日这一组前后端协同点合并维护为五件事：1) live store、Inspector、trace preview 与导出链统一按 `effective_result_output_keys` 消费 canonical outward output；2) `tool_end` SSE 在有 output policy 时会更早给出 safe `output`；3) `provider_search` 这类 real retrieval tool 会稳定产出 RAG follow-up，planner summary / mock final-answer 会继续落成 retrieval 语义；4) RAG follow-up 标题统一为 `Knowledge Retrieval Snippets`，且前端 subtitle 在已有 `meta.rag` 时不再重复暴露底层 `Step rag retrieval`；5) live/persisted tool step 现在会优先显示 runtime additive `result_summary`，而不是 generic `Tool done: ...`，`frontend/lib/stores/chat-stream-store-utils.ts` 也会在 `tool_end` 合并时稳定保留这份摘要。校验结果：`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`34/34`），`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`663/663`），`bash scripts/test_ci_e2e_tooling.sh common` 通过。真 backend / frontend e2e 本轮已实际尝试，但提权后仍因 `127.0.0.1:8000` 无服务监听而阻塞，未记为通过。
 - 阶段 5 协同（2026-06-12，settings 默认回退治理单源化）：后端 `PUT /api/settings` 与
   `POST /api/settings/validate` 的默认 profile/source 回退现已并入 shared
   `get_tool_registry_profile_name_from_settings()` /

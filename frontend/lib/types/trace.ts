@@ -31,6 +31,7 @@ export type TraceStepMeta = {
     input?: unknown;
     output?: unknown;
     output_preview?: unknown;
+    result_summary?: string | null;
     status: "running" | "done" | "error";
     supports_result_preview?: boolean;
     effective_result_preview_keys?: string[];

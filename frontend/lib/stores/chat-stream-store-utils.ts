@@ -5,6 +5,7 @@ export type LiveToolEndPayload = {
   error?: string;
   output?: unknown;
   output_preview?: unknown;
+  result_summary?: unknown;
   kind?: unknown;
   semantic_kind?: unknown;
   semantic_family?: unknown;
@@ -36,6 +37,7 @@ type ToolMetaLike = {
   input?: unknown;
   output?: unknown;
   output_preview?: unknown;
+  result_summary?: unknown;
   status?: unknown;
   retry_count?: unknown;
   error?: unknown;
@@ -46,6 +48,26 @@ type ToolMetaLike = {
   effective_result_preview_keys?: unknown;
   effective_result_output_keys?: unknown;
 };
+
+function normalizeToolOutputByKeys(
+  output: unknown,
+  outputKeys: string[] | undefined,
+): unknown {
+  if (
+    !output
+    || typeof output !== "object"
+    || Array.isArray(output)
+    || !outputKeys
+    || outputKeys.length === 0
+  ) {
+    return output;
+  }
+  return Object.fromEntries(
+    outputKeys
+      .filter((key) => Object.prototype.hasOwnProperty.call(output, key))
+      .map((key) => [key, output[key as keyof typeof output]]),
+  );
+}
 
 function normalizeToolSemantics(
   prevTool: ToolMetaLike | undefined,
@@ -163,6 +185,7 @@ export function mergeToolEndToolMeta(
   input?: unknown;
   output?: unknown;
   output_preview?: unknown;
+  result_summary?: string;
   kind?: string;
   semantic_kind?: string;
   semantic_family?: string;
@@ -178,6 +201,7 @@ export function mergeToolEndToolMeta(
     payload.status === "running" || payload.status === "error"
       ? payload.status
       : "done";
+  const semantics = normalizeToolSemantics(prevTool, payload);
 
   return {
     name:
@@ -189,9 +213,21 @@ export function mergeToolEndToolMeta(
         ? prevTool.label.trim()
         : identity.label,
     input: prevTool?.input,
-    output: hasRawOutput ? payload.output : prevTool?.output,
+    output: hasRawOutput
+      ? normalizeToolOutputByKeys(
+          payload.output,
+          semantics.effective_result_output_keys,
+        )
+      : prevTool?.output,
     output_preview: payload.output_preview,
-    ...normalizeToolSemantics(prevTool, payload),
+    result_summary:
+      typeof payload.result_summary === "string" && payload.result_summary.trim()
+        ? payload.result_summary.trim()
+        : typeof prevTool?.result_summary === "string" &&
+            prevTool.result_summary.trim()
+          ? prevTool.result_summary.trim()
+          : undefined,
+    ...semantics,
     retry_count:
       typeof payload.retry_count === "number" ? payload.retry_count : undefined,
     error: typeof payload.error === "string" ? payload.error : undefined,

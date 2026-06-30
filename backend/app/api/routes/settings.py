@@ -287,7 +287,8 @@ def _build_tool_registry_options_bundle(
             list(provider_registry.keys())
         )
         enabled_tool_labels = [
-            provider_registry[tool_name].label for tool_name in enabled_tool_names
+            get_tool_display_name(tool_name, registry_provider=provider)
+            for tool_name in enabled_tool_names
         ]
         source_spec = normalized_source_specs.get(source_name, {})
         base_profile = get_tool_registry_profile_name_from_settings(

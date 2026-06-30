@@ -48,122 +48,18 @@ file-manifest 主链现已统一切到 `task_plan / task_retrieve`；旧的 `moc
 `[mock-tool-error] / [mock-tool-fatal] / [mock-multi-tool]` 切到
 `[tool-error] / [tool-fatal] / [multi-tool]`；旧 marker 仍继续兼容，但后续调试与文档均以 generic marker 为准。
 
-2026-06-29 主线续推（shared tool observation productization）：执行链路里共用的 observation helper
-现已默认按当前 registry registration 解析展示名，不再在部分 success-artifacts / postprocess /
-effects 分支回落到 `calc_eval` 这类内部工具名。当前 built-in calculator 与 extra/real tools 会统一产出
-`Calculator` 或各自注册 label 的 preview-safe observation，同时保持外部 SSE / trace / export / e2e
-契约不变。
+2026-06-29 主线续推（real-tool execution semantics productization）：
+- built-in 与 extra/real tools 的执行期显示名、observation、trace/export 标题、governance label 已统一走产品化口径，`calc_eval` 等内部名不再回流到用户主链。
+- real tool 已支持 `runtime_semantic_kind`、`semantic_family`、`effective_result_preview_keys` 与 `effective_result_output_keys`；settings / preflight / live trace / persisted trace / export / mock final answer 现按同一份 safe-output 语义工作。
+- planner、retrieval、calculator 的前后端可观测性链已打通到过滤、搜索、标题、summary 与 usage-dashboard 断言；该轮标准校验已完成，真 e2e 通过记录保留历史基线，不在这里逐条展开。
 
-2026-06-29 主线续推（execution display label productization）：默认 built-in calculator 在执行期
-`tool_start`、`Tool running`、`Tool done` 与 `Tool error` 等可见语义里，也已不再回落到
-`calc_eval` 这类内部名。当前运行时会按 registration label 统一产出 `Calculator` 等 execution display label，
-但 planning summary 与治理筛选等仍保持既有 canonical name 口径，因此外部 SSE / trace / export / e2e
-契约继续稳定。
+2026-06-30 主线收口（real tools / safe output / result summary）：
+- unlabeled / source-override real tool label、trace/export title 与治理摘要继续统一走产品化显示名；runtime override retrieval tool（如 `provider_search`）会稳定产出 RAG follow-up，follow-up 标题保持 `Knowledge Retrieval Snippets`。
+- observation、`tool.output`、`tool_end` SSE、live store、trace preview、export 与 mock final answer 继续按 `effective_result_output_keys` 消费 canonical outward output，避免白名单外字段重新进入 UI / 导出。
+- 新增 additive `result_summary` 语义桥：对已产品化的 real/extra tools，runtime 会在 success meta 与 `tool_end` 中补充简洁结果摘要；前后端 trace display / export helper 会优先展示这份摘要，而不是 generic `Tool done: ...`，但原始 `step.content`、SSE 事件名与 trace shape 均保持兼容。
+- 校验：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`663/663`）；`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`34/34`）；`bash scripts/test_ci_e2e_tooling.sh common` 通过。真 backend / frontend e2e 本轮已实际尝试，但在提权后仍因 `127.0.0.1:8000` 无服务监听而阻塞，未记为通过。
 
-2026-06-29 主线续推（calculator user-facing label chain productization）：默认 built-in calculator 的
-用户可见 label 现已继续贯通到 planning summary、planning `allowed_tool_labels / planned_tool_labels`、
-settings/profile 预览，以及 task/session export / governance summary 的历史 label 归一化。当前
-`calc_eval` 继续保留为 canonical/internal tool name，但用户侧默认看到的 label 已统一收口到
-`Calculator`；source/profile override 的自定义 label 仍保持原样。
-
-2026-06-29 主线续推（real tool runtime semantic override）：默认 extra/real tools 现在还可以在保持
-planner 启发式兼容的前提下，单独声明 execution-facing `runtime_semantic_kind`。当前运行时的
-`tool_start/tool_end semantic_kind`、默认 result preview key 推导、RAG follow-up 追加，以及
-settings/provider-source tool details 的 `semantic_kind` / `effective_result_preview_keys`，都已优先走这层
-override；因此像 `provider_search` 这类“由 retrieval 模板规划出来、但执行期不应继续沿用本地 knowledge-base
-语义”的工具，已经可以摆脱默认 retrieval/local stub 语义，同时保持外部 SSE / trace / export / e2e
-契约不变。
-
-2026-06-29 主线续推（real tool outward result projection）：在 runtime semantic override 之后，默认
-extra/real tools 还可以进一步声明 `result_output_keys`，把真正进入 action trace / observation / export 主链的
-`tool.output` 收口成一组稳定的 outward 字段。当前运行时不会改 `run_tool()` 内部原始输出，但会在 success
-meta、step output、observation 与后续 success effects 上优先应用这层投影；因此像 `provider_search`
-这类 real tool 已不再必须把 retrieval 模板 runner 的 `chunks/knowledge_base_id` 等本地字段继续暴露到用户可见结果里，
-而可以只保留 `documents_total` 这类产品化结果摘要，同时保持外部 SSE / trace / export / e2e 契约不变。
-
-2026-06-29 主线续推（real tool output policy visible in settings/preflight）：在 outward result projection
-之后，默认 extra/real tools 的 `result_output_keys` 现在也会显式进入 settings summary、validate preview
-与 provider preflight 的 tool details。当前 provider/source 预览不只会显示 `semantic_kind` 与
-`effective_result_preview_keys`，也会继续透出 `effective_result_output_keys`，因此像 `provider_search`
-这类 real tool 在保存/校验模型设置时，就已经能明确说明“预览看哪些字段、最终 outward output 又保留哪些字段”；
-外部 SSE / trace / export / e2e 契约保持不变。
-
-2026-06-29 主线续推（real tool output policy visible in runtime trace）：在 settings/preflight 能看到
-`effective_result_output_keys` 之后，执行期 runtime meta 现在也开始透出这组语义。当前
-`tool_start/tool_end`、action step `meta.tool`、success trace meta，以及前端 live trace merge /
-subtitle / search 都已能同步消费 `effective_result_output_keys`；因此 real tool 不只结果本体已经被投影，
-连运行中/已完成步骤也能直接说明“最终 outward output 保留哪些字段”，而不再只停留在 settings 侧说明文字。
-
-2026-06-29 主线续推（real tool outward tool_kind normalization）：在 runtime semantic override 已进入
-meta、preview 与 output policy 之后，real tool 的 outward `tool.output.tool_kind` 现在也开始同步走这层
-execution-facing semantic。当前像 `provider_search` 这类 retrieval-template real tool，即使 runner 仍返回
-`provider_retrieval` 这类模板 kind，`run_tool()` 与更低层 execution helper 也会在进入 trace/observation/output
-主链前统一把它归一成 `provider_search`；因此结果本体不再偷偷回落到本地模板语义，连绕过 `run_tool()` 的执行入口也会共享
-同一份 real-tool outward kind。
-
-2026-06-29 主线续推（real tool implicit output projection fallback）：在 `runtime_semantic_kind`、
-preview keys 与 output policy 都已经打通之后，real tool 现在还支持一层 implicit outward projection fallback。
-当前如果某个 real tool 已显式声明 `runtime_semantic_kind`，也已经给出了 preview keys，但没有再重复声明
-`result_output_keys`，运行时就会默认把这组 preview keys 当成 effective output keys；因此 settings/validate/preflight
-与执行期 `tool.output` / trace meta / observation 主链，会稳定收口到同一组 outward 字段，而不再要求每个 real tool
-重复写两份几乎相同的 projection 配置。
-
-2026-06-29 主线续推（real tool semantic family visible in runtime/settings）：在 real tool 已经具备
-`runtime_semantic_kind`、output policy 与 outward `tool_kind` 归一之后，当前主链又继续补上了一层
-`semantic_family`。现在像 `provider_search` 这类 real tool，既可以在 settings/preflight、live SSE、
-persisted trace 与前端 subtitle 里保留真实执行语义 `provider_search`，又会额外透出它仍属于
-`knowledge_retrieval` 这类产品语义 family；因此前端 trace 搜索、semantic filter/stats、settings source/profile
-摘要与 live store merge 不再需要在“保留真实 identity”与“继续按 retrieval/calculator 产品语义归类”之间二选一。
-这一步同时还补上了前端 live store 对 `effective_result_output_keys` 的实际透传缺口，继续保持外部 SSE / trace /
-export / e2e 契约不变。
-
-2026-06-29 主线续推（real tool semantic-family preview/output inheritance）：在 `semantic_family` 已经进入
-runtime meta 与 settings 摘要之后，real tool 的默认 preview/output key 推导也继续并回这层 family 语义。当前如果
-`provider_search` 这类 real tool 显式声明了 `runtime_semantic_kind=provider_search`、保留了真实 execution identity，
-但没有再手写 `result_preview_keys / result_output_keys`，运行时就会优先尝试该 execution semantic 的默认键；若拿不到，
-再回退到 `semantic_family=knowledge_retrieval` 这类产品家族的默认 preview/output keys。因此 direct-runtime 执行、
-settings/validate/preflight 摘要与执行期 `tool_start/tool_end` / action-step `tool.output`，现在都能继续自动收口到
-`hit_count / knowledge_base_id` 这类 retrieval 摘要，而不再要求每个 real tool 重复声明一份和 family 默认值等价的配置。
-
-2026-06-29 主线续推（productized tool titles in trace preview/export）：在 runtime meta、preview/output policy
-与 semantic family 已经成型之后，task/session 导出和 trace preview 摘要链也继续去掉了 generic `action/tool_call`
-标题。当前 shared trace title helper 会优先按 `meta.tool.label/name + [semantic_kind · semantic_family]` 生成标题，
-因此像 `provider_search` 这类 real tool 在 task trace preview、session export 的 trace preview 列表，以及 task export
-markdown 的 Trace Steps heading 里，都会直接显示 `Provider Search [provider_search · knowledge_retrieval]`，而不再停留在
-通用 step 类型名；对应正文仍继续复用既有 preview-safe output 摘要，不改外部 SSE / trace / export / e2e 契约。
-
-2026-06-29 主线续推（live trace/session export title alignment）：在 task export 与 trace preview 标题已经产品化之后，
-前端实时 Trace 和 session export markdown 也继续并到同一套标题口径。当前
-`frontend/app/components/workbench/utils.ts:getStepTitle()` 会优先按 `meta.tool.label/name + [semantic_kind · semantic_family]`
-生成 live trace card / flow node 标题，而 `backend/app/api/routes/sessions.py:_build_session_export_markdown()` 也会在已有
-`trace_preview.title` 明显优于通用 type 时，直接输出产品化标题，不再额外前缀 `action` 这类 raw step type。这样 real tool 的
-用户可见标题链现在已经从实时 SSE/Inspector 一直贯通到 session/task export 摘要，继续保持外部 JSON / SSE / trace / e2e
-字段契约不变。
-
-2026-06-29 主线续推（shared trace filtering + usage-dashboard e2e alignment）：前端现已把
-Inspector 与任务详情页两条 trace 过滤链统一收口到 shared `filterTraceSteps()` 主干，并继续让搜索同时命中
-`semantic_family`、`effective_result_output_keys` 与 `rag.knowledge_base_id/chunks`，从而让已经进入执行主链的
-extra/real tools 与 RAG follow-up 在实时页和历史回放页上保持同一套搜索/过滤语义。与此同时，
-`frontend/e2e/usage-dashboard.spec.ts` 中仍断言旧 `calc_eval` 用户可见 label 与旧
-`planning_only` 四步摘要的用例，也已一次性对齐到当前产品化语义 `Calculator` 与 planner-only summary。
-最新校验：`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`
-通过（`22/22`），`PLAYWRIGHT_BROWSERS_PATH=$HOME/Library/Caches/ms-playwright bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001`
-通过（`47/47`），`PLAYWRIGHT_BROWSERS_PATH=$HOME/Library/Caches/ms-playwright bash scripts/ci_run_frontend_e2e.sh --phase smoke --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001`
-通过（`15/15`），`bash scripts/ci_run_backend_e2e.sh --phase main --base-url http://127.0.0.1:8000` 通过，
-`bash scripts/ci_run_backend_e2e.sh --phase timeout --base-url http://127.0.0.1:8010` 通过，
-`bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。
-
-2026-06-29 主线续推（mock final-answer semantic bridge for planned/real tools）：在 planner / retrieval /
-extra real tool 的 execution trace、preview 与 outward result 已经逐步产品化之后，默认 `mock` 最终回答层也继续补齐了
-对这类结果的最小消费。当前 `backend/app/providers/mock_provider.py` 不再只会识别 `plan`、`expression/result` 与
-`hit_count`；当 planner observation 只带结构化 `steps`，或 real retrieval / provider-search observation 已收口成
-`documents_total` 这类投影结果时，mock 最终回答也会继续综合成 `Summary: Planned steps ... / Retrieved N documents.`，
-而不再退回 `Task Planner Suite completed.`、`Provider Search completed.` 这类默认 stub 文本。这样“已经能被规划出来、也已经
-执行成产品化结果”的 extra/real tools，终于连 mock answer 末端也开始沿用同一套 preview-safe 语义，同时继续保持外部
-SSE / trace / export / e2e 契约不变。最新校验：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`
-通过（`639/639`），`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`
-通过（`22/22`），`cd frontend && npm run lint` 通过，`cd frontend && npm run build` 通过，
-`bash scripts/test_ci_e2e_tooling.sh common` 通过，`git diff --check` 通过。
+2026-06-30 主线补点（RAG follow-up subtitle cleanup）：前端 rag follow-up 在已有 `meta.rag` 时，副标题不再重复暴露底层 `Step rag retrieval`，只保留 KB / model / tokens 等产品信息；协议与 trace shape 不变，沿用上面的同轮校验基线。
 
 2026-06-29 主线续推（remote cancel e2e wait-loop alignment）：围绕“真实 provider 相关链路已越来越接近生产，但前端
 e2e 仍可能因为 Inspector 脆弱切 tab 节奏误报失败”的问题，`frontend/e2e/workbench-remote-errors.spec.ts` 这轮也把

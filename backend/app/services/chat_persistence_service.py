@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
+from app.config import get_settings
 from app.db import get_db_connection
 from app.schemas.trace import TraceStep, parse_trace_steps
 from app.services.task_status_service import (
@@ -12,6 +14,7 @@ from app.services.task_status_service import (
     task_status_rank,
 )
 from app.services.tool_runtime import (
+    get_configured_tool_registry_provider,
     get_tool_display_name,
     normalize_tool_registry_name,
 )
@@ -183,21 +186,101 @@ def _normalize_governance_filter_list(value: object) -> list[str]:
     return sorted(normalized_values)
 
 
+def _build_governance_registry_provider(
+    *,
+    profile: object,
+    provider_source: object,
+):
+    normalized_profile = (
+        profile.strip().lower() if isinstance(profile, str) and profile.strip() else None
+    )
+    normalized_provider_source = (
+        provider_source.strip().lower()
+        if isinstance(provider_source, str) and provider_source.strip()
+        else None
+    )
+    if normalized_profile is None and normalized_provider_source is None:
+        return None
+
+    runtime_settings = get_settings()
+    model_copy = getattr(runtime_settings, "model_copy", None)
+    if callable(model_copy):
+        effective_settings = model_copy(
+            update={
+                "tool_registry_profile": (
+                    normalized_profile
+                    if normalized_profile is not None
+                    else getattr(runtime_settings, "tool_registry_profile", None)
+                ),
+                "tool_registry_provider_source": (
+                    normalized_provider_source
+                    if normalized_provider_source is not None
+                    else getattr(runtime_settings, "tool_registry_provider_source", None)
+                ),
+            }
+        )
+    else:
+        effective_settings = SimpleNamespace(
+            tool_registry_profile=(
+                normalized_profile
+                if normalized_profile is not None
+                else getattr(runtime_settings, "tool_registry_profile", None)
+            ),
+            tool_registry_provider_source=(
+                normalized_provider_source
+                if normalized_provider_source is not None
+                else getattr(runtime_settings, "tool_registry_provider_source", None)
+            ),
+            tool_registry_overrides_json=getattr(
+                runtime_settings, "tool_registry_overrides_json", None
+            ),
+            tool_registry_extra_tools_json=getattr(
+                runtime_settings, "tool_registry_extra_tools_json", None
+            ),
+            tool_registry_loaders_json=getattr(
+                runtime_settings, "tool_registry_loaders_json", None
+            ),
+            tool_registry_loader_factories_json=getattr(
+                runtime_settings, "tool_registry_loader_factories_json", None
+            ),
+            tool_registry_providers_json=getattr(
+                runtime_settings, "tool_registry_providers_json", None
+            ),
+            tool_registry_provider_factories_json=getattr(
+                runtime_settings, "tool_registry_provider_factories_json", None
+            ),
+            tool_registry_provider_sources_json=getattr(
+                runtime_settings, "tool_registry_provider_sources_json", None
+            ),
+        )
+    return get_configured_tool_registry_provider(settings=effective_settings)
+
+
 def _normalize_governance_allowed_tool_labels(
     allowed_tool_names: object,
     allowed_tool_labels: object,
+    *,
+    profile: object = None,
+    provider_source: object = None,
 ) -> list[str]:
     normalized_names = _normalize_governance_string_list(allowed_tool_names)
     normalized_labels = _normalize_governance_string_list(allowed_tool_labels)
     if not normalized_names:
         return normalized_labels
 
+    registry_provider = _build_governance_registry_provider(
+        profile=profile,
+        provider_source=provider_source,
+    )
     resolved_labels: list[str] = []
     for index, tool_name in enumerate(normalized_names):
         current_label = (
             normalized_labels[index] if index < len(normalized_labels) else None
         )
-        canonical_label = get_tool_display_name(tool_name)
+        canonical_label = get_tool_display_name(
+            tool_name,
+            registry_provider=registry_provider,
+        )
         if current_label is None:
             resolved_labels.append(canonical_label)
             continue
@@ -301,21 +384,27 @@ def _normalize_task_governance_dict(
 ) -> dict[str, object] | None:
     if not isinstance(governance, dict):
         return None
-    normalized = {
-        "profile": _normalize_governance_filter(governance.get("profile"))
+    normalized_profile = (
+        _normalize_governance_filter(governance.get("profile"))
         if isinstance(governance.get("profile"), str)
-        else None,
-        "provider_source": _normalize_governance_filter(
-            governance.get("provider_source")
-        )
+        else None
+    )
+    normalized_provider_source = (
+        _normalize_governance_filter(governance.get("provider_source"))
         if isinstance(governance.get("provider_source"), str)
-        else None,
+        else None
+    )
+    normalized = {
+        "profile": normalized_profile,
+        "provider_source": normalized_provider_source,
         "allowed_tool_names": _normalize_governance_string_list(
             governance.get("allowed_tool_names")
         ),
         "allowed_tool_labels": _normalize_governance_allowed_tool_labels(
             governance.get("allowed_tool_names"),
             governance.get("allowed_tool_labels"),
+            profile=normalized_profile,
+            provider_source=normalized_provider_source,
         ),
     }
     if not _has_task_governance_values(normalized):
@@ -899,6 +988,33 @@ def _stringify_trace_tool_output_preview(value: object) -> str:
     return ""
 
 
+def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | None:
+    output_keys = tool_meta.get("effective_result_output_keys")
+    if not isinstance(output_keys, list):
+        return None
+    normalized_keys = [
+        key.strip()
+        for key in output_keys
+        if isinstance(key, str) and key.strip()
+    ]
+    if not normalized_keys:
+        return None
+    output = tool_meta.get("output")
+    if not isinstance(output, dict):
+        return output
+    return {
+        key: output[key]
+        for key in normalized_keys
+        if key in output
+    }
+
+
+def _stringify_trace_safe_tool_output(tool_meta: dict[str, object]) -> str:
+    return _stringify_trace_tool_output_preview(
+        _resolve_trace_safe_tool_output(tool_meta)
+    )
+
+
 def _format_trace_tool_semantic_descriptor(tool_meta: dict[str, object]) -> str:
     semantic_kind = str(tool_meta.get("semantic_kind") or tool_meta.get("kind") or "").strip()
     semantic_family = str(tool_meta.get("semantic_family") or "").strip()
@@ -909,11 +1025,26 @@ def _format_trace_tool_semantic_descriptor(tool_meta: dict[str, object]) -> str:
     return f"{semantic_kind} · {semantic_family}"
 
 
+def _resolve_trace_tool_display_label(tool_meta: dict[str, object]) -> str:
+    tool_name = str(tool_meta.get("name") or "").strip()
+    tool_label = str(tool_meta.get("label") or "").strip()
+    if not tool_name:
+        return tool_label
+    canonical_label = get_tool_display_name(tool_name)
+    if not tool_label:
+        return canonical_label
+    if normalize_tool_registry_name(tool_label) == normalize_tool_registry_name(
+        tool_name
+    ):
+        return canonical_label
+    return tool_label
+
+
 def get_trace_step_display_title(step: TraceStep) -> str:
     meta = getattr(step, "meta", None)
     tool_meta = getattr(meta, "tool", None) if meta is not None else None
     if isinstance(tool_meta, dict):
-        tool_label = str(tool_meta.get("label") or tool_meta.get("name") or "").strip()
+        tool_label = _resolve_trace_tool_display_label(tool_meta)
         semantic_descriptor = _format_trace_tool_semantic_descriptor(tool_meta)
         if tool_label:
             return (
@@ -921,6 +1052,9 @@ def get_trace_step_display_title(step: TraceStep) -> str:
                 if semantic_descriptor
                 else tool_label
             )
+    rag_meta = getattr(meta, "rag", None) if meta is not None else None
+    if isinstance(rag_meta, dict):
+        return "Knowledge Retrieval Snippets"
     label = getattr(meta, "label", None) if meta is not None else None
     if isinstance(label, str) and label.strip():
         return label.strip()
@@ -939,16 +1073,40 @@ def get_trace_step_display_content(step: TraceStep) -> str:
     tool_meta = getattr(meta, "tool", None) if meta is not None else None
     if not isinstance(tool_meta, dict):
         return content
+    result_summary = tool_meta.get("result_summary")
+    normalized_result_summary = (
+        result_summary.strip()
+        if isinstance(result_summary, str) and result_summary.strip()
+        else ""
+    )
+    primary_content = content
+    if normalized_result_summary:
+        stripped_content = content.strip()
+        if not stripped_content or stripped_content.startswith("Tool done:"):
+            primary_content = normalized_result_summary
+        elif normalized_result_summary not in stripped_content:
+            primary_content = "\n".join(
+                part for part in (content, normalized_result_summary) if part
+            )
     preview_text = _stringify_trace_tool_output_preview(
         tool_meta.get("output_preview")
     )
-    if not preview_text:
-        return content
-    if preview_text in content:
-        return content
-    if content.strip():
-        return f"{content}\nPreview: {preview_text}"
-    return preview_text
+    safe_output_text = _stringify_trace_safe_tool_output(tool_meta)
+    preview_line = (
+        f"Preview: {preview_text}"
+        if preview_text and preview_text not in primary_content
+        else ""
+    )
+    output_line = (
+        f"Output: {safe_output_text}"
+        if safe_output_text and safe_output_text != preview_text
+        else ""
+    )
+    if not preview_line and not output_line:
+        return primary_content or preview_text or safe_output_text
+    return "\n".join(
+        part for part in (primary_content, preview_line, output_line) if part
+    )
 
 
 def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
@@ -968,8 +1126,11 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
     if isinstance(tool_meta, dict):
         sanitized_tool_meta = dict(tool_meta)
         preview_value = sanitized_tool_meta.get("output_preview")
-        if preview_value is not None:
+        safe_output_value = _resolve_trace_safe_tool_output(sanitized_tool_meta)
+        if preview_value is not None and safe_output_value is None:
             sanitized_tool_meta.pop("output", None)
+        elif safe_output_value is not None:
+            sanitized_tool_meta["output"] = safe_output_value
         payload["tool"] = sanitized_tool_meta
     return payload
 
@@ -1671,6 +1832,7 @@ def get_task_rows_session_export_summary(
     for task_row in task_rows:
         task_id = str(task_row.get("id", ""))
         trace_summary = trace_summary_by_task_id.get(task_id, {})
+        raw_governance = task_row.get("governance")
         task_summaries.append(
             {
                 "task": {
@@ -1682,9 +1844,11 @@ def get_task_rows_session_export_summary(
                 },
                 "usage": get_task_usage_from_task(task_row),
                 "trace": {
-                    "governance": task_row.get("governance")
-                    if isinstance(task_row.get("governance"), dict)
-                    else None,
+                    "governance": (
+                        _normalize_task_governance_dict(raw_governance)
+                        if type(raw_governance) is dict
+                        else _coerce_payload_mapping_or_none(raw_governance)
+                    ),
                     "step_count": int(trace_summary.get("trace_step_count", 0) or 0),
                     "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
                     "preview": [

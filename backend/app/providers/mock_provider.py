@@ -118,7 +118,19 @@ def _summarize_tool_observation(observation: str) -> str | None:
     documents_total = payload.get("documents_total")
     if isinstance(documents_total, int) and documents_total >= 0:
         document_label = "document" if documents_total == 1 else "documents"
+        request_id = payload.get("request_id")
+        if isinstance(request_id, str) and request_id.strip():
+            return (
+                f"Retrieved {documents_total} {document_label} "
+                f"(request id {request_id.strip()})."
+            )
         return f"Retrieved {documents_total} {document_label}."
+
+    generic_payload_summary = _summarize_generic_tool_payload(payload)
+    if generic_payload_summary:
+        if label:
+            return f"{label} output - {generic_payload_summary}."
+        return f"Tool output - {generic_payload_summary}."
 
     if label:
         return f"{label} completed."
@@ -153,6 +165,28 @@ def _normalize_plan_steps(raw_steps: object) -> list[str]:
         if step:
             normalized_steps.append(step)
     return normalized_steps
+
+
+def _summarize_generic_tool_payload(payload: dict[str, object]) -> str | None:
+    parts: list[str] = []
+    for key, value in payload.items():
+        normalized_key = key.strip()
+        if not normalized_key:
+            continue
+        if isinstance(value, bool):
+            parts.append(f"{normalized_key}={'true' if value else 'false'}")
+            continue
+        if isinstance(value, (int, float)):
+            parts.append(f"{normalized_key}={value}")
+            continue
+        if isinstance(value, str):
+            normalized_value = value.strip()
+            if normalized_value:
+                parts.append(f"{normalized_key}={normalized_value}")
+            continue
+    if not parts:
+        return None
+    return ", ".join(parts[:3])
 
 
 def _mock_stream_delay_seconds(prompt: str) -> float:
