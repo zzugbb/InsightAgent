@@ -15817,6 +15817,25 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result.content,
         )
 
+    def test_mock_llm_provider_generate_summarizes_human_readable_retrieval_observations(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            "Provider Search: Retrieved 2 documents (request id req-1)."
+        )
+
+        self.assertIn(
+            "Summary: Retrieved 2 documents (request id req-1).",
+            result.content,
+        )
+        self.assertNotIn(
+            "Tool context: Provider Search: Retrieved 2 documents (request id req-1).",
+            result.content,
+        )
+
     def test_mock_llm_provider_generate_summarizes_generic_structured_tool_outputs_before_completed_fallback(
         self,
     ) -> None:
@@ -29976,7 +29995,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Calculator: {"expression": "1+2*3", "result": 7.0}',
         )
 
-    def test_build_tool_observation_entry_preserves_effective_result_output_keys_for_runtime_override_real_tool(
+    def test_build_tool_observation_entry_prefers_result_summary_for_runtime_override_real_tool(
         self,
     ) -> None:
         registration = ToolRegistration(
@@ -30008,7 +30027,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 },
                 registration=registration,
             ),
-            'Provider Search: {"documents_total": 2, "request_id": "req-1"}',
+            "Provider Search: Retrieved 2 documents (request id req-1).",
         )
 
     def test_get_trace_step_display_content_prefers_tool_result_summary_over_generic_done_content(
@@ -31844,7 +31863,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             success_bundle["observation"],
-            'Provider Search: {"documents_total": 2, "request_id": "req-1"}',
+            "Provider Search: Retrieved 2 documents (request id req-1).",
         )
         self.assertIsNone(success_bundle["rag_followup"])
 
@@ -34130,7 +34149,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
-            'Provider Search: {"documents_total": 2}',
+            "Provider Search: Retrieved 2 documents.",
         )
         self.assertEqual(
             final_item["result"]["loop_execution_result"]["success_effects"]["output"],
@@ -34420,7 +34439,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
-            'Provider Search: {"hit_count": 2, "knowledge_base_id": "provider-kb"}',
+            "Provider Search: Retrieved 2 hits from knowledge base provider-kb.",
         )
         self.assertEqual(
             final_item["result"]["loop_execution_result"]["success_effects"]["output"],

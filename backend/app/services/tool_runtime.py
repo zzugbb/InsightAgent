@@ -5425,6 +5425,19 @@ def build_tool_observation_entry(
 ) -> str:
     canonical_name = normalize_tool_registry_name(name)
     resolved_registration = registration or resolve_tool_registration(canonical_name)
+    resolved_display_name = display_name or get_tool_observation_display_name_from_registration(
+        name=canonical_name,
+        registration=resolved_registration,
+    )
+    if isinstance(output, dict):
+        result_summary = build_tool_result_summary(
+            name=canonical_name,
+            output=output,
+            display_name=resolved_display_name,
+            registration=resolved_registration,
+        )
+        if result_summary:
+            return f"{resolved_display_name}: {result_summary}"
     observation_output = output
     if isinstance(output, dict):
         effective_result_output_keys = get_tool_effective_result_output_keys(
@@ -5444,10 +5457,6 @@ def build_tool_observation_entry(
             )
             if preview_output is not None:
                 observation_output = preview_output
-    resolved_display_name = display_name or get_tool_observation_display_name_from_registration(
-        name=canonical_name,
-        registration=resolved_registration,
-    )
     return (
         f"{resolved_display_name}: "
         f"{json.dumps(observation_output, ensure_ascii=False)}"

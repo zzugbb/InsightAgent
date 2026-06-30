@@ -90,6 +90,9 @@ def _summarize_tool_observations(observations: list[str]) -> str | None:
 def _summarize_tool_observation(observation: str) -> str | None:
     label, payload = _parse_tool_observation(observation)
     if payload is None:
+        _, separator, raw_payload = observation.partition(":")
+        if separator and raw_payload.strip():
+            return raw_payload.strip()
         return None
 
     plan = payload.get("plan")

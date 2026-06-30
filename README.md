@@ -57,9 +57,12 @@ file-manifest 主链现已统一切到 `task_plan / task_retrieve`；旧的 `moc
 - unlabeled / source-override real tool label、trace/export title 与治理摘要继续统一走产品化显示名；runtime override retrieval tool（如 `provider_search`）会稳定产出 RAG follow-up，follow-up 标题保持 `Knowledge Retrieval Snippets`。
 - observation、`tool.output`、`tool_end` SSE、live store、trace preview、export 与 mock final answer 继续按 `effective_result_output_keys` 消费 canonical outward output，避免白名单外字段重新进入 UI / 导出。
 - 新增 additive `result_summary` 语义桥：对已产品化的 real/extra tools，runtime 会在 success meta 与 `tool_end` 中补充简洁结果摘要；前后端 trace display / export helper 会优先展示这份摘要，而不是 generic `Tool done: ...`，但原始 `step.content`、SSE 事件名与 trace shape 均保持兼容。
-- 校验：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`663/663`）；`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`34/34`）；`bash scripts/test_ci_e2e_tooling.sh common` 通过。真 backend / frontend e2e 本轮已实际尝试，但在提权后仍因 `127.0.0.1:8000` 无服务监听而阻塞，未记为通过。
+- observation 现在也优先复用这份摘要语义：real/extra tools 的 provider observation 不再只回传 JSON 投影，而会优先落成 `Provider Search: Retrieved 2 documents (request id req-1).` 这类人类可读结果；mock provider 也能继续总结这类 observation，而不是退回 `Tool context: ...`。
+- 校验：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`664/664`）；`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 保持通过（`34/34`）；`bash scripts/test_ci_e2e_tooling.sh common` 通过。真 backend / frontend e2e 本轮未新增通过记录。
 
 2026-06-30 主线补点（RAG follow-up subtitle cleanup）：前端 rag follow-up 在已有 `meta.rag` 时，副标题不再重复暴露底层 `Step rag retrieval`，只保留 KB / model / tokens 等产品信息；协议与 trace shape 不变，沿用上面的同轮校验基线。
+
+2026-06-30 主线补点（task snapshot final-answer priority）：前端 task detail snapshot 的 `finalAnswer` 现在会优先显示真实最终回答，只有缺失时才回退到最后一条 observation；因此随着 real-tool observation 越来越产品化，首屏“最终答案”不再被 `Provider Search: Retrieved ...` 这类工具摘要误顶掉，`lastObservation` 仍单独保留。校验：`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`35/35`），`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`664/664`），`bash scripts/test_ci_e2e_tooling.sh common` 通过。
 
 2026-06-29 主线续推（remote cancel e2e wait-loop alignment）：围绕“真实 provider 相关链路已越来越接近生产，但前端
 e2e 仍可能因为 Inspector 脆弱切 tab 节奏误报失败”的问题，`frontend/e2e/workbench-remote-errors.spec.ts` 这轮也把

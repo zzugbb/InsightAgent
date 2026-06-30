@@ -868,6 +868,41 @@ test("resolveTaskSnapshotSummary carries semantic stats for task detail snapshot
   });
 });
 
+test("resolveTaskSnapshotSummary prefers final answer over last observation in task snapshots", () => {
+  const summary = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-final-answer-priority",
+      session_id: "session-final-answer-priority",
+      prompt: "Need a final answer",
+      status: "completed",
+      trace_json: null,
+      created_at: "2026-06-30T00:00:00Z",
+      updated_at: "2026-06-30T00:00:01Z",
+    },
+    traceSteps: [
+      {
+        id: "step-observation",
+        type: "observation",
+        content: "Provider Search: Retrieved 2 documents (request id req-1).",
+      },
+      {
+        id: "step-final-answer",
+        type: "other",
+        content: "Summary: Retrieved 2 documents and synthesized final answer.",
+      },
+    ],
+  });
+
+  assert.equal(
+    summary.finalAnswer,
+    "Summary: Retrieved 2 documents and synthesized final answer.",
+  );
+  assert.equal(
+    summary.lastObservation,
+    "Provider Search: Retrieved 2 documents (request id req-1).",
+  );
+});
+
 test("formatTraceStepSemanticStatsSummary renders compact planner retrieval calculator counts", () => {
   const content = formatTraceStepSemanticStatsSummary(
     {

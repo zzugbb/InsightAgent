@@ -859,11 +859,11 @@ export function resolveTaskSnapshotSummary(args: {
     (step) => normalizeTraceStepKind(step) === "observation",
   );
   const finalAnswer =
-    lastObservation ??
     findLastStepContent(
       steps,
       (step) => !["tool", "rag", "thought"].includes(normalizeTraceStepKind(step)),
     ) ??
+    lastObservation ??
     findLastStepContent(steps);
 
   const taskGovernance = args.task.governance;
