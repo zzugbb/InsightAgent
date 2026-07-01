@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  formatToolRegistryProviderSourceDiagnosticsSummary,
   formatToolRegistryProviderToolDetailsSummary,
   resolveModelSettingsSelectionDetails,
 } from "./model-settings-modal-utils.ts";
@@ -41,6 +42,20 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
           base_profile: "retrieval_only",
           enabled_tool_names: ["provider_search", "provider_math"],
           enabled_tool_labels: ["Provider Search", "Provider Math"],
+          diagnostics_summary: {
+            has_diagnostics: true,
+            skipped_total: 0,
+            missing_total: 1,
+            total: 1,
+            entries: [
+              {
+                kind: "missing",
+                target: "registry_files",
+                count: 1,
+                values: ["missing-registry.json"],
+              },
+            ],
+          },
           tool_details: [
             {
               name: "provider_search",
@@ -82,8 +97,34 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
   assert.equal(result.selectedSourceTools, "Provider Search, Provider Math");
   assert.equal(result.selectedSourceBaseProfile, "retrieval_only");
   assert.equal(
+    result.selectedSourceDiagnosticsSummary,
+    "missing registry files: missing-registry.json",
+  );
+  assert.equal(
     result.selectedSourceToolDetailsSummary,
     "Provider Search [provider_search · knowledge_retrieval]: preview hit_count, knowledge_base_id; output documents_total | Provider Math [local_calculator]: expression, result",
+  );
+});
+
+test("formatToolRegistryProviderSourceDiagnosticsSummary humanizes missing entries", () => {
+  const result = formatToolRegistryProviderSourceDiagnosticsSummary({
+    has_diagnostics: true,
+    skipped_total: 0,
+    missing_total: 2,
+    total: 2,
+    entries: [
+      {
+        kind: "missing",
+        target: "registry_files",
+        count: 2,
+        values: ["missing-a.json", "missing-b.json"],
+      },
+    ],
+  });
+
+  assert.equal(
+    result,
+    "missing registry files: missing-a.json, missing-b.json",
   );
 });
 

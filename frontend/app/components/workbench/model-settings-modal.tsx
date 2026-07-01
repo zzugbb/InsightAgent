@@ -268,6 +268,7 @@ export function ModelSettingsModal({
     selectedProfileToolDetailsSummary,
     selectedSourceTools,
     selectedSourceBaseProfile,
+    selectedSourceDiagnosticsSummary,
     selectedSourceToolDetailsSummary,
   } = resolveModelSettingsSelectionDetails({
     previewSource,
@@ -403,6 +404,13 @@ export function ModelSettingsModal({
             >
               {selectedSourceToolDetailsSummary}
             </Typography.Paragraph>
+            <Typography.Paragraph
+              type="secondary"
+              data-testid="model-settings-selected-source-diagnostics"
+              style={{ marginTop: 8, marginBottom: 0 }}
+            >
+              {t.settings.sourceDiagnosticsLabel}: {selectedSourceDiagnosticsSummary}
+            </Typography.Paragraph>
           </Form.Item>
           {isRemoteMode ? (
             <>
@@ -478,6 +486,9 @@ export function ModelSettingsModal({
           </Descriptions.Item>
           <Descriptions.Item label={t.settings.metaToolRegistrySource}>
             {previewSource?.tool_registry_provider_source ?? "—"}
+          </Descriptions.Item>
+          <Descriptions.Item label={t.settings.metaToolRegistrySourceDiagnostics}>
+            {selectedSourceDiagnosticsSummary}
           </Descriptions.Item>
           <Descriptions.Item label={t.settings.metaEnabledTools}>
             {summaryEnabledTools}

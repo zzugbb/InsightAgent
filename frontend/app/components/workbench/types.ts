@@ -5,11 +5,27 @@ export type ToolRegistryProfileOptionDetail = {
   tool_details: ToolRegistryProviderToolDetail[];
 };
 
+export type ToolRegistryDiagnosticsSummaryEntry = {
+  kind: string;
+  target: string;
+  count: number;
+  values: string[];
+};
+
+export type ToolRegistryDiagnosticsSummary = {
+  has_diagnostics: boolean;
+  skipped_total: number;
+  missing_total: number;
+  total: number;
+  entries: ToolRegistryDiagnosticsSummaryEntry[];
+};
+
 export type ToolRegistryProviderSourceOptionDetail = {
   name: string;
   base_profile: string;
   enabled_tool_names: string[];
   enabled_tool_labels: string[];
+  diagnostics_summary?: ToolRegistryDiagnosticsSummary;
   tool_details: ToolRegistryProviderToolDetail[];
 };
 

@@ -22,6 +22,19 @@ export type TraceStepMeta = {
   tool_registry_provider_source?: string;
   allowed_tool_names?: string[];
   allowed_tool_labels?: string[];
+  tool_registry?: {
+    provider_source?: string;
+    has_diagnostics?: boolean;
+    skipped_total?: number;
+    missing_total?: number;
+    total?: number;
+    entries?: Array<{
+      kind: string;
+      target: string;
+      count: number;
+      values: string[];
+    }>;
+  };
   tool?: {
     name: string;
     label?: string;

@@ -128,6 +128,7 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
     diagnostics_total: int
     skipped_total: int
     missing_total: int
+    diagnostics_summary: dict[str, object]
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -143,6 +144,7 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
             "diagnostics_total": self.diagnostics_total,
             "skipped_total": self.skipped_total,
             "missing_total": self.missing_total,
+            "diagnostics_summary": self.diagnostics_summary,
         }
 
 
@@ -1181,6 +1183,9 @@ def _build_tool_registry_from_file_registry(
     if resolved_path is None:
         return {}
     resolved_path_key = str(resolved_path)
+    if not resolved_path.is_file():
+        _diagnostics["missing_registry_files"].append(resolved_path_key)
+        return {}
     if resolved_path_key in _visited_files:
         _diagnostics["skipped_registry_files"].append(resolved_path_key)
         return {}
@@ -1519,23 +1524,33 @@ def build_tool_registry_loaders_from_settings_artifacts(
     }
 
 
-def build_tool_registry_loader_factories_from_settings(
+def build_tool_registry_loader_factories_from_settings_artifacts(
     *,
     settings: object | None = None,
-) -> dict[str, ToolRegistryLoaderFactory]:
+) -> dict[str, object]:
     if settings is None:
         settings = get_settings()
     raw_factories = getattr(settings, "tool_registry_loader_factories_json", None)
     if not isinstance(raw_factories, str) or not raw_factories.strip():
-        return {}
+        return {
+            "loader_factories": {},
+            "loader_factory_diagnostics": {},
+        }
     try:
         factory_specs = json.loads(raw_factories)
     except json.JSONDecodeError:
-        return {}
+        return {
+            "loader_factories": {},
+            "loader_factory_diagnostics": {},
+        }
     if not isinstance(factory_specs, dict):
-        return {}
+        return {
+            "loader_factories": {},
+            "loader_factory_diagnostics": {},
+        }
 
     factories: dict[str, ToolRegistryLoaderFactory] = {}
+    factory_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
     for factory_name, spec in factory_specs.items():
         if not isinstance(factory_name, str) or not isinstance(spec, dict):
             continue
@@ -1544,7 +1559,26 @@ def build_tool_registry_loader_factories_from_settings(
         )
         if normalized_factory_name is None:
             continue
+        diagnostics = _empty_tool_registry_file_diagnostics()
         registry_file = spec.get("registry_file")
+        target_name = spec.get("factory")
+        normalized_target_name = _normalize_named_tool_registry_component_name(target_name)
+        if isinstance(registry_file, str) and registry_file.strip():
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                build_tool_registry_loader_from_file_artifacts(
+                    registry_file=registry_file,
+                    settings=settings,
+                )["diagnostics"],
+            )
+        elif (
+            normalized_target_name is not None
+            and normalized_target_name in factory_diagnostics
+        ):
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                factory_diagnostics[normalized_target_name],
+            )
         if isinstance(registry_file, str) and registry_file.strip():
             loader = build_tool_registry_loader_from_file(
                 registry_file=registry_file,
@@ -1555,8 +1589,8 @@ def build_tool_registry_loader_factories_from_settings(
             factories[normalized_factory_name] = (
                 lambda settings=None, loader=loader: loader
             )
+            factory_diagnostics[normalized_factory_name] = diagnostics
             continue
-        target_name = spec.get("factory")
         if not isinstance(target_name, str) or not target_name.strip():
             continue
         resolved = resolve_named_tool_registry_loader_factory(
@@ -1572,26 +1606,50 @@ def build_tool_registry_loader_factories_from_settings(
                 profile_name=target_normalized,
             )
         factories[normalized_factory_name] = resolved
-    return factories
+        factory_diagnostics[normalized_factory_name] = diagnostics
+    return {
+        "loader_factories": factories,
+        "loader_factory_diagnostics": factory_diagnostics,
+    }
 
 
-def build_tool_registry_provider_factories_from_settings(
+def build_tool_registry_loader_factories_from_settings(
     *,
     settings: object | None = None,
-) -> dict[str, ToolRegistryProviderFactory]:
+) -> dict[str, ToolRegistryLoaderFactory]:
+    artifacts = build_tool_registry_loader_factories_from_settings_artifacts(
+        settings=settings
+    )
+    return artifacts["loader_factories"]
+
+
+def build_tool_registry_provider_factories_from_settings_artifacts(
+    *,
+    settings: object | None = None,
+) -> dict[str, object]:
     if settings is None:
         settings = get_settings()
     raw_factories = getattr(settings, "tool_registry_provider_factories_json", None)
     if not isinstance(raw_factories, str) or not raw_factories.strip():
-        return {}
+        return {
+            "provider_factories": {},
+            "provider_factory_diagnostics": {},
+        }
     try:
         factory_specs = json.loads(raw_factories)
     except json.JSONDecodeError:
-        return {}
+        return {
+            "provider_factories": {},
+            "provider_factory_diagnostics": {},
+        }
     if not isinstance(factory_specs, dict):
-        return {}
+        return {
+            "provider_factories": {},
+            "provider_factory_diagnostics": {},
+        }
 
     factories: dict[str, ToolRegistryProviderFactory] = {}
+    factory_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
     for factory_name, spec in factory_specs.items():
         if not isinstance(factory_name, str) or not isinstance(spec, dict):
             continue
@@ -1600,7 +1658,26 @@ def build_tool_registry_provider_factories_from_settings(
         )
         if normalized_factory_name is None:
             continue
+        diagnostics = _empty_tool_registry_file_diagnostics()
         registry_file = spec.get("registry_file")
+        target_name = spec.get("factory")
+        normalized_target_name = _normalize_named_tool_registry_component_name(target_name)
+        if isinstance(registry_file, str) and registry_file.strip():
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                build_tool_registry_provider_from_file_artifacts(
+                    registry_file=registry_file,
+                    settings=settings,
+                )["diagnostics"],
+            )
+        elif (
+            normalized_target_name is not None
+            and normalized_target_name in factory_diagnostics
+        ):
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                factory_diagnostics[normalized_target_name],
+            )
         if isinstance(registry_file, str) and registry_file.strip():
             provider = build_tool_registry_provider_from_file(
                 registry_file=registry_file,
@@ -1611,8 +1688,8 @@ def build_tool_registry_provider_factories_from_settings(
             factories[normalized_factory_name] = (
                 lambda settings=None, provider=provider: provider
             )
+            factory_diagnostics[normalized_factory_name] = diagnostics
             continue
-        target_name = spec.get("factory")
         if not isinstance(target_name, str) or not target_name.strip():
             continue
         resolved = resolve_named_tool_registry_provider_factory(
@@ -1628,7 +1705,21 @@ def build_tool_registry_provider_factories_from_settings(
                 profile_name=target_normalized,
             )
         factories[normalized_factory_name] = resolved
-    return factories
+        factory_diagnostics[normalized_factory_name] = diagnostics
+    return {
+        "provider_factories": factories,
+        "provider_factory_diagnostics": factory_diagnostics,
+    }
+
+
+def build_tool_registry_provider_factories_from_settings(
+    *,
+    settings: object | None = None,
+) -> dict[str, ToolRegistryProviderFactory]:
+    artifacts = build_tool_registry_provider_factories_from_settings_artifacts(
+        settings=settings
+    )
+    return artifacts["provider_factories"]
 
 
 def build_tool_registry_loader_adapter(
@@ -1743,6 +1834,7 @@ def build_tool_registry_provider_adapter(
 ) -> ToolRegistryProvider | None:
     provider_factory_name = spec.get("provider_factory")
     provider_name = spec.get("provider")
+    loader_factory_name = spec.get("loader_factory")
     loader_name = spec.get("loader")
     registry_file = spec.get("registry_file")
     base_provider: ToolRegistryProvider | None = None
@@ -1783,6 +1875,30 @@ def build_tool_registry_provider_adapter(
         if base_provider is None:
             return None
         known_base_registry = dict(base_provider.load_tool_registry())
+    elif isinstance(loader_factory_name, str) and loader_factory_name.strip():
+        normalized_loader_factory_name = _normalize_named_tool_registry_component_name(
+            loader_factory_name
+        )
+        if normalized_loader_factory_name is None:
+            return None
+        named_loader_factories = build_tool_registry_loader_factories_from_settings(
+            settings=settings
+        )
+        loader_factory = resolve_named_tool_registry_loader_factory(
+            normalized_loader_factory_name,
+            named_loader_factories=named_loader_factories,
+        )
+        if loader_factory is None:
+            return None
+        base_loader = loader_factory(settings)
+        profile_name_hint = getattr(loader_factory, "_tool_registry_profile_name", None)
+        if profile_name_hint:
+            known_base_registry = get_default_tool_registry()
+            implicit_profile_name = get_tool_registry_profile_name_from_settings(
+                settings=SimpleNamespace(
+                    tool_registry_profile=profile_name_hint,
+                )
+            )
     elif isinstance(loader_name, str) and loader_name.strip():
         base_loader = resolve_named_tool_registry_loader(loader_name)
         normalized_loader_name = _normalize_named_tool_registry_component_name(loader_name)
@@ -1883,6 +1999,14 @@ def build_tool_registry_providers_from_settings_artifacts(
     loader_artifacts = build_tool_registry_loaders_from_settings_artifacts(settings=settings)
     named_loaders = loader_artifacts["loaders"]
     loader_diagnostics = loader_artifacts["loader_diagnostics"]
+    loader_factory_artifacts = build_tool_registry_loader_factories_from_settings_artifacts(
+        settings=settings
+    )
+    loader_factory_diagnostics = loader_factory_artifacts["loader_factory_diagnostics"]
+    provider_factory_artifacts = build_tool_registry_provider_factories_from_settings_artifacts(
+        settings=settings
+    )
+    provider_factory_diagnostics = provider_factory_artifacts["provider_factory_diagnostics"]
     providers: dict[str, ToolRegistryProvider] = {}
     provider_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
     for provider_name, spec in provider_specs.items():
@@ -1895,10 +2019,18 @@ def build_tool_registry_providers_from_settings_artifacts(
             continue
         diagnostics = _empty_tool_registry_file_diagnostics()
         registry_file = spec.get("registry_file")
+        provider_factory_reference = spec.get("provider_factory")
         provider_reference = spec.get("provider")
+        loader_factory_reference = spec.get("loader_factory")
         loader_reference = spec.get("loader")
+        normalized_provider_factory_reference = _normalize_named_tool_registry_component_name(
+            provider_factory_reference
+        )
         normalized_provider_reference = _normalize_named_tool_registry_component_name(
             provider_reference
+        )
+        normalized_loader_factory_reference = _normalize_named_tool_registry_component_name(
+            loader_factory_reference
         )
         normalized_loader_reference = _normalize_named_tool_registry_component_name(
             loader_reference
@@ -1918,6 +2050,22 @@ def build_tool_registry_providers_from_settings_artifacts(
             diagnostics = _merge_tool_registry_file_diagnostics(
                 diagnostics,
                 provider_diagnostics[normalized_provider_reference],
+            )
+        elif (
+            normalized_provider_factory_reference is not None
+            and normalized_provider_factory_reference in provider_factory_diagnostics
+        ):
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                provider_factory_diagnostics[normalized_provider_factory_reference],
+            )
+        elif (
+            normalized_loader_factory_reference is not None
+            and normalized_loader_factory_reference in loader_factory_diagnostics
+        ):
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                loader_factory_diagnostics[normalized_loader_factory_reference],
             )
         elif (
             normalized_loader_reference is not None
@@ -1986,6 +2134,8 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
 
     loader_artifacts: dict[str, object] | None = None
     provider_artifacts: dict[str, object] | None = None
+    loader_factory_artifacts: dict[str, object] | None = None
+    provider_factory_artifacts: dict[str, object] | None = None
     if named_loaders is None:
         loader_artifacts = build_tool_registry_loaders_from_settings_artifacts(
             settings=settings
@@ -1994,6 +2144,10 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
     loader_diagnostics = (
         loader_artifacts["loader_diagnostics"] if loader_artifacts is not None else {}
     )
+    loader_factory_artifacts = build_tool_registry_loader_factories_from_settings_artifacts(
+        settings=settings
+    )
+    loader_factory_diagnostics = loader_factory_artifacts["loader_factory_diagnostics"]
     if named_providers is None:
         provider_artifacts = build_tool_registry_providers_from_settings_artifacts(
             settings=settings
@@ -2002,6 +2156,10 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
     provider_diagnostics = (
         provider_artifacts["provider_diagnostics"] if provider_artifacts is not None else {}
     )
+    provider_factory_artifacts = build_tool_registry_provider_factories_from_settings_artifacts(
+        settings=settings
+    )
+    provider_factory_diagnostics = provider_factory_artifacts["provider_factory_diagnostics"]
     sources: dict[str, ToolRegistryProvider] = {}
     source_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
     for source_name, spec in source_specs.items():
@@ -2015,6 +2173,7 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
         adapter_keys = {
             "provider_factory",
             "provider",
+            "loader_factory",
             "loader",
             "registry_file",
             "profile",
@@ -2025,10 +2184,18 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
         if any(key in spec for key in adapter_keys):
             diagnostics = _empty_tool_registry_file_diagnostics()
             registry_file = spec.get("registry_file")
+            provider_factory_reference = spec.get("provider_factory")
             provider_reference = spec.get("provider")
+            loader_factory_reference = spec.get("loader_factory")
             loader_reference = spec.get("loader")
+            normalized_provider_factory_reference = _normalize_named_tool_registry_component_name(
+                provider_factory_reference
+            )
             normalized_provider_reference = _normalize_named_tool_registry_component_name(
                 provider_reference
+            )
+            normalized_loader_factory_reference = _normalize_named_tool_registry_component_name(
+                loader_factory_reference
             )
             normalized_loader_reference = _normalize_named_tool_registry_component_name(
                 loader_reference
@@ -2050,6 +2217,22 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                     provider_diagnostics[normalized_provider_reference],
                 )
             elif (
+                normalized_provider_factory_reference is not None
+                and normalized_provider_factory_reference in provider_factory_diagnostics
+            ):
+                diagnostics = _merge_tool_registry_file_diagnostics(
+                    diagnostics,
+                    provider_factory_diagnostics[normalized_provider_factory_reference],
+                )
+            elif (
+                normalized_loader_factory_reference is not None
+                and normalized_loader_factory_reference in loader_factory_diagnostics
+            ):
+                diagnostics = _merge_tool_registry_file_diagnostics(
+                    diagnostics,
+                    loader_factory_diagnostics[normalized_loader_factory_reference],
+                )
+            elif (
                 normalized_loader_reference is not None
                 and normalized_loader_reference in loader_diagnostics
             ):
@@ -2065,6 +2248,7 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                 named_sources=sources,
             )
             if provider is None:
+                source_diagnostics[normalized_source_name] = diagnostics
                 continue
             sources[normalized_source_name] = provider
             source_diagnostics[normalized_source_name] = diagnostics
@@ -2353,6 +2537,39 @@ def build_tool_registry_diagnostics_summary(
     ).to_dict()
 
 
+def _humanize_tool_registry_diagnostics_target(target: object) -> str:
+    normalized = str(target).strip().lower() if target is not None else ""
+    if not normalized:
+        return "diagnostics"
+    return normalized.replace("_", " ")
+
+
+def build_tool_registry_diagnostics_display_lines(
+    *,
+    entries: tuple[dict[str, object], ...],
+) -> tuple[str, ...]:
+    lines: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        kind = str(entry.get("kind", "")).strip().lower()
+        target = _humanize_tool_registry_diagnostics_target(entry.get("target"))
+        label = f"{kind} {target}".strip()
+        raw_values = entry.get("values", ())
+        values = [
+            str(value).strip()
+            for value in raw_values
+            if str(value).strip()
+        ] if isinstance(raw_values, (list, tuple)) else []
+        if values:
+            lines.append(f"{label}: {', '.join(values)}")
+            continue
+        count = int(entry.get("count", 0) or 0)
+        if label:
+            lines.append(f"{label}: {count}")
+    return tuple(lines)
+
+
 def build_tool_registry_diagnostics_runtime_artifacts_model(
     *,
     task_id: str,
@@ -2375,11 +2592,16 @@ def build_tool_registry_diagnostics_runtime_artifacts_model(
         "id": step_id,
         "seq": seq,
         "type": "observation",
-        "content": (
-            "Tool registry diagnostics: "
-            f"source={provider_source_name} "
-            f"skipped={int(summary.skipped_total)} "
-            f"missing={int(summary.missing_total)}"
+        "content": "\n".join(
+            (
+                "Tool registry diagnostics: "
+                f"source={provider_source_name} "
+                f"skipped={int(summary.skipped_total)} "
+                f"missing={int(summary.missing_total)}",
+                *build_tool_registry_diagnostics_display_lines(
+                    entries=summary.entries
+                ),
+            )
         ),
         "meta": {
             "model": model,
@@ -3452,6 +3674,7 @@ def build_configured_tool_registry_provider_preflight_summary_model_from_parts(
         diagnostics_total=diagnostics_summary.total,
         skipped_total=diagnostics_summary.skipped_total,
         missing_total=diagnostics_summary.missing_total,
+        diagnostics_summary=diagnostics_summary.to_dict(),
     )
 
 

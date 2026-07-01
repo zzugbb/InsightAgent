@@ -455,10 +455,51 @@ function stringifyTraceSafeToolOutput(
   return stringifyTraceToolOutputPreview(filteredOutput);
 }
 
+function humanizeToolRegistryDiagnosticsTarget(target: string): string {
+  const normalized = target.trim().toLowerCase();
+  if (!normalized) {
+    return "diagnostics";
+  }
+  return normalized.replaceAll("_", " ");
+}
+
+function formatTraceToolRegistryDiagnosticsLines(
+  meta: TraceStepMeta | undefined,
+): string[] {
+  const entries = Array.isArray(meta?.tool_registry?.entries)
+    ? meta.tool_registry.entries.filter(
+        (
+          entry,
+        ): entry is NonNullable<NonNullable<TraceStepMeta["tool_registry"]>["entries"]>[number] =>
+          !!entry &&
+          typeof entry.kind === "string" &&
+          typeof entry.target === "string",
+      )
+    : [];
+  if (entries.length === 0) {
+    return [];
+  }
+  return entries
+    .map((entry) => {
+      const values = Array.isArray(entry.values)
+        ? entry.values.filter(
+            (value): value is string => typeof value === "string" && value.trim().length > 0,
+          )
+        : [];
+      const label = `${entry.kind.trim().toLowerCase()} ${humanizeToolRegistryDiagnosticsTarget(entry.target)}`.trim();
+      if (values.length === 0) {
+        return label ? `${label}: ${entry.count}` : null;
+      }
+      return `${label}: ${values.join(", ")}`;
+    })
+    .filter((line): line is string => typeof line === "string" && line.length > 0);
+}
+
 export function resolveTraceStepDisplayContent(
   step: TraceStepPayload,
 ): string | null {
   const content = normalizeTraceContent(step.content);
+  const toolRegistryLines = formatTraceToolRegistryDiagnosticsLines(step.meta);
   const resultSummary =
     typeof step.meta?.tool?.result_summary === "string" &&
     step.meta.tool.result_summary.trim()
@@ -478,10 +519,17 @@ export function resolveTraceStepDisplayContent(
     safeOutput && safeOutput !== preview
       ? `Output: ${safeOutput}`
       : null;
-  if (!previewLine && !outputLine) {
-    return primaryContent ?? preview ?? safeOutput;
+  const baseLines = [primaryContent, previewLine, outputLine].filter(Boolean) as string[];
+  const diagnosticsLines = toolRegistryLines.filter((line) =>
+    !baseLines.some((baseLine) => baseLine.includes(line)),
+  );
+  if (baseLines.length === 0) {
+    if (diagnosticsLines.length > 0) {
+      return diagnosticsLines.join("\n");
+    }
+    return preview ?? safeOutput;
   }
-  return [primaryContent, previewLine, outputLine].filter(Boolean).join("\n");
+  return [...baseLines, ...diagnosticsLines].join("\n");
 }
 
 export function matchesTraceStepSearchQuery(

@@ -1,5 +1,6 @@
 import type {
   SettingsSummary,
+  ToolRegistryDiagnosticsSummary,
   SettingsValidateResponse,
   ToolRegistryProviderSourceOptionDetail,
   ToolRegistryProviderToolDetail,
@@ -66,6 +67,34 @@ export function formatToolRegistryProviderToolDetailsSummary(
     .join(" | ");
 }
 
+function humanizeDiagnosticsTarget(target: string): string {
+  const normalized = target.trim().toLowerCase();
+  if (!normalized) {
+    return "diagnostics";
+  }
+  return normalized.replaceAll("_", " ");
+}
+
+export function formatToolRegistryProviderSourceDiagnosticsSummary(
+  diagnosticsSummary: ToolRegistryDiagnosticsSummary | undefined,
+): string {
+  if (!diagnosticsSummary?.has_diagnostics || diagnosticsSummary.entries.length === 0) {
+    return "—";
+  }
+  return diagnosticsSummary.entries
+    .map((entry) => {
+      const label = `${entry.kind} ${humanizeDiagnosticsTarget(entry.target)}`.trim();
+      const values = Array.isArray(entry.values)
+        ? entry.values.filter((value) => value.trim().length > 0)
+        : [];
+      if (values.length === 0) {
+        return `${label}: ${entry.count}`;
+      }
+      return `${label}: ${values.join(", ")}`;
+    })
+    .join(" | ");
+}
+
 function findSelectedSourceDetail(
   previewSource: ModelSettingsPreviewSource | null,
   sourceName: string,
@@ -89,6 +118,7 @@ export function resolveModelSettingsSelectionDetails(args: {
   selectedProfileToolDetailsSummary: string;
   selectedSourceTools: string;
   selectedSourceBaseProfile: string;
+  selectedSourceDiagnosticsSummary: string;
   selectedSourceToolDetailsSummary: string;
 } {
   const selectedProfileDetail =
@@ -112,6 +142,10 @@ export function resolveModelSettingsSelectionDetails(args: {
         ? selectedSourceDetail.enabled_tool_labels.join(", ")
         : "—",
     selectedSourceBaseProfile: selectedSourceDetail?.base_profile ?? "—",
+    selectedSourceDiagnosticsSummary:
+      formatToolRegistryProviderSourceDiagnosticsSummary(
+        selectedSourceDetail?.diagnostics_summary,
+      ),
     selectedSourceToolDetailsSummary: formatToolRegistryProviderToolDetailsSummary(
       selectedSourceDetail?.tool_details,
     ),

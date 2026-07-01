@@ -836,11 +836,13 @@ export const en: Messages = {
     metaDatabase: "Database",
     metaToolRegistryProfile: "Tool registry profile",
     metaToolRegistrySource: "Tool registry source",
+    metaToolRegistrySourceDiagnostics: "Source diagnostics",
     metaEnabledTools: "Enabled tools",
     profileSummaryLabel: "Selected profile enables",
     sourceSummaryLabel: "Selected source defaults",
     sourceSummaryProfileLabel: "Base profile",
     sourceSummaryAllowedToolsLabel: "Source tools",
+    sourceDiagnosticsLabel: "Source diagnostics",
     remoteCompatibilityHint:
       "Remote currently supports OpenAI-compatible APIs only (/chat/completions with SSE).",
     appearanceTitle: "Appearance & language",

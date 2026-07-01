@@ -2,9 +2,42 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildLiveToolEndPayload,
   mergeToolEndToolMeta,
   mergeToolStartToolMeta,
 } from "./chat-stream-store-utils.ts";
+
+test("buildLiveToolEndPayload keeps result summary from raw tool_end event payload", () => {
+  const payload = buildLiveToolEndPayload({
+    status: "done",
+    retry_count: 0,
+    output_preview: {
+      documents_total: 2,
+    },
+    output: {
+      documents_total: 2,
+      request_id: "req-1",
+      raw_documents: [{ id: "doc-1" }],
+    },
+    result_summary: "Retrieved 2 documents (request id req-1).",
+    kind: "provider_retrieval",
+    semantic_kind: "provider_search",
+    semantic_family: "knowledge_retrieval",
+    supports_result_preview: true,
+    effective_result_preview_keys: ["documents_total"],
+    effective_result_output_keys: ["documents_total", "request_id"],
+  });
+
+  assert.equal(payload.result_summary, "Retrieved 2 documents (request id req-1).");
+  assert.deepEqual(payload.output_preview, {
+    documents_total: 2,
+  });
+  assert.deepEqual(payload.output, {
+    documents_total: 2,
+    request_id: "req-1",
+    raw_documents: [{ id: "doc-1" }],
+  });
+});
 
 test("mergeToolEndToolMeta keeps preview separate from raw output", () => {
   const meta = mergeToolEndToolMeta(

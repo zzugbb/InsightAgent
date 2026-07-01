@@ -49,6 +49,31 @@ type ToolMetaLike = {
   effective_result_output_keys?: unknown;
 };
 
+export function buildLiveToolEndPayload(
+  payload: Record<string, unknown>,
+): LiveToolEndPayload {
+  return {
+    status: typeof payload.status === "string" ? payload.status : "done",
+    retry_count:
+      typeof payload.retry_count === "number" ? payload.retry_count : undefined,
+    latency_ms:
+      typeof payload.latency_ms === "number" ? payload.latency_ms : undefined,
+    error: typeof payload.error === "string" ? payload.error : undefined,
+    output:
+      Object.prototype.hasOwnProperty.call(payload, "output")
+        ? payload.output
+        : undefined,
+    output_preview: payload.output_preview,
+    result_summary: payload.result_summary,
+    kind: payload.kind,
+    semantic_kind: payload.semantic_kind,
+    semantic_family: payload.semantic_family,
+    supports_result_preview: payload.supports_result_preview,
+    effective_result_preview_keys: payload.effective_result_preview_keys,
+    effective_result_output_keys: payload.effective_result_output_keys,
+  };
+}
+
 function normalizeToolOutputByKeys(
   output: unknown,
   outputKeys: string[] | undefined,

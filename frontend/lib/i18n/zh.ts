@@ -818,11 +818,13 @@ export const zh: Messages = {
     metaDatabase: "数据库连接",
     metaToolRegistryProfile: "Tool registry profile",
     metaToolRegistrySource: "Tool registry source",
+    metaToolRegistrySourceDiagnostics: "Source 诊断",
     metaEnabledTools: "已启用工具",
     profileSummaryLabel: "当前 profile 启用",
     sourceSummaryLabel: "当前 source 默认边界",
     sourceSummaryProfileLabel: "基础 profile",
     sourceSummaryAllowedToolsLabel: "source 工具",
+    sourceDiagnosticsLabel: "Source 诊断",
     remoteCompatibilityHint:
       "remote 目前仅支持 OpenAI-compatible 接口（/chat/completions 与 SSE）。",
     appearanceTitle: "外观与语言",

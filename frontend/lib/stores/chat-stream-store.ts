@@ -4,6 +4,7 @@ import { authFetch } from "../api-client";
 import { en, type Messages } from "../i18n";
 import { parseSseBlock, parseSseBlocks } from "../sse/parse";
 import {
+  buildLiveToolEndPayload,
   mergeToolEndToolMeta,
   mergeToolStartToolMeta,
 } from "./chat-stream-store-utils";
@@ -603,31 +604,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
                 tool: {
                   ...mergeToolEndToolMeta(
                     prevTool,
-                    {
-                      status,
-                      retry_count:
-                        typeof p.retry_count === "number"
-                          ? p.retry_count
-                          : undefined,
-                      latency_ms:
-                        typeof p.latency_ms === "number"
-                          ? p.latency_ms
-                          : undefined,
-                      error: typeof p.error === "string" ? p.error : undefined,
-                      output:
-                        Object.prototype.hasOwnProperty.call(p, "output")
-                          ? p.output
-                          : undefined,
-                      output_preview: p.output_preview,
-                      kind: p.kind,
-                      semantic_kind: p.semantic_kind,
-                      semantic_family: p.semantic_family,
-                      supports_result_preview: p.supports_result_preview,
-                      effective_result_preview_keys:
-                        p.effective_result_preview_keys,
-                      effective_result_output_keys:
-                        p.effective_result_output_keys,
-                    },
+                    buildLiveToolEndPayload(p),
                     { name: toolName, label: toolLabel },
                   ),
                 },

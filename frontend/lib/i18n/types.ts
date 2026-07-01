@@ -724,11 +724,13 @@ export type Messages = {
     metaDatabase: string;
     metaToolRegistryProfile: string;
     metaToolRegistrySource: string;
+    metaToolRegistrySourceDiagnostics: string;
     metaEnabledTools: string;
     profileSummaryLabel: string;
     sourceSummaryLabel: string;
     sourceSummaryProfileLabel: string;
     sourceSummaryAllowedToolsLabel: string;
+    sourceDiagnosticsLabel: string;
     remoteCompatibilityHint: string;
     appearanceTitle: string;
     themeLabel: string;

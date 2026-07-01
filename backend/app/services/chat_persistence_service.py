@@ -1070,9 +1070,42 @@ def get_trace_step_display_title(step: TraceStep) -> str:
 def get_trace_step_display_content(step: TraceStep) -> str:
     content = str(getattr(step, "content", "") or "")
     meta = getattr(step, "meta", None)
+    tool_registry_meta = getattr(meta, "tool_registry", None) if meta is not None else None
     tool_meta = getattr(meta, "tool", None) if meta is not None else None
+    tool_registry_lines: list[str] = []
+    if isinstance(tool_registry_meta, dict):
+        raw_entries = tool_registry_meta.get("entries", ())
+        if isinstance(raw_entries, (list, tuple)):
+            for entry in raw_entries:
+                if not isinstance(entry, dict):
+                    continue
+                kind = str(entry.get("kind", "")).strip().lower()
+                target = str(entry.get("target", "")).strip().lower().replace("_", " ")
+                label = f"{kind} {target}".strip()
+                raw_values = entry.get("values", ())
+                values = (
+                    [
+                        str(value).strip()
+                        for value in raw_values
+                        if str(value).strip()
+                    ]
+                    if isinstance(raw_values, (list, tuple))
+                    else []
+                )
+                if values:
+                    tool_registry_lines.append(f"{label}: {', '.join(values)}")
+                    continue
+                count = int(entry.get("count", 0) or 0)
+                if label:
+                    tool_registry_lines.append(f"{label}: {count}")
     if not isinstance(tool_meta, dict):
-        return content
+        if not tool_registry_lines:
+            return content
+        base_lines = [content] if content else []
+        diagnostics_lines = [
+            line for line in tool_registry_lines if line not in base_lines
+        ]
+        return "\n".join([*base_lines, *diagnostics_lines])
     result_summary = tool_meta.get("result_summary")
     normalized_result_summary = (
         result_summary.strip()
@@ -1102,11 +1135,19 @@ def get_trace_step_display_content(step: TraceStep) -> str:
         if safe_output_text and safe_output_text != preview_text
         else ""
     )
-    if not preview_line and not output_line:
-        return primary_content or preview_text or safe_output_text
-    return "\n".join(
+    base_lines = [
         part for part in (primary_content, preview_line, output_line) if part
-    )
+    ]
+    diagnostics_lines = [
+        line
+        for line in tool_registry_lines
+        if not any(line in existing for existing in base_lines)
+    ]
+    if not base_lines:
+        if diagnostics_lines:
+            return "\n".join(diagnostics_lines)
+        return primary_content or preview_text or safe_output_text
+    return "\n".join([*base_lines, *diagnostics_lines])
 
 
 def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:

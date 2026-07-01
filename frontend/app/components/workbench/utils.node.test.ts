@@ -125,6 +125,42 @@ test("resolveTraceStepDisplayContent prefers tool result summary over generic do
   );
 });
 
+test("resolveTraceStepDisplayContent appends tool registry diagnostics entries", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-tool-registry-diagnostics",
+    type: "observation",
+    content: "Tool registry diagnostics: source=file_source skipped=1 missing=1",
+    meta: {
+      tool_registry: {
+        provider_source: "file_source",
+        has_diagnostics: true,
+        skipped_total: 1,
+        missing_total: 1,
+        total: 2,
+        entries: [
+          {
+            kind: "skipped",
+            target: "registry_sources",
+            count: 1,
+            values: ["planning_suite"],
+          },
+          {
+            kind: "missing",
+            target: "registry_files",
+            count: 1,
+            values: ["/tmp/missing-registry.json"],
+          },
+        ],
+      },
+    },
+  });
+
+  assert.equal(
+    content,
+    "Tool registry diagnostics: source=file_source skipped=1 missing=1\nskipped registry sources: planning_suite\nmissing registry files: /tmp/missing-registry.json",
+  );
+});
+
 test("resolveTraceStepDisplayContent filters safe tool output to effective_result_output_keys subset", () => {
   const content = resolveTraceStepDisplayContent({
     id: "step-output-policy-safe-filtered",
@@ -399,6 +435,34 @@ test("matchesTraceStepSearchQuery ignores tool output values outside effective_r
   assert.equal(matchesTraceStepSearchQuery(step, "req-1"), true);
   assert.equal(matchesTraceStepSearchQuery(step, "raw_documents"), false);
   assert.equal(matchesTraceStepSearchQuery(step, "doc-1"), false);
+});
+
+test("matchesTraceStepSearchQuery matches tool registry diagnostics entry values", () => {
+  const step = {
+    id: "step-tool-registry-diagnostics-search",
+    type: "observation",
+    content: "Tool registry diagnostics: source=file_source skipped=1 missing=1",
+    meta: {
+      tool_registry: {
+        provider_source: "file_source",
+        has_diagnostics: true,
+        skipped_total: 1,
+        missing_total: 1,
+        total: 2,
+        entries: [
+          {
+            kind: "missing",
+            target: "registry_files",
+            count: 1,
+            values: ["/tmp/missing-registry.json"],
+          },
+        ],
+      },
+    },
+  } as const;
+
+  assert.equal(matchesTraceStepSearchQuery(step, "missing registry files"), true);
+  assert.equal(matchesTraceStepSearchQuery(step, "missing-registry.json"), true);
 });
 
 test("getStepTitle humanizes unlabeled real tool names for trace steps", () => {

@@ -13,7 +13,8 @@ from app.services.audit_service import safe_record_audit_event
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 from app.services.tool_runtime import (
     build_configured_tool_registry_provider_preflight_tool_details,
-    build_tool_registry_provider_sources_from_settings,
+    build_tool_registry_diagnostics_summary,
+    build_tool_registry_provider_sources_from_settings_artifacts,
     get_available_tool_registry_profile_names,
     get_configured_tool_registry_provider,
     get_registered_tool_names,
@@ -55,11 +56,29 @@ class ToolRegistryProviderToolDetailResponse(BaseModel):
     effective_result_output_keys: list[str] = Field(default_factory=list)
 
 
+class ToolRegistryDiagnosticsSummaryEntryResponse(BaseModel):
+    kind: str
+    target: str
+    count: int
+    values: list[str] = Field(default_factory=list)
+
+
+class ToolRegistryDiagnosticsSummaryResponse(BaseModel):
+    has_diagnostics: bool = False
+    skipped_total: int = 0
+    missing_total: int = 0
+    total: int = 0
+    entries: list[ToolRegistryDiagnosticsSummaryEntryResponse] = Field(default_factory=list)
+
+
 class ToolRegistryProviderSourceOptionResponse(BaseModel):
     name: str
     base_profile: str
     enabled_tool_names: list[str]
     enabled_tool_labels: list[str]
+    diagnostics_summary: ToolRegistryDiagnosticsSummaryResponse = Field(
+        default_factory=ToolRegistryDiagnosticsSummaryResponse
+    )
     tool_details: list[ToolRegistryProviderToolDetailResponse] = Field(
         default_factory=list
     )
@@ -241,15 +260,19 @@ def _build_tool_registry_options_bundle(
             }
         )
 
-    named_sources = build_tool_registry_provider_sources_from_settings(
+    source_artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
         settings=effective_settings
     )
+    named_sources = source_artifacts["sources"]
+    source_diagnostics = source_artifacts["source_diagnostics"]
     normalized_source_specs = get_tool_registry_provider_source_specs_from_settings(
         settings=effective_settings
     )
     available_tool_registry_provider_sources = ["default"]
     available_tool_registry_provider_sources.extend(
-        name for name in sorted(named_sources) if name and name != "default"
+        name
+        for name in sorted({*named_sources.keys(), *normalized_source_specs.keys()})
+        if name and name != "default"
     )
     available_tool_registry_provider_source_details: list[dict[str, object]] = []
     for source_name in available_tool_registry_provider_sources:
@@ -266,6 +289,9 @@ def _build_tool_registry_options_bundle(
                     "base_profile": "default",
                     "enabled_tool_names": list(preview_fields["enabled_tool_names"]),
                     "enabled_tool_labels": list(preview_fields["enabled_tool_labels"]),
+                    "diagnostics_summary": build_tool_registry_diagnostics_summary(
+                        diagnostics={}
+                    ),
                     "tool_details": list(
                         build_configured_tool_registry_provider_preflight_tool_details(
                             provider=get_configured_tool_registry_provider(
@@ -280,16 +306,6 @@ def _build_tool_registry_options_bundle(
             )
             continue
         provider = named_sources.get(source_name)
-        if provider is None:
-            continue
-        provider_registry = provider.load_tool_registry()
-        enabled_tool_names = _order_tool_names_for_display(
-            list(provider_registry.keys())
-        )
-        enabled_tool_labels = [
-            get_tool_display_name(tool_name, registry_provider=provider)
-            for tool_name in enabled_tool_names
-        ]
         source_spec = normalized_source_specs.get(source_name, {})
         base_profile = get_tool_registry_profile_name_from_settings(
             settings=_clone_settings_with_updates(
@@ -301,17 +317,33 @@ def _build_tool_registry_options_bundle(
                 ),
             )
         )
+        enabled_tool_names: list[str] = []
+        enabled_tool_labels: list[str] = []
+        tool_details: list[dict[str, object]] = []
+        if provider is not None:
+            provider_registry = provider.load_tool_registry()
+            enabled_tool_names = _order_tool_names_for_display(
+                list(provider_registry.keys())
+            )
+            enabled_tool_labels = [
+                get_tool_display_name(tool_name, registry_provider=provider)
+                for tool_name in enabled_tool_names
+            ]
+            tool_details = list(
+                build_configured_tool_registry_provider_preflight_tool_details(
+                    provider=provider
+                )
+            )
         available_tool_registry_provider_source_details.append(
             {
                 "name": source_name,
                 "base_profile": base_profile,
                 "enabled_tool_names": enabled_tool_names,
                 "enabled_tool_labels": enabled_tool_labels,
-                "tool_details": list(
-                    build_configured_tool_registry_provider_preflight_tool_details(
-                        provider=provider
-                    )
+                "diagnostics_summary": build_tool_registry_diagnostics_summary(
+                    diagnostics=source_diagnostics.get(source_name, {})
                 ),
+                "tool_details": tool_details,
             }
         )
     return {

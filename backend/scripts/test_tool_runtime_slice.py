@@ -118,11 +118,13 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_registry_loader_from_file_artifacts,
     build_tool_registry_loader_from_file,
     build_tool_registry_loaders_from_settings_artifacts,
+    build_tool_registry_loader_factories_from_settings_artifacts,
     build_tool_registry_provider_from_file_artifacts,
     build_tool_registry_provider_sources_from_settings_artifacts,
     build_tool_registry_provider_sources_from_settings,
     build_tool_registry_provider_from_file,
     build_tool_registry_providers_from_settings_artifacts,
+    build_tool_registry_provider_factories_from_settings_artifacts,
     build_tool_registry_overrides_from_settings,
     build_tool_registry_profile_settings_config,
     build_tool_registry_settings_config,
@@ -2651,6 +2653,46 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "default",
         )
 
+    def test_apply_tool_registry_preview_to_validate_response_keeps_provider_source_diagnostics_summary(
+        self,
+    ) -> None:
+        response = _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                message="ok",
+            ),
+            effective_settings=SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "registry_file": "missing-registry.json",
+                        }
+                    }
+                )
+            ),
+        )
+
+        file_source = next(
+            detail
+            for detail in response.available_tool_registry_provider_source_details
+            if detail.name == "file_source"
+        )
+        self.assertTrue(file_source.diagnostics_summary.has_diagnostics)
+        self.assertEqual(file_source.diagnostics_summary.missing_total, 1)
+        self.assertEqual(file_source.diagnostics_summary.total, 1)
+        self.assertEqual(
+            file_source.diagnostics_summary.entries[0].target,
+            "registry_files",
+        )
+        self.assertTrue(
+            file_source.diagnostics_summary.entries[0].values[0].endswith(
+                "/missing-registry.json"
+            )
+        )
+
     def test_settings_update_request_preserves_raw_registry_selection_fields(
         self,
     ) -> None:
@@ -3493,6 +3535,42 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("enabled_tool_names", details[0])
         self.assertIn("enabled_tool_labels", details[0])
         self.assertIn("tool_details", details[0])
+        self.assertIn("diagnostics_summary", details[0])
+
+    def test_tool_registry_options_bundle_includes_provider_source_diagnostics_summary(
+        self,
+    ) -> None:
+        option_bundle = settings_routes_module._build_tool_registry_options_bundle(
+            effective_settings=SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "registry_file": "missing-registry.json",
+                        }
+                    }
+                )
+            )
+        )
+
+        file_source = next(
+            detail
+            for detail in option_bundle["available_tool_registry_provider_source_details"]
+            if detail["name"] == "file_source"
+        )
+        diagnostics_summary = file_source["diagnostics_summary"]
+        self.assertTrue(bool(diagnostics_summary["has_diagnostics"]))
+        self.assertEqual(diagnostics_summary["missing_total"], 1)
+        self.assertEqual(diagnostics_summary["skipped_total"], 0)
+        self.assertEqual(diagnostics_summary["total"], 1)
+        self.assertEqual(
+            diagnostics_summary["entries"][0]["target"],
+            "registry_files",
+        )
+        self.assertTrue(
+            str(diagnostics_summary["entries"][0]["values"][0]).endswith(
+                "/missing-registry.json"
+            )
+        )
 
     def test_provider_source_option_details_reuse_shared_profile_name_helper(
         self,
@@ -3544,8 +3622,8 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         original_build_tool_registry_preview_fields = (
             settings_routes_module._build_tool_registry_preview_fields
         )
-        original_build_tool_registry_provider_sources_from_settings = (
-            settings_routes_module.build_tool_registry_provider_sources_from_settings
+        original_build_tool_registry_provider_sources_from_settings_artifacts = (
+            settings_routes_module.build_tool_registry_provider_sources_from_settings_artifacts
         )
         original_get_tool_registry_provider_source_specs_from_settings = (
             settings_routes_module.get_tool_registry_provider_source_specs_from_settings
@@ -3562,40 +3640,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "enabled_tool_labels": ["Task Planner"],
                 }
             )
-            settings_routes_module.build_tool_registry_provider_sources_from_settings = (
+            settings_routes_module.build_tool_registry_provider_sources_from_settings_artifacts = (
                 lambda settings=None: {
-                    "analytics_suite": StaticToolRegistryProvider(
-                        registry={
-                            "provider_search": ToolRegistration(
-                                name="provider_search",
-                                kind="provider_retrieval",
-                                label="",
-                                retryable_by_default=False,
-                                default_timeout_ms=15_000,
-                                requires_user_context=False,
-                                supports_result_preview=True,
-                                runner=lambda *, tool_input, prompt, user_id: {
-                                    "query": str(tool_input.get("query", "")),
-                                    "hit_count": 1,
-                                    "knowledge_base_id": "demo-kb",
-                                    "chunks": ["alpha"],
-                                },
-                            ),
-                            "provider_math": ToolRegistration(
-                                name="provider_math",
-                                kind="provider_calc",
-                                label="",
-                                retryable_by_default=True,
-                                default_timeout_ms=13_000,
-                                requires_user_context=True,
-                                supports_result_preview=True,
-                                runner=lambda *, tool_input, prompt, user_id: {
-                                    "expression": str(tool_input.get("expression", "")),
-                                    "result": 7.0,
-                                },
-                            ),
-                        }
-                    )
+                    "sources": {
+                        "analytics_suite": StaticToolRegistryProvider(
+                            registry={
+                                "provider_search": ToolRegistration(
+                                    name="provider_search",
+                                    kind="provider_retrieval",
+                                    label="",
+                                    retryable_by_default=False,
+                                    default_timeout_ms=15_000,
+                                    requires_user_context=False,
+                                    supports_result_preview=True,
+                                    runner=lambda *, tool_input, prompt, user_id: {
+                                        "query": str(tool_input.get("query", "")),
+                                        "hit_count": 1,
+                                        "knowledge_base_id": "demo-kb",
+                                        "chunks": ["alpha"],
+                                    },
+                                ),
+                                "provider_math": ToolRegistration(
+                                    name="provider_math",
+                                    kind="provider_calc",
+                                    label="",
+                                    retryable_by_default=True,
+                                    default_timeout_ms=13_000,
+                                    requires_user_context=True,
+                                    supports_result_preview=True,
+                                    runner=lambda *, tool_input, prompt, user_id: {
+                                        "expression": str(tool_input.get("expression", "")),
+                                        "result": 7.0,
+                                    },
+                                ),
+                            }
+                        )
+                    },
+                    "source_diagnostics": {
+                        "analytics_suite": {},
+                    },
                 }
             )
             settings_routes_module.get_tool_registry_provider_source_specs_from_settings = (
@@ -3619,8 +3702,8 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             settings_routes_module._build_tool_registry_preview_fields = (
                 original_build_tool_registry_preview_fields
             )
-            settings_routes_module.build_tool_registry_provider_sources_from_settings = (
-                original_build_tool_registry_provider_sources_from_settings
+            settings_routes_module.build_tool_registry_provider_sources_from_settings_artifacts = (
+                original_build_tool_registry_provider_sources_from_settings_artifacts
             )
             settings_routes_module.get_tool_registry_provider_source_specs_from_settings = (
                 original_get_tool_registry_provider_source_specs_from_settings
@@ -18964,6 +19047,137 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval_fast",),
         )
 
+    def test_build_tool_registry_loader_factories_from_settings_artifacts_tracks_registry_file_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_file = Path(tmpdir) / "missing-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_loader_factories_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(tuple(sorted(artifacts["loader_factories"])), ("file_factory",))
+        self.assertEqual(
+            artifacts["loader_factory_diagnostics"]["file_factory"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
+    def test_build_tool_registry_provider_factories_from_settings_artifacts_tracks_registry_file_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_dir = Path(tmpdir) / "missing-registry-dir"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_dirs": [str(missing_dir)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_provider_factories_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(tuple(sorted(artifacts["provider_factories"])), ("file_factory",))
+        self.assertEqual(
+            artifacts["provider_factory_diagnostics"]["file_factory"]["missing_registry_dirs"],
+            (str(missing_dir.resolve()),),
+        )
+
+    def test_build_tool_registry_providers_from_settings_artifacts_tracks_loader_factory_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_file = Path(tmpdir) / "missing-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "file_provider": {
+                            "loader_factory": "file_factory",
+                        }
+                    }
+                ),
+            )
+
+            artifacts = build_tool_registry_providers_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(tuple(sorted(artifacts["providers"])), ("file_provider",))
+        self.assertEqual(
+            artifacts["provider_diagnostics"]["file_provider"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+        self.assertEqual(
+            tuple(sorted(artifacts["providers"]["file_provider"].load_tool_registry())),
+            ("calc_eval_fast",),
+        )
+
     def test_build_tool_registry_provider_sources_from_settings_artifacts_tracks_named_provider_diagnostics(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root_file = Path(tmpdir) / "root-manifest.json"
@@ -19118,6 +19332,57 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval_fast",),
         )
 
+    def test_build_tool_registry_provider_sources_from_settings_artifacts_tracks_loader_factory_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_file = Path(tmpdir) / "missing-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "loader_factory": "file_factory",
+                        }
+                    }
+                ),
+            )
+
+            artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(tuple(sorted(artifacts["sources"])), ("file_source",))
+        self.assertEqual(
+            artifacts["source_diagnostics"]["file_source"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+        self.assertEqual(
+            tuple(sorted(artifacts["sources"]["file_source"].load_tool_registry())),
+            ("calc_eval_fast",),
+        )
+
     def test_get_configured_tool_registry_provider_artifacts_exposes_selected_source_diagnostics(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root_file = Path(tmpdir) / "root-manifest.json"
@@ -19142,6 +19407,56 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     {
                         "file_source": {
                             "registry_file": str(root_file),
+                        }
+                    }
+                ),
+            )
+
+            artifacts = get_configured_tool_registry_provider_artifacts(settings=settings)
+
+        self.assertEqual(artifacts["provider_source_name"], "file_source")
+        self.assertEqual(
+            artifacts["selected_source_diagnostics"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+        self.assertEqual(
+            tuple(sorted(artifacts["provider"].load_tool_registry())),
+            ("calc_eval_fast",),
+        )
+
+    def test_get_configured_tool_registry_provider_artifacts_exposes_selected_source_diagnostics_for_loader_factory_source(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_file = Path(tmpdir) / "missing-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_source="file_source",
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "loader_factory": "file_factory",
                         }
                     }
                 ),
@@ -19250,7 +19565,11 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "id": "step-1",
                 "seq": 4,
                 "type": "observation",
-                "content": "Tool registry diagnostics: source=file_source skipped=1 missing=1",
+                "content": (
+                    "Tool registry diagnostics: source=file_source skipped=1 missing=1\n"
+                    "skipped registry sources: planning_suite\n"
+                    "missing registry files: /tmp/missing.json"
+                ),
                 "meta": {
                     "model": "mock-gpt",
                     "step_type": "tool_registry_diagnostics",
@@ -22682,6 +23001,22 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "diagnostics_total": 1,
                 "skipped_total": 0,
                 "missing_total": 1,
+                "diagnostics_summary": {
+                    "has_diagnostics": True,
+                    "skipped_total": 0,
+                    "missing_total": 1,
+                    "total": 1,
+                    "entries": (
+                        {
+                            "kind": "missing",
+                            "target": "registry_files",
+                            "count": 1,
+                            "values": (
+                                str(missing_file.resolve()),
+                            ),
+                        },
+                    ),
+                },
             },
         )
 
@@ -22806,6 +23141,13 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "diagnostics_total": 0,
                 "skipped_total": 0,
                 "missing_total": 0,
+                "diagnostics_summary": {
+                    "has_diagnostics": True,
+                    "skipped_total": 0,
+                    "missing_total": 0,
+                    "total": 0,
+                    "entries": (),
+                },
             },
         )
 
@@ -22901,6 +23243,13 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "diagnostics_total": 0,
                 "skipped_total": 0,
                 "missing_total": 0,
+                "diagnostics_summary": {
+                    "has_diagnostics": False,
+                    "skipped_total": 0,
+                    "missing_total": 0,
+                    "total": 0,
+                    "entries": (),
+                },
             },
         )
 
@@ -23031,6 +23380,77 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     ),
                 },
             ),
+        )
+
+    def test_build_configured_tool_registry_provider_preflight_summary_model_includes_diagnostics_summary_entries(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        result = build_configured_tool_registry_provider_preflight_summary_model_from_parts(
+            provider=provider,
+            provider_source_name="file_source",
+            runtime_artifacts=build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+                provider=provider,
+                provider_source_name="file_source",
+                runtime_artifacts={
+                    "provider_source_name": "file_source",
+                    "diagnostics_runtime": {
+                        "summary": {
+                            "has_diagnostics": True,
+                            "skipped_total": 1,
+                            "missing_total": 1,
+                            "total": 2,
+                            "entries": (
+                                {
+                                    "kind": "skipped",
+                                    "target": "registry_sources",
+                                    "count": 1,
+                                    "values": ("planning_suite",),
+                                },
+                                {
+                                    "kind": "missing",
+                                    "target": "registry_files",
+                                    "count": 1,
+                                    "values": ("/tmp/missing.json",),
+                                },
+                            ),
+                        },
+                        "trace_step": None,
+                        "trace_event": None,
+                        "audit_detail": None,
+                    },
+                },
+            ),
+            service_actions=(),
+            trace_write_count=1,
+            audit_event_count=2,
+        )
+
+        self.assertEqual(
+            result.diagnostics_summary,
+            {
+                "has_diagnostics": True,
+                "skipped_total": 1,
+                "missing_total": 1,
+                "total": 2,
+                "entries": (
+                    {
+                        "kind": "skipped",
+                        "target": "registry_sources",
+                        "count": 1,
+                        "values": ("planning_suite",),
+                    },
+                    {
+                        "kind": "missing",
+                        "target": "registry_files",
+                        "count": 1,
+                        "values": ("/tmp/missing.json",),
+                    },
+                ),
+            },
         )
 
     def test_build_configured_tool_registry_provider_preflight_summary_model_humanizes_unlabeled_real_tool_names(
@@ -27426,6 +27846,41 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Planning Calculator",
         )
 
+    def test_build_tool_registry_providers_from_settings_accepts_loader_factory_reference(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_providers_json=json.dumps(
+                {
+                    "planning_provider": {
+                        "loader_factory": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        providers = build_tool_registry_providers_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(providers)), ("planning_provider",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=providers["planning_provider"]),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
+        )
+        self.assertEqual(
+            providers["planning_provider"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
     def test_build_tool_registry_provider_sources_from_settings_accepts_named_provider_reference(self) -> None:
         settings = SimpleNamespace(
             tool_registry_providers_json=json.dumps(
@@ -27476,6 +27931,41 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 {
                     "planning_suite": {
                         "provider_factory": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(sources)), ("planning_suite",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["planning_suite"]),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
+        )
+        self.assertEqual(
+            sources["planning_suite"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_accepts_loader_factory_reference(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "loader_factory": "planning_only",
                         "overrides": {
                             "calc_eval": {
                                 "enabled": True,
@@ -28042,6 +28532,54 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval", "calc_eval_fast", "task_plan"),
         )
 
+    def test_get_configured_tool_registry_provider_uses_selected_source_backed_by_loader_factory(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_source="planning_suite",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "loader_factory": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                }
+            ),
+            tool_registry_profile="default",
+            tool_registry_overrides_json=json.dumps(
+                {
+                    "calc_eval": {
+                        "default_timeout_ms": 1_200,
+                    }
+                }
+            ),
+            tool_registry_extra_tools_json=None,
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+        runtime_ctx = build_tool_runtime_context(
+            name="calc_eval",
+            prompt="calc",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=provider,
+        )
+
+        self.assertEqual(runtime_ctx.registration.label, "Planning Calculator")
+        self.assertEqual(runtime_ctx.default_timeout_ms, 1_200)
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
+        )
     def test_get_configured_tool_registry_provider_includes_extra_tools(self) -> None:
         settings = SimpleNamespace(
             tool_registry_profile="default",
@@ -30062,6 +30600,48 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Retrieved 2 documents (request id req-1).\nPreview: {"documents_total":2}\nOutput: {"documents_total":2,"request_id":"req-1"}',
         )
         self.assertNotIn("Tool done: Provider Search", content)
+
+    def test_get_trace_step_display_content_appends_tool_registry_diagnostics_entries(
+        self,
+    ) -> None:
+        step = SimpleNamespace(
+            id="step-tool-registry-diagnostics",
+            seq=5,
+            type="observation",
+            content="Tool registry diagnostics: source=file_source skipped=1 missing=1",
+            meta=SimpleNamespace(
+                tool_registry={
+                    "provider_source": "file_source",
+                    "has_diagnostics": True,
+                    "skipped_total": 1,
+                    "missing_total": 1,
+                    "total": 2,
+                    "entries": (
+                        {
+                            "kind": "skipped",
+                            "target": "registry_sources",
+                            "count": 1,
+                            "values": ("planning_suite",),
+                        },
+                        {
+                            "kind": "missing",
+                            "target": "registry_files",
+                            "count": 1,
+                            "values": ("/tmp/missing-registry.json",),
+                        },
+                    ),
+                }
+            ),
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(step)
+
+        self.assertEqual(
+            content,
+            "Tool registry diagnostics: source=file_source skipped=1 missing=1\n"
+            "skipped registry sources: planning_suite\n"
+            "missing registry files: /tmp/missing-registry.json",
+        )
 
     def test_build_tool_step_updates_and_observation_use_display_label_for_mock_plan(
         self,
