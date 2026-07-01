@@ -19,8 +19,15 @@
   - tool execution 的规范化输入已贯通到 action step、`tool_start`、runner、success/error step meta。
   - result preview/output/result-summary/runtime semantic 与 retrieval follow-up 会按 configured registry 解析，不再在 helper fallback 上退回默认内建语义。
   - real/provider retrieval snippet 若未返回 `knowledge_base_id`，rag follow-up 与 task markdown export 不再伪造 `kb=default`。
+  - runtime override real retrieval tool 即使输出投影成 `hit_count/knowledge_base_id`，result summary 与 observation 也不会再落回默认 knowledge-base 文案。
+  - mock final answer 的 observation 摘要器在遇到 runtime override real tool payload 时，也会避开默认本地 knowledge-base 文案。
+  - noncanonical extra/real tool 若未显式声明 `result_output_keys`，当前会在 preview 语义已可判定时同步推断安全 output keys，用于 success output、trace meta 与 observation summary。
+  - success-artifact helper 在缺少显式 registration / registry_provider 时，也会复用 step meta 中已有的 label / result summary / output_preview，避免 observation 回退到 provider 通用名或原始 JSON。
+  - trace/export helper 对 `effective_result_output_keys` 已兼容 `list/tuple` 两种内部形态，旧 trace 或旁路构造的 safe output 不会再静默失效。
+  - step-meta safe output helper 对 `effective_result_output_keys` 也已兼容 `list/tuple` 两种内部形态，name-only observation fallback 不会再因 tuple 旁路泄露原始输出。
+  - code-backed provider/source override spec 对 `result_preview_keys / result_output_keys` 也已兼容 `list/tuple` 两种内部形态，registry 入口不会再静默忽略 tuple 配置。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`687/687`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`698/698`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`39/39`）
   - `cd frontend && npm run lint` 通过
   - `bash scripts/test_ci_e2e_tooling.sh common` 通过

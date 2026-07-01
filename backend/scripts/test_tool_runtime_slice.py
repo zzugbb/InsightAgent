@@ -7962,6 +7962,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn('Output: {"documents_total":2,"request_id":"req-1"}', excerpt)
         self.assertNotIn("raw_documents", excerpt)
 
+    def test_get_task_trace_preview_summary_accepts_tuple_effective_result_output_keys(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-preview-tool-output-policy-tuple",
+                            "type": "action",
+                            "content": "Tool done: Provider Search",
+                            "seq": 25,
+                            "meta": {
+                                "tool": {
+                                    "name": "provider_search",
+                                    "label": "Provider Search",
+                                    "status": "done",
+                                    "effective_result_output_keys": (
+                                        "documents_total",
+                                        "request_id",
+                                    ),
+                                    "output_preview": {
+                                        "documents_total": 2,
+                                    },
+                                    "output": {
+                                        "documents_total": 2,
+                                        "request_id": "req-1",
+                                        "raw_documents": [{"id": "doc-1"}],
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn('Output: {"documents_total":2,"request_id":"req-1"}', excerpt)
+        self.assertNotIn("raw_documents", excerpt)
+
     def test_get_task_trace_preview_summary_uses_productized_tool_title_for_real_tool_steps(
         self,
     ) -> None:
@@ -11411,6 +11464,49 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                         "documents_total",
                         "request_id",
                     ],
+                    "output_preview": {
+                        "documents_total": 2,
+                    },
+                    "output": {
+                        "documents_total": 2,
+                        "request_id": "req-1",
+                        "raw_documents": [{"id": "doc-1"}],
+                    },
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        self.assertEqual(
+            markdown_meta["tool"]["output"],
+            {  # type: ignore[index]
+                "documents_total": 2,
+                "request_id": "req-1",
+            },
+        )
+        self.assertNotIn("raw_documents", markdown_meta["tool"]["output"])  # type: ignore[index]
+
+    def test_get_trace_step_markdown_meta_accepts_tuple_effective_result_output_keys(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-safe-output-meta-tuple",
+            seq=8,
+            type="action",
+            content="Tool done: Provider Search",
+            meta={
+                "tool": {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "status": "done",
+                    "effective_result_output_keys": (
+                        "documents_total",
+                        "request_id",
+                    ),
                     "output_preview": {
                         "documents_total": 2,
                     },
@@ -15948,6 +16044,20 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result.content,
         )
 
+    def test_mock_llm_provider_generate_does_not_imply_local_kb_for_runtime_override_real_tool_observation(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Search: {"tool_kind": "provider_search", "hit_count": 2, "knowledge_base_id": "provider-kb"}'
+        )
+
+        self.assertIn("This is a mock response from InsightAgent.", result.content)
+        self.assertIn("Summary: Retrieved 2 hits.", result.content)
+        self.assertNotIn("from knowledge base provider-kb", result.content)
+
     def test_mock_llm_provider_generate_summarizes_human_readable_retrieval_observations(
         self,
     ) -> None:
@@ -17878,6 +17988,53 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         sources = build_tool_registry_provider_sources_from_settings(settings=settings)
 
         self.assertEqual(sources, {})
+
+    def test_build_tool_registry_provider_adapter_accepts_tuple_result_preview_keys_in_overrides(
+        self,
+    ) -> None:
+        provider = tool_runtime_module.build_tool_registry_provider_adapter(
+            spec={
+                "provider": "default",
+                "overrides": {
+                    "task_retrieve": {
+                        "result_preview_keys": (
+                            "documents_total",
+                        ),
+                    }
+                },
+            }
+        )
+
+        self.assertIsNotNone(provider)
+        assert provider is not None
+        self.assertEqual(
+            provider.load_tool_registry()["task_retrieve"].result_preview_keys,
+            ("documents_total",),
+        )
+
+    def test_build_tool_registry_provider_adapter_accepts_tuple_result_output_keys_in_overrides(
+        self,
+    ) -> None:
+        provider = tool_runtime_module.build_tool_registry_provider_adapter(
+            spec={
+                "provider": "default",
+                "overrides": {
+                    "task_retrieve": {
+                        "result_output_keys": (
+                            "documents_total",
+                            "request_id",
+                        ),
+                    }
+                },
+            }
+        )
+
+        self.assertIsNotNone(provider)
+        assert provider is not None
+        self.assertEqual(
+            provider.load_tool_registry()["task_retrieve"].result_output_keys,
+            ("documents_total", "request_id"),
+        )
 
     def test_build_tool_registry_providers_from_settings_supports_loader_adapter_shape(self) -> None:
         settings = SimpleNamespace(
@@ -23412,6 +23569,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "requires_user_context": True,
                     "supports_result_preview": True,
                     "effective_result_preview_keys": ("expression", "result"),
+                    "effective_result_output_keys": ("expression", "result"),
                 },
                 {
                     "name": "provider_search",
@@ -23423,6 +23581,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "requires_user_context": False,
                     "supports_result_preview": True,
                     "effective_result_preview_keys": (
+                        "hit_count",
+                        "knowledge_base_id",
+                    ),
+                    "effective_result_output_keys": (
                         "hit_count",
                         "knowledge_base_id",
                     ),
@@ -29044,8 +29206,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         final_item = items[-1]
         self.assertEqual(final_item["kind"], "result")
         self.assertEqual(
-            final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
-            "provider_calc",
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "result": "provider-ok",
+            },
         )
 
     def test_build_tool_registry_merges_overrides_without_mutating_default(self) -> None:
@@ -30886,6 +31050,64 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Provider Search: Retrieved 2 documents (request id req-1).",
         )
 
+    def test_build_tool_observation_entry_reuses_step_meta_preview_without_registry_context(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="custom_lookup",
+                output={
+                    "tool_kind": "custom_lookup",
+                    "hit_count": 1,
+                    "secret": "do-not-preview",
+                },
+                step_tool_meta={
+                    "name": "custom_lookup",
+                    "label": "Custom Lookup",
+                    "status": "done",
+                    "output": {
+                        "tool_kind": "custom_lookup",
+                        "hit_count": 1,
+                        "secret": "do-not-preview",
+                    },
+                    "output_preview": {
+                        "tool_kind": "custom_lookup",
+                        "hit_count": 1,
+                    },
+                },
+            ),
+            'Custom Lookup: {"tool_kind": "custom_lookup", "hit_count": 1}',
+        )
+
+    def test_build_tool_observation_entry_accepts_tuple_effective_result_output_keys_from_step_meta(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="custom_lookup",
+                output={
+                    "tool_kind": "custom_lookup",
+                    "hit_count": 1,
+                    "secret": "do-not-preview",
+                },
+                step_tool_meta={
+                    "name": "custom_lookup",
+                    "label": "Custom Lookup",
+                    "status": "done",
+                    "effective_result_output_keys": (
+                        "tool_kind",
+                        "hit_count",
+                    ),
+                    "output": {
+                        "tool_kind": "custom_lookup",
+                        "hit_count": 1,
+                        "secret": "do-not-preview",
+                    },
+                },
+            ),
+            'Custom Lookup: {"tool_kind": "custom_lookup", "hit_count": 1}',
+        )
+
     def test_get_trace_step_display_content_prefers_tool_result_summary_over_generic_done_content(
         self,
     ) -> None:
@@ -31639,9 +31861,15 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             artifacts["observation"],
-            'Provider Math: {"expression": "1+2*3", "result": 7.0}',
+            "Provider Math: Calculated 1+2*3 = 7.0.",
         )
-        self.assertEqual(artifacts["output"], output)
+        self.assertEqual(
+            artifacts["output"],
+            {
+                "expression": "1+2*3",
+                "result": 7.0,
+            },
+        )
 
     def test_build_tool_iteration_success_artifacts_supports_registry_provider_without_explicit_display_name_or_registration(
         self,
@@ -31703,6 +31931,67 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             artifacts["observation"],
             "Hosted Search: Retrieved 2 documents.",
+        )
+
+    def test_build_tool_iteration_success_artifacts_reuses_step_meta_summary_without_registry_context(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Hosted Search",
+            retryable_by_default=True,
+            default_timeout_ms=13_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 2,
+                "tool_kind": "provider_retrieval",
+            },
+            result_preview_keys=("documents_total",),
+            runtime_semantic_kind="provider_search",
+        )
+        action_step = build_tool_step_success_update(
+            action_step={
+                "id": "step-2",
+                "seq": 4,
+                "type": "action",
+                "content": "Tool running: provider_search",
+                "meta": {
+                    "tool": {
+                        "name": "provider_search",
+                        "status": "running",
+                    }
+                },
+            },
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            output={
+                "documents_total": 2,
+                "tool_kind": "provider_retrieval",
+            },
+            retry_count=0,
+            token_count=7,
+            last_error=None,
+            registration=registration,
+        )
+
+        artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-2",
+            action_step=action_step,
+            name="provider_search",
+        )
+
+        self.assertEqual(
+            artifacts["observation"],
+            "Hosted Search: Retrieved 2 documents.",
+        )
+        self.assertEqual(
+            artifacts["output"],
+            {
+                "documents_total": 2,
+            },
         )
 
     def test_build_tool_iteration_success_artifacts_infer_preview_shape_for_extra_provider_planner_kind(
@@ -31776,11 +32065,20 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             artifacts["observation"],
-            'Provider Planner: {"plan": "Analyze request -> Synthesize final answer", "steps": ["Analyze request", "Synthesize final answer"]}',
+            "Provider Planner: Planned steps - Analyze request -> Synthesize final answer.",
         )
-        self.assertEqual(artifacts["output"], output)
+        self.assertEqual(
+            artifacts["output"],
+            {
+                "plan": "Analyze request -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Synthesize final answer",
+                ],
+            },
+        )
 
-    def test_build_tool_iteration_success_artifacts_keep_raw_output_for_observation_and_preview_for_trace(
+    def test_build_tool_iteration_success_artifacts_reuses_step_meta_summary_for_hot_retrieval_without_registry_context(
         self,
     ) -> None:
         registration = ToolRegistration(
@@ -31837,7 +32135,14 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             display_name="Hot Retrieval",
         )
 
-        self.assertEqual(artifacts["output"], output)
+        self.assertEqual(
+            artifacts["output"],
+            {
+                "tool_kind": "hot_knowledge_retrieval",
+                "hit_count": 2,
+                "knowledge_base_id": "demo-kb",
+            },
+        )
         self.assertEqual(
             artifacts["trace"]["step"]["meta"]["tool"]["output_preview"],
             {
@@ -31846,8 +32151,122 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "knowledge_base_id": "demo-kb",
             },
         )
-        self.assertIn('"chunks": ["alpha", "beta"]', artifacts["observation"])
-        self.assertIn('"raw_documents": [{"id": "doc-1"}]', artifacts["observation"])
+        self.assertEqual(
+            artifacts["observation"],
+            "Hot Retrieval: Retrieved 2 hits from knowledge base demo-kb.",
+        )
+
+    def test_build_tool_iteration_success_artifacts_reuses_step_meta_preview_without_registry_context(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="custom_lookup",
+            kind="custom_lookup",
+            label="Custom Lookup",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            result_preview_keys=("tool_kind", "hit_count"),
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+                "prompt": prompt,
+                "user_id": user_id,
+            },
+        )
+        action_step = build_tool_step_success_update(
+            action_step={
+                "id": "step-4",
+                "seq": 6,
+                "type": "action",
+                "content": "Tool running: Custom Lookup",
+                "meta": {
+                    "tool": {
+                        "name": "custom_lookup",
+                        "label": "Custom Lookup",
+                        "status": "running",
+                    }
+                },
+            },
+            name="custom_lookup",
+            tool_input={"query": "secret"},
+            output={
+                "tool_kind": "custom_lookup",
+                "hit_count": 1,
+                "secret": "do-not-preview",
+            },
+            retry_count=0,
+            token_count=7,
+            last_error=None,
+            display_name="Custom Lookup",
+            registration=registration,
+        )
+
+        artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-4",
+            action_step=action_step,
+            name="custom_lookup",
+        )
+
+        self.assertEqual(
+            artifacts["observation"],
+            'Custom Lookup: {"tool_kind": "custom_lookup", "hit_count": 1}',
+        )
+        self.assertEqual(
+            artifacts["output"],
+            {
+                "tool_kind": "custom_lookup",
+                "hit_count": 1,
+                "secret": "do-not-preview",
+            },
+        )
+
+    def test_build_tool_iteration_success_artifacts_accepts_tuple_effective_result_output_keys_from_step_meta(
+        self,
+    ) -> None:
+        action_step = {
+            "id": "step-5",
+            "seq": 7,
+            "type": "action",
+            "content": "Tool done: Custom Lookup",
+            "meta": {
+                "tool": {
+                    "name": "custom_lookup",
+                    "label": "Custom Lookup",
+                    "status": "done",
+                    "effective_result_output_keys": (
+                        "tool_kind",
+                        "hit_count",
+                    ),
+                    "output": {
+                        "tool_kind": "custom_lookup",
+                        "hit_count": 1,
+                        "secret": "do-not-preview",
+                    },
+                }
+            },
+        }
+
+        artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-5",
+            action_step=action_step,
+            name="custom_lookup",
+        )
+
+        self.assertEqual(
+            artifacts["observation"],
+            'Custom Lookup: {"tool_kind": "custom_lookup", "hit_count": 1}',
+        )
+        self.assertEqual(
+            artifacts["output"],
+            {
+                "tool_kind": "custom_lookup",
+                "hit_count": 1,
+                "secret": "do-not-preview",
+            },
+        )
 
     def test_build_tool_rag_followup_keeps_current_shape(self) -> None:
         followup = build_tool_rag_followup(
@@ -32664,7 +33083,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             success_bundle["observation"],
-            'Hot Retrieval: {"hit_count": 2, "knowledge_base_id": "demo-kb"}',
+            "Hot Retrieval: Retrieved 2 hits from knowledge base demo-kb.",
         )
         self.assertIsNotNone(success_bundle["rag_followup"])
         assert success_bundle["rag_followup"] is not None
@@ -32764,8 +33183,12 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["hit_count", "knowledge_base_id"],
         )
         self.assertEqual(
+            success_bundle["trace"]["step"]["meta"]["tool"]["effective_result_output_keys"],
+            ["hit_count", "knowledge_base_id"],
+        )
+        self.assertEqual(
             success_bundle["observation"],
-            'Provider Search: {"hit_count": 2, "knowledge_base_id": "demo-kb"}',
+            "Provider Search: Retrieved 2 hits from knowledge base demo-kb.",
         )
         self.assertIsNotNone(success_bundle["rag_followup"])
         assert success_bundle["rag_followup"] is not None
@@ -34690,8 +35113,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         final_item = items[-1]
         self.assertEqual(final_item["kind"], "result")
         self.assertEqual(
-            final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
-            "custom_calc",
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "result": "custom-ok",
+            },
         )
 
     def test_execute_tool_plan_item_service_execution_accepts_custom_registry_loader(self) -> None:
@@ -34755,8 +35180,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         final_item = items[-1]
         self.assertEqual(final_item["kind"], "result")
         self.assertEqual(
-            final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
-            "loader_calc",
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "result": "loader-ok",
+            },
         )
 
     def test_execute_tool_plan_item_service_execution_accepts_custom_registry_provider(self) -> None:
@@ -34820,8 +35247,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         final_item = items[-1]
         self.assertEqual(final_item["kind"], "result")
         self.assertEqual(
-            final_item["result"]["loop_execution_result"]["success_effects"]["output"]["tool_kind"],
-            "provider_calc",
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "result": "provider-ok",
+            },
         )
 
     def test_execute_tool_plan_item_retry_loop_normalizes_task_plan_input_for_tool_start_and_runner(
@@ -35628,7 +36057,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
-            "Provider Search: Retrieved 2 hits from knowledge base provider-kb.",
+            "Provider Search: Retrieved 2 hits.",
         )
         self.assertEqual(
             final_item["result"]["loop_execution_result"]["success_effects"]["output"],
@@ -35643,6 +36072,50 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "hit_count": 2,
                 "knowledge_base_id": "provider-kb",
             },
+        )
+
+    def test_build_tool_result_summary_does_not_imply_local_kb_for_runtime_override_real_tool_with_hit_projection(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            result_preview_keys=("hit_count", "knowledge_base_id"),
+            result_output_keys=("hit_count", "knowledge_base_id"),
+            runtime_semantic_kind="provider_search",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+                "tool_kind": "provider_retrieval",
+            },
+        )
+
+        output = {
+            "hit_count": 2,
+            "knowledge_base_id": "provider-kb",
+            "tool_kind": "provider_retrieval",
+        }
+
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Retrieved 2 hits.",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Provider Search: Retrieved 2 hits.",
         )
 
     def test_execute_tool_plan_item_service_actions_keeps_continue_shape(self) -> None:

@@ -17,11 +17,17 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - trace display/search 已能消费 `meta.tool_registry.entries`
   - model settings modal 已消费 `diagnostics_summary`，broken file-backed source 不会直接从设置里消失
   - real/provider retrieval snippet 在缺少 `knowledge_base_id` 时，follow-up 与导出回放不再误写成本地默认知识库命中
+  - runtime override real retrieval tool 的 result summary / observation 回放也不再把 provider 命中误解释为本地 knowledge-base 命中
+  - noncanonical extra/real tool 即使没有显式 output policy，只要后端已能推断 preview 语义，前端回放到的 safe output / observation 也会优先使用推断后的产品化结果
+  - 后端 success-artifact helper 在缺少显式 registry context 时，也会复用 step meta 中已写入的 label / result_summary / output_preview，因此前端消费 name-only 成功轨迹时不再看到 provider 通用名或原始 JSON observation
+  - 后端 trace/export helper 现在也兼容 `effective_result_output_keys` 的 `list/tuple` 形态，因此旧 trace 或旁路生成的 safe output 在前端回放与导出里不会再被吞掉
+  - 后端 step-meta safe output helper 现在同样兼容 `effective_result_output_keys` 的 `list/tuple` 形态，因此 name-only observation fallback 在前端回放里也不会再意外暴露原始输出
+  - 后端 code-backed provider/source override spec 现在也兼容 `result_preview_keys / result_output_keys` 的 `list/tuple` 形态，因此前端消费到的 registry 语义不会再因 tuple 配置被静默降级
   - 当前前端消费实时流、持久化 trace 与导出回放时，extra/real tool 的注册语义会优先沿 configured registry 继承
 - 当前最近一次已记录校验基线：
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`39/39`）
   - `cd frontend && npm run lint` 通过
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`687/687`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`698/698`）
   - `bash scripts/test_ci_e2e_tooling.sh common` 通过
   - `git diff --check` 通过
 

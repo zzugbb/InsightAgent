@@ -1049,7 +1049,7 @@ def build_tool_registry_extra_tools_from_specs(
 
 
 def _normalize_result_preview_keys(raw_value: object) -> tuple[str, ...]:
-    if not isinstance(raw_value, list):
+    if not isinstance(raw_value, (list, tuple)):
         return ()
     normalized_keys: list[str] = []
     seen_keys: set[str] = set()
@@ -4619,6 +4619,20 @@ def build_tool_result_summary(
         name=canonical_name,
         registration=resolved_registration,
     )
+    runtime_semantic_kind = get_tool_runtime_semantic_kind(
+        name=canonical_name,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    semantic_family = get_tool_semantic_kind(
+        name=canonical_name,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
 
     plan = outward_output.get("plan")
     if isinstance(plan, str) and plan.strip():
@@ -4636,11 +4650,20 @@ def build_tool_result_summary(
     knowledge_base_id = outward_output.get("knowledge_base_id")
     if isinstance(hit_count, int) and hit_count >= 0:
         hit_label = "hit" if hit_count == 1 else "hits"
-        if isinstance(knowledge_base_id, str) and knowledge_base_id.strip():
+        if (
+            runtime_semantic_kind == "knowledge_retrieval"
+            and isinstance(knowledge_base_id, str)
+            and knowledge_base_id.strip()
+        ):
             return (
                 f"Retrieved {hit_count} {hit_label} from knowledge base "
                 f"{knowledge_base_id.strip()}."
             )
+        if (
+            runtime_semantic_kind != "knowledge_retrieval"
+            and semantic_family == "knowledge_retrieval"
+        ):
+            return f"Retrieved {hit_count} {hit_label}."
         return f"Retrieved {hit_count} {hit_label}."
 
     documents_total = outward_output.get("documents_total")
@@ -5904,14 +5927,40 @@ def build_tool_attempt_error_transition(
 
 
 def build_tool_step_output(action_step: dict[str, object]) -> dict[str, object] | None:
+    tool_obj = get_action_step_tool_meta(action_step)
+    output = tool_obj.get("output") if isinstance(tool_obj, dict) else None
+    return output if isinstance(output, dict) else None
+
+
+def get_action_step_tool_meta(action_step: dict[str, object]) -> dict[str, object] | None:
     tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
     tool_obj = (
         tool_meta.get("tool")
         if isinstance(tool_meta, dict) and isinstance(tool_meta.get("tool"), dict)
         else None
     )
-    output = tool_obj.get("output") if isinstance(tool_obj, dict) else None
-    return output if isinstance(output, dict) else None
+    return tool_obj if isinstance(tool_obj, dict) else None
+
+
+def _resolve_step_tool_safe_output(
+    step_tool_meta: dict[str, object] | None,
+) -> object | None:
+    if not isinstance(step_tool_meta, dict):
+        return None
+    output_keys = step_tool_meta.get("effective_result_output_keys")
+    if not isinstance(output_keys, (list, tuple)):
+        return None
+    normalized_keys = [
+        key.strip()
+        for key in output_keys
+        if isinstance(key, str) and key.strip()
+    ]
+    if not normalized_keys:
+        return None
+    output = step_tool_meta.get("output")
+    if not isinstance(output, dict):
+        return output
+    return {key: output[key] for key in normalized_keys if key in output}
 
 
 def build_tool_observation_entry(
@@ -5919,6 +5968,7 @@ def build_tool_observation_entry(
     name: str,
     output: dict[str, object] | None,
     display_name: str | None = None,
+    step_tool_meta: dict[str, object] | None = None,
     registration: ToolRegistration | None = None,
     registry: dict[str, ToolRegistration] | None = None,
     registry_provider: ToolRegistryProvider | None = None,
@@ -5931,11 +5981,28 @@ def build_tool_observation_entry(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    resolved_display_name = display_name or get_tool_observation_display_name_from_registration(
-        name=canonical_name,
-        registration=resolved_registration,
+    meta_display_name = (
+        str(step_tool_meta.get("label")).strip()
+        if isinstance(step_tool_meta, dict) and isinstance(step_tool_meta.get("label"), str)
+        else ""
+    )
+    resolved_display_name = (
+        display_name
+        or meta_display_name
+        or get_tool_observation_display_name_from_registration(
+            name=canonical_name,
+            registration=resolved_registration,
+        )
     )
     if isinstance(output, dict):
+        meta_result_summary = (
+            str(step_tool_meta.get("result_summary")).strip()
+            if isinstance(step_tool_meta, dict)
+            and isinstance(step_tool_meta.get("result_summary"), str)
+            else ""
+        )
+        if meta_result_summary:
+            return f"{resolved_display_name}: {meta_result_summary}"
         result_summary = build_tool_result_summary(
             name=canonical_name,
             output=output,
@@ -5947,6 +6014,22 @@ def build_tool_observation_entry(
         )
         if result_summary:
             return f"{resolved_display_name}: {result_summary}"
+        meta_safe_output = _resolve_step_tool_safe_output(step_tool_meta)
+        if meta_safe_output is not None:
+            return (
+                f"{resolved_display_name}: "
+                f"{json.dumps(meta_safe_output, ensure_ascii=False)}"
+            )
+        meta_preview_output = (
+            step_tool_meta.get("output_preview")
+            if isinstance(step_tool_meta, dict)
+            else None
+        )
+        if meta_preview_output is not None:
+            return (
+                f"{resolved_display_name}: "
+                f"{json.dumps(meta_preview_output, ensure_ascii=False)}"
+            )
     observation_output = output
     if isinstance(output, dict):
         effective_result_output_keys = get_tool_effective_result_output_keys(
@@ -6225,6 +6308,7 @@ def build_tool_iteration_success_artifacts(
     registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     output = build_tool_step_output(action_step)
+    step_tool_meta = get_action_step_tool_meta(action_step)
     canonical_name = normalize_tool_registry_name(name)
     return {
         "trace": build_tool_trace_event(
@@ -6236,6 +6320,7 @@ def build_tool_iteration_success_artifacts(
             name=canonical_name,
             output=output,
             display_name=display_name,
+            step_tool_meta=step_tool_meta,
             registration=registration,
             registry=registry,
             registry_provider=registry_provider,
@@ -7577,10 +7662,23 @@ def get_tool_effective_result_output_keys(
         return ()
     if resolved_registration.result_output_keys:
         return resolved_registration.result_output_keys
+    if not resolved_registration.supports_result_preview:
+        return ()
     explicit_runtime_semantic_kind = _normalize_runtime_semantic_kind(
         resolved_registration.runtime_semantic_kind
     )
-    if explicit_runtime_semantic_kind is None or not resolved_registration.supports_result_preview:
+    semantic_kind = get_tool_runtime_semantic_kind(
+        name=normalized_name,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    raw_kind = _normalize_runtime_semantic_kind(resolved_registration.kind)
+    should_infer_output_keys = explicit_runtime_semantic_kind is not None or (
+        semantic_kind is not None and raw_kind is not None and raw_kind != semantic_kind
+    )
+    if not should_infer_output_keys:
         return ()
     return get_tool_effective_result_preview_keys(
         name=normalized_name,

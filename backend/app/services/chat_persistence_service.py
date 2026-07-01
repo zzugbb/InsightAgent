@@ -990,7 +990,7 @@ def _stringify_trace_tool_output_preview(value: object) -> str:
 
 def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | None:
     output_keys = tool_meta.get("effective_result_output_keys")
-    if not isinstance(output_keys, list):
+    if not isinstance(output_keys, (list, tuple)):
         return None
     normalized_keys = [
         key.strip()

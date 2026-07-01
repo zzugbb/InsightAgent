@@ -62,6 +62,29 @@ def _mock_estimate_token_count(text: str) -> int:
     return max(1, cjk_units + latin_words)
 
 
+def _normalize_mock_tool_semantic_kind(raw_value: object) -> str | None:
+    if not isinstance(raw_value, str):
+        return None
+    normalized = raw_value.strip().lower()
+    if not normalized:
+        return None
+    if (
+        normalized == "knowledge_retrieval"
+        or normalized.endswith("knowledge_retrieval")
+        or normalized.endswith("_retrieval")
+    ):
+        return "knowledge_retrieval"
+    if normalized == "task_planner" or normalized.endswith("_planner"):
+        return "task_planner"
+    if (
+        normalized == "local_calculator"
+        or normalized.endswith("_calculator")
+        or normalized.endswith("_calc")
+    ):
+        return "local_calculator"
+    return normalized
+
+
 def _split_tool_observations_prompt(prompt: str) -> tuple[str, list[str]]:
     separator_pattern = re.compile(r"\n+Tool observations:\n", re.MULTILINE)
     parts = separator_pattern.split(prompt, maxsplit=1)
@@ -111,11 +134,32 @@ def _summarize_tool_observation(observation: str) -> str | None:
     knowledge_base_id = payload.get("knowledge_base_id")
     if isinstance(hit_count, int) and hit_count >= 0:
         hit_label = "hit" if hit_count == 1 else "hits"
-        if isinstance(knowledge_base_id, str) and knowledge_base_id.strip():
+        runtime_semantic_kind = _normalize_mock_tool_semantic_kind(
+            payload.get("semantic_kind") or payload.get("tool_kind")
+        )
+        semantic_family = _normalize_mock_tool_semantic_kind(
+            payload.get("semantic_family")
+        )
+        if (
+            (
+                runtime_semantic_kind == "knowledge_retrieval"
+                or (
+                    runtime_semantic_kind is None
+                    and (semantic_family is None or semantic_family == "knowledge_retrieval")
+                )
+            )
+            and isinstance(knowledge_base_id, str)
+            and knowledge_base_id.strip()
+        ):
             return (
                 f"Retrieved {hit_count} {hit_label} from knowledge base "
                 f"{knowledge_base_id.strip()}."
             )
+        if (
+            runtime_semantic_kind != "knowledge_retrieval"
+            and semantic_family == "knowledge_retrieval"
+        ):
+            return f"Retrieved {hit_count} {hit_label}."
         return f"Retrieved {hit_count} {hit_label}."
 
     documents_total = payload.get("documents_total")
