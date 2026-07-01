@@ -501,6 +501,7 @@ def stream_task_execution(
                     tool_name,
                     registry_provider=tool_registry_provider,
                 ),
+                registry_provider=tool_registry_provider,
             )
             action_step = iteration_ctx["action_step"]
             seq_cursor += 1

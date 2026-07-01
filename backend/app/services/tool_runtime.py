@@ -4440,14 +4440,72 @@ def _normalize_tool_input_for_registration(
     return normalized_input
 
 
+def build_tool_runtime_input(
+    *,
+    name: str,
+    tool_input: dict[str, object],
+    registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> dict[str, object]:
+    canonical_name = normalize_tool_registry_name(name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    if resolved_registration is None:
+        return dict(tool_input)
+    return _normalize_tool_input_for_registration(
+        name=canonical_name,
+        tool_input=dict(tool_input),
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+
+
+def _with_action_step_tool_input(
+    action_step: dict[str, object],
+    *,
+    tool_input: dict[str, object],
+) -> dict[str, object]:
+    meta = action_step.get("meta")
+    if not isinstance(meta, dict):
+        return action_step
+    tool_meta = meta.get("tool")
+    if not isinstance(tool_meta, dict):
+        return action_step
+    return {
+        **action_step,
+        "meta": {
+            **meta,
+            "tool": {
+                **tool_meta,
+                "input": tool_input,
+            },
+        },
+    }
+
+
 def build_tool_result_preview(
     *,
     name: str,
     output: dict[str, object],
     registry: dict[str, ToolRegistration] | None = None,
     registration: ToolRegistration | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object] | None:
-    resolved_registration = registration or resolve_tool_registration(name, registry=registry)
+    resolved_registration = registration or resolve_tool_registration(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if resolved_registration is None:
         return output
     if not resolved_registration.supports_result_preview:
@@ -4469,8 +4527,15 @@ def build_tool_result_output(
     output: dict[str, object],
     registry: dict[str, ToolRegistration] | None = None,
     registration: ToolRegistration | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
-    resolved_registration = registration or resolve_tool_registration(name, registry=registry)
+    resolved_registration = registration or resolve_tool_registration(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if resolved_registration is None:
         return output
     result_output_keys = get_tool_effective_result_output_keys(
@@ -4523,9 +4588,17 @@ def build_tool_result_summary(
     output: dict[str, object],
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> str | None:
     canonical_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(canonical_name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if resolved_registration is None:
         return None
     effective_result_output_keys = get_tool_effective_result_output_keys(
@@ -4537,7 +4610,10 @@ def build_tool_result_summary(
     outward_output = build_tool_result_output(
         name=canonical_name,
         output=output,
+        registry=registry,
         registration=resolved_registration,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     resolved_display_name = display_name or get_tool_observation_display_name_from_registration(
         name=canonical_name,
@@ -4588,9 +4664,17 @@ def build_tool_runtime_semantics_meta(
     *,
     name: str,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(canonical_name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if resolved_registration is None:
         return {}
     semantic_kind = get_tool_runtime_semantic_kind(
@@ -4689,13 +4773,24 @@ def build_tool_end_payload(
     output: dict[str, object],
     retry_count: int,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(canonical_name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     outward_output = build_tool_result_output(
         name=canonical_name,
         output=output,
+        registry=registry,
         registration=resolved_registration,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     payload = {
         "task_id": task_id,
@@ -4713,11 +4808,17 @@ def build_tool_end_payload(
         "output_preview": build_tool_result_preview(
             name=canonical_name,
             output=outward_output,
+            registry=registry,
             registration=resolved_registration,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         ),
         **build_tool_runtime_semantics_meta(
             name=canonical_name,
             registration=resolved_registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         ),
         "retry_count": retry_count,
     }
@@ -4730,7 +4831,10 @@ def build_tool_end_payload(
         result_summary = build_tool_result_summary(
             name=canonical_name,
             output=output,
+            registry=registry,
             registration=resolved_registration,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         )
         if result_summary:
             payload["result_summary"] = result_summary
@@ -4746,19 +4850,41 @@ def build_tool_success_meta(
     last_error: str | None,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(canonical_name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    normalized_tool_input = build_tool_runtime_input(
+        name=canonical_name,
+        tool_input=tool_input,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     outward_output = build_tool_result_output(
         name=canonical_name,
         output=output,
+        registry=registry,
         registration=resolved_registration,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     result_summary = build_tool_result_summary(
         name=canonical_name,
         output=output,
         display_name=display_name,
+        registry=registry,
         registration=resolved_registration,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     return {
         "tool": {
@@ -4768,12 +4894,15 @@ def build_tool_success_meta(
                 name=canonical_name,
                 registration=resolved_registration,
             ),
-            "input": tool_input,
+            "input": normalized_tool_input,
             "output": outward_output,
             "output_preview": build_tool_result_preview(
                 name=canonical_name,
                 output=outward_output,
+                registry=registry,
                 registration=resolved_registration,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             ),
             "status": "done",
             "retry_count": retry_count,
@@ -4782,6 +4911,9 @@ def build_tool_success_meta(
             **build_tool_runtime_semantics_meta(
                 name=canonical_name,
                 registration=resolved_registration,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             ),
         },
     }
@@ -4795,9 +4927,25 @@ def build_tool_error_meta(
     error_message: str,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(canonical_name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    normalized_tool_input = build_tool_runtime_input(
+        name=canonical_name,
+        tool_input=tool_input,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     return {
         "tool": {
             "name": canonical_name,
@@ -4806,13 +4954,16 @@ def build_tool_error_meta(
                 name=canonical_name,
                 registration=resolved_registration,
             ),
-            "input": tool_input,
+            "input": normalized_tool_input,
             "status": "error",
             "retry_count": retry_count,
             "error": error_message,
             **build_tool_runtime_semantics_meta(
                 name=canonical_name,
                 registration=resolved_registration,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             ),
         },
     }
@@ -4827,9 +4978,25 @@ def build_tool_start_payload(
     retry_count: int,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(canonical_name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    normalized_tool_input = build_tool_runtime_input(
+        name=canonical_name,
+        tool_input=tool_input,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     return {
         "task_id": task_id,
         "step_id": step_id,
@@ -4839,10 +5006,13 @@ def build_tool_start_payload(
             name=canonical_name,
             registration=resolved_registration,
         ),
-        "input": tool_input,
+        "input": normalized_tool_input,
         **build_tool_runtime_semantics_meta(
             name=canonical_name,
             registration=resolved_registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         ),
         "retry_count": retry_count,
     }
@@ -4857,6 +5027,9 @@ def build_tool_error_payload(
     retry_count: int,
     latency_ms: int = 12,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     semantic_meta: dict[str, object] = {}
     normalized_name = (
@@ -4866,6 +5039,9 @@ def build_tool_error_payload(
         semantic_meta = build_tool_runtime_semantics_meta(
             name=normalized_name,
             registration=registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         )
     return {
         "task_id": task_id,
@@ -4900,9 +5076,25 @@ def build_action_step_initial_meta(
     token_count: int,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(canonical_name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    normalized_tool_input = build_tool_runtime_input(
+        name=canonical_name,
+        tool_input=tool_input,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     return {
         "model": model,
         "step_type": "tool_call",
@@ -4917,12 +5109,15 @@ def build_action_step_initial_meta(
                 name=canonical_name,
                 registration=resolved_registration,
             ),
-            "input": tool_input,
+            "input": normalized_tool_input,
             "status": "running",
             "retry_count": 0,
             **build_tool_runtime_semantics_meta(
                 name=canonical_name,
                 registration=resolved_registration,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             ),
         },
     }
@@ -4934,6 +5129,10 @@ def build_action_step_initial_step(
     seq: int,
     name: str,
     meta: dict[str, object],
+    registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     tool_meta = meta.get("tool") if isinstance(meta.get("tool"), dict) else None
     display_name = (
@@ -4941,7 +5140,13 @@ def build_action_step_initial_step(
         if isinstance(tool_meta, dict) and isinstance(tool_meta.get("label"), str)
         else get_tool_execution_display_name_from_registration(
             name=name,
-            registration=resolve_tool_registration(name),
+            registration=registration
+            or resolve_tool_registration(
+                name,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
+            ),
         )
     )
     return {
@@ -4964,6 +5169,9 @@ def build_tool_step_success_update(
     last_error: str | None,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
     tool_obj = (
@@ -4976,7 +5184,13 @@ def build_tool_step_success_update(
         if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
         else get_tool_execution_display_name_from_registration(
             name=name,
-            registration=registration or resolve_tool_registration(name),
+            registration=registration
+            or resolve_tool_registration(
+                name,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
+            ),
         )
     )
     return {
@@ -4995,6 +5209,9 @@ def build_tool_step_success_update(
                 last_error=last_error,
                 display_name=resolved_display_name,
                 registration=registration,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             ),
         },
     }
@@ -5010,6 +5227,9 @@ def build_tool_step_error_update(
     error_message: str,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     tool_meta = action_step.get("meta") if isinstance(action_step, dict) else None
     tool_obj = (
@@ -5022,7 +5242,13 @@ def build_tool_step_error_update(
         if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
         else get_tool_execution_display_name_from_registration(
             name=name,
-            registration=registration or resolve_tool_registration(name),
+            registration=registration
+            or resolve_tool_registration(
+                name,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
+            ),
         )
     )
     return {
@@ -5040,6 +5266,9 @@ def build_tool_step_error_update(
                 error_message=error_message,
                 display_name=resolved_display_name,
                 registration=registration,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             ),
         },
     }
@@ -5054,6 +5283,9 @@ def build_tool_attempt_start_events(
     attempt: int,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, dict[str, object]]:
     return {
         "tool_start": build_tool_start_payload(
@@ -5064,6 +5296,9 @@ def build_tool_attempt_start_events(
             retry_count=attempt,
             display_name=display_name,
             registration=registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         ),
         "state": {
             "task_id": task_id,
@@ -5095,6 +5330,14 @@ def build_tool_attempt_bundle(
         registry_loader=registry_loader,
     )
     return {
+        "normalized_tool_input": build_tool_runtime_input(
+            name=runtime_ctx.name,
+            tool_input=tool_input,
+            registration=runtime_ctx.registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        ),
         "start_events": build_tool_attempt_start_events(
             task_id=task_id,
             step_id=step_id,
@@ -5106,6 +5349,9 @@ def build_tool_attempt_bundle(
                 registration=runtime_ctx.registration,
             ),
             registration=runtime_ctx.registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         ),
         "runtime_ctx": runtime_ctx,
         "runtime_policy": build_tool_execution_policy(runtime_ctx),
@@ -5127,6 +5373,9 @@ def build_tool_attempt_execution(
     model: str,
     rag_step_id: str,
     rag_token_count: int,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     return build_tool_plan_item_execution(
         task_id=task_id,
@@ -5142,6 +5391,9 @@ def build_tool_attempt_execution(
         model=model,
         rag_step_id=rag_step_id,
         rag_token_count=rag_token_count,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
 
 
@@ -5276,6 +5528,11 @@ def execute_tool_plan_item_retry_loop(
             registry_provider=registry_provider,
             registry_loader=registry_loader,
         )
+        normalized_tool_input = attempt_bundle["normalized_tool_input"]
+        action_step = _with_action_step_tool_input(
+            action_step,
+            tool_input=normalized_tool_input,
+        )
         start_events = attempt_bundle["start_events"]
         yield {
             "kind": "event",
@@ -5293,7 +5550,7 @@ def execute_tool_plan_item_retry_loop(
             runtime_policy = attempt_bundle["runtime_policy"]
             output = runner(
                 name=tool_name,
-                tool_input=tool_input,
+                tool_input=normalized_tool_input,
                 prompt=prompt,
                 user_id=str(runtime_policy["effective_user_id"]),
                 attempt=attempt,
@@ -5304,7 +5561,7 @@ def execute_tool_plan_item_retry_loop(
                 action_step=action_step,
                 attempt_bundle=attempt_bundle,
                 name=tool_name,
-                tool_input=tool_input,
+                tool_input=normalized_tool_input,
                 output=output,
                 exc=None,
                 token_count=estimate_token_count(
@@ -5318,6 +5575,9 @@ def execute_tool_plan_item_retry_loop(
                 )
                 if isinstance(output, dict)
                 else 0,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             )
             loop_result = build_tool_attempt_loop_result(
                 attempt_execution=plan_item_execution,
@@ -5343,7 +5603,7 @@ def execute_tool_plan_item_retry_loop(
                 action_step=action_step,
                 attempt_bundle=attempt_bundle,
                 name=tool_name,
-                tool_input=tool_input,
+                tool_input=normalized_tool_input,
                 output=None,
                 exc=exc,
                 token_count=estimate_token_count(str(exc)),
@@ -5351,6 +5611,9 @@ def execute_tool_plan_item_retry_loop(
                 model=model,
                 rag_step_id=make_step_id(),
                 rag_token_count=0,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             )
             loop_result = build_tool_attempt_loop_result(
                 attempt_execution=plan_item_execution,
@@ -5552,6 +5815,9 @@ def build_tool_attempt_success_transition(
     last_error: str | None,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     return {
         "action_step": build_tool_step_success_update(
@@ -5564,6 +5830,9 @@ def build_tool_attempt_success_transition(
             last_error=last_error,
             display_name=display_name,
             registration=registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         ),
         "events": build_tool_attempt_success_events(
             task_id=task_id,
@@ -5587,6 +5856,9 @@ def build_tool_attempt_error_transition(
     exc: MockToolExecutionError,
     token_count: int,
     display_name: str | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     error_message = str(exc)
     retry_count = runtime_ctx.attempt + 1
@@ -5601,6 +5873,9 @@ def build_tool_attempt_error_transition(
             error_message=error_message,
             display_name=display_name,
             registration=runtime_ctx.registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         ),
         "events": {
             **build_tool_attempt_error_events(
@@ -5645,9 +5920,17 @@ def build_tool_observation_entry(
     output: dict[str, object] | None,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> str:
     canonical_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(canonical_name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     resolved_display_name = display_name or get_tool_observation_display_name_from_registration(
         name=canonical_name,
         registration=resolved_registration,
@@ -5658,6 +5941,9 @@ def build_tool_observation_entry(
             output=output,
             display_name=resolved_display_name,
             registration=resolved_registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         )
         if result_summary:
             return f"{resolved_display_name}: {result_summary}"
@@ -5670,13 +5956,19 @@ def build_tool_observation_entry(
         observation_output = build_tool_result_output(
             name=canonical_name,
             output=output,
+            registry=registry,
             registration=resolved_registration,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         )
         if not effective_result_output_keys:
             preview_output = build_tool_result_preview(
                 name=canonical_name,
                 output=observation_output,
+                registry=registry,
                 registration=resolved_registration,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             )
             if preview_output is not None:
                 observation_output = preview_output
@@ -5732,10 +6024,15 @@ def build_tool_rag_step(
     seq: int,
     model: str,
     chunks: list[str],
-    knowledge_base_id: str,
+    knowledge_base_id: str | None,
     token_count: int,
     content: str | None = None,
 ) -> dict[str, object]:
+    rag_meta: dict[str, object] = {
+        "chunks": chunks,
+    }
+    if isinstance(knowledge_base_id, str) and knowledge_base_id:
+        rag_meta["knowledge_base_id"] = knowledge_base_id
     return {
         "id": step_id,
         "seq": seq,
@@ -5747,12 +6044,34 @@ def build_tool_rag_step(
             "step_type": "rag_retrieval",
             "tokens": token_count,
             "cost_estimate": None,
-            "rag": {
-                "chunks": chunks,
-                "knowledge_base_id": knowledge_base_id,
-            },
+            "rag": rag_meta,
         },
     }
+
+
+def _build_tool_rag_followup_content(
+    *,
+    display_name: str | None,
+    runtime_semantic_kind: str | None,
+    semantic_family: str | None,
+) -> str:
+    normalized_display_name = (
+        str(display_name).strip() if isinstance(display_name, str) else ""
+    )
+    normalized_runtime_semantic_kind = _normalize_tool_semantic_kind(
+        runtime_semantic_kind
+    )
+    normalized_semantic_family = _normalize_tool_semantic_kind(semantic_family)
+    if (
+        normalized_runtime_semantic_kind != "knowledge_retrieval"
+        and normalized_semantic_family == "knowledge_retrieval"
+    ):
+        if normalized_display_name:
+            return f"{normalized_display_name} returned snippets."
+        return "Knowledge Retrieval returned snippets."
+    if normalized_display_name and normalized_display_name != "Knowledge Retrieval":
+        return f"{normalized_display_name} returned snippets from the selected knowledge base."
+    return "Knowledge Retrieval returned snippets from the selected knowledge base."
 
 
 def build_tool_prompt_with_observations(
@@ -5796,6 +6115,9 @@ def build_tool_attempt_outcome(
     exc: MockToolExecutionError | None,
     token_count: int,
     last_error: str | None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     display_name = get_tool_execution_display_name_from_registration(
         name=runtime_ctx.registration.name,
@@ -5815,6 +6137,9 @@ def build_tool_attempt_outcome(
             last_error=last_error,
             display_name=display_name,
             registration=runtime_ctx.registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         )
         return build_tool_attempt_result(
             outcome="success",
@@ -5835,6 +6160,9 @@ def build_tool_attempt_outcome(
         exc=exc,
         token_count=token_count,
         display_name=display_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     return build_tool_attempt_result(
         outcome="error",
@@ -5857,6 +6185,9 @@ def build_tool_iteration_context(
     token_count: int,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     canonical_name = normalize_tool_registry_name(name)
     return {
@@ -5873,6 +6204,9 @@ def build_tool_iteration_context(
                 token_count=token_count,
                 display_name=display_name,
                 registration=registration,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             ),
         ),
     }
@@ -5886,6 +6220,9 @@ def build_tool_iteration_success_artifacts(
     name: str,
     display_name: str | None = None,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     output = build_tool_step_output(action_step)
     canonical_name = normalize_tool_registry_name(name)
@@ -5900,6 +6237,9 @@ def build_tool_iteration_success_artifacts(
             output=output,
             display_name=display_name,
             registration=registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
         ),
         "output": output,
     }
@@ -5917,34 +6257,48 @@ def build_tool_rag_followup(
     display_name: str | None = None,
     output: dict[str, object] | None,
     token_count: int,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object] | None:
     if not isinstance(output, dict):
         return None
-    semantic_kind = _normalize_tool_semantic_kind(tool_kind)
-    if semantic_kind is None:
-        semantic_kind = get_tool_runtime_semantic_kind(name=tool_name)
+    runtime_semantic_kind = _normalize_tool_semantic_kind(tool_kind)
+    if runtime_semantic_kind is None:
+        runtime_semantic_kind = get_tool_runtime_semantic_kind(
+            name=tool_name,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        )
+    semantic_family = _normalize_tool_semantic_kind(tool_semantic_family)
+    if semantic_family is None:
+        semantic_family = get_tool_semantic_kind(
+            name=tool_name,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        )
+    semantic_kind = runtime_semantic_kind
     if semantic_kind != "knowledge_retrieval":
-        semantic_kind = _normalize_tool_semantic_kind(tool_semantic_family)
+        semantic_kind = semantic_family
     if semantic_kind != "knowledge_retrieval":
         return None
     chunks = output.get("chunks")
     if not isinstance(chunks, list):
         return None
     kb = output.get("knowledge_base_id")
-    normalized_display_name = (
-        str(display_name).strip() if isinstance(display_name, str) else ""
-    )
     step = build_tool_rag_step(
         step_id=step_id,
         seq=seq,
         model=model,
         chunks=[str(x) for x in chunks],
-        knowledge_base_id=str(kb) if kb else get_settings().rag_default_knowledge_base_id,
+        knowledge_base_id=str(kb) if kb else None,
         token_count=token_count,
-        content=(
-            f"{normalized_display_name} returned snippets from the selected knowledge base."
-            if normalized_display_name and normalized_display_name != "Knowledge Retrieval"
-            else None
+        content=_build_tool_rag_followup_content(
+            display_name=display_name,
+            runtime_semantic_kind=runtime_semantic_kind,
+            semantic_family=semantic_family,
         ),
     )
     return {
@@ -5970,6 +6324,9 @@ def build_tool_iteration_execution(
     exc: MockToolExecutionError | None,
     token_count: int,
     last_error: str | None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     normalized_output = (
         normalize_tool_output_for_registration(
@@ -5990,6 +6347,10 @@ def build_tool_iteration_execution(
         tool_input=tool_input,
         attempt=runtime_ctx.attempt,
         display_name=execution_display_name,
+        registration=runtime_ctx.registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     outcome = build_tool_attempt_outcome(
         task_id=task_id,
@@ -6002,6 +6363,9 @@ def build_tool_iteration_execution(
         exc=exc,
         token_count=token_count,
         last_error=last_error,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     if outcome["outcome"] == "success":
         observation_display_name = get_tool_observation_display_name_from_registration(
@@ -6018,6 +6382,9 @@ def build_tool_iteration_execution(
                 name=name,
                 display_name=observation_display_name,
                 registration=runtime_ctx.registration,
+                registry=registry,
+                registry_provider=registry_provider,
+                registry_loader=registry_loader,
             ),
             "rag_source_output": normalized_output if isinstance(normalized_output, dict) else None,
             "terminal_failure": None,
@@ -6117,6 +6484,9 @@ def build_tool_plan_item_execution(
     model: str,
     rag_step_id: str,
     rag_token_count: int,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     iteration_execution = build_tool_iteration_execution(
         task_id=task_id,
@@ -6130,6 +6500,9 @@ def build_tool_plan_item_execution(
         exc=exc,
         token_count=token_count,
         last_error=last_error,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     success_artifacts = iteration_execution.get("success_artifacts")
     rag_followup = None
@@ -7132,9 +7505,17 @@ def get_tool_semantic_kind(
     *,
     name: str,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> str | None:
     normalized_name = normalize_tool_registry_name(name)
-    default_registration = _REGISTERED_TOOLS.get(normalized_name)
+    default_registration = resolve_tool_registration(
+        normalized_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if registration is not None:
         template_registration = _find_builtin_registration_by_runner(registration.runner)
         if template_registration is not None:
@@ -7151,17 +7532,29 @@ def get_tool_runtime_semantic_kind(
     *,
     name: str,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> str | None:
+    resolved_registration = registration or resolve_tool_registration(
+        normalize_tool_registry_name(name),
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     explicit_runtime_semantic_kind = (
-        _normalize_runtime_semantic_kind(registration.runtime_semantic_kind)
-        if registration is not None
+        _normalize_runtime_semantic_kind(resolved_registration.runtime_semantic_kind)
+        if resolved_registration is not None
         else None
     )
     if explicit_runtime_semantic_kind is not None:
         return explicit_runtime_semantic_kind
     return get_tool_semantic_kind(
         name=name,
-        registration=registration,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
 
 
@@ -7169,9 +7562,17 @@ def get_tool_effective_result_output_keys(
     *,
     name: str,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> tuple[str, ...]:
     normalized_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(normalized_name)
+    resolved_registration = registration or resolve_tool_registration(
+        normalized_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if resolved_registration is None:
         return ()
     if resolved_registration.result_output_keys:
@@ -7184,6 +7585,9 @@ def get_tool_effective_result_output_keys(
     return get_tool_effective_result_preview_keys(
         name=normalized_name,
         registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
 
 
@@ -7191,9 +7595,17 @@ def get_tool_effective_result_preview_keys(
     *,
     name: str,
     registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
 ) -> tuple[str, ...]:
     normalized_name = normalize_tool_registry_name(name)
-    resolved_registration = registration or resolve_tool_registration(normalized_name)
+    resolved_registration = registration or resolve_tool_registration(
+        normalized_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if resolved_registration is None or not resolved_registration.supports_result_preview:
         return ()
     if resolved_registration.result_preview_keys:
@@ -7201,6 +7613,9 @@ def get_tool_effective_result_preview_keys(
     semantic_kind = get_tool_runtime_semantic_kind(
         name=normalized_name,
         registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     preview_keys = _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
     if preview_keys:
@@ -7208,6 +7623,9 @@ def get_tool_effective_result_preview_keys(
     semantic_family = get_tool_semantic_kind(
         name=normalized_name,
         registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
     )
     if semantic_family and semantic_family != semantic_kind:
         return _get_default_result_preview_keys_for_semantic_kind(semantic_family)

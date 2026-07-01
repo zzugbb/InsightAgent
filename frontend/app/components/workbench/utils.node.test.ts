@@ -491,7 +491,7 @@ test("getStepTitle uses productized title for rag retrieval follow-up steps", ()
   const title = getStepTitle({
     id: "step-rag-followup-title",
     type: "thought",
-    content: "Provider Search returned snippets from the selected knowledge base.",
+    content: "Provider Search returned snippets.",
     meta: {
       step_type: "rag_retrieval",
       rag: {
@@ -509,7 +509,7 @@ test("formatTraceStepMetaSubtitle hides raw rag step kind when rag summary is pr
     {
       id: "step-rag-followup-subtitle",
       type: "thought",
-      content: "Provider Search returned snippets from the selected knowledge base.",
+      content: "Provider Search returned snippets.",
       meta: {
         step_type: "rag_retrieval",
         rag: {

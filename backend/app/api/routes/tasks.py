@@ -483,8 +483,10 @@ def _build_task_export_markdown(payload: TaskExportJsonResponse) -> str:
         lines.append("## RAG Chunks")
         lines.append("")
         for idx, chunk in enumerate(payload.trace.rag_chunks, start=1):
-            kb = chunk.knowledge_base_id or "default"
-            lines.append(f"### {idx}. step={chunk.step_id} · kb={kb}")
+            header = f"### {idx}. step={chunk.step_id}"
+            if chunk.knowledge_base_id:
+                header += f" · kb={chunk.knowledge_base_id}"
+            lines.append(header)
             lines.append("")
             _append_fenced_block(lines, chunk.content, "text")
             lines.append("")
