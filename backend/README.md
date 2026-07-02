@@ -12,22 +12,14 @@
   - `tool registry / profile / provider source` 治理产品化
   - extra/real tool 在执行本体、trace、observation、result preview、export 语义上的真实化
 - 最近已对齐到代码的高信号能力：
-  - 默认 canonical tool 名已统一到 `task_plan / task_retrieve`，`mock_*` 仅保留兼容 alias。
-  - planner 已支持真实 planned tools、动态 registry/source 候选、extra tools 优先规划。
-  - provider / provider source 已支持 `loader_factory`，file-backed diagnostics 会透传到 provider/source artifacts、selected source、settings summary/validate/preflight。
-  - tool-registry diagnostics 已进入 entry 级 trace/export/preflight 语义，而不只是 totals。
-  - tool execution 的规范化输入已贯通到 action step、`tool_start`、runner、success/error step meta。
-  - result preview/output/result-summary/runtime semantic 与 retrieval follow-up 会按 configured registry 解析，不再在 helper fallback 上退回默认内建语义。
-  - real/provider retrieval snippet 若未返回 `knowledge_base_id`，rag follow-up 与 task markdown export 不再伪造 `kb=default`。
-  - runtime override real retrieval tool 即使输出投影成 `hit_count/knowledge_base_id`，result summary 与 observation 也不会再落回默认 knowledge-base 文案。
-  - mock final answer 的 observation 摘要器在遇到 runtime override real tool payload 时，也会避开默认本地 knowledge-base 文案。
-  - noncanonical extra/real tool 若未显式声明 `result_output_keys`，当前会在 preview 语义已可判定时同步推断安全 output keys，用于 success output、trace meta 与 observation summary。
-  - success-artifact helper 在缺少显式 registration / registry_provider 时，也会复用 step meta 中已有的 label / result summary / output_preview，避免 observation 回退到 provider 通用名或原始 JSON。
-  - trace/export helper 对 `effective_result_output_keys` 已兼容 `list/tuple` 两种内部形态，旧 trace 或旁路构造的 safe output 不会再静默失效。
-  - step-meta safe output helper 对 `effective_result_output_keys` 也已兼容 `list/tuple` 两种内部形态，name-only observation fallback 不会再因 tuple 旁路泄露原始输出。
-  - code-backed provider/source override spec 对 `result_preview_keys / result_output_keys` 也已兼容 `list/tuple` 两种内部形态，registry 入口不会再静默忽略 tuple 配置。
+  - 默认 canonical tool 名已统一到 `task_plan / task_retrieve`，`mock_*` 仅保留兼容 alias；planner 已能规划 real/extra tools 与动态 registry/source 候选。
+  - provider / provider source 已支持 `loader_factory`，tool-registry diagnostics 已进入 entry 级 trace/export/preflight 语义，settings、selected source 与 runtime artifacts 使用同一治理主干。
+  - tool execution 的规范化输入、preview/output/result-summary、runtime semantic 与 retrieval follow-up 已贯通 action step、`tool_start/tool_end`、persisted trace、export 与 mock final answer。
+  - real/provider retrieval 与 runtime override real tool 已不再在 result summary、observation、rag follow-up 或 task export 中伪造默认本地 knowledge-base 语义。
+  - name-only success/helper fallback 会优先复用 configured registry 或 step meta 中已落下的 label / result summary / output preview，而不是退回 provider 通用名或原始 JSON。
+  - runtime helper、governance/export、registry diagnostics 与 planner 输入归一化已统一兼容旁路结构化载荷；当前 provider planner 已支持结构化 `dict/list/tuple`、单工具对象、content-part 文本响应，以及带 `content/usage` 或顶层 `tools/usage` 的 response envelope，并兼容 `input_tokens/output_tokens` usage alias 与脏 usage 值容错。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`698/698`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`729/729`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`39/39`）
   - `cd frontend && npm run lint` 通过
   - `bash scripts/test_ci_e2e_tooling.sh common` 通过

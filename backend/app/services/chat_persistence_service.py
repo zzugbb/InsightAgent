@@ -140,17 +140,17 @@ def _serialize_task_governance_columns(
         governance["provider_source"]
         if isinstance(governance["provider_source"], str)
         else None,
-        json.dumps(allowed_tool_names, ensure_ascii=False)
-        if isinstance(allowed_tool_names, list)
+        json.dumps(list(allowed_tool_names), ensure_ascii=False)
+        if isinstance(allowed_tool_names, (list, tuple))
         else None,
-        json.dumps(allowed_tool_labels, ensure_ascii=False)
-        if isinstance(allowed_tool_labels, list)
+        json.dumps(list(allowed_tool_labels), ensure_ascii=False)
+        if isinstance(allowed_tool_labels, (list, tuple))
         else None,
     )
 
 
 def _parse_task_governance_json_list_blob(value: object) -> list[str]:
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [item for item in value if isinstance(item, str)]
     if not isinstance(value, str) or not value.strip():
         return []
@@ -164,7 +164,7 @@ def _parse_task_governance_json_list_blob(value: object) -> list[str]:
 
 
 def _normalize_governance_string_list(value: object) -> list[str]:
-    if not isinstance(value, list):
+    if not isinstance(value, (list, tuple)):
         return []
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
@@ -174,7 +174,7 @@ def _normalize_governance_summary_string_list(value: object) -> list[str]:
 
 
 def _normalize_governance_filter_list(value: object) -> list[str]:
-    if not isinstance(value, list):
+    if not isinstance(value, (list, tuple)):
         return []
     normalized_values = {
         normalized
@@ -301,11 +301,11 @@ def _has_task_governance_values(governance: object) -> bool:
         return True
     if isinstance(governance.get("provider_source"), str):
         return True
-    if isinstance(governance.get("allowed_tool_names"), list) and bool(
+    if isinstance(governance.get("allowed_tool_names"), (list, tuple)) and bool(
         governance.get("allowed_tool_names")
     ):
         return True
-    if isinstance(governance.get("allowed_tool_labels"), list) and bool(
+    if isinstance(governance.get("allowed_tool_labels"), (list, tuple)) and bool(
         governance.get("allowed_tool_labels")
     ):
         return True
@@ -315,17 +315,19 @@ def _has_task_governance_values(governance: object) -> bool:
 def _has_session_governance_values(governance: object) -> bool:
     if not isinstance(governance, dict):
         return False
-    if isinstance(governance.get("profiles"), list) and bool(governance.get("profiles")):
+    if isinstance(governance.get("profiles"), (list, tuple)) and bool(
+        governance.get("profiles")
+    ):
         return True
-    if isinstance(governance.get("provider_sources"), list) and bool(
+    if isinstance(governance.get("provider_sources"), (list, tuple)) and bool(
         governance.get("provider_sources")
     ):
         return True
-    if isinstance(governance.get("allowed_tool_names"), list) and bool(
+    if isinstance(governance.get("allowed_tool_names"), (list, tuple)) and bool(
         governance.get("allowed_tool_names")
     ):
         return True
-    if isinstance(governance.get("allowed_tool_labels"), list) and bool(
+    if isinstance(governance.get("allowed_tool_labels"), (list, tuple)) and bool(
         governance.get("allowed_tool_labels")
     ):
         return True
@@ -983,6 +985,8 @@ def _stringify_trace_tool_output_preview(value: object) -> str:
         return ""
     if isinstance(value, str):
         return value.strip()
+    if isinstance(value, tuple):
+        value = list(value)
     if isinstance(value, (dict, list, int, float, bool)):
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     return ""
@@ -1231,7 +1235,7 @@ def get_trace_rag_export_summary(
         if kb_id_text and kb_id_text not in seen_kb_ids:
             seen_kb_ids.add(kb_id_text)
             rag_knowledge_base_ids.append(kb_id_text)
-        if isinstance(raw_chunks, list):
+        if isinstance(raw_chunks, (list, tuple)):
             for chunk in raw_chunks:
                 if not isinstance(chunk, str):
                     continue
@@ -1419,7 +1423,7 @@ def _coerce_export_payload_block_to_dict(value: object) -> dict[str, object]:
 
 
 def _coerce_export_payload_block_list_to_dicts(value: object) -> list[dict[str, object]]:
-    if not isinstance(value, list):
+    if not isinstance(value, (list, tuple)):
         return []
     rows: list[dict[str, object]] = []
     for item in value:
@@ -1446,7 +1450,7 @@ def _coerce_payload_mapping_or_none(value: object) -> dict[str, object] | None:
 
 
 def _coerce_export_trace_steps(value: object) -> list[TraceStep]:
-    if not isinstance(value, list):
+    if not isinstance(value, (list, tuple)):
         return []
     steps: list[TraceStep] = []
     for item in value:

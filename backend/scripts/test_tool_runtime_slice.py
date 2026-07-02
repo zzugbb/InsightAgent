@@ -21,6 +21,7 @@ import app.services.settings_service as settings_service_module  # type: ignore[
 import app.api.routes.settings as settings_routes_module  # type: ignore[import-not-found]
 import app.api.routes.tasks as task_routes_module  # type: ignore[import-not-found]
 import app.api.routes.sessions as session_routes_module  # type: ignore[import-not-found]
+import app.providers.mock_provider as mock_provider_module  # type: ignore[import-not-found]
 import app.db as db_module  # type: ignore[import-not-found]
 from app.api.routes.settings import (  # type: ignore[import-not-found]
     _apply_tool_registry_preview_to_validate_response,
@@ -905,6 +906,400 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             artifacts.tool_plan[1]["input"],
             {"expression": "8/4"},
         )
+
+    def test_build_tool_plan_provider_accepts_structured_dict_content(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content={
+                        "tools": [
+                            {
+                                "name": "task_retrieve",
+                                "input": {
+                                    "query": "深入检索背景",
+                                    "top_k": 2,
+                                    "knowledge_base_id": "kb-structured",
+                                },
+                            }
+                        ]
+                    }
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式检索标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "task_retrieve"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {
+                "query": "深入检索背景",
+                "top_k": 2,
+                "knowledge_base_id": "kb-structured",
+            },
+        )
+
+    def test_build_tool_plan_provider_accepts_structured_tuple_tools_content(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content={
+                        "tools": (
+                            "task_retrieve",
+                            {
+                                "name": "calc_eval",
+                                "input": {"expression": "6/2"},
+                            },
+                        )
+                    }
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "请先检索再计算 [kb:demo]",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "task_retrieve", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {
+                "query": "请先检索再计算 [kb:demo]",
+                "top_k": 4,
+                "knowledge_base_id": "demo",
+            },
+        )
+        self.assertEqual(
+            artifacts.tool_plan[2]["input"],
+            {"expression": "6/2"},
+        )
+
+    def test_build_tool_plan_provider_accepts_plain_structured_response_object(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "tools": [
+                        {
+                            "name": "calc_eval",
+                            "input": {"expression": "9/3"},
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "9/3"},
+        )
+
+    def test_build_tool_plan_provider_accepts_single_tool_object_response(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "name": "calc_eval",
+                    "input": {"expression": "12/4"},
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "12/4"},
+        )
+
+    def test_build_tool_plan_provider_accepts_dict_response_envelope_with_usage(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "content": {
+                        "tools": [
+                            {
+                                "name": "task_retrieve",
+                                "input": {
+                                    "query": "深入检索背景",
+                                    "top_k": 3,
+                                    "knowledge_base_id": "kb-envelope",
+                                },
+                            }
+                        ]
+                    },
+                    "usage": {
+                        "prompt_tokens": 12,
+                        "completion_tokens": 5,
+                        "total_tokens": 17,
+                    },
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式检索标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "task_retrieve"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {
+                "query": "深入检索背景",
+                "top_k": 3,
+                "knowledge_base_id": "kb-envelope",
+            },
+        )
+        self.assertIsNotNone(artifacts.provider_usage)
+        assert artifacts.provider_usage is not None
+        self.assertEqual(artifacts.provider_usage.total_tokens, 17)
+
+    def test_build_tool_plan_provider_accepts_top_level_plan_dict_with_usage(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "tools": [
+                        {
+                            "name": "calc_eval",
+                            "input": {"expression": "15/5"},
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 8,
+                        "completion_tokens": 3,
+                        "total_tokens": 11,
+                    },
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "15/5"},
+        )
+        self.assertIsNotNone(artifacts.provider_usage)
+        assert artifacts.provider_usage is not None
+        self.assertEqual(artifacts.provider_usage.total_tokens, 11)
+
+    def test_build_tool_plan_provider_accepts_content_part_list_response_envelope(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                {
+                                    "tools": [
+                                        {
+                                            "name": "calc_eval",
+                                            "input": {"expression": "18/6"},
+                                        }
+                                    ]
+                                },
+                                ensure_ascii=False,
+                            ),
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 4,
+                        "total_tokens": 14,
+                    },
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "18/6"},
+        )
+        self.assertIsNotNone(artifacts.provider_usage)
+        assert artifacts.provider_usage is not None
+        self.assertEqual(artifacts.provider_usage.total_tokens, 14)
+
+    def test_build_tool_plan_provider_accepts_input_output_usage_keys(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "tools": [
+                        {
+                            "name": "calc_eval",
+                            "input": {"expression": "20/5"},
+                        }
+                    ],
+                    "usage": {
+                        "input_tokens": 9,
+                        "output_tokens": 3,
+                    },
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertIsNotNone(artifacts.provider_usage)
+        assert artifacts.provider_usage is not None
+        self.assertEqual(artifacts.provider_usage.prompt_tokens, 9)
+        self.assertEqual(artifacts.provider_usage.completion_tokens, 3)
+        self.assertIsNone(artifacts.provider_usage.total_tokens)
+
+    def test_build_tool_plan_provider_ignores_boolean_usage_values(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "tools": [
+                        {
+                            "name": "calc_eval",
+                            "input": {"expression": "21/7"},
+                        }
+                    ],
+                    "usage": {
+                        "input_tokens": True,
+                        "output_tokens": False,
+                        "total_tokens": True,
+                    },
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertIsNotNone(artifacts.provider_usage)
+        assert artifacts.provider_usage is not None
+        self.assertIsNone(artifacts.provider_usage.prompt_tokens)
+        self.assertIsNone(artifacts.provider_usage.completion_tokens)
+        self.assertIsNone(artifacts.provider_usage.total_tokens)
+
+    def test_build_tool_plan_provider_tolerates_malformed_usage_strings(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "tools": [
+                        {
+                            "name": "calc_eval",
+                            "input": {"expression": "24/6"},
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": "oops",
+                        "completion_tokens": "4",
+                        "total_tokens": "",
+                    },
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertIsNotNone(artifacts.provider_usage)
+        assert artifacts.provider_usage is not None
+        self.assertIsNone(artifacts.provider_usage.prompt_tokens)
+        self.assertEqual(artifacts.provider_usage.completion_tokens, 4)
+        self.assertIsNone(artifacts.provider_usage.total_tokens)
 
     def test_build_tool_plan_rule_based_selection_keeps_canonical_override_calculator_semantics(
         self,
@@ -4653,6 +5048,39 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
+    def test_serialize_task_governance_columns_accepts_tuple_allowed_tool_values(
+        self,
+    ) -> None:
+        original_extractor = (
+            chat_persistence_module._extract_task_governance_from_trace_steps
+        )
+        try:
+            chat_persistence_module._extract_task_governance_from_trace_steps = (
+                lambda _trace_steps: {
+                    "profile": "guarded_profile",
+                    "provider_source": "guarded_source",
+                    "allowed_tool_names": ("guarded_tool",),
+                    "allowed_tool_labels": ("Guarded Tool",),
+                }
+            )
+            payload = chat_persistence_module._serialize_task_governance_columns(  # type: ignore[attr-defined]
+                [{"id": "trace-governance-2"}]
+            )
+        finally:
+            chat_persistence_module._extract_task_governance_from_trace_steps = (
+                original_extractor
+            )
+
+        self.assertEqual(
+            payload,
+            (
+                "guarded_profile",
+                "guarded_source",
+                json.dumps(["guarded_tool"], ensure_ascii=False),
+                json.dumps(["Guarded Tool"], ensure_ascii=False),
+            ),
+        )
+
     def test_extract_task_governance_from_trace_steps_reuses_shared_normalizer(self) -> None:
         original_normalizer = chat_persistence_module._normalize_task_governance_dict  # type: ignore[attr-defined]
         try:
@@ -5240,6 +5668,50 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertEqual(payload, ["   ", " task_plan ", "Task Planner"])
+
+    def test_normalize_task_governance_dict_accepts_tuple_allowed_tool_values(
+        self,
+    ) -> None:
+        payload = chat_persistence_module._normalize_task_governance_dict(  # type: ignore[attr-defined]
+            {
+                "profile": " Planning_Only ",
+                "provider_source": " Planning_Suite ",
+                "allowed_tool_names": (" task_plan ", "   "),
+                "allowed_tool_labels": (" Task Planner Suite ", "   "),
+            }
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "profile": "planning_only",
+                "provider_source": "planning_suite",
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner Suite"],
+            },
+        )
+
+    def test_normalize_session_governance_summary_dict_accepts_tuple_summary_values(
+        self,
+    ) -> None:
+        payload = chat_persistence_module._normalize_session_governance_summary_dict(  # type: ignore[attr-defined]
+            {
+                "profiles": (" Planning_Only ", " "),
+                "provider_sources": (" Planning_Suite ",),
+                "allowed_tool_names": (" task_plan ", " "),
+                "allowed_tool_labels": (" Task Planner Suite ",),
+            }
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "profiles": ["planning_only"],
+                "provider_sources": ["planning_suite"],
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner Suite"],
+            },
+        )
 
     def test_normalize_session_governance_summary_reuses_shared_governance_filter_normalizer(
         self,
@@ -8015,6 +8487,50 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn('Output: {"documents_total":2,"request_id":"req-1"}', excerpt)
         self.assertNotIn("raw_documents", excerpt)
 
+    def test_get_task_trace_preview_summary_appends_tuple_tool_output_preview_for_action_steps(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-preview-tool-tuple-preview",
+                            "type": "action",
+                            "content": "Tool done: Provider Search",
+                            "seq": 26,
+                            "meta": {
+                                "tool": {
+                                    "name": "provider_search",
+                                    "label": "Provider Search",
+                                    "status": "done",
+                                    "output_preview": (
+                                        "alpha",
+                                        "beta",
+                                    ),
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn('Preview: ["alpha","beta"]', excerpt)
+
     def test_get_task_trace_preview_summary_uses_productized_tool_title_for_real_tool_steps(
         self,
     ) -> None:
@@ -8166,6 +8682,42 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "step_id": "step-2",
                     "knowledge_base_id": "kb-1",
                     "content": "chunk-3",
+                },
+            ],
+        )
+
+    def test_get_trace_rag_export_summary_accepts_tuple_chunks(self) -> None:
+        payload = chat_persistence_module.get_trace_rag_export_summary(  # type: ignore[attr-defined]
+            [
+                chat_persistence_module.TraceStep(  # type: ignore[attr-defined]
+                    id="step-tuple-rag-1",
+                    type="thought",
+                    content="planner note",
+                    seq=1,
+                    meta={
+                        "rag": {
+                            "chunks": (" chunk-1 ", "", "chunk-2"),
+                            "knowledge_base_id": " kb-1 ",
+                        }
+                    },
+                )
+            ]
+        )
+
+        self.assertEqual(payload["rag_hit_count"], 2)
+        self.assertEqual(payload["rag_knowledge_base_ids"], ["kb-1"])
+        self.assertEqual(
+            payload["rag_chunks"],
+            [
+                {
+                    "step_id": "step-tuple-rag-1",
+                    "knowledge_base_id": "kb-1",
+                    "content": "chunk-1",
+                },
+                {
+                    "step_id": "step-tuple-rag-1",
+                    "knowledge_base_id": "kb-1",
+                    "content": "chunk-2",
                 },
             ],
         )
@@ -11362,6 +11914,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn('Preview: {"documents_total":2}', markdown)
         self.assertIn('Output: {"documents_total":2,"request_id":"req-1"}', markdown)
         self.assertIn('"request_id": "req-1"', markdown)
+
+    def test_build_task_export_markdown_appends_tuple_tool_output_preview_for_action_steps(
+        self,
+    ) -> None:
+        payload = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-06-30T16:20:00",
+            task=task_routes_module.TaskExportTask(  # type: ignore[attr-defined]
+                id="task-export-output-preview-tuple",
+                session_id="session-export-output-preview-tuple",
+                prompt="export output preview tuple",
+                status="completed",
+                status_normalized="completed",
+                status_label="Completed",
+                status_rank=4,
+                created_at="2026-06-30T16:15:00",
+                updated_at="2026-06-30T16:20:00",
+            ),
+            usage=None,
+            messages=[],
+            trace=task_routes_module.TaskExportTrace(  # type: ignore[attr-defined]
+                governance=None,
+                step_count=1,
+                rag_hit_count=0,
+                rag_knowledge_base_ids=[],
+                rag_chunks=[],
+                steps=[
+                    task_routes_module.TraceStep(  # type: ignore[attr-defined]
+                        id="step-output-preview-tuple",
+                        seq=6,
+                        type="action",
+                        content="Tool done: Provider Search",
+                        meta={
+                            "tool": {
+                                "name": "provider_search",
+                                "label": "Provider Search",
+                                "status": "done",
+                                "output_preview": (
+                                    "alpha",
+                                    "beta",
+                                ),
+                            }
+                        },
+                    )
+                ],
+            ),
+        )
+
+        markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn('Preview: ["alpha","beta"]', markdown)
 
     def test_build_task_export_markdown_does_not_label_external_rag_chunks_as_default_kb_when_missing_knowledge_base_id(
         self,
@@ -16024,6 +16629,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result.content,
         )
 
+    def test_mock_provider_normalize_plan_steps_accepts_tuple(self) -> None:
+        self.assertEqual(
+            mock_provider_module._normalize_plan_steps(  # type: ignore[attr-defined]
+                (" Analyze request ", "", "Synthesize final answer")
+            ),
+            [
+                "Analyze request",
+                "Synthesize final answer",
+            ],
+        )
+
     def test_mock_llm_provider_generate_preserves_request_id_for_projected_retrieval_outputs(
         self,
     ) -> None:
@@ -16825,6 +17441,33 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "prompt_preview": "请帮我规划",
                 "planned_tool_names": ["calc_eval"],
                 "planned_tool_labels": ["calc_eval"],
+            },
+            prompt="普通问答，不包含显式计算标记",
+            user_id="user-1",
+            attempt=0,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Evaluate calculation -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Evaluate calculation",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "请帮我规划",
+                "echo": True,
+            },
+        )
+
+    def test_run_tool_supports_task_plan_alias_using_tuple_planned_tools(self) -> None:
+        output = run_tool(
+            name="task_plan",
+            tool_input={
+                "prompt_preview": "请帮我规划",
+                "planned_tool_names": ("calc_eval",),
+                "planned_tool_labels": ("calc_eval",),
             },
             prompt="普通问答，不包含显式计算标记",
             user_id="user-1",
@@ -18036,6 +18679,40 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("documents_total", "request_id"),
         )
 
+    def test_build_tool_registry_loader_adapter_accepts_tuple_disabled_tool_names(
+        self,
+    ) -> None:
+        loader = tool_runtime_module.build_tool_registry_loader_adapter(
+            spec={
+                "loader": "default",
+                "disabled_tool_names": ("mock_plan",),
+            }
+        )
+
+        self.assertIsNotNone(loader)
+        assert loader is not None
+        self.assertEqual(
+            tuple(sorted(loader().keys())),
+            ("calc_eval", "task_retrieve"),
+        )
+
+    def test_build_tool_registry_provider_adapter_accepts_tuple_disabled_tool_names(
+        self,
+    ) -> None:
+        provider = tool_runtime_module.build_tool_registry_provider_adapter(
+            spec={
+                "provider": "default",
+                "disabled_tool_names": ("mock_plan",),
+            }
+        )
+
+        self.assertIsNotNone(provider)
+        assert provider is not None
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "task_retrieve"),
+        )
+
     def test_build_tool_registry_providers_from_settings_supports_loader_adapter_shape(self) -> None:
         settings = SimpleNamespace(
             tool_registry_providers_json=json.dumps(
@@ -18717,6 +19394,123 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval", "calc_eval_fast", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_from_file_accepts_tuple_registry_inputs_from_payload(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            base_file = Path(tmpdir) / "base-registry.json"
+            overlay_file = Path(tmpdir) / "overlay-manifest.json"
+            registry_dir = Path(tmpdir) / "registry-parts"
+            registry_dir.mkdir()
+            child_file = registry_dir / "10-child.json"
+            for file_path in (root_file, base_file, overlay_file, child_file):
+                file_path.write_text("{}", encoding="utf-8")
+
+            settings = SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "planning_suite": {
+                            "provider_factory": "planning_only",
+                            "overrides": {
+                                "calc_eval": {
+                                    "enabled": True,
+                                    "label": "Source Calculator",
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+            original_loader = tool_runtime_module.load_tool_registry_file_payload
+            try:
+                def fake_load_tool_registry_file_payload(*, registry_file: str, base_dir=None):
+                    resolved_registry_file = str(Path(registry_file).resolve())
+                    if resolved_registry_file == str(root_file.resolve()):
+                        return {
+                            "registry_sources": ("planning_suite",),
+                            "registry_files": (str(base_file), str(overlay_file)),
+                            "registry_dirs": (str(registry_dir),),
+                        }
+                    if resolved_registry_file == str(base_file.resolve()):
+                        return {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        }
+                    if resolved_registry_file == str(overlay_file.resolve()):
+                        return {
+                            "profile": "planning_only",
+                            "overrides": {
+                                "calc_eval": {
+                                    "enabled": True,
+                                    "label": "Planning Calculator",
+                                }
+                            },
+                        }
+                    if resolved_registry_file == str(child_file.resolve()):
+                        return {
+                            "mock_plan_brief": {
+                                "template": "mock_plan",
+                                "label": "Brief Planner",
+                            }
+                        }
+                    return original_loader(registry_file=registry_file, base_dir=base_dir)
+
+                tool_runtime_module.load_tool_registry_file_payload = (  # type: ignore[attr-defined]
+                    fake_load_tool_registry_file_payload
+                )
+                registry = build_tool_registry_from_file(
+                    registry_file=str(root_file),
+                    settings=settings,
+                )
+            finally:
+                tool_runtime_module.load_tool_registry_file_payload = original_loader  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "calc_eval_fast", "mock_plan_brief", "task_plan"),
+        )
+        self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_from_file_artifacts_reports_missing_tuple_registry_inputs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            root_file.write_text("{}", encoding="utf-8")
+            missing_file = Path(tmpdir) / "missing-registry.json"
+            missing_dir = Path(tmpdir) / "missing-dir"
+
+            original_loader = tool_runtime_module.load_tool_registry_file_payload
+            try:
+                tool_runtime_module.load_tool_registry_file_payload = (  # type: ignore[attr-defined]
+                    lambda *, registry_file, base_dir=None: {
+                        "registry_sources": ("missing_suite",),
+                        "registry_files": (str(missing_file),),
+                        "registry_dirs": (str(missing_dir),),
+                    }
+                    if str(Path(registry_file).resolve()) == str(root_file.resolve())
+                    else original_loader(registry_file=registry_file, base_dir=base_dir)
+                )
+                artifacts = build_tool_registry_from_file_artifacts(
+                    registry_file=str(root_file)
+                )
+            finally:
+                tool_runtime_module.load_tool_registry_file_payload = original_loader  # type: ignore[attr-defined]
+
+        diagnostics = artifacts["diagnostics"]
+        self.assertEqual(diagnostics["missing_registry_sources"], ("missing_suite",))
+        self.assertEqual(
+            diagnostics["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+        self.assertEqual(
+            diagnostics["missing_registry_dirs"],
+            (str(missing_dir.resolve()),),
+        )
 
     def test_build_tool_registry_from_file_reuses_shared_provider_source_name_helper_for_registry_sources(
         self,
@@ -19725,6 +20519,87 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
+    def test_merge_tool_registry_file_diagnostics_accepts_list_values(self) -> None:
+        diagnostics = tool_runtime_module._merge_tool_registry_file_diagnostics(  # type: ignore[attr-defined]
+            {
+                "skipped_registry_sources": ["planning_suite", "planning_suite"],
+                "missing_registry_sources": [],
+                "skipped_registry_files": ["/tmp/base.json"],
+                "missing_registry_files": ["/tmp/missing.json"],
+                "skipped_registry_dirs": [],
+                "missing_registry_dirs": ["/tmp/missing-dir"],
+            },
+            {
+                "skipped_registry_sources": ["planning_suite", "planning_suite_2"],
+                "missing_registry_sources": [],
+                "skipped_registry_files": [],
+                "missing_registry_files": ["/tmp/missing.json", "/tmp/missing-2.json"],
+                "skipped_registry_dirs": [],
+                "missing_registry_dirs": [],
+            },
+        )
+
+        self.assertEqual(
+            diagnostics,
+            {
+                "skipped_registry_sources": ("planning_suite", "planning_suite_2"),
+                "missing_registry_sources": (),
+                "skipped_registry_files": ("/tmp/base.json",),
+                "missing_registry_files": (
+                    "/tmp/missing.json",
+                    "/tmp/missing-2.json",
+                ),
+                "skipped_registry_dirs": (),
+                "missing_registry_dirs": ("/tmp/missing-dir",),
+            },
+        )
+
+    def test_build_tool_registry_diagnostics_summary_accepts_list_values(self) -> None:
+        diagnostics = {
+            "skipped_registry_sources": ["planning_suite"],
+            "missing_registry_sources": [],
+            "skipped_registry_files": ["/tmp/base.json"],
+            "missing_registry_files": ["/tmp/missing.json"],
+            "skipped_registry_dirs": [],
+            "missing_registry_dirs": ["/tmp/missing-dir"],
+        }
+
+        result = build_tool_registry_diagnostics_summary(diagnostics=diagnostics)
+
+        self.assertTrue(result["has_diagnostics"])
+        self.assertEqual(result["skipped_total"], 2)
+        self.assertEqual(result["missing_total"], 2)
+        self.assertEqual(result["total"], 4)
+        self.assertEqual(
+            result["entries"],
+            (
+                {
+                    "kind": "skipped",
+                    "target": "registry_sources",
+                    "count": 1,
+                    "values": ("planning_suite",),
+                },
+                {
+                    "kind": "skipped",
+                    "target": "registry_files",
+                    "count": 1,
+                    "values": ("/tmp/base.json",),
+                },
+                {
+                    "kind": "missing",
+                    "target": "registry_files",
+                    "count": 1,
+                    "values": ("/tmp/missing.json",),
+                },
+                {
+                    "kind": "missing",
+                    "target": "registry_dirs",
+                    "count": 1,
+                    "values": ("/tmp/missing-dir",),
+                },
+            ),
+        )
+
     def test_build_tool_registry_diagnostics_summary_model_keeps_fields(self) -> None:
         diagnostics = {
             "skipped_registry_sources": ("planning_suite",),
@@ -20337,6 +21212,87 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(payload["trace"]["steps"][0].id, "step-dumped-dict")
         self.assertEqual(payload["trace"]["steps"][0].seq, 7)
+
+    def test_get_task_export_response_summary_accepts_tuple_trace_steps(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_task_export_payload_summary
+        )
+        try:
+            chat_persistence_module.get_task_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "task": {
+                        "id": "task-export-tuple-steps",
+                        "session_id": "session-export-tuple-steps",
+                        "prompt": "shared prompt",
+                        "status": "completed",
+                        "status_normalized": "normalized::completed",
+                        "status_label": "label::completed",
+                        "status_rank": 9,
+                        "created_at": "2026-06-22T16:01:00",
+                        "updated_at": "2026-06-22T16:02:00",
+                    },
+                    "usage": None,
+                    "messages": [],
+                    "trace": {
+                        "governance": None,
+                        "step_count": 2,
+                        "rag_hit_count": 0,
+                        "rag_knowledge_base_ids": [],
+                        "rag_chunks": [],
+                        "steps": (
+                            {
+                                "id": "step-tuple-dict",
+                                "type": "thought",
+                                "content": "tuple dict body",
+                                "seq": 3,
+                            },
+                            chat_persistence_module.TraceStep(  # type: ignore[attr-defined]
+                                id="step-tuple-model",
+                                type="thought",
+                                content="tuple model body",
+                                seq=4,
+                            ),
+                        ),
+                    },
+                }
+            )
+            payload = chat_persistence_module.get_task_export_response_summary(  # type: ignore[attr-defined]
+                {"id": "task-export-tuple-steps"},
+                [],
+            )
+        finally:
+            chat_persistence_module.get_task_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(len(payload["trace"]["steps"]), 2)
+        self.assertEqual(payload["trace"]["steps"][0].id, "step-tuple-dict")
+        self.assertEqual(payload["trace"]["steps"][1].id, "step-tuple-model")
+
+    def test_coerce_export_payload_block_list_to_dicts_accepts_tuple(
+        self,
+    ) -> None:
+        class ResponseReadyRow:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def model_dump(self):
+                return dict(self._payload)
+
+        payload = chat_persistence_module._coerce_export_payload_block_list_to_dicts(  # type: ignore[attr-defined]
+            (
+                {"day": "2026-06-22", "tokens": 3},
+                ResponseReadyRow({"day": "2026-06-23", "tokens": 5}),
+            )
+        )
+
+        self.assertEqual(
+            payload,
+            [
+                {"day": "2026-06-22", "tokens": 3},
+                {"day": "2026-06-23", "tokens": 5},
+            ],
+        )
 
     def test_build_tool_registry_diagnostics_runtime_artifacts_model_keeps_fields(
         self,
@@ -21997,6 +22953,37 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIs(result.provider, provider)
         self.assertEqual(result.provider_source_name, "file_source")
         self.assertEqual(result.runtime_artifacts.diagnostics_runtime.summary.missing_total, 1)
+        self.assertEqual(
+            tuple(action.kind for action in result.service_actions),
+            ("internal_trace_write", "record_audit_event"),
+        )
+
+    def test_build_configured_tool_registry_provider_service_execution_model_from_dict_accepts_tuple_service_actions(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        result = build_configured_tool_registry_provider_service_execution_model_from_dict(
+            service_execution={
+                "provider": provider,
+                "provider_source_name": "file_source",
+                "runtime_artifacts": {},
+                "service_actions": (
+                    {
+                        "kind": "internal_trace_write",
+                        "trace_step": {"id": "step-registry"},
+                        "trace_event": {"task_id": "task-1"},
+                        "persist_force": True,
+                    },
+                    {
+                        "kind": "record_audit_event",
+                        "kwargs": {"event_type": "tool_registry_diagnostics"},
+                    },
+                ),
+            }
+        )
+
         self.assertEqual(
             tuple(action.kind for action in result.service_actions),
             ("internal_trace_write", "record_audit_event"),
@@ -29415,6 +30402,46 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_result_preview_infers_preview_shape_for_extra_provider_planner_kind_with_tuple_steps(
+        self,
+    ) -> None:
+        output = {
+            "plan": "Analyze request -> Synthesize final answer",
+            "steps": (
+                "Analyze request",
+                "Synthesize final answer",
+            ),
+            "tool_kind": "provider_planner",
+            "raw_payload": {"audit": "keep-raw-only"},
+        }
+        registration = ToolRegistration(
+            name="provider_plan",
+            kind="provider_planner",
+            label="Provider Planner",
+            retryable_by_default=False,
+            default_timeout_ms=8_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+            },
+        )
+
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_plan",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "plan": "Analyze request -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Synthesize final answer",
+                ],
+            },
+        )
+
     def test_tool_runtime_helpers_expose_current_calc_defaults(self) -> None:
         self.assertTrue(tool_requires_user_context("calc_eval"))
         self.assertTrue(is_tool_retryable_by_default("calc_eval"))
@@ -31735,6 +32762,51 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_iteration_context_normalizes_tuple_task_plan_inputs(self) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        },
+                        "mock_plan_brief": {
+                            "template": "mock_plan",
+                            "label": "Brief Planner",
+                        },
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        context = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="task_plan",
+            tool_input={
+                "prompt_preview": "please plan",
+                "planned_tool_names": ("mock_plan_brief", "calc_eval_fast"),
+                "planned_tool_labels": ("Brief Planner", "Fast Calculator"),
+            },
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            context["action_step"]["meta"]["tool"]["input"],
+            {
+                "prompt_preview": "please plan",
+                "planned_tool_names": ["calc_eval_fast"],
+                "planned_tool_labels": ["Fast Calculator"],
+                "planned_tool_kinds": ["local_calculator"],
+            },
+        )
+
     def test_build_tool_iteration_success_artifacts_use_preview_aware_observation_shape(self) -> None:
         action_step = build_tool_step_success_update(
             action_step={
@@ -32017,6 +33089,90 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "Analyze request",
                 "Synthesize final answer",
             ],
+            "tool_kind": "provider_planner",
+            "raw_payload": {"audit": "keep-raw-only"},
+        }
+        action_step = build_tool_step_success_update(
+            action_step={
+                "id": "step-3",
+                "seq": 5,
+                "type": "action",
+                "content": "Tool running: Provider Planner",
+                "meta": {
+                    "tool": {
+                        "name": "provider_plan",
+                        "label": "Provider Planner",
+                        "status": "running",
+                    }
+                },
+            },
+            name="provider_plan",
+            tool_input={"prompt_preview": "please plan"},
+            output=output,
+            retry_count=0,
+            token_count=7,
+            last_error=None,
+            display_name="Provider Planner",
+            registration=registration,
+        )
+
+        artifacts = build_tool_iteration_success_artifacts(
+            task_id="task-1",
+            step_id="step-3",
+            action_step=action_step,
+            name="provider_plan",
+            display_name="Provider Planner",
+            registration=registration,
+        )
+
+        self.assertEqual(
+            artifacts["trace"]["step"]["meta"]["tool"]["output_preview"],
+            {
+                "plan": "Analyze request -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Synthesize final answer",
+                ],
+            },
+        )
+        self.assertEqual(
+            artifacts["observation"],
+            "Provider Planner: Planned steps - Analyze request -> Synthesize final answer.",
+        )
+        self.assertEqual(
+            artifacts["output"],
+            {
+                "plan": "Analyze request -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Synthesize final answer",
+                ],
+            },
+        )
+
+    def test_build_tool_iteration_success_artifacts_infer_preview_shape_for_extra_provider_planner_kind_with_tuple_steps(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_plan",
+            kind="provider_planner",
+            label="Provider Planner",
+            retryable_by_default=False,
+            default_timeout_ms=8_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+                "prompt": prompt,
+                "user_id": user_id,
+            },
+        )
+        output = {
+            "plan": "Analyze request -> Synthesize final answer",
+            "steps": (
+                "Analyze request",
+                "Synthesize final answer",
+            ),
             "tool_kind": "provider_planner",
             "raw_payload": {"audit": "keep-raw-only"},
         }
@@ -32367,6 +33523,39 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             followup["step"]["meta"]["rag"]["knowledge_base_id"],
             "demo",
+        )
+
+    def test_build_tool_rag_followup_accepts_tuple_chunks_for_runtime_override_real_tool(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "chunks": ("a", "b"),
+                "knowledge_base_id": "demo",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"]["content"],
+            "Provider Search returned snippets.",
+        )
+        self.assertEqual(
+            followup["step"]["meta"]["rag"],
+            {
+                "chunks": ["a", "b"],
+                "knowledge_base_id": "demo",
+            },
         )
 
     def test_build_tool_rag_followup_supports_registry_provider_without_explicit_semantic_inputs(

@@ -202,7 +202,7 @@ def _parse_tool_observation(observation: str) -> tuple[str, dict[str, object] | 
 
 
 def _normalize_plan_steps(raw_steps: object) -> list[str]:
-    if not isinstance(raw_steps, list):
+    if not isinstance(raw_steps, (list, tuple)):
         return []
     normalized_steps: list[str] = []
     for raw_step in raw_steps:

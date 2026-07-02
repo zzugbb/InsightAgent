@@ -341,7 +341,7 @@ def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
 
 
 def _normalize_planned_tool_names(raw_value: object) -> list[str]:
-    if not isinstance(raw_value, list):
+    if not isinstance(raw_value, (list, tuple)):
         return []
     normalized_names: list[str] = []
     seen_names: set[str] = set()
@@ -363,14 +363,14 @@ def _build_task_plan_steps(
     steps = ["Analyze request"]
     label_by_name: dict[str, str] = {}
     kind_by_name: dict[str, str] = {}
-    if isinstance(planned_tool_labels, list):
+    if isinstance(planned_tool_labels, (list, tuple)):
         for idx, raw_label in enumerate(planned_tool_labels):
             if idx >= len(planned_tool_names):
                 break
             label = str(raw_label).strip()
             if label:
                 label_by_name[planned_tool_names[idx]] = label
-    if isinstance(planned_tool_kinds, list):
+    if isinstance(planned_tool_kinds, (list, tuple)):
         for idx, raw_kind in enumerate(planned_tool_kinds):
             if idx >= len(planned_tool_names):
                 break
@@ -399,17 +399,21 @@ def _run_task_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) 
     prompt_preview = str(tool_input.get("prompt_preview", "")).strip() or prompt.strip()[:120]
     planned_tool_names = _normalize_planned_tool_names(tool_input.get("planned_tool_names"))
     if "planned_tool_names" in tool_input and isinstance(
-        tool_input.get("planned_tool_names"), list
+        tool_input.get("planned_tool_names"), (list, tuple)
     ):
         planned_tool_labels = tool_input.get("planned_tool_labels")
         planned_tool_kinds = tool_input.get("planned_tool_kinds")
         steps = _build_task_plan_steps(
             planned_tool_names=planned_tool_names,
             planned_tool_labels=(
-                planned_tool_labels if isinstance(planned_tool_labels, list) else None
+                planned_tool_labels
+                if isinstance(planned_tool_labels, (list, tuple))
+                else None
             ),
             planned_tool_kinds=(
-                planned_tool_kinds if isinstance(planned_tool_kinds, list) else None
+                planned_tool_kinds
+                if isinstance(planned_tool_kinds, (list, tuple))
+                else None
             ),
         )
     else:
@@ -1161,7 +1165,7 @@ def _merge_tool_registry_file_diagnostics(
             continue
         for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
             values = diagnostic_group.get(key, ())
-            if not isinstance(values, tuple):
+            if not isinstance(values, (list, tuple)):
                 continue
             for value in values:
                 if not isinstance(value, str) or value in merged[key]:
@@ -1214,12 +1218,12 @@ def _build_tool_registry_from_file_registry(
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
     disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = payload.get("disabled_tool_names")
-    if isinstance(raw_disabled_tool_names, list):
+    if isinstance(raw_disabled_tool_names, (list, tuple)):
         disabled_tool_names.update(normalize_tool_registry_names(raw_disabled_tool_names))
 
     composed_base_registry: dict[str, ToolRegistration] | None = None
     raw_registry_sources = payload.get("registry_sources")
-    if isinstance(raw_registry_sources, list):
+    if isinstance(raw_registry_sources, (list, tuple)):
         composed_base_registry = {}
         named_sources = build_tool_registry_provider_sources_from_settings(
             settings=settings,
@@ -1252,7 +1256,7 @@ def _build_tool_registry_from_file_registry(
                 overrides=child_registry,
             )
     raw_registry_files = payload.get("registry_files")
-    if isinstance(raw_registry_files, list):
+    if isinstance(raw_registry_files, (list, tuple)):
         if composed_base_registry is None:
             composed_base_registry = {}
         for child_registry_file in raw_registry_files:
@@ -1283,7 +1287,7 @@ def _build_tool_registry_from_file_registry(
                 overrides=child_registry,
             )
     raw_registry_dirs = payload.get("registry_dirs")
-    if isinstance(raw_registry_dirs, list):
+    if isinstance(raw_registry_dirs, (list, tuple)):
         if composed_base_registry is None:
             composed_base_registry = {}
         for child_registry_dir in raw_registry_dirs:
@@ -1789,7 +1793,7 @@ def build_tool_registry_loader_adapter(
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
     disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = spec.get("disabled_tool_names")
-    if isinstance(raw_disabled_tool_names, list):
+    if isinstance(raw_disabled_tool_names, (list, tuple)):
         disabled_tool_names.update(normalize_tool_registry_names(raw_disabled_tool_names))
 
     extra_tools = build_tool_registry_extra_tools_from_specs(
@@ -1931,7 +1935,7 @@ def build_tool_registry_provider_adapter(
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
     disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = spec.get("disabled_tool_names")
-    if isinstance(raw_disabled_tool_names, list):
+    if isinstance(raw_disabled_tool_names, (list, tuple)):
         disabled_tool_names.update(normalize_tool_registry_names(raw_disabled_tool_names))
 
     extra_tools = build_tool_registry_extra_tools_from_specs(
@@ -2505,14 +2509,14 @@ def build_tool_registry_diagnostics_summary_model(
     missing_total = 0
     for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
         values = diagnostics.get(key, ())
-        if not isinstance(values, tuple) or not values:
+        if not isinstance(values, (list, tuple)) or not values:
             continue
         kind, target = key.split("_", 1)
         entry = {
             "kind": kind,
             "target": target,
             "count": len(values),
-            "values": values,
+            "values": tuple(values),
         }
         entries.append(entry)
         if kind == "skipped":
@@ -2910,7 +2914,7 @@ def build_configured_tool_registry_provider_service_execution_model_from_dict(
     if not isinstance(runtime_artifacts_payload, dict):
         runtime_artifacts_payload = {}
     service_actions_payload = service_execution.get("service_actions", [])
-    if not isinstance(service_actions_payload, list):
+    if not isinstance(service_actions_payload, (list, tuple)):
         service_actions_payload = []
     return ConfiguredToolRegistryProviderServiceExecutionModel(
         provider=provider,
@@ -4398,7 +4402,7 @@ def _normalize_tool_input_for_registration(
 ) -> dict[str, object]:
     if get_tool_semantic_kind(name=name, registration=registration) != "task_planner":
         return tool_input
-    if not isinstance(tool_input.get("planned_tool_names"), list):
+    if not isinstance(tool_input.get("planned_tool_names"), (list, tuple)):
         return tool_input
     raw_planned_tool_names = _normalize_planned_tool_names(tool_input.get("planned_tool_names"))
     if not raw_planned_tool_names:
@@ -4423,7 +4427,7 @@ def _normalize_tool_input_for_registration(
             continue
         planned_tool_names.append(planned_tool_name)
         label = ""
-        if isinstance(existing_labels, list) and idx < len(existing_labels):
+        if isinstance(existing_labels, (list, tuple)) and idx < len(existing_labels):
             label = str(existing_labels[idx]).strip()
         if not label:
             label = get_tool_display_name_from_registration(
@@ -4514,10 +4518,28 @@ def build_tool_result_preview(
         name=name,
         registration=resolved_registration,
     )
+    semantic_kind = get_tool_semantic_kind(
+        name=name,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if result_preview_keys:
-        return {
+        preview = {
             key: output[key] for key in result_preview_keys if key in output
         }
+        if semantic_kind == "task_planner":
+            normalized_steps = _normalize_tool_result_plan_steps(preview.get("steps"))
+            if normalized_steps:
+                preview["steps"] = normalized_steps
+        return preview
+    if semantic_kind == "task_planner":
+        normalized_output = dict(output)
+        normalized_steps = _normalize_tool_result_plan_steps(normalized_output.get("steps"))
+        if normalized_steps:
+            normalized_output["steps"] = normalized_steps
+        return normalized_output
     return output
 
 
@@ -4542,13 +4564,33 @@ def build_tool_result_output(
         name=name,
         registration=resolved_registration,
     )
+    semantic_kind = get_tool_semantic_kind(
+        name=name,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
     if not result_output_keys:
+        if semantic_kind == "task_planner":
+            normalized_output = dict(output)
+            normalized_steps = _normalize_tool_result_plan_steps(
+                normalized_output.get("steps")
+            )
+            if normalized_steps:
+                normalized_output["steps"] = normalized_steps
+            return normalized_output
         return output
-    return {key: output[key] for key in result_output_keys if key in output}
+    normalized_output = {key: output[key] for key in result_output_keys if key in output}
+    if semantic_kind == "task_planner":
+        normalized_steps = _normalize_tool_result_plan_steps(normalized_output.get("steps"))
+        if normalized_steps:
+            normalized_output["steps"] = normalized_steps
+    return normalized_output
 
 
 def _normalize_tool_result_plan_steps(raw_steps: object) -> list[str]:
-    if not isinstance(raw_steps, list):
+    if not isinstance(raw_steps, (list, tuple)):
         return []
     normalized_steps: list[str] = []
     for raw_step in raw_steps:
@@ -6370,7 +6412,7 @@ def build_tool_rag_followup(
     if semantic_kind != "knowledge_retrieval":
         return None
     chunks = output.get("chunks")
-    if not isinstance(chunks, list):
+    if not isinstance(chunks, (list, tuple)):
         return None
     kb = output.get("knowledge_base_id")
     step = build_tool_rag_step(
@@ -7186,7 +7228,32 @@ def _build_provider_tool_plan_prompt(
     )
 
 
-def _extract_provider_tool_plan_items(provider_content: str) -> list[object] | None:
+def _extract_provider_tool_plan_items_from_payload(
+    payload: object,
+) -> list[object] | None:
+    if isinstance(payload, tuple):
+        return list(payload)
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return None
+    tools = payload.get("tools", payload.get("plan"))
+    if isinstance(tools, tuple):
+        return list(tools)
+    if isinstance(tools, list):
+        return tools
+    raw_name = payload.get("name", payload.get("tool"))
+    if isinstance(raw_name, str) and raw_name.strip():
+        return [payload]
+    return None
+
+
+def _extract_provider_tool_plan_items(provider_content: object) -> list[object] | None:
+    direct_items = _extract_provider_tool_plan_items_from_payload(provider_content)
+    if direct_items is not None:
+        return direct_items
+    if not isinstance(provider_content, str):
+        return None
     raw = provider_content.strip()
     if not raw:
         return None
@@ -7199,13 +7266,90 @@ def _extract_provider_tool_plan_items(provider_content: str) -> list[object] | N
             payload = json.loads(candidate)
         except json.JSONDecodeError:
             continue
-        if isinstance(payload, list):
-            return payload
-        if isinstance(payload, dict):
-            tools = payload.get("tools", payload.get("plan"))
-            if isinstance(tools, list):
-                return tools
+        items = _extract_provider_tool_plan_items_from_payload(payload)
+        if items is not None:
+            return items
     return None
+
+
+def _coerce_provider_usage(value: object) -> ProviderUsage | None:
+    if isinstance(value, ProviderUsage):
+        return value
+    if not isinstance(value, dict):
+        return None
+    known_keys = (
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "input_tokens",
+        "output_tokens",
+    )
+    if not any(key in value for key in known_keys):
+        return None
+    prompt_tokens = _normalize_provider_usage_int(
+        value.get("prompt_tokens", value.get("input_tokens"))
+    )
+    completion_tokens = _normalize_provider_usage_int(
+        value.get("completion_tokens", value.get("output_tokens"))
+    )
+    total_tokens = _normalize_provider_usage_int(value.get("total_tokens"))
+    return ProviderUsage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
+
+
+def _normalize_provider_usage_int(value: object) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        return int(value) if value >= 0 else None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = float(text)
+        except ValueError:
+            return None
+        return int(parsed) if parsed >= 0 else None
+    return None
+
+
+def _normalize_provider_response_content_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, list):
+        return ""
+    parts: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            parts.append(item)
+            continue
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "text" and isinstance(item.get("text"), str):
+            parts.append(item["text"])
+    return "".join(parts)
+
+
+def _extract_provider_response_content(response: object) -> object:
+    if isinstance(response, dict):
+        if "content" in response:
+            content = response.get("content")
+            normalized_text = _normalize_provider_response_content_text(content)
+            if normalized_text:
+                return normalized_text
+            return content
+        return response
+    content = getattr(response, "content", response)
+    normalized_text = _normalize_provider_response_content_text(content)
+    if normalized_text:
+        return normalized_text
+    return content
 
 
 def _normalize_provider_tool_plan_item(
@@ -7374,15 +7518,15 @@ def _build_provider_tool_plan(
         registry_provider=registry_provider,
     )
     response = generate(planning_prompt)
-    provider_usage = getattr(response, "usage", None)
-    if not isinstance(provider_usage, ProviderUsage):
+    provider_usage = _coerce_provider_usage(
+        response.get("usage") if isinstance(response, dict) else getattr(response, "usage", None)
+    )
+    if provider_usage is None:
         get_last_usage = getattr(provider, "get_last_usage", None)
         if callable(get_last_usage):
-            latest_usage = get_last_usage()
-            if isinstance(latest_usage, ProviderUsage):
-                provider_usage = latest_usage
-    content = getattr(response, "content", None)
-    if not isinstance(content, str):
+            provider_usage = _coerce_provider_usage(get_last_usage())
+    content = _extract_provider_response_content(response)
+    if content is None:
         return ToolPlanArtifacts(
             tool_plan=[],
             planning_prompt=planning_prompt,
