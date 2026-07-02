@@ -20,6 +20,28 @@ from app.services.chroma_rag_service import (
 router = APIRouter()
 
 
+def _coerce_payload_mapping(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dict(dumped)
+    return {}
+
+
+def _coerce_payload_block_list(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in value:
+        row = _coerce_payload_mapping(item)
+        if row:
+            rows.append(row)
+    return rows
+
+
 def _is_admin_user(current_user: dict) -> bool:
     return str(current_user.get("role") or "").strip().lower() == "admin"
 
@@ -137,9 +159,11 @@ def get_rag_status(
         knowledge_base_id=knowledge_base_id,
         mutate=False,
     )
-    raw = get_knowledge_base_status(
-        user_id=owner_user_id,
-        knowledge_base_id=knowledge_base_id,
+    raw = _coerce_payload_mapping(
+        get_knowledge_base_status(
+            user_id=owner_user_id,
+            knowledge_base_id=knowledge_base_id,
+        )
     )
     return RagStatusResponse(**raw)
 
@@ -148,10 +172,13 @@ def get_rag_status(
 def get_rag_knowledge_bases(
     current_user: dict = Depends(get_current_user),
 ) -> RagKnowledgeBaseListResponse:
-    raw = list_knowledge_bases_with_shared(
-        user_id=str(current_user["id"]),
-        include_shared=True,
+    raw = _coerce_payload_mapping(
+        list_knowledge_bases_with_shared(
+            user_id=str(current_user["id"]),
+            include_shared=True,
+        )
     )
+    raw["knowledge_bases"] = _coerce_payload_block_list(raw.get("knowledge_bases"))
     return RagKnowledgeBaseListResponse(**raw)
 
 
@@ -170,9 +197,11 @@ def post_rag_clear_knowledge_base(
         mutate=True,
     )
     try:
-        raw = clear_knowledge_base(
-            user_id=owner_user_id,
-            knowledge_base_id=knowledge_base_id,
+        raw = _coerce_payload_mapping(
+            clear_knowledge_base(
+                user_id=owner_user_id,
+                knowledge_base_id=knowledge_base_id,
+            )
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -208,9 +237,11 @@ def delete_rag_knowledge_base(
         mutate=True,
     )
     try:
-        raw = delete_knowledge_base(
-            user_id=owner_user_id,
-            knowledge_base_id=knowledge_base_id,
+        raw = _coerce_payload_mapping(
+            delete_knowledge_base(
+                user_id=owner_user_id,
+                knowledge_base_id=knowledge_base_id,
+            )
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -244,12 +275,14 @@ def post_rag_ingest(
     )
     docs = [x.model_dump(exclude_none=True) for x in payload.documents]
     try:
-        raw = ingest_knowledge_documents(
-            user_id=owner_user_id,
-            knowledge_base_id=payload.knowledge_base_id,
-            documents=docs,
-            chunk_size=payload.chunk_size,
-            chunk_overlap=payload.chunk_overlap,
+        raw = _coerce_payload_mapping(
+            ingest_knowledge_documents(
+                user_id=owner_user_id,
+                knowledge_base_id=payload.knowledge_base_id,
+                documents=docs,
+                chunk_size=payload.chunk_size,
+                chunk_overlap=payload.chunk_overlap,
+            )
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -284,15 +317,18 @@ def post_rag_query(
         mutate=False,
     )
     try:
-        raw = query_knowledge_base(
-            user_id=owner_user_id,
-            knowledge_base_id=payload.knowledge_base_id,
-            query_text=payload.query,
-            top_k=payload.top_k,
+        raw = _coerce_payload_mapping(
+            query_knowledge_base(
+                user_id=owner_user_id,
+                knowledge_base_id=payload.knowledge_base_id,
+                query_text=payload.query,
+                top_k=payload.top_k,
+            )
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         msg = str(exc).strip() or type(exc).__name__
         raise HTTPException(status_code=503, detail=msg[:400]) from exc
+    raw["hits"] = _coerce_payload_block_list(raw.get("hits"))
     return RagQueryResponse(**raw)

@@ -13,14 +13,14 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - model settings 中 provider/source diagnostics 与 selected source 说明
   - 真实工具输入、计划项与最终 trace/export 回放的一致性
 - 最近已对齐到代码的高信号能力：
-  - `tool_end.result_summary`、preview/output key 与安全 observation 已进入流式 store 与回放主链，不再回退泛化 `Tool done: ...` 或原始 JSON。
+  - `tool_end.result_summary`、preview/output key 与安全 observation 已进入流式 store 与回放主链，不再回退泛化 `Tool done: ...` 或原始 JSON；当后端只保留 step meta 而未保留原始 `output` 时，也会优先回放 `result_summary` / `output_preview`，并把 preview 继续作为结构化 success output、markdown export meta、task-row batch trace preview、session export trace preview，以及 task/session export 的 `rag_chunks`、task rows、session export payload `tasks/messages/stats` 透传；Memory / RAG 调试返回的 query metadata、query payload root、RAG ingest 文档行、RAG route 列表/命中行、shared merge 结果、session create/detail/list/messages/export、task/session usage、task detail/list/trace/export/stream-reconnect、auth/audit 列表相关 outward summary，以及由 `chat_persistence_service` 直接产出的 task summary/export/trace 批量聚合结果，现在也不会再因后端 typed payload 被归一化成空对象或直接报错。
   - trace display/search 已能消费 `meta.tool_registry.entries`；model settings modal 已消费 `diagnostics_summary`，broken file-backed source 不会直接从设置里消失。
   - real/provider retrieval 与 runtime override real tool 的 follow-up、result summary、observation、导出回放已不再误写成本地默认知识库命中。
-  - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 现在也能稳定消费结构化 response envelope、content-part 文本响应、usage alias 与脏 usage 值，因此前后端对 name-only fallback 与旁路结构化 payload 的消费已基本一致。
+  - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体，因此前后端对 name-only fallback 与旁路结构化 payload 的消费已基本一致。
 - 当前最近一次已记录校验基线：
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`39/39`）
   - `cd frontend && npm run lint` 通过
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`729/729`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`814/814`）
   - `bash scripts/test_ci_e2e_tooling.sh common` 通过
   - `git diff --check` 通过
 

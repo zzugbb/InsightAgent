@@ -6,6 +6,12 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.providers.base import ProviderCallError, ProviderResponse, ProviderUsage
+from app.providers.response_utils import (
+    coerce_provider_usage,
+    extract_response_delta_text,
+    extract_response_text,
+    normalize_response_text,
+)
 
 
 class OpenAICompatibleLLMProvider:
@@ -152,57 +158,39 @@ class OpenAICompatibleLLMProvider:
                 retryable=False,
             ) from exc
 
-    def _extract_message_content(self, obj: dict[str, Any]) -> str:
-        choices = obj.get("choices")
-        if not isinstance(choices, list) or not choices:
+    def _extract_message_content(self, obj: object) -> str:
+        choices = (
+            obj.get("choices")
+            if isinstance(obj, dict)
+            else getattr(obj, "choices", None)
+        )
+        if not isinstance(choices, (list, tuple)) or not choices:
             return ""
         first = choices[0]
-        if not isinstance(first, dict):
+        message = (
+            first.get("message")
+            if isinstance(first, dict)
+            else getattr(first, "message", None)
+        )
+        if message is None:
             return ""
-        message = first.get("message")
-        if not isinstance(message, dict):
-            return ""
-        content = message.get("content")
-        return _normalize_content_text(content)
+        content = (
+            message.get("content")
+            if isinstance(message, dict)
+            else getattr(message, "content", None)
+        )
+        return normalize_response_text(content)
 
     def _extract_delta_content(self, obj: dict[str, Any]) -> str:
-        choices = obj.get("choices")
-        if not isinstance(choices, list) or not choices:
-            return ""
-        first = choices[0]
-        if not isinstance(first, dict):
-            return ""
-        delta = first.get("delta")
-        if not isinstance(delta, dict):
-            return ""
-        content = delta.get("content")
-        return _normalize_content_text(content)
+        return extract_response_delta_text(obj)
 
-    def _extract_usage(self, obj: dict[str, Any]) -> ProviderUsage | None:
-        raw_usage = obj.get("usage")
-        if not isinstance(raw_usage, dict):
-            return None
-
-        prompt_tokens = _normalize_usage_int(
-            raw_usage.get("prompt_tokens", raw_usage.get("input_tokens"))
+    def _extract_usage(self, obj: object) -> ProviderUsage | None:
+        raw_usage = (
+            obj.get("usage")
+            if isinstance(obj, dict)
+            else getattr(obj, "usage", None)
         )
-        completion_tokens = _normalize_usage_int(
-            raw_usage.get("completion_tokens", raw_usage.get("output_tokens"))
-        )
-        total_tokens = _normalize_usage_int(raw_usage.get("total_tokens"))
-
-        if (
-            prompt_tokens is None
-            and completion_tokens is None
-            and total_tokens is None
-        ):
-            return None
-
-        return ProviderUsage(
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-        )
+        return coerce_provider_usage(raw_usage)
 
     def generate(self, prompt: str) -> ProviderResponse:
         payload = {
@@ -213,7 +201,9 @@ class OpenAICompatibleLLMProvider:
         response_obj = self._request_json(payload)
         usage = self._extract_usage(response_obj)
         self._last_usage = usage
-        content = self._extract_message_content(response_obj)
+        content = self._extract_message_content(response_obj) or extract_response_text(
+            response_obj
+        )
         if not content.strip():
             raise ProviderCallError(
                 code="remote_provider_empty_response",
@@ -311,45 +301,3 @@ class OpenAICompatibleLLMProvider:
 
     def get_last_usage(self) -> ProviderUsage | None:
         return self._last_usage
-
-
-def _normalize_content_text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-                continue
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") == "text" and isinstance(item.get("text"), str):
-                parts.append(item["text"])
-        return "".join(parts)
-    return ""
-
-
-def _normalize_usage_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value if value >= 0 else None
-    if isinstance(value, float):
-        if value < 0:
-            return None
-        return int(value)
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            parsed = float(text)
-        except ValueError:
-            return None
-        if parsed < 0:
-            return None
-        return int(parsed)
-    return None

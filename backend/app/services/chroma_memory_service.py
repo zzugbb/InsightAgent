@@ -73,7 +73,7 @@ def query_session_memory(
         return {"ids": [], "documents": [], "distances": None, "metadatas": []}
 
     k = max(1, min(n_results, count))
-    raw = collection.query(query_texts=[q], n_results=k)
+    raw = _coerce_query_payload_mapping(collection.query(query_texts=[q], n_results=k))
     ids = raw.get("ids") or []
     docs_raw = raw.get("documents") or []
     dist = raw.get("distances")
@@ -109,11 +109,31 @@ def _normalize_query_metadatas(
         item = row0[i] if i < len(row0) else None
         if item is None:
             inner.append({})
-        elif isinstance(item, dict):
-            inner.append({str(k): v for k, v in item.items()})
         else:
-            inner.append({})
+            inner.append(_coerce_metadata_mapping(item))
     return [inner]
+
+
+def _coerce_metadata_mapping(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return {str(k): v for k, v in value.items()}
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return {str(k): v for k, v in dumped.items()}
+    return {}
+
+
+def _coerce_query_payload_mapping(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    return {}
 
 
 def try_append_task_memory(

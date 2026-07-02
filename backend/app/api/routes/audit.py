@@ -19,6 +19,28 @@ from app.services.audit_service import (
 router = APIRouter()
 
 
+def _coerce_payload_mapping(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dict(dumped)
+    return {}
+
+
+def _coerce_payload_row_list(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in value:
+        row = _coerce_payload_mapping(item)
+        if row:
+            rows.append(row)
+    return rows
+
+
 class AuditLogItemResponse(BaseModel):
     id: str
     event_type: str
@@ -99,15 +121,17 @@ def get_audit_logs(
         raise HTTPException(status_code=422, detail="start_at must be <= end_at")
 
     user_id = str(current_user["id"])
-    rows = list_audit_logs(
-        user_id=user_id,
-        limit=limit,
-        offset=offset,
-        event_type=normalized_event_type,
-        session_id=session_id,
-        task_id=task_id,
-        start_at=start_iso,
-        end_at=end_iso,
+    rows = _coerce_payload_row_list(
+        list_audit_logs(
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+            event_type=normalized_event_type,
+            session_id=session_id,
+            task_id=task_id,
+            start_at=start_iso,
+            end_at=end_iso,
+        )
     )
     total = count_audit_logs(
         user_id=user_id,

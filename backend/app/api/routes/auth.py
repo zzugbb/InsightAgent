@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -17,6 +19,28 @@ from app.services.audit_service import record_audit_event
 
 
 router = APIRouter()
+
+
+def _coerce_payload_mapping(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dict(dumped)
+    return {}
+
+
+def _coerce_payload_row_list(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in value:
+        row = _coerce_payload_mapping(item)
+        if row:
+            rows.append(row)
+    return rows
 
 
 class UserSummary(BaseModel):
@@ -147,10 +171,12 @@ def _safe_record_audit_event(
 @router.post("/register", response_model=AuthTokenResponse)
 def register(payload: RegisterRequest, request: Request) -> AuthTokenResponse:
     try:
-        user = create_user(
-            email=payload.email,
-            password=payload.password,
-            display_name=payload.display_name,
+        user = _coerce_payload_mapping(
+            create_user(
+                email=payload.email,
+                password=payload.password,
+                display_name=payload.display_name,
+            )
         )
     except ValueError as exc:
         msg = str(exc)
@@ -158,74 +184,82 @@ def register(payload: RegisterRequest, request: Request) -> AuthTokenResponse:
             raise HTTPException(status_code=409, detail=msg) from exc
         raise HTTPException(status_code=422, detail=msg) from exc
 
-    issued = issue_auth_tokens(
-        user=user,
-        user_agent=_user_agent(request),
-        ip_address=_client_ip(request),
+    issued = _coerce_payload_mapping(
+        issue_auth_tokens(
+            user=user,
+            user_agent=_user_agent(request),
+            ip_address=_client_ip(request),
+        )
     )
+    issued_user = _coerce_payload_mapping(issued.get("user"))
     _safe_record_audit_event(
-        user_id=str(user["id"]),
+        user_id=str(user.get("id", "")),
         event_type="login",
         detail={
             "reason": "register_auto_login",
-            "session_id": str(issued["session_id"]),
+            "session_id": str(issued.get("session_id", "")),
         },
     )
     return AuthTokenResponse(
-        access_token=str(issued["access_token"]),
-        refresh_token=str(issued["refresh_token"]),
-        session_id=str(issued["session_id"]),
-        user=UserSummary(**user),
+        access_token=str(issued.get("access_token", "")),
+        refresh_token=str(issued.get("refresh_token", "")),
+        session_id=str(issued.get("session_id", "")),
+        user=UserSummary(**issued_user),
     )
 
 
 @router.post("/login", response_model=AuthTokenResponse)
 def login(payload: LoginRequest, request: Request) -> AuthTokenResponse:
-    user = authenticate_user(email=payload.email, password=payload.password)
-    if user is None:
+    user_raw = authenticate_user(email=payload.email, password=payload.password)
+    if user_raw is None:
         raise HTTPException(status_code=401, detail="email or password is incorrect")
-    issued = issue_auth_tokens(
-        user=user,
-        user_agent=_user_agent(request),
-        ip_address=_client_ip(request),
+    user = _coerce_payload_mapping(user_raw)
+    issued = _coerce_payload_mapping(
+        issue_auth_tokens(
+            user=user,
+            user_agent=_user_agent(request),
+            ip_address=_client_ip(request),
+        )
     )
+    issued_user = _coerce_payload_mapping(issued.get("user")) or user
     _safe_record_audit_event(
-        user_id=str(user["id"]),
+        user_id=str(user.get("id", "")),
         event_type="login",
         detail={
             "reason": "password",
-            "session_id": str(issued["session_id"]),
+            "session_id": str(issued.get("session_id", "")),
         },
     )
     return AuthTokenResponse(
-        access_token=str(issued["access_token"]),
-        refresh_token=str(issued["refresh_token"]),
-        session_id=str(issued["session_id"]),
-        user=UserSummary(**user),
+        access_token=str(issued.get("access_token", "")),
+        refresh_token=str(issued.get("refresh_token", "")),
+        session_id=str(issued.get("session_id", "")),
+        user=UserSummary(**issued_user),
     )
 
 
 @router.post("/refresh", response_model=AuthTokenResponse)
 def refresh(payload: RefreshRequest, request: Request) -> AuthTokenResponse:
-    issued = refresh_auth_tokens(
+    issued_raw = refresh_auth_tokens(
         refresh_token=payload.refresh_token,
         user_agent=_user_agent(request),
         ip_address=_client_ip(request),
     )
-    if issued is None:
+    if issued_raw is None:
         raise HTTPException(status_code=401, detail="invalid refresh token")
-    user = issued["user"]
-    if not isinstance(user, dict):
+    issued = _coerce_payload_mapping(issued_raw)
+    user = _coerce_payload_mapping(issued.get("user"))
+    if not user:
         raise HTTPException(status_code=401, detail="invalid refresh token user")
     _safe_record_audit_event(
-        user_id=str(user["id"]),
+        user_id=str(user.get("id", "")),
         event_type="refresh",
-        detail={"session_id": str(issued["session_id"])},
+        detail={"session_id": str(issued.get("session_id", ""))},
     )
     return AuthTokenResponse(
-        access_token=str(issued["access_token"]),
-        refresh_token=str(issued["refresh_token"]),
-        session_id=str(issued["session_id"]),
+        access_token=str(issued.get("access_token", "")),
+        refresh_token=str(issued.get("refresh_token", "")),
+        session_id=str(issued.get("session_id", "")),
         user=UserSummary(**user),
     )
 
@@ -271,7 +305,7 @@ def logout_all(current_user: dict = Depends(get_current_user)) -> LogoutAllRespo
 
 @router.get("/sessions", response_model=AuthSessionListResponse)
 def get_auth_sessions(current_user: dict = Depends(get_current_user)) -> AuthSessionListResponse:
-    rows = list_auth_sessions(user_id=str(current_user["id"]))
+    rows = _coerce_payload_row_list(list_auth_sessions(user_id=str(current_user["id"])))
     return AuthSessionListResponse(items=[AuthSessionSummary(**row) for row in rows])
 
 
@@ -286,7 +320,7 @@ def delete_auth_session(
 
 @router.get("/me", response_model=UserSummary)
 def me(current_user: dict = Depends(get_current_user)) -> UserSummary:
-    return UserSummary(**current_user)
+    return UserSummary(**_coerce_payload_mapping(current_user))
 
 
 @router.get("/users", response_model=UserListResponse)
@@ -296,6 +330,7 @@ def get_users(
     _current_admin: dict = Depends(get_current_admin),
 ) -> UserListResponse:
     rows, total = list_users(limit=limit, offset=offset)
+    rows = _coerce_payload_row_list(rows)
     items = [UserSummary(**row) for row in rows]
     return UserListResponse(
         items=items,

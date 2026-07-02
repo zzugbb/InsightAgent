@@ -30,6 +30,28 @@ from app.services.chat_persistence_service import (
 
 router = APIRouter()
 
+
+def _coerce_payload_mapping(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dict(dumped)
+    return {}
+
+
+def _coerce_payload_row_list(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in value:
+        row = _coerce_payload_mapping(item)
+        if row:
+            rows.append(row)
+    return rows
+
 class SessionResponse(BaseModel):
     id: str
     title: str | None = None
@@ -203,6 +225,7 @@ def _normalize_filename_part(raw: str, fallback: str) -> str:
 
 
 def _build_session_export_filename(session: dict, ext: str) -> str:
+    session = _coerce_payload_mapping(session)
     sid = _normalize_filename_part(str(session.get("id", "")), "session")
     title = _normalize_filename_part(str(session.get("title") or ""), "")
     suffix = f"-{title}" if title else ""
@@ -348,6 +371,7 @@ def _build_session_export_payload(
     session: dict,
     user_id: str,
 ) -> SessionExportJsonResponse:
+    session = _coerce_payload_mapping(session)
     session_id = str(session["id"])
     usage_summary_payload = get_session_usage_summary(session_id, user_id=user_id)
     message_rows = get_session_messages(session_id, user_id)
@@ -375,7 +399,9 @@ def post_session(
     payload: CreateSessionRequest = CreateSessionRequest(),
     current_user: dict = Depends(get_current_user),
 ) -> SessionResponse:
-    row = create_session_record(title=payload.title, user_id=str(current_user["id"]))
+    row = _coerce_payload_mapping(
+        create_session_record(title=payload.title, user_id=str(current_user["id"]))
+    )
     return SessionResponse(**row)
 
 
@@ -391,7 +417,9 @@ def get_sessions(
     current_user: dict = Depends(get_current_user),
 ) -> SessionListResponse:
     user_id = str(current_user["id"])
-    sessions = list_sessions(user_id=user_id, limit=limit, offset=offset)
+    sessions = _coerce_payload_row_list(
+        list_sessions(user_id=user_id, limit=limit, offset=offset)
+    )
     total = count_sessions(user_id=user_id)
     n = len(sessions)
     return SessionListResponse(
@@ -409,9 +437,10 @@ def patch_session(
     payload: UpdateSessionRequest,
     current_user: dict = Depends(get_current_user),
 ) -> SessionResponse:
-    row = update_session_title(session_id, payload.title, str(current_user["id"]))
-    if row is None:
+    raw = update_session_title(session_id, payload.title, str(current_user["id"]))
+    if raw is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    row = _coerce_payload_mapping(raw)
     return SessionResponse(**row)
 
 
@@ -420,9 +449,10 @@ def get_session_detail(
     session_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> SessionResponse:
-    session = get_session(session_id, str(current_user["id"]))
-    if session is None:
+    raw = get_session(session_id, str(current_user["id"]))
+    if raw is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    session = _coerce_payload_mapping(raw)
     return SessionResponse(**session)
 
 
@@ -434,7 +464,7 @@ def get_session_memory_status_route(
     user_id = str(current_user["id"])
     if get_session(session_id, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    raw = get_session_memory_status(session_id)
+    raw = _coerce_payload_mapping(get_session_memory_status(session_id))
     return SessionMemoryStatusResponse(**raw)
 
 
@@ -446,7 +476,7 @@ def get_session_usage_summary_route(
     user_id = str(current_user["id"])
     if get_session(session_id, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    raw = get_session_usage_summary(session_id, user_id=user_id)
+    raw = _coerce_payload_mapping(get_session_usage_summary(session_id, user_id=user_id))
     return SessionUsageSummaryResponse(**raw)
 
 
@@ -459,10 +489,12 @@ def post_session_memory_add(
     if get_session(session_id, str(current_user["id"])) is None:
         raise HTTPException(status_code=404, detail="Session not found")
     try:
-        raw = add_session_memory_text(
-            session_id,
-            payload.text,
-            metadatas=payload.metadata,
+        raw = _coerce_payload_mapping(
+            add_session_memory_text(
+                session_id,
+                payload.text,
+                metadatas=payload.metadata,
+            )
         )
         return MemoryAddResponse(**raw)
     except ValueError as exc:
@@ -481,10 +513,12 @@ def post_session_memory_query(
     if get_session(session_id, str(current_user["id"])) is None:
         raise HTTPException(status_code=404, detail="Session not found")
     try:
-        raw = query_session_memory(
-            session_id,
-            payload.text,
-            n_results=payload.n_results,
+        raw = _coerce_payload_mapping(
+            query_session_memory(
+                session_id,
+                payload.text,
+                n_results=payload.n_results,
+            )
         )
         return MemoryQueryResponse(**raw)
     except ValueError as exc:
@@ -500,10 +534,11 @@ def get_session_messages_detail(
     current_user: dict = Depends(get_current_user),
 ) -> SessionMessagesResponse:
     user_id = str(current_user["id"])
-    session = get_session(session_id, user_id)
-    if session is None:
+    raw = get_session(session_id, user_id)
+    if raw is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    messages = get_session_messages(session_id, user_id)
+    session = _coerce_payload_mapping(raw)
+    messages = _coerce_payload_row_list(get_session_messages(session_id, user_id))
     return SessionMessagesResponse(
         session=session,
         messages=messages,
@@ -521,9 +556,10 @@ def export_session_json(
     current_user: dict = Depends(get_current_user),
 ) -> SessionExportJsonResponse:
     user_id = str(current_user["id"])
-    session = get_session(session_id, user_id)
-    if session is None:
+    raw = get_session(session_id, user_id)
+    if raw is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    session = _coerce_payload_mapping(raw)
     payload = _build_session_export_payload(session, user_id)
     if download:
         response.headers["Content-Disposition"] = (
@@ -542,9 +578,10 @@ def export_session_markdown(
     current_user: dict = Depends(get_current_user),
 ) -> PlainTextResponse:
     user_id = str(current_user["id"])
-    session = get_session(session_id, user_id)
-    if session is None:
+    raw = get_session(session_id, user_id)
+    if raw is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    session = _coerce_payload_mapping(raw)
     payload = _build_session_export_payload(session, user_id)
     markdown = _build_session_export_markdown(payload)
     headers: dict[str, str] = {}

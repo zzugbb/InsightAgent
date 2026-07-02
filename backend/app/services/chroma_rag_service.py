@@ -71,6 +71,50 @@ def _resolve_collection_name(entry: object) -> str | None:
     return None
 
 
+def _coerce_metadata_mapping(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return {str(k): v for k, v in value.items()}
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return {str(k): v for k, v in dumped.items()}
+    return {}
+
+
+def _coerce_query_payload_mapping(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    return {}
+
+
+def _coerce_document_mapping(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    return {}
+
+
+def _coerce_payload_block_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    rows: list[dict[str, object]] = []
+    for item in value:
+        row = _coerce_document_mapping(item)
+        if row:
+            rows.append(row)
+    return rows
+
+
 def _chunk_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[str]:
     src = text.strip()
     if not src:
@@ -92,11 +136,12 @@ def _chunk_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[str]:
     return chunks
 
 
-def _normalize_metadata(metadata: dict[str, str] | None) -> dict[str, object]:
-    if not metadata:
+def _normalize_metadata(metadata: object) -> dict[str, object]:
+    metadata_dict = _coerce_metadata_mapping(metadata)
+    if not metadata_dict:
         return {}
     normalized: dict[str, object] = {}
-    for key, value in metadata.items():
+    for key, value in metadata_dict.items():
         k = str(key).strip()
         if not k:
             continue
@@ -128,15 +173,14 @@ def ingest_knowledge_documents(
     metadatas: list[dict[str, object]] = []
 
     ingested_docs = 0
-    for doc in documents:
+    for raw_doc in documents:
+        doc = _coerce_document_mapping(raw_doc)
         text = str(doc.get("text", "") or "").strip()
         if not text:
             continue
         source = str(doc.get("source", "") or "manual").strip() or "manual"
         doc_id = str(doc.get("document_id", "") or "").strip() or str(uuid4())
-        extra_meta = _normalize_metadata(
-            doc.get("metadata") if isinstance(doc.get("metadata"), dict) else None,
-        )
+        extra_meta = _normalize_metadata(doc.get("metadata"))
         doc_chunks = _chunk_text(
             text,
             chunk_size=chunk_size,
@@ -217,7 +261,9 @@ def query_knowledge_base(
         }
 
     limit = max(1, min(int(top_k), count, 20))
-    raw = collection.query(query_texts=[q], n_results=limit)
+    raw = _coerce_query_payload_mapping(
+        collection.query(query_texts=[q], n_results=limit)
+    )
 
     ids = raw.get("ids") or [[]]
     docs = raw.get("documents") or [[]]
@@ -234,15 +280,13 @@ def query_knowledge_base(
         doc_id = row_ids[index] if index < len(row_ids) else str(index)
         distance = row_dists[index] if index < len(row_dists) else None
         metadata = row_metas[index] if index < len(row_metas) else {}
-        if not isinstance(metadata, dict):
-            metadata = {}
 
         hits.append(
             {
                 "id": str(doc_id),
                 "content": str(content or ""),
                 "distance": float(distance) if isinstance(distance, (int, float)) else None,
-                "metadata": {str(k): v for k, v in metadata.items()},
+                "metadata": _coerce_metadata_mapping(metadata),
             }
         )
 
@@ -340,18 +384,24 @@ def list_knowledge_bases_with_shared(
     user_id: str,
     include_shared: bool,
 ) -> dict[str, object]:
-    result = list_knowledge_bases(user_id=user_id)
+    result = _coerce_document_mapping(list_knowledge_bases(user_id=user_id))
     if not include_shared:
+        result["knowledge_bases"] = _coerce_payload_block_list(
+            result.get("knowledge_bases")
+        )
+        result["knowledge_base_count"] = len(result["knowledge_bases"])
         return result
     if user_id == SHARED_RAG_SCOPE_USER_ID:
+        result["knowledge_bases"] = _coerce_payload_block_list(
+            result.get("knowledge_bases")
+        )
+        result["knowledge_base_count"] = len(result["knowledge_bases"])
         return result
-    shared = list_knowledge_bases(user_id=SHARED_RAG_SCOPE_USER_ID)
-    own_rows = result.get("knowledge_bases")
-    shared_rows = shared.get("knowledge_bases")
-    if not isinstance(own_rows, list):
-        own_rows = []
-    if not isinstance(shared_rows, list):
-        shared_rows = []
+    shared = _coerce_document_mapping(
+        list_knowledge_bases(user_id=SHARED_RAG_SCOPE_USER_ID)
+    )
+    own_rows = _coerce_payload_block_list(result.get("knowledge_bases"))
+    shared_rows = _coerce_payload_block_list(shared.get("knowledge_bases"))
     merged = own_rows + shared_rows
     merged.sort(key=lambda item: str(item.get("knowledge_base_id") or ""))
     result["knowledge_bases"] = merged

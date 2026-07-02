@@ -4,6 +4,7 @@ import re
 from collections.abc import AsyncIterator
 from datetime import datetime
 from time import monotonic
+from typing import Any
 
 import app.services.chat_persistence_service as chat_persistence_service
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -36,6 +37,17 @@ from app.services.task_status_service import normalize_task_status
 
 
 router = APIRouter()
+
+
+def _coerce_payload_mapping(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dict(dumped)
+    return {}
 
 
 def _parse_last_event_id(value: str | None) -> int | None:
@@ -79,7 +91,8 @@ async def stream_running_task_reconnect(
         last_phase = phase
         return sse_event("state", {"task_id": task_id, "phase": phase})
 
-    first_task = get_task(task_id, user_id)
+    first_task_raw = get_task(task_id, user_id)
+    first_task = _coerce_payload_mapping(first_task_raw) if first_task_raw is not None else None
     session_id = str(first_task.get("session_id")) if first_task else None
     yield sse_event(
         "start",
@@ -90,8 +103,8 @@ async def stream_running_task_reconnect(
         },
     )
     while True:
-        task = get_task(task_id, user_id)
-        if task is None:
+        task_raw = get_task(task_id, user_id)
+        if task_raw is None:
             yield sse_event(
                 "error",
                 sse_error_payload(
@@ -103,6 +116,7 @@ async def stream_running_task_reconnect(
                 ),
             )
             return
+        task = _coerce_payload_mapping(task_raw)
 
         parsed_steps, next_cursor, _, _latest_seq, latest_step_id = (
             chat_persistence_service.get_task_trace_delta_snapshot_from_task(
@@ -373,6 +387,7 @@ def _normalize_filename_part(raw: str, fallback: str) -> str:
 
 
 def _build_task_export_filename(task: dict, ext: str) -> str:
+    task = _coerce_payload_mapping(task)
     task_id_part = _normalize_filename_part(str(task.get("id", "")), "task")
     session_id_part = _normalize_filename_part(
         str(task.get("session_id", "")),
@@ -381,6 +396,7 @@ def _build_task_export_filename(task: dict, ext: str) -> str:
     return f"insightagent-task-{task_id_part}-session-{session_id_part}.{ext}"
 
 def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonResponse:
+    task = _coerce_payload_mapping(task)
     task_id = str(task["id"])
     message_rows = get_task_messages(task_id, user_id)
     export_summary = chat_persistence_service.get_task_export_response_summary(
@@ -569,6 +585,7 @@ def create_task_entry(
         session_id=resolved_session_id,
         status="pending",
     )
+    response_summary = _coerce_payload_mapping(response_summary)
     return TaskCreateResponse(**response_summary)
 
 
@@ -640,7 +657,9 @@ def get_tasks(
     n = len(tasks)
     return TaskListResponse(
         items=[
-            chat_persistence_service.get_task_response_summary_from_task(task)
+            _coerce_payload_mapping(
+                chat_persistence_service.get_task_response_summary_from_task(task)
+            )
             for task in tasks
         ],
         total=total,
@@ -662,7 +681,7 @@ def get_tasks_usage_summary_route(
     sid = session_id.strip() if session_id else None
     if sid and get_session(sid, user_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    raw = get_tasks_usage_summary(user_id, sid)
+    raw = _coerce_payload_mapping(get_tasks_usage_summary(user_id, sid))
     return TaskUsageSummaryResponse(**raw)
 
 
@@ -727,6 +746,7 @@ def get_tasks_usage_dashboard_route(
     response_summary = chat_persistence_service.get_tasks_usage_dashboard_response_summary(
         payload
     )
+    response_summary = _coerce_payload_mapping(response_summary)
     return TaskUsageDashboardResponse(**response_summary)
 
 
@@ -735,12 +755,14 @@ def get_task_detail(
     task_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> TaskResponse:
-    task = get_task(task_id, str(current_user["id"]))
-    if task is None:
+    raw = get_task(task_id, str(current_user["id"]))
+    if raw is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return TaskResponse(
-        **chat_persistence_service.get_task_response_summary_from_task(task)
+    task = _coerce_payload_mapping(raw)
+    response_summary = _coerce_payload_mapping(
+        chat_persistence_service.get_task_response_summary_from_task(task)
     )
+    return TaskResponse(**response_summary)
 
 
 @router.post("/{task_id}/cancel", response_model=TaskCancelResponse)
@@ -749,9 +771,10 @@ def cancel_task(
     current_user: dict = Depends(get_current_user),
 ) -> TaskCancelResponse:
     user_id = str(current_user["id"])
-    task = get_task(task_id, user_id)
-    if task is None:
+    raw = get_task(task_id, user_id)
+    if raw is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    task = _coerce_payload_mapping(raw)
 
     previous_status = str(task.get("status", ""))
     normalized_prev = normalize_task_status(previous_status)
@@ -759,7 +782,12 @@ def cancel_task(
 
     if not already_terminal:
         update_task_status(task_id=task_id, status="cancelled", user_id=user_id)
-        task = get_task(task_id, user_id) or {**task, "status": "cancelled"}
+        refreshed_raw = get_task(task_id, user_id)
+        task = (
+            _coerce_payload_mapping(refreshed_raw)
+            if refreshed_raw is not None
+            else {**task, "status": "cancelled"}
+        )
 
     response_summary = (
         chat_persistence_service.get_task_cancel_response_summary_from_task(
@@ -768,6 +796,7 @@ def cancel_task(
             already_terminal=already_terminal,
         )
     )
+    response_summary = _coerce_payload_mapping(response_summary)
     safe_record_audit_event(
         user_id=user_id,
         event_type="task_cancel",
@@ -793,9 +822,10 @@ def export_task_json(
     current_user: dict = Depends(get_current_user),
 ) -> TaskExportJsonResponse:
     user_id = str(current_user["id"])
-    task = get_task(task_id, user_id)
-    if task is None:
+    raw = get_task(task_id, user_id)
+    if raw is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    task = _coerce_payload_mapping(raw)
     payload = _build_task_export_payload(task, user_id)
     if download:
         response.headers["Content-Disposition"] = (
@@ -814,9 +844,10 @@ def export_task_markdown(
     current_user: dict = Depends(get_current_user),
 ) -> PlainTextResponse:
     user_id = str(current_user["id"])
-    task = get_task(task_id, user_id)
-    if task is None:
+    raw = get_task(task_id, user_id)
+    if raw is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    task = _coerce_payload_mapping(raw)
     payload = _build_task_export_payload(task, user_id)
     markdown = _build_task_export_markdown(payload)
     headers: dict[str, str] = {}
@@ -837,10 +868,12 @@ def get_task_trace_detail(
     current_user: dict = Depends(get_current_user),
 ) -> TaskTraceResponse:
     user_id = str(current_user["id"])
-    task = get_task(task_id, user_id)
-    if task is None:
+    raw = get_task(task_id, user_id)
+    if raw is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    task = _coerce_payload_mapping(raw)
     trace_summary = chat_persistence_service.get_task_trace_response_summary_from_task(task)
+    trace_summary = _coerce_payload_mapping(trace_summary)
     return TaskTraceResponse(task_id=task_id, **trace_summary)
 
 
@@ -856,15 +889,17 @@ def get_task_trace_delta_detail(
     ),
     current_user: dict = Depends(get_current_user),
 ) -> TaskTraceDeltaResponse:
-    task = get_task(task_id, str(current_user["id"]))
-    if task is None:
+    raw = get_task(task_id, str(current_user["id"]))
+    if raw is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    task = _coerce_payload_mapping(raw)
 
     delta_summary = chat_persistence_service.get_task_trace_delta_response_summary_from_task(
         task,
         after_seq=after_seq,
         limit=limit,
     )
+    delta_summary = _coerce_payload_mapping(delta_summary)
     return TaskTraceDeltaResponse(
         task_id=task_id,
         server_time=datetime.now().isoformat(),
@@ -889,9 +924,10 @@ def stream_task_detail(
     current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
     user_id = str(current_user["id"])
-    task = get_task(task_id, user_id)
-    if task is None:
+    raw = get_task(task_id, user_id)
+    if raw is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    task = _coerce_payload_mapping(raw)
     if task["status"] not in {"pending", "running"}:
         raise HTTPException(
             status_code=409,

@@ -10,6 +10,11 @@ from typing import Callable, Iterator, Protocol
 
 from app.config import get_settings
 from app.providers.base import ProviderUsage
+from app.providers.response_utils import (
+    coerce_provider_usage,
+    extract_response_text,
+    normalize_response_text,
+)
 from app.services.chroma_rag_service import query_knowledge_base
 
 
@@ -5971,7 +5976,13 @@ def build_tool_attempt_error_transition(
 def build_tool_step_output(action_step: dict[str, object]) -> dict[str, object] | None:
     tool_obj = get_action_step_tool_meta(action_step)
     output = tool_obj.get("output") if isinstance(tool_obj, dict) else None
-    return output if isinstance(output, dict) else None
+    if isinstance(output, dict):
+        return output
+    safe_output = _resolve_step_tool_safe_output(tool_obj)
+    if isinstance(safe_output, dict):
+        return safe_output
+    preview_output = tool_obj.get("output_preview") if isinstance(tool_obj, dict) else None
+    return preview_output if isinstance(preview_output, dict) else None
 
 
 def get_action_step_tool_meta(action_step: dict[str, object]) -> dict[str, object] | None:
@@ -6036,15 +6047,31 @@ def build_tool_observation_entry(
             registration=resolved_registration,
         )
     )
-    if isinstance(output, dict):
-        meta_result_summary = (
-            str(step_tool_meta.get("result_summary")).strip()
-            if isinstance(step_tool_meta, dict)
-            and isinstance(step_tool_meta.get("result_summary"), str)
-            else ""
+    meta_result_summary = (
+        str(step_tool_meta.get("result_summary")).strip()
+        if isinstance(step_tool_meta, dict)
+        and isinstance(step_tool_meta.get("result_summary"), str)
+        else ""
+    )
+    if meta_result_summary:
+        return f"{resolved_display_name}: {meta_result_summary}"
+    meta_safe_output = _resolve_step_tool_safe_output(step_tool_meta)
+    if meta_safe_output is not None and not isinstance(output, dict):
+        return (
+            f"{resolved_display_name}: "
+            f"{json.dumps(meta_safe_output, ensure_ascii=False)}"
         )
-        if meta_result_summary:
-            return f"{resolved_display_name}: {meta_result_summary}"
+    meta_preview_output = (
+        step_tool_meta.get("output_preview")
+        if isinstance(step_tool_meta, dict)
+        else None
+    )
+    if meta_preview_output is not None and not isinstance(output, dict):
+        return (
+            f"{resolved_display_name}: "
+            f"{json.dumps(meta_preview_output, ensure_ascii=False)}"
+        )
+    if isinstance(output, dict):
         result_summary = build_tool_result_summary(
             name=canonical_name,
             output=output,
@@ -6062,11 +6089,6 @@ def build_tool_observation_entry(
                 f"{resolved_display_name}: "
                 f"{json.dumps(meta_safe_output, ensure_ascii=False)}"
             )
-        meta_preview_output = (
-            step_tool_meta.get("output_preview")
-            if isinstance(step_tool_meta, dict)
-            else None
-        )
         if meta_preview_output is not None:
             return (
                 f"{resolved_display_name}: "
@@ -7272,81 +7294,37 @@ def _extract_provider_tool_plan_items(provider_content: object) -> list[object] 
     return None
 
 
-def _coerce_provider_usage(value: object) -> ProviderUsage | None:
-    if isinstance(value, ProviderUsage):
-        return value
-    if not isinstance(value, dict):
-        return None
-    known_keys = (
-        "prompt_tokens",
-        "completion_tokens",
-        "total_tokens",
-        "input_tokens",
-        "output_tokens",
-    )
-    if not any(key in value for key in known_keys):
-        return None
-    prompt_tokens = _normalize_provider_usage_int(
-        value.get("prompt_tokens", value.get("input_tokens"))
-    )
-    completion_tokens = _normalize_provider_usage_int(
-        value.get("completion_tokens", value.get("output_tokens"))
-    )
-    total_tokens = _normalize_provider_usage_int(value.get("total_tokens"))
-    return ProviderUsage(
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        total_tokens=total_tokens,
-    )
-
-
-def _normalize_provider_usage_int(value: object) -> int | None:
-    if value is None or isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value if value >= 0 else None
-    if isinstance(value, float):
-        return int(value) if value >= 0 else None
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            parsed = float(text)
-        except ValueError:
-            return None
-        return int(parsed) if parsed >= 0 else None
-    return None
-
-
-def _normalize_provider_response_content_text(value: object) -> str:
-    if isinstance(value, str):
-        return value
-    if not isinstance(value, list):
-        return ""
-    parts: list[str] = []
-    for item in value:
-        if isinstance(item, str):
-            parts.append(item)
-            continue
-        if not isinstance(item, dict):
-            continue
-        if item.get("type") == "text" and isinstance(item.get("text"), str):
-            parts.append(item["text"])
-    return "".join(parts)
-
-
 def _extract_provider_response_content(response: object) -> object:
     if isinstance(response, dict):
+        if any(key in response for key in ("tools", "plan", "name", "tool")):
+            return response
         if "content" in response:
             content = response.get("content")
-            normalized_text = _normalize_provider_response_content_text(content)
+            normalized_text = normalize_response_text(content)
             if normalized_text:
                 return normalized_text
             return content
+        output_text = response.get("output_text")
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text
+        text = response.get("text")
+        if isinstance(text, str) and text.strip():
+            return text
+        normalized_text = extract_response_text(response)
+        if normalized_text:
+            return normalized_text
         return response
     content = getattr(response, "content", response)
-    normalized_text = _normalize_provider_response_content_text(content)
+    normalized_text = normalize_response_text(content)
+    if normalized_text:
+        return normalized_text
+    output_text = getattr(response, "output_text", None)
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text
+    normalized_text = extract_response_text(response)
     if normalized_text:
         return normalized_text
     return content
@@ -7518,13 +7496,18 @@ def _build_provider_tool_plan(
         registry_provider=registry_provider,
     )
     response = generate(planning_prompt)
-    provider_usage = _coerce_provider_usage(
-        response.get("usage") if isinstance(response, dict) else getattr(response, "usage", None)
+    raw_usage = (
+        response.get("usage")
+        if isinstance(response, dict)
+        else getattr(response, "usage", None)
     )
+    provider_usage = coerce_provider_usage(raw_usage)
+    if provider_usage is None and isinstance(raw_usage, dict):
+        provider_usage = ProviderUsage()
     if provider_usage is None:
         get_last_usage = getattr(provider, "get_last_usage", None)
         if callable(get_last_usage):
-            provider_usage = _coerce_provider_usage(get_last_usage())
+            provider_usage = coerce_provider_usage(get_last_usage())
     content = _extract_provider_response_content(response)
     if content is None:
         return ToolPlanArtifacts(
