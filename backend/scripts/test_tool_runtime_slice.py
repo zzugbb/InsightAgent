@@ -143,6 +143,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_registry_overrides_from_settings,
     build_tool_registry_profile_settings_config,
     build_tool_registry_settings_config,
+    build_tool_registry_settings_execution_diagnostics,
     build_tool_registry_diagnostics_runtime_artifacts,
     build_tool_registry_diagnostics_summary,
     build_tool_registry_diagnostics_runtime_artifacts_model,
@@ -20272,6 +20273,401 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_supports_http_json_execution_runtime_template_context(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            api_key="sk-runtime",
+            base_url="https://gateway.example/v1",
+            tool_registry_provider_source="analytics_suite",
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "GET",
+                            "headers": {
+                                "Authorization": "Bearer ${settings_api_key}",
+                                "X-Upstream-Base-Url": "${settings_base_url}",
+                            },
+                            "query_params": {
+                                "source": "$tool_registry_provider_source",
+                                "q": "$query",
+                            },
+                            "result_fields": {
+                                "documents_total": "$.meta.total",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total"],
+                        "result_output_keys": ["documents_total"],
+                    }
+                }
+            ),
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+        urlopen_calls: list[tuple[object, object]] = []
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append((request, timeout))
+                or FakeHttpResponse({"meta": {"total": 3}})
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(len(urlopen_calls), 1)
+        request, timeout = urlopen_calls[0]
+        self.assertEqual(timeout, 5.0)
+        self.assertEqual(
+            request.full_url,
+            "https://provider.example/search?source=analytics_suite&q=revenue+trend",
+        )
+        self.assertEqual(request.headers["Authorization"], "Bearer sk-runtime")
+        self.assertEqual(
+            request.headers["X-upstream-base-url"],
+            "https://gateway.example/v1",
+        )
+        self.assertEqual(
+            output,
+            {
+                "documents_total": 3,
+                "tool_kind": "provider_search",
+            },
+        )
+
+    def test_get_configured_tool_registry_provider_supports_http_json_execution_runtime_template_context_for_source_extra_tools(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            api_key="sk-source",
+            base_url="https://gateway.example/v1",
+            tool_registry_provider_source="analytics_suite",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "analytics_suite": {
+                        "provider": "default",
+                        "profile": "default",
+                        "disabled_tool_names": [
+                            "task_plan",
+                            "task_retrieve",
+                            "calc_eval",
+                        ],
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "runtime_semantic_kind": "provider_search",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "method": "GET",
+                                    "headers": {
+                                        "Authorization": "Bearer ${settings_api_key}",
+                                    },
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "q": "$query",
+                                    },
+                                    "result_fields": {
+                                        "documents_total": "$.meta.total",
+                                    },
+                                },
+                                "result_preview_keys": ["documents_total"],
+                                "result_output_keys": ["documents_total"],
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+        urlopen_calls: list[tuple[object, object]] = []
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append((request, timeout))
+                or FakeHttpResponse({"meta": {"total": 4}})
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "margin trend"},
+                prompt="search margin trend",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(len(urlopen_calls), 1)
+        request, timeout = urlopen_calls[0]
+        self.assertEqual(timeout, 5.0)
+        self.assertEqual(
+            request.full_url,
+            "https://provider.example/search?source=analytics_suite&q=margin+trend",
+        )
+        self.assertEqual(request.headers["Authorization"], "Bearer sk-source")
+        self.assertEqual(
+            output,
+            {
+                "documents_total": 4,
+                "tool_kind": "provider_search",
+            },
+        )
+
+    def test_get_configured_tool_registry_provider_supports_http_json_execution_runtime_template_context_for_file_source_extra_tools(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "file-source-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "runtime_semantic_kind": "provider_search",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "method": "GET",
+                                    "headers": {
+                                        "Authorization": "Bearer ${settings_api_key}",
+                                    },
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "q": "$query",
+                                    },
+                                    "result_fields": {
+                                        "documents_total": "$.meta.total",
+                                    },
+                                },
+                                "result_preview_keys": ["documents_total"],
+                                "result_output_keys": ["documents_total"],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                api_key="sk-file-source",
+                tool_registry_provider_source="file_source",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+            )
+
+            provider = get_configured_tool_registry_provider(settings=settings)
+            urlopen_calls: list[tuple[object, object]] = []
+
+            class FakeHttpResponse:
+                def __init__(self, payload: object) -> None:
+                    self._payload = json.dumps(payload).encode("utf-8")
+
+                def read(self) -> bytes:
+                    return self._payload
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append((request, timeout))
+                    or FakeHttpResponse({"meta": {"total": 5}})
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "cash flow"},
+                    prompt="search cash flow",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(len(urlopen_calls), 1)
+        request, timeout = urlopen_calls[0]
+        self.assertEqual(timeout, 5.0)
+        self.assertEqual(
+            request.full_url,
+            "https://provider.example/search?source=file_source&q=cash+flow",
+        )
+        self.assertEqual(request.headers["Authorization"], "Bearer sk-file-source")
+        self.assertEqual(
+            output,
+            {
+                "documents_total": 5,
+                "tool_kind": "provider_search",
+            },
+        )
+
+    def test_get_configured_tool_registry_provider_supports_http_json_execution_runtime_template_context_for_file_source_overrides(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "file-source-overrides.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "overrides": {
+                            "task_retrieve": {
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "method": "GET",
+                                    "headers": {
+                                        "Authorization": "Bearer ${settings_api_key}",
+                                    },
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "q": "$query",
+                                    },
+                                    "result_fields": {
+                                        "documents_total": "$.meta.total",
+                                    },
+                                },
+                                "result_preview_keys": ["documents_total"],
+                                "result_output_keys": ["documents_total"],
+                                "runtime_semantic_kind": "provider_search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                api_key="sk-file-override",
+                tool_registry_provider_source="file_source",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+            )
+
+            provider = get_configured_tool_registry_provider(settings=settings)
+            urlopen_calls: list[tuple[object, object]] = []
+
+            class FakeHttpResponse:
+                def __init__(self, payload: object) -> None:
+                    self._payload = json.dumps(payload).encode("utf-8")
+
+                def read(self) -> bytes:
+                    return self._payload
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append((request, timeout))
+                    or FakeHttpResponse({"meta": {"total": 6}})
+                )
+
+                output = run_tool(
+                    name="task_retrieve",
+                    tool_input={"query": "gross margin"},
+                    prompt="search gross margin",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(len(urlopen_calls), 1)
+        request, timeout = urlopen_calls[0]
+        self.assertEqual(timeout, 5.0)
+        self.assertEqual(
+            request.full_url,
+            "https://provider.example/search?source=file_source&q=gross+margin",
+        )
+        self.assertEqual(request.headers["Authorization"], "Bearer sk-file-override")
+        self.assertEqual(
+            output,
+            {
+                "documents_total": 6,
+                "tool_kind": "provider_search",
+            },
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_rejects_unknown_execution_kind_without_fallback(
         self,
     ) -> None:
@@ -20304,6 +20700,47 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertTrue(raised.exception.fatal)
         self.assertIn("Unsupported tool execution kind", str(raised.exception))
+
+    def test_build_tool_registry_extra_tools_from_settings_rejects_unsupported_runtime_template_variables_without_fallback(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "headers": {
+                                "Authorization": "Bearer ${settings_api_keey}",
+                            },
+                            "query_params": {
+                                "q": "$query",
+                            },
+                        },
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "unsupported runtime template variable settings_api_keey",
+            str(raised.exception),
+        )
 
     def test_build_tool_registry_extra_tools_from_settings_ignores_unknown_template_and_existing_name(self) -> None:
         settings = SimpleNamespace(
@@ -22352,6 +22789,42 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                         "provider_search: unsupported tool execution kind unsupported_transport",
                     ),
                 },
+            ),
+        )
+
+    def test_build_tool_registry_settings_execution_diagnostics_reports_unsupported_runtime_template_variables(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Authorization": "Bearer ${settings_api_keey}",
+                                },
+                                "query_params": {
+                                    "source": "$tool_registry_provider_sourcee",
+                                    "q": "$query",
+                                },
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution references unsupported runtime template variable settings_api_keey in headers.Authorization",
+                "provider_search: http_json execution references unsupported runtime template variable tool_registry_provider_sourcee in query_params.source",
             ),
         )
 

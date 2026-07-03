@@ -1052,14 +1052,23 @@ def build_tool_registry_profile_settings_config(
 def build_tool_registry_extra_tools_from_specs(
     *,
     extra_tool_specs: object,
+    settings: object | None = None,
+    provider_source_name: str | None = None,
 ) -> dict[str, ToolRegistration]:
     if not isinstance(extra_tool_specs, dict):
         return {}
-    extra_tools_settings = type(
-        "ToolRegistryExtraToolSettings",
-        (),
-        {"tool_registry_extra_tools_json": json.dumps(extra_tool_specs, ensure_ascii=False)},
-    )()
+    extra_tools_settings = _clone_tool_execution_settings(
+        settings=settings or SimpleNamespace(),
+        tool_registry_extra_tools_json=json.dumps(
+            extra_tool_specs,
+            ensure_ascii=False,
+        ),
+        **(
+            {"tool_registry_provider_source": provider_source_name}
+            if provider_source_name
+            else {}
+        ),
+    )
     return build_tool_registry_extra_tools_from_settings(settings=extra_tools_settings)
 
 
@@ -1095,7 +1104,72 @@ def _normalize_tool_execution_kind(raw_value: object) -> str | None:
     return normalized or None
 
 
+def _build_tool_execution_runtime_template_context(
+    *,
+    settings: object | None = None,
+) -> dict[str, object]:
+    if settings is None:
+        return {}
+    context: dict[str, object] = {}
+    for attr_name, context_key in (
+        ("mode", "settings_mode"),
+        ("provider", "settings_provider"),
+        ("model", "settings_model"),
+        ("base_url", "settings_base_url"),
+        ("api_key", "settings_api_key"),
+        ("tool_registry_provider_source", "tool_registry_provider_source"),
+        ("tool_registry_profile", "tool_registry_profile"),
+    ):
+        raw_value = getattr(settings, attr_name, None)
+        if not isinstance(raw_value, str):
+            continue
+        normalized = raw_value.strip()
+        if not normalized:
+            continue
+        context[context_key] = normalized
+    return context
+
+
+_SUPPORTED_TOOL_EXECUTION_RUNTIME_TEMPLATE_KEYS = frozenset(
+    {
+        "settings_mode",
+        "settings_provider",
+        "settings_model",
+        "settings_base_url",
+        "settings_api_key",
+        "tool_registry_provider_source",
+        "tool_registry_profile",
+    }
+)
+_TOOL_EXECUTION_RUNTIME_TEMPLATE_RESERVED_PREFIXES = ("settings_", "tool_registry_")
+
+
 _TOOL_EXECUTION_TEMPLATE_MISSING = object()
+
+
+def _stringify_tool_execution_template_interpolation_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return str(value)
+
+
+def _clone_tool_execution_settings(
+    *,
+    settings: object,
+    **updates: object,
+) -> object:
+    if isinstance(settings, dict):
+        merged_values = dict(settings)
+    elif hasattr(settings, "model_dump"):
+        merged_values = dict(getattr(settings, "model_dump")())
+    else:
+        merged_values = dict(vars(settings))
+    merged_values.update(updates)
+    return SimpleNamespace(**merged_values)
 
 
 def _render_tool_execution_template(
@@ -1105,6 +1179,23 @@ def _render_tool_execution_template(
 ) -> object:
     if isinstance(value, str):
         raw = value.strip()
+        if "${" in value:
+            missing_placeholder = False
+
+            def replace_placeholder(match: re.Match[str]) -> str:
+                nonlocal missing_placeholder
+                lookup_key = match.group(1).strip()
+                if not lookup_key or lookup_key not in context:
+                    missing_placeholder = True
+                    return ""
+                return _stringify_tool_execution_template_interpolation_value(
+                    context[lookup_key]
+                )
+
+            rendered_value = re.sub(r"\$\{([^{}]+)\}", replace_placeholder, value)
+            if missing_placeholder:
+                return _TOOL_EXECUTION_TEMPLATE_MISSING
+            return rendered_value
         if raw.startswith("$") and len(raw) > 1:
             lookup_key = raw[1:]
             return (
@@ -1135,6 +1226,82 @@ def _render_tool_execution_template(
             rendered_items.append(rendered_item)
         return rendered_items
     return value
+
+
+def _iter_tool_execution_template_variable_references(
+    value: object,
+    *,
+    path: str,
+) -> tuple[tuple[str, str], ...]:
+    if isinstance(value, str):
+        references: list[tuple[str, str]] = []
+        raw = value.strip()
+        if raw.startswith("$") and len(raw) > 1 and not raw.startswith("${"):
+            references.append((path, raw[1:]))
+        references.extend(
+            (path, match.group(1).strip())
+            for match in re.finditer(r"\$\{([^{}]+)\}", value)
+            if match.group(1).strip()
+        )
+        return tuple(references)
+    if isinstance(value, dict):
+        references: list[tuple[str, str]] = []
+        for raw_key, raw_item in value.items():
+            if not isinstance(raw_key, str) or not raw_key.strip():
+                continue
+            child_path = f"{path}.{raw_key.strip()}" if path else raw_key.strip()
+            references.extend(
+                _iter_tool_execution_template_variable_references(
+                    raw_item,
+                    path=child_path,
+                )
+            )
+        return tuple(references)
+    if isinstance(value, (list, tuple)):
+        references: list[tuple[str, str]] = []
+        for index, item in enumerate(value):
+            references.extend(
+                _iter_tool_execution_template_variable_references(
+                    item,
+                    path=f"{path}[{index}]",
+                )
+            )
+        return tuple(references)
+    return ()
+
+
+def _collect_tool_execution_runtime_template_validation_errors(
+    *,
+    execution_spec: object,
+) -> tuple[str, ...]:
+    if not isinstance(execution_spec, dict):
+        return ()
+    execution_kind = _normalize_named_tool_registry_component_name(
+        execution_spec.get("kind")
+    )
+    if execution_kind != "http_json":
+        return ()
+    references: list[tuple[str, str]] = []
+    for field_name in ("url", "headers", "query_params", "json_body"):
+        if field_name not in execution_spec:
+            continue
+        references.extend(
+            _iter_tool_execution_template_variable_references(
+                execution_spec.get(field_name),
+                path=field_name,
+            )
+        )
+    messages: list[str] = []
+    for path, variable_name in references:
+        if not variable_name.startswith(_TOOL_EXECUTION_RUNTIME_TEMPLATE_RESERVED_PREFIXES):
+            continue
+        if variable_name in _SUPPORTED_TOOL_EXECUTION_RUNTIME_TEMPLATE_KEYS:
+            continue
+        messages.append(
+            "http_json execution references unsupported runtime template "
+            f"variable {variable_name} in {path}"
+        )
+    return tuple(dict.fromkeys(messages))
 
 
 def _normalize_tool_execution_http_method(raw_value: object) -> str:
@@ -1238,6 +1405,7 @@ def _build_http_json_tool_runner(
     *,
     execution_spec: dict[str, object],
     default_timeout_ms: int,
+    template_context: dict[str, object] | None = None,
 ) -> ToolRunner:
     method = _normalize_tool_execution_http_method(
         execution_spec.get("method", "POST" if execution_spec.get("json_body") else "GET")
@@ -1257,6 +1425,7 @@ def _build_http_json_tool_runner(
                 fatal=True,
             )
         context = {
+            **(template_context or {}),
             **tool_input,
             "prompt": prompt,
             "user_id": user_id,
@@ -1354,12 +1523,16 @@ def _build_tool_runner_from_execution_spec(
     execution_spec: object,
     fallback_runner: ToolRunner,
     default_timeout_ms: int,
+    template_context: dict[str, object] | None = None,
 ) -> ToolRunner:
     if execution_spec is None:
         return fallback_runner
-    if not isinstance(execution_spec, dict):
+    validation_errors = _describe_tool_execution_spec_validation_errors(
+        execution_spec
+    )
+    if validation_errors:
         return _build_invalid_tool_execution_runner(
-            message="Invalid tool execution spec: expected an object.",
+            message=f"{validation_errors[0][:1].upper()}{validation_errors[0][1:]}",
         )
     execution_kind = _normalize_named_tool_registry_component_name(
         execution_spec.get("kind")
@@ -1368,6 +1541,7 @@ def _build_tool_runner_from_execution_spec(
         return _build_http_json_tool_runner(
             execution_spec=execution_spec,
             default_timeout_ms=default_timeout_ms,
+            template_context=template_context,
         )
     if execution_kind is None:
         return _build_invalid_tool_execution_runner(
@@ -1453,36 +1627,45 @@ def _build_tool_execution_summary_from_spec(
 def _describe_tool_execution_spec_validation_error(
     execution_spec: object,
 ) -> str | None:
+    validation_errors = _describe_tool_execution_spec_validation_errors(execution_spec)
+    return validation_errors[0] if validation_errors else None
+
+
+def _describe_tool_execution_spec_validation_errors(
+    execution_spec: object,
+) -> tuple[str, ...]:
     if execution_spec is None:
-        return None
+        return ()
     if not isinstance(execution_spec, dict):
-        return "invalid tool execution spec: expected an object"
+        return ("invalid tool execution spec: expected an object",)
     execution_kind = _normalize_named_tool_registry_component_name(
         execution_spec.get("kind")
     )
     if execution_kind is None:
-        return "invalid tool execution spec: execution.kind is required"
+        return ("invalid tool execution spec: execution.kind is required",)
     if execution_kind != "http_json":
-        return f"unsupported tool execution kind {execution_kind}"
+        return (f"unsupported tool execution kind {execution_kind}",)
     raw_url = execution_spec.get("url")
     if not isinstance(raw_url, str) or not raw_url.strip():
-        return "http_json execution requires a non-empty url"
+        return ("http_json execution requires a non-empty url",)
     raw_headers = execution_spec.get("headers")
     if raw_headers is not None and not isinstance(raw_headers, dict):
-        return "http_json execution headers must be an object"
+        return ("http_json execution headers must be an object",)
     raw_query_params = execution_spec.get("query_params")
     if raw_query_params is not None and not isinstance(raw_query_params, dict):
-        return "http_json execution query_params must be an object"
+        return ("http_json execution query_params must be an object",)
     raw_json_body = execution_spec.get("json_body")
     if raw_json_body is not None and not isinstance(raw_json_body, dict):
-        return "http_json execution json_body must be an object"
+        return ("http_json execution json_body must be an object",)
     raw_response_path = execution_spec.get("response_path")
     if raw_response_path is not None and not isinstance(raw_response_path, str):
-        return "http_json execution response_path must be a string"
+        return ("http_json execution response_path must be a string",)
     raw_result_fields = execution_spec.get("result_fields")
     if raw_result_fields is not None and not isinstance(raw_result_fields, dict):
-        return "http_json execution result_fields must be an object"
-    return None
+        return ("http_json execution result_fields must be an object",)
+    return _collect_tool_execution_runtime_template_validation_errors(
+        execution_spec=execution_spec,
+    )
 
 
 def _build_invalid_tool_execution_diagnostics(
@@ -1515,13 +1698,16 @@ def _collect_invalid_tool_execution_messages_from_extra_tool_specs(
             continue
         if "execution" not in spec:
             continue
-        validation_error = _describe_tool_execution_spec_validation_error(
+        validation_errors = _describe_tool_execution_spec_validation_errors(
             spec.get("execution")
         )
-        if validation_error is None:
+        if not validation_errors:
             continue
         normalized_tool_name = normalize_tool_registry_name(tool_name) or tool_name.strip()
-        messages.append(f"{normalized_tool_name}: {validation_error}")
+        messages.extend(
+            f"{normalized_tool_name}: {validation_error}"
+            for validation_error in validation_errors
+        )
     return tuple(dict.fromkeys(messages))
 
 
@@ -1541,12 +1727,15 @@ def _collect_invalid_tool_execution_messages_from_override_specs(
             continue
         if "execution" not in spec:
             continue
-        validation_error = _describe_tool_execution_spec_validation_error(
+        validation_errors = _describe_tool_execution_spec_validation_errors(
             spec.get("execution")
         )
-        if validation_error is None:
+        if not validation_errors:
             continue
-        messages.append(f"{normalized_tool_name}: {validation_error}")
+        messages.extend(
+            f"{normalized_tool_name}: {validation_error}"
+            for validation_error in validation_errors
+        )
     return tuple(dict.fromkeys(messages))
 
 
@@ -1577,7 +1766,8 @@ def build_tool_registry_settings_execution_diagnostics(
         else get_default_tool_registry()
     )
     extra_tools = build_tool_registry_extra_tools_from_specs(
-        extra_tool_specs=extra_tool_specs
+        extra_tool_specs=extra_tool_specs,
+        settings=settings,
     )
     known_registrations = build_tool_registry(
         base_registry=known_registrations,
@@ -1606,13 +1796,17 @@ def build_tool_registry_settings_execution_diagnostics(
 def build_tool_registry_extra_tools_from_file(
     *,
     registry_file: str,
+    settings: object | None = None,
 ) -> dict[str, ToolRegistration]:
     payload = load_tool_registry_file_payload(registry_file=registry_file)
     if not isinstance(payload, dict):
         return {}
     if isinstance(payload.get("extra_tools"), dict):
         payload = payload["extra_tools"]
-    return build_tool_registry_extra_tools_from_specs(extra_tool_specs=payload)
+    return build_tool_registry_extra_tools_from_specs(
+        extra_tool_specs=payload,
+        settings=settings,
+    )
 
 
 def _resolve_tool_registry_file_path(
@@ -1704,6 +1898,7 @@ def _build_tool_registry_from_file_registry(
     *,
     registry_file: str,
     settings: object | None = None,
+    provider_source_name: str | None = None,
     _visited_files: set[str],
     _visited_dirs: set[str],
     _visited_sources: set[str],
@@ -1739,7 +1934,10 @@ def _build_tool_registry_from_file_registry(
                 extra_tool_specs=payload
             )
         )
-        return build_tool_registry_extra_tools_from_specs(extra_tool_specs=payload)
+        return build_tool_registry_extra_tools_from_specs(
+            extra_tool_specs=payload,
+            settings=settings,
+        )
 
     profile_name = get_tool_registry_profile_name_from_settings(
         settings=SimpleNamespace(
@@ -1806,6 +2004,7 @@ def _build_tool_registry_from_file_registry(
             child_registry = _build_tool_registry_from_file_registry(
                 registry_file=str(resolved_child_file),
                 settings=settings,
+                provider_source_name=provider_source_name,
                 _visited_files=_visited_files,
                 _visited_dirs=_visited_dirs,
                 _visited_sources=_visited_sources,
@@ -1844,6 +2043,7 @@ def _build_tool_registry_from_file_registry(
                 child_registry = _build_tool_registry_from_file_registry(
                     registry_file=str(child_file),
                     settings=settings,
+                    provider_source_name=provider_source_name,
                     _visited_files=_visited_files,
                     _visited_dirs=_visited_dirs,
                     _visited_sources=_visited_sources,
@@ -1865,7 +2065,9 @@ def _build_tool_registry_from_file_registry(
         )
     )
     extra_tools = build_tool_registry_extra_tools_from_specs(
-        extra_tool_specs=extra_tool_specs
+        extra_tool_specs=extra_tool_specs,
+        settings=settings,
+        provider_source_name=provider_source_name,
     )
 
     base_registry = build_tool_registry(
@@ -1886,6 +2088,14 @@ def _build_tool_registry_from_file_registry(
         override_specs=payload.get("overrides"),
         base_registry=base_registry,
         disabled_tool_names=disabled_tool_names,
+        settings=_clone_tool_execution_settings(
+            settings=settings or SimpleNamespace(),
+            **(
+                {"tool_registry_provider_source": provider_source_name}
+                if provider_source_name
+                else {}
+            ),
+        ),
     )
     return build_tool_registry(
         base_registry=base_registry,
@@ -1902,6 +2112,7 @@ def build_tool_registry_from_file_artifacts(
     *,
     registry_file: str,
     settings: object | None = None,
+    provider_source_name: str | None = None,
 ) -> dict[str, object]:
     diagnostics: dict[str, list[str]] = {
         "skipped_registry_sources": [],
@@ -1915,6 +2126,7 @@ def build_tool_registry_from_file_artifacts(
     registry = _build_tool_registry_from_file_registry(
         registry_file=registry_file,
         settings=settings,
+        provider_source_name=provider_source_name,
         _visited_files=set(),
         _visited_dirs=set(),
         _visited_sources=set(),
@@ -1930,10 +2142,12 @@ def build_tool_registry_loader_from_file_artifacts(
     *,
     registry_file: str,
     settings: object | None = None,
+    provider_source_name: str | None = None,
 ) -> dict[str, object]:
     artifacts = build_tool_registry_from_file_artifacts(
         registry_file=registry_file,
         settings=settings,
+        provider_source_name=provider_source_name,
     )
     registry = dict(artifacts["registry"])
     loader = (lambda registry=registry: dict(registry)) if registry else None
@@ -1948,10 +2162,12 @@ def build_tool_registry_provider_from_file_artifacts(
     *,
     registry_file: str,
     settings: object | None = None,
+    provider_source_name: str | None = None,
 ) -> dict[str, object]:
     artifacts = build_tool_registry_loader_from_file_artifacts(
         registry_file=registry_file,
         settings=settings,
+        provider_source_name=provider_source_name,
     )
     loader = artifacts["loader"]
     registry = dict(artifacts["registry"])
@@ -1967,10 +2183,12 @@ def build_tool_registry_from_file(
     *,
     registry_file: str,
     settings: object | None = None,
+    provider_source_name: str | None = None,
 ) -> dict[str, ToolRegistration]:
     artifacts = build_tool_registry_from_file_artifacts(
         registry_file=registry_file,
         settings=settings,
+        provider_source_name=provider_source_name,
     )
     return dict(artifacts["registry"])
 
@@ -1979,10 +2197,12 @@ def build_tool_registry_loader_from_file(
     *,
     registry_file: str,
     settings: object | None = None,
+    provider_source_name: str | None = None,
 ) -> ToolRegistryLoader | None:
     artifacts = build_tool_registry_loader_from_file_artifacts(
         registry_file=registry_file,
         settings=settings,
+        provider_source_name=provider_source_name,
     )
     return artifacts["loader"]
 
@@ -1991,10 +2211,12 @@ def build_tool_registry_provider_from_file(
     *,
     registry_file: str,
     settings: object | None = None,
+    provider_source_name: str | None = None,
 ) -> ToolRegistryProvider | None:
     artifacts = build_tool_registry_provider_from_file_artifacts(
         registry_file=registry_file,
         settings=settings,
+        provider_source_name=provider_source_name,
     )
     return artifacts["provider"]
 
@@ -2365,6 +2587,7 @@ def build_tool_registry_loader_adapter(
 
     extra_tools = build_tool_registry_extra_tools_from_specs(
         extra_tool_specs=spec.get("extra_tools"),
+        settings=settings,
     )
     base_registry = build_tool_registry(
         base_registry=known_base_registry if known_base_registry is not None else base_loader(),
@@ -2374,6 +2597,7 @@ def build_tool_registry_loader_adapter(
         override_specs=spec.get("overrides"),
         base_registry=base_registry,
         disabled_tool_names=disabled_tool_names,
+        settings=settings,
     )
     registry = build_tool_registry(
         base_registry=base_registry,
@@ -2399,6 +2623,7 @@ def build_tool_registry_provider_adapter(
     *,
     spec: dict[str, object],
     settings: object | None = None,
+    provider_source_name: str | None = None,
     named_loaders: dict[str, ToolRegistryLoader] | None = None,
     named_providers: dict[str, ToolRegistryProvider] | None = None,
     named_sources: dict[str, ToolRegistryProvider] | None = None,
@@ -2507,6 +2732,8 @@ def build_tool_registry_provider_adapter(
 
     extra_tools = build_tool_registry_extra_tools_from_specs(
         extra_tool_specs=spec.get("extra_tools"),
+        settings=settings,
+        provider_source_name=provider_source_name,
     )
     base_registry = build_tool_registry(
         base_registry=known_base_registry
@@ -2518,6 +2745,14 @@ def build_tool_registry_provider_adapter(
         override_specs=spec.get("overrides"),
         base_registry=base_registry,
         disabled_tool_names=disabled_tool_names,
+        settings=_clone_tool_execution_settings(
+            settings=settings or SimpleNamespace(),
+            **(
+                {"tool_registry_provider_source": provider_source_name}
+                if provider_source_name
+                else {}
+            ),
+        ),
     )
     return build_tool_registry_provider(
         provider=base_provider,
@@ -2788,6 +3023,7 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                     build_tool_registry_provider_from_file_artifacts(
                         registry_file=registry_file,
                         settings=settings,
+                        provider_source_name=normalized_source_name,
                     )["diagnostics"],
                 )
             elif (
@@ -2834,6 +3070,7 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
             provider = build_tool_registry_provider_adapter(
                 spec=spec,
                 settings=settings,
+                provider_source_name=normalized_source_name,
                 named_loaders=named_loaders,
                 named_providers=named_providers,
                 named_sources=sources,
@@ -2845,7 +3082,11 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
             source_diagnostics[normalized_source_name] = diagnostics
             continue
 
-        extra_tools = build_tool_registry_extra_tools_from_specs(extra_tool_specs=spec)
+        extra_tools = build_tool_registry_extra_tools_from_specs(
+            extra_tool_specs=spec,
+            settings=settings,
+            provider_source_name=normalized_source_name,
+        )
         if not extra_tools:
             continue
         sources[normalized_source_name] = StaticToolRegistryProvider(registry=extra_tools)
@@ -2880,6 +3121,9 @@ def build_tool_registry_extra_tools_from_settings(
     if not isinstance(extra_tool_specs, dict):
         return {}
 
+    runtime_template_context = _build_tool_execution_runtime_template_context(
+        settings=settings,
+    )
     extra_tools: dict[str, ToolRegistration] = {}
     for name, spec in extra_tool_specs.items():
         if not isinstance(name, str) or not isinstance(spec, dict):
@@ -2915,6 +3159,7 @@ def build_tool_registry_extra_tools_from_settings(
                 execution_spec=execution_spec,
                 fallback_runner=template_registration.runner,
                 default_timeout_ms=resolved_default_timeout_ms,
+                template_context=runtime_template_context,
             ),
             requires_user_context=bool(
                 spec.get("requires_user_context", template_registration.requires_user_context)
@@ -2946,10 +3191,14 @@ def _build_registry_overrides_from_specs(
     override_specs: object,
     base_registry: dict[str, ToolRegistration],
     disabled_tool_names: set[str],
+    settings: object | None = None,
 ) -> tuple[dict[str, ToolRegistration], set[str]]:
     if not isinstance(override_specs, dict):
         return {}, disabled_tool_names
 
+    runtime_template_context = _build_tool_execution_runtime_template_context(
+        settings=settings,
+    )
     overrides: dict[str, ToolRegistration] = {}
     for name, spec in override_specs.items():
         if not isinstance(name, str) or not isinstance(spec, dict):
@@ -2995,6 +3244,7 @@ def _build_registry_overrides_from_specs(
                 execution_spec=execution_spec,
                 fallback_runner=base_registration.runner,
                 default_timeout_ms=resolved_default_timeout_ms,
+                template_context=runtime_template_context,
             ),
             requires_user_context=bool(
                 spec.get("requires_user_context", base_registration.requires_user_context)
@@ -3066,6 +3316,7 @@ def build_tool_registry_settings_config(
         override_specs=override_specs,
         base_registry=known_registrations,
         disabled_tool_names=disabled_tool_names,
+        settings=settings,
     )
     overrides.update(source_overrides)
     return ToolRegistrySettingsConfig(

@@ -71,7 +71,41 @@ function formatToolExecutionSummary(
   if (!method && !endpoint) {
     return "";
   }
-  return [method, endpoint].filter((part) => part.length > 0).join(" ");
+  const parts = [[method, endpoint].filter((part) => part.length > 0).join(" ")];
+  const headerCount = executionSummary.header_count;
+  if (typeof headerCount === "number" && Number.isFinite(headerCount) && headerCount > 0) {
+    parts.push(`headers ${Math.trunc(headerCount)}`);
+  }
+  const queryParamCount = executionSummary.query_param_count;
+  if (
+    typeof queryParamCount === "number"
+    && Number.isFinite(queryParamCount)
+    && queryParamCount > 0
+  ) {
+    parts.push(`query ${Math.trunc(queryParamCount)}`);
+  }
+  const jsonBodyFieldCount = executionSummary.json_body_field_count;
+  if (
+    typeof jsonBodyFieldCount === "number"
+    && Number.isFinite(jsonBodyFieldCount)
+    && jsonBodyFieldCount > 0
+  ) {
+    parts.push(`body ${Math.trunc(jsonBodyFieldCount)}`);
+  }
+  const responsePath =
+    typeof executionSummary.response_path === "string" && executionSummary.response_path.trim().length > 0
+      ? executionSummary.response_path.trim()
+      : "";
+  if (responsePath) {
+    parts.push(`response ${responsePath}`);
+  }
+  const resultFieldNames = Array.isArray(executionSummary.result_field_names)
+    ? executionSummary.result_field_names.filter((name) => name.trim().length > 0)
+    : [];
+  if (resultFieldNames.length > 0) {
+    parts.push(`fields ${resultFieldNames.join(", ")}`);
+  }
+  return parts.filter((part) => part.length > 0).join(" · ");
 }
 
 export function formatToolRegistryProviderToolDetailsSummary(

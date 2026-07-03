@@ -65,9 +65,14 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
               semantic_family: "knowledge_retrieval",
               execution_kind: "http_json",
               execution_summary: {
-                method: "GET",
+                method: "POST",
                 url_origin: "https://provider.example",
                 url_path: "/search",
+                header_count: 1,
+                query_param_count: 1,
+                json_body_field_count: 2,
+                response_path: "$.data",
+                result_field_names: ["documents_total", "request_id"],
               },
               retryable_by_default: false,
               default_timeout_ms: 21_000,
@@ -108,7 +113,7 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
   );
   assert.equal(
     result.selectedSourceToolDetailsSummary,
-    "Provider Search [provider_search · knowledge_retrieval via http_json @ GET https://provider.example/search]: preview hit_count, knowledge_base_id; output documents_total | Provider Math [local_calculator]: expression, result",
+    "Provider Search [provider_search · knowledge_retrieval via http_json @ POST https://provider.example/search · headers 1 · query 1 · body 2 · response $.data · fields documents_total, request_id]: preview hit_count, knowledge_base_id; output documents_total | Provider Math [local_calculator]: expression, result",
   );
 });
 
@@ -161,9 +166,14 @@ test("formatToolRegistryProviderToolDetailsSummary includes output keys when ava
       semantic_kind: "provider_search",
       execution_kind: "http_json",
       execution_summary: {
-        method: "GET",
+        method: "POST",
         url_origin: "https://provider.example",
         url_path: "/search",
+        header_count: 1,
+        query_param_count: 1,
+        json_body_field_count: 2,
+        response_path: "$.data",
+        result_field_names: ["documents_total", "request_id"],
       },
       retryable_by_default: false,
       default_timeout_ms: 21_000,
@@ -176,6 +186,6 @@ test("formatToolRegistryProviderToolDetailsSummary includes output keys when ava
 
   assert.equal(
     result,
-    "Provider Search [provider_search via http_json @ GET https://provider.example/search]: preview documents_total; output documents_total",
+    "Provider Search [provider_search via http_json @ POST https://provider.example/search · headers 1 · query 1 · body 2 · response $.data · fields documents_total, request_id]: preview documents_total; output documents_total",
   );
 });
