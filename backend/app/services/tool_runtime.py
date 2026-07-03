@@ -7,6 +7,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable, Iterator, Protocol
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request, urlopen
 
 from app.config import get_settings
 from app.providers.base import ProviderUsage
@@ -53,6 +56,8 @@ class ToolRegistration:
     result_preview_keys: tuple[str, ...] = ()
     result_output_keys: tuple[str, ...] = ()
     runtime_semantic_kind: str | None = None
+    execution_kind: str | None = None
+    execution_summary: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -334,6 +339,7 @@ _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS = (
     "missing_registry_files",
     "skipped_registry_dirs",
     "missing_registry_dirs",
+    "invalid_tool_executions",
 )
 
 
@@ -1082,6 +1088,521 @@ def _normalize_runtime_semantic_kind(raw_value: object) -> str | None:
     return normalized or None
 
 
+def _normalize_tool_execution_kind(raw_value: object) -> str | None:
+    if not isinstance(raw_value, str):
+        return None
+    normalized = raw_value.strip().lower()
+    return normalized or None
+
+
+_TOOL_EXECUTION_TEMPLATE_MISSING = object()
+
+
+def _render_tool_execution_template(
+    value: object,
+    *,
+    context: dict[str, object],
+) -> object:
+    if isinstance(value, str):
+        raw = value.strip()
+        if raw.startswith("$") and len(raw) > 1:
+            lookup_key = raw[1:]
+            return (
+                context[lookup_key]
+                if lookup_key in context
+                else _TOOL_EXECUTION_TEMPLATE_MISSING
+            )
+        return value
+    if isinstance(value, dict):
+        rendered_mapping: dict[str, object] = {}
+        for raw_key, raw_value in value.items():
+            if not isinstance(raw_key, str) or not raw_key.strip():
+                continue
+            rendered_value = _render_tool_execution_template(
+                raw_value,
+                context=context,
+            )
+            if rendered_value is _TOOL_EXECUTION_TEMPLATE_MISSING or rendered_value is None:
+                continue
+            rendered_mapping[raw_key] = rendered_value
+        return rendered_mapping
+    if isinstance(value, (list, tuple)):
+        rendered_items: list[object] = []
+        for item in value:
+            rendered_item = _render_tool_execution_template(item, context=context)
+            if rendered_item is _TOOL_EXECUTION_TEMPLATE_MISSING:
+                continue
+            rendered_items.append(rendered_item)
+        return rendered_items
+    return value
+
+
+def _normalize_tool_execution_http_method(raw_value: object) -> str:
+    if not isinstance(raw_value, str):
+        return "GET"
+    normalized = raw_value.strip().upper()
+    if normalized in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+        return normalized
+    return "GET"
+
+
+def _normalize_tool_execution_http_headers(raw_value: object) -> dict[str, str]:
+    if not isinstance(raw_value, dict):
+        return {}
+    headers: dict[str, str] = {}
+    for raw_key, raw_item in raw_value.items():
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            continue
+        if raw_item is None:
+            continue
+        headers[raw_key] = str(raw_item)
+    return headers
+
+
+def _normalize_tool_execution_http_query_params(
+    raw_value: object,
+) -> dict[str, object]:
+    if not isinstance(raw_value, dict):
+        return {}
+    query_params: dict[str, object] = {}
+    for raw_key, raw_item in raw_value.items():
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            continue
+        if raw_item is None:
+            continue
+        if isinstance(raw_item, tuple):
+            query_params[raw_key] = list(raw_item)
+            continue
+        query_params[raw_key] = raw_item
+    return query_params
+
+
+def _normalize_tool_execution_response_path(raw_value: object) -> list[object]:
+    if not isinstance(raw_value, str):
+        return []
+    normalized = raw_value.strip()
+    if normalized.startswith("$"):
+        normalized = normalized[1:]
+    if normalized.startswith("."):
+        normalized = normalized[1:]
+    if not normalized:
+        return []
+    parts: list[object] = []
+    for segment in normalized.split("."):
+        if not segment:
+            continue
+        token_match = re.finditer(r"([^\[\]]+)|\[(\d+)\]", segment)
+        for match in token_match:
+            key = match.group(1)
+            index = match.group(2)
+            if key:
+                parts.append(key)
+            elif index is not None:
+                parts.append(int(index))
+    return parts
+
+
+def _extract_tool_execution_response_value(
+    payload: object,
+    *,
+    path: object,
+) -> object:
+    path_tokens = _normalize_tool_execution_response_path(path)
+    if not path_tokens:
+        return payload
+    current = payload
+    for token in path_tokens:
+        if isinstance(token, int):
+            if not isinstance(current, (list, tuple)) or token >= len(current):
+                return _TOOL_EXECUTION_TEMPLATE_MISSING
+            current = current[token]
+            continue
+        if not isinstance(current, dict) or token not in current:
+            return _TOOL_EXECUTION_TEMPLATE_MISSING
+        current = current[token]
+    return current
+
+
+def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, object]:
+    normalized_output = dict(output)
+    documents = normalized_output.get("documents")
+    if "documents_total" not in normalized_output and isinstance(documents, (list, tuple)):
+        normalized_output["documents_total"] = len(documents)
+    hits = normalized_output.get("hits")
+    if "hit_count" not in normalized_output and isinstance(hits, (list, tuple)):
+        normalized_output["hit_count"] = len(hits)
+    return normalized_output
+
+
+def _build_http_json_tool_runner(
+    *,
+    execution_spec: dict[str, object],
+    default_timeout_ms: int,
+) -> ToolRunner:
+    method = _normalize_tool_execution_http_method(
+        execution_spec.get("method", "POST" if execution_spec.get("json_body") else "GET")
+    )
+    headers = _normalize_tool_execution_http_headers(execution_spec.get("headers"))
+    raw_query_params = execution_spec.get("query_params")
+    raw_json_body = execution_spec.get("json_body")
+    raw_response_path = execution_spec.get("response_path")
+    raw_result_fields = execution_spec.get("result_fields")
+    timeout_ms = int(execution_spec.get("timeout_ms", default_timeout_ms) or default_timeout_ms)
+
+    def runner(*, tool_input: dict[str, object], prompt: str, user_id: str) -> dict[str, object]:
+        raw_url = execution_spec.get("url")
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            raise MockToolExecutionError(
+                "HTTP JSON tool requires a non-empty url.",
+                fatal=True,
+            )
+        context = {
+            **tool_input,
+            "prompt": prompt,
+            "user_id": user_id,
+        }
+        rendered_url = _render_tool_execution_template(raw_url, context=context)
+        if not isinstance(rendered_url, str) or not rendered_url.strip():
+            raise MockToolExecutionError(
+                "HTTP JSON tool could not resolve a valid url.",
+                fatal=True,
+            )
+        rendered_headers = _normalize_tool_execution_http_headers(
+            _render_tool_execution_template(headers, context=context)
+        )
+        rendered_query_params = _normalize_tool_execution_http_query_params(
+            _render_tool_execution_template(raw_query_params, context=context)
+        )
+        query_string = urlencode(rendered_query_params, doseq=True)
+        full_url = rendered_url.strip()
+        if query_string:
+            separator = "&" if "?" in full_url else "?"
+            full_url = f"{full_url}{separator}{query_string}"
+        request_data: bytes | None = None
+        if raw_json_body is not None and method != "GET":
+            rendered_json_body = _render_tool_execution_template(
+                raw_json_body,
+                context=context,
+            )
+            if not isinstance(rendered_json_body, dict):
+                raise MockToolExecutionError(
+                    "HTTP JSON tool json_body must resolve to an object.",
+                    fatal=True,
+                )
+            request_data = json.dumps(rendered_json_body, ensure_ascii=False).encode("utf-8")
+            rendered_headers.setdefault("Content-Type", "application/json")
+        rendered_headers.setdefault("Accept", "application/json")
+        request = Request(
+            full_url,
+            data=request_data,
+            headers=rendered_headers,
+            method=method,
+        )
+        try:
+            with urlopen(
+                request,
+                timeout=max(0.1, timeout_ms / 1000),
+            ) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, OSError, ValueError, json.JSONDecodeError) as exc:
+            raise MockToolExecutionError(
+                f"HTTP JSON tool failed: {exc}",
+                fatal=False,
+            ) from exc
+
+        scoped_payload = _extract_tool_execution_response_value(
+            response_payload,
+            path=raw_response_path,
+        )
+        if scoped_payload is _TOOL_EXECUTION_TEMPLATE_MISSING:
+            scoped_payload = response_payload
+        if isinstance(raw_result_fields, dict):
+            mapped_output: dict[str, object] = {}
+            for raw_key, raw_path in raw_result_fields.items():
+                if not isinstance(raw_key, str) or not raw_key.strip():
+                    continue
+                mapped_value = _extract_tool_execution_response_value(
+                    scoped_payload,
+                    path=raw_path,
+                )
+                if mapped_value is _TOOL_EXECUTION_TEMPLATE_MISSING:
+                    continue
+                mapped_output[raw_key] = mapped_value
+            return _normalize_http_json_output_shape(mapped_output)
+        if isinstance(scoped_payload, dict):
+            return _normalize_http_json_output_shape(dict(scoped_payload))
+        return {
+            "value": scoped_payload,
+        }
+
+    return runner
+
+
+def _build_invalid_tool_execution_runner(
+    *,
+    message: str,
+) -> ToolRunner:
+    def runner(*, tool_input: dict[str, object], prompt: str, user_id: str) -> dict[str, object]:
+        del tool_input, prompt, user_id
+        raise MockToolExecutionError(message, fatal=True)
+
+    return runner
+
+
+def _build_tool_runner_from_execution_spec(
+    *,
+    execution_spec: object,
+    fallback_runner: ToolRunner,
+    default_timeout_ms: int,
+) -> ToolRunner:
+    if execution_spec is None:
+        return fallback_runner
+    if not isinstance(execution_spec, dict):
+        return _build_invalid_tool_execution_runner(
+            message="Invalid tool execution spec: expected an object.",
+        )
+    execution_kind = _normalize_named_tool_registry_component_name(
+        execution_spec.get("kind")
+    )
+    if execution_kind == "http_json":
+        return _build_http_json_tool_runner(
+            execution_spec=execution_spec,
+            default_timeout_ms=default_timeout_ms,
+        )
+    if execution_kind is None:
+        return _build_invalid_tool_execution_runner(
+            message="Invalid tool execution spec: execution.kind is required.",
+        )
+    return _build_invalid_tool_execution_runner(
+        message=f"Unsupported tool execution kind: {execution_kind}",
+    )
+
+
+def _resolve_tool_execution_kind_from_spec(execution_spec: object) -> str | None:
+    if not isinstance(execution_spec, dict):
+        return None
+    return _normalize_tool_execution_kind(execution_spec.get("kind"))
+
+
+def _build_tool_execution_summary_from_spec(
+    execution_spec: object,
+) -> dict[str, object] | None:
+    if not isinstance(execution_spec, dict):
+        return None
+    execution_kind = _normalize_tool_execution_kind(execution_spec.get("kind"))
+    if execution_kind != "http_json":
+        return None
+
+    summary: dict[str, object] = {
+        "method": _normalize_tool_execution_http_method(
+            execution_spec.get(
+                "method",
+                "POST" if execution_spec.get("json_body") is not None else "GET",
+            )
+        )
+    }
+    raw_url = execution_spec.get("url")
+    if isinstance(raw_url, str) and raw_url.strip():
+        parsed_url = urlparse(raw_url.strip())
+        if parsed_url.scheme and parsed_url.netloc:
+            summary["url_origin"] = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        if parsed_url.path:
+            summary["url_path"] = parsed_url.path
+    raw_headers = execution_spec.get("headers")
+    if isinstance(raw_headers, dict) and raw_headers:
+        summary["header_count"] = len(
+            [
+                raw_key
+                for raw_key in raw_headers
+                if isinstance(raw_key, str) and raw_key.strip()
+            ]
+        )
+    raw_query_params = execution_spec.get("query_params")
+    if isinstance(raw_query_params, dict) and raw_query_params:
+        summary["query_param_count"] = len(
+            [
+                raw_key
+                for raw_key in raw_query_params
+                if isinstance(raw_key, str) and raw_key.strip()
+            ]
+        )
+    raw_json_body = execution_spec.get("json_body")
+    if isinstance(raw_json_body, dict) and raw_json_body:
+        summary["json_body_field_count"] = len(
+            [
+                raw_key
+                for raw_key in raw_json_body
+                if isinstance(raw_key, str) and raw_key.strip()
+            ]
+        )
+    raw_response_path = execution_spec.get("response_path")
+    if isinstance(raw_response_path, str) and raw_response_path.strip():
+        summary["response_path"] = raw_response_path.strip()
+    raw_result_fields = execution_spec.get("result_fields")
+    if isinstance(raw_result_fields, dict) and raw_result_fields:
+        result_field_names = tuple(
+            raw_key.strip()
+            for raw_key in raw_result_fields
+            if isinstance(raw_key, str) and raw_key.strip()
+        )
+        if result_field_names:
+            summary["result_field_names"] = list(result_field_names)
+    return summary
+
+
+def _describe_tool_execution_spec_validation_error(
+    execution_spec: object,
+) -> str | None:
+    if execution_spec is None:
+        return None
+    if not isinstance(execution_spec, dict):
+        return "invalid tool execution spec: expected an object"
+    execution_kind = _normalize_named_tool_registry_component_name(
+        execution_spec.get("kind")
+    )
+    if execution_kind is None:
+        return "invalid tool execution spec: execution.kind is required"
+    if execution_kind != "http_json":
+        return f"unsupported tool execution kind {execution_kind}"
+    raw_url = execution_spec.get("url")
+    if not isinstance(raw_url, str) or not raw_url.strip():
+        return "http_json execution requires a non-empty url"
+    raw_headers = execution_spec.get("headers")
+    if raw_headers is not None and not isinstance(raw_headers, dict):
+        return "http_json execution headers must be an object"
+    raw_query_params = execution_spec.get("query_params")
+    if raw_query_params is not None and not isinstance(raw_query_params, dict):
+        return "http_json execution query_params must be an object"
+    raw_json_body = execution_spec.get("json_body")
+    if raw_json_body is not None and not isinstance(raw_json_body, dict):
+        return "http_json execution json_body must be an object"
+    raw_response_path = execution_spec.get("response_path")
+    if raw_response_path is not None and not isinstance(raw_response_path, str):
+        return "http_json execution response_path must be a string"
+    raw_result_fields = execution_spec.get("result_fields")
+    if raw_result_fields is not None and not isinstance(raw_result_fields, dict):
+        return "http_json execution result_fields must be an object"
+    return None
+
+
+def _build_invalid_tool_execution_diagnostics(
+    *,
+    messages: object,
+) -> dict[str, tuple[str, ...]]:
+    if not isinstance(messages, (list, tuple)):
+        return _empty_tool_registry_file_diagnostics()
+    normalized_messages = tuple(
+        str(message).strip()
+        for message in messages
+        if str(message).strip()
+    )
+    if not normalized_messages:
+        return _empty_tool_registry_file_diagnostics()
+    diagnostics = _empty_tool_registry_file_diagnostics()
+    diagnostics["invalid_tool_executions"] = tuple(dict.fromkeys(normalized_messages))
+    return diagnostics
+
+
+def _collect_invalid_tool_execution_messages_from_extra_tool_specs(
+    *,
+    extra_tool_specs: object,
+) -> tuple[str, ...]:
+    if not isinstance(extra_tool_specs, dict):
+        return ()
+    messages: list[str] = []
+    for tool_name, spec in extra_tool_specs.items():
+        if not isinstance(tool_name, str) or not isinstance(spec, dict):
+            continue
+        if "execution" not in spec:
+            continue
+        validation_error = _describe_tool_execution_spec_validation_error(
+            spec.get("execution")
+        )
+        if validation_error is None:
+            continue
+        normalized_tool_name = normalize_tool_registry_name(tool_name) or tool_name.strip()
+        messages.append(f"{normalized_tool_name}: {validation_error}")
+    return tuple(dict.fromkeys(messages))
+
+
+def _collect_invalid_tool_execution_messages_from_override_specs(
+    *,
+    override_specs: object,
+    base_registry: dict[str, ToolRegistration],
+) -> tuple[str, ...]:
+    if not isinstance(override_specs, dict):
+        return ()
+    messages: list[str] = []
+    for tool_name, spec in override_specs.items():
+        if not isinstance(tool_name, str) or not isinstance(spec, dict):
+            continue
+        normalized_tool_name = normalize_tool_registry_name(tool_name)
+        if not normalized_tool_name or normalized_tool_name not in base_registry:
+            continue
+        if "execution" not in spec:
+            continue
+        validation_error = _describe_tool_execution_spec_validation_error(
+            spec.get("execution")
+        )
+        if validation_error is None:
+            continue
+        messages.append(f"{normalized_tool_name}: {validation_error}")
+    return tuple(dict.fromkeys(messages))
+
+
+def build_tool_registry_settings_execution_diagnostics(
+    *,
+    settings: object | None = None,
+    base_provider: ToolRegistryProvider | None = None,
+) -> dict[str, tuple[str, ...]]:
+    if settings is None:
+        settings = get_settings()
+    raw_extra_tools = getattr(settings, "tool_registry_extra_tools_json", None)
+    extra_tool_specs: object = None
+    if isinstance(raw_extra_tools, str) and raw_extra_tools.strip():
+        try:
+            parsed_extra_tool_specs = json.loads(raw_extra_tools)
+        except json.JSONDecodeError:
+            parsed_extra_tool_specs = None
+        if isinstance(parsed_extra_tool_specs, dict):
+            extra_tool_specs = parsed_extra_tool_specs
+
+    extra_tool_messages = _collect_invalid_tool_execution_messages_from_extra_tool_specs(
+        extra_tool_specs=extra_tool_specs
+    )
+
+    known_registrations = (
+        dict(base_provider.load_tool_registry())
+        if base_provider is not None
+        else get_default_tool_registry()
+    )
+    extra_tools = build_tool_registry_extra_tools_from_specs(
+        extra_tool_specs=extra_tool_specs
+    )
+    known_registrations = build_tool_registry(
+        base_registry=known_registrations,
+        overrides=extra_tools or None,
+    )
+
+    raw_overrides = getattr(settings, "tool_registry_overrides_json", None)
+    override_specs: object = None
+    if isinstance(raw_overrides, str) and raw_overrides.strip():
+        try:
+            parsed_override_specs = json.loads(raw_overrides)
+        except json.JSONDecodeError:
+            parsed_override_specs = None
+        if isinstance(parsed_override_specs, dict):
+            override_specs = parsed_override_specs
+
+    override_messages = _collect_invalid_tool_execution_messages_from_override_specs(
+        override_specs=override_specs,
+        base_registry=known_registrations,
+    )
+    return _build_invalid_tool_execution_diagnostics(
+        messages=(*extra_tool_messages, *override_messages),
+    )
+
+
 def build_tool_registry_extra_tools_from_file(
     *,
     registry_file: str,
@@ -1213,6 +1734,11 @@ def _build_tool_registry_from_file_registry(
         "extra_tools",
     }
     if not any(key in payload for key in manifest_keys):
+        _diagnostics["invalid_tool_executions"].extend(
+            _collect_invalid_tool_execution_messages_from_extra_tool_specs(
+                extra_tool_specs=payload
+            )
+        )
         return build_tool_registry_extra_tools_from_specs(extra_tool_specs=payload)
 
     profile_name = get_tool_registry_profile_name_from_settings(
@@ -1333,6 +1859,11 @@ def _build_tool_registry_from_file_registry(
     extra_tool_specs = payload.get("extra_tools")
     if not isinstance(extra_tool_specs, dict):
         extra_tool_specs = payload
+    _diagnostics["invalid_tool_executions"].extend(
+        _collect_invalid_tool_execution_messages_from_extra_tool_specs(
+            extra_tool_specs=extra_tool_specs
+        )
+    )
     extra_tools = build_tool_registry_extra_tools_from_specs(
         extra_tool_specs=extra_tool_specs
     )
@@ -1344,6 +1875,12 @@ def _build_tool_registry_from_file_registry(
             else get_default_tool_registry()
         ),
         overrides=extra_tools or None,
+    )
+    _diagnostics["invalid_tool_executions"].extend(
+        _collect_invalid_tool_execution_messages_from_override_specs(
+            override_specs=payload.get("overrides"),
+            base_registry=base_registry,
+        )
     )
     source_overrides, disabled_tool_names = _build_registry_overrides_from_specs(
         override_specs=payload.get("overrides"),
@@ -1373,6 +1910,7 @@ def build_tool_registry_from_file_artifacts(
         "missing_registry_files": [],
         "skipped_registry_dirs": [],
         "missing_registry_dirs": [],
+        "invalid_tool_executions": [],
     }
     registry = _build_tool_registry_from_file_registry(
         registry_file=registry_file,
@@ -1518,6 +2056,14 @@ def build_tool_registry_loaders_from_settings_artifacts(
                 diagnostics,
                 loader_diagnostics[normalized_loader_reference],
             )
+        diagnostics = _merge_tool_registry_file_diagnostics(
+            diagnostics,
+            _build_invalid_tool_execution_diagnostics(
+                messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
+                    extra_tool_specs=spec.get("extra_tools")
+                )
+            ),
+        )
         loader = build_tool_registry_loader_adapter(
             spec=spec,
             settings=settings,
@@ -1588,6 +2134,14 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
                 diagnostics,
                 factory_diagnostics[normalized_target_name],
             )
+        diagnostics = _merge_tool_registry_file_diagnostics(
+            diagnostics,
+            _build_invalid_tool_execution_diagnostics(
+                messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
+                    extra_tool_specs=spec.get("extra_tools")
+                )
+            ),
+        )
         if isinstance(registry_file, str) and registry_file.strip():
             loader = build_tool_registry_loader_from_file(
                 registry_file=registry_file,
@@ -1687,6 +2241,14 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
                 diagnostics,
                 factory_diagnostics[normalized_target_name],
             )
+        diagnostics = _merge_tool_registry_file_diagnostics(
+            diagnostics,
+            _build_invalid_tool_execution_diagnostics(
+                messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
+                    extra_tool_specs=spec.get("extra_tools")
+                )
+            ),
+        )
         if isinstance(registry_file, str) and registry_file.strip():
             provider = build_tool_registry_provider_from_file(
                 registry_file=registry_file,
@@ -2084,6 +2646,14 @@ def build_tool_registry_providers_from_settings_artifacts(
                 diagnostics,
                 loader_diagnostics[normalized_loader_reference],
             )
+        diagnostics = _merge_tool_registry_file_diagnostics(
+            diagnostics,
+            _build_invalid_tool_execution_diagnostics(
+                messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
+                    extra_tool_specs=spec.get("extra_tools")
+                )
+            ),
+        )
         provider = build_tool_registry_provider_adapter(
             spec=spec,
             settings=settings,
@@ -2169,6 +2739,9 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
         settings=settings
     )
     provider_factory_diagnostics = provider_factory_artifacts["provider_factory_diagnostics"]
+    settings_execution_diagnostics = build_tool_registry_settings_execution_diagnostics(
+        settings=settings
+    )
     sources: dict[str, ToolRegistryProvider] = {}
     source_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
     for source_name, spec in source_specs.items():
@@ -2249,6 +2822,15 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                     diagnostics,
                     loader_diagnostics[normalized_loader_reference],
                 )
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                _build_invalid_tool_execution_diagnostics(
+                    messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
+                        extra_tool_specs=spec.get("extra_tools")
+                    )
+                ),
+                settings_execution_diagnostics,
+            )
             provider = build_tool_registry_provider_adapter(
                 spec=spec,
                 settings=settings,
@@ -2267,7 +2849,15 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
         if not extra_tools:
             continue
         sources[normalized_source_name] = StaticToolRegistryProvider(registry=extra_tools)
-        source_diagnostics[normalized_source_name] = _empty_tool_registry_file_diagnostics()
+        source_diagnostics[normalized_source_name] = _merge_tool_registry_file_diagnostics(
+            _empty_tool_registry_file_diagnostics(),
+            _build_invalid_tool_execution_diagnostics(
+                messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
+                    extra_tool_specs=spec
+                )
+            ),
+            settings_execution_diagnostics,
+        )
     return {
         "sources": sources,
         "source_diagnostics": source_diagnostics,
@@ -2305,6 +2895,13 @@ def build_tool_registry_extra_tools_from_settings(
         )
         if template_registration is None:
             continue
+        resolved_default_timeout_ms = int(
+            spec.get("default_timeout_ms", template_registration.default_timeout_ms)
+        )
+        execution_spec = spec.get("execution")
+        resolved_execution_kind = _resolve_tool_execution_kind_from_spec(
+            execution_spec
+        )
         extra_tools[name] = replace(
             template_registration,
             name=name,
@@ -2313,8 +2910,11 @@ def build_tool_registry_extra_tools_from_settings(
             retryable_by_default=bool(
                 spec.get("retryable_by_default", template_registration.retryable_by_default)
             ),
-            default_timeout_ms=int(
-                spec.get("default_timeout_ms", template_registration.default_timeout_ms)
+            default_timeout_ms=resolved_default_timeout_ms,
+            runner=_build_tool_runner_from_execution_spec(
+                execution_spec=execution_spec,
+                fallback_runner=template_registration.runner,
+                default_timeout_ms=resolved_default_timeout_ms,
             ),
             requires_user_context=bool(
                 spec.get("requires_user_context", template_registration.requires_user_context)
@@ -2334,6 +2934,9 @@ def build_tool_registry_extra_tools_from_settings(
                 _normalize_runtime_semantic_kind(spec.get("runtime_semantic_kind"))
                 or template_registration.runtime_semantic_kind
             ),
+            execution_kind=resolved_execution_kind or template_registration.execution_kind,
+            execution_summary=_build_tool_execution_summary_from_spec(execution_spec)
+            or template_registration.execution_summary,
         )
     return extra_tools
 
@@ -2369,9 +2972,17 @@ def _build_registry_overrides_from_specs(
             "result_preview_keys",
             "result_output_keys",
             "runtime_semantic_kind",
+            "execution",
         }
         if not any(key in spec for key in metadata_keys):
             continue
+        resolved_default_timeout_ms = int(
+            spec.get("default_timeout_ms", base_registration.default_timeout_ms)
+        )
+        execution_spec = spec.get("execution")
+        resolved_execution_kind = _resolve_tool_execution_kind_from_spec(
+            execution_spec
+        )
         overrides[normalized_name] = replace(
             base_registration,
             kind=str(spec.get("kind", base_registration.kind)),
@@ -2379,8 +2990,11 @@ def _build_registry_overrides_from_specs(
             retryable_by_default=bool(
                 spec.get("retryable_by_default", base_registration.retryable_by_default)
             ),
-            default_timeout_ms=int(
-                spec.get("default_timeout_ms", base_registration.default_timeout_ms)
+            default_timeout_ms=resolved_default_timeout_ms,
+            runner=_build_tool_runner_from_execution_spec(
+                execution_spec=execution_spec,
+                fallback_runner=base_registration.runner,
+                default_timeout_ms=resolved_default_timeout_ms,
             ),
             requires_user_context=bool(
                 spec.get("requires_user_context", base_registration.requires_user_context)
@@ -2400,6 +3014,9 @@ def _build_registry_overrides_from_specs(
                 _normalize_runtime_semantic_kind(spec.get("runtime_semantic_kind"))
                 or base_registration.runtime_semantic_kind
             ),
+            execution_kind=resolved_execution_kind or base_registration.execution_kind,
+            execution_summary=_build_tool_execution_summary_from_spec(execution_spec)
+            or base_registration.execution_summary,
         )
     return overrides, disabled_tool_names
 
@@ -2485,6 +3102,10 @@ def get_configured_tool_registry_provider_artifacts(
     )
     provider_sources = source_artifacts["sources"]
     base_provider = provider_sources.get(provider_source_name)
+    settings_execution_diagnostics = build_tool_registry_settings_execution_diagnostics(
+        settings=settings,
+        base_provider=base_provider,
+    )
     settings_config = build_tool_registry_settings_config(
         settings=settings,
         base_provider=base_provider,
@@ -2497,9 +3118,12 @@ def get_configured_tool_registry_provider_artifacts(
         ),
         "provider_source_name": provider_source_name,
         "provider_sources": provider_sources,
-        "selected_source_diagnostics": source_artifacts["source_diagnostics"].get(
-            provider_source_name,
-            _empty_tool_registry_file_diagnostics(),
+        "selected_source_diagnostics": _merge_tool_registry_file_diagnostics(
+            source_artifacts["source_diagnostics"].get(
+                provider_source_name,
+                _empty_tool_registry_file_diagnostics(),
+            ),
+            settings_execution_diagnostics,
         ),
         "source_diagnostics": source_artifacts["source_diagnostics"],
     }
@@ -2512,6 +3136,7 @@ def build_tool_registry_diagnostics_summary_model(
     entries: list[dict[str, object]] = []
     skipped_total = 0
     missing_total = 0
+    total = 0
     for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
         values = diagnostics.get(key, ())
         if not isinstance(values, (list, tuple)) or not values:
@@ -2524,6 +3149,7 @@ def build_tool_registry_diagnostics_summary_model(
             "values": tuple(values),
         }
         entries.append(entry)
+        total += len(values)
         if kind == "skipped":
             skipped_total += len(values)
         elif kind == "missing":
@@ -2532,7 +3158,7 @@ def build_tool_registry_diagnostics_summary_model(
         has_diagnostics=bool(entries),
         skipped_total=skipped_total,
         missing_total=missing_total,
-        total=skipped_total + missing_total,
+        total=total,
         entries=tuple(entries),
     )
 
@@ -4769,6 +5395,12 @@ def build_tool_runtime_semantics_meta(
         "supports_result_preview": resolved_registration.supports_result_preview,
         "effective_result_preview_keys": list(effective_result_preview_keys),
     }
+    execution_kind = _normalize_tool_execution_kind(resolved_registration.execution_kind)
+    if execution_kind is not None:
+        meta["execution_kind"] = execution_kind
+    execution_summary = resolved_registration.execution_summary
+    if isinstance(execution_summary, dict) and execution_summary:
+        meta["execution_summary"] = dict(execution_summary)
     if semantic_family and semantic_family != semantic_kind:
         meta["semantic_family"] = semantic_family
     if effective_result_output_keys:
@@ -7904,6 +8536,25 @@ def build_configured_tool_registry_provider_preflight_tool_details(
                 "label": label,
                 "kind": registration.kind,
                 "semantic_kind": semantic_kind,
+                **(
+                    {
+                        "execution_kind": normalized_execution_kind,
+                    }
+                    if (
+                        normalized_execution_kind := _normalize_tool_execution_kind(
+                            registration.execution_kind
+                        )
+                    )
+                    else {}
+                ),
+                **(
+                    {
+                        "execution_summary": dict(registration.execution_summary),
+                    }
+                    if isinstance(registration.execution_summary, dict)
+                    and registration.execution_summary
+                    else {}
+                ),
                 **(
                     {"semantic_family": semantic_family}
                     if semantic_family and semantic_family != semantic_kind

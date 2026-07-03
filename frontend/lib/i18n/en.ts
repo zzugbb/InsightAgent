@@ -622,6 +622,7 @@ export const en: Messages = {
       toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
       toolPreviewDisabled: "Preview disabled",
       toolOutputKeys: (keys: string[]) => `Output ${keys.join(", ")}`,
+      toolExecutionSummary: (summary: string) => `Execution ${summary}`,
       ragLine: (chunkCount: number, knowledgeBaseId?: string) =>
         knowledgeBaseId
           ? `RAG · ${chunkCount} chunks · ${knowledgeBaseId}`

@@ -2187,6 +2187,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                                     "template": "task_retrieve",
                                     "label": "Provider Search",
                                     "kind": "provider_retrieval",
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/search",
+                                    },
                                     "result_preview_keys": [],
                                     "supports_result_preview": True,
                                     "default_timeout_ms": 21_000,
@@ -2229,6 +2233,8 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     tool.default_timeout_ms,
                     tool.requires_user_context,
                     tool.supports_result_preview,
+                    getattr(tool, "execution_kind", None),
+                    getattr(tool, "execution_summary", None),
                     tuple(tool.effective_result_preview_keys),
                 )
                 for tool in analytics_detail.tool_details
@@ -2243,6 +2249,8 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     13_000,
                     True,
                     True,
+                    None,
+                    None,
                     ("expression", "result"),
                 ),
                 (
@@ -2254,6 +2262,12 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     21_000,
                     True,
                     True,
+                    "http_json",
+                    {
+                        "method": "GET",
+                        "url_origin": "https://provider.example",
+                        "url_path": "/search",
+                    },
                     ("hit_count", "knowledge_base_id"),
                 ),
             ],
@@ -3013,6 +3027,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                                     "template": "task_retrieve",
                                     "label": "Provider Search",
                                     "kind": "provider_retrieval",
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/search",
+                                    },
                                     "result_preview_keys": [],
                                     "supports_result_preview": True,
                                     "default_timeout_ms": 21_000,
@@ -3048,15 +3066,23 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 (
                     tool.name,
                     tool.semantic_kind,
+                    getattr(tool, "execution_kind", None),
+                    getattr(tool, "execution_summary", None),
                     tuple(tool.effective_result_preview_keys),
                 )
                 for tool in analytics_detail.tool_details
             ],
             [
-                ("provider_math", "local_calculator", ("expression", "result")),
+                ("provider_math", "local_calculator", None, None, ("expression", "result")),
                 (
                     "provider_search",
                     "knowledge_retrieval",
+                    "http_json",
+                    {
+                        "method": "GET",
+                        "url_origin": "https://provider.example",
+                        "url_path": "/search",
+                    },
                     ("hit_count", "knowledge_base_id"),
                 ),
             ],
@@ -3427,6 +3453,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             file_source.diagnostics_summary.entries[0].values[0].endswith(
                 "/missing-registry.json"
             )
+        )
+
+    def test_apply_tool_registry_preview_to_validate_response_includes_invalid_tool_execution_diagnostics(
+        self,
+    ) -> None:
+        response = _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                message="ok",
+            ),
+            effective_settings=SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "execution": {
+                                "kind": "unsupported_transport",
+                            }
+                        }
+                    }
+                ),
+            ),
+        )
+
+        analytics_suite = next(
+            detail
+            for detail in response.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertTrue(analytics_suite.diagnostics_summary.has_diagnostics)
+        self.assertEqual(analytics_suite.diagnostics_summary.missing_total, 0)
+        self.assertEqual(analytics_suite.diagnostics_summary.skipped_total, 0)
+        self.assertEqual(analytics_suite.diagnostics_summary.total, 1)
+        self.assertEqual(
+            [
+                (
+                    entry.kind,
+                    entry.target,
+                    entry.count,
+                    tuple(entry.values),
+                )
+                for entry in analytics_suite.diagnostics_summary.entries
+            ],
+            [
+                (
+                    "invalid",
+                    "tool_executions",
+                    1,
+                    (
+                        "calc_eval: unsupported tool execution kind unsupported_transport",
+                    ),
+                )
+            ],
         )
 
     def test_settings_update_request_preserves_raw_registry_selection_fields(
@@ -4306,6 +4394,54 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             str(diagnostics_summary["entries"][0]["values"][0]).endswith(
                 "/missing-registry.json"
             )
+        )
+
+    def test_tool_registry_options_bundle_includes_global_invalid_tool_execution_diagnostics(
+        self,
+    ) -> None:
+        option_bundle = settings_routes_module._build_tool_registry_options_bundle(
+            effective_settings=SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "execution": {
+                                "kind": "unsupported_transport",
+                            }
+                        }
+                    }
+                ),
+            )
+        )
+
+        analytics_suite = next(
+            detail
+            for detail in option_bundle["available_tool_registry_provider_source_details"]
+            if detail["name"] == "analytics_suite"
+        )
+        diagnostics_summary = analytics_suite["diagnostics_summary"]
+        self.assertTrue(bool(diagnostics_summary["has_diagnostics"]))
+        self.assertEqual(diagnostics_summary["missing_total"], 0)
+        self.assertEqual(diagnostics_summary["skipped_total"], 0)
+        self.assertEqual(diagnostics_summary["total"], 1)
+        self.assertEqual(
+            diagnostics_summary["entries"],
+            (
+                {
+                    "kind": "invalid",
+                    "target": "tool_executions",
+                    "count": 1,
+                    "values": (
+                        "calc_eval: unsupported tool execution kind unsupported_transport",
+                    ),
+                },
+            ),
         )
 
     def test_provider_source_option_details_reuse_shared_profile_name_helper(
@@ -6355,6 +6491,42 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_get_task_rows_governance_summary_coerces_model_dump_governance(
+        self,
+    ) -> None:
+        class ResponseReadyGovernance:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def model_dump(self):
+                return dict(self._payload)
+
+        payload = chat_persistence_module.get_task_rows_governance_summary(  # type: ignore[attr-defined]
+            [
+                {
+                    "id": "task-governance-model-dump",
+                    "governance": ResponseReadyGovernance(
+                        {
+                            "profile": "planning_only",
+                            "provider_source": "suite_a",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        }
+                    ),
+                }
+            ]
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "profiles": ["planning_only"],
+                "provider_sources": ["suite_a"],
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner"],
+            },
+        )
+
     def test_get_task_rows_trace_preview_summary_reuses_shared_preview_helper(
         self,
     ) -> None:
@@ -7483,6 +7655,74 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             chat_persistence_module.get_session_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
 
         self.assertEqual(payload["messages"], [message_sentinel])
+
+    def test_get_session_export_response_summary_accepts_model_dump_payload_summary(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_session_export_payload_summary
+        )
+
+        class ResponseReadyPayload:
+            def model_dump(self):
+                return {
+                    "usage_summary": {"tasks_total": 1},
+                    "tasks": [
+                        {
+                            "task": {
+                                "id": "task-payload-model",
+                                "prompt": "payload model prompt",
+                                "status": "completed",
+                                "status_normalized": "normalized::completed",
+                                "status_label": "label::completed",
+                                "status_rank": 5,
+                                "created_at": "2026-07-03T10:00:00",
+                                "updated_at": "2026-07-03T10:01:00",
+                            },
+                            "usage": None,
+                            "trace": {
+                                "governance": {
+                                    "profile": "planning_only",
+                                    "provider_source": "suite_a",
+                                    "allowed_tool_names": ["task_plan"],
+                                    "allowed_tool_labels": ["Task Planner"],
+                                },
+                                "step_count": 2,
+                                "rag_hit_count": 1,
+                                "preview": [],
+                            },
+                        }
+                    ],
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 2,
+                        "rag_hit_count": 1,
+                    },
+                    "governance": {
+                        "profiles": ["planning_only"],
+                        "provider_sources": ["suite_a"],
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner"],
+                    },
+                    "messages": [],
+                }
+
+        try:
+            chat_persistence_module.get_session_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: ResponseReadyPayload()
+            )
+            payload = chat_persistence_module.get_session_export_response_summary(  # type: ignore[attr-defined]
+                usage_summary={"tasks_total": 1},
+                task_rows=[],
+                message_rows=[],
+            )
+        finally:
+            chat_persistence_module.get_session_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(payload["tasks"][0]["id"], "task-payload-model")
+        self.assertEqual(payload["stats"]["trace_step_count"], 2)
+        self.assertEqual(payload["governance"]["profiles"], ["planning_only"])
 
     def test_get_session_export_response_summary_preserves_response_ready_task_rows(
         self,
@@ -19917,6 +20157,154 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("documents_total",),
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_supports_http_json_execution(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "headers": {"X-Trace-Token": "trace-demo"},
+                            "json_body": {
+                                "query": "$query",
+                                "limit": "$top_k",
+                                "knowledge_base_id": "$knowledge_base_id",
+                            },
+                            "result_fields": {
+                                "documents_total": "$.meta.total",
+                                "documents": "$.data.documents",
+                                "chunks": "$.data.snippets",
+                                "request_id": "$.meta.request_id",
+                                "knowledge_base_id": "$.meta.knowledge_base_id",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total"],
+                        "result_output_keys": ["documents_total", "request_id"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+        urlopen_calls: list[tuple[object, object]] = []
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append((request, timeout))
+                or FakeHttpResponse(
+                    {
+                        "meta": {
+                            "total": 2,
+                            "request_id": "req-http-1",
+                            "knowledge_base_id": "provider-kb",
+                        },
+                        "data": {
+                            "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                            "snippets": ["alpha", "beta"],
+                        },
+                    }
+                )
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={
+                    "query": "revenue trend",
+                    "top_k": 2,
+                    "knowledge_base_id": "provider-kb",
+                },
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(len(urlopen_calls), 1)
+        request, timeout = urlopen_calls[0]
+        self.assertEqual(timeout, 5.0)
+        self.assertEqual(request.full_url, "https://provider.example/search")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.headers["X-trace-token"], "trace-demo")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {
+                "query": "revenue trend",
+                "limit": 2,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            output,
+            {
+                "documents_total": 2,
+                "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                "chunks": ["alpha", "beta"],
+                "request_id": "req-http-1",
+                "knowledge_base_id": "provider-kb",
+                "tool_kind": "provider_search",
+            },
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_rejects_unknown_execution_kind_without_fallback(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_math": {
+                        "template": "calc_eval",
+                        "label": "Provider Math",
+                        "kind": "provider_calc",
+                        "execution": {
+                            "kind": "unsupported_transport",
+                        },
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="provider_math",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("Unsupported tool execution kind", str(raised.exception))
+
     def test_build_tool_registry_extra_tools_from_settings_ignores_unknown_template_and_existing_name(self) -> None:
         settings = SimpleNamespace(
             tool_registry_extra_tools_json=json.dumps(
@@ -21932,6 +22320,41 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
+    def test_build_tool_registry_diagnostics_summary_includes_invalid_tool_execution_entries(
+        self,
+    ) -> None:
+        diagnostics = {
+            "skipped_registry_sources": (),
+            "missing_registry_sources": (),
+            "skipped_registry_files": (),
+            "missing_registry_files": (),
+            "skipped_registry_dirs": (),
+            "missing_registry_dirs": (),
+            "invalid_tool_executions": (
+                "provider_search: unsupported tool execution kind unsupported_transport",
+            ),
+        }
+
+        result = build_tool_registry_diagnostics_summary(diagnostics=diagnostics)
+
+        self.assertTrue(result["has_diagnostics"])
+        self.assertEqual(result["skipped_total"], 0)
+        self.assertEqual(result["missing_total"], 0)
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(
+            result["entries"],
+            (
+                {
+                    "kind": "invalid",
+                    "target": "tool_executions",
+                    "count": 1,
+                    "values": (
+                        "provider_search: unsupported tool execution kind unsupported_transport",
+                    ),
+                },
+            ),
+        )
+
     def test_merge_tool_registry_file_diagnostics_accepts_list_values(self) -> None:
         diagnostics = tool_runtime_module._merge_tool_registry_file_diagnostics(  # type: ignore[attr-defined]
             {
@@ -21964,6 +22387,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 ),
                 "skipped_registry_dirs": (),
                 "missing_registry_dirs": ("/tmp/missing-dir",),
+                "invalid_tool_executions": (),
             },
         )
 
@@ -22498,6 +22922,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload["trace"]["rag_hit_count"], 2)
         self.assertEqual(payload["trace"]["rag_knowledge_base_ids"], ["kb-1"])
         self.assertEqual(payload["messages"], message_rows)
+
+    def test_get_task_export_response_summary_accepts_model_dump_payload_summary(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_task_export_payload_summary
+        )
+
+        class ResponseReadyPayload:
+            def model_dump(self):
+                return {
+                    "task": {
+                        "id": "task-export-payload-model",
+                        "session_id": "session-export-payload-model",
+                        "prompt": "payload summary prompt",
+                        "status": "completed",
+                        "status_normalized": "normalized::completed",
+                        "status_label": "label::completed",
+                        "status_rank": 11,
+                        "created_at": "2026-07-03T10:10:00",
+                        "updated_at": "2026-07-03T10:11:00",
+                    },
+                    "usage": {"prompt_tokens": 3},
+                    "messages": [],
+                    "trace": {
+                        "governance": {
+                            "profile": "planning_only",
+                            "provider_source": "suite_a",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        },
+                        "steps": [],
+                        "step_count": 2,
+                        "rag_hit_count": 1,
+                        "rag_knowledge_base_ids": ["kb-1"],
+                        "rag_chunks": [],
+                    },
+                }
+
+        try:
+            chat_persistence_module.get_task_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: ResponseReadyPayload()
+            )
+            payload = chat_persistence_module.get_task_export_response_summary(  # type: ignore[attr-defined]
+                {"id": "task-export-payload-model"},
+                [],
+            )
+        finally:
+            chat_persistence_module.get_task_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(payload["task"]["id"], "task-export-payload-model")
+        self.assertEqual(payload["trace"]["step_count"], 2)
+        self.assertEqual(payload["trace"]["governance"]["profile"], "planning_only")
 
     def test_get_task_export_response_summary_preserves_payload_task_and_messages(
         self,
@@ -29050,6 +29527,76 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(persisted, [True])
         self.assertEqual(len(audit_calls), 1)
 
+    def test_execute_configured_tool_registry_provider_preflight_model_surfaces_invalid_tool_execution_diagnostics(
+        self,
+    ) -> None:
+        trace_steps: list[dict[str, object]] = []
+        persisted: list[bool] = []
+        audit_calls: list[dict[str, object]] = []
+        settings = SimpleNamespace(
+            tool_registry_provider_source="analytics_suite",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "analytics_suite": {
+                        "provider": "default",
+                        "profile": "default",
+                        "disabled_tool_names": [
+                            "task_plan",
+                            "task_retrieve",
+                            "calc_eval",
+                        ],
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "unsupported_transport",
+                                },
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+
+        result = execute_configured_tool_registry_provider_preflight_model(
+            settings=settings,
+            task_id="task-1",
+            step_id="step-registry",
+            seq=2,
+            model="mock-gpt",
+            trace_steps=trace_steps,
+            persist_trace_fn=lambda **kwargs: persisted.append(bool(kwargs["force"])),
+            record_audit_event_fn=lambda **kwargs: audit_calls.append(kwargs),
+        )
+
+        self.assertEqual(result.provider_source_name, "analytics_suite")
+        self.assertEqual(
+            tuple(sorted(result.provider.load_tool_registry())),
+            ("provider_search",),
+        )
+        self.assertTrue(result.summary.has_diagnostics)
+        self.assertEqual(result.summary.skipped_total, 0)
+        self.assertEqual(result.summary.missing_total, 0)
+        self.assertEqual(result.summary.diagnostics_total, 1)
+        self.assertEqual(
+            result.summary.diagnostics_summary["entries"],
+            (
+                {
+                    "kind": "invalid",
+                    "target": "tool_executions",
+                    "count": 1,
+                    "values": (
+                        "provider_search: unsupported tool execution kind unsupported_transport",
+                    ),
+                },
+            ),
+        )
+        self.assertEqual(len(trace_steps), 1)
+        self.assertEqual(persisted, [True])
+        self.assertEqual(len(audit_calls), 1)
+
     def test_execute_configured_tool_registry_provider_preflight_outputs_from_service_execution_model_keeps_fields(
         self,
     ) -> None:
@@ -32639,6 +33186,87 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_start_payload_includes_http_json_execution_summary(
+        self,
+    ) -> None:
+        provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_provider_source="analytics_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "runtime_semantic_kind": "provider_search",
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/search?debug=1",
+                                        "method": "POST",
+                                        "headers": {"X-Trace-Token": "trace-demo"},
+                                        "query_params": {"q": "$query"},
+                                        "json_body": {"query": "$query", "limit": "$top_k"},
+                                        "response_path": "$.data",
+                                        "result_fields": {
+                                            "documents_total": "$.meta.total",
+                                            "request_id": "$.meta.request_id",
+                                        },
+                                    },
+                                    "result_preview_keys": ["documents_total"],
+                                    "result_output_keys": ["documents_total", "request_id"],
+                                }
+                            },
+                        }
+                    }
+                ),
+            )
+        )
+
+        self.assertEqual(
+            build_tool_start_payload(
+                task_id="task-1",
+                step_id="step-1",
+                name="provider_search",
+                tool_input={"query": "revenue trend", "top_k": 2},
+                retry_count=0,
+                registry_provider=provider,
+            ),
+            {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "name": "provider_search",
+                "display_name": "Provider Search",
+                "input": {"query": "revenue trend", "top_k": 2},
+                "kind": "provider_retrieval",
+                "semantic_kind": "provider_search",
+                "execution_kind": "http_json",
+                "execution_summary": {
+                    "method": "POST",
+                    "url_origin": "https://provider.example",
+                    "url_path": "/search",
+                    "header_count": 1,
+                    "query_param_count": 1,
+                    "json_body_field_count": 2,
+                    "response_path": "$.data",
+                    "result_field_names": ["documents_total", "request_id"],
+                },
+                "semantic_family": "knowledge_retrieval",
+                "supports_result_preview": True,
+                "effective_result_preview_keys": ["documents_total"],
+                "effective_result_output_keys": ["documents_total", "request_id"],
+                "retry_count": 0,
+            },
+        )
+
     def test_build_tool_phase_and_policy_keep_current_calc_defaults(self) -> None:
         ctx = build_tool_runtime_context(
             name="calc_eval",
@@ -32724,6 +33352,67 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ["hit_count", "knowledge_base_id"],
         )
         self.assertEqual(step["content"], "Tool running: Knowledge Retrieval")
+
+    def test_build_action_step_initial_meta_includes_http_json_execution_summary(
+        self,
+    ) -> None:
+        provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_provider_source="analytics_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "runtime_semantic_kind": "provider_search",
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/search",
+                                        "method": "GET",
+                                        "query_params": {"q": "$query", "top_k": "$top_k"},
+                                        "result_fields": {
+                                            "documents_total": "$.meta.total",
+                                        },
+                                    },
+                                    "result_preview_keys": ["documents_total"],
+                                    "result_output_keys": ["documents_total"],
+                                }
+                            },
+                        }
+                    }
+                ),
+            )
+        )
+
+        meta = build_action_step_initial_meta(
+            name="provider_search",
+            tool_input={"query": "检索 demo", "top_k": 3},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            registry_provider=provider,
+        )
+
+        self.assertEqual(
+            meta["tool"]["execution_summary"],
+            {
+                "method": "GET",
+                "url_origin": "https://provider.example",
+                "url_path": "/search",
+                "query_param_count": 2,
+                "result_field_names": ["documents_total"],
+            },
+        )
 
     def test_build_action_step_initial_step_supports_registry_provider_without_explicit_label(
         self,
@@ -38346,6 +39035,130 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_run_tool_canonical_override_supports_http_json_execution(self) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "method": "POST",
+                                "json_body": {
+                                    "expression": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                    "request_id": "$.meta.request_id",
+                                },
+                            },
+                            "result_preview_keys": ["result"],
+                            "result_output_keys": ["result", "request_id"],
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[tuple[object, object]] = []
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append((request, timeout))
+                or FakeHttpResponse(
+                    {
+                        "meta": {"request_id": "req-calc-1"},
+                        "data": {"value": 7},
+                    }
+                )
+            )
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(len(urlopen_calls), 1)
+        request, timeout = urlopen_calls[0]
+        self.assertEqual(timeout, 3.0)
+        self.assertEqual(request.full_url, "https://provider.example/calc")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"expression": "1+2*3"},
+        )
+        self.assertEqual(
+            output,
+            {
+                "result": 7,
+                "request_id": "req-calc-1",
+                "tool_kind": "provider_calc",
+            },
+        )
+
+    def test_run_tool_canonical_override_rejects_unknown_execution_kind_without_fallback(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "unsupported_transport",
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("Unsupported tool execution kind", str(raised.exception))
+
     def test_execute_tool_plan_item_service_execution_honors_custom_preview_policy(
         self,
     ) -> None:
@@ -40778,6 +41591,121 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.session.id, "session-export-model-dump")
         self.assertEqual(payload.stats.task_count, 0)
 
+    def test_build_session_export_payload_accepts_model_dump_export_summary(
+        self,
+    ) -> None:
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_response_helper = getattr(
+            session_routes_module.chat_persistence_service,
+            "get_session_export_response_summary",
+            None,
+        )
+
+        class ExportSummaryPayload:
+            def model_dump(self):
+                return {
+                    "usage_summary": {
+                        "tasks_total": 1,
+                        "tasks_with_usage": 0,
+                        "source_tasks_provider": 0,
+                        "source_tasks_estimated": 0,
+                        "source_tasks_mixed": 0,
+                        "source_tasks_legacy": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "avg_total_tokens": None,
+                        "avg_cost_estimate": None,
+                    },
+                    "governance": {
+                        "profiles": ["planning_only"],
+                        "provider_sources": ["suite_a"],
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner"],
+                    },
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 2,
+                        "rag_hit_count": 1,
+                    },
+                    "messages": [],
+                    "tasks": [
+                        {
+                            "id": "task-session-export-model",
+                            "prompt": "session export payload model",
+                            "status": "completed",
+                            "status_normalized": "completed",
+                            "status_label": "Completed",
+                            "status_rank": 3,
+                            "created_at": "2026-07-03T10:20:00",
+                            "updated_at": "2026-07-03T10:21:00",
+                            "usage": None,
+                            "trace_step_count": 2,
+                            "rag_hit_count": 1,
+                            "trace_preview": [],
+                            "governance": {
+                                "profile": "planning_only",
+                                "provider_source": "suite_a",
+                                "allowed_tool_names": ["task_plan"],
+                                "allowed_tool_labels": ["Task Planner"],
+                            },
+                        }
+                    ],
+                }
+
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {  # type: ignore[assignment]
+                "tasks_total": 0,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            session_routes_module.chat_persistence_service.get_session_export_response_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: ExportSummaryPayload()
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                {
+                    "id": "session-export-summary-model",
+                    "title": "Session Export Summary Model",
+                    "created_at": "2026-07-03T10:20:00",
+                    "updated_at": "2026-07-03T10:21:00",
+                },
+                "user-session-export-summary-model",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary  # type: ignore[assignment]
+            session_routes_module.get_session_messages = original_get_session_messages  # type: ignore[assignment]
+            session_routes_module.get_session_tasks = original_get_session_tasks  # type: ignore[assignment]
+            if original_response_helper is None:
+                if hasattr(
+                    session_routes_module.chat_persistence_service,
+                    "get_session_export_response_summary",
+                ):
+                    delattr(
+                        session_routes_module.chat_persistence_service,
+                        "get_session_export_response_summary",
+                    )
+            else:
+                session_routes_module.chat_persistence_service.get_session_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(payload.stats.trace_step_count, 2)
+        self.assertEqual(payload.tasks[0].id, "task-session-export-model")
+        self.assertEqual(payload.governance.profiles, ["planning_only"])
+
     def test_export_session_json_accepts_model_dump_session_row_for_filename_and_payload(self) -> None:
         original_get_session = session_routes_module.get_session
         original_build_payload = getattr(
@@ -40912,6 +41840,81 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(payload.task.id, "task-export-model-dump")
         self.assertEqual(payload.trace.step_count, 0)
+
+    def test_build_task_export_payload_accepts_model_dump_export_summary(
+        self,
+    ) -> None:
+        original_get_task_messages = task_routes_module.get_task_messages
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_export_response_summary",
+            None,
+        )
+
+        class ExportSummaryPayload:
+            def model_dump(self):
+                return {
+                    "task": {
+                        "id": "task-export-summary-model",
+                        "session_id": "session-export-summary-model",
+                        "prompt": "task export summary model",
+                        "status": "completed",
+                        "status_normalized": "completed",
+                        "status_label": "Completed",
+                        "status_rank": 3,
+                        "created_at": "2026-07-03T10:30:00",
+                        "updated_at": "2026-07-03T10:31:00",
+                    },
+                    "usage": {"prompt_tokens": 5},
+                    "messages": [],
+                    "trace": {
+                        "governance": {
+                            "profile": "planning_only",
+                            "provider_source": "suite_a",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        },
+                        "step_count": 2,
+                        "rag_hit_count": 1,
+                        "rag_knowledge_base_ids": ["kb-1"],
+                        "rag_chunks": [],
+                        "steps": [],
+                    },
+                }
+
+        try:
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            task_routes_module.chat_persistence_service.get_task_export_response_summary = (  # type: ignore[attr-defined]
+                lambda _task, _messages: ExportSummaryPayload()
+            )
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                {
+                    "id": "task-export-summary-model",
+                    "session_id": "session-export-summary-model",
+                    "prompt": "task export summary model",
+                    "status": "completed",
+                    "created_at": "2026-07-03T10:30:00",
+                    "updated_at": "2026-07-03T10:31:00",
+                },
+                "user-task-export-summary-model",
+            )
+        finally:
+            task_routes_module.get_task_messages = original_get_task_messages  # type: ignore[assignment]
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_export_response_summary",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_export_response_summary",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(payload.task.id, "task-export-summary-model")
+        self.assertEqual(payload.trace.step_count, 2)
+        self.assertEqual(payload.trace.governance.profile, "planning_only")
 
     def test_export_task_json_accepts_model_dump_task_row_for_filename_and_payload(self) -> None:
         original_get_task = task_routes_module.get_task

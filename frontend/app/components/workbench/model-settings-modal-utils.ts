@@ -20,7 +20,10 @@ type ModelSettingsPreviewSource = Pick<
   >;
 
 function formatToolSemanticDescriptor(
-  tool: Pick<ToolRegistryProviderToolDetail, "kind" | "semantic_kind" | "semantic_family">,
+  tool: Pick<
+    ToolRegistryProviderToolDetail,
+    "kind" | "semantic_kind" | "semantic_family" | "execution_kind"
+  >,
 ): string {
   const semanticKind =
     typeof tool.semantic_kind === "string" && tool.semantic_kind.trim().length > 0
@@ -31,9 +34,44 @@ function formatToolSemanticDescriptor(
       ? tool.semantic_family.trim()
       : "";
   if (!semanticFamily || semanticFamily === semanticKind) {
-    return semanticKind;
+    const executionKind =
+      typeof tool.execution_kind === "string" && tool.execution_kind.trim().length > 0
+        ? tool.execution_kind.trim()
+        : "";
+    return executionKind ? `${semanticKind} via ${executionKind}` : semanticKind;
   }
-  return `${semanticKind} · ${semanticFamily}`;
+  const baseDescriptor = `${semanticKind} · ${semanticFamily}`;
+  const executionKind =
+    typeof tool.execution_kind === "string" && tool.execution_kind.trim().length > 0
+      ? tool.execution_kind.trim()
+      : "";
+  return executionKind ? `${baseDescriptor} via ${executionKind}` : baseDescriptor;
+}
+
+function formatToolExecutionSummary(
+  tool: Pick<ToolRegistryProviderToolDetail, "execution_summary">,
+): string {
+  const executionSummary = tool.execution_summary;
+  if (!executionSummary) {
+    return "";
+  }
+  const method =
+    typeof executionSummary.method === "string" && executionSummary.method.trim().length > 0
+      ? executionSummary.method.trim().toUpperCase()
+      : "";
+  const urlOrigin =
+    typeof executionSummary.url_origin === "string" && executionSummary.url_origin.trim().length > 0
+      ? executionSummary.url_origin.trim()
+      : "";
+  const urlPath =
+    typeof executionSummary.url_path === "string" && executionSummary.url_path.trim().length > 0
+      ? executionSummary.url_path.trim()
+      : "";
+  const endpoint = `${urlOrigin}${urlPath}`;
+  if (!method && !endpoint) {
+    return "";
+  }
+  return [method, endpoint].filter((part) => part.length > 0).join(" ");
 }
 
 export function formatToolRegistryProviderToolDetailsSummary(
@@ -44,7 +82,11 @@ export function formatToolRegistryProviderToolDetailsSummary(
   }
   return toolDetails
     .map((tool) => {
-      const semanticOrKind = formatToolSemanticDescriptor(tool);
+      const semanticDescriptor = formatToolSemanticDescriptor(tool);
+      const executionSummary = formatToolExecutionSummary(tool);
+      const semanticOrKind = executionSummary
+        ? `${semanticDescriptor} @ ${executionSummary}`
+        : semanticDescriptor;
       const previewKeys =
         Array.isArray(tool.effective_result_preview_keys)
           ? tool.effective_result_preview_keys.filter((key) => key.trim().length > 0)

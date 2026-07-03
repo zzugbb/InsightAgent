@@ -1473,7 +1473,9 @@ def get_task_export_response_summary(
     task: dict,
     message_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
 ) -> dict[str, object]:
-    payload_summary = get_task_export_payload_summary(task, message_rows)
+    payload_summary = _coerce_export_payload_block_to_dict(
+        get_task_export_payload_summary(task, message_rows)
+    )
     trace_summary = _coerce_export_payload_block_to_dict(payload_summary.get("trace"))
     trace_steps = _coerce_export_trace_steps(trace_summary.get("steps"))
     return {
@@ -1805,9 +1807,12 @@ def get_task_rows_governance_summary(
     task_rows = _coerce_export_payload_block_list_to_dicts(task_rows)
     governance_summary: dict[str, object] | None = None
     for task_row in task_rows:
-        task_governance = task_row.get("governance")
-        if not isinstance(task_governance, dict):
+        raw_task_governance = _coerce_payload_mapping_or_none(task_row.get("governance"))
+        if raw_task_governance is None:
             continue
+        task_governance = (
+            _normalize_task_governance_dict(raw_task_governance) or raw_task_governance
+        )
         governance_summary = _merge_session_governance_summary(
             governance_summary,
             task_governance,
@@ -2015,11 +2020,13 @@ def get_session_export_response_summary(
     message_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
     preview_limit: int = 3,
 ) -> dict[str, object]:
-    payload_summary = get_session_export_payload_summary(
-        usage_summary=usage_summary,
-        task_rows=task_rows,
-        message_rows=message_rows,
-        preview_limit=preview_limit,
+    payload_summary = _coerce_export_payload_block_to_dict(
+        get_session_export_payload_summary(
+            usage_summary=usage_summary,
+            task_rows=task_rows,
+            message_rows=message_rows,
+            preview_limit=preview_limit,
+        )
     )
     task_summaries: list[dict[str, object]] = []
     for row in payload_summary.get("tasks", []):
@@ -2029,11 +2036,7 @@ def get_session_export_response_summary(
         task_summaries.append(
             _get_session_export_task_response_summary_from_payload_row(row_summary)
         )
-    stats_summary = (
-        payload_summary.get("stats")
-        if isinstance(payload_summary.get("stats"), dict)
-        else {}
-    )
+    stats_summary = _coerce_export_payload_block_to_dict(payload_summary.get("stats"))
     return {
         "usage_summary": payload_summary.get("usage_summary"),
         "tasks": task_summaries,

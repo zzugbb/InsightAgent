@@ -358,6 +358,72 @@ test("formatTraceStepMetaSubtitle includes tool output policy when available", (
   );
 });
 
+test("formatTraceStepMetaSubtitle includes safe execution summary for http_json tools", () => {
+  const subtitle = formatTraceStepMetaSubtitle(
+    {
+      id: "step-execution-summary",
+      type: "action",
+      content: "Tool running: Provider Search",
+      meta: {
+        tool: {
+          name: "provider_search",
+          label: "Provider Search",
+          kind: "provider_retrieval",
+          semantic_kind: "provider_search",
+          semantic_family: "knowledge_retrieval",
+          supports_result_preview: true,
+          effective_result_preview_keys: ["documents_total"],
+          effective_result_output_keys: ["documents_total", "request_id"],
+          execution_kind: "http_json",
+          execution_summary: {
+            method: "POST",
+            url_origin: "https://provider.example",
+            url_path: "/search",
+            header_count: 1,
+            query_param_count: 1,
+            json_body_field_count: 2,
+            response_path: "$.data",
+            result_field_names: ["documents_total", "request_id"],
+          },
+          status: "running",
+        },
+      },
+    },
+    {
+      toolLine: (name: string, status: string) => `${name} (${status})`,
+      toolRetry: (count: number) => `Retry ${count}`,
+      toolError: (message: string) => `Error ${message}`,
+      toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
+      toolPreviewDisabled: "Preview disabled",
+      toolOutputKeys: (keys: string[]) => `Output ${keys.join(", ")}`,
+      toolExecutionSummary: (summary: string) => `Execution ${summary}`,
+      ragLine: (count: number, kb?: string) =>
+        kb ? `RAG ${count} ${kb}` : `RAG ${count}`,
+      model: "Model",
+      stepKind: "Step",
+      planningProviderUsed: "Planning provider used",
+      planningProviderFallback: "Planning provider fallback",
+      planningProviderRuleOnly: "Planning provider rule only",
+      toolRegistryProfile: "Profile",
+      toolRegistrySource: "Source",
+      allowedTools: "Allowed",
+      tokens: "Tokens",
+      promptTokens: "Prompt",
+      completionTokens: "Completion",
+      cost: "Cost",
+      usageSource: "Usage",
+      usageSourceProvider: "provider",
+      usageSourceEstimated: "estimated",
+      usageSourceLegacy: "legacy",
+    },
+  );
+
+  assert.equal(
+    subtitle,
+    "Provider Search (running) [provider_search · knowledge_retrieval] · Preview documents_total · Output documents_total, request_id · Execution POST https://provider.example/search · headers 1 · query 1 · body 2 · response $.data · fields documents_total, request_id",
+  );
+});
+
 test("getStepTitle uses productized tool title for real tool steps", () => {
   const title = getStepTitle({
     id: "step-productized-title",
@@ -748,6 +814,37 @@ test("matchesTraceStepSearchQuery matches output policy keys for tool steps", ()
       },
     },
     "documents_total",
+  );
+
+  assert.equal(matches, true);
+});
+
+test("matchesTraceStepSearchQuery matches execution summary fields for http_json tools", () => {
+  const matches = matchesTraceStepSearchQuery(
+    {
+      id: "step-execution-summary-search",
+      type: "action",
+      content: "Tool running: Provider Search",
+      meta: {
+        tool: {
+          name: "provider_search",
+          label: "Provider Search",
+          kind: "provider_retrieval",
+          semantic_kind: "provider_search",
+          semantic_family: "knowledge_retrieval",
+          supports_result_preview: true,
+          execution_kind: "http_json",
+          execution_summary: {
+            method: "POST",
+            url_origin: "https://provider.example",
+            url_path: "/search",
+            result_field_names: ["documents_total", "request_id"],
+          },
+          status: "running",
+        },
+      },
+    },
+    "provider.example/search",
   );
 
   assert.equal(matches, true);

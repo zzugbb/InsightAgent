@@ -63,6 +63,12 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
               kind: "provider_retrieval",
               semantic_kind: "provider_search",
               semantic_family: "knowledge_retrieval",
+              execution_kind: "http_json",
+              execution_summary: {
+                method: "GET",
+                url_origin: "https://provider.example",
+                url_path: "/search",
+              },
               retryable_by_default: false,
               default_timeout_ms: 21_000,
               requires_user_context: true,
@@ -102,7 +108,7 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
   );
   assert.equal(
     result.selectedSourceToolDetailsSummary,
-    "Provider Search [provider_search · knowledge_retrieval]: preview hit_count, knowledge_base_id; output documents_total | Provider Math [local_calculator]: expression, result",
+    "Provider Search [provider_search · knowledge_retrieval via http_json @ GET https://provider.example/search]: preview hit_count, knowledge_base_id; output documents_total | Provider Math [local_calculator]: expression, result",
   );
 });
 
@@ -153,6 +159,12 @@ test("formatToolRegistryProviderToolDetailsSummary includes output keys when ava
       label: "Provider Search",
       kind: "provider_retrieval",
       semantic_kind: "provider_search",
+      execution_kind: "http_json",
+      execution_summary: {
+        method: "GET",
+        url_origin: "https://provider.example",
+        url_path: "/search",
+      },
       retryable_by_default: false,
       default_timeout_ms: 21_000,
       requires_user_context: true,
@@ -164,6 +176,6 @@ test("formatToolRegistryProviderToolDetailsSummary includes output keys when ava
 
   assert.equal(
     result,
-    "Provider Search [provider_search]: preview documents_total; output documents_total",
+    "Provider Search [provider_search via http_json @ GET https://provider.example/search]: preview documents_total; output documents_total",
   );
 });

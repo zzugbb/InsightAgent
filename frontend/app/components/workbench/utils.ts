@@ -575,6 +575,8 @@ export function matchesTraceStepSearchQuery(
         .filter((item): item is string => typeof item === "string")
         .map((item) => item.toLowerCase())
     : [];
+  const executionSummaryParts = formatTraceToolExecutionSummaryParts(step.meta?.tool)
+    .map((item) => item.toLowerCase());
   const safeOutput = stringifyTraceSafeToolOutput(step.meta?.tool)?.toLowerCase() ?? "";
   const ragKnowledgeBaseId =
     typeof step.meta?.rag?.knowledge_base_id === "string"
@@ -595,6 +597,7 @@ export function matchesTraceStepSearchQuery(
     toolKind.includes(q) ||
     toolSemanticKind.includes(q) ||
     toolSemanticFamily.includes(q) ||
+    executionSummaryParts.some((part) => part.includes(q)) ||
     safeOutput.includes(q) ||
     ragKnowledgeBaseId.includes(q) ||
     ragChunks.some((chunk) => chunk.includes(q)) ||
@@ -778,6 +781,79 @@ function resolveTraceToolDisplayLabel(tool: TraceStepMeta["tool"]): string {
     return canonicalLabel;
   }
   return rawLabel;
+}
+
+function formatTraceToolExecutionSummaryParts(
+  tool: TraceStepMeta["tool"],
+): string[] {
+  const executionSummary = tool?.execution_summary;
+  if (!executionSummary) {
+    return [];
+  }
+  const parts: string[] = [];
+  const method =
+    typeof executionSummary.method === "string" && executionSummary.method.trim()
+      ? executionSummary.method.trim().toUpperCase()
+      : "";
+  const urlOrigin =
+    typeof executionSummary.url_origin === "string" && executionSummary.url_origin.trim()
+      ? executionSummary.url_origin.trim()
+      : "";
+  const urlPath =
+    typeof executionSummary.url_path === "string" && executionSummary.url_path.trim()
+      ? executionSummary.url_path.trim()
+      : "";
+  const endpoint = `${urlOrigin}${urlPath}`;
+  if (method || endpoint) {
+    parts.push([method, endpoint].filter((item) => item.length > 0).join(" "));
+  }
+  const headerCount = executionSummary.header_count;
+  if (typeof headerCount === "number" && Number.isFinite(headerCount) && headerCount > 0) {
+    parts.push(`headers ${Math.trunc(headerCount)}`);
+  }
+  const queryParamCount = executionSummary.query_param_count;
+  if (
+    typeof queryParamCount === "number"
+    && Number.isFinite(queryParamCount)
+    && queryParamCount > 0
+  ) {
+    parts.push(`query ${Math.trunc(queryParamCount)}`);
+  }
+  const jsonBodyFieldCount = executionSummary.json_body_field_count;
+  if (
+    typeof jsonBodyFieldCount === "number"
+    && Number.isFinite(jsonBodyFieldCount)
+    && jsonBodyFieldCount > 0
+  ) {
+    parts.push(`body ${Math.trunc(jsonBodyFieldCount)}`);
+  }
+  const responsePath =
+    typeof executionSummary.response_path === "string" && executionSummary.response_path.trim()
+      ? executionSummary.response_path.trim()
+      : "";
+  if (responsePath) {
+    parts.push(`response ${responsePath}`);
+  }
+  const resultFieldNames = Array.isArray(executionSummary.result_field_names)
+    ? executionSummary.result_field_names
+        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => item.trim())
+    : [];
+  if (resultFieldNames.length > 0) {
+    parts.push(`fields ${resultFieldNames.join(", ")}`);
+  }
+  return parts;
+}
+
+function formatTraceToolExecutionSummary(
+  tool: TraceStepMeta["tool"],
+  labels: Messages["inspector"]["traceMeta"],
+): string | null {
+  const parts = formatTraceToolExecutionSummaryParts(tool);
+  if (parts.length === 0) {
+    return null;
+  }
+  return labels.toolExecutionSummary(parts.join(" · "));
 }
 
 function formatTraceToolDisplayTitle(tool: TraceStepMeta["tool"]): string {
@@ -1217,6 +1293,10 @@ export function formatTraceStepMetaSubtitle(
         if (outputKeys.length > 0) {
           parts.push(labels.toolOutputKeys(outputKeys));
         }
+      }
+      const executionSummary = formatTraceToolExecutionSummary(meta.tool, labels);
+      if (executionSummary) {
+        parts.push(executionSummary);
       }
     }
   }

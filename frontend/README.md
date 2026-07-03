@@ -13,14 +13,23 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - model settings 中 provider/source diagnostics 与 selected source 说明
   - 真实工具输入、计划项与最终 trace/export 回放的一致性
 - 最近已对齐到代码的高信号能力：
-  - `tool_end.result_summary`、preview/output key 与安全 observation 已进入流式 store 与回放主链，不再回退泛化 `Tool done: ...` 或原始 JSON；当后端只保留 step meta 而未保留原始 `output` 时，也会优先回放 `result_summary` / `output_preview`，并把 preview 继续作为结构化 success output、markdown export meta、task-row batch trace preview、session export trace preview，以及 task/session export 的 `rag_chunks`、task rows、session export payload `tasks/messages/stats` 透传；Memory / RAG 调试返回的 query metadata、query payload root、RAG ingest 文档行、RAG route 列表/命中行、shared merge 结果、session create/detail/list/messages/export、task/session usage、task detail/list/trace/export/stream-reconnect、auth/audit 列表相关 outward summary，以及由 `chat_persistence_service` 直接产出的 task summary/export/trace 批量聚合结果，现在也不会再因后端 typed payload 被归一化成空对象或直接报错。
+  - `tool_end.result_summary`、preview/output key 与安全 observation 已进入流式 store 与回放主链，不再回退泛化 `Tool done: ...` 或原始 JSON；当后端只保留 step meta 而未保留原始 `output` 时，也会优先回放 `result_summary` / `output_preview`，并把 preview 继续作为结构化 success output、markdown export meta、task-row batch trace preview、session export trace preview，以及 task/session export 的 `rag_chunks`、task rows、session export payload `tasks/messages/stats` 透传；Memory / RAG 调试返回的 query metadata、query payload root、RAG ingest 文档行、RAG route 列表/命中行、shared merge 结果、session create/detail/list/messages/export、task/session usage、task detail/list/trace/export/stream-reconnect、auth/audit 列表相关 outward summary，以及由 `chat_persistence_service` 直接产出的 task summary/export/trace 批量聚合结果、task/session export response summary 与 export builder 路由入口，现在也不会再因后端 typed payload 被归一化成空对象或直接报错。
   - trace display/search 已能消费 `meta.tool_registry.entries`；model settings modal 已消费 `diagnostics_summary`，broken file-backed source 不会直接从设置里消失。
+  - 后端 `extra_tools` / `overrides` 已可绑定 `execution.kind=http_json` 的真实执行器，因此 workbench 对 provider search / provider calc 一类 real tool 的 preview/output/result-summary/observation/export 回放，不再默认假设它们只是本地 template runner 的语义换壳。
+  - model settings modal 的 tool detail summary 现会直接显示 `via http_json` 一类 `execution_kind`，前端可以更直观看到某个 provider/source tool 是否已经接到真实执行器。
+  - 当后端显式配置了无效 `execution` 时，当前策略是 fail-fast 而不是静默回退 stub runner；前端后续看到的是明确的配置错误，而不是“看似成功、实际跑了本地模板”的假语义。
+  - 同时，provider/source diagnostics 现在也会把这类静态可判定的坏配置提前归一成 `invalid/tool_executions` 项；设置面板不需要等任务真跑起来，source diagnostics 就能先提示 real tool 的执行器配置已经坏掉。
+  - 后端对 `http_json` real tool 新增的安全 `execution_summary` 也会随 tool meta 进入 SSE/trace/export 主链；即使前端当前还没单独做专门 UI，这份 method/origin/path/query-body/result-field 概览已经会稳定跟着工作台回放语义走。
+  - workbench trace subtitle 与搜索现在会直接消费 `execution_summary`；真实工具运行中的 `POST https://.../search`、response path、result fields 等安全摘要已经能在前端回放和检索里直接看到。
+  - model settings modal 的 tool detail summary 现在也会直接显示 `execution_summary` 的 endpoint 摘要；provider/source 治理面不需要进入运行态 trace，就能先看出某个 `http_json` real tool 会打到什么路径。
   - real/provider retrieval 与 runtime override real tool 的 follow-up、result summary、observation、导出回放已不再误写成本地默认知识库命中。
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体，因此前后端对 name-only fallback 与旁路结构化 payload 的消费已基本一致。
 - 当前最近一次已记录校验基线：
+  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts` 通过（`29/29`）
+  - `cd frontend && node --test --experimental-strip-types app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`4/4`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`39/39`）
   - `cd frontend && npm run lint` 通过
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`814/814`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`829/829`）
   - `bash scripts/test_ci_e2e_tooling.sh common` 通过
   - `git diff --check` 通过
 

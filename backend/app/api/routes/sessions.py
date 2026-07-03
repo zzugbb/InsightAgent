@@ -382,6 +382,7 @@ def _build_session_export_payload(
         message_rows=message_rows,
         preview_limit=3,
     )
+    export_summary = _coerce_payload_mapping(export_summary)
     return SessionExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),

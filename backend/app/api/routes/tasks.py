@@ -403,6 +403,7 @@ def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonRespon
         task,
         message_rows,
     )
+    export_summary = _coerce_payload_mapping(export_summary)
     return TaskExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),

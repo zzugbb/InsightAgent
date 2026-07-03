@@ -39,6 +39,7 @@ export type TraceStepMeta = {
     name: string;
     label?: string;
     kind?: string;
+    execution_kind?: string | null;
     semantic_kind?: string | null;
     semantic_family?: string | null;
     input?: unknown;
@@ -49,6 +50,16 @@ export type TraceStepMeta = {
     supports_result_preview?: boolean;
     effective_result_preview_keys?: string[];
     effective_result_output_keys?: string[];
+    execution_summary?: {
+      method?: string;
+      url_origin?: string;
+      url_path?: string;
+      header_count?: number;
+      query_param_count?: number;
+      json_body_field_count?: number;
+      response_path?: string;
+      result_field_names?: string[];
+    } | null;
     retry_count?: number;
     error?: string | null;
   };

@@ -47,6 +47,8 @@ class ToolRegistryProviderToolDetailResponse(BaseModel):
     label: str
     kind: str
     semantic_kind: str | None = None
+    execution_kind: str | None = None
+    execution_summary: dict[str, object] | None = None
     semantic_family: str | None = None
     retryable_by_default: bool
     default_timeout_ms: int

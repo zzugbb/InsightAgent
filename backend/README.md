@@ -14,12 +14,21 @@
 - 最近已对齐到代码的高信号能力：
   - 默认 canonical tool 名已统一到 `task_plan / task_retrieve`，`mock_*` 仅保留兼容 alias；planner 已能规划 real/extra tools 与动态 registry/source 候选。
   - provider / provider source 已支持 `loader_factory`，tool-registry diagnostics 已进入 entry 级 trace/export/preflight 语义，settings、selected source 与 runtime artifacts 使用同一治理主干。
+  - `extra_tools` / registry `overrides` 现可直接声明 `execution.kind=http_json` 的真实执行器；provider/real tool 已不必再只靠模板 runner 做语义换壳，HTTP JSON 返回的 `documents_total/request_id/chunks/result` 等字段会继续沿 preview/output/result-summary、observation、rag follow-up 与 export 主链复用。
+  - configured provider preflight 与 settings summary/validate 返回的 `tool_details` 现也显式包含 `execution_kind`；file/source 治理与前端设置面板可以直接识别哪些 tool 已切到真实 `http_json` runner。
+  - 若 registry `extra_tools` / `overrides` 显式声明了 `execution`，但 `kind` 缺失、shape 非法或写成不支持的执行器，tool runtime 现会直接返回配置错误，不再静默回退到模板 stub runner。
+  - 同一批坏掉的 `execution` 配置现在也会进入 `invalid/tool_executions` diagnostics：file/source/global settings、selected source、configured provider preflight 以及 trace/audit 可以在真正跑 tool 之前就把问题暴露出来，而不是只在运行期 fail-fast。
+  - 对已接上 `http_json` 的 real tool，runtime 现在还会生成一份安全的 `execution_summary` 并挂到 tool semantic meta 上；`tool_start`、action step、持久化 trace 与 export 回放都能看到 method、origin/path、query/body/result-field 概览，同时避免把 header value 等敏感配置直接写进 trace。
+  - 前端 workbench 的 trace subtitle/search 现也开始消费这份 `execution_summary`；后端这边输出的安全执行摘要已经不再只停留在 JSON trace/export 里，而是能直接参与 UI 回放与检索。
+  - configured provider preflight、settings summary/validate 的 `tool_details` 现在也继续带上 `execution_summary`；真实工具的 endpoint 摘要已经不再只存在于运行期 trace，settings 治理面就能先读到。
   - tool execution 的规范化输入、preview/output/result-summary、runtime semantic 与 retrieval follow-up 已贯通 action step、`tool_start/tool_end`、persisted trace、export 与 mock final answer。
   - real/provider retrieval 与 runtime override real tool 已不再在 result summary、observation、rag follow-up 或 task export 中伪造默认本地 knowledge-base 语义。
-  - name-only success/helper fallback 会优先复用 configured registry 或 step meta 中已落下的 label / result summary / output preview，而不是退回 provider 通用名或原始 JSON；即使原始 `output` 未保留成 dict，observation、success output、markdown export meta、task-row batch trace preview、session export trace preview，以及 task/session export 的 `rag_chunks`、task rows、session export payload `tasks/messages/stats` 聚合仍会优先沿 step meta 或 typed payload 的结构化结果回放；会话 Memory query、RAG ingest/query、RAG route 层与 shared knowledge-base merge 的 metadata、query payload root、document row、row list，以及 session create/detail/list/messages/export、task/session usage、task create/detail/list/cancel/trace/delta/export/stream-reconnect、auth register/refresh/session list/user list、audit log list 这些 outward summary route，以及 `chat_persistence_service` 的 task trace/usage/response/export/delta 与 `task_rows_*` 批量聚合 helper 也已接受 typed Chroma / typed service payload / `model_dump()` 行，不再在归一化阶段静默清空或直接报错，nested metadata 也会继续保留。
+  - name-only success/helper fallback 会优先复用 configured registry 或 step meta 中已落下的 label / result summary / output preview，而不是退回 provider 通用名或原始 JSON；即使原始 `output` 未保留成 dict，observation、success output、markdown export meta、task-row batch trace preview、session export trace preview，以及 task/session export 的 `rag_chunks`、task rows、session export payload `tasks/messages/stats` 聚合仍会优先沿 step meta 或 typed payload 的结构化结果回放；会话 Memory query、RAG ingest/query、RAG route 层与 shared knowledge-base merge 的 metadata、query payload root、document row、row list，以及 session create/detail/list/messages/export、task/session usage、task create/detail/list/cancel/trace/delta/export/stream-reconnect、auth register/refresh/session list/user list、audit log list 这些 outward summary route，以及 `chat_persistence_service` 的 task trace/usage/response/export/delta、`task_rows_*` 批量聚合 helper、task/session export response summary 外层 payload，以及 task/session export builder 路由入口，也已接受 typed Chroma / typed service payload / `model_dump()` 行，不再在归一化阶段静默清空或直接报错，nested metadata 也会继续保留。
   - runtime helper、governance/export、registry diagnostics 与 planner 输入归一化已统一兼容旁路结构化载荷；当前 provider planner 与真实 `OpenAICompatibleLLMProvider` 已共享一套 response text / usage 提取语义，支持 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 `input_tokens/output_tokens` usage alias、脏 usage 值容错与流式 delta 文本字段变体。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`814/814`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`829/829`）
+  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts` 通过（`29/29`）
+  - `cd frontend && node --test --experimental-strip-types app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`4/4`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`39/39`）
   - `cd frontend && npm run lint` 通过
   - `bash scripts/test_ci_e2e_tooling.sh common` 通过
@@ -123,6 +132,9 @@
 - 默认 settings 语义是：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`；remote `base_url/api_key` 继承链已打通到 get/save/validate。
 - shared RAG 语义当前保持 `shared-*` 命名空间约定：admin 可写共享库，普通用户对共享库只读。
 - 当前后端主线优先补真实工具执行与 registry-aware helper 语义，不优先继续扩写 archived runtime spec。
+- 当前 registry extra tool / override 的真实执行器入口先以 `execution.kind=http_json` 为主；请求模板、响应字段映射与既有 runtime semantic/preview/export 主链保持同一契约，不额外发散独立 route。
+- 显式给 tool 配了 `execution` 时，当前语义是“宁可报配置错，也不回退 stub”；这样 provider/source 治理不会把 real tool 假阳性地跑成本地模板行为。
+- provider/source/global settings 侧当前也会把静态可判定的 `execution` 坏配置归一成 registry diagnostics；下一步优先继续补更细粒度的模板/映射诊断，而不是改外层接口。
 
 ## Memory / Chroma / Embedding
 

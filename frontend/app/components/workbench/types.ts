@@ -34,6 +34,17 @@ export type ToolRegistryProviderToolDetail = {
   label: string;
   kind: string;
   semantic_kind: string | null;
+  execution_kind?: string | null;
+  execution_summary?: {
+    method?: string;
+    url_origin?: string;
+    url_path?: string;
+    header_count?: number;
+    query_param_count?: number;
+    json_body_field_count?: number;
+    response_path?: string;
+    result_field_names?: string[];
+  } | null;
   semantic_family?: string | null;
   retryable_by_default: boolean;
   default_timeout_ms: number;
