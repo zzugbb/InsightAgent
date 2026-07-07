@@ -23,17 +23,23 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - 后端现在还支持 `http_json` 执行模板读取运行时 `settings_api_key/settings_base_url/tool_registry_provider_source` 上下文，并在 `headers/url/query/json_body` 中使用 `${...}` 做安全字符串插值；前端继续只消费安全 `execution_summary` 与 diagnostics，不会把 secret 模板值直接带进设置面板或 trace UI。
   - 即使 provider/source 改成 file-backed registry manifest，后端也会继续把同一套 source 级模板上下文灌进 `extra_tools/overrides`；因此前端看到的 source diagnostics、tool detail summary 与运行态 trace 语义不会再因配置承载形态不同而分叉。
   - 对 `http_json` 模板里拼错的 `settings_*` / `tool_registry_*` 运行时变量，后端现在会更早在 source diagnostics 中给出 `invalid/tool_executions` 提示；前端不必等真实 tool 执行到上游请求阶段，设置治理面就能先看出是模板变量 typo，而不是网络/权限波动。
+  - 对那些只有任务执行时才知道会不会缺失的 `$top_k`、`$precision` 一类模板输入，后端现在也会在真正发请求前直接报出 `query_params.limit`、`json_body.precision` 这类缺参路径；前端看到的会是明确的运行时模板缺参错误，而不是“请求发出去了但语义残缺”的假成功或假网络问题。
+  - 对 `headers/query_params/json_body` 里只有空白字段名这类原本会被请求构建过程静默吞掉的配置，后端现在也会在 settings/source diagnostics 与 preflight 阶段提前报出 `invalid_tool_executions`；前端设置治理面可以更早指出“请求模板字段名本身就坏了”。
+  - 对显式配置了 `response_path` 的 real tool，如果后端在真实响应里找不到这条路径，或者配置本身只是空白字符串，现在也会直接报配置/协议错误，而不是静默退回根 payload；前端看到的会是明确的响应映射失败，而不是 trace/export 中混入根响应兜底后的假结果。
+  - 对显式配置了 `result_fields` 的 real tool，如果所有字段映射都没命中，后端现在也会直接报出映射失败，而不是返回空结果对象；前端看到的会是明确的 response mapping 错误，不再需要从“运行成功但没有任何 preview/output”这种假信号里倒推问题。
+  - 对 `result_fields.*` 里静态就能看出的坏 path，后端现在也会在 settings/source diagnostics 与 preflight 阶段提前报出 `invalid_tool_executions`；像 path 本身坏掉、`result_fields` 里混入空白字段名、只有空白字段名，或显式给了空对象这类问题，前端设置治理面都能更早指出，而不是只在任务失败后回放运行态错误。
   - workbench trace subtitle 与搜索现在会直接消费 `execution_summary`；真实工具运行中的 `POST https://.../search`、response path、result fields 等安全摘要已经能在前端回放和检索里直接看到。
   - model settings modal 的 tool detail summary 现在也会直接显示 `execution_summary` 的 endpoint 与 query/body/response-field 摘要；provider/source 治理面不需要进入运行态 trace，就能先看出某个 `http_json` real tool 会打到什么路径、响应会映射到哪些字段。
+  - model settings modal 的 tool detail summary 现在也会继续拼出 per-tool `execution_diagnostics`；source diagnostics 不再只告诉你“这个 source 有坏配置”，而是能直接看出具体是哪个 real tool 的 `http_json` 配置出错。
+  - 同一份 per-tool `execution_diagnostics` 现在也会继续进入运行态 tool meta、live store 与 trace subtitle/search；如果坏掉的 real tool 真被规划并执行到，前端不需要只看泛化 error message，就能直接看到是哪条执行配置坏了。
+  - 对 retrieval family 的 `http_json` real tool，后端现在也会从 `documents` 列表自动提炼 snippets，不再要求上游额外伪造本地 stub 风格的 `chunks`；前端看到的 rag follow-up / trace 回放会因此更接近真实检索响应语义。
+  - 对 docs-only 的 real retrieval 结果，后端现在也会把 `documents_total` 纳入默认 preview/output key 推断；前端在 `tool_end` 预览、trace/export 回放里不再只看到空 preview 或退化文案，而是能继续看到文档数量级摘要。
+  - 同一路 docs-only retrieval fallback 现在还会保留默认 output 里的 `request_id`；前端在 result summary、observation 与导出回放里可以继续看到真实 provider 请求关联号，而不必依赖工具显式补 `result_output_keys`。
   - real/provider retrieval 与 runtime override real tool 的 follow-up、result summary、observation、导出回放已不再误写成本地默认知识库命中。
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体，因此前后端对 name-only fallback 与旁路结构化 payload 的消费已基本一致。
 - 当前最近一次已记录校验基线：
-  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts` 通过（`29/29`）
-  - `cd frontend && node --test --experimental-strip-types app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`4/4`）
-  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`39/39`）
-  - `cd frontend && npm run lint` 通过
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`835/835`）
-  - `bash scripts/test_ci_e2e_tooling.sh common` 通过
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`862/862`）
+  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`46/46`）
   - `git diff --check` 通过
 
 ## 当前已有内容

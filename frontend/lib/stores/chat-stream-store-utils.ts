@@ -12,6 +12,7 @@ export type LiveToolEndPayload = {
   supports_result_preview?: unknown;
   effective_result_preview_keys?: unknown;
   effective_result_output_keys?: unknown;
+  execution_diagnostics?: unknown;
 };
 
 export type LiveToolStartPayload = {
@@ -24,6 +25,7 @@ export type LiveToolStartPayload = {
   supports_result_preview?: unknown;
   effective_result_preview_keys?: unknown;
   effective_result_output_keys?: unknown;
+  execution_diagnostics?: unknown;
 };
 
 type ToolIdentity = {
@@ -47,6 +49,7 @@ type ToolMetaLike = {
   supports_result_preview?: unknown;
   effective_result_preview_keys?: unknown;
   effective_result_output_keys?: unknown;
+  execution_diagnostics?: unknown;
 };
 
 export function buildLiveToolEndPayload(
@@ -71,6 +74,7 @@ export function buildLiveToolEndPayload(
     supports_result_preview: payload.supports_result_preview,
     effective_result_preview_keys: payload.effective_result_preview_keys,
     effective_result_output_keys: payload.effective_result_output_keys,
+    execution_diagnostics: payload.execution_diagnostics,
   };
 }
 
@@ -103,6 +107,7 @@ function normalizeToolSemantics(
     supports_result_preview?: unknown;
     effective_result_preview_keys?: unknown;
     effective_result_output_keys?: unknown;
+    execution_diagnostics?: unknown;
   },
 ): {
   kind?: string;
@@ -111,6 +116,7 @@ function normalizeToolSemantics(
   supports_result_preview?: boolean;
   effective_result_preview_keys?: string[];
   effective_result_output_keys?: string[];
+  execution_diagnostics?: string[];
 } {
   return {
     kind:
@@ -163,6 +169,17 @@ function normalizeToolSemantics(
               typeof key === "string" && key.trim().length > 0,
           )
         : undefined,
+    execution_diagnostics: Array.isArray(payload.execution_diagnostics)
+      ? payload.execution_diagnostics.filter(
+          (diagnostic): diagnostic is string =>
+            typeof diagnostic === "string" && diagnostic.trim().length > 0,
+        )
+      : Array.isArray(prevTool?.execution_diagnostics)
+        ? prevTool.execution_diagnostics.filter(
+            (diagnostic): diagnostic is string =>
+              typeof diagnostic === "string" && diagnostic.trim().length > 0,
+          )
+        : undefined,
   };
 }
 
@@ -180,6 +197,7 @@ export function mergeToolStartToolMeta(
   supports_result_preview?: boolean;
   effective_result_preview_keys?: string[];
   effective_result_output_keys?: string[];
+  execution_diagnostics?: string[];
   status: "running";
   retry_count: number;
 } {
@@ -217,6 +235,7 @@ export function mergeToolEndToolMeta(
   supports_result_preview?: boolean;
   effective_result_preview_keys?: string[];
   effective_result_output_keys?: string[];
+  execution_diagnostics?: string[];
   status: "running" | "done" | "error";
   retry_count?: number;
   error?: string | undefined;

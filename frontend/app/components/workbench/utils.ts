@@ -577,6 +577,11 @@ export function matchesTraceStepSearchQuery(
     : [];
   const executionSummaryParts = formatTraceToolExecutionSummaryParts(step.meta?.tool)
     .map((item) => item.toLowerCase());
+  const executionDiagnostics = Array.isArray(step.meta?.tool?.execution_diagnostics)
+    ? step.meta.tool.execution_diagnostics
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.toLowerCase())
+    : [];
   const safeOutput = stringifyTraceSafeToolOutput(step.meta?.tool)?.toLowerCase() ?? "";
   const ragKnowledgeBaseId =
     typeof step.meta?.rag?.knowledge_base_id === "string"
@@ -598,6 +603,7 @@ export function matchesTraceStepSearchQuery(
     toolSemanticKind.includes(q) ||
     toolSemanticFamily.includes(q) ||
     executionSummaryParts.some((part) => part.includes(q)) ||
+    executionDiagnostics.some((diagnostic) => diagnostic.includes(q)) ||
     safeOutput.includes(q) ||
     ragKnowledgeBaseId.includes(q) ||
     ragChunks.some((chunk) => chunk.includes(q)) ||
@@ -854,6 +860,21 @@ function formatTraceToolExecutionSummary(
     return null;
   }
   return labels.toolExecutionSummary(parts.join(" · "));
+}
+
+function formatTraceToolExecutionDiagnostics(
+  tool: TraceStepMeta["tool"],
+  labels: Messages["inspector"]["traceMeta"],
+): string | null {
+  const diagnostics = Array.isArray(tool?.execution_diagnostics)
+    ? tool.execution_diagnostics
+        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => item.trim())
+    : [];
+  if (diagnostics.length === 0) {
+    return null;
+  }
+  return labels.toolExecutionDiagnostics(diagnostics.join(", "));
 }
 
 function formatTraceToolDisplayTitle(tool: TraceStepMeta["tool"]): string {
@@ -1297,6 +1318,10 @@ export function formatTraceStepMetaSubtitle(
       const executionSummary = formatTraceToolExecutionSummary(meta.tool, labels);
       if (executionSummary) {
         parts.push(executionSummary);
+      }
+      const executionDiagnostics = formatTraceToolExecutionDiagnostics(meta.tool, labels);
+      if (executionDiagnostics) {
+        parts.push(executionDiagnostics);
       }
     }
   }

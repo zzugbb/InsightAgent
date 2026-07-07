@@ -22,19 +22,25 @@
   - `http_json` execution template 现在也会复用运行时 settings/source 上下文：global extra tool、source extra tool、registry override 与 file-backed source 都可以在 `headers/url/query/json_body` 中读取 `settings_api_key`、`settings_base_url`、`tool_registry_provider_source` 等变量，并支持 `${...}` 字符串插值来拼接 bearer/header 模板，而无需把敏感值硬编码进 registry 配置。
   - file-backed source manifest 里的 `extra_tools` / `overrides` 现也继续走同一套 source 级模板上下文传递；把 source 从内联 JSON 切到 `registry_file` 后，`tool_registry_provider_source` 一类运行时变量不会再丢失。
   - 对 `http_json` 模板中的保留命名空间变量，runtime 现在也会做更细粒度静态诊断：`settings_*` / `tool_registry_*` typo 会直接落进 `invalid_tool_executions`，并在 runner 构建时继续 fail-fast，而不是静默丢掉 header/query 参数后才在真实上游请求里暴露成旁路错误。
+  - 对只能到 tool 真正执行时才知道是否缺失的请求模板变量，`http_json` runner 现在也会在发请求前直接 fail-fast：像 `$top_k`、`$precision` 这类缺参会明确报到 `query_params.limit`、`json_body.precision` 等路径上，而不是先静默删字段再把问题伪装成上游协议或网络异常。
+  - 对 `headers/query_params/json_body` 里那些静态就能看出的空白字段名，settings/source diagnostics 与 configured provider preflight 现在也会提前报成 `invalid_tool_executions`；这类原本会在 request normalizer 中被静默忽略的坏配置，不必再等运行时才旁路消失。
+  - 对显式声明了 `response_path` 的 `http_json` real tool，runtime 现在也不再在路径缺失时偷偷退回根响应 payload；如果上游响应里找不到该路径，或者配置里给的是空白 `response_path`，都会直接按配置/协议错 fail-fast，避免 response mapping 坏掉后仍产出看似“有结果”的假成功。
+  - 对显式声明了 `result_fields` 的 `http_json` real tool，runtime 现在也会在“所有字段映射都落空”时直接 fail-fast，并把失败的映射项一起带出来；上游响应结构漂移或 mapping 写错时，不会再默默返回空输出对象，把真实配置/协议问题伪装成成功。
+  - 对 `result_fields.*` 里那些静态就能看出的坏 path，settings/source diagnostics 与 configured provider preflight 现在也会提前报成 `invalid_tool_executions`；像非字符串 path、空白 path，`result_fields` 里混入空白字段名、根本没有有效字段名，或显式给了空对象这类问题，都不必再等真实请求出去后才变成运行时错误。
   - 前端 workbench 的 trace subtitle/search 现也开始消费这份 `execution_summary`；后端这边输出的安全执行摘要已经不再只停留在 JSON trace/export 里，而是能直接参与 UI 回放与检索。
   - configured provider preflight、settings summary/validate 的 `tool_details` 现在也继续带上 `execution_summary`；真实工具的 endpoint 与 query/body/response-field 摘要已经不再只存在于运行期 trace，settings 治理面就能先读到。
+  - source/settings/preflight 的 `tool_details` 现在还会继续挂上 per-tool `execution_diagnostics`；`invalid/tool_executions` 不再只停留在 source 级 summary，治理面可以直接指出是哪个 real tool 的 `http_json` 配置坏掉了。
+  - 同一份 per-tool `execution_diagnostics` 现在也会继续挂进 runtime tool semantic；对显式声明了坏执行器的 real tool，`tool_start`、`tool_end`、error meta 与 action trace step 会直接带出配置诊断，不再只有 settings/preflight 才知道“为什么这个工具必然失败”。
+  - retrieval family 的 real tool 现在也不再要求上游必须额外返回本地 stub 风格的 `chunks`：只要 `http_json` 响应里有 `documents` 列表，runtime 也会自动从 `snippet/content/text/body/...` 提炼 snippets，继续产出 rag follow-up，避免“真实检索已成功、但 trace follow-up 仍因为没手工补 chunks 而断链”。
+  - 对 retrieval family 的 runtime override / real tool，如果上游只返回 `documents` / `documents_total` 且没有显式配置 `result_preview_keys`，默认 preview/output key 推断现在也会把 `documents_total` 带上；这样 docs-only real retrieval 结果不会再在 `tool_end` preview、result_summary、observation 与 export 回放里退化成空投影。
+  - 同一条 docs-only retrieval 推断链现在也会在默认 result output projection 中保留 `request_id`；即使 registry 没单独声明 `result_output_keys`，provider/real retrieval 的 result summary、observation、success output 与 export trace 仍能带出请求关联号。
   - tool execution 的规范化输入、preview/output/result-summary、runtime semantic 与 retrieval follow-up 已贯通 action step、`tool_start/tool_end`、persisted trace、export 与 mock final answer。
   - real/provider retrieval 与 runtime override real tool 已不再在 result summary、observation、rag follow-up 或 task export 中伪造默认本地 knowledge-base 语义。
   - name-only success/helper fallback 会优先复用 configured registry 或 step meta 中已落下的 label / result summary / output preview，而不是退回 provider 通用名或原始 JSON；即使原始 `output` 未保留成 dict，observation、success output、markdown export meta、task-row batch trace preview、session export trace preview，以及 task/session export 的 `rag_chunks`、task rows、session export payload `tasks/messages/stats` 聚合仍会优先沿 step meta 或 typed payload 的结构化结果回放；会话 Memory query、RAG ingest/query、RAG route 层与 shared knowledge-base merge 的 metadata、query payload root、document row、row list，以及 session create/detail/list/messages/export、task/session usage、task create/detail/list/cancel/trace/delta/export/stream-reconnect、auth register/refresh/session list/user list、audit log list 这些 outward summary route，以及 `chat_persistence_service` 的 task trace/usage/response/export/delta、`task_rows_*` 批量聚合 helper、task/session export response summary 外层 payload，以及 task/session export builder 路由入口，也已接受 typed Chroma / typed service payload / `model_dump()` 行，不再在归一化阶段静默清空或直接报错，nested metadata 也会继续保留。
   - runtime helper、governance/export、registry diagnostics 与 planner 输入归一化已统一兼容旁路结构化载荷；当前 provider planner 与真实 `OpenAICompatibleLLMProvider` 已共享一套 response text / usage 提取语义，支持 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 `input_tokens/output_tokens` usage alias、脏 usage 值容错与流式 delta 文本字段变体。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`835/835`）
-  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts` 通过（`29/29`）
-  - `cd frontend && node --test --experimental-strip-types app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`4/4`）
-  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`39/39`）
-  - `cd frontend && npm run lint` 通过
-  - `bash scripts/test_ci_e2e_tooling.sh common` 通过
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`862/862`）
+  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`46/46`）
   - `git diff --check` 通过
 
 ## 当前已有内容

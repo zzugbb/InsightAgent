@@ -50,6 +50,7 @@ export type TraceStepMeta = {
     supports_result_preview?: boolean;
     effective_result_preview_keys?: string[];
     effective_result_output_keys?: string[];
+    execution_diagnostics?: string[];
     execution_summary?: {
       method?: string;
       url_origin?: string;

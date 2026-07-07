@@ -850,6 +850,87 @@ test("matchesTraceStepSearchQuery matches execution summary fields for http_json
   assert.equal(matches, true);
 });
 
+test("formatTraceStepMetaSubtitle includes execution diagnostics for invalid real tools", () => {
+  const subtitle = formatTraceStepMetaSubtitle(
+    {
+      id: "step-execution-diagnostics-subtitle",
+      type: "action",
+      content: "Tool error: Provider Calculator",
+      meta: {
+        tool: {
+          name: "calc_eval",
+          label: "Provider Calculator",
+          kind: "provider_calc",
+          semantic_kind: "local_calculator",
+          execution_diagnostics: [
+            "unsupported tool execution kind unsupported_transport",
+          ],
+          status: "error",
+          error: "Unsupported tool execution kind: unsupported_transport",
+        },
+      },
+    },
+    {
+      toolLine: (name: string, status: string) => `${name} (${status})`,
+      toolRetry: (count: number) => `Retry ${count}`,
+      toolError: (message: string) => `Error ${message}`,
+      toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
+      toolPreviewDisabled: "Preview disabled",
+      toolOutputKeys: (keys: string[]) => `Output ${keys.join(", ")}`,
+      toolExecutionSummary: (summary: string) => `Execution ${summary}`,
+      toolExecutionDiagnostics: (summary: string) => `Diagnostics ${summary}`,
+      ragLine: (count: number, kb?: string) =>
+        kb ? `RAG ${count} ${kb}` : `RAG ${count}`,
+      model: "Model",
+      stepKind: "Step",
+      planningProviderUsed: "Planning provider used",
+      planningProviderFallback: "Planning provider fallback",
+      planningProviderRuleOnly: "Planning provider rule only",
+      toolRegistryProfile: "Profile",
+      toolRegistrySource: "Source",
+      allowedTools: "Allowed",
+      tokens: "Tokens",
+      promptTokens: "Prompt",
+      completionTokens: "Completion",
+      cost: "Cost",
+      usageSource: "Usage",
+      usageSourceProvider: "provider",
+      usageSourceEstimated: "estimated",
+      usageSourceLegacy: "legacy",
+    },
+  );
+
+  assert.match(
+    subtitle,
+    /Diagnostics unsupported tool execution kind unsupported_transport/,
+  );
+});
+
+test("matchesTraceStepSearchQuery matches execution diagnostics for invalid real tools", () => {
+  const matches = matchesTraceStepSearchQuery(
+    {
+      id: "step-execution-diagnostics-search",
+      type: "action",
+      content: "Tool error: Provider Calculator",
+      meta: {
+        tool: {
+          name: "calc_eval",
+          label: "Provider Calculator",
+          kind: "provider_calc",
+          semantic_kind: "local_calculator",
+          execution_diagnostics: [
+            "unsupported tool execution kind unsupported_transport",
+          ],
+          status: "error",
+        },
+      },
+    },
+    "unsupported_transport",
+  );
+
+  assert.equal(matches, true);
+});
+
 test("matchesTraceStepSemanticFilter matches retrieval tool and rag follow-up", () => {
   const retrievalToolMatches = matchesTraceStepSemanticFilter(
     {

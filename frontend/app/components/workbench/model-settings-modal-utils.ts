@@ -108,6 +108,18 @@ function formatToolExecutionSummary(
   return parts.filter((part) => part.length > 0).join(" · ");
 }
 
+function formatToolExecutionDiagnostics(
+  tool: Pick<ToolRegistryProviderToolDetail, "execution_diagnostics">,
+): string {
+  const executionDiagnostics = Array.isArray(tool.execution_diagnostics)
+    ? tool.execution_diagnostics.filter((value) => value.trim().length > 0)
+    : [];
+  if (executionDiagnostics.length === 0) {
+    return "";
+  }
+  return executionDiagnostics.join(", ");
+}
+
 export function formatToolRegistryProviderToolDetailsSummary(
   toolDetails: ToolRegistryProviderToolDetail[] | undefined,
 ): string {
@@ -121,6 +133,7 @@ export function formatToolRegistryProviderToolDetailsSummary(
       const semanticOrKind = executionSummary
         ? `${semanticDescriptor} @ ${executionSummary}`
         : semanticDescriptor;
+      const executionDiagnostics = formatToolExecutionDiagnostics(tool);
       const previewKeys =
         Array.isArray(tool.effective_result_preview_keys)
           ? tool.effective_result_preview_keys.filter((key) => key.trim().length > 0)
@@ -129,16 +142,22 @@ export function formatToolRegistryProviderToolDetailsSummary(
         Array.isArray(tool.effective_result_output_keys)
           ? tool.effective_result_output_keys.filter((key) => key.trim().length > 0)
           : [];
-      if (previewKeys.length === 0 && outputKeys.length === 0) {
+      const suffixes: string[] = [];
+      if (previewKeys.length > 0 && outputKeys.length > 0) {
+        suffixes.push(`preview ${previewKeys.join(", ")}`);
+        suffixes.push(`output ${outputKeys.join(", ")}`);
+      } else if (previewKeys.length > 0) {
+        suffixes.push(previewKeys.join(", "));
+      } else if (outputKeys.length > 0) {
+        suffixes.push(`output ${outputKeys.join(", ")}`);
+      }
+      if (executionDiagnostics) {
+        suffixes.push(`diagnostics ${executionDiagnostics}`);
+      }
+      if (suffixes.length === 0) {
         return `${tool.label} [${semanticOrKind}]`;
       }
-      if (previewKeys.length > 0 && outputKeys.length > 0) {
-        return `${tool.label} [${semanticOrKind}]: preview ${previewKeys.join(", ")}; output ${outputKeys.join(", ")}`;
-      }
-      if (previewKeys.length > 0) {
-        return `${tool.label} [${semanticOrKind}]: ${previewKeys.join(", ")}`;
-      }
-      return `${tool.label} [${semanticOrKind}]: output ${outputKeys.join(", ")}`;
+      return `${tool.label} [${semanticOrKind}]: ${suffixes.join("; ")}`;
     })
     .join(" | ");
 }

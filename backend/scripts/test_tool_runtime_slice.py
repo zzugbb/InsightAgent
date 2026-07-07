@@ -2274,6 +2274,88 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_build_settings_summary_response_includes_per_tool_invalid_execution_diagnostics_for_real_provider_source_tools(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url="https://example.invalid/v1",
+                api_key="secret",
+                tool_registry_profile="default",
+                tool_registry_provider_source="analytics_suite",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/search",
+                                        "response_path": "   ",
+                                    },
+                                    "result_preview_keys": [],
+                                    "supports_result_preview": True,
+                                    "default_timeout_ms": 21_000,
+                                    "retryable_by_default": False,
+                                },
+                                "provider_math": {
+                                    "template": "calc_eval",
+                                    "label": "Provider Math",
+                                    "kind": "provider_calc",
+                                    "result_preview_keys": [],
+                                    "supports_result_preview": True,
+                                    "default_timeout_ms": 13_000,
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+            database_locator="postgresql://demo",
+        )
+
+        analytics_detail = next(
+            detail
+            for detail in summary.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    tuple(getattr(tool, "execution_diagnostics", ()) or ()),
+                )
+                for tool in analytics_detail.tool_details
+            ],
+            [
+                ("provider_math", ()),
+                (
+                    "provider_search",
+                    (
+                        "http_json execution response_path must be a non-empty string when provided",
+                    ),
+                ),
+            ],
+        )
+
     def test_build_settings_summary_response_uses_runtime_semantic_override_for_real_provider_source_tools(
         self,
     ) -> None:
@@ -3515,6 +3597,85 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                         "calc_eval: unsupported tool execution kind unsupported_transport",
                     ),
                 )
+            ],
+        )
+
+    def test_apply_tool_registry_preview_to_validate_response_includes_per_tool_invalid_execution_diagnostics(
+        self,
+    ) -> None:
+        response = _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                message="ok",
+            ),
+            effective_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="analytics_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "analytics_suite": {
+                            "provider": "default",
+                            "profile": "default",
+                            "disabled_tool_names": [
+                                "task_plan",
+                                "task_retrieve",
+                                "calc_eval",
+                            ],
+                            "extra_tools": {
+                                "provider_search": {
+                                    "template": "task_retrieve",
+                                    "label": "Provider Search",
+                                    "kind": "provider_retrieval",
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/search",
+                                        "response_path": "   ",
+                                    },
+                                    "result_preview_keys": [],
+                                    "supports_result_preview": True,
+                                    "default_timeout_ms": 21_000,
+                                    "retryable_by_default": False,
+                                },
+                                "provider_math": {
+                                    "template": "calc_eval",
+                                    "label": "Provider Math",
+                                    "kind": "provider_calc",
+                                    "result_preview_keys": [],
+                                    "supports_result_preview": True,
+                                    "default_timeout_ms": 13_000,
+                                },
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+
+        analytics_detail = next(
+            detail
+            for detail in response.available_tool_registry_provider_source_details
+            if detail.name == "analytics_suite"
+        )
+        self.assertEqual(
+            [
+                (
+                    tool.name,
+                    tuple(getattr(tool, "execution_diagnostics", ()) or ()),
+                )
+                for tool in analytics_detail.tool_details
+            ],
+            [
+                ("provider_math", ()),
+                (
+                    "provider_search",
+                    (
+                        "http_json execution response_path must be a non-empty string when provided",
+                    ),
+                ),
             ],
         )
 
@@ -20742,6 +20903,239 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             str(raised.exception),
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_rejects_missing_runtime_template_variables_without_partial_http_request(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "query_params": {
+                                "q": "$query",
+                                "limit": "$top_k",
+                            },
+                            "result_fields": {
+                                "documents_total": "$.meta.total",
+                            },
+                        },
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"meta": {"total": 1}}
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="provider_search",
+                    tool_input={"query": "revenue trend"},
+                    prompt="search",
+                    user_id="user-1",
+                    attempt=0,
+                    registry=extra_tools,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("missing runtime template variable top_k", str(raised.exception))
+        self.assertIn("query_params.limit", str(raised.exception))
+
+    def test_build_tool_registry_extra_tools_from_settings_rejects_missing_http_json_response_path_without_root_fallback(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "response_path": "$.data.documents",
+                            "result_fields": {
+                                "documents_total": "$.meta.total",
+                            },
+                        },
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"meta": {"total": 2}}
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="provider_search",
+                    tool_input={"query": "revenue trend"},
+                    prompt="search",
+                    user_id="user-1",
+                    attempt=0,
+                    registry=extra_tools,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("response_path", str(raised.exception))
+        self.assertIn("$.data.documents", str(raised.exception))
+
+    def test_build_tool_registry_extra_tools_from_settings_rejects_http_json_result_fields_when_no_mapping_resolves(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "result_fields": {
+                                "documents_total": "$.meta.total",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"data": {"documents": [{"id": "doc-1"}]}}
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="provider_search",
+                    tool_input={"query": "revenue trend"},
+                    prompt="search",
+                    user_id="user-1",
+                    attempt=0,
+                    registry=extra_tools,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("result_fields", str(raised.exception))
+        self.assertIn("documents_total", str(raised.exception))
+        self.assertIn("$.meta.total", str(raised.exception))
+
+    def test_build_tool_registry_extra_tools_from_settings_rejects_http_json_result_fields_with_invalid_path_without_fallback(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "result_fields": {
+                                "documents_total": 123,
+                            },
+                        },
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "result_fields.documents_total must be a non-empty string path",
+            str(raised.exception),
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_ignores_unknown_template_and_existing_name(self) -> None:
         settings = SimpleNamespace(
             tool_registry_extra_tools_json=json.dumps(
@@ -22825,6 +23219,202 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             (
                 "provider_search: http_json execution references unsupported runtime template variable settings_api_keey in headers.Authorization",
                 "provider_search: http_json execution references unsupported runtime template variable tool_registry_provider_sourcee in query_params.source",
+            ),
+        )
+
+    def test_build_tool_registry_settings_execution_diagnostics_reports_invalid_result_field_paths(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "result_fields": {
+                                    "documents_total": 123,
+                                    "request_id": " ",
+                                },
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution result_fields.documents_total must be a non-empty string path",
+                "provider_search: http_json execution result_fields.request_id must be a non-empty string path",
+            ),
+        )
+
+    def test_build_tool_registry_settings_execution_diagnostics_reports_blank_result_field_names(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "result_fields": {
+                                    " ": "$.meta.total",
+                                },
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution result_fields must include at least one non-empty field name",
+            ),
+        )
+
+    def test_build_tool_registry_settings_execution_diagnostics_reports_mixed_blank_result_field_names(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "result_fields": {
+                                    " ": "$.meta.total",
+                                    "documents_total": "$.meta.total",
+                                },
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution result_fields must not include blank field names",
+            ),
+        )
+
+    def test_build_tool_registry_settings_execution_diagnostics_reports_empty_result_fields_mapping(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "result_fields": {},
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution result_fields must include at least one field mapping",
+            ),
+        )
+
+    def test_build_tool_registry_settings_execution_diagnostics_reports_blank_response_path(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "response_path": " ",
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution response_path must be a non-empty string when provided",
+            ),
+        )
+
+    def test_build_tool_registry_settings_execution_diagnostics_reports_blank_request_field_names(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    " ": "Bearer demo",
+                                },
+                                "query_params": {
+                                    " ": "$query",
+                                },
+                                "json_body": {
+                                    " ": "$query",
+                                },
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers must not include blank field names",
+                "provider_search: http_json execution headers must include at least one non-empty field name when provided",
+                "provider_search: http_json execution query_params must not include blank field names",
+                "provider_search: http_json execution query_params must include at least one non-empty field name when provided",
+                "provider_search: http_json execution json_body must not include blank field names",
+                "provider_search: http_json execution json_body must include at least one non-empty field name when provided",
             ),
         )
 
@@ -27204,6 +27794,122 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     },
                 ),
             },
+        )
+
+    def test_build_configured_tool_registry_provider_preflight_summary_model_includes_per_tool_invalid_execution_diagnostics(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            registry={
+                "provider_math": ToolRegistration(
+                    name="provider_math",
+                    kind="provider_calc",
+                    label="Provider Math",
+                    retryable_by_default=True,
+                    default_timeout_ms=13_000,
+                    requires_user_context=True,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "expression": str(tool_input.get("expression", "")),
+                        "result": 7.0,
+                    },
+                ),
+                "provider_search": ToolRegistration(
+                    name="provider_search",
+                    kind="provider_retrieval",
+                    label="Provider Search",
+                    retryable_by_default=False,
+                    default_timeout_ms=15_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "query": str(tool_input.get("query", "")),
+                        "hit_count": 1,
+                        "knowledge_base_id": "demo-kb",
+                        "chunks": ["alpha"],
+                    },
+                ),
+            }
+        )
+
+        result = build_configured_tool_registry_provider_preflight_summary_model_from_parts(
+            provider=provider,
+            provider_source_name="provider_suite",
+            runtime_artifacts=build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+                provider=provider,
+                provider_source_name="provider_suite",
+                runtime_artifacts={
+                    "provider_source_name": "provider_suite",
+                    "selected_source_diagnostics": {
+                        "invalid_tool_executions": (
+                            "provider_search: http_json execution response_path must not be blank",
+                        ),
+                    },
+                    "diagnostics_runtime": {
+                        "summary": {
+                            "has_diagnostics": True,
+                            "skipped_total": 0,
+                            "missing_total": 0,
+                            "total": 1,
+                            "entries": (
+                                {
+                                    "kind": "invalid",
+                                    "target": "tool_executions",
+                                    "count": 1,
+                                    "values": (
+                                        "provider_search: http_json execution response_path must not be blank",
+                                    ),
+                                },
+                            ),
+                        },
+                        "trace_step": None,
+                        "trace_event": None,
+                        "audit_detail": None,
+                    },
+                },
+            ),
+            service_actions=(),
+            trace_write_count=0,
+            audit_event_count=0,
+        )
+
+        self.assertEqual(
+            result.tool_details,
+            (
+                {
+                    "name": "provider_math",
+                    "label": "Provider Math",
+                    "kind": "provider_calc",
+                    "semantic_kind": "local_calculator",
+                    "retryable_by_default": True,
+                    "default_timeout_ms": 13_000,
+                    "requires_user_context": True,
+                    "supports_result_preview": True,
+                    "effective_result_preview_keys": ("expression", "result"),
+                    "effective_result_output_keys": ("expression", "result"),
+                },
+                {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "kind": "provider_retrieval",
+                    "semantic_kind": "knowledge_retrieval",
+                    "retryable_by_default": False,
+                    "default_timeout_ms": 15_000,
+                    "requires_user_context": False,
+                    "supports_result_preview": True,
+                    "effective_result_preview_keys": (
+                        "hit_count",
+                        "knowledge_base_id",
+                    ),
+                    "effective_result_output_keys": (
+                        "hit_count",
+                        "knowledge_base_id",
+                    ),
+                    "execution_diagnostics": (
+                        "http_json execution response_path must not be blank",
+                    ),
+                },
+            ),
         )
 
     def test_build_configured_tool_registry_provider_preflight_summary_model_humanizes_unlabeled_real_tool_names(
@@ -33563,6 +34269,104 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("documents_total", "request_id"),
         )
 
+    def test_get_tool_effective_result_key_helpers_include_documents_total_for_runtime_override_real_retrieval_tools(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            runtime_semantic_kind="provider_search",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 2,
+                "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                "tool_kind": "provider_retrieval",
+            },
+        )
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="provider_search",
+                registration=registration,
+            ),
+            ("documents_total", "hit_count", "knowledge_base_id"),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="provider_search",
+                registration=registration,
+            ),
+            ("documents_total", "hit_count", "knowledge_base_id", "request_id"),
+        )
+
+    def test_build_tool_result_helpers_fall_back_to_documents_total_for_runtime_override_real_retrieval_tools(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            runtime_semantic_kind="provider_search",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 2,
+                "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                "request_id": "req-1",
+                "tool_kind": "provider_retrieval",
+            },
+        )
+        output = {
+            "documents_total": 2,
+            "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+            "request_id": "req-1",
+            "tool_kind": "provider_retrieval",
+        }
+
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "request_id": "req-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Retrieved 2 documents (request id req-1).",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Provider Search: Retrieved 2 documents (request id req-1).",
+        )
+
     def test_build_tool_start_and_error_payload_keep_current_shape(self) -> None:
         self.assertEqual(
             build_tool_start_payload(
@@ -33737,6 +34541,86 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "effective_result_preview_keys": ["documents_total"],
                 "effective_result_output_keys": ["documents_total", "request_id"],
                 "retry_count": 0,
+            },
+        )
+
+    def test_build_tool_start_and_error_payload_include_execution_diagnostics_for_invalid_real_tool_execution(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "unsupported_transport",
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            build_tool_start_payload(
+                task_id="task-1",
+                step_id="step-1",
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                retry_count=0,
+                registry_provider=registry_provider,
+            ),
+            {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "name": "calc_eval",
+                "display_name": "Provider Calculator",
+                "input": {"expression": "1+2*3"},
+                "kind": "provider_calc",
+                "semantic_kind": "local_calculator",
+                "execution_kind": "unsupported_transport",
+                "execution_diagnostics": [
+                    "unsupported tool execution kind unsupported_transport",
+                ],
+                "supports_result_preview": True,
+                "effective_result_preview_keys": ["expression", "result"],
+                "effective_result_output_keys": ["expression", "result"],
+                "retry_count": 0,
+            },
+        )
+        self.assertEqual(
+            build_tool_error_payload(
+                name="calc_eval",
+                task_id="task-1",
+                step_id="step-1",
+                error_message="Unsupported tool execution kind: unsupported_transport",
+                retry_count=0,
+                registry_provider=registry_provider,
+            ),
+            {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "status": "error",
+                "latency_ms": 12,
+                "output_preview": {
+                    "error": "Unsupported tool execution kind: unsupported_transport",
+                },
+                "kind": "provider_calc",
+                "semantic_kind": "local_calculator",
+                "execution_kind": "unsupported_transport",
+                "execution_diagnostics": [
+                    "unsupported tool execution kind unsupported_transport",
+                ],
+                "supports_result_preview": True,
+                "effective_result_preview_keys": ["expression", "result"],
+                "effective_result_output_keys": ["expression", "result"],
+                "retry_count": 0,
+                "error": "Unsupported tool execution kind: unsupported_transport",
             },
         )
 
@@ -36402,6 +37286,50 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             followup["step"]["meta"]["rag"],
             {
                 "chunks": ["a", "b"],
+                "knowledge_base_id": "demo",
+            },
+        )
+
+    def test_build_tool_rag_followup_extracts_chunks_from_documents_for_runtime_override_real_tool(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "documents": [
+                    {"snippet": "alpha snippet"},
+                    {"content": "beta content"},
+                    {"text": "gamma text"},
+                    "delta string",
+                    {"title": "ignored title only"},
+                ],
+                "knowledge_base_id": "demo",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"]["content"],
+            "Provider Search returned snippets.",
+        )
+        self.assertEqual(
+            followup["step"]["meta"]["rag"],
+            {
+                "chunks": [
+                    "alpha snippet",
+                    "beta content",
+                    "gamma text",
+                    "delta string",
+                ],
                 "knowledge_base_id": "demo",
             },
         )
@@ -39632,6 +40560,416 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertTrue(raised.exception.fatal)
         self.assertIn("Unsupported tool execution kind", str(raised.exception))
 
+    def test_run_tool_canonical_override_rejects_missing_runtime_template_variables_without_partial_http_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "method": "POST",
+                                "json_body": {
+                                    "expression": "$expression",
+                                    "precision": "$precision",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"data": {"value": 7}}
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "missing runtime template variable precision",
+            str(raised.exception),
+        )
+        self.assertIn("json_body.precision", str(raised.exception))
+
+    def test_run_tool_canonical_override_rejects_missing_http_json_response_path_without_root_fallback(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data.result",
+                                "result_fields": {
+                                    "result": "$.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"data": {"value": 7}}
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("response_path", str(raised.exception))
+        self.assertIn("$.data.result", str(raised.exception))
+
+    def test_run_tool_canonical_override_rejects_http_json_result_fields_when_no_mapping_resolves(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                    "request_id": "$.meta.request_id",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"status": "ok"}
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("result_fields", str(raised.exception))
+        self.assertIn("result", str(raised.exception))
+        self.assertIn("$.data.value", str(raised.exception))
+
+    def test_run_tool_canonical_override_rejects_http_json_result_fields_with_blank_field_name_without_fallback(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    " ": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "result_fields must include at least one non-empty field name",
+            str(raised.exception),
+        )
+
+    def test_run_tool_canonical_override_rejects_http_json_mixed_blank_result_field_names_without_fallback(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    " ": "$.meta.request_id",
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "result_fields must not include blank field names",
+            str(raised.exception),
+        )
+
+    def test_run_tool_canonical_override_rejects_http_json_empty_result_fields_without_fallback(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {},
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "result_fields must include at least one field mapping",
+            str(raised.exception),
+        )
+
+    def test_run_tool_canonical_override_rejects_http_json_blank_response_path_without_fallback(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": " ",
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "response_path must be a non-empty string when provided",
+            str(raised.exception),
+        )
+
+    def test_run_tool_canonical_override_rejects_http_json_blank_query_param_field_name_without_fallback(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "query_params": {
+                                    " ": "$expression",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "query_params must not include blank field names",
+            str(raised.exception),
+        )
+
     def test_execute_tool_plan_item_service_execution_honors_custom_preview_policy(
         self,
     ) -> None:
@@ -39974,6 +41312,86 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             [("trace_write", "step-1"), ("trace_write", "rag-1"), ("continue", None)],
         )
 
+    def test_execute_tool_plan_item_service_execution_builds_rag_followup_from_documents_for_real_search_tool(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "documents_total": 2,
+                    "documents": [
+                        {"snippet": "alpha snippet"},
+                        {"content": "beta content"},
+                    ],
+                    "knowledge_base_id": "provider-kb",
+                },
+                result_preview_keys=("documents_total",),
+                result_output_keys=("documents_total",),
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-1",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        final_item = items[-1]
+        rag_followup = final_item["result"]["loop_execution_result"]["success_effects"][
+            "rag_followup"
+        ]
+        self.assertIsNotNone(rag_followup)
+        assert rag_followup is not None
+        self.assertEqual(
+            rag_followup["step"]["content"],
+            "Provider Search returned snippets.",
+        )
+        self.assertEqual(
+            rag_followup["step"]["meta"]["rag"],
+            {
+                "chunks": ["alpha snippet", "beta content"],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            [
+                (item["kind"], item.get("trace_step", {}).get("id"))
+                for item in final_item["result"]["service_actions"]
+            ],
+            [("trace_write", "step-1"), ("trace_write", "rag-1"), ("continue", None)],
+        )
+
     def test_execute_tool_plan_item_service_execution_rewrites_real_search_tool_kind_to_runtime_semantic_kind(
         self,
     ) -> None:
@@ -40195,19 +41613,19 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             tool_start_event["effective_result_preview_keys"],
-            ["hit_count", "knowledge_base_id"],
+            ["documents_total", "hit_count", "knowledge_base_id"],
         )
         self.assertEqual(
             tool_end_event["effective_result_preview_keys"],
-            ["hit_count", "knowledge_base_id"],
+            ["documents_total", "hit_count", "knowledge_base_id"],
         )
         self.assertEqual(
             tool_start_event["effective_result_output_keys"],
-            ["hit_count", "knowledge_base_id"],
+            ["documents_total", "hit_count", "knowledge_base_id", "request_id"],
         )
         self.assertEqual(
             tool_end_event["effective_result_output_keys"],
-            ["hit_count", "knowledge_base_id"],
+            ["documents_total", "hit_count", "knowledge_base_id", "request_id"],
         )
         self.assertEqual(
             tool_end_event["output_preview"],
@@ -40232,6 +41650,94 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             {
                 "hit_count": 2,
                 "knowledge_base_id": "provider-kb",
+            },
+        )
+
+    def test_execute_tool_plan_item_service_execution_infers_documents_total_preview_for_runtime_override_real_search_tool(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "documents_total": 2,
+                    "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                    "request_id": "req-1",
+                },
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_start_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_start"
+        )
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(
+            tool_start_event["effective_result_preview_keys"],
+            ["documents_total", "hit_count", "knowledge_base_id"],
+        )
+        self.assertEqual(
+            tool_end_event["effective_result_preview_keys"],
+            ["documents_total", "hit_count", "knowledge_base_id"],
+        )
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
+            "Provider Search: Retrieved 2 documents (request id req-1).",
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 2,
+                "request_id": "req-1",
             },
         )
 

@@ -74,6 +74,9 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
                 response_path: "$.data",
                 result_field_names: ["documents_total", "request_id"],
               },
+              execution_diagnostics: [
+                "http_json execution response_path must be a non-empty string when provided",
+              ],
               retryable_by_default: false,
               default_timeout_ms: 21_000,
               requires_user_context: true,
@@ -113,7 +116,7 @@ test("resolveModelSettingsSelectionDetails uses preview source detail summaries"
   );
   assert.equal(
     result.selectedSourceToolDetailsSummary,
-    "Provider Search [provider_search · knowledge_retrieval via http_json @ POST https://provider.example/search · headers 1 · query 1 · body 2 · response $.data · fields documents_total, request_id]: preview hit_count, knowledge_base_id; output documents_total | Provider Math [local_calculator]: expression, result",
+    "Provider Search [provider_search · knowledge_retrieval via http_json @ POST https://provider.example/search · headers 1 · query 1 · body 2 · response $.data · fields documents_total, request_id]: preview hit_count, knowledge_base_id; output documents_total; diagnostics http_json execution response_path must be a non-empty string when provided | Provider Math [local_calculator]: expression, result",
   );
 });
 
@@ -187,5 +190,37 @@ test("formatToolRegistryProviderToolDetailsSummary includes output keys when ava
   assert.equal(
     result,
     "Provider Search [provider_search via http_json @ POST https://provider.example/search · headers 1 · query 1 · body 2 · response $.data · fields documents_total, request_id]: preview documents_total; output documents_total",
+  );
+});
+
+test("formatToolRegistryProviderToolDetailsSummary includes execution diagnostics when available", () => {
+  const result = formatToolRegistryProviderToolDetailsSummary([
+    {
+      name: "provider_search",
+      label: "Provider Search",
+      kind: "provider_retrieval",
+      semantic_kind: "provider_search",
+      execution_kind: "http_json",
+      execution_summary: {
+        method: "POST",
+        url_origin: "https://provider.example",
+        url_path: "/search",
+      },
+      execution_diagnostics: [
+        "http_json execution response_path must be a non-empty string when provided",
+        "http_json execution result_fields mapping must not be empty",
+      ],
+      retryable_by_default: false,
+      default_timeout_ms: 21_000,
+      requires_user_context: true,
+      supports_result_preview: true,
+      effective_result_preview_keys: ["documents_total"],
+      effective_result_output_keys: ["documents_total"],
+    },
+  ]);
+
+  assert.equal(
+    result,
+    "Provider Search [provider_search via http_json @ POST https://provider.example/search]: preview documents_total; output documents_total; diagnostics http_json execution response_path must be a non-empty string when provided, http_json execution result_fields mapping must not be empty",
   );
 });

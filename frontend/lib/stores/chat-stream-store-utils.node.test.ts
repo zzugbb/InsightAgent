@@ -150,6 +150,66 @@ test("mergeToolEndToolMeta keeps runtime semantic metadata from tool_end payload
   assert.equal(meta.status, "done");
 });
 
+test("mergeToolStartToolMeta keeps execution diagnostics from tool_start payload", () => {
+  const meta = mergeToolStartToolMeta(
+    {
+      name: "calc_eval",
+      label: "Provider Calculator",
+      status: "running",
+    },
+    {
+      name: "calc_eval",
+      input: { expression: "1+2*3" },
+      kind: "provider_calc",
+      semantic_kind: "local_calculator",
+      effective_result_output_keys: ["expression", "result"],
+      execution_diagnostics: [
+        "unsupported tool execution kind unsupported_transport",
+      ],
+      retry_count: 0,
+    },
+    {
+      name: "calc_eval",
+      label: "Provider Calculator",
+    },
+  );
+
+  assert.deepEqual(meta.execution_diagnostics, [
+    "unsupported tool execution kind unsupported_transport",
+  ]);
+  assert.equal(meta.status, "running");
+});
+
+test("mergeToolEndToolMeta preserves execution diagnostics from tool_end payload", () => {
+  const meta = mergeToolEndToolMeta(
+    {
+      name: "calc_eval",
+      label: "Provider Calculator",
+      status: "running",
+      execution_diagnostics: [
+        "unsupported tool execution kind unsupported_transport",
+      ],
+    },
+    {
+      status: "error",
+      error: "Unsupported tool execution kind: unsupported_transport",
+      execution_diagnostics: [
+        "unsupported tool execution kind unsupported_transport",
+      ],
+      retry_count: 0,
+    },
+    {
+      name: "calc_eval",
+      label: "Provider Calculator",
+    },
+  );
+
+  assert.deepEqual(meta.execution_diagnostics, [
+    "unsupported tool execution kind unsupported_transport",
+  ]);
+  assert.equal(meta.status, "error");
+});
+
 test("mergeToolEndToolMeta filters output to effective_result_output_keys from tool_end payload", () => {
   const meta = mergeToolEndToolMeta(
     {

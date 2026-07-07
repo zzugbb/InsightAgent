@@ -45,6 +45,7 @@ export type ToolRegistryProviderToolDetail = {
     response_path?: string;
     result_field_names?: string[];
   } | null;
+  execution_diagnostics?: string[];
   semantic_family?: string | null;
   retryable_by_default: boolean;
   default_timeout_ms: number;

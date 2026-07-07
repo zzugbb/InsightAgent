@@ -610,6 +610,7 @@ export const zh: Messages = {
       toolPreviewDisabled: "预览已禁用",
       toolOutputKeys: (keys: string[]) => `输出 ${keys.join(", ")}`,
       toolExecutionSummary: (summary: string) => `执行 ${summary}`,
+      toolExecutionDiagnostics: (summary: string) => `诊断 ${summary}`,
       ragLine: (chunkCount: number, knowledgeBaseId?: string) =>
         knowledgeBaseId
           ? `RAG · ${chunkCount} 条片段 · ${knowledgeBaseId}`

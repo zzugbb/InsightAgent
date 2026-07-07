@@ -49,6 +49,7 @@ class ToolRegistryProviderToolDetailResponse(BaseModel):
     semantic_kind: str | None = None
     execution_kind: str | None = None
     execution_summary: dict[str, object] | None = None
+    execution_diagnostics: list[str] = Field(default_factory=list)
     semantic_family: str | None = None
     retryable_by_default: bool
     default_timeout_ms: int
@@ -301,7 +302,8 @@ def _build_tool_registry_options_bundle(
                                     settings=effective_settings,
                                     tool_registry_provider_source="default",
                                 )
-                            )
+                            ),
+                            diagnostics={},
                         )
                     ),
                 }
@@ -333,7 +335,8 @@ def _build_tool_registry_options_bundle(
             ]
             tool_details = list(
                 build_configured_tool_registry_provider_preflight_tool_details(
-                    provider=provider
+                    provider=provider,
+                    diagnostics=source_diagnostics.get(source_name, {}),
                 )
             )
         available_tool_registry_provider_source_details.append(

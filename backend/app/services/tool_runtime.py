@@ -58,6 +58,7 @@ class ToolRegistration:
     runtime_semantic_kind: str | None = None
     execution_kind: str | None = None
     execution_summary: dict[str, object] | None = None
+    execution_diagnostics: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1228,6 +1229,80 @@ def _render_tool_execution_template(
     return value
 
 
+def _iter_missing_tool_execution_template_variables(
+    value: object,
+    *,
+    context: dict[str, object],
+    path: str,
+) -> tuple[tuple[str, str], ...]:
+    if isinstance(value, str):
+        missing: list[tuple[str, str]] = []
+        raw = value.strip()
+        if raw.startswith("$") and len(raw) > 1 and not raw.startswith("${"):
+            lookup_key = raw[1:]
+            if lookup_key not in context:
+                missing.append((path, lookup_key))
+        for match in re.finditer(r"\$\{([^{}]+)\}", value):
+            lookup_key = match.group(1).strip()
+            if lookup_key and lookup_key not in context:
+                missing.append((path, lookup_key))
+        return tuple(missing)
+    if isinstance(value, dict):
+        missing: list[tuple[str, str]] = []
+        for raw_key, raw_item in value.items():
+            if not isinstance(raw_key, str) or not raw_key.strip():
+                continue
+            child_path = f"{path}.{raw_key.strip()}" if path else raw_key.strip()
+            missing.extend(
+                _iter_missing_tool_execution_template_variables(
+                    raw_item,
+                    context=context,
+                    path=child_path,
+                )
+            )
+        return tuple(missing)
+    if isinstance(value, (list, tuple)):
+        missing: list[tuple[str, str]] = []
+        for index, item in enumerate(value):
+            missing.extend(
+                _iter_missing_tool_execution_template_variables(
+                    item,
+                    context=context,
+                    path=f"{path}[{index}]",
+                )
+            )
+        return tuple(missing)
+    return ()
+
+
+def _render_required_tool_execution_template(
+    value: object,
+    *,
+    context: dict[str, object],
+    path: str,
+) -> object:
+    missing_references = _iter_missing_tool_execution_template_variables(
+        value,
+        context=context,
+        path=path,
+    )
+    if missing_references:
+        formatted_references = tuple(
+            dict.fromkeys(
+                f"{variable_name} in {reference_path}"
+                for reference_path, variable_name in missing_references
+            )
+        )
+        qualifier = "variable" if len(formatted_references) == 1 else "variables"
+        joined_references = "; ".join(formatted_references)
+        raise MockToolExecutionError(
+            "HTTP JSON tool request template references missing runtime template "
+            f"{qualifier} {joined_references}.",
+            fatal=True,
+        )
+    return _render_tool_execution_template(value, context=context)
+
+
 def _iter_tool_execution_template_variable_references(
     value: object,
     *,
@@ -1430,17 +1505,29 @@ def _build_http_json_tool_runner(
             "prompt": prompt,
             "user_id": user_id,
         }
-        rendered_url = _render_tool_execution_template(raw_url, context=context)
+        rendered_url = _render_required_tool_execution_template(
+            raw_url,
+            context=context,
+            path="url",
+        )
         if not isinstance(rendered_url, str) or not rendered_url.strip():
             raise MockToolExecutionError(
                 "HTTP JSON tool could not resolve a valid url.",
                 fatal=True,
             )
         rendered_headers = _normalize_tool_execution_http_headers(
-            _render_tool_execution_template(headers, context=context)
+            _render_required_tool_execution_template(
+                headers,
+                context=context,
+                path="headers",
+            )
         )
         rendered_query_params = _normalize_tool_execution_http_query_params(
-            _render_tool_execution_template(raw_query_params, context=context)
+            _render_required_tool_execution_template(
+                raw_query_params,
+                context=context,
+                path="query_params",
+            )
         )
         query_string = urlencode(rendered_query_params, doseq=True)
         full_url = rendered_url.strip()
@@ -1449,9 +1536,10 @@ def _build_http_json_tool_runner(
             full_url = f"{full_url}{separator}{query_string}"
         request_data: bytes | None = None
         if raw_json_body is not None and method != "GET":
-            rendered_json_body = _render_tool_execution_template(
+            rendered_json_body = _render_required_tool_execution_template(
                 raw_json_body,
                 context=context,
+                path="json_body",
             )
             if not isinstance(rendered_json_body, dict):
                 raise MockToolExecutionError(
@@ -1484,19 +1572,36 @@ def _build_http_json_tool_runner(
             path=raw_response_path,
         )
         if scoped_payload is _TOOL_EXECUTION_TEMPLATE_MISSING:
+            if isinstance(raw_response_path, str) and raw_response_path.strip():
+                raise MockToolExecutionError(
+                    "HTTP JSON tool response_path could not resolve any payload at "
+                    f"{raw_response_path.strip()}.",
+                    fatal=True,
+                )
             scoped_payload = response_payload
         if isinstance(raw_result_fields, dict):
             mapped_output: dict[str, object] = {}
+            missing_result_fields: list[str] = []
             for raw_key, raw_path in raw_result_fields.items():
                 if not isinstance(raw_key, str) or not raw_key.strip():
                     continue
+                normalized_key = raw_key.strip()
                 mapped_value = _extract_tool_execution_response_value(
                     scoped_payload,
                     path=raw_path,
                 )
                 if mapped_value is _TOOL_EXECUTION_TEMPLATE_MISSING:
+                    missing_result_fields.append(
+                        f"{normalized_key} -> {str(raw_path).strip()}"
+                    )
                     continue
-                mapped_output[raw_key] = mapped_value
+                mapped_output[normalized_key] = mapped_value
+            if missing_result_fields and not mapped_output:
+                raise MockToolExecutionError(
+                    "HTTP JSON tool result_fields could not resolve any configured "
+                    f"mapping: {'; '.join(missing_result_fields)}.",
+                    fatal=True,
+                )
             return _normalize_http_json_output_shape(mapped_output)
         if isinstance(scoped_payload, dict):
             return _normalize_http_json_output_shape(dict(scoped_payload))
@@ -1660,12 +1765,69 @@ def _describe_tool_execution_spec_validation_errors(
     raw_response_path = execution_spec.get("response_path")
     if raw_response_path is not None and not isinstance(raw_response_path, str):
         return ("http_json execution response_path must be a string",)
+    if isinstance(raw_response_path, str) and not raw_response_path.strip():
+        return ("http_json execution response_path must be a non-empty string when provided",)
     raw_result_fields = execution_spec.get("result_fields")
     if raw_result_fields is not None and not isinstance(raw_result_fields, dict):
         return ("http_json execution result_fields must be an object",)
-    return _collect_tool_execution_runtime_template_validation_errors(
-        execution_spec=execution_spec,
+    validation_errors: list[str] = []
+    for field_name, raw_mapping in (
+        ("headers", raw_headers),
+        ("query_params", raw_query_params),
+        ("json_body", raw_json_body),
+    ):
+        if not isinstance(raw_mapping, dict):
+            continue
+        has_valid_field_name = False
+        has_blank_field_name = False
+        for raw_key in raw_mapping:
+            if isinstance(raw_key, str) and raw_key.strip():
+                has_valid_field_name = True
+                continue
+            has_blank_field_name = True
+        if has_blank_field_name:
+            validation_errors.append(
+                f"http_json execution {field_name} must not include blank field names"
+            )
+        if raw_mapping and not has_valid_field_name:
+            validation_errors.append(
+                f"http_json execution {field_name} must include at least one "
+                "non-empty field name when provided"
+            )
+    if isinstance(raw_result_fields, dict):
+        if not raw_result_fields:
+            validation_errors.append(
+                "http_json execution result_fields must include at least one "
+                "field mapping"
+            )
+        has_valid_result_field_name = False
+        has_blank_result_field_name = False
+        for raw_key, raw_path in raw_result_fields.items():
+            if not isinstance(raw_key, str) or not raw_key.strip():
+                has_blank_result_field_name = True
+                continue
+            has_valid_result_field_name = True
+            if isinstance(raw_path, str) and raw_path.strip():
+                continue
+            validation_errors.append(
+                "http_json execution result_fields."
+                f"{raw_key.strip()} must be a non-empty string path"
+            )
+        if has_blank_result_field_name and has_valid_result_field_name:
+            validation_errors.append(
+                "http_json execution result_fields must not include blank field names"
+            )
+        if raw_result_fields and not has_valid_result_field_name:
+            validation_errors.append(
+                "http_json execution result_fields must include at least one "
+                "non-empty field name"
+            )
+    validation_errors.extend(
+        _collect_tool_execution_runtime_template_validation_errors(
+            execution_spec=execution_spec,
+        )
     )
+    return tuple(dict.fromkeys(validation_errors))
 
 
 def _build_invalid_tool_execution_diagnostics(
@@ -1684,6 +1846,32 @@ def _build_invalid_tool_execution_diagnostics(
     diagnostics = _empty_tool_registry_file_diagnostics()
     diagnostics["invalid_tool_executions"] = tuple(dict.fromkeys(normalized_messages))
     return diagnostics
+
+
+def _group_invalid_tool_execution_messages_by_tool(
+    messages: object,
+) -> dict[str, tuple[str, ...]]:
+    if not isinstance(messages, (list, tuple)):
+        return {}
+    grouped_messages: dict[str, list[str]] = {}
+    for raw_message in messages:
+        message = str(raw_message).strip()
+        if not message:
+            continue
+        tool_name, separator, detail = message.partition(":")
+        if not separator:
+            continue
+        normalized_tool_name = normalize_tool_registry_name(tool_name)
+        normalized_detail = detail.strip()
+        if not normalized_tool_name or not normalized_detail:
+            continue
+        grouped_messages.setdefault(normalized_tool_name, [])
+        if normalized_detail not in grouped_messages[normalized_tool_name]:
+            grouped_messages[normalized_tool_name].append(normalized_detail)
+    return {
+        tool_name: tuple(messages)
+        for tool_name, messages in grouped_messages.items()
+    }
 
 
 def _collect_invalid_tool_execution_messages_from_extra_tool_specs(
@@ -3146,6 +3334,9 @@ def build_tool_registry_extra_tools_from_settings(
         resolved_execution_kind = _resolve_tool_execution_kind_from_spec(
             execution_spec
         )
+        validation_errors = _describe_tool_execution_spec_validation_errors(
+            execution_spec
+        )
         extra_tools[name] = replace(
             template_registration,
             name=name,
@@ -3182,6 +3373,11 @@ def build_tool_registry_extra_tools_from_settings(
             execution_kind=resolved_execution_kind or template_registration.execution_kind,
             execution_summary=_build_tool_execution_summary_from_spec(execution_spec)
             or template_registration.execution_summary,
+            execution_diagnostics=(
+                tuple(dict.fromkeys(validation_errors))
+                if validation_errors
+                else template_registration.execution_diagnostics
+            ),
         )
     return extra_tools
 
@@ -3232,6 +3428,9 @@ def _build_registry_overrides_from_specs(
         resolved_execution_kind = _resolve_tool_execution_kind_from_spec(
             execution_spec
         )
+        validation_errors = _describe_tool_execution_spec_validation_errors(
+            execution_spec
+        )
         overrides[normalized_name] = replace(
             base_registration,
             kind=str(spec.get("kind", base_registration.kind)),
@@ -3267,6 +3466,11 @@ def _build_registry_overrides_from_specs(
             execution_kind=resolved_execution_kind or base_registration.execution_kind,
             execution_summary=_build_tool_execution_summary_from_spec(execution_spec)
             or base_registration.execution_summary,
+            execution_diagnostics=(
+                tuple(dict.fromkeys(validation_errors))
+                if validation_errors
+                else base_registration.execution_diagnostics
+            ),
         )
     return overrides, disabled_tool_names
 
@@ -4550,7 +4754,8 @@ def build_configured_tool_registry_provider_preflight_summary_model_from_parts(
         tool_count=len(tool_registry),
         tool_names=tuple(sorted(tool_registry)),
         tool_details=build_configured_tool_registry_provider_preflight_tool_details(
-            provider=provider
+            provider=provider,
+            diagnostics=runtime_artifacts.selected_source_diagnostics,
         ),
         service_action_count=len(service_actions),
         service_action_kinds=tuple(action.kind for action in service_actions),
@@ -5652,6 +5857,13 @@ def build_tool_runtime_semantics_meta(
     execution_summary = resolved_registration.execution_summary
     if isinstance(execution_summary, dict) and execution_summary:
         meta["execution_summary"] = dict(execution_summary)
+    execution_diagnostics = tuple(
+        diagnostic.strip()
+        for diagnostic in resolved_registration.execution_diagnostics
+        if isinstance(diagnostic, str) and diagnostic.strip()
+    )
+    if execution_diagnostics:
+        meta["execution_diagnostics"] = list(execution_diagnostics)
     if semantic_family and semantic_family != semantic_kind:
         meta["semantic_family"] = semantic_family
     if effective_result_output_keys:
@@ -7104,6 +7316,48 @@ def _build_tool_rag_followup_content(
     return "Knowledge Retrieval returned snippets from the selected knowledge base."
 
 
+def _extract_tool_rag_chunks_from_output(output: dict[str, object]) -> list[str]:
+    raw_chunks = output.get("chunks")
+    if isinstance(raw_chunks, (list, tuple)):
+        return [
+            chunk.strip()
+            for chunk in raw_chunks
+            if isinstance(chunk, str) and chunk.strip()
+        ]
+
+    raw_documents = output.get("documents")
+    if not isinstance(raw_documents, (list, tuple)):
+        return []
+
+    extracted_chunks: list[str] = []
+    for raw_document in raw_documents:
+        if isinstance(raw_document, str):
+            normalized_chunk = raw_document.strip()
+            if normalized_chunk:
+                extracted_chunks.append(normalized_chunk)
+            continue
+        if not isinstance(raw_document, dict):
+            continue
+        for field_name in (
+            "snippet",
+            "content",
+            "text",
+            "body",
+            "chunk",
+            "page_content",
+            "document_text",
+        ):
+            raw_value = raw_document.get(field_name)
+            if not isinstance(raw_value, str):
+                continue
+            normalized_chunk = raw_value.strip()
+            if not normalized_chunk:
+                continue
+            extracted_chunks.append(normalized_chunk)
+            break
+    return extracted_chunks
+
+
 def build_tool_prompt_with_observations(
     *,
     prompt: str,
@@ -7316,15 +7570,15 @@ def build_tool_rag_followup(
         semantic_kind = semantic_family
     if semantic_kind != "knowledge_retrieval":
         return None
-    chunks = output.get("chunks")
-    if not isinstance(chunks, (list, tuple)):
+    chunks = _extract_tool_rag_chunks_from_output(output)
+    if not chunks:
         return None
     kb = output.get("knowledge_base_id")
     step = build_tool_rag_step(
         step_id=step_id,
         seq=seq,
         model=model,
-        chunks=[str(x) for x in chunks],
+        chunks=chunks,
         knowledge_base_id=str(kb) if kb else None,
         token_count=token_count,
         content=_build_tool_rag_followup_content(
@@ -8690,12 +8944,27 @@ def get_tool_effective_result_output_keys(
     )
     if not should_infer_output_keys:
         return ()
-    return get_tool_effective_result_preview_keys(
+    output_keys = get_tool_effective_result_preview_keys(
         name=normalized_name,
         registration=resolved_registration,
         registry=registry,
         registry_provider=registry_provider,
         registry_loader=registry_loader,
+    )
+    if resolved_registration.result_preview_keys:
+        return output_keys
+    semantic_family = get_tool_semantic_kind(
+        name=normalized_name,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    return _augment_runtime_override_retrieval_output_keys(
+        output_keys=output_keys,
+        registration=resolved_registration,
+        semantic_kind=semantic_kind,
+        semantic_family=semantic_family,
     )
 
 
@@ -8725,9 +8994,6 @@ def get_tool_effective_result_preview_keys(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    preview_keys = _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
-    if preview_keys:
-        return preview_keys
     semantic_family = get_tool_semantic_kind(
         name=normalized_name,
         registration=resolved_registration,
@@ -8735,9 +9001,65 @@ def get_tool_effective_result_preview_keys(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
+    preview_keys = _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
+    if not preview_keys and semantic_family and semantic_family != semantic_kind:
+        preview_keys = _get_default_result_preview_keys_for_semantic_kind(
+            semantic_family
+        )
     if semantic_family and semantic_family != semantic_kind:
-        return _get_default_result_preview_keys_for_semantic_kind(semantic_family)
+        return _augment_runtime_override_retrieval_preview_keys(
+            preview_keys=preview_keys,
+            registration=resolved_registration,
+            semantic_kind=semantic_kind,
+            semantic_family=semantic_family,
+        )
+    if preview_keys:
+        return preview_keys
     return ()
+
+
+def _augment_runtime_override_retrieval_preview_keys(
+    *,
+    preview_keys: tuple[str, ...],
+    registration: ToolRegistration,
+    semantic_kind: str | None,
+    semantic_family: str | None,
+) -> tuple[str, ...]:
+    explicit_runtime_semantic_kind = _normalize_runtime_semantic_kind(
+        registration.runtime_semantic_kind
+    )
+    normalized_semantic_kind = _normalize_tool_semantic_kind(semantic_kind)
+    normalized_semantic_family = _normalize_tool_semantic_kind(semantic_family)
+    if (
+        explicit_runtime_semantic_kind is None
+        or normalized_semantic_kind == "knowledge_retrieval"
+        or normalized_semantic_family != "knowledge_retrieval"
+        or "documents_total" in preview_keys
+    ):
+        return preview_keys
+    return ("documents_total", *preview_keys)
+
+
+def _augment_runtime_override_retrieval_output_keys(
+    *,
+    output_keys: tuple[str, ...],
+    registration: ToolRegistration,
+    semantic_kind: str | None,
+    semantic_family: str | None,
+) -> tuple[str, ...]:
+    explicit_runtime_semantic_kind = _normalize_runtime_semantic_kind(
+        registration.runtime_semantic_kind
+    )
+    normalized_semantic_kind = _normalize_tool_semantic_kind(semantic_kind)
+    normalized_semantic_family = _normalize_tool_semantic_kind(semantic_family)
+    if (
+        explicit_runtime_semantic_kind is None
+        or normalized_semantic_kind == "knowledge_retrieval"
+        or normalized_semantic_family != "knowledge_retrieval"
+        or "request_id" in output_keys
+    ):
+        return output_keys
+    return (*output_keys, "request_id")
 
 
 def _get_default_result_preview_keys_for_semantic_kind(
@@ -8756,11 +9078,28 @@ def _get_default_result_preview_keys_for_semantic_kind(
 def build_configured_tool_registry_provider_preflight_tool_details(
     *,
     provider: ToolRegistryProvider,
+    diagnostics: dict[str, tuple[str, ...]] | None = None,
 ) -> tuple[dict[str, object], ...]:
     tool_registry = provider.load_tool_registry()
+    execution_diagnostics_by_tool = _group_invalid_tool_execution_messages_by_tool(
+        diagnostics.get("invalid_tool_executions") if isinstance(diagnostics, dict) else ()
+    )
     details: list[dict[str, object]] = []
     for tool_name in sorted(tool_registry):
         registration = tool_registry[tool_name]
+        registration_execution_diagnostics = tuple(
+            diagnostic.strip()
+            for diagnostic in registration.execution_diagnostics
+            if isinstance(diagnostic, str) and diagnostic.strip()
+        )
+        merged_execution_diagnostics = tuple(
+            dict.fromkeys(
+                (
+                    *registration_execution_diagnostics,
+                    *execution_diagnostics_by_tool.get(tool_name, ()),
+                )
+            )
+        )
         semantic_kind = get_tool_runtime_semantic_kind(
             name=tool_name,
             registration=registration,
@@ -8819,6 +9158,13 @@ def build_configured_tool_registry_provider_preflight_tool_details(
                 **(
                     {"effective_result_output_keys": effective_result_output_keys}
                     if effective_result_output_keys
+                    else {}
+                ),
+                **(
+                    {
+                        "execution_diagnostics": merged_execution_diagnostics,
+                    }
+                    if merged_execution_diagnostics
                     else {}
                 ),
             }

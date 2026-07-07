@@ -541,6 +541,7 @@ export type Messages = {
       toolPreviewDisabled: string;
       toolOutputKeys: (keys: string[]) => string;
       toolExecutionSummary: (summary: string) => string;
+      toolExecutionDiagnostics: (summary: string) => string;
       ragLine: (chunkCount: number, knowledgeBaseId?: string) => string;
     };
     /** 轨迹：列表时间线 vs 流程图 */
