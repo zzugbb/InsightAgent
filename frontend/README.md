@@ -35,11 +35,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - 对 retrieval family 的 `http_json` real tool，后端现在也会从 `documents` 列表自动提炼 snippets，不再要求上游额外伪造本地 stub 风格的 `chunks`；前端看到的 rag follow-up / trace 回放会因此更接近真实检索响应语义。
   - 对 docs-only 的 real retrieval 结果，后端现在也会把 `documents_total` 纳入默认 preview/output key 推断；前端在 `tool_end` 预览、trace/export 回放里不再只看到空 preview 或退化文案，而是能继续看到文档数量级摘要。
   - 同一路 docs-only retrieval fallback 现在还会保留默认 output 里的 `request_id`；前端在 result summary、observation 与导出回放里可以继续看到真实 provider 请求关联号，而不必依赖工具显式补 `result_output_keys`。
+  - 对 `hit_count` 风格的 real/provider retrieval，后端现在也会把 `request_id` 带进 result summary 与 observation；前端在工作台、trace 与导出回放里不会再看到“结构化 output 有请求关联号，但摘要文案没有”的分叉。
+  - 对 `http_json` real/provider calc，后端现在也会在默认 output projection 中保留 `request_id`，并把只有 `result/request_id` 的返回转成 `Calculated result = ... (request id ...)`；前端工作台、trace 与导出回放不再只看到 generic payload 文案。
+  - mock final answer / 回放链路现在也会沿这套 `request_id` 语义输出 retrieval hit summary 与 real calc summary；前端看到的最终回答、trace 摘要与导出文案更一致。
+  - 对旧 trace / typed payload 那些没有显式 `result_summary`、但仍保留了 safe output 的 real tool step，工作台、trace 与导出回放现在也会直接推断出 `Retrieved ...` / `Calculated result = ...` 摘要，而不是继续停留在 `Tool done: ...` 加 JSON。
+  - 同一条 fallback 现在也已经落到 task/session preview 摘要展示；前端看到的 trace preview、session export preview 与 workbench 主回放会尽量使用推断后的结果摘要，而不是继续把 `Tool done: ...` 当作旧数据的主文案。
+  - 这条 fallback 现在也覆盖只有 `output_preview` 的旧 tool step；前端 workbench、task trace preview 与 task export markdown 回放在 planner/retrieval/calc 的 preview-only 场景下，也会优先显示 `Planned steps - ...` / `Retrieved ...` 摘要，而不是保留 `Tool done: ...`。
+  - 后端 session export markdown builder 现在也会把旧 `trace_preview.content_excerpt` 里的 `Label: {...}` 与 `Tool done: ... Preview: ... Output: ...` 归一成推断摘要；前端发起的会话 markdown 导出和工作台内的 trace/export 回放文案会更一致。
+  - 后端 observation helper 现在也会在只剩 safe output / preview output 的 real tool 场景下优先产出结果摘要；前端看到的最终回答、observation 回放与导出文案会更接近工作台主展示链。
+  - 当 registry/source 已经取不到、但 step meta 里仍保留 `semantic_family` 与结构化 output 时，后端 observation helper 现在也会继续推断 real tool 摘要；前端工作台、最终回答与导出回放不会因为 registry 缺席而退回 JSON-only observation。
+  - task/session preview excerpt 现在也会尽量保留完整的 `request_id` 与 safe output 片段；前端不会再经常只看到 `req-...` 这种被后端 preview 截断的半残摘要。
   - real/provider retrieval 与 runtime override real tool 的 follow-up、result summary、observation、导出回放已不再误写成本地默认知识库命中。
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体，因此前后端对 name-only fallback 与旁路结构化 payload 的消费已基本一致。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`862/862`）
-  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`46/46`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`874/874`）
+  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`48/48`）
   - `git diff --check` 通过
 
 ## 当前已有内容

@@ -13,7 +13,7 @@ import {
   resolveTraceStepDisplayContent,
 } from "./utils.ts";
 
-test("resolveTraceStepDisplayContent appends tool output preview for action steps", () => {
+test("resolveTraceStepDisplayContent prefers inferred result summary from preview-only action steps", () => {
   const content = resolveTraceStepDisplayContent({
     id: "step-preview-tool",
     type: "action",
@@ -32,7 +32,9 @@ test("resolveTraceStepDisplayContent appends tool output preview for action step
   });
 
   assert.equal(typeof content, "string");
-  assert.match(content, /Tool done: Task Planner/);
+  assert.match(content, /Planned steps - Analyze request -> Synthesize final answer\./);
+  assert.doesNotMatch(content, /Tool done: Task Planner/);
+  assert.match(content, /Preview: \{"plan":"Analyze request -> Synthesize final answer","prompt_preview":"playwright trace preview content"\}/);
   assert.match(content, /Analyze request -> Synthesize final answer/);
   assert.match(content, /playwright trace preview content/);
 });
@@ -122,6 +124,75 @@ test("resolveTraceStepDisplayContent prefers tool result summary over generic do
   assert.equal(
     content,
     'Retrieved 2 documents (request id req-1).\nPreview: {"documents_total":2}\nOutput: {"documents_total":2,"request_id":"req-1"}',
+  );
+});
+
+test("resolveTraceStepDisplayContent infers retrieval result summary from safe output without explicit result summary", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-output-policy-result-summary-inferred",
+    type: "action",
+    content: "Tool done: Provider Search",
+    meta: {
+      tool: {
+        name: "provider_search",
+        label: "Provider Search",
+        kind: "provider_retrieval",
+        semantic_kind: "provider_search",
+        semantic_family: "knowledge_retrieval",
+        status: "done",
+        effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+        effective_result_output_keys: [
+          "hit_count",
+          "knowledge_base_id",
+          "request_id",
+        ],
+        output_preview: {
+          hit_count: 2,
+          knowledge_base_id: "provider-kb",
+        },
+        output: {
+          hit_count: 2,
+          knowledge_base_id: "provider-kb",
+          request_id: "req-1",
+        },
+      },
+    },
+  });
+
+  assert.equal(
+    content,
+    'Retrieved 2 hits (request id req-1).\nPreview: {"hit_count":2,"knowledge_base_id":"provider-kb"}\nOutput: {"hit_count":2,"knowledge_base_id":"provider-kb","request_id":"req-1"}',
+  );
+});
+
+test("resolveTraceStepDisplayContent infers calc result summary from safe output without explicit result summary", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-output-policy-result-summary-calc-inferred",
+    type: "action",
+    content: "Tool done: Provider Math",
+    meta: {
+      tool: {
+        name: "provider_math",
+        label: "Provider Math",
+        kind: "provider_calc",
+        semantic_kind: "local_calculator",
+        status: "done",
+        effective_result_preview_keys: ["result"],
+        effective_result_output_keys: ["result", "request_id"],
+        output_preview: {
+          result: 7,
+        },
+        output: {
+          result: 7,
+          request_id: "req-calc-1",
+        },
+      },
+    },
+  });
+
+  assert.equal(
+    content,
+    'Calculated result = 7 (request id req-calc-1).\nPreview: {"result":7}\nOutput: {"result":7,"request_id":"req-calc-1"}',
   );
 });
 

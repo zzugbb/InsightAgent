@@ -429,9 +429,9 @@ function stringifyTraceToolOutputPreview(value: unknown): string | null {
   return null;
 }
 
-function stringifyTraceSafeToolOutput(
+function resolveTraceSafeToolOutput(
   tool: TraceStepMeta["tool"],
-): string | null {
+): unknown | null {
   if (!tool) {
     return null;
   }
@@ -445,14 +445,162 @@ function stringifyTraceSafeToolOutput(
   }
   const output = tool.output;
   if (!output || typeof output !== "object" || Array.isArray(output)) {
-    return stringifyTraceToolOutputPreview(output);
+    return output;
   }
-  const filteredOutput = Object.fromEntries(
+  return Object.fromEntries(
     outputKeys
       .filter((key) => Object.prototype.hasOwnProperty.call(output, key))
       .map((key) => [key, output[key as keyof typeof output]]),
   );
-  return stringifyTraceToolOutputPreview(filteredOutput);
+}
+
+function stringifyTraceSafeToolOutput(
+  tool: TraceStepMeta["tool"],
+): string | null {
+  return stringifyTraceToolOutputPreview(resolveTraceSafeToolOutput(tool));
+}
+
+function normalizeTraceToolSemanticKind(v: unknown): string | null {
+  if (typeof v !== "string") {
+    return null;
+  }
+  const normalized = v.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (
+    normalized === "knowledge_retrieval"
+    || normalized.endsWith("knowledge_retrieval")
+    || normalized.endsWith("_retrieval")
+  ) {
+    return "knowledge_retrieval";
+  }
+  if (normalized === "task_planner" || normalized.endsWith("_planner")) {
+    return "task_planner";
+  }
+  if (
+    normalized === "local_calculator"
+    || normalized.endsWith("_calculator")
+    || normalized.endsWith("_calc")
+  ) {
+    return "local_calculator";
+  }
+  return normalized;
+}
+
+function normalizeTraceToolResultPlanSteps(v: unknown): string[] {
+  if (!Array.isArray(v)) {
+    return [];
+  }
+  return v.filter((step): step is string => typeof step === "string" && step.trim().length > 0)
+    .map((step) => step.trim());
+}
+
+function resolveTraceToolResultSummaryInput(
+  tool: TraceStepMeta["tool"],
+): Record<string, unknown> | null {
+  if (!tool) {
+    return null;
+  }
+  const safeOutput = resolveTraceSafeToolOutput(tool);
+  if (safeOutput && typeof safeOutput === "object" && !Array.isArray(safeOutput)) {
+    return safeOutput as Record<string, unknown>;
+  }
+  const preview = tool.output_preview;
+  if (preview && typeof preview === "object" && !Array.isArray(preview)) {
+    return preview as Record<string, unknown>;
+  }
+  return null;
+}
+
+function inferTraceToolResultSummary(
+  tool: TraceStepMeta["tool"],
+): string | null {
+  if (!tool) {
+    return null;
+  }
+  const output = resolveTraceToolResultSummaryInput(tool);
+  if (!output) {
+    return null;
+  }
+
+  const runtimeSemanticKind = normalizeTraceToolSemanticKind(
+    tool.semantic_kind ?? tool.kind ?? (typeof output.tool_kind === "string" ? output.tool_kind : undefined),
+  );
+  const semanticFamily = normalizeTraceToolSemanticKind(
+    tool.semantic_family ?? (typeof output.tool_family === "string" ? output.tool_family : undefined),
+  );
+
+  const plan = output.plan;
+  if (typeof plan === "string" && plan.trim()) {
+    return `Planned steps - ${plan.trim()}.`;
+  }
+  const steps = normalizeTraceToolResultPlanSteps(output.steps);
+  if (steps.length > 0) {
+    return `Planned steps - ${steps.join(" -> ")}.`;
+  }
+
+  const expression = output.expression;
+  const result = output.result;
+  const requestId = output.request_id;
+  if (typeof expression === "string" && expression.trim().length > 0 && result !== undefined && result !== null) {
+    if (typeof requestId === "string" && requestId.trim().length > 0) {
+      return `Calculated ${expression.trim()} = ${String(result)} (request id ${requestId.trim()}).`;
+    }
+    return `Calculated ${expression.trim()} = ${String(result)}.`;
+  }
+  if ((semanticFamily === "local_calculator" || runtimeSemanticKind === "local_calculator")
+    && result !== undefined && result !== null) {
+    if (typeof requestId === "string" && requestId.trim().length > 0) {
+      return `Calculated result = ${String(result)} (request id ${requestId.trim()}).`;
+    }
+    return `Calculated result = ${String(result)}.`;
+  }
+
+  const hitCount = output.hit_count;
+  const knowledgeBaseId = output.knowledge_base_id;
+  if (typeof hitCount === "number" && Number.isInteger(hitCount) && hitCount >= 0) {
+    const hitLabel = hitCount === 1 ? "hit" : "hits";
+    if (
+      (
+        runtimeSemanticKind === "knowledge_retrieval"
+        || (
+          runtimeSemanticKind === null
+          && (semanticFamily === null || semanticFamily === "knowledge_retrieval")
+        )
+      )
+      && typeof knowledgeBaseId === "string"
+      && knowledgeBaseId.trim().length > 0
+    ) {
+      if (typeof requestId === "string" && requestId.trim().length > 0) {
+        return `Retrieved ${hitCount} ${hitLabel} from knowledge base ${knowledgeBaseId.trim()} (request id ${requestId.trim()}).`;
+      }
+      return `Retrieved ${hitCount} ${hitLabel} from knowledge base ${knowledgeBaseId.trim()}.`;
+    }
+    if (
+      runtimeSemanticKind !== "knowledge_retrieval"
+      && semanticFamily === "knowledge_retrieval"
+    ) {
+      if (typeof requestId === "string" && requestId.trim().length > 0) {
+        return `Retrieved ${hitCount} ${hitLabel} (request id ${requestId.trim()}).`;
+      }
+      return `Retrieved ${hitCount} ${hitLabel}.`;
+    }
+    if (typeof requestId === "string" && requestId.trim().length > 0) {
+      return `Retrieved ${hitCount} ${hitLabel} (request id ${requestId.trim()}).`;
+    }
+    return `Retrieved ${hitCount} ${hitLabel}.`;
+  }
+
+  const documentsTotal = output.documents_total;
+  if (typeof documentsTotal === "number" && Number.isInteger(documentsTotal) && documentsTotal >= 0) {
+    const documentLabel = documentsTotal === 1 ? "document" : "documents";
+    if (typeof requestId === "string" && requestId.trim().length > 0) {
+      return `Retrieved ${documentsTotal} ${documentLabel} (request id ${requestId.trim()}).`;
+    }
+    return `Retrieved ${documentsTotal} ${documentLabel}.`;
+  }
+  return null;
 }
 
 function humanizeToolRegistryDiagnosticsTarget(target: string): string {
@@ -504,7 +652,7 @@ export function resolveTraceStepDisplayContent(
     typeof step.meta?.tool?.result_summary === "string" &&
     step.meta.tool.result_summary.trim()
       ? step.meta.tool.result_summary.trim()
-      : null;
+      : inferTraceToolResultSummary(step.meta?.tool);
   const primaryContent =
     resultSummary && (!content || content.startsWith("Tool done:"))
       ? resultSummary

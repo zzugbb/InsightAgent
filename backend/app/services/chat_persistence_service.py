@@ -973,7 +973,7 @@ def get_task_usage_from_task(task: dict) -> dict[str, object] | None:
     return _parse_usage_json_blob(task.get("usage_json"))
 
 
-def _normalize_trace_preview_excerpt(text: str, limit: int = 120) -> str:
+def _normalize_trace_preview_excerpt(text: str, limit: int = 160) -> str:
     normalized = " ".join((text or "").strip().split())
     if not normalized:
         return ""
@@ -1019,6 +1019,139 @@ def _stringify_trace_safe_tool_output(tool_meta: dict[str, object]) -> str:
     return _stringify_trace_tool_output_preview(
         _resolve_trace_safe_tool_output(tool_meta)
     )
+
+
+def _resolve_trace_tool_result_summary_input(
+    tool_meta: dict[str, object],
+) -> dict[str, object] | None:
+    safe_output = _resolve_trace_safe_tool_output(tool_meta)
+    if isinstance(safe_output, dict):
+        return safe_output
+    preview_output = tool_meta.get("output_preview")
+    if isinstance(preview_output, dict):
+        return preview_output
+    return None
+
+
+def _normalize_trace_tool_semantic_kind(raw_value: object) -> str | None:
+    if not isinstance(raw_value, str):
+        return None
+    normalized = raw_value.strip().lower()
+    if not normalized:
+        return None
+    if (
+        normalized == "knowledge_retrieval"
+        or normalized.endswith("knowledge_retrieval")
+        or normalized.endswith("_retrieval")
+    ):
+        return "knowledge_retrieval"
+    if normalized == "task_planner" or normalized.endswith("_planner"):
+        return "task_planner"
+    if (
+        normalized == "local_calculator"
+        or normalized.endswith("_calculator")
+        or normalized.endswith("_calc")
+    ):
+        return "local_calculator"
+    return normalized
+
+
+def _normalize_trace_tool_result_plan_steps(raw_steps: object) -> list[str]:
+    if not isinstance(raw_steps, (list, tuple)):
+        return []
+    normalized_steps: list[str] = []
+    for raw_step in raw_steps:
+        if not isinstance(raw_step, str):
+            continue
+        step = raw_step.strip()
+        if step:
+            normalized_steps.append(step)
+    return normalized_steps
+
+
+def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
+    output = _resolve_trace_tool_result_summary_input(tool_meta)
+    if not isinstance(output, dict):
+        return ""
+
+    runtime_semantic_kind = _normalize_trace_tool_semantic_kind(
+        tool_meta.get("semantic_kind")
+        or tool_meta.get("kind")
+        or output.get("tool_kind")
+    )
+    semantic_family = _normalize_trace_tool_semantic_kind(
+        tool_meta.get("semantic_family") or output.get("tool_family")
+    )
+
+    plan = output.get("plan")
+    if isinstance(plan, str) and plan.strip():
+        return f"Planned steps - {plan.strip()}."
+    steps = _normalize_trace_tool_result_plan_steps(output.get("steps"))
+    if steps:
+        return f"Planned steps - {' -> '.join(steps)}."
+
+    expression = output.get("expression")
+    result = output.get("result")
+    request_id = output.get("request_id")
+    if isinstance(expression, str) and expression.strip() and result is not None:
+        if isinstance(request_id, str) and request_id.strip():
+            return (
+                f"Calculated {expression.strip()} = {result} "
+                f"(request id {request_id.strip()})."
+            )
+        return f"Calculated {expression.strip()} = {result}."
+    if (
+        semantic_family == "local_calculator" or runtime_semantic_kind == "local_calculator"
+    ) and result is not None:
+        if isinstance(request_id, str) and request_id.strip():
+            return f"Calculated result = {result} (request id {request_id.strip()})."
+        return f"Calculated result = {result}."
+
+    hit_count = output.get("hit_count")
+    knowledge_base_id = output.get("knowledge_base_id")
+    if isinstance(hit_count, int) and hit_count >= 0:
+        hit_label = "hit" if hit_count == 1 else "hits"
+        if (
+            (
+                runtime_semantic_kind == "knowledge_retrieval"
+                or (
+                    runtime_semantic_kind is None
+                    and (semantic_family is None or semantic_family == "knowledge_retrieval")
+                )
+            )
+            and isinstance(knowledge_base_id, str)
+            and knowledge_base_id.strip()
+        ):
+            if isinstance(request_id, str) and request_id.strip():
+                return (
+                    f"Retrieved {hit_count} {hit_label} from knowledge base "
+                    f"{knowledge_base_id.strip()} (request id {request_id.strip()})."
+                )
+            return (
+                f"Retrieved {hit_count} {hit_label} from knowledge base "
+                f"{knowledge_base_id.strip()}."
+            )
+        if (
+            runtime_semantic_kind != "knowledge_retrieval"
+            and semantic_family == "knowledge_retrieval"
+        ):
+            if isinstance(request_id, str) and request_id.strip():
+                return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
+            return f"Retrieved {hit_count} {hit_label}."
+        if isinstance(request_id, str) and request_id.strip():
+            return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
+        return f"Retrieved {hit_count} {hit_label}."
+
+    documents_total = output.get("documents_total")
+    if isinstance(documents_total, int) and documents_total >= 0:
+        document_label = "document" if documents_total == 1 else "documents"
+        if isinstance(request_id, str) and request_id.strip():
+            return (
+                f"Retrieved {documents_total} {document_label} "
+                f"(request id {request_id.strip()})."
+            )
+        return f"Retrieved {documents_total} {document_label}."
+    return ""
 
 
 def _format_trace_tool_semantic_descriptor(tool_meta: dict[str, object]) -> str:
@@ -1118,6 +1251,8 @@ def get_trace_step_display_content(step: TraceStep) -> str:
         if isinstance(result_summary, str) and result_summary.strip()
         else ""
     )
+    if not normalized_result_summary:
+        normalized_result_summary = _infer_trace_tool_result_summary(tool_meta)
     primary_content = content
     if normalized_result_summary:
         stripped_content = content.strip()
@@ -1207,7 +1342,7 @@ def get_task_trace_preview_summary_from_task(
                 "title": _trace_preview_title(step),
                 "content_excerpt": _normalize_trace_preview_excerpt(
                     get_trace_step_display_content(step),
-                    limit=120,
+                    limit=160,
                 ),
             }
         )

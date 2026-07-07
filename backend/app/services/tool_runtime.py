@@ -5772,8 +5772,18 @@ def build_tool_result_summary(
 
     expression = outward_output.get("expression")
     result = outward_output.get("result")
+    request_id = outward_output.get("request_id")
     if isinstance(expression, str) and expression.strip() and result is not None:
+        if isinstance(request_id, str) and request_id.strip():
+            return (
+                f"Calculated {expression.strip()} = {result} "
+                f"(request id {request_id.strip()})."
+            )
         return f"Calculated {expression.strip()} = {result}."
+    if semantic_family == "local_calculator" and result is not None:
+        if isinstance(request_id, str) and request_id.strip():
+            return f"Calculated result = {result} (request id {request_id.strip()})."
+        return f"Calculated result = {result}."
 
     hit_count = outward_output.get("hit_count")
     knowledge_base_id = outward_output.get("knowledge_base_id")
@@ -5784,6 +5794,11 @@ def build_tool_result_summary(
             and isinstance(knowledge_base_id, str)
             and knowledge_base_id.strip()
         ):
+            if isinstance(request_id, str) and request_id.strip():
+                return (
+                    f"Retrieved {hit_count} {hit_label} from knowledge base "
+                    f"{knowledge_base_id.strip()} (request id {request_id.strip()})."
+                )
             return (
                 f"Retrieved {hit_count} {hit_label} from knowledge base "
                 f"{knowledge_base_id.strip()}."
@@ -5792,13 +5807,16 @@ def build_tool_result_summary(
             runtime_semantic_kind != "knowledge_retrieval"
             and semantic_family == "knowledge_retrieval"
         ):
+            if isinstance(request_id, str) and request_id.strip():
+                return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
             return f"Retrieved {hit_count} {hit_label}."
+        if isinstance(request_id, str) and request_id.strip():
+            return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
         return f"Retrieved {hit_count} {hit_label}."
 
     documents_total = outward_output.get("documents_total")
     if isinstance(documents_total, int) and documents_total >= 0:
         document_label = "document" if documents_total == 1 else "documents"
-        request_id = outward_output.get("request_id")
         if isinstance(request_id, str) and request_id.strip():
             return (
                 f"Retrieved {documents_total} {document_label} "
@@ -7111,6 +7129,109 @@ def _resolve_step_tool_safe_output(
     return {key: output[key] for key in normalized_keys if key in output}
 
 
+def _build_tool_result_summary_from_step_meta_semantics(
+    *,
+    output: dict[str, object],
+    step_tool_meta: dict[str, object] | None,
+) -> str | None:
+    if not isinstance(output, dict):
+        return None
+    explicit_semantic_kind = (
+        str(step_tool_meta.get("semantic_kind")).strip()
+        if isinstance(step_tool_meta, dict)
+        and isinstance(step_tool_meta.get("semantic_kind"), str)
+        else ""
+    )
+    explicit_semantic_family = (
+        str(step_tool_meta.get("semantic_family")).strip()
+        if isinstance(step_tool_meta, dict)
+        and isinstance(step_tool_meta.get("semantic_family"), str)
+        else ""
+    )
+    if not explicit_semantic_family:
+        return None
+    runtime_semantic_kind = _normalize_tool_semantic_kind(
+        explicit_semantic_kind or None
+    )
+    semantic_family = _normalize_tool_semantic_kind(
+        explicit_semantic_family or None
+    )
+
+    plan = output.get("plan")
+    if isinstance(plan, str) and plan.strip():
+        return f"Planned steps - {plan.strip()}."
+    steps = _normalize_tool_result_plan_steps(output.get("steps"))
+    if steps:
+        return f"Planned steps - {' -> '.join(steps)}."
+
+    expression = output.get("expression")
+    result = output.get("result")
+    request_id = output.get("request_id")
+    if isinstance(expression, str) and expression.strip() and result is not None:
+        if isinstance(request_id, str) and request_id.strip():
+            return (
+                f"Calculated {expression.strip()} = {result} "
+                f"(request id {request_id.strip()})."
+            )
+        return f"Calculated {expression.strip()} = {result}."
+    if (
+        semantic_family == "local_calculator"
+        or runtime_semantic_kind == "local_calculator"
+    ) and result is not None:
+        if isinstance(request_id, str) and request_id.strip():
+            return f"Calculated result = {result} (request id {request_id.strip()})."
+        return f"Calculated result = {result}."
+
+    hit_count = output.get("hit_count")
+    knowledge_base_id = output.get("knowledge_base_id")
+    if isinstance(hit_count, int) and hit_count >= 0:
+        hit_label = "hit" if hit_count == 1 else "hits"
+        if (
+            (
+                runtime_semantic_kind == "knowledge_retrieval"
+                or (
+                    runtime_semantic_kind is None
+                    and (
+                        semantic_family is None
+                        or semantic_family == "knowledge_retrieval"
+                    )
+                )
+            )
+            and isinstance(knowledge_base_id, str)
+            and knowledge_base_id.strip()
+        ):
+            if isinstance(request_id, str) and request_id.strip():
+                return (
+                    f"Retrieved {hit_count} {hit_label} from knowledge base "
+                    f"{knowledge_base_id.strip()} (request id {request_id.strip()})."
+                )
+            return (
+                f"Retrieved {hit_count} {hit_label} from knowledge base "
+                f"{knowledge_base_id.strip()}."
+            )
+        if (
+            runtime_semantic_kind != "knowledge_retrieval"
+            and semantic_family == "knowledge_retrieval"
+        ):
+            if isinstance(request_id, str) and request_id.strip():
+                return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
+            return f"Retrieved {hit_count} {hit_label}."
+        if isinstance(request_id, str) and request_id.strip():
+            return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
+        return f"Retrieved {hit_count} {hit_label}."
+
+    documents_total = output.get("documents_total")
+    if isinstance(documents_total, int) and documents_total >= 0:
+        document_label = "document" if documents_total == 1 else "documents"
+        if isinstance(request_id, str) and request_id.strip():
+            return (
+                f"Retrieved {documents_total} {document_label} "
+                f"(request id {request_id.strip()})."
+            )
+        return f"Retrieved {documents_total} {document_label}."
+    return None
+
+
 def build_tool_observation_entry(
     *,
     name: str,
@@ -7151,6 +7272,23 @@ def build_tool_observation_entry(
     if meta_result_summary:
         return f"{resolved_display_name}: {meta_result_summary}"
     meta_safe_output = _resolve_step_tool_safe_output(step_tool_meta)
+    if isinstance(meta_safe_output, dict) and not isinstance(output, dict):
+        result_summary = build_tool_result_summary(
+            name=canonical_name,
+            output=meta_safe_output,
+            display_name=resolved_display_name,
+            registration=resolved_registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        )
+        if result_summary is None:
+            result_summary = _build_tool_result_summary_from_step_meta_semantics(
+                output=meta_safe_output,
+                step_tool_meta=step_tool_meta,
+            )
+        if result_summary:
+            return f"{resolved_display_name}: {result_summary}"
     if meta_safe_output is not None and not isinstance(output, dict):
         return (
             f"{resolved_display_name}: "
@@ -7161,6 +7299,23 @@ def build_tool_observation_entry(
         if isinstance(step_tool_meta, dict)
         else None
     )
+    if isinstance(meta_preview_output, dict) and not isinstance(output, dict):
+        result_summary = build_tool_result_summary(
+            name=canonical_name,
+            output=meta_preview_output,
+            display_name=resolved_display_name,
+            registration=resolved_registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        )
+        if result_summary is None:
+            result_summary = _build_tool_result_summary_from_step_meta_semantics(
+                output=meta_preview_output,
+                step_tool_meta=step_tool_meta,
+            )
+        if result_summary:
+            return f"{resolved_display_name}: {result_summary}"
     if meta_preview_output is not None and not isinstance(output, dict):
         return (
             f"{resolved_display_name}: "
@@ -7176,6 +7331,11 @@ def build_tool_observation_entry(
             registry_provider=registry_provider,
             registry_loader=registry_loader,
         )
+        if result_summary is None:
+            result_summary = _build_tool_result_summary_from_step_meta_semantics(
+                output=output,
+                step_tool_meta=step_tool_meta,
+            )
         if result_summary:
             return f"{resolved_display_name}: {result_summary}"
         meta_safe_output = _resolve_step_tool_safe_output(step_tool_meta)
@@ -8960,7 +9120,13 @@ def get_tool_effective_result_output_keys(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    return _augment_runtime_override_retrieval_output_keys(
+    output_keys = _augment_runtime_override_retrieval_output_keys(
+        output_keys=output_keys,
+        registration=resolved_registration,
+        semantic_kind=semantic_kind,
+        semantic_family=semantic_family,
+    )
+    return _augment_http_json_local_calculator_output_keys(
         output_keys=output_keys,
         registration=resolved_registration,
         semantic_kind=semantic_kind,
@@ -9056,6 +9222,26 @@ def _augment_runtime_override_retrieval_output_keys(
         explicit_runtime_semantic_kind is None
         or normalized_semantic_kind == "knowledge_retrieval"
         or normalized_semantic_family != "knowledge_retrieval"
+        or "request_id" in output_keys
+    ):
+        return output_keys
+    return (*output_keys, "request_id")
+
+
+def _augment_http_json_local_calculator_output_keys(
+    *,
+    output_keys: tuple[str, ...],
+    registration: ToolRegistration,
+    semantic_kind: str | None,
+    semantic_family: str | None,
+) -> tuple[str, ...]:
+    normalized_execution_kind = _normalize_tool_execution_kind(registration.execution_kind)
+    normalized_semantic_kind = _normalize_tool_semantic_kind(semantic_kind)
+    normalized_semantic_family = _normalize_tool_semantic_kind(semantic_family)
+    if (
+        normalized_execution_kind != "http_json"
+        or normalized_semantic_kind != "local_calculator"
+        or normalized_semantic_family != "local_calculator"
         or "request_id" in output_keys
     ):
         return output_keys

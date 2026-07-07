@@ -251,6 +251,99 @@ def _append_fenced_block(lines: list[str], content: str, language: str = "text")
     lines.append(fence)
 
 
+def _parse_trace_preview_json_payload(value: str) -> dict[str, object] | None:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return dict(parsed) if isinstance(parsed, dict) else None
+
+
+def _extract_trace_preview_tool_semantics(
+    title: str,
+) -> tuple[str | None, str | None]:
+    match = re.search(r"\[(?P<kind>[^\[\]·]+?)(?:\s*·\s*(?P<family>[^\[\]]+?))?\]\s*$", title)
+    if match is None:
+        return None, None
+    raw_kind = match.group("kind")
+    raw_family = match.group("family")
+    kind = raw_kind.strip() if isinstance(raw_kind, str) and raw_kind.strip() else None
+    family = (
+        raw_family.strip() if isinstance(raw_family, str) and raw_family.strip() else None
+    )
+    return kind, family
+
+
+def _normalize_session_trace_preview_excerpt(
+    title: str,
+    content_excerpt: str,
+) -> str:
+    normalized = " ".join((content_excerpt or "").strip().split())
+    if not normalized:
+        return ""
+    if not normalized.startswith("Tool done:"):
+        _, separator, raw_payload = normalized.partition(":")
+        if not separator or not raw_payload.strip().startswith("{"):
+            return normalized
+
+    preview_output: dict[str, object] | None = None
+    safe_output: dict[str, object] | None = None
+    has_explicit_preview = False
+    has_explicit_output = False
+
+    output_match = re.search(r"\bOutput:\s*(\{.*\})\s*$", normalized)
+    if output_match is not None:
+        has_explicit_output = True
+        safe_output = _parse_trace_preview_json_payload(output_match.group(1))
+    preview_match = re.search(r"\bPreview:\s*(\{.*?\})(?:\s+Output:\s*\{.*\}\s*)?$", normalized)
+    if preview_match is not None:
+        has_explicit_preview = True
+        preview_output = _parse_trace_preview_json_payload(preview_match.group(1))
+    if safe_output is None and preview_output is None:
+        _, _, raw_payload = normalized.partition(":")
+        parsed_payload = _parse_trace_preview_json_payload(raw_payload.strip())
+        if parsed_payload is None:
+            return normalized
+        safe_output = parsed_payload
+    if safe_output is None:
+        safe_output = preview_output
+    if safe_output is None:
+        return normalized
+
+    semantic_kind, semantic_family = _extract_trace_preview_tool_semantics(title)
+    inferred_tool_meta: dict[str, object] = {
+        "output": safe_output,
+        "effective_result_output_keys": list(safe_output.keys()),
+    }
+    if semantic_kind:
+        inferred_tool_meta["semantic_kind"] = semantic_kind
+    if semantic_family:
+        inferred_tool_meta["semantic_family"] = semantic_family
+    inferred_summary = chat_persistence_service._infer_trace_tool_result_summary(  # type: ignore[attr-defined]
+        inferred_tool_meta
+    )
+    if not inferred_summary:
+        return normalized
+
+    lines = [inferred_summary]
+    preview_text = (
+        chat_persistence_service._stringify_trace_tool_output_preview(preview_output)  # type: ignore[attr-defined]
+        if preview_output is not None
+        else ""
+    )
+    safe_output_text = chat_persistence_service._stringify_trace_tool_output_preview(  # type: ignore[attr-defined]
+        safe_output
+    )
+    if has_explicit_preview and preview_text and preview_text not in inferred_summary:
+        lines.append(f"Preview: {preview_text}")
+    if has_explicit_output and safe_output_text and safe_output_text != preview_text:
+        lines.append(f"Output: {safe_output_text}")
+    return chat_persistence_service._normalize_trace_preview_excerpt(  # type: ignore[attr-defined]
+        "\n".join(lines),
+        limit=160,
+    )
+
+
 def _build_session_export_markdown(payload: SessionExportJsonResponse) -> str:
     lines: list[str] = []
     lines.append("# InsightAgent Session Export")
@@ -359,8 +452,12 @@ def _build_session_export_markdown(payload: SessionExportJsonResponse) -> str:
                         if preview_title.casefold() != preview_type.casefold()
                         else preview_type
                     )
+                    preview_excerpt = _normalize_session_trace_preview_excerpt(
+                        preview_title,
+                        preview.content_excerpt,
+                    )
                     lines.append(
-                        f"  - seq={seq} · {preview_heading} · {preview.content_excerpt or '(empty)'}",
+                        f"  - seq={seq} · {preview_heading} · {preview_excerpt or '(empty)'}",
                     )
             lines.append("")
 

@@ -9553,7 +9553,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
-    def test_get_task_trace_preview_summary_appends_tool_output_preview_for_action_steps(
+    def test_get_task_trace_preview_summary_prefers_inferred_result_summary_from_preview_only_action_steps(
         self,
     ) -> None:
         original_export_helper = (
@@ -9595,7 +9595,9 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
 
         excerpt = payload["trace_preview"][0]["content_excerpt"]
-        self.assertIn("Tool done: Task Planner", excerpt)
+        self.assertIn("Planned steps - Analyze request -> synthesize answer.", excerpt)
+        self.assertNotIn("Tool done: Task Planner", excerpt)
+        self.assertIn('Preview: {"plan":"Analyze request -> synthesize answer","prompt_preview":"trace preview prompt"}', excerpt)
         self.assertIn("Analyze request -> synthesize answer", excerpt)
         self.assertIn("trace preview prompt", excerpt)
 
@@ -9700,7 +9702,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
 
         excerpt = payload["trace_preview"][0]["content_excerpt"]
-        self.assertIn("Tool done: Provider Search", excerpt)
+        self.assertIn("Retrieved 2 documents (request id req-1).", excerpt)
         self.assertIn('Preview: {"documents_total":2}', excerpt)
         self.assertIn('Output: {"documents_total":2,"request_id":"req-1"}', excerpt)
 
@@ -9754,6 +9756,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
 
         excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn("Retrieved 2 documents (request id req-1).", excerpt)
         self.assertIn('Output: {"documents_total":2,"request_id":"req-1"}', excerpt)
         self.assertNotIn("raw_documents", excerpt)
 
@@ -9807,6 +9810,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
 
         excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn("Retrieved 2 documents (request id req-1).", excerpt)
         self.assertIn('Output: {"documents_total":2,"request_id":"req-1"}', excerpt)
         self.assertNotIn("raw_documents", excerpt)
 
@@ -13039,7 +13043,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("- Tool Registry Source: default", markdown)
         self.assertIn("- Allowed Tools: Knowledge Retrieval", markdown)
 
-    def test_build_task_export_markdown_appends_tool_output_preview_for_action_steps(
+    def test_build_task_export_markdown_prefers_inferred_result_summary_from_preview_only_action_steps(
         self,
     ) -> None:
         payload = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
@@ -13091,7 +13095,9 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             payload,
         )
 
-        self.assertIn("Tool done: Hot Retrieval", markdown)
+        self.assertIn("Retrieved 2 hits from knowledge base demo-kb.", markdown)
+        self.assertNotIn("Tool done: Hot Retrieval", markdown)
+        self.assertIn('Preview: {"tool_kind":"hot_knowledge_retrieval","hit_count":2,"knowledge_base_id":"demo-kb"}', markdown)
         self.assertIn('"hit_count":2', markdown)
         self.assertIn('"knowledge_base_id":"demo-kb"', markdown)
 
@@ -17355,9 +17361,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertIn(
-            'seq=3 · Provider Search [provider_search · knowledge_retrieval] · Provider Search: {"documents_total":2}',
+            'seq=3 · Provider Search [provider_search · knowledge_retrieval] · Retrieved 2 documents.',
             markdown,
         )
+        self.assertNotIn('Provider Search: {"documents_total":2}', markdown)
         self.assertNotIn("seq=3 · action · Provider Search", markdown)
 
     def test_build_session_export_markdown_preserves_safe_output_policy_values_in_trace_preview_excerpt(
@@ -17423,9 +17430,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertIn(
-            'seq=4 · Provider Search [provider_search · knowledge_retrieval] · Tool done: Provider Search Preview: {"documents_total":2} Output: {"documents_total":2,"request_id":"req-1"}',
+            'seq=4 · Provider Search [provider_search · knowledge_retrieval] · Retrieved 2 documents (request id req-1). Preview: {"documents_total":2} Output: {"documents_total":2,"request_id":"req-1"}',
             markdown,
         )
+        self.assertNotIn("Tool done: Provider Search", markdown)
 
     def test_build_session_export_payload_trusts_service_task_governance_shape(
         self,
@@ -18182,6 +18190,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("This is a mock response from InsightAgent.", result.content)
         self.assertIn("Summary: Retrieved 2 hits.", result.content)
         self.assertNotIn("from knowledge base provider-kb", result.content)
+
+    def test_mock_llm_provider_generate_preserves_request_id_for_runtime_override_real_retrieval_hit_projection(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Search: {"tool_kind": "provider_search", "hit_count": 2, "knowledge_base_id": "provider-kb", "request_id": "req-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Retrieved 2 hits (request id req-1).",
+            result.content,
+        )
+        self.assertNotIn(
+            'Provider Search: {"tool_kind": "provider_search", "hit_count": 2, "knowledge_base_id": "provider-kb", "request_id": "req-1"}',
+            result.content,
+        )
+        self.assertNotIn("from knowledge base provider-kb", result.content)
+
+    def test_mock_llm_provider_generate_preserves_request_id_for_projected_calc_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Math: {"result": 7, "request_id": "req-calc-1", "tool_kind": "provider_calc"}'
+        )
+
+        self.assertIn(
+            "Summary: Calculated result = 7 (request id req-calc-1).",
+            result.content,
+        )
+        self.assertNotIn(
+            'Provider Math: {"result": 7, "request_id": "req-calc-1", "tool_kind": "provider_calc"}',
+            result.content,
+        )
 
     def test_mock_llm_provider_generate_summarizes_human_readable_retrieval_observations(
         self,
@@ -34367,6 +34414,168 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Provider Search: Retrieved 2 documents (request id req-1).",
         )
 
+    def test_build_tool_result_helpers_preserve_request_id_for_runtime_override_real_retrieval_hit_projection(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            runtime_semantic_kind="provider_search",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-1",
+                "tool_kind": "provider_retrieval",
+            },
+        )
+        output = {
+            "hit_count": 2,
+            "knowledge_base_id": "provider-kb",
+            "request_id": "req-1",
+            "tool_kind": "provider_retrieval",
+        }
+
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Retrieved 2 hits (request id req-1).",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Provider Search: Retrieved 2 hits (request id req-1).",
+        )
+
+    def test_get_tool_effective_result_key_helpers_preserve_request_id_for_http_json_provider_calc_without_explicit_output_keys(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_math",
+            kind="provider_calc",
+            label="Provider Math",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "result": 7,
+                "request_id": "req-calc-1",
+                "tool_kind": "provider_calc",
+            },
+        )
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="provider_math",
+                registration=registration,
+            ),
+            ("expression", "result"),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="provider_math",
+                registration=registration,
+            ),
+            ("expression", "result", "request_id"),
+        )
+
+    def test_build_tool_result_helpers_preserve_request_id_for_http_json_provider_calc_without_explicit_output_keys(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_math",
+            kind="provider_calc",
+            label="Provider Math",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "result": 7,
+                "request_id": "req-calc-1",
+                "tool_kind": "provider_calc",
+            },
+        )
+        output = {
+            "result": 7,
+            "request_id": "req-calc-1",
+            "tool_kind": "provider_calc",
+        }
+
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_math",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "result": 7,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_math",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "result": 7,
+                "request_id": "req-calc-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_math",
+                output=output,
+                registration=registration,
+            ),
+            "Calculated result = 7 (request id req-calc-1).",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_math",
+                output=output,
+                registration=registration,
+            ),
+            "Provider Math: Calculated result = 7 (request id req-calc-1).",
+        )
+
     def test_build_tool_start_and_error_payload_keep_current_shape(self) -> None:
         self.assertEqual(
             build_tool_start_payload(
@@ -35778,6 +35987,142 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Provider Search: Retrieved 2 documents (request id req-1).",
         )
 
+    def test_build_tool_observation_entry_infers_result_summary_from_step_meta_safe_output_without_output(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=13_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total", "request_id"),
+            runtime_semantic_kind="provider_search",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+                "prompt": prompt,
+                "user_id": user_id,
+            },
+        )
+
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=None,
+                registration=registration,
+                step_tool_meta={
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "documents_total",
+                        "request_id",
+                    ],
+                    "output": {
+                        "documents_total": 2,
+                        "request_id": "req-1",
+                        "documents": [{"id": "doc-1"}],
+                    },
+                    "output_preview": {
+                        "documents_total": 2,
+                    },
+                },
+            ),
+            "Provider Search: Retrieved 2 documents (request id req-1).",
+        )
+
+    def test_build_tool_observation_entry_infers_result_summary_from_step_meta_preview_without_output(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="task_plan",
+            kind="planner",
+            label="Task Planner",
+            retryable_by_default=False,
+            default_timeout_ms=13_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            result_preview_keys=("plan",),
+            result_output_keys=("plan",),
+            runtime_semantic_kind="task_planner",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+                "prompt": prompt,
+                "user_id": user_id,
+            },
+        )
+
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="task_plan",
+                output=None,
+                registration=registration,
+                step_tool_meta={
+                    "name": "task_plan",
+                    "label": "Task Planner",
+                    "status": "done",
+                    "output_preview": {
+                        "plan": "Analyze request -> Synthesize final answer",
+                    },
+                },
+            ),
+            "Task Planner: Planned steps - Analyze request -> Synthesize final answer.",
+        )
+
+    def test_build_tool_observation_entry_infers_result_summary_from_step_meta_safe_output_without_registration(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_search",
+                output=None,
+                step_tool_meta={
+                    "name": "hosted_search",
+                    "label": "Hosted Search",
+                    "status": "done",
+                    "semantic_kind": "provider_search",
+                    "semantic_family": "knowledge_retrieval",
+                    "effective_result_output_keys": [
+                        "documents_total",
+                        "request_id",
+                    ],
+                    "output": {
+                        "documents_total": 2,
+                        "request_id": "req-1",
+                        "documents": [{"id": "doc-1"}],
+                    },
+                    "output_preview": {
+                        "documents_total": 2,
+                    },
+                },
+            ),
+            "Hosted Search: Retrieved 2 documents (request id req-1).",
+        )
+
+    def test_build_tool_observation_entry_infers_result_summary_from_step_meta_preview_without_registration(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_planner",
+                output=None,
+                step_tool_meta={
+                    "name": "provider_planner",
+                    "label": "Provider Planner",
+                    "status": "done",
+                    "semantic_kind": "provider_planner",
+                    "semantic_family": "task_planner",
+                    "output_preview": {
+                        "plan": "Analyze request -> Synthesize final answer",
+                    },
+                },
+            ),
+            "Provider Planner: Planned steps - Analyze request -> Synthesize final answer.",
+        )
+
     def test_build_tool_observation_entry_reuses_step_meta_preview_without_output(
         self,
     ) -> None:
@@ -35859,6 +36204,88 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Retrieved 2 documents (request id req-1).\nPreview: {"documents_total":2}\nOutput: {"documents_total":2,"request_id":"req-1"}',
         )
         self.assertNotIn("Tool done: Provider Search", content)
+
+    def test_get_trace_step_display_content_infers_retrieval_result_summary_from_safe_output_without_explicit_result_summary(
+        self,
+    ) -> None:
+        step = SimpleNamespace(
+            id="step-provider-search-summary-inferred",
+            seq=5,
+            type="action",
+            content="Tool done: Provider Search",
+            meta=SimpleNamespace(
+                tool={
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "kind": "provider_retrieval",
+                    "semantic_kind": "provider_search",
+                    "semantic_family": "knowledge_retrieval",
+                    "status": "done",
+                    "effective_result_preview_keys": [
+                        "hit_count",
+                        "knowledge_base_id",
+                    ],
+                    "effective_result_output_keys": [
+                        "hit_count",
+                        "knowledge_base_id",
+                        "request_id",
+                    ],
+                    "output_preview": {
+                        "hit_count": 2,
+                        "knowledge_base_id": "provider-kb",
+                    },
+                    "output": {
+                        "hit_count": 2,
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-1",
+                    },
+                }
+            ),
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(step)
+
+        self.assertEqual(
+            content,
+            'Retrieved 2 hits (request id req-1).\nPreview: {"hit_count":2,"knowledge_base_id":"provider-kb"}\nOutput: {"hit_count":2,"knowledge_base_id":"provider-kb","request_id":"req-1"}',
+        )
+        self.assertNotIn("Tool done: Provider Search", content)
+
+    def test_get_trace_step_display_content_infers_calc_result_summary_from_safe_output_without_explicit_result_summary(
+        self,
+    ) -> None:
+        step = SimpleNamespace(
+            id="step-provider-math-summary-inferred",
+            seq=6,
+            type="action",
+            content="Tool done: Provider Math",
+            meta=SimpleNamespace(
+                tool={
+                    "name": "provider_math",
+                    "label": "Provider Math",
+                    "kind": "provider_calc",
+                    "semantic_kind": "local_calculator",
+                    "status": "done",
+                    "effective_result_preview_keys": ["result"],
+                    "effective_result_output_keys": ["result", "request_id"],
+                    "output_preview": {
+                        "result": 7,
+                    },
+                    "output": {
+                        "result": 7,
+                        "request_id": "req-calc-1",
+                    },
+                }
+            ),
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(step)
+
+        self.assertEqual(
+            content,
+            'Calculated result = 7 (request id req-calc-1).\nPreview: {"result":7}\nOutput: {"result":7,"request_id":"req-calc-1"}',
+        )
+        self.assertNotIn("Tool done: Provider Math", content)
 
     def test_get_trace_step_display_content_appends_tool_registry_diagnostics_entries(
         self,
@@ -41650,6 +42077,81 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             {
                 "hit_count": 2,
                 "knowledge_base_id": "provider-kb",
+            },
+        )
+
+    def test_execute_tool_plan_item_service_execution_preserves_request_id_in_hit_projection_summary_for_runtime_override_real_search_tool(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "hit_count": 2,
+                    "knowledge_base_id": "provider-kb",
+                    "request_id": "req-1",
+                    "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+                },
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(
+            tool_end_event["result_summary"],
+            "Retrieved 2 hits (request id req-1).",
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
+            "Provider Search: Retrieved 2 hits (request id req-1).",
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-1",
             },
         )
 

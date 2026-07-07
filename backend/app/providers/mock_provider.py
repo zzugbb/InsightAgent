@@ -127,19 +127,31 @@ def _summarize_tool_observation(observation: str) -> str | None:
 
     expression = payload.get("expression")
     result = payload.get("result")
+    request_id = payload.get("request_id")
     if isinstance(expression, str) and expression.strip() and result is not None:
+        if isinstance(request_id, str) and request_id.strip():
+            return (
+                f"Calculated {expression.strip()} = {result} "
+                f"(request id {request_id.strip()})."
+            )
         return f"Calculated {expression.strip()} = {result}."
+    semantic_kind = _normalize_mock_tool_semantic_kind(
+        payload.get("semantic_kind") or payload.get("tool_kind")
+    )
+    semantic_family = _normalize_mock_tool_semantic_kind(
+        payload.get("semantic_family")
+    )
+    if semantic_family == "local_calculator" or semantic_kind == "local_calculator":
+        if result is not None:
+            if isinstance(request_id, str) and request_id.strip():
+                return f"Calculated result = {result} (request id {request_id.strip()})."
+            return f"Calculated result = {result}."
 
     hit_count = payload.get("hit_count")
     knowledge_base_id = payload.get("knowledge_base_id")
     if isinstance(hit_count, int) and hit_count >= 0:
         hit_label = "hit" if hit_count == 1 else "hits"
-        runtime_semantic_kind = _normalize_mock_tool_semantic_kind(
-            payload.get("semantic_kind") or payload.get("tool_kind")
-        )
-        semantic_family = _normalize_mock_tool_semantic_kind(
-            payload.get("semantic_family")
-        )
+        runtime_semantic_kind = semantic_kind
         if (
             (
                 runtime_semantic_kind == "knowledge_retrieval"
@@ -151,6 +163,11 @@ def _summarize_tool_observation(observation: str) -> str | None:
             and isinstance(knowledge_base_id, str)
             and knowledge_base_id.strip()
         ):
+            if isinstance(request_id, str) and request_id.strip():
+                return (
+                    f"Retrieved {hit_count} {hit_label} from knowledge base "
+                    f"{knowledge_base_id.strip()} (request id {request_id.strip()})."
+                )
             return (
                 f"Retrieved {hit_count} {hit_label} from knowledge base "
                 f"{knowledge_base_id.strip()}."
@@ -159,13 +176,16 @@ def _summarize_tool_observation(observation: str) -> str | None:
             runtime_semantic_kind != "knowledge_retrieval"
             and semantic_family == "knowledge_retrieval"
         ):
+            if isinstance(request_id, str) and request_id.strip():
+                return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
             return f"Retrieved {hit_count} {hit_label}."
+        if isinstance(request_id, str) and request_id.strip():
+            return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
         return f"Retrieved {hit_count} {hit_label}."
 
     documents_total = payload.get("documents_total")
     if isinstance(documents_total, int) and documents_total >= 0:
         document_label = "document" if documents_total == 1 else "documents"
-        request_id = payload.get("request_id")
         if isinstance(request_id, str) and request_id.strip():
             return (
                 f"Retrieved {documents_total} {document_label} "
