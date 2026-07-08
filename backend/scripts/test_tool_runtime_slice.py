@@ -17435,6 +17435,149 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn("Tool done: Provider Search", markdown)
 
+    def test_build_session_export_markdown_does_not_imply_local_kb_for_name_only_real_tool_preview(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-08T10:00:00",
+            session=session_routes_module.SessionResponse(
+                id="session-name-only-real-tool-preview",
+                title="Name-only Real Tool Preview Session",
+                created_at="2026-07-08T09:59:00",
+                updated_at="2026-07-08T10:00:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-name-only-real-tool-preview",
+                    prompt="Search the provider index",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-08T09:59:30",
+                    updated_at="2026-07-08T10:00:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-provider-search-name-only",
+                            seq=5,
+                            type="action",
+                            title="Provider Search",
+                            content_excerpt='Provider Search: {"hit_count":2,"knowledge_base_id":"provider-kb","request_id":"req-1"}',
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "seq=5 · Provider Search · Retrieved 2 hits (request id req-1).",
+            markdown,
+        )
+        self.assertNotIn("from knowledge base provider-kb", markdown)
+        self.assertNotIn(
+            'Provider Search: {"hit_count":2,"knowledge_base_id":"provider-kb","request_id":"req-1"}',
+            markdown,
+        )
+
+    def test_build_session_export_markdown_infers_calc_summary_from_structural_kind_preview_without_semantic_family(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-08T11:00:00",
+            session=session_routes_module.SessionResponse(
+                id="session-structural-kind-calc-preview",
+                title="Structural Kind Calc Preview Session",
+                created_at="2026-07-08T10:59:00",
+                updated_at="2026-07-08T11:00:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-structural-kind-calc-preview",
+                    prompt="Calculate provider metric",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-08T10:59:30",
+                    updated_at="2026-07-08T11:00:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-provider-math-structural-kind",
+                            seq=6,
+                            type="action",
+                            title="Hosted Math",
+                            content_excerpt='Hosted Math: {"kind":"provider_calc","result":7,"request_id":"req-calc-1"}',
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "seq=6 · Hosted Math · Calculated result = 7 (request id req-calc-1).",
+            markdown,
+        )
+        self.assertNotIn(
+            'Hosted Math: {"kind":"provider_calc","result":7,"request_id":"req-calc-1"}',
+            markdown,
+        )
+
     def test_build_session_export_payload_trusts_service_task_governance_shape(
         self,
     ) -> None:
@@ -18105,9 +18248,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("This is a mock response from InsightAgent.", result.content)
         self.assertIn(
             "Summary: Planned steps - Analyze request -> Evaluate calculation -> Synthesize final answer. "
-            "Calculated 1+2 = 3.0. Retrieved 2 hits from knowledge base demo-kb.",
+            "Calculated 1+2 = 3.0. Retrieved 2 hits.",
             result.content,
         )
+        self.assertNotIn("from knowledge base demo-kb", result.content)
         self.assertIn("Prompt received: need answer", result.content)
         self.assertNotIn("Tool observations:", result.content)
         self.assertNotIn(
@@ -18191,6 +18335,37 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("Summary: Retrieved 2 hits.", result.content)
         self.assertNotIn("from knowledge base provider-kb", result.content)
 
+    def test_mock_llm_provider_generate_does_not_imply_local_kb_for_name_only_real_tool_observation(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Search: {"hit_count": 2, "knowledge_base_id": "provider-kb", "request_id": "req-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Retrieved 2 hits (request id req-1).",
+            result.content,
+        )
+        self.assertNotIn("from knowledge base provider-kb", result.content)
+
+    def test_mock_llm_provider_generate_keeps_local_kb_summary_for_builtin_retrieval_name_only_observation(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Knowledge Retrieval: {"hit_count": 2, "knowledge_base_id": "demo-kb", "request_id": "req-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Retrieved 2 hits from knowledge base demo-kb (request id req-1).",
+            result.content,
+        )
+
     def test_mock_llm_provider_generate_preserves_request_id_for_runtime_override_real_retrieval_hit_projection(
         self,
     ) -> None:
@@ -18227,6 +18402,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn(
             'Provider Math: {"result": 7, "request_id": "req-calc-1", "tool_kind": "provider_calc"}',
+            result.content,
+        )
+
+    def test_mock_llm_provider_generate_infers_retrieval_summary_from_structural_kind_without_semantic_family(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Hosted Search: {"kind": "provider_retrieval", "hit_count": 2, "knowledge_base_id": "provider-kb", "request_id": "req-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Retrieved 2 hits (request id req-1).",
+            result.content,
+        )
+        self.assertNotIn("from knowledge base provider-kb", result.content)
+        self.assertNotIn(
+            'Hosted Search: {"kind": "provider_retrieval", "hit_count": 2, "knowledge_base_id": "provider-kb", "request_id": "req-1"}',
+            result.content,
+        )
+
+    def test_mock_llm_provider_generate_infers_calc_summary_from_structural_kind_without_semantic_family(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Hosted Math: {"kind": "provider_calc", "result": 7, "request_id": "req-calc-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Calculated result = 7 (request id req-calc-1).",
+            result.content,
+        )
+        self.assertNotIn(
+            'Hosted Math: {"kind": "provider_calc", "result": 7, "request_id": "req-calc-1"}',
             result.content,
         )
 
@@ -36123,6 +36337,95 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Provider Planner: Planned steps - Analyze request -> Synthesize final answer.",
         )
 
+    def test_build_tool_observation_entry_infers_result_summary_from_noncanonical_semantic_kind_and_output_keys_without_semantic_family(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_lookup",
+                output=None,
+                step_tool_meta={
+                    "name": "hosted_lookup",
+                    "label": "Hosted Lookup",
+                    "kind": "provider_retrieval",
+                    "semantic_kind": "provider_search",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "documents_total",
+                        "request_id",
+                    ],
+                    "output": {
+                        "documents_total": 2,
+                        "request_id": "req-1",
+                        "documents": [{"id": "doc-1"}],
+                    },
+                    "output_preview": {
+                        "documents_total": 2,
+                    },
+                },
+            ),
+            "Hosted Lookup: Retrieved 2 documents (request id req-1).",
+        )
+
+    def test_build_tool_observation_entry_infers_calc_summary_from_noncanonical_semantic_kind_and_output_keys_without_semantic_family(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_math",
+                output=None,
+                step_tool_meta={
+                    "name": "hosted_math",
+                    "label": "Hosted Math",
+                    "kind": "provider_calc",
+                    "semantic_kind": "provider_math",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "result",
+                        "request_id",
+                    ],
+                    "output": {
+                        "result": 7,
+                        "request_id": "req-calc-1",
+                    },
+                    "output_preview": {
+                        "result": 7,
+                    },
+                },
+            ),
+            "Hosted Math: Calculated result = 7 (request id req-calc-1).",
+        )
+
+    def test_build_tool_observation_entry_does_not_imply_local_kb_for_name_only_real_tool_without_registration(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=None,
+                step_tool_meta={
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "hit_count",
+                        "knowledge_base_id",
+                        "request_id",
+                    ],
+                    "output": {
+                        "hit_count": 2,
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-1",
+                    },
+                    "output_preview": {
+                        "hit_count": 2,
+                        "knowledge_base_id": "provider-kb",
+                    },
+                },
+            ),
+            "Provider Search: Retrieved 2 hits (request id req-1).",
+        )
+
     def test_build_tool_observation_entry_reuses_step_meta_preview_without_output(
         self,
     ) -> None:
@@ -38565,6 +38868,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             success_bundle["trace"]["step"]["meta"]["tool"]["semantic_kind"],
+            "provider_search",
+        )
+        self.assertEqual(
+            success_bundle["trace"]["step"]["meta"]["tool"]["semantic_family"],
             "knowledge_retrieval",
         )
         self.assertTrue(
@@ -38580,13 +38887,13 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             success_bundle["observation"],
-            "Provider Search: Retrieved 2 hits from knowledge base demo-kb.",
+            "Provider Search: Retrieved 2 hits.",
         )
         self.assertIsNotNone(success_bundle["rag_followup"])
         assert success_bundle["rag_followup"] is not None
         self.assertEqual(
             success_bundle["rag_followup"]["step"]["content"],
-            "Provider Search returned snippets from the selected knowledge base.",
+            "Provider Search returned snippets.",
         )
 
     def test_build_tool_plan_item_execution_rewrites_manual_real_search_output_to_runtime_semantic_kind(

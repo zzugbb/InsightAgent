@@ -165,6 +165,42 @@ test("resolveTraceStepDisplayContent infers retrieval result summary from safe o
   );
 });
 
+test("resolveTraceStepDisplayContent does not imply local kb for name-only real retrieval steps", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-output-policy-result-summary-name-only-real-tool",
+    type: "action",
+    content: "Tool done: Provider Search",
+    meta: {
+      tool: {
+        name: "provider_search",
+        label: "Provider Search",
+        kind: "provider_retrieval",
+        status: "done",
+        effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+        effective_result_output_keys: [
+          "hit_count",
+          "knowledge_base_id",
+          "request_id",
+        ],
+        output_preview: {
+          hit_count: 2,
+          knowledge_base_id: "provider-kb",
+        },
+        output: {
+          hit_count: 2,
+          knowledge_base_id: "provider-kb",
+          request_id: "req-1",
+        },
+      },
+    },
+  });
+
+  assert.equal(
+    content,
+    'Retrieved 2 hits (request id req-1).\nPreview: {"hit_count":2,"knowledge_base_id":"provider-kb"}\nOutput: {"hit_count":2,"knowledge_base_id":"provider-kb","request_id":"req-1"}',
+  );
+});
+
 test("resolveTraceStepDisplayContent infers calc result summary from safe output without explicit result summary", () => {
   const content = resolveTraceStepDisplayContent({
     id: "step-output-policy-result-summary-calc-inferred",

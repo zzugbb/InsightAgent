@@ -488,6 +488,22 @@ function normalizeTraceToolSemanticKind(v: unknown): string | null {
   return normalized;
 }
 
+function normalizeTraceToolLabel(v: unknown): string {
+  if (typeof v !== "string") {
+    return "";
+  }
+  return v.trim().toLowerCase().replaceAll("_", " ").split(/\s+/).filter(Boolean).join(" ");
+}
+
+function traceToolLabelImpliesLocalKnowledgeRetrieval(v: unknown): boolean {
+  const normalized = normalizeTraceToolLabel(v);
+  return normalized === "knowledge retrieval"
+    || normalized === "hot retrieval"
+    || normalized === "task retrieve"
+    || normalized === "task retrieve hot"
+    || normalized === "mock retrieve";
+}
+
 function normalizeTraceToolResultPlanSteps(v: unknown): string[] {
   if (!Array.isArray(v)) {
     return [];
@@ -524,9 +540,11 @@ function inferTraceToolResultSummary(
     return null;
   }
 
-  const runtimeSemanticKind = normalizeTraceToolSemanticKind(
-    tool.semantic_kind ?? tool.kind ?? (typeof output.tool_kind === "string" ? output.tool_kind : undefined),
+  const explicitSemanticKind = normalizeTraceToolSemanticKind(tool.semantic_kind);
+  const fallbackRuntimeKind = normalizeTraceToolSemanticKind(
+    tool.kind ?? (typeof output.tool_kind === "string" ? output.tool_kind : undefined),
   );
+  const runtimeSemanticKind = explicitSemanticKind ?? fallbackRuntimeKind;
   const semanticFamily = normalizeTraceToolSemanticKind(
     tool.semantic_family ?? (typeof output.tool_family === "string" ? output.tool_family : undefined),
   );
@@ -561,12 +579,20 @@ function inferTraceToolResultSummary(
   const knowledgeBaseId = output.knowledge_base_id;
   if (typeof hitCount === "number" && Number.isInteger(hitCount) && hitCount >= 0) {
     const hitLabel = hitCount === 1 ? "hit" : "hits";
+    const labelImpliesLocalRetrieval = traceToolLabelImpliesLocalKnowledgeRetrieval(tool.label)
+      || traceToolLabelImpliesLocalKnowledgeRetrieval(tool.name);
     if (
       (
-        runtimeSemanticKind === "knowledge_retrieval"
+        explicitSemanticKind === "knowledge_retrieval"
         || (
-          runtimeSemanticKind === null
-          && (semanticFamily === null || semanticFamily === "knowledge_retrieval")
+          explicitSemanticKind === null
+          && (
+            semanticFamily === "knowledge_retrieval"
+            || (
+              semanticFamily === null
+              && labelImpliesLocalRetrieval
+            )
+          )
         )
       )
       && typeof knowledgeBaseId === "string"

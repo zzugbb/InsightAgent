@@ -99,6 +99,22 @@ def _split_tool_observations_prompt(prompt: str) -> tuple[str, list[str]]:
     return base_prompt, observations
 
 
+def _normalize_mock_observation_label(raw_value: object) -> str:
+    if not isinstance(raw_value, str):
+        return ""
+    return " ".join(raw_value.strip().lower().replace("_", " ").split())
+
+
+def _label_implies_local_knowledge_retrieval(label: str) -> bool:
+    normalized = _normalize_mock_observation_label(label)
+    return normalized in {
+        "knowledge retrieval",
+        "hot retrieval",
+        "task retrieve",
+        "mock retrieve",
+    }
+
+
 def _summarize_tool_observations(observations: list[str]) -> str | None:
     summaries: list[str] = []
     for observation in observations:
@@ -135,9 +151,13 @@ def _summarize_tool_observation(observation: str) -> str | None:
                 f"(request id {request_id.strip()})."
             )
         return f"Calculated {expression.strip()} = {result}."
-    semantic_kind = _normalize_mock_tool_semantic_kind(
-        payload.get("semantic_kind") or payload.get("tool_kind")
+    explicit_semantic_kind = _normalize_mock_tool_semantic_kind(
+        payload.get("semantic_kind")
     )
+    fallback_runtime_kind = _normalize_mock_tool_semantic_kind(
+        payload.get("tool_kind") or payload.get("kind")
+    )
+    semantic_kind = explicit_semantic_kind or fallback_runtime_kind
     semantic_family = _normalize_mock_tool_semantic_kind(
         payload.get("semantic_family")
     )
@@ -154,10 +174,16 @@ def _summarize_tool_observation(observation: str) -> str | None:
         runtime_semantic_kind = semantic_kind
         if (
             (
-                runtime_semantic_kind == "knowledge_retrieval"
+                explicit_semantic_kind == "knowledge_retrieval"
                 or (
-                    runtime_semantic_kind is None
-                    and (semantic_family is None or semantic_family == "knowledge_retrieval")
+                    explicit_semantic_kind is None
+                    and (
+                        semantic_family == "knowledge_retrieval"
+                        or (
+                            semantic_family is None
+                            and _label_implies_local_knowledge_retrieval(label)
+                        )
+                    )
                 )
             )
             and isinstance(knowledge_base_id, str)

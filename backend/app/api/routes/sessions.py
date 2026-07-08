@@ -274,6 +274,14 @@ def _extract_trace_preview_tool_semantics(
     return kind, family
 
 
+def _extract_trace_preview_tool_label(title: str) -> str:
+    normalized = " ".join((title or "").strip().split())
+    if not normalized:
+        return ""
+    head, _, _ = normalized.partition("[")
+    return head.strip() or normalized
+
+
 def _normalize_session_trace_preview_excerpt(
     title: str,
     content_excerpt: str,
@@ -315,6 +323,9 @@ def _normalize_session_trace_preview_excerpt(
         "output": safe_output,
         "effective_result_output_keys": list(safe_output.keys()),
     }
+    title_label = _extract_trace_preview_tool_label(title)
+    if title_label:
+        inferred_tool_meta["label"] = title_label
     if semantic_kind:
         inferred_tool_meta["semantic_kind"] = semantic_kind
     if semantic_family:

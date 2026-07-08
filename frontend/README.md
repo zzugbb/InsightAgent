@@ -44,12 +44,18 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - 后端 session export markdown builder 现在也会把旧 `trace_preview.content_excerpt` 里的 `Label: {...}` 与 `Tool done: ... Preview: ... Output: ...` 归一成推断摘要；前端发起的会话 markdown 导出和工作台内的 trace/export 回放文案会更一致。
   - 后端 observation helper 现在也会在只剩 safe output / preview output 的 real tool 场景下优先产出结果摘要；前端看到的最终回答、observation 回放与导出文案会更接近工作台主展示链。
   - 当 registry/source 已经取不到、但 step meta 里仍保留 `semantic_family` 与结构化 output 时，后端 observation helper 现在也会继续推断 real tool 摘要；前端工作台、最终回答与导出回放不会因为 registry 缺席而退回 JSON-only observation。
+  - 当更老的 real tool step meta 连 `semantic_family` 都已经丢失、但还保留了 `provider_retrieval` / `provider_calc` 这类 structural `kind` 与结构化 safe output 时，后端 observation / final-answer 链也会继续推断 `Retrieved ...` / `Calculated result = ...` 摘要；前端最终看到的回放与最终回答因此更少退回 JSON-only 文案，而 builtin/generic tool 仍保持原先更保守的显示语义。
+  - 后端 mock final-answer 现在也会把 name-only 的旧 real/provider retrieval observation 视作更保守的 real tool 语义；前端看到的最终回答不再把 `Provider Search` / `Hosted Search` 这类旧 observation 误写成默认本地 knowledge-base 命中，而 builtin `Knowledge Retrieval` 仍保留本地语义。
+  - 后端 mock final-answer 现在也会继续识别旧 observation payload 里的 structural `kind`（例如 `provider_calc`）；因此前端最终看到的最终回答在这类旧 real calc observation 场景下，也会更稳定地保留 `Calculated result = ...` 语义，而不是退回 generic payload output。
+  - 后端 session export / trace preview summary 现在也会继续识别旧 preview payload 里的 structural `kind`（例如 `provider_calc`）；因此前端发起 markdown 导出或消费 session trace preview 时，在缺少 `tool_kind` / `semantic_family` 的旧 real calc payload 场景下，也更少看到原始 JSON 回退。
+  - 同一条保守语义现在也继续落到前端旧 trace display / session export preview 回放：当旧 step meta 或 preview 里只剩 `hit_count + knowledge_base_id + request_id`，且 label 只是 `Provider Search` / `Hosted Search` 这类 real retrieval 名称时，workbench 不会再误补 `from knowledge base ...`，也不会因为缺 registration/semantic family 退回 JSON-only 文案。
+  - 后端 runtime semantic 现在还会对未显式补 `runtime_semantic_kind` 的 noncanonical real tool 保留工具自身名称，并把 retrieval/calc/planner family 留在 `semantic_family`；因此前端后续消费到这类 step meta 时，`Provider Search` 一类 real tool 的标题、observation 与 rag follow-up 会更稳定地保留真实工具语义，而不是塌回 builtin family 名称。
   - task/session preview excerpt 现在也会尽量保留完整的 `request_id` 与 safe output 片段；前端不会再经常只看到 `req-...` 这种被后端 preview 截断的半残摘要。
   - real/provider retrieval 与 runtime override real tool 的 follow-up、result summary、observation、导出回放已不再误写成本地默认知识库命中。
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体，因此前后端对 name-only fallback 与旁路结构化 payload 的消费已基本一致。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`874/874`）
-  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`48/48`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`883/883`）
+  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`49/49`）
   - `git diff --check` 通过
 
 ## 当前已有内容

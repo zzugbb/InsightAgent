@@ -1056,6 +1056,23 @@ def _normalize_trace_tool_semantic_kind(raw_value: object) -> str | None:
     return normalized
 
 
+def _normalize_trace_tool_label(raw_value: object) -> str:
+    if not isinstance(raw_value, str):
+        return ""
+    return " ".join(raw_value.strip().lower().replace("_", " ").split())
+
+
+def _trace_tool_label_implies_local_knowledge_retrieval(raw_value: object) -> bool:
+    normalized = _normalize_trace_tool_label(raw_value)
+    return normalized in {
+        "knowledge retrieval",
+        "hot retrieval",
+        "task retrieve",
+        "task retrieve hot",
+        "mock retrieve",
+    }
+
+
 def _normalize_trace_tool_result_plan_steps(raw_steps: object) -> list[str]:
     if not isinstance(raw_steps, (list, tuple)):
         return []
@@ -1074,11 +1091,13 @@ def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
     if not isinstance(output, dict):
         return ""
 
-    runtime_semantic_kind = _normalize_trace_tool_semantic_kind(
+    explicit_semantic_kind = _normalize_trace_tool_semantic_kind(
         tool_meta.get("semantic_kind")
-        or tool_meta.get("kind")
-        or output.get("tool_kind")
     )
+    fallback_runtime_kind = _normalize_trace_tool_semantic_kind(
+        tool_meta.get("kind") or output.get("tool_kind") or output.get("kind")
+    )
+    runtime_semantic_kind = explicit_semantic_kind or fallback_runtime_kind
     semantic_family = _normalize_trace_tool_semantic_kind(
         tool_meta.get("semantic_family") or output.get("tool_family")
     )
@@ -1111,12 +1130,22 @@ def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
     knowledge_base_id = output.get("knowledge_base_id")
     if isinstance(hit_count, int) and hit_count >= 0:
         hit_label = "hit" if hit_count == 1 else "hits"
+        label_implies_local_retrieval = (
+            _trace_tool_label_implies_local_knowledge_retrieval(tool_meta.get("label"))
+            or _trace_tool_label_implies_local_knowledge_retrieval(tool_meta.get("name"))
+        )
         if (
             (
-                runtime_semantic_kind == "knowledge_retrieval"
+                explicit_semantic_kind == "knowledge_retrieval"
                 or (
-                    runtime_semantic_kind is None
-                    and (semantic_family is None or semantic_family == "knowledge_retrieval")
+                    explicit_semantic_kind is None
+                    and (
+                        semantic_family == "knowledge_retrieval"
+                        or (
+                            semantic_family is None
+                            and label_implies_local_retrieval
+                        )
+                    )
                 )
             )
             and isinstance(knowledge_base_id, str)

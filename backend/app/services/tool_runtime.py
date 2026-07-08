@@ -5748,7 +5748,7 @@ def build_tool_result_summary(
         name=canonical_name,
         registration=resolved_registration,
     )
-    runtime_semantic_kind = get_tool_runtime_semantic_kind(
+    runtime_semantic_kind = _get_tool_runtime_trace_semantic_kind(
         name=canonical_name,
         registration=resolved_registration,
         registry=registry,
@@ -5847,7 +5847,7 @@ def build_tool_runtime_semantics_meta(
     )
     if resolved_registration is None:
         return {}
-    semantic_kind = get_tool_runtime_semantic_kind(
+    semantic_kind = _get_tool_runtime_trace_semantic_kind(
         name=canonical_name,
         registration=resolved_registration,
     )
@@ -7136,6 +7136,24 @@ def _build_tool_result_summary_from_step_meta_semantics(
 ) -> str | None:
     if not isinstance(output, dict):
         return None
+    meta_label = (
+        str(step_tool_meta.get("label")).strip()
+        if isinstance(step_tool_meta, dict)
+        and isinstance(step_tool_meta.get("label"), str)
+        else ""
+    )
+    meta_name = (
+        str(step_tool_meta.get("name")).strip()
+        if isinstance(step_tool_meta, dict)
+        and isinstance(step_tool_meta.get("name"), str)
+        else ""
+    )
+    structural_tool_kind = (
+        str(step_tool_meta.get("kind")).strip()
+        if isinstance(step_tool_meta, dict)
+        and isinstance(step_tool_meta.get("kind"), str)
+        else ""
+    )
     explicit_semantic_kind = (
         str(step_tool_meta.get("semantic_kind")).strip()
         if isinstance(step_tool_meta, dict)
@@ -7148,13 +7166,46 @@ def _build_tool_result_summary_from_step_meta_semantics(
         and isinstance(step_tool_meta.get("semantic_family"), str)
         else ""
     )
-    if not explicit_semantic_family:
-        return None
+    label_implies_local_retrieval = (
+        _label_implies_local_knowledge_retrieval(meta_label)
+        or _label_implies_local_knowledge_retrieval(meta_name)
+    )
+    label_implies_real_retrieval = (
+        _label_implies_real_retrieval_summary(meta_label)
+        or _label_implies_real_retrieval_summary(meta_name)
+    )
     runtime_semantic_kind = _normalize_tool_semantic_kind(
         explicit_semantic_kind or None
     )
-    semantic_family = _normalize_tool_semantic_kind(
+    explicit_runtime_semantic_family = _normalize_tool_semantic_kind(
         explicit_semantic_family or None
+    )
+    structural_semantic_family = _normalize_tool_semantic_kind(
+        structural_tool_kind or None
+    )
+    semantic_family = explicit_runtime_semantic_family
+    if semantic_family is None and structural_semantic_family in {
+        "knowledge_retrieval",
+        "local_calculator",
+        "task_planner",
+    } and normalize_tool_registry_name(meta_name) not in _REGISTERED_TOOLS:
+        semantic_family = structural_semantic_family
+    has_runtime_semantic_hint = semantic_family is not None
+    if (
+        not has_runtime_semantic_hint
+        and not label_implies_local_retrieval
+        and not label_implies_real_retrieval
+    ):
+        return None
+    allow_local_knowledge_base_summary = (
+        runtime_semantic_kind == "knowledge_retrieval"
+        or (
+            runtime_semantic_kind is None
+            and (
+                explicit_runtime_semantic_family == "knowledge_retrieval"
+                or label_implies_local_retrieval
+            )
+        )
     )
 
     plan = output.get("plan")
@@ -7187,16 +7238,7 @@ def _build_tool_result_summary_from_step_meta_semantics(
     if isinstance(hit_count, int) and hit_count >= 0:
         hit_label = "hit" if hit_count == 1 else "hits"
         if (
-            (
-                runtime_semantic_kind == "knowledge_retrieval"
-                or (
-                    runtime_semantic_kind is None
-                    and (
-                        semantic_family is None
-                        or semantic_family == "knowledge_retrieval"
-                    )
-                )
-            )
+            allow_local_knowledge_base_summary
             and isinstance(knowledge_base_id, str)
             and knowledge_base_id.strip()
         ):
@@ -7209,10 +7251,7 @@ def _build_tool_result_summary_from_step_meta_semantics(
                 f"Retrieved {hit_count} {hit_label} from knowledge base "
                 f"{knowledge_base_id.strip()}."
             )
-        if (
-            runtime_semantic_kind != "knowledge_retrieval"
-            and semantic_family == "knowledge_retrieval"
-        ):
+        if semantic_family == "knowledge_retrieval":
             if isinstance(request_id, str) and request_id.strip():
                 return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
             return f"Retrieved {hit_count} {hit_label}."
@@ -7711,7 +7750,7 @@ def build_tool_rag_followup(
         return None
     runtime_semantic_kind = _normalize_tool_semantic_kind(tool_kind)
     if runtime_semantic_kind is None:
-        runtime_semantic_kind = get_tool_runtime_semantic_kind(
+        runtime_semantic_kind = _get_tool_runtime_trace_semantic_kind(
             name=tool_name,
             registry=registry,
             registry_provider=registry_provider,
@@ -7962,7 +8001,7 @@ def build_tool_plan_item_execution(
             seq=int(action_step.get("seq", 0)) + 1,
             model=model,
             tool_name=name,
-            tool_kind=get_tool_runtime_semantic_kind(
+            tool_kind=_get_tool_runtime_trace_semantic_kind(
                 name=runtime_ctx.registration.name,
                 registration=runtime_ctx.registration,
             ),
@@ -9010,6 +9049,32 @@ def _normalize_tool_semantic_kind(kind: str | None) -> str | None:
     return normalized_kind
 
 
+def _normalize_tool_observation_label(raw_value: object) -> str:
+    if not isinstance(raw_value, str):
+        return ""
+    return " ".join(raw_value.strip().lower().replace("_", " ").split())
+
+
+def _label_implies_local_knowledge_retrieval(raw_value: object) -> bool:
+    normalized = _normalize_tool_observation_label(raw_value)
+    return normalized in {
+        "knowledge retrieval",
+        "hot retrieval",
+        "task retrieve",
+        "task retrieve hot",
+        "mock retrieve",
+    }
+
+
+def _label_implies_real_retrieval_summary(raw_value: object) -> bool:
+    normalized = _normalize_tool_observation_label(raw_value)
+    return normalized in {
+        "provider search",
+        "hosted search",
+        "provider retrieval",
+    }
+
+
 def get_tool_semantic_kind(
     *,
     name: str,
@@ -9065,6 +9130,48 @@ def get_tool_runtime_semantic_kind(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
+
+
+def _get_tool_runtime_trace_semantic_kind(
+    *,
+    name: str,
+    registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> str | None:
+    normalized_name = normalize_tool_registry_name(name)
+    resolved_registration = registration or resolve_tool_registration(
+        normalized_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    explicit_runtime_semantic_kind = (
+        _normalize_runtime_semantic_kind(resolved_registration.runtime_semantic_kind)
+        if resolved_registration is not None
+        else None
+    )
+    if explicit_runtime_semantic_kind is not None:
+        return explicit_runtime_semantic_kind
+    semantic_family = get_tool_semantic_kind(
+        name=normalized_name,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    if (
+        resolved_registration is not None
+        and semantic_family in {"knowledge_retrieval", "local_calculator", "task_planner"}
+        and normalized_name not in _REGISTERED_TOOLS
+        and not _label_implies_local_knowledge_retrieval(normalized_name)
+        and not _label_implies_local_knowledge_retrieval(
+            resolved_registration.label if resolved_registration is not None else None
+        )
+    ):
+        return normalized_name
+    return semantic_family
 
 
 def get_tool_effective_result_output_keys(
