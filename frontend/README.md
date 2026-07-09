@@ -59,13 +59,16 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - 后端 session markdown fallback 现在还会避免把这类仅用于展示的通用 `[retrieval]` 标题反向当成 builtin retrieval 语义；因此前端导出旧 real retrieval 历史 payload 时，即使 title 已经产品化，markdown 摘要也不会被误写成 `from knowledge base ...`。
   - 后端 observation / mock final-answer 现在也会忽略产品化 label 中仅用于展示的 bracket descriptor；因此前端最终看到的旧 real calc observation，即使 label 已变成 `Hosted Math [calculator]` 且 canonical name 已丢，也会更稳定地保留 `Calculated result = ... (request id ...)` 语义，而不是退回 JSON-only 文案。
   - 前端 `normalizeTraceToolLabel(...)` 现在也会忽略这类仅用于展示的 bracket descriptor；因此旧 history step 即使 label 已被产品化成 `Provider Search [retrieval]` / `Hosted Math [calculator]`，workbench 的结果摘要推断、semantic filter、search 与 stats 也会继续识别出 retrieval / calculator 语义，而不是退回 `Tool done: ...` 或漏成 `other`。
+  - 后端 provider branch 现在也会在解析 planner 输出的 extra-tool label 前剥掉同一层 bracket descriptor；因此前端后续看到的 productized planner 输出如果回传成 `Fast Calculator [calculator]` 这类 label，后端也会继续稳定命中真实 registry tool，而不会因为 label 已产品化就丢回 `task_plan`-only 路径。
+  - 后端 `task_plan` 自己现在也会在消费历史 `planned_tool_names` 时剥掉同一层 bracket descriptor；因此前端回放旧 planner payload 时，即使计划工具名已经被产品化成 `calc_eval [calculator]`，trace/export 里的 planner steps 也仍会稳定显示 `Evaluate calculation` / `Retrieve supporting context`，而不是退回 `Run ...`。
+  - 后端 governance summary 现在也会在仍保留 canonical tool name 的场景下剥掉 `allowed_tool_labels` 里的同类 bracket descriptor；因此前端工作台、导出回放与治理视图后续看到的 `Calculator Suite [calculator]` 一类旧标签，会更稳定地回落到 canonical label，而不会把展示噪音继续带进治理 UI；如果旧 session summary 里先残留了 label-only 的产品化旧标签、后续 task 才补回 canonical tool name，后端聚合也会把这两份标签收敛成一份 canonical label。
   - 同一条保守语义现在也继续落到前端旧 trace display / session export preview 回放：当旧 step meta 或 preview 里只剩 `hit_count + knowledge_base_id + request_id`，且 label 只是 `Provider Search` / `Hosted Search` 这类 real retrieval 名称时，workbench 不会再误补 `from knowledge base ...`，也不会因为缺 registration/semantic family 退回 JSON-only 文案。
   - 后端 runtime semantic 现在还会对未显式补 `runtime_semantic_kind` 的 noncanonical real tool 保留工具自身名称，并把 retrieval/calc/planner family 留在 `semantic_family`；因此前端后续消费到这类 step meta 时，`Provider Search` 一类 real tool 的标题、observation 与 rag follow-up 会更稳定地保留真实工具语义，而不是塌回 builtin family 名称。
   - task/session preview excerpt 现在也会尽量保留完整的 `request_id` 与 safe output 片段；前端不会再经常只看到 `req-...` 这种被后端 preview 截断的半残摘要。
   - real/provider retrieval 与 runtime override real tool 的 follow-up、result summary、observation、导出回放已不再误写成本地默认知识库命中。
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体，因此前后端对 name-only fallback 与旁路结构化 payload 的消费已基本一致。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`896/896`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`900/900`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`60/60`）
   - `git diff --check` 通过
 

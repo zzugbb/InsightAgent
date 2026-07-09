@@ -557,6 +557,7 @@ def normalize_tool_registry_name(name: str) -> str:
     normalized = name.strip()
     if not normalized:
         return normalized
+    normalized = re.sub(r"\s*\[[^\[\]]+\]\s*$", "", normalized)
     return _TOOL_NAME_ALIASES.get(normalized, normalized)
 
 
@@ -579,7 +580,8 @@ def _normalize_named_tool_registry_component_name(name: object | None) -> str | 
 def _normalize_tool_lookup_text(name: object | None) -> str | None:
     if not isinstance(name, str):
         return None
-    normalized = " ".join(name.strip().lower().split())
+    normalized = re.sub(r"\s*\[[^\[\]]+\]\s*$", "", name.strip())
+    normalized = " ".join(normalized.lower().split())
     return normalized or None
 
 

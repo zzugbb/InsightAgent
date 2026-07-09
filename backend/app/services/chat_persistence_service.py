@@ -288,6 +288,11 @@ def _normalize_governance_allowed_tool_labels(
         if normalize_tool_registry_name(current_label) == tool_name:
             resolved_labels.append(canonical_label)
             continue
+        if normalize_tool_registry_name(current_label) == normalize_tool_registry_name(
+            canonical_label
+        ):
+            resolved_labels.append(canonical_label)
+            continue
         resolved_labels.append(current_label)
 
     if len(normalized_labels) > len(normalized_names):
@@ -2071,14 +2076,39 @@ def _merge_session_governance_summary(
     if not profiles and not provider_sources and not allowed_tool_names and not allowed_tool_labels:
         return normalized_current
 
+    resolved_allowed_tool_labels = list(allowed_tool_labels)
+    merged_allowed_tool_names = list(allowed_tool_names)
+    merged_profile = next(iter(profiles)) if len(profiles) == 1 else None
+    merged_provider_source = (
+        next(iter(provider_sources)) if len(provider_sources) == 1 else None
+    )
+    if merged_allowed_tool_names and resolved_allowed_tool_labels:
+        registry_provider = _build_governance_registry_provider(
+            profile=merged_profile,
+            provider_source=merged_provider_source,
+        )
+        canonical_labels_by_normalized_value = {
+            normalize_tool_registry_name(
+                get_tool_display_name(tool_name, registry_provider=registry_provider)
+            ): get_tool_display_name(tool_name, registry_provider=registry_provider)
+            for tool_name in merged_allowed_tool_names
+        }
+        resolved_allowed_tool_labels = [
+            canonical_labels_by_normalized_value.get(
+                normalize_tool_registry_name(label),
+                label,
+            )
+            for label in resolved_allowed_tool_labels
+        ]
+
     return {
         "profiles": sorted(profiles),
         "provider_sources": sorted(provider_sources),
         "allowed_tool_names": _normalize_governance_summary_string_list(
-            list(allowed_tool_names)
+            merged_allowed_tool_names
         ),
         "allowed_tool_labels": _normalize_governance_summary_string_list(
-            list(allowed_tool_labels)
+            resolved_allowed_tool_labels
         ),
     }
 

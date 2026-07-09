@@ -566,6 +566,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("Allowed tool names: calc_eval_fast.", provider.last_prompt)
         self.assertIn("Fast Calculator", provider.last_prompt)
 
+    def test_build_tool_plan_provider_branch_accepts_productized_extra_tool_label_from_registry_provider(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+            last_prompt = ""
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                self.last_prompt = prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "Fast Calculator [calculator]",
+                                    "input": {"expression": "6/2"},
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+        provider = FakeProvider()
+        plan = build_tool_plan(
+            "请规划一条快速计算路径",
+            provider=provider,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "calc_eval_fast"],
+        )
+        self.assertEqual(
+            plan[1]["input"],
+            {"expression": "6/2"},
+        )
+
     def test_build_tool_plan_provider_branch_annotates_semantic_family_kind_for_runtime_override_real_retrieval_tool(
         self,
     ) -> None:
@@ -6325,6 +6378,28 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_normalize_task_governance_dict_drops_productized_bracket_suffix_from_selected_source_override_label(
+        self,
+    ) -> None:
+        payload = chat_persistence_module._normalize_task_governance_dict(  # type: ignore[attr-defined]
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite [calculator]"],
+            }
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
+            },
+        )
+
     def test_parse_task_governance_json_list_blob_preserves_raw_string_items(
         self,
     ) -> None:
@@ -6596,6 +6671,34 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "provider_sources": ["normalized_current_source"],
                 "allowed_tool_names": ["normalized_current_tool"],
                 "allowed_tool_labels": ["Normalized Current Tool"],
+            },
+        )
+
+    def test_merge_session_governance_summary_deduplicates_stale_productized_labels_when_task_names_arrive(
+        self,
+    ) -> None:
+        payload = chat_persistence_module._merge_session_governance_summary(  # type: ignore[attr-defined]
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": [],
+                "allowed_tool_labels": ["Calculator Suite [calculator]"],
+            },
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
+            },
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
             },
         )
 
@@ -19991,6 +20094,35 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "expression": "1+2*3",
                 "result": 7.0,
                 "tool_kind": "local_calculator",
+            },
+        )
+
+    def test_run_tool_task_plan_normalizes_productized_planned_tool_names(
+        self,
+    ) -> None:
+        output = run_tool(
+            name="task_plan",
+            tool_input={
+                "planned_tool_names": ["calc_eval [calculator]"],
+                "planned_tool_labels": ["Calculator [calculator]"],
+                "prompt_preview": "planned from historical payload",
+            },
+            prompt="请规划计算步骤",
+            user_id="user-1",
+            attempt=0,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Evaluate calculation -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Evaluate calculation",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "planned from historical payload",
+                "echo": True,
             },
         )
 
