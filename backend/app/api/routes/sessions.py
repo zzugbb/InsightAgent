@@ -274,12 +274,84 @@ def _extract_trace_preview_tool_semantics(
     return kind, family
 
 
+def _is_generic_trace_preview_semantic(value: str | None) -> bool:
+    return value in {"retrieval", "calculator", "planner"}
+
+
 def _extract_trace_preview_tool_label(title: str) -> str:
     normalized = " ".join((title or "").strip().split())
     if not normalized:
         return ""
     head, _, _ = normalized.partition("[")
     return head.strip() or normalized
+
+
+def _build_trace_preview_inferred_tool_meta(
+    title: str,
+    content_excerpt: str,
+) -> dict[str, object] | None:
+    normalized = " ".join((content_excerpt or "").strip().split())
+    if not normalized:
+        return None
+    if not normalized.startswith("Tool done:"):
+        _, separator, raw_payload = normalized.partition(":")
+        if not separator or not raw_payload.strip().startswith("{"):
+            return None
+
+    preview_output: dict[str, object] | None = None
+    safe_output: dict[str, object] | None = None
+    output_match = re.search(r"\bOutput:\s*(\{.*\})\s*$", normalized)
+    if output_match is not None:
+        safe_output = _parse_trace_preview_json_payload(output_match.group(1))
+    preview_match = re.search(r"\bPreview:\s*(\{.*?\})(?:\s+Output:\s*\{.*\}\s*)?$", normalized)
+    if preview_match is not None:
+        preview_output = _parse_trace_preview_json_payload(preview_match.group(1))
+    if safe_output is None and preview_output is None:
+        _, _, raw_payload = normalized.partition(":")
+        parsed_payload = _parse_trace_preview_json_payload(raw_payload.strip())
+        if parsed_payload is None:
+            return None
+        safe_output = parsed_payload
+    if safe_output is None:
+        safe_output = preview_output
+    if safe_output is None:
+        return None
+
+    semantic_kind, semantic_family = _extract_trace_preview_tool_semantics(title)
+    inferred_tool_meta: dict[str, object] = {
+        "output": safe_output,
+        "effective_result_output_keys": list(safe_output.keys()),
+    }
+    title_label = _extract_trace_preview_tool_label(title)
+    if title_label:
+        inferred_tool_meta["label"] = title_label
+    if semantic_kind and not (
+        _is_generic_trace_preview_semantic(semantic_kind)
+        and semantic_family is None
+    ):
+        inferred_tool_meta["semantic_kind"] = semantic_kind
+    if semantic_family:
+        inferred_tool_meta["semantic_family"] = semantic_family
+    return inferred_tool_meta
+
+
+def _normalize_session_trace_preview_title(
+    title: str,
+    content_excerpt: str,
+) -> str:
+    normalized_title = " ".join((title or "").strip().split())
+    if not normalized_title:
+        return ""
+    inferred_tool_meta = _build_trace_preview_inferred_tool_meta(title, content_excerpt)
+    if not isinstance(inferred_tool_meta, dict):
+        return normalized_title
+    semantic_descriptor = chat_persistence_service._format_trace_tool_semantic_descriptor(  # type: ignore[attr-defined]
+        inferred_tool_meta
+    )
+    title_label = _extract_trace_preview_tool_label(normalized_title)
+    if title_label and semantic_descriptor:
+        return f"{title_label} [{semantic_descriptor}]"
+    return normalized_title
 
 
 def _normalize_session_trace_preview_excerpt(
@@ -318,18 +390,9 @@ def _normalize_session_trace_preview_excerpt(
     if safe_output is None:
         return normalized
 
-    semantic_kind, semantic_family = _extract_trace_preview_tool_semantics(title)
-    inferred_tool_meta: dict[str, object] = {
-        "output": safe_output,
-        "effective_result_output_keys": list(safe_output.keys()),
-    }
-    title_label = _extract_trace_preview_tool_label(title)
-    if title_label:
-        inferred_tool_meta["label"] = title_label
-    if semantic_kind:
-        inferred_tool_meta["semantic_kind"] = semantic_kind
-    if semantic_family:
-        inferred_tool_meta["semantic_family"] = semantic_family
+    inferred_tool_meta = _build_trace_preview_inferred_tool_meta(title, content_excerpt)
+    if not isinstance(inferred_tool_meta, dict):
+        return normalized
     inferred_summary = chat_persistence_service._infer_trace_tool_result_summary(  # type: ignore[attr-defined]
         inferred_tool_meta
     )
@@ -455,7 +518,10 @@ def _build_session_export_markdown(payload: SessionExportJsonResponse) -> str:
                 for preview in task.trace_preview:
                     seq = preview.seq if preview.seq is not None else "-"
                     preview_type = preview.type.replace("_", " ").strip()
-                    preview_title = preview.title.strip()
+                    preview_title = _normalize_session_trace_preview_title(
+                        preview.title,
+                        preview.content_excerpt,
+                    )
                     preview_heading = (
                         preview_type
                         if not preview_title
@@ -464,7 +530,7 @@ def _build_session_export_markdown(payload: SessionExportJsonResponse) -> str:
                         else preview_type
                     )
                     preview_excerpt = _normalize_session_trace_preview_excerpt(
-                        preview_title,
+                        preview.title,
                         preview.content_excerpt,
                     )
                     lines.append(

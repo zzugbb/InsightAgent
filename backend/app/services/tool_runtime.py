@@ -5780,7 +5780,18 @@ def build_tool_result_summary(
                 f"(request id {request_id.strip()})."
             )
         return f"Calculated {expression.strip()} = {result}."
-    if semantic_family == "local_calculator" and result is not None:
+    if (
+        semantic_family == "local_calculator"
+        or (
+            result is not None
+            and semantic_family is None
+            and runtime_semantic_kind is None
+            and (
+                _label_implies_real_calc_summary(tool_name)
+                or _label_implies_real_calc_summary(display_name)
+            )
+        )
+    ) and result is not None:
         if isinstance(request_id, str) and request_id.strip():
             return f"Calculated result = {result} (request id {request_id.strip()})."
         return f"Calculated result = {result}."
@@ -7174,6 +7185,10 @@ def _build_tool_result_summary_from_step_meta_semantics(
         _label_implies_real_retrieval_summary(meta_label)
         or _label_implies_real_retrieval_summary(meta_name)
     )
+    label_implies_real_calc = (
+        _label_implies_real_calc_summary(meta_label)
+        or _label_implies_real_calc_summary(meta_name)
+    )
     runtime_semantic_kind = _normalize_tool_semantic_kind(
         explicit_semantic_kind or None
     )
@@ -7195,6 +7210,7 @@ def _build_tool_result_summary_from_step_meta_semantics(
         not has_runtime_semantic_hint
         and not label_implies_local_retrieval
         and not label_implies_real_retrieval
+        and not label_implies_real_calc
     ):
         return None
     allow_local_knowledge_base_summary = (
@@ -7228,6 +7244,12 @@ def _build_tool_result_summary_from_step_meta_semantics(
     if (
         semantic_family == "local_calculator"
         or runtime_semantic_kind == "local_calculator"
+        or (
+            result is not None
+            and semantic_family is None
+            and runtime_semantic_kind is None
+            and label_implies_real_calc
+        )
     ) and result is not None:
         if isinstance(request_id, str) and request_id.strip():
             return f"Calculated result = {result} (request id {request_id.strip()})."
@@ -9052,7 +9074,9 @@ def _normalize_tool_semantic_kind(kind: str | None) -> str | None:
 def _normalize_tool_observation_label(raw_value: object) -> str:
     if not isinstance(raw_value, str):
         return ""
-    return " ".join(raw_value.strip().lower().replace("_", " ").split())
+    normalized = raw_value.strip()
+    normalized = re.sub(r"\s*\[[^\[\]]+\]\s*$", "", normalized)
+    return " ".join(normalized.lower().replace("_", " ").split())
 
 
 def _label_implies_local_knowledge_retrieval(raw_value: object) -> bool:
@@ -9072,6 +9096,18 @@ def _label_implies_real_retrieval_summary(raw_value: object) -> bool:
         "provider search",
         "hosted search",
         "provider retrieval",
+    }
+
+
+def _label_implies_real_calc_summary(raw_value: object) -> bool:
+    normalized = _normalize_tool_observation_label(raw_value)
+    return normalized in {
+        "provider math",
+        "hosted math",
+        "provider calc",
+        "provider calculator",
+        "hosted calc",
+        "hosted calculator",
     }
 
 

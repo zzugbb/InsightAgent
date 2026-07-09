@@ -9960,6 +9960,246 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Knowledge Retrieval Snippets",
         )
 
+    def test_get_task_trace_preview_summary_infers_calc_summary_from_structural_kind_output_without_semantic_family(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-preview-hosted-math",
+                            "type": "action",
+                            "content": "Tool done: Hosted Math",
+                            "seq": 27,
+                            "meta": {
+                                "tool": {
+                                    "name": "hosted_math",
+                                    "label": "Hosted Math",
+                                    "status": "done",
+                                    "effective_result_output_keys": [
+                                        "result",
+                                        "request_id",
+                                    ],
+                                    "output_preview": {
+                                        "result": 7,
+                                    },
+                                    "output": {
+                                        "kind": "provider_calc",
+                                        "result": 7,
+                                        "request_id": "req-calc-1",
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn("Calculated result = 7 (request id req-calc-1).", excerpt)
+        self.assertIn('Preview: {"result":7}', excerpt)
+        self.assertIn('Output: {"result":7,"request_id":"req-calc-1"}', excerpt)
+        self.assertNotIn("Tool done: Hosted Math", excerpt)
+
+    def test_get_task_trace_preview_summary_infers_calc_summary_for_name_only_real_tool_without_semantic_family(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-preview-hosted-math-name-only",
+                            "type": "action",
+                            "content": "Tool done: Hosted Math",
+                            "seq": 28,
+                            "meta": {
+                                "tool": {
+                                    "name": "hosted_math",
+                                    "label": "Hosted Math",
+                                    "status": "done",
+                                    "effective_result_output_keys": [
+                                        "result",
+                                        "request_id",
+                                    ],
+                                    "output_preview": {
+                                        "result": 7,
+                                    },
+                                    "output": {
+                                        "result": 7,
+                                        "request_id": "req-calc-1",
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload["trace_preview"][0]["title"],
+            "Hosted Math [calculator]",
+        )
+        excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn("Calculated result = 7 (request id req-calc-1).", excerpt)
+        self.assertIn('Preview: {"result":7}', excerpt)
+        self.assertIn('Output: {"result":7,"request_id":"req-calc-1"}', excerpt)
+        self.assertNotIn("Tool done: Hosted Math", excerpt)
+
+    def test_get_task_trace_preview_summary_infers_planner_title_for_name_only_real_tool_without_semantic_family(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-preview-hosted-planner-name-only",
+                            "type": "action",
+                            "content": "Tool done: Hosted Planner",
+                            "seq": 29,
+                            "meta": {
+                                "tool": {
+                                    "name": "hosted_planner",
+                                    "label": "Hosted Planner",
+                                    "status": "done",
+                                    "effective_result_output_keys": [
+                                        "steps",
+                                    ],
+                                    "output_preview": {
+                                        "steps": [
+                                            "Analyze request",
+                                            "Synthesize final answer",
+                                        ],
+                                    },
+                                    "output": {
+                                        "steps": [
+                                            "Analyze request",
+                                            "Synthesize final answer",
+                                        ],
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload["trace_preview"][0]["title"],
+            "Hosted Planner [planner]",
+        )
+        excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn(
+            "Planned steps - Analyze request -> Synthesize final answer.",
+            excerpt,
+        )
+        self.assertNotIn("Tool done: Hosted Planner", excerpt)
+
+    def test_get_task_trace_preview_summary_infers_retrieval_title_for_name_only_real_tool_without_semantic_family(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-preview-hosted-search-name-only",
+                            "type": "action",
+                            "content": "Tool done: Hosted Search",
+                            "seq": 30,
+                            "meta": {
+                                "tool": {
+                                    "name": "hosted_search",
+                                    "label": "Hosted Search",
+                                    "status": "done",
+                                    "effective_result_output_keys": [
+                                        "documents_total",
+                                        "request_id",
+                                    ],
+                                    "output_preview": {
+                                        "documents_total": 2,
+                                    },
+                                    "output": {
+                                        "documents_total": 2,
+                                        "request_id": "req-search-1",
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload["trace_preview"][0]["title"],
+            "Hosted Search [retrieval]",
+        )
+        excerpt = payload["trace_preview"][0]["content_excerpt"]
+        self.assertIn(
+            "Retrieved 2 documents (request id req-search-1).",
+            excerpt,
+        )
+        self.assertIn('Preview: {"documents_total":2}', excerpt)
+        self.assertIn(
+            'Output: {"documents_total":2,"request_id":"req-search-1"}',
+            excerpt,
+        )
+        self.assertNotIn("Tool done: Hosted Search", excerpt)
+
     def test_get_trace_rag_export_summary_reuses_shared_trace_steps_shape(self) -> None:
         payload = chat_persistence_module.get_trace_rag_export_summary(  # type: ignore[attr-defined]
             [
@@ -17498,7 +17738,79 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "seq=5 · Provider Search · Retrieved 2 hits (request id req-1).",
+            "seq=5 · Provider Search [retrieval] · Retrieved 2 hits (request id req-1).",
+            markdown,
+        )
+        self.assertNotIn("from knowledge base provider-kb", markdown)
+        self.assertNotIn(
+            'Provider Search: {"hit_count":2,"knowledge_base_id":"provider-kb","request_id":"req-1"}',
+            markdown,
+        )
+
+    def test_build_session_export_markdown_does_not_imply_local_kb_for_generic_retrieval_title_on_real_tool_preview(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-09T11:00:00",
+            session=session_routes_module.SessionResponse(
+                id="session-generic-retrieval-title-preview",
+                title="Generic Retrieval Title Preview Session",
+                created_at="2026-07-09T10:59:00",
+                updated_at="2026-07-09T11:00:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-generic-retrieval-title-preview",
+                    prompt="Search the provider index",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-09T10:59:30",
+                    updated_at="2026-07-09T11:00:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-provider-search-generic-retrieval-title",
+                            seq=9,
+                            type="action",
+                            title="Provider Search [retrieval]",
+                            content_excerpt='Provider Search: {"hit_count":2,"knowledge_base_id":"provider-kb","request_id":"req-1"}',
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "seq=9 · Provider Search [retrieval] · Retrieved 2 hits (request id req-1).",
             markdown,
         )
         self.assertNotIn("from knowledge base provider-kb", markdown)
@@ -17570,11 +17882,153 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "seq=6 · Hosted Math · Calculated result = 7 (request id req-calc-1).",
+            "seq=6 · Hosted Math [calculator] · Calculated result = 7 (request id req-calc-1).",
             markdown,
         )
         self.assertNotIn(
             'Hosted Math: {"kind":"provider_calc","result":7,"request_id":"req-calc-1"}',
+            markdown,
+        )
+
+    def test_build_session_export_markdown_infers_calc_summary_for_name_only_real_tool_preview(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-09T09:00:00",
+            session=session_routes_module.SessionResponse(
+                id="session-name-only-real-calc-preview",
+                title="Name-only Real Calc Preview Session",
+                created_at="2026-07-09T08:59:00",
+                updated_at="2026-07-09T09:00:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-name-only-real-calc-preview",
+                    prompt="Calculate provider metric",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-09T08:59:30",
+                    updated_at="2026-07-09T09:00:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-hosted-math-name-only",
+                            seq=7,
+                            type="action",
+                            title="Hosted Math",
+                            content_excerpt='Hosted Math: {"result":7,"request_id":"req-calc-1"}',
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "seq=7 · Hosted Math [calculator] · Calculated result = 7 (request id req-calc-1).",
+            markdown,
+        )
+        self.assertNotIn(
+            'Hosted Math: {"result":7,"request_id":"req-calc-1"}',
+            markdown,
+        )
+
+    def test_build_session_export_markdown_infers_planner_title_for_name_only_real_tool_preview(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-09T10:00:00",
+            session=session_routes_module.SessionResponse(
+                id="session-name-only-real-planner-preview",
+                title="Name-only Real Planner Preview Session",
+                created_at="2026-07-09T09:59:00",
+                updated_at="2026-07-09T10:00:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-name-only-real-planner-preview",
+                    prompt="Plan provider workflow",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-09T09:59:30",
+                    updated_at="2026-07-09T10:00:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-hosted-planner-name-only",
+                            seq=8,
+                            type="action",
+                            title="Hosted Planner",
+                            content_excerpt='Hosted Planner: {"steps":["Analyze request","Synthesize final answer"]}',
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "seq=8 · Hosted Planner [planner] · Planned steps - Analyze request -> Synthesize final answer.",
+            markdown,
+        )
+        self.assertNotIn(
+            'Hosted Planner: {"steps":["Analyze request","Synthesize final answer"]}',
             markdown,
         )
 
@@ -18351,6 +18805,22 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn("from knowledge base provider-kb", result.content)
 
+    def test_mock_llm_provider_generate_does_not_imply_local_kb_for_productized_retrieval_label_on_real_tool_observation(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Search [retrieval]: {"hit_count": 2, "knowledge_base_id": "provider-kb", "request_id": "req-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Retrieved 2 hits (request id req-1).",
+            result.content,
+        )
+        self.assertNotIn("from knowledge base provider-kb", result.content)
+
     def test_mock_llm_provider_generate_keeps_local_kb_summary_for_builtin_retrieval_name_only_observation(
         self,
     ) -> None:
@@ -18405,6 +18875,25 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result.content,
         )
 
+    def test_mock_llm_provider_generate_infers_calc_summary_for_productized_calculator_label_without_semantic_hints(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Hosted Math [calculator]: {"result": 7, "request_id": "req-calc-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Calculated result = 7 (request id req-calc-1).",
+            result.content,
+        )
+        self.assertNotIn(
+            'Hosted Math [calculator]: {"result": 7, "request_id": "req-calc-1"}',
+            result.content,
+        )
+
     def test_mock_llm_provider_generate_infers_retrieval_summary_from_structural_kind_without_semantic_family(
         self,
     ) -> None:
@@ -18441,6 +18930,25 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn(
             'Hosted Math: {"kind": "provider_calc", "result": 7, "request_id": "req-calc-1"}',
+            result.content,
+        )
+
+    def test_mock_llm_provider_generate_infers_calc_summary_for_name_only_real_tool_observation(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Hosted Math: {"result": 7, "request_id": "req-calc-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Calculated result = 7 (request id req-calc-1).",
+            result.content,
+        )
+        self.assertNotIn(
+            'Hosted Math: {"result": 7, "request_id": "req-calc-1"}',
             result.content,
         )
 
@@ -36424,6 +36932,90 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 },
             ),
             "Provider Search: Retrieved 2 hits (request id req-1).",
+        )
+
+    def test_build_tool_observation_entry_does_not_imply_local_kb_for_productized_retrieval_label_without_registration(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=None,
+                step_tool_meta={
+                    "name": "provider_search",
+                    "label": "Provider Search [retrieval]",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "hit_count",
+                        "knowledge_base_id",
+                        "request_id",
+                    ],
+                    "output": {
+                        "hit_count": 2,
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-1",
+                    },
+                    "output_preview": {
+                        "hit_count": 2,
+                        "knowledge_base_id": "provider-kb",
+                    },
+                },
+            ),
+            "Provider Search [retrieval]: Retrieved 2 hits (request id req-1).",
+        )
+
+    def test_build_tool_observation_entry_infers_calc_summary_for_name_only_real_tool_without_registration(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_math",
+                output=None,
+                step_tool_meta={
+                    "name": "hosted_math",
+                    "label": "Hosted Math",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "result",
+                        "request_id",
+                    ],
+                    "output": {
+                        "result": 7,
+                        "request_id": "req-calc-1",
+                    },
+                    "output_preview": {
+                        "result": 7,
+                    },
+                },
+            ),
+            "Hosted Math: Calculated result = 7 (request id req-calc-1).",
+        )
+
+    def test_build_tool_observation_entry_infers_calc_summary_for_productized_calculator_label_without_registration(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="custom_math_runner",
+                output=None,
+                step_tool_meta={
+                    "name": "custom_math_runner",
+                    "label": "Hosted Math [calculator]",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "result",
+                        "request_id",
+                    ],
+                    "output": {
+                        "result": 7,
+                        "request_id": "req-calc-1",
+                    },
+                    "output_preview": {
+                        "result": 7,
+                    },
+                },
+            ),
+            "Hosted Math [calculator]: Calculated result = 7 (request id req-calc-1).",
         )
 
     def test_build_tool_observation_entry_reuses_step_meta_preview_without_output(

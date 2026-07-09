@@ -232,6 +232,94 @@ test("resolveTraceStepDisplayContent infers calc result summary from safe output
   );
 });
 
+test("resolveTraceStepDisplayContent infers calc result summary from structural kind in raw output without semantic family", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-output-policy-result-summary-calc-structural-kind",
+    type: "action",
+    content: "Tool done: Hosted Math",
+    meta: {
+      tool: {
+        name: "hosted_math",
+        label: "Hosted Math",
+        status: "done",
+        effective_result_preview_keys: ["result"],
+        effective_result_output_keys: ["result", "request_id"],
+        output_preview: {
+          result: 7,
+        },
+        output: {
+          kind: "provider_calc",
+          result: 7,
+          request_id: "req-calc-1",
+        },
+      },
+    },
+  });
+
+  assert.equal(
+    content,
+    'Calculated result = 7 (request id req-calc-1).\nPreview: {"result":7}\nOutput: {"result":7,"request_id":"req-calc-1"}',
+  );
+});
+
+test("resolveTraceStepDisplayContent infers calc result summary for name-only real tool without semantic family", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-output-policy-result-summary-calc-name-only-real-tool",
+    type: "action",
+    content: "Tool done: Hosted Math",
+    meta: {
+      tool: {
+        name: "hosted_math",
+        label: "Hosted Math",
+        status: "done",
+        effective_result_preview_keys: ["result"],
+        effective_result_output_keys: ["result", "request_id"],
+        output_preview: {
+          result: 7,
+        },
+        output: {
+          result: 7,
+          request_id: "req-calc-1",
+        },
+      },
+    },
+  });
+
+  assert.equal(
+    content,
+    'Calculated result = 7 (request id req-calc-1).\nPreview: {"result":7}\nOutput: {"result":7,"request_id":"req-calc-1"}',
+  );
+});
+
+test("resolveTraceStepDisplayContent infers calc result summary for productized calculator label without semantic family", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-output-policy-result-summary-calc-productized-label",
+    type: "action",
+    content: "Tool done: Hosted Math [calculator]",
+    meta: {
+      tool: {
+        name: "custom_math_runner",
+        label: "Hosted Math [calculator]",
+        status: "done",
+        effective_result_preview_keys: ["result"],
+        effective_result_output_keys: ["result", "request_id"],
+        output_preview: {
+          result: 7,
+        },
+        output: {
+          result: 7,
+          request_id: "req-calc-1",
+        },
+      },
+    },
+  });
+
+  assert.equal(
+    content,
+    'Calculated result = 7 (request id req-calc-1).\nPreview: {"result":7}\nOutput: {"result":7,"request_id":"req-calc-1"}',
+  );
+});
+
 test("resolveTraceStepDisplayContent appends tool registry diagnostics entries", () => {
   const content = resolveTraceStepDisplayContent({
     id: "step-tool-registry-diagnostics",
@@ -660,6 +748,33 @@ test("getStepTitle humanizes unlabeled real tool names for trace steps", () => {
   );
 });
 
+test("getStepTitle infers semantic category for name-only history steps", () => {
+  const title = getStepTitle({
+    id: "step-productized-title-name-only-planner",
+    type: "action",
+    content: "Tool done: Hosted Planner",
+    meta: {
+      tool: {
+        name: "hosted_planner",
+        label: "Hosted Planner",
+        status: "done",
+        effective_result_output_keys: ["steps"],
+        output: {
+          steps: [
+            "Analyze request",
+            "Synthesize final answer",
+          ],
+        },
+      },
+    },
+  });
+
+  assert.equal(
+    title,
+    "Hosted Planner [planner]",
+  );
+});
+
 test("getStepTitle uses productized title for rag retrieval follow-up steps", () => {
   const title = getStepTitle({
     id: "step-rag-followup-title",
@@ -772,6 +887,61 @@ test("formatTraceStepMetaSubtitle humanizes unlabeled real tool names", () => {
   assert.equal(
     subtitle,
     "Provider Search (running) [knowledge_retrieval] · Preview hit_count, knowledge_base_id",
+  );
+});
+
+test("formatTraceStepMetaSubtitle infers semantic category for name-only history steps", () => {
+  const subtitle = formatTraceStepMetaSubtitle(
+    {
+      id: "step-name-only-planner-subtitle",
+      type: "action",
+      content: "Tool done: Hosted Planner",
+      meta: {
+        tool: {
+          name: "hosted_planner",
+          label: "Hosted Planner",
+          status: "done",
+          effective_result_output_keys: ["steps"],
+          output: {
+            steps: [
+              "Analyze request",
+              "Synthesize final answer",
+            ],
+          },
+        },
+      },
+    },
+    {
+      toolLine: (name: string, status: string) => `${name} (${status})`,
+      toolRetry: (count: number) => `Retry ${count}`,
+      toolError: (message: string) => `Error ${message}`,
+      toolPreviewKeys: (keys: string[]) => `Preview ${keys.join(", ")}`,
+      toolPreviewDisabled: "Preview disabled",
+      toolOutputKeys: (keys: string[]) => `Output ${keys.join(", ")}`,
+      ragLine: (count: number, kb?: string) =>
+        kb ? `RAG ${count} ${kb}` : `RAG ${count}`,
+      model: "Model",
+      stepKind: "Step",
+      planningProviderUsed: "Planning provider used",
+      planningProviderFallback: "Planning provider fallback",
+      planningProviderRuleOnly: "Planning provider rule only",
+      toolRegistryProfile: "Profile",
+      toolRegistrySource: "Source",
+      allowedTools: "Allowed",
+      tokens: "Tokens",
+      promptTokens: "Prompt",
+      completionTokens: "Completion",
+      cost: "Cost",
+      usageSource: "Usage",
+      usageSourceProvider: "provider",
+      usageSourceEstimated: "estimated",
+      usageSourceLegacy: "legacy",
+    },
+  );
+
+  assert.equal(
+    subtitle,
+    "Hosted Planner (done) [planner] · Output steps",
   );
 });
 
@@ -1038,6 +1208,54 @@ test("matchesTraceStepSearchQuery matches execution diagnostics for invalid real
   assert.equal(matches, true);
 });
 
+test("matchesTraceStepSearchQuery matches derived semantic category for name-only history steps", () => {
+  const plannerMatches = matchesTraceStepSearchQuery(
+    {
+      id: "step-name-only-planner-search",
+      type: "action",
+      content: "Tool done: Hosted Planner",
+      meta: {
+        tool: {
+          name: "hosted_planner",
+          label: "Hosted Planner",
+          status: "done",
+          effective_result_output_keys: ["steps"],
+          output: {
+            steps: [
+              "Analyze request",
+              "Synthesize final answer",
+            ],
+          },
+        },
+      },
+    },
+    "planner",
+  );
+  const calculatorMatches = matchesTraceStepSearchQuery(
+    {
+      id: "step-name-only-calc-search",
+      type: "action",
+      content: "Tool done: Hosted Math",
+      meta: {
+        tool: {
+          name: "hosted_math",
+          label: "Hosted Math",
+          status: "done",
+          effective_result_output_keys: ["result", "request_id"],
+          output: {
+            result: 7,
+            request_id: "req-calc-1",
+          },
+        },
+      },
+    },
+    "calculator",
+  );
+
+  assert.equal(plannerMatches, true);
+  assert.equal(calculatorMatches, true);
+});
+
 test("matchesTraceStepSemanticFilter matches retrieval tool and rag follow-up", () => {
   const retrievalToolMatches = matchesTraceStepSemanticFilter(
     {
@@ -1074,6 +1292,129 @@ test("matchesTraceStepSemanticFilter matches retrieval tool and rag follow-up", 
 
   assert.equal(retrievalToolMatches, true);
   assert.equal(ragMatches, true);
+});
+
+test("matchesTraceStepSemanticFilter infers retrieval and calculator categories for name-only real tool history steps", () => {
+  const retrievalMatches = matchesTraceStepSemanticFilter(
+    {
+      id: "step-name-only-retrieval",
+      type: "action",
+      content: "Tool done: Hosted Search",
+      meta: {
+        tool: {
+          name: "hosted_search",
+          label: "Hosted Search",
+          status: "done",
+          effective_result_output_keys: ["documents_total", "request_id"],
+          output: {
+            documents_total: 2,
+            request_id: "req-1",
+          },
+        },
+      },
+    },
+    "retrieval",
+  );
+  const calculatorMatches = matchesTraceStepSemanticFilter(
+    {
+      id: "step-name-only-calc",
+      type: "action",
+      content: "Tool done: Hosted Math",
+      meta: {
+        tool: {
+          name: "hosted_math",
+          label: "Hosted Math",
+          status: "done",
+          effective_result_output_keys: ["result", "request_id"],
+          output: {
+            result: 7,
+            request_id: "req-calc-1",
+          },
+        },
+      },
+    },
+    "calculator",
+  );
+
+  assert.equal(retrievalMatches, true);
+  assert.equal(calculatorMatches, true);
+});
+
+test("matchesTraceStepSemanticFilter infers categories for productized bracket labels without semantic hints", () => {
+  const retrievalMatches = matchesTraceStepSemanticFilter(
+    {
+      id: "step-productized-retrieval-label",
+      type: "action",
+      content: "Tool done: Provider Search [retrieval]",
+      meta: {
+        tool: {
+          name: "custom_provider_search",
+          label: "Provider Search [retrieval]",
+          status: "done",
+          output_preview: {
+            documents_total: 2,
+          },
+          output: {
+            documents_total: 2,
+            request_id: "req-1",
+          },
+        },
+      },
+    },
+    "retrieval",
+  );
+  const calculatorMatches = matchesTraceStepSemanticFilter(
+    {
+      id: "step-productized-calculator-label",
+      type: "action",
+      content: "Tool done: Hosted Math [calculator]",
+      meta: {
+        tool: {
+          name: "custom_math_runner",
+          label: "Hosted Math [calculator]",
+          status: "done",
+          output_preview: {
+            result: 7,
+          },
+          output: {
+            result: 7,
+            request_id: "req-calc-1",
+          },
+        },
+      },
+    },
+    "calculator",
+  );
+
+  assert.equal(retrievalMatches, true);
+  assert.equal(calculatorMatches, true);
+});
+
+test("matchesTraceStepSemanticFilter infers planner category for name-only planner history steps", () => {
+  const plannerMatches = matchesTraceStepSemanticFilter(
+    {
+      id: "step-name-only-planner",
+      type: "action",
+      content: "Tool done: Hosted Planner",
+      meta: {
+        tool: {
+          name: "hosted_planner",
+          label: "Hosted Planner",
+          status: "done",
+          effective_result_output_keys: ["steps"],
+          output: {
+            steps: [
+              "Analyze request",
+              "Synthesize final answer",
+            ],
+          },
+        },
+      },
+    },
+    "planner",
+  );
+
+  assert.equal(plannerMatches, true);
 });
 
 test("resolveTraceStepSemanticStats counts planner retrieval and calculator traces", () => {
@@ -1138,6 +1479,81 @@ test("resolveTraceStepSemanticStats counts planner retrieval and calculator trac
     planner: 1,
     retrieval: 2,
     calculator: 1,
+  });
+});
+
+test("resolveTraceStepSemanticStats counts name-only real retrieval and calc steps without semantic hints", () => {
+  const stats = resolveTraceStepSemanticStats([
+    {
+      id: "step-name-only-retrieval",
+      type: "action",
+      content: "Tool done: Hosted Search",
+      meta: {
+        tool: {
+          name: "hosted_search",
+          label: "Hosted Search",
+          status: "done",
+          effective_result_output_keys: ["documents_total", "request_id"],
+          output: {
+            documents_total: 2,
+            request_id: "req-1",
+          },
+        },
+      },
+    },
+    {
+      id: "step-name-only-calc",
+      type: "action",
+      content: "Tool done: Hosted Math",
+      meta: {
+        tool: {
+          name: "hosted_math",
+          label: "Hosted Math",
+          status: "done",
+          effective_result_output_keys: ["result", "request_id"],
+          output: {
+            result: 7,
+            request_id: "req-calc-1",
+          },
+        },
+      },
+    },
+  ]);
+
+  assert.deepEqual(stats, {
+    planner: 0,
+    retrieval: 1,
+    calculator: 1,
+  });
+});
+
+test("resolveTraceStepSemanticStats counts name-only planner steps without semantic hints", () => {
+  const stats = resolveTraceStepSemanticStats([
+    {
+      id: "step-name-only-planner",
+      type: "action",
+      content: "Tool done: Hosted Planner",
+      meta: {
+        tool: {
+          name: "hosted_planner",
+          label: "Hosted Planner",
+          status: "done",
+          effective_result_output_keys: ["steps"],
+          output: {
+            steps: [
+              "Analyze request",
+              "Synthesize final answer",
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  assert.deepEqual(stats, {
+    planner: 1,
+    retrieval: 0,
+    calculator: 0,
   });
 });
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
@@ -1039,14 +1040,20 @@ def _normalize_trace_tool_semantic_kind(raw_value: object) -> str | None:
     normalized = raw_value.strip().lower()
     if not normalized:
         return None
+    if normalized == "retrieval":
+        return "knowledge_retrieval"
     if (
         normalized == "knowledge_retrieval"
         or normalized.endswith("knowledge_retrieval")
         or normalized.endswith("_retrieval")
     ):
         return "knowledge_retrieval"
+    if normalized == "planner":
+        return "task_planner"
     if normalized == "task_planner" or normalized.endswith("_planner"):
         return "task_planner"
+    if normalized == "calculator":
+        return "local_calculator"
     if (
         normalized == "local_calculator"
         or normalized.endswith("_calculator")
@@ -1059,7 +1066,9 @@ def _normalize_trace_tool_semantic_kind(raw_value: object) -> str | None:
 def _normalize_trace_tool_label(raw_value: object) -> str:
     if not isinstance(raw_value, str):
         return ""
-    return " ".join(raw_value.strip().lower().replace("_", " ").split())
+    normalized = raw_value.strip()
+    normalized = re.sub(r"\s*\[[^\[\]]+\]\s*$", "", normalized)
+    return " ".join(normalized.lower().replace("_", " ").split())
 
 
 def _trace_tool_label_implies_local_knowledge_retrieval(raw_value: object) -> bool:
@@ -1070,6 +1079,37 @@ def _trace_tool_label_implies_local_knowledge_retrieval(raw_value: object) -> bo
         "task retrieve",
         "task retrieve hot",
         "mock retrieve",
+    }
+
+
+def _trace_tool_label_implies_real_retrieval_summary(raw_value: object) -> bool:
+    normalized = _normalize_trace_tool_label(raw_value)
+    return normalized in {
+        "provider search",
+        "hosted search",
+        "provider retrieval",
+    }
+
+
+def _trace_tool_label_implies_real_calc_summary(raw_value: object) -> bool:
+    normalized = _normalize_trace_tool_label(raw_value)
+    return normalized in {
+        "provider math",
+        "hosted math",
+        "provider calc",
+        "provider calculator",
+        "hosted calc",
+        "hosted calculator",
+    }
+
+
+def _trace_tool_label_implies_planner_summary(raw_value: object) -> bool:
+    normalized = _normalize_trace_tool_label(raw_value)
+    return normalized in {
+        "task planner",
+        "provider planner",
+        "hosted planner",
+        "mock planner",
     }
 
 
@@ -1090,16 +1130,32 @@ def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
     output = _resolve_trace_tool_result_summary_input(tool_meta)
     if not isinstance(output, dict):
         return ""
+    raw_output = tool_meta.get("output") if isinstance(tool_meta.get("output"), dict) else None
+    raw_preview_output = (
+        tool_meta.get("output_preview")
+        if isinstance(tool_meta.get("output_preview"), dict)
+        else None
+    )
 
     explicit_semantic_kind = _normalize_trace_tool_semantic_kind(
         tool_meta.get("semantic_kind")
     )
     fallback_runtime_kind = _normalize_trace_tool_semantic_kind(
-        tool_meta.get("kind") or output.get("tool_kind") or output.get("kind")
+        tool_meta.get("kind")
+        or output.get("tool_kind")
+        or output.get("kind")
+        or (raw_output or {}).get("tool_kind")
+        or (raw_output or {}).get("kind")
+        or (raw_preview_output or {}).get("tool_kind")
+        or (raw_preview_output or {}).get("kind")
     )
     runtime_semantic_kind = explicit_semantic_kind or fallback_runtime_kind
     semantic_family = _normalize_trace_tool_semantic_kind(
         tool_meta.get("semantic_family") or output.get("tool_family")
+    )
+    label_implies_real_calc = (
+        _trace_tool_label_implies_real_calc_summary(tool_meta.get("label"))
+        or _trace_tool_label_implies_real_calc_summary(tool_meta.get("name"))
     )
 
     plan = output.get("plan")
@@ -1120,7 +1176,14 @@ def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
             )
         return f"Calculated {expression.strip()} = {result}."
     if (
-        semantic_family == "local_calculator" or runtime_semantic_kind == "local_calculator"
+        semantic_family == "local_calculator"
+        or runtime_semantic_kind == "local_calculator"
+        or (
+            result is not None
+            and semantic_family is None
+            and runtime_semantic_kind is None
+            and label_implies_real_calc
+        )
     ) and result is not None:
         if isinstance(request_id, str) and request_id.strip():
             return f"Calculated result = {result} (request id {request_id.strip()})."
@@ -1183,11 +1246,66 @@ def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
     return ""
 
 
+def _resolve_trace_tool_semantic_category(
+    tool_meta: dict[str, object],
+) -> str | None:
+    semantic = _normalize_trace_tool_semantic_kind(
+        tool_meta.get("semantic_family")
+        or tool_meta.get("semantic_kind")
+        or tool_meta.get("kind")
+    )
+    if semantic:
+        if semantic == "knowledge_retrieval" or semantic.endswith("_retrieval"):
+            return "retrieval"
+        if (
+            semantic == "local_calculator"
+            or semantic.endswith("_calculator")
+            or semantic.endswith("_calc")
+        ):
+            return "calculator"
+        if semantic == "task_planner" or semantic.endswith("_planner"):
+            return "planner"
+    output = _resolve_trace_tool_result_summary_input(tool_meta)
+    if not isinstance(output, dict):
+        return None
+    label_implies_retrieval = (
+        _trace_tool_label_implies_local_knowledge_retrieval(tool_meta.get("label"))
+        or _trace_tool_label_implies_local_knowledge_retrieval(tool_meta.get("name"))
+        or _trace_tool_label_implies_real_retrieval_summary(tool_meta.get("label"))
+        or _trace_tool_label_implies_real_retrieval_summary(tool_meta.get("name"))
+    )
+    if label_implies_retrieval and (
+        (isinstance(output.get("hit_count"), int) and output.get("hit_count") >= 0)
+        or (
+            isinstance(output.get("documents_total"), int)
+            and output.get("documents_total") >= 0
+        )
+    ):
+        return "retrieval"
+    label_implies_calc = (
+        _trace_tool_label_implies_real_calc_summary(tool_meta.get("label"))
+        or _trace_tool_label_implies_real_calc_summary(tool_meta.get("name"))
+    )
+    if label_implies_calc and output.get("result") is not None:
+        return "calculator"
+    label_implies_planner = (
+        _trace_tool_label_implies_planner_summary(tool_meta.get("label"))
+        or _trace_tool_label_implies_planner_summary(tool_meta.get("name"))
+    )
+    plan = output.get("plan")
+    steps = _normalize_trace_tool_result_plan_steps(output.get("steps"))
+    if label_implies_planner and (
+        (isinstance(plan, str) and plan.strip()) or steps
+    ):
+        return "planner"
+    return None
+
+
 def _format_trace_tool_semantic_descriptor(tool_meta: dict[str, object]) -> str:
     semantic_kind = str(tool_meta.get("semantic_kind") or tool_meta.get("kind") or "").strip()
     semantic_family = str(tool_meta.get("semantic_family") or "").strip()
     if not semantic_kind:
-        return semantic_family
+        return semantic_family or (_resolve_trace_tool_semantic_category(tool_meta) or "")
     if not semantic_family or semantic_family == semantic_kind:
         return semantic_kind
     return f"{semantic_kind} · {semantic_family}"

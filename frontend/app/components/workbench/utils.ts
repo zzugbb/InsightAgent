@@ -492,7 +492,8 @@ function normalizeTraceToolLabel(v: unknown): string {
   if (typeof v !== "string") {
     return "";
   }
-  return v.trim().toLowerCase().replaceAll("_", " ").split(/\s+/).filter(Boolean).join(" ");
+  const normalized = v.trim().replace(/\s*\[[^[\]]+\]\s*$/, "");
+  return normalized.toLowerCase().replaceAll("_", " ").split(/\s+/).filter(Boolean).join(" ");
 }
 
 function traceToolLabelImpliesLocalKnowledgeRetrieval(v: unknown): boolean {
@@ -502,6 +503,31 @@ function traceToolLabelImpliesLocalKnowledgeRetrieval(v: unknown): boolean {
     || normalized === "task retrieve"
     || normalized === "task retrieve hot"
     || normalized === "mock retrieve";
+}
+
+function traceToolLabelImpliesRealRetrievalSummary(v: unknown): boolean {
+  const normalized = normalizeTraceToolLabel(v);
+  return normalized === "provider search"
+    || normalized === "hosted search"
+    || normalized === "provider retrieval";
+}
+
+function traceToolLabelImpliesRealCalcSummary(v: unknown): boolean {
+  const normalized = normalizeTraceToolLabel(v);
+  return normalized === "provider math"
+    || normalized === "hosted math"
+    || normalized === "provider calc"
+    || normalized === "provider calculator"
+    || normalized === "hosted calc"
+    || normalized === "hosted calculator";
+}
+
+function traceToolLabelImpliesPlannerSummary(v: unknown): boolean {
+  const normalized = normalizeTraceToolLabel(v);
+  return normalized === "task planner"
+    || normalized === "provider planner"
+    || normalized === "hosted planner"
+    || normalized === "mock planner";
 }
 
 function normalizeTraceToolResultPlanSteps(v: unknown): string[] {
@@ -539,15 +565,31 @@ function inferTraceToolResultSummary(
   if (!output) {
     return null;
   }
+  const rawOutput =
+    tool.output && typeof tool.output === "object" && !Array.isArray(tool.output)
+      ? tool.output as Record<string, unknown>
+      : null;
+  const rawPreviewOutput =
+    tool.output_preview && typeof tool.output_preview === "object" && !Array.isArray(tool.output_preview)
+      ? tool.output_preview as Record<string, unknown>
+      : null;
 
   const explicitSemanticKind = normalizeTraceToolSemanticKind(tool.semantic_kind);
   const fallbackRuntimeKind = normalizeTraceToolSemanticKind(
-    tool.kind ?? (typeof output.tool_kind === "string" ? output.tool_kind : undefined),
+    tool.kind
+      ?? (typeof output.tool_kind === "string" ? output.tool_kind : undefined)
+      ?? (typeof output.kind === "string" ? output.kind : undefined)
+      ?? (typeof rawOutput?.tool_kind === "string" ? rawOutput.tool_kind : undefined)
+      ?? (typeof rawOutput?.kind === "string" ? rawOutput.kind : undefined)
+      ?? (typeof rawPreviewOutput?.tool_kind === "string" ? rawPreviewOutput.tool_kind : undefined)
+      ?? (typeof rawPreviewOutput?.kind === "string" ? rawPreviewOutput.kind : undefined),
   );
   const runtimeSemanticKind = explicitSemanticKind ?? fallbackRuntimeKind;
   const semanticFamily = normalizeTraceToolSemanticKind(
     tool.semantic_family ?? (typeof output.tool_family === "string" ? output.tool_family : undefined),
   );
+  const labelImpliesRealCalc = traceToolLabelImpliesRealCalcSummary(tool.label)
+    || traceToolLabelImpliesRealCalcSummary(tool.name);
 
   const plan = output.plan;
   if (typeof plan === "string" && plan.trim()) {
@@ -567,8 +609,17 @@ function inferTraceToolResultSummary(
     }
     return `Calculated ${expression.trim()} = ${String(result)}.`;
   }
-  if ((semanticFamily === "local_calculator" || runtimeSemanticKind === "local_calculator")
-    && result !== undefined && result !== null) {
+  if ((
+    semanticFamily === "local_calculator"
+    || runtimeSemanticKind === "local_calculator"
+    || (
+      result !== undefined
+      && result !== null
+      && semanticFamily === null
+      && runtimeSemanticKind === null
+      && labelImpliesRealCalc
+    )
+  ) && result !== undefined && result !== null) {
     if (typeof requestId === "string" && requestId.trim().length > 0) {
       return `Calculated result = ${String(result)} (request id ${requestId.trim()}).`;
     }
@@ -739,6 +790,7 @@ export function matchesTraceStepSearchQuery(
     typeof step.meta?.tool?.semantic_family === "string"
       ? step.meta.tool.semantic_family.toLowerCase()
       : "";
+  const toolSemanticCategory = resolveTraceStepSemanticCategory(step) ?? "";
   const previewKeys = Array.isArray(step.meta?.tool?.effective_result_preview_keys)
     ? step.meta?.tool?.effective_result_preview_keys
         .filter((item): item is string => typeof item === "string")
@@ -776,6 +828,7 @@ export function matchesTraceStepSearchQuery(
     toolKind.includes(q) ||
     toolSemanticKind.includes(q) ||
     toolSemanticFamily.includes(q) ||
+    toolSemanticCategory.includes(q) ||
     executionSummaryParts.some((part) => part.includes(q)) ||
     executionDiagnostics.some((diagnostic) => diagnostic.includes(q)) ||
     safeOutput.includes(q) ||
@@ -800,16 +853,58 @@ function resolveTraceStepSemanticCategory(
     normalizeTraceToolSemanticValue(step.meta?.tool?.semantic_family) ||
     normalizeTraceToolSemanticValue(step.meta?.tool?.semantic_kind) ||
     normalizeTraceToolSemanticValue(step.meta?.tool?.kind);
-  if (!semantic) {
+  if (semantic) {
+    if (semantic === "knowledge_retrieval" || semantic.endsWith("_retrieval")) {
+      return "retrieval";
+    }
+    if (semantic === "local_calculator" || semantic.endsWith("_calculator") || semantic.endsWith("_calc")) {
+      return "calculator";
+    }
+    if (semantic === "task_planner" || semantic.endsWith("_planner")) {
+      return "planner";
+    }
+  }
+  const tool = step.meta?.tool;
+  if (!tool) {
     return null;
   }
-  if (semantic === "knowledge_retrieval" || semantic.endsWith("_retrieval")) {
+  const output = resolveTraceToolResultSummaryInput(tool);
+  if (!output) {
+    return null;
+  }
+  const labelImpliesRetrieval = traceToolLabelImpliesLocalKnowledgeRetrieval(tool.label)
+    || traceToolLabelImpliesLocalKnowledgeRetrieval(tool.name)
+    || traceToolLabelImpliesRealRetrievalSummary(tool.label)
+    || traceToolLabelImpliesRealRetrievalSummary(tool.name);
+  if (
+    labelImpliesRetrieval
+    && (
+      (typeof output.hit_count === "number" && Number.isInteger(output.hit_count) && output.hit_count >= 0)
+      || (typeof output.documents_total === "number" && Number.isInteger(output.documents_total) && output.documents_total >= 0)
+    )
+  ) {
     return "retrieval";
   }
-  if (semantic === "local_calculator" || semantic.endsWith("_calculator") || semantic.endsWith("_calc")) {
+  const labelImpliesCalc = traceToolLabelImpliesRealCalcSummary(tool.label)
+    || traceToolLabelImpliesRealCalcSummary(tool.name);
+  if (
+    labelImpliesCalc
+    && output.result !== undefined
+    && output.result !== null
+  ) {
     return "calculator";
   }
-  if (semantic === "task_planner" || semantic.endsWith("_planner")) {
+  const labelImpliesPlanner = traceToolLabelImpliesPlannerSummary(tool.label)
+    || traceToolLabelImpliesPlannerSummary(tool.name);
+  const plan = output.plan;
+  const steps = normalizeTraceToolResultPlanSteps(output.steps);
+  if (
+    labelImpliesPlanner
+    && (
+      (typeof plan === "string" && plan.trim().length > 0)
+      || steps.length > 0
+    )
+  ) {
     return "planner";
   }
   return null;
@@ -897,6 +992,17 @@ function formatTraceToolSemanticDescriptor(tool: TraceStepMeta["tool"]): string 
     return semanticKind;
   }
   return `${semanticKind} · ${semanticFamily}`;
+}
+
+function formatTraceStepDerivedSemanticDescriptor(
+  step: TraceStepPayload,
+): string {
+  const explicitDescriptor = formatTraceToolSemanticDescriptor(step.meta?.tool);
+  if (explicitDescriptor) {
+    return explicitDescriptor;
+  }
+  const category = resolveTraceStepSemanticCategory(step);
+  return category ?? "";
 }
 
 const TRACE_TOOL_DISPLAY_ACRONYMS: Record<string, string> = {
@@ -1394,9 +1500,13 @@ export function getTraceFlowKindLabel(
 }
 
 export function getStepTitle(step: TraceStepPayload): string {
-  const toolTitle = formatTraceToolDisplayTitle(step.meta?.tool);
-  if (toolTitle) {
-    return toolTitle;
+  const tool = step.meta?.tool;
+  if (tool) {
+    const toolLabel = resolveTraceToolDisplayLabel(tool);
+    if (toolLabel) {
+      const semanticDescriptor = formatTraceStepDerivedSemanticDescriptor(step);
+      return semanticDescriptor ? `${toolLabel} [${semanticDescriptor}]` : toolLabel;
+    }
   }
   if (step.meta?.rag) {
     return "Knowledge Retrieval Snippets";
@@ -1452,7 +1562,7 @@ export function formatTraceStepMetaSubtitle(
   if (meta.tool?.name) {
     const name = resolveTraceToolDisplayLabel(meta.tool);
     if (name) {
-      const semanticKind = formatTraceToolSemanticDescriptor(meta.tool);
+      const semanticKind = formatTraceStepDerivedSemanticDescriptor(step);
       const toolLine = labels.toolLine(name, String(meta.tool.status ?? ""));
       parts.push(
         semanticKind ? `${toolLine} [${semanticKind}]` : toolLine,

@@ -102,7 +102,9 @@ def _split_tool_observations_prompt(prompt: str) -> tuple[str, list[str]]:
 def _normalize_mock_observation_label(raw_value: object) -> str:
     if not isinstance(raw_value, str):
         return ""
-    return " ".join(raw_value.strip().lower().replace("_", " ").split())
+    normalized = raw_value.strip()
+    normalized = re.sub(r"\s*\[[^\[\]]+\]\s*$", "", normalized)
+    return " ".join(normalized.lower().replace("_", " ").split())
 
 
 def _label_implies_local_knowledge_retrieval(label: str) -> bool:
@@ -112,6 +114,18 @@ def _label_implies_local_knowledge_retrieval(label: str) -> bool:
         "hot retrieval",
         "task retrieve",
         "mock retrieve",
+    }
+
+
+def _label_implies_real_calc_summary(label: str) -> bool:
+    normalized = _normalize_mock_observation_label(label)
+    return normalized in {
+        "provider math",
+        "hosted math",
+        "provider calc",
+        "provider calculator",
+        "hosted calc",
+        "hosted calculator",
     }
 
 
@@ -161,7 +175,16 @@ def _summarize_tool_observation(observation: str) -> str | None:
     semantic_family = _normalize_mock_tool_semantic_kind(
         payload.get("semantic_family")
     )
-    if semantic_family == "local_calculator" or semantic_kind == "local_calculator":
+    if (
+        semantic_family == "local_calculator"
+        or semantic_kind == "local_calculator"
+        or (
+            result is not None
+            and semantic_family is None
+            and semantic_kind is None
+            and _label_implies_real_calc_summary(label)
+        )
+    ):
         if result is not None:
             if isinstance(request_id, str) and request_id.strip():
                 return f"Calculated result = {result} (request id {request_id.strip()})."
