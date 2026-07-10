@@ -14352,6 +14352,44 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn("secret", markdown_meta["tool"]["output"])  # type: ignore[index]
 
+    def test_get_trace_step_markdown_meta_filters_quoted_json_string_safe_output(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-quoted-json-string-safe-output-meta",
+            seq=10,
+            type="action",
+            content="Tool done: Hosted Math",
+            meta={
+                "tool": {
+                    "name": "hosted_math",
+                    "label": "Hosted Math",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "result",
+                        "request_id",
+                    ],
+                    "output": json.dumps(
+                        '{"result":7,"request_id":"req-calc-1","kind":"provider_calc","secret":"hidden"}'
+                    ),
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        self.assertEqual(
+            markdown_meta["tool"]["output"],  # type: ignore[index]
+            {
+                "result": 7,
+                "request_id": "req-calc-1",
+            },
+        )
+        self.assertNotIn("secret", markdown_meta["tool"]["output"])  # type: ignore[index]
+
     def test_build_task_export_markdown_reuses_shared_markdown_meta_helper(
         self,
     ) -> None:
@@ -18545,6 +18583,150 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             markdown,
         )
         self.assertNotIn("Tool done: Hosted Math", markdown)
+        self.assertNotIn("secret", markdown)
+
+    def test_build_session_export_markdown_infers_calc_summary_from_quoted_json_label_preview(
+        self,
+    ) -> None:
+        quoted_payload = json.dumps(
+            '{"result":7,"request_id":"req-calc-1","kind":"provider_calc","secret":"hidden"}'
+        )
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-10T10:30:00",
+            session=session_routes_module.SessionResponse(
+                id="session-quoted-json-label-preview",
+                title="Quoted JSON Label Preview Session",
+                created_at="2026-07-10T10:29:00",
+                updated_at="2026-07-10T10:30:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-quoted-json-label-preview",
+                    prompt="Calculate provider metric",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-10T10:29:30",
+                    updated_at="2026-07-10T10:30:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-hosted-math-quoted-json-label",
+                            seq=11,
+                            type="action",
+                            title="Hosted Math",
+                            content_excerpt=f"Hosted Math: {quoted_payload}",
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "seq=11 · Hosted Math [calculator] · Calculated result = 7 (request id req-calc-1).",
+            markdown,
+        )
+        self.assertNotIn(f"Hosted Math: {quoted_payload}", markdown)
+        self.assertNotIn("secret", markdown)
+
+    def test_build_session_export_markdown_infers_calc_summary_from_legacy_quoted_json_label_preview(
+        self,
+    ) -> None:
+        legacy_quoted_payload = (
+            '"{"result":7,"request_id":"req-calc-1","kind":"provider_calc","secret":"hidden"}"'
+        )
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-10T10:35:00",
+            session=session_routes_module.SessionResponse(
+                id="session-legacy-quoted-json-label-preview",
+                title="Legacy Quoted JSON Label Preview Session",
+                created_at="2026-07-10T10:34:00",
+                updated_at="2026-07-10T10:35:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-legacy-quoted-json-label-preview",
+                    prompt="Calculate provider metric",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-10T10:34:30",
+                    updated_at="2026-07-10T10:35:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-hosted-math-legacy-quoted-json-label",
+                            seq=12,
+                            type="action",
+                            title="Hosted Math",
+                            content_excerpt=f"Hosted Math: {legacy_quoted_payload}",
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "seq=12 · Hosted Math [calculator] · Calculated result = 7 (request id req-calc-1).",
+            markdown,
+        )
+        self.assertNotIn(f"Hosted Math: {legacy_quoted_payload}", markdown)
         self.assertNotIn("secret", markdown)
 
     def test_build_session_export_markdown_infers_planner_title_for_name_only_real_tool_preview(
@@ -37784,6 +37966,29 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Hosted Math: Calculated result = 7 (request id req-calc-1).",
         )
 
+    def test_build_tool_observation_entry_infers_summary_from_quoted_json_string_step_meta_safe_output_without_output(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_math",
+                output=None,
+                step_tool_meta={
+                    "name": "hosted_math",
+                    "label": "Hosted Math",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "result",
+                        "request_id",
+                    ],
+                    "output": json.dumps(
+                        '{"result":7,"request_id":"req-calc-1","secret":"hidden"}'
+                    ),
+                },
+            ),
+            "Hosted Math: Calculated result = 7 (request id req-calc-1).",
+        )
+
     def test_build_tool_observation_entry_accepts_tuple_effective_result_output_keys_from_step_meta(
         self,
     ) -> None:
@@ -37871,6 +38076,35 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Calculated result = 7 (request id req-calc-1).\nPreview: {"result":7,"request_id":"req-calc-1"}',
         )
         self.assertNotIn("Tool done: Hosted Math", content)
+
+    def test_get_trace_step_display_content_infers_result_summary_from_quoted_json_string_output_preview(
+        self,
+    ) -> None:
+        step = SimpleNamespace(
+            id="step-hosted-math-preview-quoted-string",
+            seq=5,
+            type="action",
+            content="Tool done: Hosted Math",
+            meta=SimpleNamespace(
+                tool={
+                    "name": "hosted_math",
+                    "label": "Hosted Math",
+                    "status": "done",
+                    "output_preview": json.dumps(
+                        '{"result":7,"request_id":"req-calc-1"}'
+                    ),
+                }
+            ),
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(step)
+
+        self.assertEqual(
+            content,
+            'Calculated result = 7 (request id req-calc-1).\nPreview: {"result":7,"request_id":"req-calc-1"}',
+        )
+        self.assertNotIn("Tool done: Hosted Math", content)
+        self.assertNotIn('\\"result\\"', content)
 
     def test_get_trace_step_display_content_infers_retrieval_result_summary_from_safe_output_without_explicit_result_summary(
         self,

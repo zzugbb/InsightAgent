@@ -7099,11 +7099,7 @@ def build_tool_attempt_error_transition(
     }
 
 
-def _coerce_tool_output_preview_mapping(value: object) -> dict[str, object] | None:
-    if isinstance(value, dict):
-        return value
-    if not isinstance(value, str):
-        return None
+def _parse_tool_json_mapping_string(value: str) -> dict[str, object] | None:
     normalized = value.strip()
     if not normalized:
         return None
@@ -7111,9 +7107,25 @@ def _coerce_tool_output_preview_mapping(value: object) -> dict[str, object] | No
         parsed = json.loads(normalized)
     except json.JSONDecodeError:
         return None
+    if isinstance(parsed, str):
+        nested = parsed.strip()
+        if not nested.startswith("{"):
+            return None
+        try:
+            parsed = json.loads(nested)
+        except json.JSONDecodeError:
+            return None
     if isinstance(parsed, dict):
         return parsed
     return None
+
+
+def _coerce_tool_output_preview_mapping(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    return _parse_tool_json_mapping_string(value)
 
 
 def _coerce_tool_output_mapping(value: object) -> dict[str, object] | None:
@@ -7121,16 +7133,7 @@ def _coerce_tool_output_mapping(value: object) -> dict[str, object] | None:
         return value
     if not isinstance(value, str):
         return None
-    normalized = value.strip()
-    if not normalized:
-        return None
-    try:
-        parsed = json.loads(normalized)
-    except json.JSONDecodeError:
-        return None
-    if isinstance(parsed, dict):
-        return parsed
-    return None
+    return _parse_tool_json_mapping_string(value)
 
 
 def build_tool_step_output(action_step: dict[str, object]) -> dict[str, object] | None:

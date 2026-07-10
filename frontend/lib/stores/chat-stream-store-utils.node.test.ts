@@ -328,6 +328,35 @@ test("mergeToolEndToolMeta filters JSON string output to effective_result_output
   assert.equal(meta.status, "done");
 });
 
+test("mergeToolEndToolMeta filters quoted JSON string output to effective_result_output_keys", () => {
+  const meta = mergeToolEndToolMeta(
+    {
+      name: "provider_math",
+      label: "Provider Math",
+      input: { expression: "1+2*3" },
+      effective_result_output_keys: ["result", "request_id"],
+      status: "running",
+    },
+    {
+      status: "done",
+      output: JSON.stringify(
+        '{"result":7,"request_id":"req-calc-1","kind":"provider_calc","secret":"hidden"}',
+      ),
+      retry_count: 0,
+    },
+    {
+      name: "provider_math",
+      label: "Provider Math",
+    },
+  );
+
+  assert.deepEqual(meta.output, {
+    result: 7,
+    request_id: "req-calc-1",
+  });
+  assert.equal(meta.status, "done");
+});
+
 test("mergeToolStartToolMeta keeps runtime semantic metadata from tool_start payload", () => {
   const meta = mergeToolStartToolMeta(
     undefined,

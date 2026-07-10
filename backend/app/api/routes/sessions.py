@@ -341,7 +341,20 @@ def _parse_trace_preview_json_payload(value: str) -> dict[str, object] | None:
     try:
         parsed = json.loads(value)
     except json.JSONDecodeError:
-        return None
+        normalized = value.strip()
+        if not (
+            len(normalized) >= 2
+            and normalized[0] == normalized[-1] == '"'
+        ):
+            return None
+        nested = normalized[1:-1].strip()
+        if not nested.startswith("{"):
+            return None
+        try:
+            reparsed = json.loads(nested)
+        except json.JSONDecodeError:
+            return None
+        return dict(reparsed) if isinstance(reparsed, dict) else None
     if isinstance(parsed, str):
         try:
             reparsed = json.loads(parsed)
@@ -435,7 +448,7 @@ def _build_trace_preview_inferred_tool_meta(
         return None
     if not normalized.startswith("Tool done:"):
         _, separator, raw_payload = normalized.partition(":")
-        if not separator or not raw_payload.strip().startswith("{"):
+        if not separator or not raw_payload.strip():
             return None
 
     preview_output: dict[str, object] | None = None
@@ -513,7 +526,7 @@ def _normalize_session_trace_preview_excerpt(
         return ""
     if not normalized.startswith("Tool done:"):
         _, separator, raw_payload = normalized.partition(":")
-        if not separator or not raw_payload.strip().startswith("{"):
+        if not separator or not raw_payload.strip():
             return normalized
 
     preview_output: dict[str, object] | None = None

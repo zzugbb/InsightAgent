@@ -52,6 +52,25 @@ type ToolMetaLike = {
   execution_diagnostics?: unknown;
 };
 
+function parseJsonObjectPayload(value: string): Record<string, unknown> | null {
+  try {
+    let parsed = JSON.parse(value.trim()) as unknown;
+    if (typeof parsed === "string") {
+      const nested = parsed.trim();
+      if (!nested.startsWith("{")) {
+        return null;
+      }
+      parsed = JSON.parse(nested) as unknown;
+    }
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function buildLiveToolEndPayload(
   payload: Record<string, unknown>,
 ): LiveToolEndPayload {
@@ -83,18 +102,15 @@ function normalizeToolOutputByKeys(
   outputKeys: string[] | undefined,
 ): unknown {
   if (typeof output === "string" && output.trim().length > 0 && outputKeys && outputKeys.length > 0) {
-    try {
-      const parsed = JSON.parse(output.trim()) as unknown;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return Object.fromEntries(
-          outputKeys
-            .filter((key) => Object.prototype.hasOwnProperty.call(parsed, key))
-            .map((key) => [key, parsed[key as keyof typeof parsed]]),
-        );
-      }
-    } catch {
+    const parsed = parseJsonObjectPayload(output);
+    if (!parsed) {
       return output;
     }
+    return Object.fromEntries(
+      outputKeys
+        .filter((key) => Object.prototype.hasOwnProperty.call(parsed, key))
+        .map((key) => [key, parsed[key]]),
+    );
   }
   if (
     !output

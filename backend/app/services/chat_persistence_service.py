@@ -1045,6 +1045,9 @@ def _stringify_trace_tool_output_preview(value: object) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
+        parsed_mapping = _parse_trace_tool_json_mapping_string(value)
+        if isinstance(parsed_mapping, dict):
+            return json.dumps(parsed_mapping, ensure_ascii=False, separators=(",", ":"))
         return value.strip()
     if isinstance(value, tuple):
         value = list(value)
@@ -1053,11 +1056,7 @@ def _stringify_trace_tool_output_preview(value: object) -> str:
     return ""
 
 
-def _coerce_trace_tool_output_preview_mapping(value: object) -> dict[str, object] | None:
-    if isinstance(value, dict):
-        return value
-    if not isinstance(value, str):
-        return None
+def _parse_trace_tool_json_mapping_string(value: str) -> dict[str, object] | None:
     normalized = value.strip()
     if not normalized:
         return None
@@ -1065,9 +1064,25 @@ def _coerce_trace_tool_output_preview_mapping(value: object) -> dict[str, object
         parsed = json.loads(normalized)
     except json.JSONDecodeError:
         return None
+    if isinstance(parsed, str):
+        nested = parsed.strip()
+        if not nested.startswith("{"):
+            return None
+        try:
+            parsed = json.loads(nested)
+        except json.JSONDecodeError:
+            return None
     if isinstance(parsed, dict):
         return parsed
     return None
+
+
+def _coerce_trace_tool_output_preview_mapping(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    return _parse_trace_tool_json_mapping_string(value)
 
 
 def _coerce_trace_tool_output_mapping(value: object) -> dict[str, object] | None:
@@ -1075,16 +1090,7 @@ def _coerce_trace_tool_output_mapping(value: object) -> dict[str, object] | None
         return value
     if not isinstance(value, str):
         return None
-    normalized = value.strip()
-    if not normalized:
-        return None
-    try:
-        parsed = json.loads(normalized)
-    except json.JSONDecodeError:
-        return None
-    if isinstance(parsed, dict):
-        return parsed
-    return None
+    return _parse_trace_tool_json_mapping_string(value)
 
 
 def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | None:
