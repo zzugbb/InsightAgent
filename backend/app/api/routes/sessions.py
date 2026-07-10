@@ -342,6 +342,12 @@ def _parse_trace_preview_json_payload(value: str) -> dict[str, object] | None:
         parsed = json.loads(value)
     except json.JSONDecodeError:
         return None
+    if isinstance(parsed, str):
+        try:
+            reparsed = json.loads(parsed)
+        except json.JSONDecodeError:
+            return None
+        return dict(reparsed) if isinstance(reparsed, dict) else None
     return dict(parsed) if isinstance(parsed, dict) else None
 
 
@@ -372,6 +378,54 @@ def _extract_trace_preview_tool_label(title: str) -> str:
     return head.strip() or normalized
 
 
+def _infer_trace_preview_effective_output_keys(
+    *,
+    title: str,
+    output: dict[str, object],
+) -> list[str]:
+    semantic_kind, semantic_family = _extract_trace_preview_tool_semantics(title)
+    semantic_hints = {
+        value
+        for value in (semantic_kind, semantic_family)
+        if isinstance(value, str) and value.strip()
+    }
+    normalized_hints = {value.strip().lower() for value in semantic_hints}
+    keys: list[str] = []
+    if (
+        "calculator" in normalized_hints
+        or "local_calculator" in normalized_hints
+        or "provider_calc" in normalized_hints
+        or "provider_math" in normalized_hints
+    ):
+        keys = ["expression", "result", "request_id"]
+    elif (
+        "retrieval" in normalized_hints
+        or "knowledge_retrieval" in normalized_hints
+        or "provider_retrieval" in normalized_hints
+        or "provider_search" in normalized_hints
+    ):
+        keys = ["documents_total", "hit_count", "knowledge_base_id", "request_id"]
+    elif (
+        "planner" in normalized_hints
+        or "task_planner" in normalized_hints
+        or "provider_planner" in normalized_hints
+    ):
+        keys = ["plan", "steps", "request_id"]
+
+    if not keys:
+        if "result" in output or "expression" in output:
+            keys = ["expression", "result", "request_id"]
+        elif "documents_total" in output or "hit_count" in output:
+            keys = ["documents_total", "hit_count", "knowledge_base_id", "request_id"]
+        elif "plan" in output or "steps" in output:
+            keys = ["plan", "steps", "request_id"]
+
+    filtered_keys = [key for key in keys if key in output]
+    if filtered_keys:
+        return filtered_keys
+    return list(output.keys())
+
+
 def _build_trace_preview_inferred_tool_meta(
     title: str,
     content_excerpt: str,
@@ -386,10 +440,16 @@ def _build_trace_preview_inferred_tool_meta(
 
     preview_output: dict[str, object] | None = None
     safe_output: dict[str, object] | None = None
-    output_match = re.search(r"\bOutput:\s*(\{.*\})\s*$", normalized)
+    output_match = re.search(
+        r'\bOutput:\s*(\{.*\}|"(?:\\.|[^"])*")\s*$',
+        normalized,
+    )
     if output_match is not None:
         safe_output = _parse_trace_preview_json_payload(output_match.group(1))
-    preview_match = re.search(r"\bPreview:\s*(\{.*?\})(?:\s+Output:\s*\{.*\}\s*)?$", normalized)
+    preview_match = re.search(
+        r'\bPreview:\s*(\{.*?\}|"(?:\\.|[^"])*")(?:\s+Output:\s*(?:\{.*\}|"(?:\\.|[^"])*")\s*)?$',
+        normalized,
+    )
     if preview_match is not None:
         preview_output = _parse_trace_preview_json_payload(preview_match.group(1))
     if safe_output is None and preview_output is None:
@@ -404,9 +464,13 @@ def _build_trace_preview_inferred_tool_meta(
         return None
 
     semantic_kind, semantic_family = _extract_trace_preview_tool_semantics(title)
+    effective_result_output_keys = _infer_trace_preview_effective_output_keys(
+        title=title,
+        output=safe_output,
+    )
     inferred_tool_meta: dict[str, object] = {
         "output": safe_output,
-        "effective_result_output_keys": list(safe_output.keys()),
+        "effective_result_output_keys": effective_result_output_keys,
     }
     title_label = _extract_trace_preview_tool_label(title)
     if title_label:
@@ -457,11 +521,17 @@ def _normalize_session_trace_preview_excerpt(
     has_explicit_preview = False
     has_explicit_output = False
 
-    output_match = re.search(r"\bOutput:\s*(\{.*\})\s*$", normalized)
+    output_match = re.search(
+        r'\bOutput:\s*(\{.*\}|"(?:\\.|[^"])*")\s*$',
+        normalized,
+    )
     if output_match is not None:
         has_explicit_output = True
         safe_output = _parse_trace_preview_json_payload(output_match.group(1))
-    preview_match = re.search(r"\bPreview:\s*(\{.*?\})(?:\s+Output:\s*\{.*\}\s*)?$", normalized)
+    preview_match = re.search(
+        r'\bPreview:\s*(\{.*?\}|"(?:\\.|[^"])*")(?:\s+Output:\s*(?:\{.*\}|"(?:\\.|[^"])*")\s*)?$',
+        normalized,
+    )
     if preview_match is not None:
         has_explicit_preview = True
         preview_output = _parse_trace_preview_json_payload(preview_match.group(1))
@@ -492,7 +562,7 @@ def _normalize_session_trace_preview_excerpt(
         else ""
     )
     safe_output_text = chat_persistence_service._stringify_trace_tool_output_preview(  # type: ignore[attr-defined]
-        safe_output
+        chat_persistence_service._resolve_trace_safe_tool_output(inferred_tool_meta)  # type: ignore[attr-defined]
     )
     if has_explicit_preview and preview_text and preview_text not in inferred_summary:
         lines.append(f"Preview: {preview_text}")

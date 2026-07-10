@@ -1070,6 +1070,23 @@ def _coerce_trace_tool_output_preview_mapping(value: object) -> dict[str, object
     return None
 
 
+def _coerce_trace_tool_output_mapping(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
 def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | None:
     output_keys = tool_meta.get("effective_result_output_keys")
     if not isinstance(output_keys, (list, tuple)):
@@ -1082,12 +1099,13 @@ def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | No
     if not normalized_keys:
         return None
     output = tool_meta.get("output")
-    if not isinstance(output, dict):
+    output_mapping = _coerce_trace_tool_output_mapping(output)
+    if not isinstance(output_mapping, dict):
         return output
     return {
-        key: output[key]
+        key: output_mapping[key]
         for key in normalized_keys
-        if key in output
+        if key in output_mapping
     }
 
 

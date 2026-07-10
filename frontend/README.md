@@ -41,6 +41,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - 对旧 trace / typed payload 那些没有显式 `result_summary`、但仍保留了 safe output 的 real tool step，工作台、trace 与导出回放现在也会直接推断出 `Retrieved ...` / `Calculated result = ...` 摘要，而不是继续停留在 `Tool done: ...` 加 JSON。
   - 同一条 fallback 现在也已经落到 task/session preview 摘要展示；前端看到的 trace preview、session export preview 与 workbench 主回放会尽量使用推断后的结果摘要，而不是继续把 `Tool done: ...` 当作旧数据的主文案。
   - 这条 fallback 现在也覆盖只有 `output_preview` 的旧 tool step；即使历史 payload 把 `output_preview` 存成 JSON 字符串，前端 workbench、task trace preview、tool observation 与 task export markdown 回放在 planner/retrieval/calc 的 preview-only 场景下，也会先恢复可解析结构化 preview，并优先显示 `Planned steps - ...` / `Retrieved ...` / `Calculated result = ...` 摘要，而不是保留 `Tool done: ...`。
+  - 同一条 safe-output fallback 现在也继续覆盖 `effective_result_output_keys` 已存在、但 `tool.output` 仍落成 JSON 字符串的半迁移旧 payload；workbench display、标题/语义分类、搜索与 trace preview 回放会先按 output policy 恢复结构化安全 output，再推断 retrieval / calc / planner 摘要，不再直接显示原始 JSON，也不会把被过滤字段重新带回 UI。
+  - `chat-stream-store` 的 `tool_end` 合并现在也会对这类 JSON 字符串 `output` 复用同一条 output-policy 裁剪语义；即使 live SSE / reconnect payload 里还残留半迁移字符串结果，store 内的 tool meta 也会先收成安全 output 对象，再交给 workbench display、搜索和 semantic stats，而不会把整段原始 JSON 挂在前端运行态。
+  - 后端 session markdown / preview route 现在也补齐了 quoted JSON fallback；因此前端发起会话导出时，旧 `Output: "{\"result\":7,...}"` 这类双重转义 excerpt 也会被恢复成安全 output 回放，不会再把 `kind/secret` 一类旁路字段带回导出结果。
+  - task export markdown / markdown meta 这一层现在也已补上同类防回归覆盖；因此前端发起任务导出或消费旧 trace markdown meta 时，JSON-string safe output 也会继续按 output policy 裁成安全字段，而不会把旁路字段带回导出结果。
+  - 后端 mock final-answer observation parser 现在也会恢复 quoted JSON payload；因此前端看到的最终回答在旧 `Tool observations:` 只剩双层 JSON 字符串或 `"{"result":...}"` excerpt 时，也会继续显示 `Calculated result = ...` 这类摘要，而不是原始 JSON 或旁路字段。
   - 后端 session export markdown builder 现在也会把旧 `trace_preview.content_excerpt` 里的 `Label: {...}` 与 `Tool done: ... Preview: ... Output: ...` 归一成推断摘要；前端发起的会话 markdown 导出和工作台内的 trace/export 回放文案会更一致。
   - 后端 observation helper 现在也会在只剩 safe output / preview output 的 real tool 场景下优先产出结果摘要；前端看到的最终回答、observation 回放与导出文案会更接近工作台主展示链。
   - 当 registry/source 已经取不到、但 step meta 里仍保留 `semantic_family` 与结构化 output 时，后端 observation helper 现在也会继续推断 real tool 摘要；前端工作台、最终回答与导出回放不会因为 registry 缺席而退回 JSON-only observation。
@@ -69,8 +74,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - real/provider retrieval 与 runtime override real tool 的 follow-up、result summary、observation、导出回放已不再误写成本地默认知识库命中。
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`919/919`）
-  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`61/61`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`925/925`）
+  - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`63/63`）
   - `git diff --check` 通过
 
 ## 当前已有内容

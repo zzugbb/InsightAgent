@@ -264,7 +264,26 @@ def _parse_tool_observation(observation: str) -> tuple[str, dict[str, object] | 
     try:
         payload = json.loads(normalized_payload)
     except json.JSONDecodeError:
-        return normalized_label, None
+        if not (
+            len(normalized_payload) >= 2
+            and normalized_payload[0] == normalized_payload[-1] == '"'
+        ):
+            return normalized_label, None
+        nested_payload = normalized_payload[1:-1].strip()
+        if not nested_payload.startswith("{"):
+            return normalized_label, None
+        try:
+            payload = json.loads(nested_payload)
+        except json.JSONDecodeError:
+            return normalized_label, None
+    if isinstance(payload, str):
+        nested_payload = payload.strip()
+        if not nested_payload.startswith("{"):
+            return normalized_label, None
+        try:
+            payload = json.loads(nested_payload)
+        except json.JSONDecodeError:
+            return normalized_label, None
     if not isinstance(payload, dict):
         return normalized_label, None
     return normalized_label, payload

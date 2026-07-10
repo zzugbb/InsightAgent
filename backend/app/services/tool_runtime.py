@@ -7116,6 +7116,23 @@ def _coerce_tool_output_preview_mapping(value: object) -> dict[str, object] | No
     return None
 
 
+def _coerce_tool_output_mapping(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
 def build_tool_step_output(action_step: dict[str, object]) -> dict[str, object] | None:
     tool_obj = get_action_step_tool_meta(action_step)
     output = tool_obj.get("output") if isinstance(tool_obj, dict) else None
@@ -7154,9 +7171,14 @@ def _resolve_step_tool_safe_output(
     if not normalized_keys:
         return None
     output = step_tool_meta.get("output")
-    if not isinstance(output, dict):
+    output_mapping = _coerce_tool_output_mapping(output)
+    if not isinstance(output_mapping, dict):
         return output
-    return {key: output[key] for key in normalized_keys if key in output}
+    return {
+        key: output_mapping[key]
+        for key in normalized_keys
+        if key in output_mapping
+    }
 
 
 def _build_tool_result_summary_from_step_meta_semantics(

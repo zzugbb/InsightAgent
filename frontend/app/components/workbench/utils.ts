@@ -444,6 +444,20 @@ function resolveTraceSafeToolOutput(
     return null;
   }
   const output = tool.output;
+  if (typeof output === "string" && output.trim().length > 0) {
+    try {
+      const parsed = JSON.parse(output.trim()) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return Object.fromEntries(
+          outputKeys
+            .filter((key) => Object.prototype.hasOwnProperty.call(parsed, key))
+            .map((key) => [key, parsed[key as keyof typeof parsed]]),
+        );
+      }
+    } catch {
+      return output;
+    }
+  }
   if (!output || typeof output !== "object" || Array.isArray(output)) {
     return output;
   }
