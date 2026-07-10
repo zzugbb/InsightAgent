@@ -5277,6 +5277,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNot(payload["governance"], governance)
         self.assertEqual(payload["governance"]["profile"], "planning_only")
 
+    def test_get_task_response_summary_from_task_normalizes_governance_models_with_provider_source_context(
+        self,
+    ) -> None:
+        class ResponseReadyGovernance:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def model_dump(self):
+                return dict(self._payload)
+
+        payload = chat_persistence_module.get_task_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": "task-with-model-governance-source-context",
+                "session_id": "session-with-model-governance-source-context",
+                "prompt": "task response helper governance source context",
+                "status": "completed",
+                "created_at": "2026-06-22T18:00:00",
+                "updated_at": "2026-06-22T18:01:00",
+                "governance": ResponseReadyGovernance(
+                    {
+                        "profile": "calculator_only",
+                        "provider_source": "calculator_suite",
+                        "allowed_tool_names": ["calc_eval"],
+                        "allowed_tool_labels": ["calc_eval"],
+                    }
+                ),
+            }
+        )
+
+        self.assertEqual(
+            payload["governance"],
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
+            },
+        )
+
     def test_get_task_response_summary_from_task_accepts_model_dump_row(self) -> None:
         class TaskRowPayload:
             def model_dump(self):
@@ -6459,6 +6498,28 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "provider_sources": ["planning_suite"],
                 "allowed_tool_names": ["task_plan"],
                 "allowed_tool_labels": ["Task Planner Suite"],
+            },
+        )
+
+    def test_normalize_session_governance_summary_uses_single_provider_source_for_internal_tool_labels(
+        self,
+    ) -> None:
+        payload = chat_persistence_module._normalize_session_governance_summary_dict(  # type: ignore[attr-defined]
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
             },
         )
 
@@ -7795,6 +7856,99 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsInstance(payload["governance"], dict)
         self.assertIsNot(payload["governance"], session_governance)
         self.assertEqual(payload["governance"]["profiles"], ["planning_only"])
+
+    def test_get_session_export_response_summary_normalizes_governance_models_with_provider_source_context(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_session_export_payload_summary
+        )
+
+        class ResponseReadyGovernance:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def model_dump(self):
+                return dict(self._payload)
+
+        task_governance = ResponseReadyGovernance(
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+        session_governance = ResponseReadyGovernance(
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+        try:
+            chat_persistence_module.get_session_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "usage_summary": {"tasks_total": 1},
+                    "tasks": [
+                        {
+                            "task": {
+                                "id": "task-governance-source-model",
+                                "prompt": "governance source model prompt",
+                                "status": "completed",
+                                "status_normalized": "normalized::completed",
+                                "status_label": "label::completed",
+                                "status_rank": 5,
+                                "created_at": "2026-06-22T16:10:00",
+                                "updated_at": "2026-06-22T16:11:00",
+                            },
+                            "usage": None,
+                            "trace": {
+                                "governance": task_governance,
+                                "step_count": 3,
+                                "rag_hit_count": 1,
+                                "preview": [],
+                            },
+                        }
+                    ],
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 3,
+                        "rag_hit_count": 1,
+                    },
+                    "governance": session_governance,
+                    "messages": [],
+                }
+            )
+            payload = chat_persistence_module.get_session_export_response_summary(  # type: ignore[attr-defined]
+                usage_summary={"tasks_total": 1},
+                task_rows=[],
+                message_rows=[],
+                preview_limit=3,
+            )
+        finally:
+            chat_persistence_module.get_session_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload["tasks"][0]["governance"],
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
+            },
+        )
+        self.assertEqual(
+            payload["governance"],
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
+            },
+        )
 
     def test_get_session_export_response_summary_reuses_shared_payload_helper(self) -> None:
         original_payload_helper = (
@@ -10733,6 +10887,46 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNot(payload["trace"]["governance"], task["governance"])
         self.assertEqual(payload["trace"]["governance"]["profile"], "planning_only")
 
+    def test_get_task_export_summary_from_task_normalizes_governance_models_with_provider_source_context(
+        self,
+    ) -> None:
+        class ResponseReadyGovernance:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def model_dump(self):
+                return dict(self._payload)
+
+        task = {
+            "id": "task-export-summary-model-governance-source-context",
+            "session_id": "session-export-summary-model-governance-source-context",
+            "prompt": "export summary prompt source context",
+            "status": "completed",
+            "created_at": "2026-06-22T13:00:00",
+            "updated_at": "2026-06-22T13:05:00",
+            "governance": ResponseReadyGovernance(
+                {
+                    "profile": "calculator_only",
+                    "provider_source": "calculator_suite",
+                    "allowed_tool_names": ["calc_eval"],
+                    "allowed_tool_labels": ["calc_eval"],
+                }
+            ),
+        }
+        payload = chat_persistence_module.get_task_export_summary_from_task(  # type: ignore[attr-defined]
+            task
+        )
+
+        self.assertEqual(
+            payload["trace"]["governance"],
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
+            },
+        )
+
     def test_get_task_export_summary_from_task_coerces_trace_step_dicts(
         self,
     ) -> None:
@@ -11202,6 +11396,80 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             payload["top_tasks"][0]["governance"]["profile"],
             "planning_only",
+        )
+
+    def test_get_tasks_usage_dashboard_response_summary_normalizes_governance_models_with_provider_source_context(
+        self,
+    ) -> None:
+        class ResponseReadyGovernance:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def model_dump(self):
+                return dict(self._payload)
+
+        session_governance = ResponseReadyGovernance(
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+        task_governance = ResponseReadyGovernance(
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+        payload = chat_persistence_module.get_tasks_usage_dashboard_response_summary(  # type: ignore[attr-defined]
+            {
+                "window_days": 14,
+                "summary": {},
+                "trend": [],
+                "by_session": [
+                    {
+                        "session_id": "session-governance-source-model",
+                        "tasks_with_usage": 1,
+                        "total_tokens": 10,
+                        "cost_estimate": 0.1,
+                        "governance": session_governance,
+                    }
+                ],
+                "top_tasks": [
+                    {
+                        "task_id": "task-governance-source-model",
+                        "session_id": "session-governance-source-model",
+                        "prompt_excerpt": "governance source model",
+                        "total_tokens": 10,
+                        "cost_estimate": 0.1,
+                        "created_at": "2026-06-22T20:00:00",
+                        "updated_at": "2026-06-22T20:05:00",
+                        "governance": task_governance,
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(
+            payload["by_session"][0]["governance"],
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
+            },
+        )
+        self.assertEqual(
+            payload["top_tasks"][0]["governance"],
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
+            },
         )
 
     def test_task_route_module_does_not_expose_dead_clone_builders(self) -> None:
@@ -24807,6 +25075,71 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "planning_only",
         )
 
+    def test_get_task_export_response_summary_normalizes_governance_models_with_provider_source_context(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_task_export_payload_summary
+        )
+
+        class ResponseReadyGovernance:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def model_dump(self):
+                return dict(self._payload)
+
+        trace_governance = ResponseReadyGovernance(
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+        try:
+            chat_persistence_module.get_task_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "task": {
+                        "id": "task-export-governance-source",
+                        "session_id": "session-export-governance-source",
+                        "prompt": "export governance source prompt",
+                        "status": "completed",
+                        "status_normalized": "normalized::completed",
+                        "status_label": "label::completed",
+                        "status_rank": 19,
+                        "created_at": "2026-06-22T21:00:00",
+                        "updated_at": "2026-06-22T21:05:00",
+                    },
+                    "usage": None,
+                    "messages": [],
+                    "trace": {
+                        "governance": trace_governance,
+                        "step_count": 0,
+                        "rag_hit_count": 0,
+                        "rag_knowledge_base_ids": [],
+                        "rag_chunks": [],
+                        "steps": [],
+                    },
+                }
+            )
+            payload = chat_persistence_module.get_task_export_response_summary(  # type: ignore[attr-defined]
+                {"id": "task-export-governance-source"},
+                [],
+            )
+        finally:
+            chat_persistence_module.get_task_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload["trace"]["governance"],
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["Calculator Suite"],
+            },
+        )
+
     def test_get_task_export_response_summary_reuses_shared_payload_helper(self) -> None:
         original_payload_helper = (
             chat_persistence_module.get_task_export_payload_summary
@@ -37170,6 +37503,23 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Custom Lookup: {"tool_kind": "custom_lookup", "hit_count": 1}',
         )
 
+    def test_build_tool_observation_entry_infers_summary_from_json_string_step_meta_preview_without_output(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_math",
+                output=None,
+                step_tool_meta={
+                    "name": "hosted_math",
+                    "label": "Hosted Math",
+                    "status": "done",
+                    "output_preview": '{"result":7,"request_id":"req-calc-1"}',
+                },
+            ),
+            "Hosted Math: Calculated result = 7 (request id req-calc-1).",
+        )
+
     def test_build_tool_observation_entry_accepts_tuple_effective_result_output_keys_from_step_meta(
         self,
     ) -> None:
@@ -37231,6 +37581,32 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Retrieved 2 documents (request id req-1).\nPreview: {"documents_total":2}\nOutput: {"documents_total":2,"request_id":"req-1"}',
         )
         self.assertNotIn("Tool done: Provider Search", content)
+
+    def test_get_trace_step_display_content_infers_result_summary_from_json_string_output_preview(
+        self,
+    ) -> None:
+        step = SimpleNamespace(
+            id="step-hosted-math-preview-string",
+            seq=5,
+            type="action",
+            content="Tool done: Hosted Math",
+            meta=SimpleNamespace(
+                tool={
+                    "name": "hosted_math",
+                    "label": "Hosted Math",
+                    "status": "done",
+                    "output_preview": '{"result":7,"request_id":"req-calc-1"}',
+                }
+            ),
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(step)
+
+        self.assertEqual(
+            content,
+            'Calculated result = 7 (request id req-calc-1).\nPreview: {"result":7,"request_id":"req-calc-1"}',
+        )
+        self.assertNotIn("Tool done: Hosted Math", content)
 
     def test_get_trace_step_display_content_infers_retrieval_result_summary_from_safe_output_without_explicit_result_summary(
         self,
@@ -44413,6 +44789,223 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.summary.tasks_total, 1)
         self.assertEqual(payload.summary.total_tokens, 30)
 
+    def test_get_tasks_usage_dashboard_route_normalizes_model_dump_response_summary_governance_with_provider_source_context(
+        self,
+    ) -> None:
+        original_dashboard_loader = task_routes_module.get_tasks_usage_dashboard
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_tasks_usage_dashboard_response_summary",
+            None,
+        )
+
+        class ResponseReadyPayload:
+            def model_dump(self):
+                return {
+                    "window_days": 14,
+                    "summary": {
+                        "tasks_total": 1,
+                        "tasks_with_usage": 1,
+                        "source_tasks_provider": 1,
+                        "source_tasks_estimated": 0,
+                        "source_tasks_mixed": 0,
+                        "source_tasks_legacy": 0,
+                        "prompt_tokens": 10,
+                        "completion_tokens": 20,
+                        "total_tokens": 30,
+                        "cost_estimate": 0.12,
+                        "avg_total_tokens": 30.0,
+                        "avg_cost_estimate": 0.12,
+                    },
+                    "trend": [],
+                    "by_session": [
+                        {
+                            "session_id": "session-usage-route-source",
+                            "session_title": "Usage Route Source",
+                            "tasks_with_usage": 1,
+                            "total_tokens": 30,
+                            "cost_estimate": 0.12,
+                            "last_task_at": "2026-07-02T10:00:00",
+                            "governance": {
+                                "profiles": ["calculator_only"],
+                                "provider_sources": ["calculator_suite"],
+                                "allowed_tool_names": ["calc_eval"],
+                                "allowed_tool_labels": ["calc_eval"],
+                            },
+                        }
+                    ],
+                    "top_tasks": [
+                        {
+                            "task_id": "task-usage-route-source",
+                            "session_id": "session-usage-route-source",
+                            "session_title": "Usage Route Source",
+                            "prompt_excerpt": "usage route source",
+                            "total_tokens": 30,
+                            "cost_estimate": 0.12,
+                            "created_at": "2026-07-02T10:00:00",
+                            "updated_at": "2026-07-02T10:01:00",
+                            "source_kind": "provider",
+                            "governance": {
+                                "profile": "calculator_only",
+                                "provider_source": "calculator_suite",
+                                "allowed_tool_names": ["calc_eval"],
+                                "allowed_tool_labels": ["calc_eval"],
+                            },
+                        }
+                    ],
+                }
+
+        try:
+            task_routes_module.get_tasks_usage_dashboard = lambda *_args, **_kwargs: {  # type: ignore[assignment]
+                "ignored": True
+            }
+            task_routes_module.chat_persistence_service.get_tasks_usage_dashboard_response_summary = (  # type: ignore[attr-defined]
+                lambda _payload: ResponseReadyPayload()
+            )
+            payload = task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=8,
+                top_tasks=12,
+                source_kind="all",
+                current_user={"id": "user-usage-dashboard-source-model-dump"},
+            )
+        finally:
+            task_routes_module.get_tasks_usage_dashboard = original_dashboard_loader
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_tasks_usage_dashboard_response_summary",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_tasks_usage_dashboard_response_summary",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_tasks_usage_dashboard_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload.by_session[0].governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+        self.assertEqual(
+            payload.top_tasks[0].governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+
+    def test_get_tasks_usage_dashboard_route_normalizes_dict_response_summary_with_model_dump_governance(
+        self,
+    ) -> None:
+        original_dashboard_loader = task_routes_module.get_tasks_usage_dashboard
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_tasks_usage_dashboard_response_summary",
+            None,
+        )
+
+        class ResponseReadyGovernance:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def model_dump(self):
+                return dict(self._payload)
+
+        session_governance = ResponseReadyGovernance(
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+        task_governance = ResponseReadyGovernance(
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+        try:
+            task_routes_module.get_tasks_usage_dashboard = lambda *_args, **_kwargs: {  # type: ignore[assignment]
+                "ignored": True
+            }
+            task_routes_module.chat_persistence_service.get_tasks_usage_dashboard_response_summary = (  # type: ignore[attr-defined]
+                lambda _payload: {
+                    "window_days": 14,
+                    "summary": {
+                        "tasks_total": 1,
+                        "tasks_with_usage": 1,
+                        "source_tasks_provider": 1,
+                        "source_tasks_estimated": 0,
+                        "source_tasks_mixed": 0,
+                        "source_tasks_legacy": 0,
+                        "prompt_tokens": 10,
+                        "completion_tokens": 20,
+                        "total_tokens": 30,
+                        "cost_estimate": 0.12,
+                        "avg_total_tokens": 30.0,
+                        "avg_cost_estimate": 0.12,
+                    },
+                    "trend": [],
+                    "by_session": [
+                        {
+                            "session_id": "session-usage-route-mixed",
+                            "session_title": "Usage Route Mixed",
+                            "tasks_with_usage": 1,
+                            "total_tokens": 30,
+                            "cost_estimate": 0.12,
+                            "last_task_at": "2026-07-02T10:00:00",
+                            "governance": session_governance,
+                        }
+                    ],
+                    "top_tasks": [
+                        {
+                            "task_id": "task-usage-route-mixed",
+                            "session_id": "session-usage-route-mixed",
+                            "session_title": "Usage Route Mixed",
+                            "prompt_excerpt": "usage route mixed",
+                            "total_tokens": 30,
+                            "cost_estimate": 0.12,
+                            "created_at": "2026-07-02T10:00:00",
+                            "updated_at": "2026-07-02T10:01:00",
+                            "source_kind": "provider",
+                            "governance": task_governance,
+                        }
+                    ],
+                }
+            )
+            payload = task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=8,
+                top_tasks=12,
+                source_kind="all",
+                current_user={"id": "user-usage-dashboard-mixed-governance"},
+            )
+        finally:
+            task_routes_module.get_tasks_usage_dashboard = original_dashboard_loader
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_tasks_usage_dashboard_response_summary",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_tasks_usage_dashboard_response_summary",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_tasks_usage_dashboard_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload.by_session[0].governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+        self.assertEqual(
+            payload.top_tasks[0].governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+
     def test_get_task_detail_accepts_model_dump_response_summary(self) -> None:
         original_get_task = task_routes_module.get_task
         original_response_helper = getattr(
@@ -44467,6 +45060,132 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.id, "task-detail-model-dump")
         self.assertEqual(payload.status, "completed")
         self.assertEqual(payload.prompt, "detail model dump")
+
+    def test_get_task_detail_normalizes_model_dump_response_summary_governance_with_provider_source_context(
+        self,
+    ) -> None:
+        original_get_task = task_routes_module.get_task
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_response_summary_from_task",
+            None,
+        )
+
+        class ResponseReadyPayload:
+            def model_dump(self):
+                return {
+                    "id": "task-detail-source-model-dump",
+                    "session_id": "session-detail-source-model-dump",
+                    "prompt": "detail source model dump",
+                    "status": "completed",
+                    "status_normalized": "completed",
+                    "status_label": "Completed",
+                    "status_rank": 3,
+                    "created_at": "2026-07-02T10:00:00",
+                    "updated_at": "2026-07-02T10:01:00",
+                    "usage": None,
+                    "trace_step_count": 0,
+                    "rag_hit_count": 0,
+                    "governance": {
+                        "profile": "calculator_only",
+                        "provider_source": "calculator_suite",
+                        "allowed_tool_names": ["calc_eval"],
+                        "allowed_tool_labels": ["calc_eval"],
+                    },
+                }
+
+        try:
+            task_routes_module.get_task = lambda _task_id, _user_id: {
+                "id": "task-detail-source-model-dump"
+            }
+            task_routes_module.chat_persistence_service.get_task_response_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: ResponseReadyPayload()
+            )
+            payload = task_routes_module.get_task_detail(
+                "task-detail-source-model-dump",
+                current_user={"id": "user-task-detail-source-model-dump"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_response_summary_from_task",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_response_summary_from_task",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_response_summary_from_task = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload.governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+
+    def test_get_task_detail_normalizes_dict_response_summary_with_model_dump_governance(
+        self,
+    ) -> None:
+        original_get_task = task_routes_module.get_task
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_response_summary_from_task",
+            None,
+        )
+
+        class ResponseReadyGovernance:
+            def model_dump(self):
+                return {
+                    "profile": "calculator_only",
+                    "provider_source": "calculator_suite",
+                    "allowed_tool_names": ["calc_eval"],
+                    "allowed_tool_labels": ["calc_eval"],
+                }
+
+        try:
+            task_routes_module.get_task = lambda _task_id, _user_id: {
+                "id": "task-detail-mixed-governance"
+            }
+            task_routes_module.chat_persistence_service.get_task_response_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "id": "task-detail-mixed-governance",
+                    "session_id": "session-detail-mixed-governance",
+                    "prompt": "detail mixed governance",
+                    "status": "completed",
+                    "status_normalized": "completed",
+                    "status_label": "Completed",
+                    "status_rank": 3,
+                    "created_at": "2026-07-02T10:00:00",
+                    "updated_at": "2026-07-02T10:01:00",
+                    "usage": None,
+                    "trace_step_count": 0,
+                    "rag_hit_count": 0,
+                    "governance": ResponseReadyGovernance(),
+                }
+            )
+            payload = task_routes_module.get_task_detail(
+                "task-detail-mixed-governance",
+                current_user={"id": "user-task-detail-mixed-governance"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_response_summary_from_task",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_response_summary_from_task",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_response_summary_from_task = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload.governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
 
     def test_get_tasks_accepts_model_dump_item_summaries(self) -> None:
         original_list_tasks = task_routes_module.list_tasks
@@ -44534,6 +45253,148 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual([item.id for item in payload.items], ["task-list-model-dump-1", "task-list-model-dump-2"])
         self.assertEqual(payload.total, 2)
         self.assertFalse(payload.has_more)
+
+    def test_get_tasks_normalizes_model_dump_item_summary_governance_with_provider_source_context(
+        self,
+    ) -> None:
+        original_list_tasks = task_routes_module.list_tasks
+        original_count_tasks = task_routes_module.count_tasks
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_response_summary_from_task",
+            None,
+        )
+
+        class ResponseReadyPayload:
+            def model_dump(self):
+                return {
+                    "id": "task-list-source-model-dump",
+                    "session_id": "session-list-source-model-dump",
+                    "prompt": "prompt::task-list-source-model-dump",
+                    "status": "completed",
+                    "status_normalized": "completed",
+                    "status_label": "Completed",
+                    "status_rank": 3,
+                    "created_at": "2026-07-02T11:00:00",
+                    "updated_at": "2026-07-02T11:01:00",
+                    "usage": None,
+                    "trace_step_count": 0,
+                    "rag_hit_count": 0,
+                    "governance": {
+                        "profile": "calculator_only",
+                        "provider_source": "calculator_suite",
+                        "allowed_tool_names": ["calc_eval"],
+                        "allowed_tool_labels": ["calc_eval"],
+                    },
+                }
+
+        try:
+            task_routes_module.list_tasks = lambda **_kwargs: [  # type: ignore[assignment]
+                {"id": "task-list-source-model-dump"},
+            ]
+            task_routes_module.count_tasks = lambda *_args, **_kwargs: 1  # type: ignore[assignment]
+            task_routes_module.chat_persistence_service.get_task_response_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: ResponseReadyPayload()
+            )
+            payload = task_routes_module.get_tasks(
+                limit=20,
+                offset=0,
+                session_id=None,
+                query=None,
+                tool_registry_profile=None,
+                tool_registry_provider_source=None,
+                current_user={"id": "user-task-list-source-model-dump"},
+            )
+        finally:
+            task_routes_module.list_tasks = original_list_tasks
+            task_routes_module.count_tasks = original_count_tasks
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_response_summary_from_task",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_response_summary_from_task",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_response_summary_from_task = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload.items[0].governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+
+    def test_get_tasks_normalizes_dict_item_summary_with_model_dump_governance(
+        self,
+    ) -> None:
+        original_list_tasks = task_routes_module.list_tasks
+        original_count_tasks = task_routes_module.count_tasks
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_response_summary_from_task",
+            None,
+        )
+
+        class ResponseReadyGovernance:
+            def model_dump(self):
+                return {
+                    "profile": "calculator_only",
+                    "provider_source": "calculator_suite",
+                    "allowed_tool_names": ["calc_eval"],
+                    "allowed_tool_labels": ["calc_eval"],
+                }
+
+        try:
+            task_routes_module.list_tasks = lambda **_kwargs: [  # type: ignore[assignment]
+                {"id": "task-list-mixed-governance"},
+            ]
+            task_routes_module.count_tasks = lambda *_args, **_kwargs: 1  # type: ignore[assignment]
+            task_routes_module.chat_persistence_service.get_task_response_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "id": "task-list-mixed-governance",
+                    "session_id": "session-list-mixed-governance",
+                    "prompt": "prompt::task-list-mixed-governance",
+                    "status": "completed",
+                    "status_normalized": "completed",
+                    "status_label": "Completed",
+                    "status_rank": 3,
+                    "created_at": "2026-07-02T11:00:00",
+                    "updated_at": "2026-07-02T11:01:00",
+                    "usage": None,
+                    "trace_step_count": 0,
+                    "rag_hit_count": 0,
+                    "governance": ResponseReadyGovernance(),
+                }
+            )
+            payload = task_routes_module.get_tasks(
+                limit=20,
+                offset=0,
+                session_id=None,
+                query=None,
+                tool_registry_profile=None,
+                tool_registry_provider_source=None,
+                current_user={"id": "user-task-list-mixed-governance"},
+            )
+        finally:
+            task_routes_module.list_tasks = original_list_tasks
+            task_routes_module.count_tasks = original_count_tasks
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_response_summary_from_task",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_response_summary_from_task",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_response_summary_from_task = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload.items[0].governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
 
     def test_get_task_trace_detail_accepts_model_dump_response_summary(self) -> None:
         original_get_task = task_routes_module.get_task
@@ -45218,6 +46079,378 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.tasks[0].id, "task-session-export-model")
         self.assertEqual(payload.governance.profiles, ["planning_only"])
 
+    def test_build_session_export_payload_normalizes_model_dump_export_summary_governance_with_provider_source_context(
+        self,
+    ) -> None:
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_response_helper = getattr(
+            session_routes_module.chat_persistence_service,
+            "get_session_export_response_summary",
+            None,
+        )
+
+        class ExportSummaryPayload:
+            def model_dump(self):
+                return {
+                    "usage_summary": {
+                        "tasks_total": 1,
+                        "tasks_with_usage": 0,
+                        "source_tasks_provider": 0,
+                        "source_tasks_estimated": 0,
+                        "source_tasks_mixed": 0,
+                        "source_tasks_legacy": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "avg_total_tokens": None,
+                        "avg_cost_estimate": None,
+                    },
+                    "governance": {
+                        "profiles": ["calculator_only"],
+                        "provider_sources": ["calculator_suite"],
+                        "allowed_tool_names": ["calc_eval"],
+                        "allowed_tool_labels": ["calc_eval"],
+                    },
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 2,
+                        "rag_hit_count": 1,
+                    },
+                    "messages": [],
+                    "tasks": [
+                        {
+                            "id": "task-session-export-source-model",
+                            "prompt": "session export source model",
+                            "status": "completed",
+                            "status_normalized": "completed",
+                            "status_label": "Completed",
+                            "status_rank": 3,
+                            "created_at": "2026-07-03T10:20:00",
+                            "updated_at": "2026-07-03T10:21:00",
+                            "usage": None,
+                            "trace_step_count": 2,
+                            "rag_hit_count": 1,
+                            "trace_preview": [],
+                            "governance": {
+                                "profile": "calculator_only",
+                                "provider_source": "calculator_suite",
+                                "allowed_tool_names": ["calc_eval"],
+                                "allowed_tool_labels": ["calc_eval"],
+                            },
+                        }
+                    ],
+                }
+
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {  # type: ignore[assignment]
+                "tasks_total": 0,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            session_routes_module.chat_persistence_service.get_session_export_response_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: ExportSummaryPayload()
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                {
+                    "id": "session-export-source-summary-model",
+                    "title": "Session Export Source Summary Model",
+                    "created_at": "2026-07-03T10:20:00",
+                    "updated_at": "2026-07-03T10:21:00",
+                },
+                "user-session-export-source-summary-model",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary  # type: ignore[assignment]
+            session_routes_module.get_session_messages = original_get_session_messages  # type: ignore[assignment]
+            session_routes_module.get_session_tasks = original_get_session_tasks  # type: ignore[assignment]
+            if original_response_helper is None:
+                if hasattr(
+                    session_routes_module.chat_persistence_service,
+                    "get_session_export_response_summary",
+                ):
+                    delattr(
+                        session_routes_module.chat_persistence_service,
+                        "get_session_export_response_summary",
+                    )
+            else:
+                session_routes_module.chat_persistence_service.get_session_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload.governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+        self.assertEqual(
+            payload.tasks[0].governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+
+    def test_build_session_export_payload_normalizes_dict_export_summary_with_model_dump_governance(
+        self,
+    ) -> None:
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_response_helper = getattr(
+            session_routes_module.chat_persistence_service,
+            "get_session_export_response_summary",
+            None,
+        )
+
+        class ResponseReadyGovernance:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def model_dump(self):
+                return dict(self._payload)
+
+        session_governance = ResponseReadyGovernance(
+            {
+                "profiles": ["calculator_only"],
+                "provider_sources": ["calculator_suite"],
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+        task_governance = ResponseReadyGovernance(
+            {
+                "profile": "calculator_only",
+                "provider_source": "calculator_suite",
+                "allowed_tool_names": ["calc_eval"],
+                "allowed_tool_labels": ["calc_eval"],
+            }
+        )
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {  # type: ignore[assignment]
+                "tasks_total": 0,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            session_routes_module.chat_persistence_service.get_session_export_response_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "usage_summary": {
+                        "tasks_total": 1,
+                        "tasks_with_usage": 0,
+                        "source_tasks_provider": 0,
+                        "source_tasks_estimated": 0,
+                        "source_tasks_mixed": 0,
+                        "source_tasks_legacy": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "avg_total_tokens": None,
+                        "avg_cost_estimate": None,
+                    },
+                    "governance": session_governance,
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 2,
+                        "rag_hit_count": 1,
+                    },
+                    "messages": [],
+                    "tasks": [
+                        {
+                            "id": "task-session-export-mixed-governance",
+                            "prompt": "session export mixed governance",
+                            "status": "completed",
+                            "status_normalized": "completed",
+                            "status_label": "Completed",
+                            "status_rank": 3,
+                            "created_at": "2026-07-03T10:20:00",
+                            "updated_at": "2026-07-03T10:21:00",
+                            "usage": None,
+                            "trace_step_count": 2,
+                            "rag_hit_count": 1,
+                            "trace_preview": [],
+                            "governance": task_governance,
+                        }
+                    ],
+                }
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                {
+                    "id": "session-export-mixed-governance",
+                    "title": "Session Export Mixed Governance",
+                    "created_at": "2026-07-03T10:20:00",
+                    "updated_at": "2026-07-03T10:21:00",
+                },
+                "user-session-export-mixed-governance",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary  # type: ignore[assignment]
+            session_routes_module.get_session_messages = original_get_session_messages  # type: ignore[assignment]
+            session_routes_module.get_session_tasks = original_get_session_tasks  # type: ignore[assignment]
+            if original_response_helper is None:
+                if hasattr(
+                    session_routes_module.chat_persistence_service,
+                    "get_session_export_response_summary",
+                ):
+                    delattr(
+                        session_routes_module.chat_persistence_service,
+                        "get_session_export_response_summary",
+                    )
+            else:
+                session_routes_module.chat_persistence_service.get_session_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload.governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+        self.assertEqual(
+            payload.tasks[0].governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+
+    def test_build_session_export_payload_normalizes_dict_export_summary_with_model_dump_nested_rows(
+        self,
+    ) -> None:
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_response_helper = getattr(
+            session_routes_module.chat_persistence_service,
+            "get_session_export_response_summary",
+            None,
+        )
+
+        class ResponseReadyMessage:
+            def model_dump(self):
+                return {
+                    "id": "message-session-export-mixed-row",
+                    "task_id": "task-session-export-mixed-row",
+                    "role": "assistant",
+                    "content": "mixed nested message",
+                    "created_at": "2026-07-03T10:22:00",
+                }
+
+        class ResponseReadyPreviewStep:
+            def model_dump(self):
+                return {
+                    "id": "step-session-export-mixed-row",
+                    "seq": 7,
+                    "type": "observation",
+                    "title": "Tool observation",
+                    "content_excerpt": "mixed nested trace preview",
+                }
+
+        try:
+            session_routes_module.get_session_usage_summary = lambda *_args, **_kwargs: {  # type: ignore[assignment]
+                "tasks_total": 0,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            session_routes_module.chat_persistence_service.get_session_export_response_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "usage_summary": {
+                        "tasks_total": 1,
+                        "tasks_with_usage": 0,
+                        "source_tasks_provider": 0,
+                        "source_tasks_estimated": 0,
+                        "source_tasks_mixed": 0,
+                        "source_tasks_legacy": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "avg_total_tokens": None,
+                        "avg_cost_estimate": None,
+                    },
+                    "governance": None,
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 1,
+                        "trace_step_count": 1,
+                        "rag_hit_count": 0,
+                    },
+                    "messages": [ResponseReadyMessage()],
+                    "tasks": [
+                        {
+                            "id": "task-session-export-mixed-row",
+                            "prompt": "session export mixed row",
+                            "status": "completed",
+                            "status_normalized": "completed",
+                            "status_label": "Completed",
+                            "status_rank": 3,
+                            "created_at": "2026-07-03T10:20:00",
+                            "updated_at": "2026-07-03T10:21:00",
+                            "usage": None,
+                            "trace_step_count": 1,
+                            "rag_hit_count": 0,
+                            "trace_preview": [ResponseReadyPreviewStep()],
+                            "governance": None,
+                        }
+                    ],
+                }
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                {
+                    "id": "session-export-mixed-row",
+                    "title": "Session Export Mixed Row",
+                    "created_at": "2026-07-03T10:20:00",
+                    "updated_at": "2026-07-03T10:21:00",
+                },
+                "user-session-export-mixed-row",
+            )
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary  # type: ignore[assignment]
+            session_routes_module.get_session_messages = original_get_session_messages  # type: ignore[assignment]
+            session_routes_module.get_session_tasks = original_get_session_tasks  # type: ignore[assignment]
+            if original_response_helper is None:
+                if hasattr(
+                    session_routes_module.chat_persistence_service,
+                    "get_session_export_response_summary",
+                ):
+                    delattr(
+                        session_routes_module.chat_persistence_service,
+                        "get_session_export_response_summary",
+                    )
+            else:
+                session_routes_module.chat_persistence_service.get_session_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(payload.messages[0].id, "message-session-export-mixed-row")
+        self.assertEqual(
+            payload.tasks[0].trace_preview[0].content_excerpt,
+            "mixed nested trace preview",
+        )
+
     def test_export_session_json_accepts_model_dump_session_row_for_filename_and_payload(self) -> None:
         original_get_session = session_routes_module.get_session
         original_build_payload = getattr(
@@ -45427,6 +46660,174 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.task.id, "task-export-summary-model")
         self.assertEqual(payload.trace.step_count, 2)
         self.assertEqual(payload.trace.governance.profile, "planning_only")
+
+    def test_build_task_export_payload_normalizes_model_dump_export_summary_governance_with_provider_source_context(
+        self,
+    ) -> None:
+        original_get_task_messages = task_routes_module.get_task_messages
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_export_response_summary",
+            None,
+        )
+
+        class ExportSummaryPayload:
+            def model_dump(self):
+                return {
+                    "task": {
+                        "id": "task-export-source-summary-model",
+                        "session_id": "session-export-source-summary-model",
+                        "prompt": "task export source summary model",
+                        "status": "completed",
+                        "status_normalized": "completed",
+                        "status_label": "Completed",
+                        "status_rank": 3,
+                        "created_at": "2026-07-03T10:30:00",
+                        "updated_at": "2026-07-03T10:31:00",
+                    },
+                    "usage": {"prompt_tokens": 5},
+                    "messages": [],
+                    "trace": {
+                        "governance": {
+                            "profile": "calculator_only",
+                            "provider_source": "calculator_suite",
+                            "allowed_tool_names": ["calc_eval"],
+                            "allowed_tool_labels": ["calc_eval"],
+                        },
+                        "step_count": 2,
+                        "rag_hit_count": 1,
+                        "rag_knowledge_base_ids": ["kb-1"],
+                        "rag_chunks": [],
+                        "steps": [],
+                    },
+                }
+
+        try:
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            task_routes_module.chat_persistence_service.get_task_export_response_summary = (  # type: ignore[attr-defined]
+                lambda _task, _messages: ExportSummaryPayload()
+            )
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                {
+                    "id": "task-export-source-summary-model",
+                    "session_id": "session-export-source-summary-model",
+                    "prompt": "task export source summary model",
+                    "status": "completed",
+                    "created_at": "2026-07-03T10:30:00",
+                    "updated_at": "2026-07-03T10:31:00",
+                },
+                "user-task-export-source-summary-model",
+            )
+        finally:
+            task_routes_module.get_task_messages = original_get_task_messages  # type: ignore[assignment]
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_export_response_summary",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_export_response_summary",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload.trace.governance.allowed_tool_labels,
+            ["Calculator Suite"],
+        )
+
+    def test_build_task_export_payload_normalizes_dict_export_summary_with_model_dump_nested_rows(
+        self,
+    ) -> None:
+        original_get_task_messages = task_routes_module.get_task_messages
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_export_response_summary",
+            None,
+        )
+
+        class ResponseReadyMessage:
+            def model_dump(self):
+                return {
+                    "id": "message-task-export-mixed-row",
+                    "role": "assistant",
+                    "content": "mixed nested task message",
+                    "created_at": "2026-07-03T10:32:00",
+                }
+
+        class ResponseReadyRagChunk:
+            def model_dump(self):
+                return {
+                    "step_id": "step-task-export-mixed-row",
+                    "knowledge_base_id": "kb-mixed-row",
+                    "content": "mixed nested rag chunk",
+                }
+
+        class ResponseReadyTraceStep:
+            def model_dump(self):
+                return {
+                    "id": "step-task-export-mixed-row",
+                    "type": "observation",
+                    "content": "mixed nested trace step",
+                    "seq": 3,
+                }
+
+        try:
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            task_routes_module.chat_persistence_service.get_task_export_response_summary = (  # type: ignore[attr-defined]
+                lambda _task, _messages: {
+                    "task": {
+                        "id": "task-export-mixed-row",
+                        "session_id": "session-export-mixed-row",
+                        "prompt": "task export mixed row",
+                        "status": "completed",
+                        "status_normalized": "completed",
+                        "status_label": "Completed",
+                        "status_rank": 3,
+                        "created_at": "2026-07-03T10:30:00",
+                        "updated_at": "2026-07-03T10:31:00",
+                    },
+                    "usage": {"prompt_tokens": 5},
+                    "messages": [ResponseReadyMessage()],
+                    "trace": {
+                        "governance": None,
+                        "step_count": 1,
+                        "rag_hit_count": 1,
+                        "rag_knowledge_base_ids": ["kb-mixed-row"],
+                        "rag_chunks": [ResponseReadyRagChunk()],
+                        "steps": [ResponseReadyTraceStep()],
+                    },
+                }
+            )
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                {
+                    "id": "task-export-mixed-row",
+                    "session_id": "session-export-mixed-row",
+                    "prompt": "task export mixed row",
+                    "status": "completed",
+                    "created_at": "2026-07-03T10:30:00",
+                    "updated_at": "2026-07-03T10:31:00",
+                },
+                "user-task-export-mixed-row",
+            )
+        finally:
+            task_routes_module.get_task_messages = original_get_task_messages  # type: ignore[assignment]
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_export_response_summary",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_export_response_summary",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(payload.messages[0].id, "message-task-export-mixed-row")
+        self.assertEqual(payload.trace.rag_chunks[0].content, "mixed nested rag chunk")
+        self.assertEqual(payload.trace.steps[0].id, "step-task-export-mixed-row")
 
     def test_export_task_json_accepts_model_dump_task_row_for_filename_and_payload(self) -> None:
         original_get_task = task_routes_module.get_task

@@ -552,6 +552,16 @@ function resolveTraceToolResultSummaryInput(
   if (preview && typeof preview === "object" && !Array.isArray(preview)) {
     return preview as Record<string, unknown>;
   }
+  if (typeof preview === "string" && preview.trim().length > 0) {
+    try {
+      const parsed = JSON.parse(preview.trim()) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+  }
   return null;
 }
 
@@ -572,7 +582,7 @@ function inferTraceToolResultSummary(
   const rawPreviewOutput =
     tool.output_preview && typeof tool.output_preview === "object" && !Array.isArray(tool.output_preview)
       ? tool.output_preview as Record<string, unknown>
-      : null;
+      : resolveTraceToolResultSummaryInput({ output_preview: tool.output_preview });
 
   const explicitSemanticKind = normalizeTraceToolSemanticKind(tool.semantic_kind);
   const fallbackRuntimeKind = normalizeTraceToolSemanticKind(

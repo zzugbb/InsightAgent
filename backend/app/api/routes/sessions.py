@@ -42,6 +42,92 @@ def _coerce_payload_mapping(value: object) -> dict[str, Any]:
     return {}
 
 
+def _coerce_payload_model_dump_list(value: object) -> object:
+    if not isinstance(value, list):
+        return value
+    items: list[object] = []
+    for item in value:
+        if isinstance(item, (dict, BaseModel)):
+            items.append(item)
+            continue
+        payload = _coerce_payload_mapping(item)
+        items.append(payload or item)
+    return items
+
+
+def _coerce_task_governance_for_route(
+    value: object,
+    *,
+    normalize_dict: bool = False,
+) -> object:
+    if isinstance(value, dict):
+        if not normalize_dict:
+            return value
+        return chat_persistence_service._normalize_task_governance_payload(value)
+    return chat_persistence_service._normalize_task_governance_payload(value)
+
+
+def _coerce_session_governance_for_route(
+    value: object,
+    *,
+    normalize_dict: bool = False,
+) -> object:
+    if isinstance(value, dict):
+        if not normalize_dict:
+            return value
+        return (
+            chat_persistence_service._normalize_session_governance_summary_dict(
+                value
+            )
+            or value
+        )
+    governance = _coerce_payload_mapping(value)
+    if not governance:
+        return None
+    return (
+        chat_persistence_service._normalize_session_governance_summary_dict(
+            governance
+        )
+        or governance
+    )
+
+
+def _coerce_session_export_summary(value: object) -> dict[str, Any]:
+    summary_is_dict = isinstance(value, dict)
+    summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
+    if "governance" in summary:
+        if not summary_is_dict or not isinstance(summary.get("governance"), dict):
+            summary["governance"] = _coerce_session_governance_for_route(
+                summary.get("governance"),
+                normalize_dict=not summary_is_dict,
+            )
+    if "messages" in summary:
+        summary["messages"] = _coerce_payload_model_dump_list(summary.get("messages"))
+    tasks = summary.get("tasks")
+    if isinstance(tasks, list):
+        normalized_tasks: list[object] = []
+        for task in tasks:
+            task_is_dict = isinstance(task, dict)
+            if summary_is_dict and not task_is_dict and isinstance(task, BaseModel):
+                normalized_tasks.append(task)
+                continue
+            task_summary = dict(task) if task_is_dict else _coerce_payload_mapping(task)
+            if not task_summary:
+                continue
+            if not summary_is_dict or not isinstance(task_summary.get("governance"), dict):
+                task_summary["governance"] = _coerce_task_governance_for_route(
+                    task_summary.get("governance"),
+                    normalize_dict=not summary_is_dict,
+                )
+            if "trace_preview" in task_summary:
+                task_summary["trace_preview"] = _coerce_payload_model_dump_list(
+                    task_summary.get("trace_preview")
+                )
+            normalized_tasks.append(task_summary)
+        summary["tasks"] = normalized_tasks
+    return summary
+
+
 def _coerce_payload_row_list(value: object) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
@@ -556,7 +642,7 @@ def _build_session_export_payload(
         message_rows=message_rows,
         preview_limit=3,
     )
-    export_summary = _coerce_payload_mapping(export_summary)
+    export_summary = _coerce_session_export_summary(export_summary)
     return SessionExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),

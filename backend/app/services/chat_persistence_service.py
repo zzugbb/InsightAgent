@@ -425,11 +425,13 @@ def _normalize_session_governance_summary_dict(
 ) -> dict[str, object] | None:
     if not isinstance(governance, dict):
         return None
+    normalized_profiles = _normalize_governance_filter_list(governance.get("profiles"))
+    normalized_provider_sources = _normalize_governance_filter_list(
+        governance.get("provider_sources")
+    )
     normalized = {
-        "profiles": _normalize_governance_filter_list(governance.get("profiles")),
-        "provider_sources": _normalize_governance_filter_list(
-            governance.get("provider_sources")
-        ),
+        "profiles": normalized_profiles,
+        "provider_sources": normalized_provider_sources,
         "allowed_tool_names": _normalize_governance_summary_string_list(
             governance.get("allowed_tool_names")
         ),
@@ -437,12 +439,63 @@ def _normalize_session_governance_summary_dict(
             _normalize_governance_allowed_tool_labels(
                 governance.get("allowed_tool_names"),
                 governance.get("allowed_tool_labels"),
+                profile=normalized_profiles[0] if len(normalized_profiles) == 1 else None,
+                provider_source=(
+                    normalized_provider_sources[0]
+                    if len(normalized_provider_sources) == 1
+                    else None
+                ),
             )
         ),
     }
     if not _has_session_governance_values(normalized):
         return None
     return normalized
+
+
+def _normalize_task_governance_payload(value: object) -> dict[str, object] | None:
+    coerced = _coerce_payload_mapping_or_none(value)
+    if coerced is None:
+        return None
+    normalized = _normalize_task_governance_dict(coerced)
+    if normalized is None:
+        return coerced
+    compact: dict[str, object] = {}
+    if isinstance(normalized.get("profile"), str):
+        compact["profile"] = normalized["profile"]
+    if isinstance(normalized.get("provider_source"), str):
+        compact["provider_source"] = normalized["provider_source"]
+    if isinstance(normalized.get("allowed_tool_names"), list) and normalized.get(
+        "allowed_tool_names"
+    ):
+        compact["allowed_tool_names"] = list(normalized["allowed_tool_names"])
+    if isinstance(normalized.get("allowed_tool_labels"), list) and normalized.get(
+        "allowed_tool_labels"
+    ):
+        compact["allowed_tool_labels"] = list(normalized["allowed_tool_labels"])
+    return compact
+
+
+def _normalize_task_governance_payload_or_original(value: object) -> object:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return _normalize_task_governance_payload(dumped)
+    return value
+
+
+def _normalize_session_governance_payload_or_original(value: object) -> object:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return _normalize_session_governance_summary_dict(dumped) or dict(dumped)
+    return value
 
 
 def ensure_session(prompt: str, user_id: str, session_id: str | None = None) -> str:
@@ -1000,6 +1053,23 @@ def _stringify_trace_tool_output_preview(value: object) -> str:
     return ""
 
 
+def _coerce_trace_tool_output_preview_mapping(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
 def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | None:
     output_keys = tool_meta.get("effective_result_output_keys")
     if not isinstance(output_keys, (list, tuple)):
@@ -1033,7 +1103,9 @@ def _resolve_trace_tool_result_summary_input(
     safe_output = _resolve_trace_safe_tool_output(tool_meta)
     if isinstance(safe_output, dict):
         return safe_output
-    preview_output = tool_meta.get("output_preview")
+    preview_output = _coerce_trace_tool_output_preview_mapping(
+        tool_meta.get("output_preview")
+    )
     if isinstance(preview_output, dict):
         return preview_output
     return None
@@ -1137,9 +1209,7 @@ def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
         return ""
     raw_output = tool_meta.get("output") if isinstance(tool_meta.get("output"), dict) else None
     raw_preview_output = (
-        tool_meta.get("output_preview")
-        if isinstance(tool_meta.get("output_preview"), dict)
-        else None
+        _coerce_trace_tool_output_preview_mapping(tool_meta.get("output_preview"))
     )
 
     explicit_semantic_kind = _normalize_trace_tool_semantic_kind(
@@ -1615,7 +1685,7 @@ def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
         "session_id": str(task.get("session_id", "")),
         "prompt": str(task.get("prompt", "")),
         **_get_task_status_summary_from_task(task),
-        "governance": _coerce_payload_mapping_or_original(task.get("governance")),
+        "governance": _normalize_task_governance_payload(task.get("governance")),
         "trace_json": task.get("trace_json"),
         "usage_json": task.get("usage_json"),
         "created_at": str(task.get("created_at", "")),
@@ -1666,7 +1736,7 @@ def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
         },
         "usage": get_task_usage_from_task(task),
         "trace": {
-            "governance": _coerce_payload_mapping_or_none(task.get("governance")),
+            "governance": _normalize_task_governance_payload(task.get("governance")),
             "steps": trace_steps,
             "step_count": int(trace_summary.get("step_count", 0) or 0),
             "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
@@ -1770,7 +1840,7 @@ def get_task_export_response_summary(
         "usage": payload_summary.get("usage"),
         "messages": payload_summary.get("messages", []),
         "trace": {
-            "governance": _coerce_payload_mapping_or_none(
+            "governance": _normalize_task_governance_payload(
                 trace_summary.get("governance")
             ),
             "step_count": int(trace_summary.get("step_count", len(trace_steps)) or 0),
@@ -2215,9 +2285,10 @@ def get_task_rows_session_export_summary(
                 "usage": get_task_usage_from_task(task_row),
                 "trace": {
                     "governance": (
-                        _normalize_task_governance_dict(raw_governance)
-                        if type(raw_governance) is dict
-                        else _coerce_payload_mapping_or_none(raw_governance)
+                        _normalize_task_governance_dict(
+                            _coerce_payload_mapping_or_none(raw_governance)
+                        )
+                        or _coerce_payload_mapping_or_none(raw_governance)
                     ),
                     "step_count": int(trace_summary.get("trace_step_count", 0) or 0),
                     "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
@@ -2300,7 +2371,7 @@ def _get_session_export_task_response_summary_from_payload_row(
             "trace_preview": _coerce_export_payload_block_list_to_dicts(
                 row.get("trace_preview")
             ),
-            "governance": _coerce_payload_mapping_or_none(row.get("governance")),
+            "governance": _normalize_task_governance_payload(row.get("governance")),
         }
     task_summary = _coerce_export_payload_block_to_dict(row.get("task"))
     trace_summary = _coerce_export_payload_block_to_dict(row.get("trace"))
@@ -2319,7 +2390,7 @@ def _get_session_export_task_response_summary_from_payload_row(
         "trace_preview": _coerce_export_payload_block_list_to_dicts(
             trace_summary.get("preview")
         ),
-        "governance": _coerce_payload_mapping_or_none(
+        "governance": _normalize_task_governance_payload(
             trace_summary.get("governance")
         ),
     }
@@ -2358,7 +2429,7 @@ def get_session_export_response_summary(
             "trace_step_count": int(stats_summary.get("trace_step_count", 0) or 0),
             "rag_hit_count": int(stats_summary.get("rag_hit_count", 0) or 0),
         },
-        "governance": _coerce_payload_mapping_or_original(
+        "governance": _normalize_session_governance_payload_or_original(
             payload_summary.get("governance")
         ),
         "messages": payload_summary.get("messages", []),
@@ -2664,7 +2735,7 @@ def get_tasks_usage_dashboard_response_summary(
                     if isinstance(row.get("last_task_at"), str)
                     else None
                 ),
-                "governance": _coerce_payload_mapping_or_original(
+                "governance": _normalize_session_governance_payload_or_original(
                     row.get("governance")
                 ),
             }
@@ -2685,7 +2756,7 @@ def get_tasks_usage_dashboard_response_summary(
                 "created_at": str(row.get("created_at", "")),
                 "updated_at": str(row.get("updated_at", "")),
                 "source_kind": str(row.get("source_kind", "legacy") or "legacy"),
-                "governance": _coerce_payload_mapping_or_original(
+                "governance": _normalize_task_governance_payload_or_original(
                     row.get("governance")
                 ),
             }

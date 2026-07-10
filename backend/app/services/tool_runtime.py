@@ -7099,6 +7099,23 @@ def build_tool_attempt_error_transition(
     }
 
 
+def _coerce_tool_output_preview_mapping(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
 def build_tool_step_output(action_step: dict[str, object]) -> dict[str, object] | None:
     tool_obj = get_action_step_tool_meta(action_step)
     output = tool_obj.get("output") if isinstance(tool_obj, dict) else None
@@ -7108,7 +7125,7 @@ def build_tool_step_output(action_step: dict[str, object]) -> dict[str, object] 
     if isinstance(safe_output, dict):
         return safe_output
     preview_output = tool_obj.get("output_preview") if isinstance(tool_obj, dict) else None
-    return preview_output if isinstance(preview_output, dict) else None
+    return _coerce_tool_output_preview_mapping(preview_output)
 
 
 def get_action_step_tool_meta(action_step: dict[str, object]) -> dict[str, object] | None:
@@ -7362,10 +7379,11 @@ def build_tool_observation_entry(
         if isinstance(step_tool_meta, dict)
         else None
     )
-    if isinstance(meta_preview_output, dict) and not isinstance(output, dict):
+    meta_preview_mapping = _coerce_tool_output_preview_mapping(meta_preview_output)
+    if isinstance(meta_preview_mapping, dict) and not isinstance(output, dict):
         result_summary = build_tool_result_summary(
             name=canonical_name,
-            output=meta_preview_output,
+            output=meta_preview_mapping,
             display_name=resolved_display_name,
             registration=resolved_registration,
             registry=registry,
@@ -7374,7 +7392,7 @@ def build_tool_observation_entry(
         )
         if result_summary is None:
             result_summary = _build_tool_result_summary_from_step_meta_semantics(
-                output=meta_preview_output,
+                output=meta_preview_mapping,
                 step_tool_meta=step_tool_meta,
             )
         if result_summary:

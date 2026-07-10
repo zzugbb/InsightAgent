@@ -50,6 +50,129 @@ def _coerce_payload_mapping(value: object) -> dict[str, Any]:
     return {}
 
 
+def _coerce_payload_model_dump_list(value: object) -> object:
+    if not isinstance(value, list):
+        return value
+    items: list[object] = []
+    for item in value:
+        if isinstance(item, (dict, BaseModel)):
+            items.append(item)
+            continue
+        payload = _coerce_payload_mapping(item)
+        items.append(payload or item)
+    return items
+
+
+def _coerce_task_governance_for_route(
+    value: object,
+    *,
+    normalize_dict: bool = False,
+) -> object:
+    if isinstance(value, dict):
+        if not normalize_dict:
+            return value
+        return chat_persistence_service._normalize_task_governance_payload(value)
+    return chat_persistence_service._normalize_task_governance_payload(value)
+
+
+def _coerce_session_governance_for_route(
+    value: object,
+    *,
+    normalize_dict: bool = False,
+) -> object:
+    if isinstance(value, dict):
+        if not normalize_dict:
+            return value
+        return (
+            chat_persistence_service._normalize_session_governance_summary_dict(
+                value
+            )
+            or value
+        )
+    governance = _coerce_payload_mapping(value)
+    if not governance:
+        return None
+    return (
+        chat_persistence_service._normalize_session_governance_summary_dict(
+            governance
+        )
+        or governance
+    )
+
+
+def _coerce_task_export_summary(value: object) -> dict[str, Any]:
+    summary_is_dict = isinstance(value, dict)
+    summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
+    if "messages" in summary:
+        summary["messages"] = _coerce_payload_model_dump_list(summary.get("messages"))
+    raw_trace = summary.get("trace")
+    trace = _coerce_payload_mapping(raw_trace)
+    if trace and (
+        not summary_is_dict
+        or isinstance(raw_trace, dict)
+        or not isinstance(raw_trace, BaseModel)
+    ):
+        if not summary_is_dict or not isinstance(trace.get("governance"), dict):
+            trace["governance"] = _coerce_task_governance_for_route(
+                trace.get("governance"),
+                normalize_dict=not summary_is_dict,
+            )
+        if "rag_chunks" in trace:
+            trace["rag_chunks"] = _coerce_payload_model_dump_list(
+                trace.get("rag_chunks")
+            )
+        if "steps" in trace:
+            trace["steps"] = _coerce_payload_model_dump_list(trace.get("steps"))
+        summary["trace"] = trace
+    return summary
+
+
+def _coerce_task_response_summary(value: object) -> dict[str, Any]:
+    summary_is_dict = isinstance(value, dict)
+    summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
+    if "governance" in summary:
+        if not summary_is_dict or not isinstance(summary.get("governance"), dict):
+            summary["governance"] = _coerce_task_governance_for_route(
+                summary.get("governance"),
+                normalize_dict=not summary_is_dict,
+            )
+    return summary
+
+
+def _coerce_tasks_usage_dashboard_response_summary(value: object) -> dict[str, Any]:
+    summary_is_dict = isinstance(value, dict)
+    summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
+    by_session = summary.get("by_session")
+    if isinstance(by_session, list):
+        normalized_sessions: list[dict[str, Any]] = []
+        for row in by_session:
+            row_summary = _coerce_payload_mapping(row)
+            if not row_summary:
+                continue
+            if not summary_is_dict or not isinstance(row_summary.get("governance"), dict):
+                row_summary["governance"] = _coerce_session_governance_for_route(
+                    row_summary.get("governance"),
+                    normalize_dict=not summary_is_dict,
+                )
+            normalized_sessions.append(row_summary)
+        summary["by_session"] = normalized_sessions
+    top_tasks = summary.get("top_tasks")
+    if isinstance(top_tasks, list):
+        normalized_tasks: list[dict[str, Any]] = []
+        for row in top_tasks:
+            row_summary = _coerce_payload_mapping(row)
+            if not row_summary:
+                continue
+            if not summary_is_dict or not isinstance(row_summary.get("governance"), dict):
+                row_summary["governance"] = _coerce_task_governance_for_route(
+                    row_summary.get("governance"),
+                    normalize_dict=not summary_is_dict,
+                )
+            normalized_tasks.append(row_summary)
+        summary["top_tasks"] = normalized_tasks
+    return summary
+
+
 def _parse_last_event_id(value: str | None) -> int | None:
     if value is None:
         return None
@@ -403,7 +526,7 @@ def _build_task_export_payload(task: dict, user_id: str) -> TaskExportJsonRespon
         task,
         message_rows,
     )
-    export_summary = _coerce_payload_mapping(export_summary)
+    export_summary = _coerce_task_export_summary(export_summary)
     return TaskExportJsonResponse(
         version="1.0",
         exported_at=datetime.now().isoformat(),
@@ -658,7 +781,7 @@ def get_tasks(
     n = len(tasks)
     return TaskListResponse(
         items=[
-            _coerce_payload_mapping(
+            _coerce_task_response_summary(
                 chat_persistence_service.get_task_response_summary_from_task(task)
             )
             for task in tasks
@@ -747,7 +870,7 @@ def get_tasks_usage_dashboard_route(
     response_summary = chat_persistence_service.get_tasks_usage_dashboard_response_summary(
         payload
     )
-    response_summary = _coerce_payload_mapping(response_summary)
+    response_summary = _coerce_tasks_usage_dashboard_response_summary(response_summary)
     return TaskUsageDashboardResponse(**response_summary)
 
 
@@ -760,7 +883,7 @@ def get_task_detail(
     if raw is None:
         raise HTTPException(status_code=404, detail="Task not found")
     task = _coerce_payload_mapping(raw)
-    response_summary = _coerce_payload_mapping(
+    response_summary = _coerce_task_response_summary(
         chat_persistence_service.get_task_response_summary_from_task(task)
     )
     return TaskResponse(**response_summary)

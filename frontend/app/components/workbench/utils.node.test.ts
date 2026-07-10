@@ -39,6 +39,26 @@ test("resolveTraceStepDisplayContent prefers inferred result summary from previe
   assert.match(content, /playwright trace preview content/);
 });
 
+test("resolveTraceStepDisplayContent infers result summary from JSON string output preview", () => {
+  const content = resolveTraceStepDisplayContent({
+    id: "step-preview-json-string",
+    type: "action",
+    content: "Tool done: Hosted Math",
+    meta: {
+      tool: {
+        name: "hosted_math",
+        label: "Hosted Math",
+        status: "done",
+        output_preview: '{"result":7,"request_id":"req-calc-1"}',
+      },
+    },
+  });
+
+  assert.equal(typeof content, "string");
+  assert.match(content, /Calculated result = 7 \(request id req-calc-1\)\./);
+  assert.doesNotMatch(content, /Tool done: Hosted Math/);
+});
+
 test("resolveTraceStepDisplayContent prefers output preview without leaking raw output", () => {
   const content = resolveTraceStepDisplayContent({
     id: "step-preview-safe",
