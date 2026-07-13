@@ -18,7 +18,7 @@
   - configured provider preflight 与 settings summary/validate 返回的 `tool_details` 现也显式包含 `execution_kind`；file/source 治理与前端设置面板可以直接识别哪些 tool 已切到真实 `http_json` runner。
   - 若 registry `extra_tools` / `overrides` 显式声明了 `execution`，但 `kind` 缺失、shape 非法或写成不支持的执行器，tool runtime 现会直接返回配置错误，不再静默回退到模板 stub runner。
   - 同一批坏掉的 `execution` 配置现在也会进入 `invalid/tool_executions` diagnostics：file/source/global settings、selected source、configured provider preflight 以及 trace/audit 可以在真正跑 tool 之前就把问题暴露出来，而不是只在运行期 fail-fast。
-  - `http_json.execution.method`、`timeout_ms` 与 tool 级 `default_timeout_ms` 现在也会被纳入同一套真实执行器治理：显式 method 只接受 `GET / POST / PUT / PATCH / DELETE`，显式 timeout 只接受正数毫秒；`POTS` / `FETCH` / `timeout_ms="slow"` / `default_timeout_ms="slow"` 一类坏配置会提前落进 `invalid/tool_executions`，运行时也会 fail-fast 或安全回退到模板默认值，不再静默降级成 `GET` 或裸抛构建异常。
+  - `http_json.execution.method`、`timeout_ms` 与 tool 级 `default_timeout_ms` 现在也会被纳入同一套真实执行器治理：显式 method 只接受 `GET / POST / PUT / PATCH / DELETE`，显式 timeout 只接受至少 1ms 的正整数毫秒；`POTS` / `FETCH` / `timeout_ms="slow"` / `default_timeout_ms="slow"` / fractional/sub-millisecond / `NaN` / `Infinity` / 超大整数一类坏配置会提前落进 `invalid/tool_executions`，运行时也会 fail-fast 或安全回退到模板默认值，不再静默降级成 `GET` 或裸抛构建异常。
   - 对已接上 `http_json` 的 real tool，runtime 现在还会生成一份安全的 `execution_summary` 并挂到 tool semantic meta 上；`tool_start`、action step、持久化 trace 与 export 回放都能看到 method、origin/path、query/body/result-field 概览，同时避免把 header value 等敏感配置直接写进 trace。
   - `http_json` execution template 现在也会复用运行时 settings/source 上下文：global extra tool、source extra tool、registry override 与 file-backed source 都可以在 `headers/url/query/json_body` 中读取 `settings_api_key`、`settings_base_url`、`tool_registry_provider_source` 等变量，并支持 `${...}` 字符串插值来拼接 bearer/header 模板，而无需把敏感值硬编码进 registry 配置。
   - file-backed source manifest 里的 `extra_tools` / `overrides` 现也继续走同一套 source 级模板上下文传递；把 source 从内联 JSON 切到 `registry_file` 后，`tool_registry_provider_source` 一类运行时变量不会再丢失。
@@ -76,7 +76,7 @@
   - `MockLLMProvider` 的 final-answer observation parser 现在也会从 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串恢复结构化结果，并继承父级 semantic / request 上下文；半迁移 observation 不再退回 `output_preview=...` generic summary，也不会把旁路字段写进最终 Summary。
   - runtime helper、governance/export、registry diagnostics 与 planner 输入归一化已统一兼容旁路结构化载荷；当前 provider planner 与真实 `OpenAICompatibleLLMProvider` 已共享一套 response text / usage 提取语义，支持 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 `input_tokens/output_tokens` usage alias、脏 usage 值容错与流式 delta 文本字段变体。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`938/938`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`948/948`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）

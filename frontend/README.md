@@ -19,7 +19,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - model settings modal 的 tool detail summary 现会直接显示 `via http_json` 一类 `execution_kind`，前端可以更直观看到某个 provider/source tool 是否已经接到真实执行器。
   - 当后端显式配置了无效 `execution` 时，当前策略是 fail-fast 而不是静默回退 stub runner；前端后续看到的是明确的配置错误，而不是“看似成功、实际跑了本地模板”的假语义。
   - 同时，provider/source diagnostics 现在也会把这类静态可判定的坏配置提前归一成 `invalid/tool_executions` 项；设置面板不需要等任务真跑起来，source diagnostics 就能先提示 real tool 的执行器配置已经坏掉。
-  - 对 `http_json.execution.method` / `timeout_ms` / `default_timeout_ms` 这类真实请求协议字段，后端现在也会提前治理：拼错 method 不再静默变成 `GET`，坏 timeout 不再裸抛构建异常，而是作为 per-tool execution diagnostic 进入设置/回放链路，前端看到的是明确配置错误。
+  - 对 `http_json.execution.method` / `timeout_ms` / `default_timeout_ms` 这类真实请求协议字段，后端现在也会提前治理：拼错 method 不再静默变成 `GET`，坏 timeout（含 fractional/sub-millisecond、非有限数或超大整数）不再裸抛构建异常，而是作为 per-tool execution diagnostic 进入设置/回放链路，前端看到的是明确配置错误。
   - 后端对 `http_json` real tool 新增的安全 `execution_summary` 也会随 tool meta 进入 SSE/trace/export 主链；即使前端当前还没单独做专门 UI，这份 method/origin/path/query-body/result-field 概览已经会稳定跟着工作台回放语义走。
   - 后端现在还支持 `http_json` 执行模板读取运行时 `settings_api_key/settings_base_url/tool_registry_provider_source` 上下文，并在 `headers/url/query/json_body` 中使用 `${...}` 做安全字符串插值；前端继续只消费安全 `execution_summary` 与 diagnostics，不会把 secret 模板值直接带进设置面板或 trace UI。
   - 即使 provider/source 改成 file-backed registry manifest，后端也会继续把同一套 source 级模板上下文灌进 `extra_tools/overrides`；因此前端看到的 source diagnostics、tool detail summary 与运行态 trace 语义不会再因配置承载形态不同而分叉。
@@ -81,7 +81,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
   - 后端 mock final-answer observation parser 现在也会恢复 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串；因此前端最终回答在旧 observation 只剩嵌套 preview 时，也会继续显示 real calc / real retrieval 摘要，而不是 `output_preview=...` 或旁路字段。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`938/938`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`948/948`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）

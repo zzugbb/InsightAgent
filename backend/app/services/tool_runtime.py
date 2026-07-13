@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
 from dataclasses import dataclass, replace
@@ -343,6 +344,7 @@ _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS = (
     "invalid_tool_executions",
 )
 _HTTP_JSON_ALLOWED_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+_TOOL_TIMEOUT_MAX_MS = 2_147_483_647
 
 
 def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
@@ -1408,6 +1410,20 @@ def _describe_tool_execution_http_method_validation_error(
     )
 
 
+def _is_supported_tool_timeout_ms(raw_value: object) -> bool:
+    if isinstance(raw_value, bool):
+        return False
+    if isinstance(raw_value, int):
+        return 0 < raw_value <= _TOOL_TIMEOUT_MAX_MS
+    if isinstance(raw_value, float):
+        return (
+            math.isfinite(raw_value)
+            and raw_value.is_integer()
+            and 1 <= raw_value <= _TOOL_TIMEOUT_MAX_MS
+        )
+    return False
+
+
 def _coerce_tool_execution_timeout_ms(
     raw_value: object,
     *,
@@ -1415,9 +1431,7 @@ def _coerce_tool_execution_timeout_ms(
 ) -> int:
     if raw_value is None:
         return default_timeout_ms
-    if isinstance(raw_value, bool):
-        return default_timeout_ms
-    if isinstance(raw_value, (int, float)) and raw_value > 0:
+    if _is_supported_tool_timeout_ms(raw_value):
         return int(raw_value)
     return default_timeout_ms
 
@@ -1425,11 +1439,7 @@ def _coerce_tool_execution_timeout_ms(
 def _describe_tool_execution_timeout_ms_validation_error(
     raw_value: object,
 ) -> str | None:
-    if isinstance(raw_value, bool):
-        return (
-            "http_json execution timeout_ms must be a positive number of milliseconds"
-        )
-    if isinstance(raw_value, (int, float)) and raw_value > 0:
+    if _is_supported_tool_timeout_ms(raw_value):
         return None
     return "http_json execution timeout_ms must be a positive number of milliseconds"
 
@@ -1439,30 +1449,30 @@ def _coerce_tool_default_timeout_ms(
     *,
     fallback_timeout_ms: int,
 ) -> int:
-    if isinstance(raw_value, bool):
-        return fallback_timeout_ms
-    if isinstance(raw_value, (int, float)):
+    if _is_supported_tool_timeout_ms(raw_value):
         coerced_timeout_ms = int(raw_value)
-        return coerced_timeout_ms if coerced_timeout_ms > 0 else fallback_timeout_ms
+        return coerced_timeout_ms
     if isinstance(raw_value, str) and raw_value.strip():
         try:
             coerced_timeout_ms = int(raw_value.strip())
         except ValueError:
             return fallback_timeout_ms
-        return coerced_timeout_ms if coerced_timeout_ms > 0 else fallback_timeout_ms
+        return (
+            coerced_timeout_ms
+            if _is_supported_tool_timeout_ms(coerced_timeout_ms)
+            else fallback_timeout_ms
+        )
     return fallback_timeout_ms
 
 
 def _describe_tool_default_timeout_ms_validation_error(
     raw_value: object,
 ) -> str | None:
-    if isinstance(raw_value, bool):
-        return "tool default_timeout_ms must be a positive number of milliseconds"
-    if isinstance(raw_value, (int, float)) and int(raw_value) > 0:
+    if _is_supported_tool_timeout_ms(raw_value):
         return None
     if isinstance(raw_value, str) and raw_value.strip():
         try:
-            if int(raw_value.strip()) > 0:
+            if _is_supported_tool_timeout_ms(int(raw_value.strip())):
                 return None
         except ValueError:
             pass
