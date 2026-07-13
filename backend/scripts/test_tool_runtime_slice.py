@@ -19748,6 +19748,65 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 self.assertNotIn("Tool context:", result.content)
                 self.assertNotIn("secret", result.content)
 
+    def test_mock_llm_provider_generate_infers_summary_from_nested_preview_observation_payload(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            "Hosted Math: "
+            + json.dumps(
+                {
+                    "output_preview": json.dumps(
+                        {
+                            "result": 7,
+                            "request_id": "req-calc-1",
+                            "secret": "hidden",
+                        }
+                    ),
+                    "semantic_family": "local_calculator",
+                }
+            )
+        )
+
+        self.assertIn(
+            "Summary: Calculated result = 7 (request id req-calc-1).",
+            result.content,
+        )
+        self.assertNotIn("output_preview=", result.content)
+        self.assertNotIn("secret", result.content)
+
+    def test_mock_llm_provider_generate_keeps_real_retrieval_semantics_from_nested_safe_output(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            "Provider Search: "
+            + json.dumps(
+                {
+                    "safe_output": json.dumps(
+                        {
+                            "hit_count": 2,
+                            "knowledge_base_id": "provider-kb",
+                        }
+                    ),
+                    "semantic_kind": "provider_search",
+                    "semantic_family": "knowledge_retrieval",
+                    "request_id": "req-1",
+                }
+            )
+        )
+
+        self.assertIn(
+            "Summary: Retrieved 2 hits (request id req-1).",
+            result.content,
+        )
+        self.assertNotIn("from knowledge base provider-kb", result.content)
+        self.assertNotIn("safe_output=", result.content)
+
     def test_mock_llm_provider_generate_summarizes_human_readable_retrieval_observations(
         self,
     ) -> None:

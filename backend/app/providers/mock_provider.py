@@ -148,6 +148,36 @@ def _summarize_tool_observation(observation: str) -> str | None:
             return raw_payload.strip()
         return None
 
+    structured_summary = _summarize_structured_mock_tool_payload(
+        label=label,
+        payload=payload,
+    )
+    if structured_summary:
+        return structured_summary
+
+    nested_payload = _resolve_nested_mock_observation_payload(payload)
+    if nested_payload is not None:
+        nested_summary = _summarize_structured_mock_tool_payload(
+            label=label,
+            payload=nested_payload,
+        )
+        if nested_summary:
+            return nested_summary
+
+    generic_payload_summary = _summarize_generic_tool_payload(payload)
+    if generic_payload_summary:
+        if label:
+            return f"{label} output - {generic_payload_summary}."
+        return f"Tool output - {generic_payload_summary}."
+
+    if label:
+        return f"{label} completed."
+    return None
+
+
+def _summarize_structured_mock_tool_payload(
+    *, label: str, payload: dict[str, object]
+) -> str | None:
     plan = payload.get("plan")
     if isinstance(plan, str) and plan.strip():
         return f"Planned steps - {plan.strip()}."
@@ -165,6 +195,7 @@ def _summarize_tool_observation(observation: str) -> str | None:
                 f"(request id {request_id.strip()})."
             )
         return f"Calculated {expression.strip()} = {result}."
+
     explicit_semantic_kind = _normalize_mock_tool_semantic_kind(
         payload.get("semantic_kind")
     )
@@ -194,7 +225,6 @@ def _summarize_tool_observation(observation: str) -> str | None:
     knowledge_base_id = payload.get("knowledge_base_id")
     if isinstance(hit_count, int) and hit_count >= 0:
         hit_label = "hit" if hit_count == 1 else "hits"
-        runtime_semantic_kind = semantic_kind
         if (
             (
                 explicit_semantic_kind == "knowledge_retrieval"
@@ -222,7 +252,7 @@ def _summarize_tool_observation(observation: str) -> str | None:
                 f"{knowledge_base_id.strip()}."
             )
         if (
-            runtime_semantic_kind != "knowledge_retrieval"
+            semantic_kind != "knowledge_retrieval"
             and semantic_family == "knowledge_retrieval"
         ):
             if isinstance(request_id, str) and request_id.strip():
@@ -242,14 +272,64 @@ def _summarize_tool_observation(observation: str) -> str | None:
             )
         return f"Retrieved {documents_total} {document_label}."
 
-    generic_payload_summary = _summarize_generic_tool_payload(payload)
-    if generic_payload_summary:
-        if label:
-            return f"{label} output - {generic_payload_summary}."
-        return f"Tool output - {generic_payload_summary}."
+    return None
 
-    if label:
-        return f"{label} completed."
+
+def _coerce_mock_json_mapping(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    try:
+        payload: object = json.loads(normalized)
+    except json.JSONDecodeError:
+        if not (
+            len(normalized) >= 2
+            and normalized[0] == normalized[-1] == '"'
+        ):
+            return None
+        nested_payload = normalized[1:-1].strip()
+        if not nested_payload.startswith("{"):
+            return None
+        try:
+            payload = json.loads(nested_payload)
+        except json.JSONDecodeError:
+            return None
+    if isinstance(payload, str):
+        nested_payload = payload.strip()
+        if not nested_payload.startswith("{"):
+            return None
+        try:
+            payload = json.loads(nested_payload)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _resolve_nested_mock_observation_payload(
+    payload: dict[str, object],
+) -> dict[str, object] | None:
+    for output_key in ("safe_output", "output", "output_preview", "result_preview"):
+        nested_payload = _coerce_mock_json_mapping(payload.get(output_key))
+        if nested_payload is None:
+            continue
+        normalized_payload = dict(nested_payload)
+        for context_key in (
+            "semantic_kind",
+            "semantic_family",
+            "tool_kind",
+            "kind",
+            "request_id",
+            "knowledge_base_id",
+        ):
+            if context_key not in normalized_payload and context_key in payload:
+                normalized_payload[context_key] = payload[context_key]
+        return normalized_payload
     return None
 
 
@@ -261,30 +341,8 @@ def _parse_tool_observation(observation: str) -> tuple[str, dict[str, object] | 
     normalized_payload = raw_payload.strip()
     if not normalized_payload:
         return normalized_label, None
-    try:
-        payload = json.loads(normalized_payload)
-    except json.JSONDecodeError:
-        if not (
-            len(normalized_payload) >= 2
-            and normalized_payload[0] == normalized_payload[-1] == '"'
-        ):
-            return normalized_label, None
-        nested_payload = normalized_payload[1:-1].strip()
-        if not nested_payload.startswith("{"):
-            return normalized_label, None
-        try:
-            payload = json.loads(nested_payload)
-        except json.JSONDecodeError:
-            return normalized_label, None
-    if isinstance(payload, str):
-        nested_payload = payload.strip()
-        if not nested_payload.startswith("{"):
-            return normalized_label, None
-        try:
-            payload = json.loads(nested_payload)
-        except json.JSONDecodeError:
-            return normalized_label, None
-    if not isinstance(payload, dict):
+    payload = _coerce_mock_json_mapping(normalized_payload)
+    if payload is None:
         return normalized_label, None
     return normalized_label, payload
 

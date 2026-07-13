@@ -139,16 +139,17 @@ export default function TaskDetailPage() {
   }, [traceKindFilter, traceSearchQuery, traceSteps]);
 
   const exportTask = async (format: "json" | "markdown") => {
-    if (!task?.id) {
+    const exportTaskId = (task?.id ?? taskId).trim();
+    if (!exportTaskId) {
       return;
     }
     setTaskExporting(format);
-    const encodedTaskId = encodeURIComponent(task.id);
+    const encodedTaskId = encodeURIComponent(exportTaskId);
     const route = format === "json" ? "json" : "markdown";
     const fallbackFilename =
       format === "json"
-        ? `insightagent-task-${task.id}.json`
-        : `insightagent-task-${task.id}.md`;
+        ? `insightagent-task-${exportTaskId}.json`
+        : `insightagent-task-${exportTaskId}.md`;
     const requestUrl =
       `${API_BASE_URL}/api/tasks/${encodedTaskId}/export/${route}?download=1`;
     try {
@@ -193,7 +194,7 @@ export default function TaskDetailPage() {
               size="small"
               data-testid="task-detail-export-json"
               loading={taskExporting === "json"}
-              disabled={!task}
+              disabled={!taskId}
               onClick={() => {
                 void exportTask("json");
               }}
@@ -204,7 +205,7 @@ export default function TaskDetailPage() {
               size="small"
               data-testid="task-detail-export-markdown"
               loading={taskExporting === "markdown"}
-              disabled={!task}
+              disabled={!taskId}
               onClick={() => {
                 void exportTask("markdown");
               }}

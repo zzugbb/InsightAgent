@@ -9,6 +9,7 @@ import {
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
   resolveTaskSnapshotSummary,
+  resolveTaskStreamTerminalReason,
   resolveTraceStepSemanticStats,
   resolveTraceStepDisplayContent,
 } from "./utils.ts";
@@ -1626,6 +1627,36 @@ test("resolveTraceStepSemanticStats counts name-only real retrieval and calc ste
   });
 });
 
+test("resolveTraceStepSemanticStats counts local retrieval observation when no standalone rag follow-up exists", () => {
+  const stats = resolveTraceStepSemanticStats([
+    {
+      id: "step-local-retrieval",
+      type: "action",
+      content: "Tool done: Knowledge Retrieval",
+      meta: {
+        tool: {
+          name: "task_retrieve",
+          label: "Knowledge Retrieval",
+          kind: "knowledge_retrieval",
+          semantic_kind: "knowledge_retrieval",
+          status: "done",
+          effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+          output_preview: {
+            hit_count: 0,
+            knowledge_base_id: "detail-check",
+          },
+        },
+      },
+    },
+  ]);
+
+  assert.deepEqual(stats, {
+    planner: 0,
+    retrieval: 2,
+    calculator: 0,
+  });
+});
+
 test("resolveTraceStepSemanticStats counts name-only planner steps without semantic hints", () => {
   const stats = resolveTraceStepSemanticStats([
     {
@@ -1730,6 +1761,57 @@ test("resolveTaskSnapshotSummary carries semantic stats for task detail snapshot
     retrieval: 2,
     calculator: 1,
   });
+});
+
+test("resolveTaskStreamTerminalReason maps active terminal task status to local stream completion reason", () => {
+  assert.equal(
+    resolveTaskStreamTerminalReason({
+      task: {
+        id: "task-cancelled",
+        status: "cancelled",
+        status_normalized: "cancelled",
+      },
+      activeTaskId: "task-cancelled",
+      isStreaming: true,
+    }),
+    "cancelled",
+  );
+  assert.equal(
+    resolveTaskStreamTerminalReason({
+      task: {
+        id: "task-running",
+        status: "running",
+        status_normalized: "running",
+      },
+      activeTaskId: "task-running",
+      isStreaming: true,
+    }),
+    null,
+  );
+  assert.equal(
+    resolveTaskStreamTerminalReason({
+      task: {
+        id: "task-other",
+        status: "cancelled",
+        status_normalized: "cancelled",
+      },
+      activeTaskId: "task-current",
+      isStreaming: true,
+    }),
+    null,
+  );
+  assert.equal(
+    resolveTaskStreamTerminalReason({
+      task: {
+        id: "task-completed",
+        status: "completed",
+        status_normalized: "completed",
+      },
+      activeTaskId: "task-completed",
+      isStreaming: true,
+    }),
+    "done",
+  );
 });
 
 test("resolveTaskSnapshotSummary prefers final answer over last observation in task snapshots", () => {

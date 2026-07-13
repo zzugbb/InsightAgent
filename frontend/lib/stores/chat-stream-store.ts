@@ -149,6 +149,10 @@ export type ChatStreamStore = {
     taskId: string,
     options?: { silent?: boolean },
   ) => Promise<{ ok: boolean; error: string | null; hasMore: boolean }>;
+  completeActiveStreamLocal: (options?: {
+    taskId?: string | null;
+    reason?: "done" | "cancelled" | "timeout" | "error";
+  }) => boolean;
   cancelActiveStreamLocal: (options?: {
     taskId?: string | null;
     reason?: "cancelled" | "timeout";
@@ -420,6 +424,47 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       }
       return { ok: false, error: errorMessage, hasMore: false };
     }
+  },
+
+  completeActiveStreamLocal: (options) => {
+    const sm = get().streamMessages;
+    const targetTaskId = options?.taskId?.trim() ?? "";
+    const activeTaskId = get().sseTaskId?.trim() ?? "";
+    if (targetTaskId && activeTaskId && targetTaskId !== activeTaskId) {
+      return false;
+    }
+
+    if (activeStreamController) {
+      const streamTaskId = activeStreamControllerTaskId?.trim() ?? "";
+      if (!targetTaskId || !streamTaskId || streamTaskId === targetTaskId) {
+        activeStreamController.abort();
+      }
+    }
+
+    const reason = options?.reason ?? "done";
+    const nextPhase =
+      reason === "cancelled"
+        ? "cancelled"
+        : reason === "timeout"
+          ? "timeout"
+          : reason === "error"
+            ? "error"
+            : "done";
+    const nextMessage =
+      reason === "cancelled"
+        ? sm.streamCancelled
+        : reason === "timeout"
+          ? sm.streamTimeout
+          : reason === "error"
+            ? sm.streamClosed
+            : sm.streamCompleted;
+
+    set({
+      isStreaming: false,
+      ssePhase: nextPhase,
+      sseMessage: nextMessage,
+    });
+    return true;
   },
 
   cancelActiveStreamLocal: (options) => {

@@ -70,6 +70,41 @@ export type TraceStepKindFilter =
   | "rag"
   | "other";
 
+export type TaskStreamTerminalReason = "done" | "cancelled" | "timeout" | "error";
+
+export function resolveTaskStreamTerminalReason(args: {
+  task: Pick<TaskSummary, "id" | "status" | "status_normalized"> | null | undefined;
+  activeTaskId: string | null | undefined;
+  isStreaming: boolean;
+}): TaskStreamTerminalReason | null {
+  if (!args.isStreaming) {
+    return null;
+  }
+  const activeTaskId = args.activeTaskId?.trim() ?? "";
+  const taskId = args.task?.id?.trim() ?? "";
+  if (!activeTaskId || !taskId || activeTaskId !== taskId) {
+    return null;
+  }
+  const rawStatus =
+    (typeof args.task?.status_normalized === "string"
+      ? args.task.status_normalized
+      : args.task?.status) ?? "";
+  const status = rawStatus.trim().toLowerCase();
+  if (!status || status === "pending" || status === "running") {
+    return null;
+  }
+  if (status === "cancelled" || status === "canceled") {
+    return "cancelled";
+  }
+  if (status === "timeout" || status === "timed_out") {
+    return "timeout";
+  }
+  if (status === "failed" || status === "error") {
+    return "error";
+  }
+  return "done";
+}
+
 function parseUsageNumber(v: unknown): number | null {
   if (v === null || v === undefined) {
     return null;
@@ -592,6 +627,20 @@ function resolveTraceToolResultSummaryInput(
   return null;
 }
 
+function traceToolImpliesLocalRetrievalObservation(
+  tool: TraceStepMeta["tool"],
+): boolean {
+  if (!tool) {
+    return false;
+  }
+  const semanticKind = normalizeTraceToolSemanticValue(tool.semantic_kind);
+  const runtimeKind = normalizeTraceToolSemanticValue(tool.kind);
+  return semanticKind === "knowledge_retrieval"
+    || runtimeKind === "knowledge_retrieval"
+    || traceToolLabelImpliesLocalKnowledgeRetrieval(tool.label)
+    || traceToolLabelImpliesLocalKnowledgeRetrieval(tool.name);
+}
+
 function inferTraceToolResultSummary(
   tool: TraceStepMeta["tool"],
 ): string | null {
@@ -609,7 +658,9 @@ function inferTraceToolResultSummary(
   const rawPreviewOutput =
     tool.output_preview && typeof tool.output_preview === "object" && !Array.isArray(tool.output_preview)
       ? tool.output_preview as Record<string, unknown>
-      : resolveTraceToolResultSummaryInput({ output_preview: tool.output_preview });
+      : typeof tool.output_preview === "string"
+        ? parseJsonObjectPayload(tool.output_preview)
+        : null;
 
   const explicitSemanticKind = normalizeTraceToolSemanticKind(tool.semantic_kind);
   const fallbackRuntimeKind = normalizeTraceToolSemanticKind(
@@ -988,10 +1039,20 @@ export function resolveTraceStepSemanticStats(
     retrieval: 0,
     calculator: 0,
   };
+  const hasStandaloneRetrievalFollowup = steps.some(
+    (step) => Boolean(step.meta?.rag) || normalizeTraceStepKind(step) === "rag",
+  );
   for (const step of steps) {
     const semantic = resolveTraceStepSemanticCategory(step);
     if (semantic && semantic in stats) {
       stats[semantic] += 1;
+    }
+    if (
+      semantic === "retrieval" &&
+      !hasStandaloneRetrievalFollowup &&
+      traceToolImpliesLocalRetrievalObservation(step.meta?.tool)
+    ) {
+      stats.retrieval += 1;
     }
   }
   return stats;
@@ -1192,18 +1253,6 @@ function formatTraceToolExecutionDiagnostics(
     return null;
   }
   return labels.toolExecutionDiagnostics(diagnostics.join(", "));
-}
-
-function formatTraceToolDisplayTitle(tool: TraceStepMeta["tool"]): string {
-  if (!tool) {
-    return "";
-  }
-  const toolLabel = resolveTraceToolDisplayLabel(tool);
-  if (!toolLabel) {
-    return "";
-  }
-  const semanticDescriptor = formatTraceToolSemanticDescriptor(tool);
-  return semanticDescriptor ? `${toolLabel} [${semanticDescriptor}]` : toolLabel;
 }
 
 function sortTraceStepsBySeq(steps: TraceStepPayload[]): TraceStepPayload[] {

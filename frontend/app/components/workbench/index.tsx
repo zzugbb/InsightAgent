@@ -46,7 +46,10 @@ import {
   SIDEBAR_COLLAPSED_STORAGE_KEY,
   SIDEBAR_WIDTH_STORAGE_KEY,
 } from "../../../lib/storage-keys";
-import { API_BASE_URL } from "./utils";
+import {
+  API_BASE_URL,
+  resolveTaskStreamTerminalReason,
+} from "./utils";
 import { useMediaQuery } from "./use-media-query";
 
 const NARROW_QUERY = "(max-width: 980px)";
@@ -62,6 +65,7 @@ const TRACE_DELTA_SYNC_MAX_MS = 15_000;
 const TRACE_DELTA_SYNC_MAX_RETRY_EXP = 3;
 const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
 const TRACE_DELTA_FAST_DRAIN_MS = 180;
+const ACTIVE_TASK_STATUS_POLL_MS = 600;
 const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
 const RUNNING_TASK_STATUSES = new Set(["pending", "running"]);
 const CANCEL_SEND_COOLDOWN_MS = 2200;
@@ -203,6 +207,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   );
   const cancelActiveStreamLocal = useChatStreamStore(
     (s: ChatStreamStore) => s.cancelActiveStreamLocal,
+  );
+  const completeActiveStreamLocal = useChatStreamStore(
+    (s: ChatStreamStore) => s.completeActiveStreamLocal,
   );
   const resumeTaskStream = useChatStreamStore(
     (s: ChatStreamStore) => s.resumeTaskStream,
@@ -497,12 +504,15 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/cancel`,
         {},
       ),
+    onMutate: (taskId) => {
+      cancelActiveStreamLocal({ taskId, reason: "cancelled" });
+      if (settingsSummary?.mode === "remote") {
+        startCancelSendCooldown();
+      }
+    },
     onSuccess: (data, taskId) => {
       if (!data.already_terminal) {
         cancelActiveStreamLocal({ taskId, reason: "cancelled" });
-        if (settingsSummary?.mode === "remote") {
-          startCancelSendCooldown();
-        }
       }
       if (data.already_terminal) {
         message.info(t.inspector.taskCancelAlreadyTerminal);
@@ -690,6 +700,72 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       messagesMessage = t.workbench.loadingMessages;
     }
   }
+
+  useEffect(() => {
+    const taskId = sseTaskId?.trim() ?? "";
+    if (!taskId) {
+      return;
+    }
+    const task = recentTasks.find((item) => item.id === taskId);
+    const reason = resolveTaskStreamTerminalReason({
+      task,
+      activeTaskId: taskId,
+      isStreaming,
+    });
+    if (!reason) {
+      return;
+    }
+    completeActiveStreamLocal({ taskId, reason });
+  }, [completeActiveStreamLocal, isStreaming, recentTasks, sseTaskId]);
+
+  useEffect(() => {
+    const taskId = sseTaskId?.trim() ?? "";
+    if (!isStreaming || !taskId) {
+      return;
+    }
+    let stopped = false;
+    let timerId: number | null = null;
+
+    const schedule = () => {
+      if (stopped) {
+        return;
+      }
+      timerId = window.setTimeout(() => {
+        void run();
+      }, ACTIVE_TASK_STATUS_POLL_MS);
+    };
+
+    const run = async () => {
+      if (stopped) {
+        return;
+      }
+      try {
+        const task = await apiJson<TaskSummary>(
+          `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}`,
+        );
+        const reason = resolveTaskStreamTerminalReason({
+          task,
+          activeTaskId: taskId,
+          isStreaming: useChatStreamStore.getState().isStreaming,
+        });
+        if (reason) {
+          completeActiveStreamLocal({ taskId, reason });
+          return;
+        }
+      } catch {
+        // Status polling is a best-effort fallback; SSE remains the primary stream contract.
+      }
+      schedule();
+    };
+
+    schedule();
+    return () => {
+      stopped = true;
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [completeActiveStreamLocal, isStreaming, sseTaskId]);
 
   useEffect(() => {
     const err =
