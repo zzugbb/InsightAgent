@@ -25,7 +25,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - 即使 provider/source 改成 file-backed registry manifest，后端也会继续把同一套 source 级模板上下文灌进 `extra_tools/overrides`；因此前端看到的 source diagnostics、tool detail summary 与运行态 trace 语义不会再因配置承载形态不同而分叉。
   - 对 `http_json` 模板里拼错的 `settings_*` / `tool_registry_*` 运行时变量，后端现在会更早在 source diagnostics 中给出 `invalid/tool_executions` 提示；前端不必等真实 tool 执行到上游请求阶段，设置治理面就能先看出是模板变量 typo，而不是网络/权限波动。
   - 对 URL、header/query value shape 与 response mapping path，后端也会给出更明确的配置诊断：相对 URL、对象型 header/query、运行时渲染成对象的 query 参数，以及非法 bracket path 不会再被静默字符串化、延后裸抛或部分解析，前端设置面与运行态 trace 看到的是同一类 real-tool execution 配置错误。
-  - 当 `http_json` 上游返回 HTTP 错误或 2xx 非 JSON 响应时，后端现在会带出稳定的 HTTP status/reason 或 `invalid JSON response` 与敏感键脱敏后的有限长度 body preview；前端工作台、trace 与导出回放后续消费到的是更可排障的真实上游错误语义，而不是泛化网络/解析异常文案。
+  - 当 `http_json` 上游返回 HTTP 错误、2xx 非 JSON 响应或非法 UTF-8 响应体时，后端现在会带出稳定的 HTTP status/reason 或 `invalid JSON response` 与敏感键脱敏后的有限长度 body preview；前端工作台、trace 与导出回放后续消费到的是更可排障的真实上游错误语义，而不是泛化网络/解析/codec 异常文案。
   - 对那些只有任务执行时才知道会不会缺失的 `$top_k`、`$precision` 一类模板输入，后端现在也会在真正发请求前直接报出 `query_params.limit`、`json_body.precision` 这类缺参路径；前端看到的会是明确的运行时模板缺参错误，而不是“请求发出去了但语义残缺”的假成功或假网络问题。
   - 对 `headers/query_params/json_body` 里只有空白字段名这类原本会被请求构建过程静默吞掉的配置，后端现在也会在 settings/source diagnostics 与 preflight 阶段提前报出 `invalid_tool_executions`；前端设置治理面可以更早指出“请求模板字段名本身就坏了”。
   - 对显式配置了 `response_path` 的 real tool，如果后端在真实响应里找不到这条路径，或者配置本身只是空白字符串，现在也会直接报配置/协议错误，而不是静默退回根 payload；前端看到的会是明确的响应映射失败，而不是 trace/export 中混入根响应兜底后的假结果。
@@ -83,7 +83,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
   - 后端 mock final-answer observation parser 现在也会恢复 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串；因此前端最终回答在旧 observation 只剩嵌套 preview 时，也会继续显示 real calc / real retrieval 摘要，而不是 `output_preview=...` 或旁路字段。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`959/959`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`960/960`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）

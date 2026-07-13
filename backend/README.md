@@ -24,7 +24,7 @@
   - file-backed source manifest 里的 `extra_tools` / `overrides` 现也继续走同一套 source 级模板上下文传递；把 source 从内联 JSON 切到 `registry_file` 后，`tool_registry_provider_source` 一类运行时变量不会再丢失。
   - 对 `http_json` 模板中的保留命名空间变量，runtime 现在也会做更细粒度静态诊断：`settings_*` / `tool_registry_*` typo 会直接落进 `invalid_tool_executions`，并在 runner 构建时继续 fail-fast，而不是静默丢掉 header/query 参数后才在真实上游请求里暴露成旁路错误。
   - `http_json` URL、header/query value shape 与 response mapping path 现在也会提前治理：URL 必须是绝对 `http(s)` 地址，header 值只接受 string/number/boolean，query 参数只接受 string/number/boolean 或这些值的列表；如果运行时模板把 URL 渲染成相对地址或把 query 参数渲染成对象，runner 会在发请求前 fail-fast；`response_path` / `result_fields.*` 也只接受 dot field 与数字索引语法，避免 `[-1]` / `[]` 一类非法 bracket 被部分解析成假路径。
-  - `http_json` 上游 HTTP 错误或 2xx 非 JSON 响应现在会归一成稳定可读的 runtime error：错误信息包含 HTTP status/reason 或 `invalid JSON response` 与敏感键脱敏后的有限长度 body preview，便于 trace/observation/export 排障，而不再只透出 urllib 或 JSON parser 的泛化异常字符串。
+  - `http_json` 上游 HTTP 错误、2xx 非 JSON 响应或非法 UTF-8 响应体现在会归一成稳定可读的 runtime error：错误信息包含 HTTP status/reason 或 `invalid JSON response` 与敏感键脱敏后的有限长度 body preview，便于 trace/observation/export 排障，而不再只透出 urllib、JSON parser 或 codec 的泛化异常字符串。
   - 对只能到 tool 真正执行时才知道是否缺失的请求模板变量，`http_json` runner 现在也会在发请求前直接 fail-fast：像 `$top_k`、`$precision` 这类缺参会明确报到 `query_params.limit`、`json_body.precision` 等路径上，而不是先静默删字段再把问题伪装成上游协议或网络异常。
   - 对 `headers/query_params/json_body` 里那些静态就能看出的空白字段名，settings/source diagnostics 与 configured provider preflight 现在也会提前报成 `invalid_tool_executions`；这类原本会在 request normalizer 中被静默忽略的坏配置，不必再等运行时才旁路消失。
   - 对显式声明了 `response_path` 的 `http_json` real tool，runtime 现在也不再在路径缺失时偷偷退回根响应 payload；如果上游响应里找不到该路径，或者配置里给的是空白 `response_path`，都会直接按配置/协议错 fail-fast，避免 response mapping 坏掉后仍产出看似“有结果”的假成功。
@@ -78,7 +78,7 @@
   - `MockLLMProvider` 的 final-answer observation parser 现在也会从 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串恢复结构化结果，并继承父级 semantic / request 上下文；半迁移 observation 不再退回 `output_preview=...` generic summary，也不会把旁路字段写进最终 Summary。
   - runtime helper、governance/export、registry diagnostics 与 planner 输入归一化已统一兼容旁路结构化载荷；当前 provider planner 与真实 `OpenAICompatibleLLMProvider` 已共享一套 response text / usage 提取语义，支持 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 `input_tokens/output_tokens` usage alias、脏 usage 值容错与流式 delta 文本字段变体。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`959/959`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`960/960`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）

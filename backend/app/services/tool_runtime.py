@@ -1768,9 +1768,14 @@ def _format_http_json_http_error(exc: HTTPError) -> str:
 def _format_http_json_invalid_json_response(
     *,
     raw_body: bytes,
-    error: json.JSONDecodeError,
+    error: json.JSONDecodeError | UnicodeDecodeError,
 ) -> str:
-    message = f"HTTP JSON tool failed: invalid JSON response: {error.msg}"
+    error_message = (
+        error.msg
+        if isinstance(error, json.JSONDecodeError)
+        else f"invalid UTF-8 response body: {error.reason}"
+    )
+    message = f"HTTP JSON tool failed: invalid JSON response: {error_message}"
     body_preview = _format_http_json_error_body_preview(raw_body)
     if body_preview:
         message = f"{message}; body: {body_preview}"
@@ -1877,8 +1882,9 @@ def _build_http_json_tool_runner(
             ) as response:
                 response_body = response.read()
                 try:
-                    response_payload = json.loads(response_body.decode("utf-8"))
-                except json.JSONDecodeError as exc:
+                    response_text = response_body.decode("utf-8")
+                    response_payload = json.loads(response_text)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                     raise MockToolExecutionError(
                         _format_http_json_invalid_json_response(
                             raw_body=response_body,

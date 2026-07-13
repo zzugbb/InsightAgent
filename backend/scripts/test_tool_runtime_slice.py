@@ -43336,6 +43336,67 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("[redacted]", str(raised.exception))
         self.assertNotIn("hidden", str(raised.exception))
 
+    def test_run_tool_canonical_override_reports_invalid_utf8_http_json_response_body_preview(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return b"\xff<html>login expired secret=hidden</html>"
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response", str(raised.exception))
+        self.assertIn("login expired", str(raised.exception))
+        self.assertIn("[redacted]", str(raised.exception))
+        self.assertNotIn("hidden", str(raised.exception))
+
     def test_run_tool_canonical_override_rejects_http_json_get_with_json_body_without_dropping_body(
         self,
     ) -> None:
