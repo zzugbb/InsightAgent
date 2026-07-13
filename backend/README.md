@@ -18,11 +18,13 @@
   - configured provider preflight 与 settings summary/validate 返回的 `tool_details` 现也显式包含 `execution_kind`；file/source 治理与前端设置面板可以直接识别哪些 tool 已切到真实 `http_json` runner。
   - 若 registry `extra_tools` / `overrides` 显式声明了 `execution`，但 `kind` 缺失、shape 非法或写成不支持的执行器，tool runtime 现会直接返回配置错误，不再静默回退到模板 stub runner。
   - 同一批坏掉的 `execution` 配置现在也会进入 `invalid/tool_executions` diagnostics：file/source/global settings、selected source、configured provider preflight 以及 trace/audit 可以在真正跑 tool 之前就把问题暴露出来，而不是只在运行期 fail-fast。
-  - `http_json.execution.method`、`timeout_ms` 与 tool 级 `default_timeout_ms` 现在也会被纳入同一套真实执行器治理：显式 method 只接受 `GET / POST / PUT / PATCH / DELETE`，显式 timeout 只接受至少 1ms 的正整数毫秒；`POTS` / `FETCH` / `timeout_ms="slow"` / `default_timeout_ms="slow"` / fractional/sub-millisecond / `NaN` / `Infinity` / 超大整数一类坏配置会提前落进 `invalid/tool_executions`，运行时也会 fail-fast 或安全回退到模板默认值，不再静默降级成 `GET` 或裸抛构建异常。
+  - `http_json.execution.method`、`timeout_ms` 与 tool 级 `default_timeout_ms` 现在也会被纳入同一套真实执行器治理：显式 method 只接受 `GET / POST / PUT / PATCH / DELETE`，显式 `GET + json_body` 会被视为协议配置错而不是静默丢 body，显式 timeout 只接受至少 1ms 的正整数毫秒；`POTS` / `FETCH` / `method=GET` 同时声明 `json_body` / `timeout_ms="slow"` / `default_timeout_ms="slow"` / fractional/sub-millisecond / `NaN` / `Infinity` / 超大整数一类坏配置会提前落进 `invalid/tool_executions`，运行时也会 fail-fast 或安全回退到模板默认值，不再静默降级成 `GET`、静默丢弃请求体或裸抛构建异常。
   - 对已接上 `http_json` 的 real tool，runtime 现在还会生成一份安全的 `execution_summary` 并挂到 tool semantic meta 上；`tool_start`、action step、持久化 trace 与 export 回放都能看到 method、origin/path、query/body/result-field 概览，同时避免把 header value 等敏感配置直接写进 trace。
   - `http_json` execution template 现在也会复用运行时 settings/source 上下文：global extra tool、source extra tool、registry override 与 file-backed source 都可以在 `headers/url/query/json_body` 中读取 `settings_api_key`、`settings_base_url`、`tool_registry_provider_source` 等变量，并支持 `${...}` 字符串插值来拼接 bearer/header 模板，而无需把敏感值硬编码进 registry 配置。
   - file-backed source manifest 里的 `extra_tools` / `overrides` 现也继续走同一套 source 级模板上下文传递；把 source 从内联 JSON 切到 `registry_file` 后，`tool_registry_provider_source` 一类运行时变量不会再丢失。
   - 对 `http_json` 模板中的保留命名空间变量，runtime 现在也会做更细粒度静态诊断：`settings_*` / `tool_registry_*` typo 会直接落进 `invalid_tool_executions`，并在 runner 构建时继续 fail-fast，而不是静默丢掉 header/query 参数后才在真实上游请求里暴露成旁路错误。
+  - `http_json` URL、header/query value shape 与 response mapping path 现在也会提前治理：URL 必须是绝对 `http(s)` 地址，header 值只接受 string/number/boolean，query 参数只接受 string/number/boolean 或这些值的列表；如果运行时模板把 URL 渲染成相对地址或把 query 参数渲染成对象，runner 会在发请求前 fail-fast；`response_path` / `result_fields.*` 也只接受 dot field 与数字索引语法，避免 `[-1]` / `[]` 一类非法 bracket 被部分解析成假路径。
+  - `http_json` 上游 HTTP 错误或 2xx 非 JSON 响应现在会归一成稳定可读的 runtime error：错误信息包含 HTTP status/reason 或 `invalid JSON response` 与敏感键脱敏后的有限长度 body preview，便于 trace/observation/export 排障，而不再只透出 urllib 或 JSON parser 的泛化异常字符串。
   - 对只能到 tool 真正执行时才知道是否缺失的请求模板变量，`http_json` runner 现在也会在发请求前直接 fail-fast：像 `$top_k`、`$precision` 这类缺参会明确报到 `query_params.limit`、`json_body.precision` 等路径上，而不是先静默删字段再把问题伪装成上游协议或网络异常。
   - 对 `headers/query_params/json_body` 里那些静态就能看出的空白字段名，settings/source diagnostics 与 configured provider preflight 现在也会提前报成 `invalid_tool_executions`；这类原本会在 request normalizer 中被静默忽略的坏配置，不必再等运行时才旁路消失。
   - 对显式声明了 `response_path` 的 `http_json` real tool，runtime 现在也不再在路径缺失时偷偷退回根响应 payload；如果上游响应里找不到该路径，或者配置里给的是空白 `response_path`，都会直接按配置/协议错 fail-fast，避免 response mapping 坏掉后仍产出看似“有结果”的假成功。
@@ -76,7 +78,7 @@
   - `MockLLMProvider` 的 final-answer observation parser 现在也会从 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串恢复结构化结果，并继承父级 semantic / request 上下文；半迁移 observation 不再退回 `output_preview=...` generic summary，也不会把旁路字段写进最终 Summary。
   - runtime helper、governance/export、registry diagnostics 与 planner 输入归一化已统一兼容旁路结构化载荷；当前 provider planner 与真实 `OpenAICompatibleLLMProvider` 已共享一套 response text / usage 提取语义，支持 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 `input_tokens/output_tokens` usage alias、脏 usage 值容错与流式 delta 文本字段变体。
 - 当前最近一次已记录校验基线：
-  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`948/948`）
+  - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`959/959`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）
@@ -86,6 +88,13 @@
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 通过（完整 Chromium e2e，`47/47`）
   - `git diff --check` 通过
+
+## 全仓库审计结论
+
+- 后端当前主线与 README / 前端 README / 实时计划一致：最近收尾的 final-answer、observation、trace/export fallback 与 `http_json` execution diagnostics 已基本闭环。
+- 下一阶段后端优先做 `real-tool-execution`，也就是把 provider/source 中已经能注册和规划的 real tools 继续推进到真实请求模板、真实上游响应映射、result preview/output、runtime semantic、trace/observation/export 诊断的一体化执行链。
+- registry/source 治理继续作为第二优先级：保持 loader_factory、file-backed source、selected source、settings/preflight、per-tool diagnostics 与 runtime semantic 使用同一套语义。
+- 单机任务队列/并发治理与更细粒度 RAG 治理保留为后续模块，不与当前真实工具执行主线混在同一轮里改外部契约。
 
 ## 当前已有内容
 
@@ -261,5 +270,5 @@ docker compose up -d chroma
 ## 当前约束
 
 - 当前外部 SSE / trace / export / e2e 契约尽量保持稳定，优先做内部 runtime/helper 收口。
-- 当前主线优先真实工具执行语义，不优先继续维护已归档的 runtime spec 历史文档。
+- 当前主线优先真实工具执行本体与上游协议接入，不优先继续扩大旧 fallback 兼容面，也不继续维护已归档的 runtime spec 历史文档。
 - 文档只保留高信号当前状态，不继续累积按天流水账。
