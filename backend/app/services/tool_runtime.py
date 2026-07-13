@@ -342,6 +342,7 @@ _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS = (
     "missing_registry_dirs",
     "invalid_tool_executions",
 )
+_HTTP_JSON_ALLOWED_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 
 
 def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
@@ -1385,9 +1386,87 @@ def _normalize_tool_execution_http_method(raw_value: object) -> str:
     if not isinstance(raw_value, str):
         return "GET"
     normalized = raw_value.strip().upper()
-    if normalized in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+    if normalized in _HTTP_JSON_ALLOWED_METHODS:
         return normalized
     return "GET"
+
+
+def _describe_tool_execution_http_method_validation_error(
+    raw_value: object,
+) -> str | None:
+    if not isinstance(raw_value, str):
+        return (
+            "http_json execution method must be one of "
+            f"{', '.join(_HTTP_JSON_ALLOWED_METHODS)}"
+        )
+    normalized = raw_value.strip().upper()
+    if normalized in _HTTP_JSON_ALLOWED_METHODS:
+        return None
+    return (
+        "http_json execution method must be one of "
+        f"{', '.join(_HTTP_JSON_ALLOWED_METHODS)}"
+    )
+
+
+def _coerce_tool_execution_timeout_ms(
+    raw_value: object,
+    *,
+    default_timeout_ms: int,
+) -> int:
+    if raw_value is None:
+        return default_timeout_ms
+    if isinstance(raw_value, bool):
+        return default_timeout_ms
+    if isinstance(raw_value, (int, float)) and raw_value > 0:
+        return int(raw_value)
+    return default_timeout_ms
+
+
+def _describe_tool_execution_timeout_ms_validation_error(
+    raw_value: object,
+) -> str | None:
+    if isinstance(raw_value, bool):
+        return (
+            "http_json execution timeout_ms must be a positive number of milliseconds"
+        )
+    if isinstance(raw_value, (int, float)) and raw_value > 0:
+        return None
+    return "http_json execution timeout_ms must be a positive number of milliseconds"
+
+
+def _coerce_tool_default_timeout_ms(
+    raw_value: object,
+    *,
+    fallback_timeout_ms: int,
+) -> int:
+    if isinstance(raw_value, bool):
+        return fallback_timeout_ms
+    if isinstance(raw_value, (int, float)):
+        coerced_timeout_ms = int(raw_value)
+        return coerced_timeout_ms if coerced_timeout_ms > 0 else fallback_timeout_ms
+    if isinstance(raw_value, str) and raw_value.strip():
+        try:
+            coerced_timeout_ms = int(raw_value.strip())
+        except ValueError:
+            return fallback_timeout_ms
+        return coerced_timeout_ms if coerced_timeout_ms > 0 else fallback_timeout_ms
+    return fallback_timeout_ms
+
+
+def _describe_tool_default_timeout_ms_validation_error(
+    raw_value: object,
+) -> str | None:
+    if isinstance(raw_value, bool):
+        return "tool default_timeout_ms must be a positive number of milliseconds"
+    if isinstance(raw_value, (int, float)) and int(raw_value) > 0:
+        return None
+    if isinstance(raw_value, str) and raw_value.strip():
+        try:
+            if int(raw_value.strip()) > 0:
+                return None
+        except ValueError:
+            pass
+    return "tool default_timeout_ms must be a positive number of milliseconds"
 
 
 def _normalize_tool_execution_http_headers(raw_value: object) -> dict[str, str]:
@@ -1492,7 +1571,10 @@ def _build_http_json_tool_runner(
     raw_json_body = execution_spec.get("json_body")
     raw_response_path = execution_spec.get("response_path")
     raw_result_fields = execution_spec.get("result_fields")
-    timeout_ms = int(execution_spec.get("timeout_ms", default_timeout_ms) or default_timeout_ms)
+    timeout_ms = _coerce_tool_execution_timeout_ms(
+        execution_spec.get("timeout_ms"),
+        default_timeout_ms=default_timeout_ms,
+    )
 
     def runner(*, tool_input: dict[str, object], prompt: str, user_id: str) -> dict[str, object]:
         raw_url = execution_spec.get("url")
@@ -1755,24 +1837,38 @@ def _describe_tool_execution_spec_validation_errors(
     raw_url = execution_spec.get("url")
     if not isinstance(raw_url, str) or not raw_url.strip():
         return ("http_json execution requires a non-empty url",)
+    validation_errors: list[str] = []
+    if "method" in execution_spec:
+        method_error = _describe_tool_execution_http_method_validation_error(
+            execution_spec.get("method")
+        )
+        if method_error:
+            validation_errors.append(method_error)
+    if "timeout_ms" in execution_spec:
+        timeout_error = _describe_tool_execution_timeout_ms_validation_error(
+            execution_spec.get("timeout_ms")
+        )
+        if timeout_error:
+            validation_errors.append(timeout_error)
     raw_headers = execution_spec.get("headers")
     if raw_headers is not None and not isinstance(raw_headers, dict):
-        return ("http_json execution headers must be an object",)
+        validation_errors.append("http_json execution headers must be an object")
     raw_query_params = execution_spec.get("query_params")
     if raw_query_params is not None and not isinstance(raw_query_params, dict):
-        return ("http_json execution query_params must be an object",)
+        validation_errors.append("http_json execution query_params must be an object")
     raw_json_body = execution_spec.get("json_body")
     if raw_json_body is not None and not isinstance(raw_json_body, dict):
-        return ("http_json execution json_body must be an object",)
+        validation_errors.append("http_json execution json_body must be an object")
     raw_response_path = execution_spec.get("response_path")
     if raw_response_path is not None and not isinstance(raw_response_path, str):
-        return ("http_json execution response_path must be a string",)
+        validation_errors.append("http_json execution response_path must be a string")
     if isinstance(raw_response_path, str) and not raw_response_path.strip():
-        return ("http_json execution response_path must be a non-empty string when provided",)
+        validation_errors.append(
+            "http_json execution response_path must be a non-empty string when provided"
+        )
     raw_result_fields = execution_spec.get("result_fields")
     if raw_result_fields is not None and not isinstance(raw_result_fields, dict):
-        return ("http_json execution result_fields must be an object",)
-    validation_errors: list[str] = []
+        validation_errors.append("http_json execution result_fields must be an object")
     for field_name, raw_mapping in (
         ("headers", raw_headers),
         ("query_params", raw_query_params),
@@ -1886,11 +1982,17 @@ def _collect_invalid_tool_execution_messages_from_extra_tool_specs(
     for tool_name, spec in extra_tool_specs.items():
         if not isinstance(tool_name, str) or not isinstance(spec, dict):
             continue
-        if "execution" not in spec:
-            continue
-        validation_errors = _describe_tool_execution_spec_validation_errors(
-            spec.get("execution")
-        )
+        validation_errors: list[str] = []
+        if "default_timeout_ms" in spec:
+            timeout_error = _describe_tool_default_timeout_ms_validation_error(
+                spec.get("default_timeout_ms")
+            )
+            if timeout_error:
+                validation_errors.append(timeout_error)
+        if "execution" in spec:
+            validation_errors.extend(
+                _describe_tool_execution_spec_validation_errors(spec.get("execution"))
+            )
         if not validation_errors:
             continue
         normalized_tool_name = normalize_tool_registry_name(tool_name) or tool_name.strip()
@@ -1915,11 +2017,17 @@ def _collect_invalid_tool_execution_messages_from_override_specs(
         normalized_tool_name = normalize_tool_registry_name(tool_name)
         if not normalized_tool_name or normalized_tool_name not in base_registry:
             continue
-        if "execution" not in spec:
-            continue
-        validation_errors = _describe_tool_execution_spec_validation_errors(
-            spec.get("execution")
-        )
+        validation_errors: list[str] = []
+        if "default_timeout_ms" in spec:
+            timeout_error = _describe_tool_default_timeout_ms_validation_error(
+                spec.get("default_timeout_ms")
+            )
+            if timeout_error:
+                validation_errors.append(timeout_error)
+        if "execution" in spec:
+            validation_errors.extend(
+                _describe_tool_execution_spec_validation_errors(spec.get("execution"))
+            )
         if not validation_errors:
             continue
         messages.extend(
@@ -3329,15 +3437,26 @@ def build_tool_registry_extra_tools_from_settings(
         )
         if template_registration is None:
             continue
-        resolved_default_timeout_ms = int(
-            spec.get("default_timeout_ms", template_registration.default_timeout_ms)
+        raw_default_timeout_ms = spec.get(
+            "default_timeout_ms", template_registration.default_timeout_ms
+        )
+        resolved_default_timeout_ms = _coerce_tool_default_timeout_ms(
+            raw_default_timeout_ms,
+            fallback_timeout_ms=template_registration.default_timeout_ms,
         )
         execution_spec = spec.get("execution")
         resolved_execution_kind = _resolve_tool_execution_kind_from_spec(
             execution_spec
         )
-        validation_errors = _describe_tool_execution_spec_validation_errors(
-            execution_spec
+        validation_errors: list[str] = []
+        if "default_timeout_ms" in spec:
+            timeout_error = _describe_tool_default_timeout_ms_validation_error(
+                raw_default_timeout_ms
+            )
+            if timeout_error:
+                validation_errors.append(timeout_error)
+        validation_errors.extend(
+            _describe_tool_execution_spec_validation_errors(execution_spec)
         )
         extra_tools[name] = replace(
             template_registration,
@@ -3423,15 +3542,26 @@ def _build_registry_overrides_from_specs(
         }
         if not any(key in spec for key in metadata_keys):
             continue
-        resolved_default_timeout_ms = int(
-            spec.get("default_timeout_ms", base_registration.default_timeout_ms)
+        raw_default_timeout_ms = spec.get(
+            "default_timeout_ms", base_registration.default_timeout_ms
+        )
+        resolved_default_timeout_ms = _coerce_tool_default_timeout_ms(
+            raw_default_timeout_ms,
+            fallback_timeout_ms=base_registration.default_timeout_ms,
         )
         execution_spec = spec.get("execution")
         resolved_execution_kind = _resolve_tool_execution_kind_from_spec(
             execution_spec
         )
-        validation_errors = _describe_tool_execution_spec_validation_errors(
-            execution_spec
+        validation_errors: list[str] = []
+        if "default_timeout_ms" in spec:
+            timeout_error = _describe_tool_default_timeout_ms_validation_error(
+                raw_default_timeout_ms
+            )
+            if timeout_error:
+                validation_errors.append(timeout_error)
+        validation_errors.extend(
+            _describe_tool_execution_spec_validation_errors(execution_spec)
         )
         overrides[normalized_name] = replace(
             base_registration,

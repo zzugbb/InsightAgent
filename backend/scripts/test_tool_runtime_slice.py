@@ -21895,6 +21895,30 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertFalse(extra_tools["calc_eval_fast"].retryable_by_default)
         self.assertEqual(extra_tools["calc_eval_fast"].kind, "local_calculator")
 
+    def test_build_tool_registry_extra_tools_from_settings_diagnoses_invalid_default_timeout(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "calc_eval_fast": {
+                        "template": "calc_eval",
+                        "label": "Fast Calculator",
+                        "default_timeout_ms": "slow",
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(extra_tools)), ("calc_eval_fast",))
+        self.assertEqual(extra_tools["calc_eval_fast"].default_timeout_ms, 3_000)
+        self.assertEqual(
+            extra_tools["calc_eval_fast"].execution_diagnostics,
+            ("tool default_timeout_ms must be a positive number of milliseconds",),
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_accepts_result_preview_keys(
         self,
     ) -> None:
@@ -42950,6 +42974,229 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertTrue(raised.exception.fatal)
         self.assertIn("Unsupported tool execution kind", str(raised.exception))
+
+    def test_run_tool_canonical_override_rejects_invalid_http_json_method_without_get_fallback(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "method": "POTS",
+                                "json_body": {
+                                    "expression": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("invalid http_json method must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "execution method must be one of",
+            str(raised.exception),
+        )
+
+    def test_tool_registry_execution_diagnostics_reject_invalid_http_json_method(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "method": "FETCH",
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution method must be one of "
+                "GET, POST, PUT, PATCH, DELETE",
+            ),
+        )
+
+    def test_run_tool_canonical_override_rejects_invalid_http_json_timeout_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "timeout_ms": "slow",
+                                "json_body": {
+                                    "expression": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("invalid http_json timeout must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "timeout_ms must be a positive number",
+            str(raised.exception),
+        )
+
+    def test_tool_registry_execution_diagnostics_reject_invalid_http_json_timeout(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "timeout_ms": 0,
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution timeout_ms must be a "
+                "positive number of milliseconds",
+            ),
+        )
+
+    def test_tool_registry_execution_diagnostics_reject_invalid_default_timeout(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "default_timeout_ms": "slow",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "default_timeout_ms": 0,
+                        }
+                    }
+                ),
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: tool default_timeout_ms must be a positive "
+                "number of milliseconds",
+                "calc_eval: tool default_timeout_ms must be a positive number "
+                "of milliseconds",
+            ),
+        )
 
     def test_run_tool_canonical_override_rejects_missing_runtime_template_variables_without_partial_http_request(
         self,
