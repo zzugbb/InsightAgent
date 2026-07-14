@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -24930,6 +24932,36 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(diagnostics["invalid_tool_executions"], ())
 
+    def test_build_tool_registry_settings_execution_diagnostics_redacts_sensitive_execution_kind(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "token=hidden",
+                            },
+                        }
+                    }
+                ),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: unsupported tool execution kind [redacted]",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
     def test_build_tool_registry_settings_execution_diagnostics_rejects_http_json_url_credentials_without_summary_leak(
         self,
     ) -> None:
@@ -25189,11 +25221,13 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             diagnostics["invalid_tool_executions"],
             (
-                "provider_search: http_json execution references unsupported runtime template variable tool_registry_api_key_typo in query_params.[redacted]",
-                "provider_search: http_json execution references unsupported runtime template variable settings_access_token_typo in json_body.[redacted]",
+                "provider_search: http_json execution references unsupported runtime template variable [redacted] in query_params.[redacted]",
+                "provider_search: http_json execution references unsupported runtime template variable [redacted] in json_body.[redacted]",
             ),
         )
         joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("tool_registry_api_key_typo", joined_diagnostics)
+        self.assertNotIn("settings_access_token_typo", joined_diagnostics)
         self.assertNotIn("query_params.api_key", joined_diagnostics)
         self.assertNotIn("json_body.access_token", joined_diagnostics)
 
@@ -25223,8 +25257,16 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             {
                 "method": "GET",
                 "url_origin": "https://provider.example",
-                "url_path": "/v1/token=[redacted]/search/api_key/[redacted]",
+                "url_path": "/v1/[redacted]/search/[redacted]/[redacted]",
             },
+        )
+        self.assertNotIn(
+            "token",
+            json.dumps(extra_tools["provider_search"].execution_summary),
+        )
+        self.assertNotIn(
+            "api_key",
+            json.dumps(extra_tools["provider_search"].execution_summary),
         )
         self.assertNotIn(
             "hidden",
@@ -25280,6 +25322,46 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn(
             "api_key",
+            json.dumps(extra_tools["provider_search"].execution_summary),
+        )
+
+    def test_build_tool_registry_settings_execution_summary_redacts_http_json_sensitive_response_path(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "response_path": "$.data.token=hidden",
+                        },
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        self.assertEqual(
+            extra_tools["provider_search"].execution_summary,
+            {
+                "method": "GET",
+                "url_origin": "https://provider.example",
+                "url_path": "/search",
+                "response_path": "$.data.[redacted]",
+            },
+        )
+        self.assertNotIn(
+            "hidden",
+            json.dumps(extra_tools["provider_search"].execution_summary),
+        )
+        self.assertNotIn(
+            "token",
             json.dumps(extra_tools["provider_search"].execution_summary),
         )
 
@@ -25411,6 +25493,42 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "provider_search: http_json execution result_fields.request_id must be a non-empty string path",
             ),
         )
+
+    def test_build_tool_registry_settings_execution_diagnostics_redacts_sensitive_result_field_names(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "result_fields": {
+                                    "access_token": 123,
+                                    "api_key": "$.data.documents[-1]",
+                                },
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution result_fields.[redacted] must be a non-empty string path",
+                "provider_search: http_json execution result_fields.[redacted] must use dot fields and numeric indexes",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("access_token", joined_diagnostics)
+        self.assertNotIn("api_key", joined_diagnostics)
 
     def test_build_tool_registry_settings_execution_diagnostics_reports_blank_result_field_names(
         self,
@@ -43420,6 +43538,1212 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_run_tool_canonical_override_accepts_http_json_problem_json_content_type(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def getheader(self, name: str, default: object = None) -> object:
+                return "application/problem+json; charset=utf-8" if name.lower() == "content-type" else default
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"data": {"value": 7}}
+            )
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 7)
+
+    def test_run_tool_canonical_override_rejects_http_json_non_json_content_type_with_body_preview(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def getheader(self, name: str, default: object = None) -> object:
+                return "text/html; charset=utf-8" if name.lower() == "content-type" else default
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "message": "login expired token=hidden",
+                    "secret": "hidden",
+                }
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response content-type: text/html", message)
+        self.assertIn("login expired", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_bytes_content_type_before_mapping(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def getheader(self, name: str, default: object = None) -> object:
+                return b"text/html; charset=utf-8" if name.lower() == "content-type" else default
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7},"message":"login token=hidden"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response content-type: text/html", message)
+        self.assertIn("login", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_accepts_http_json_gzip_response_body(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def getheader(self, name: str, default: object = None) -> object:
+                if name.lower() == "content-encoding":
+                    return "gzip"
+                if name.lower() == "content-type":
+                    return "application/json"
+                return default
+
+            def read(self) -> bytes:
+                return gzip.compress(b'{"data":{"value":7}}')
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 7)
+
+    def test_run_tool_canonical_override_accepts_http_json_deflate_response_body(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def getheader(self, name: str, default: object = None) -> object:
+                if name.lower() == "content-encoding":
+                    return "deflate"
+                if name.lower() == "content-type":
+                    return "application/json"
+                return default
+
+            def read(self) -> bytes:
+                return zlib.compress(b'{"data":{"value":8}}')
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 8)
+
+    def test_run_tool_canonical_override_rejects_http_json_unsupported_content_encoding(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def getheader(self, name: str, default: object = None) -> object:
+                if name.lower() == "content-encoding":
+                    return b"br"
+                if name.lower() == "content-type":
+                    return "application/json"
+                return default
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7},"message":"token=hidden"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("unsupported response content-encoding: br", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_invalid_gzip_body_with_redacted_preview(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def getheader(self, name: str, default: object = None) -> object:
+                if name.lower() == "content-encoding":
+                    return "gzip"
+                if name.lower() == "content-type":
+                    return "application/json"
+                return default
+
+            def read(self) -> bytes:
+                return b"not gzip secret=hidden"
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid gzip response body", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_multiple_content_encodings_with_redacted_preview(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def getheader(self, name: str, default: object = None) -> object:
+                if name.lower() == "content-encoding":
+                    return "gzip, br"
+                if name.lower() == "content-type":
+                    return "application/json"
+                return default
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7},"message":"api_key=hidden"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("unsupported response content-encoding: gzip,br", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("api_key", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_accepts_http_json_utf16_charset_response_body(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def getheader(self, name: str, default: object = None) -> object:
+                return "application/json; charset=utf-16" if name.lower() == "content-type" else default
+
+            def read(self) -> bytes:
+                return '{"data":{"value":9}}'.encode("utf-16")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 9)
+
+    def test_run_tool_canonical_override_rejects_http_json_unknown_charset_with_redacted_preview(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def getheader(self, name: str, default: object = None) -> object:
+                return "application/json; charset=secret=hidden" if name.lower() == "content-type" else default
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7},"message":"token=hidden"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response charset", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_http_json_declared_charset_decode_error(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def getheader(self, name: str, default: object = None) -> object:
+                return "application/json; charset=utf-16" if name.lower() == "content-type" else default
+
+            def read(self) -> bytes:
+                return b"\xff<html>secret=hidden</html>"
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response", message)
+        self.assertIn("invalid utf-16 response body", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_accepts_http_json_string_response_body_from_adapter(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def read(self) -> str:
+                return '{"data":{"value":7}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 7)
+
+    def test_run_tool_canonical_override_accepts_http_json_bytes_like_response_body_from_adapter(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def read(self) -> memoryview:
+                return memoryview(b'{"data":{"value":8}}')
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 8)
+
+    def test_run_tool_canonical_override_rejects_http_json_unsupported_response_body_type_as_transport_error(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def read(self) -> None:
+                return None
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("transport error", str(raised.exception))
+        self.assertIn("response body must be bytes or text", str(raised.exception))
+
+    def test_run_tool_canonical_override_rejects_http_json_returned_error_status_with_redacted_preview(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 503
+            reason = "gateway rejected token=hidden"
+
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def getheader(self, name: str, default: object = None) -> object:
+                return "application/json" if name.lower() == "content-type" else default
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "message": "upstream failed api_key=hidden",
+                    "secret": "hidden",
+                }
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 503", message)
+        self.assertIn("gateway rejected", message)
+        self.assertIn("upstream failed", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("api_key", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_status_code_attr_with_bytes_reason(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status_code = "429"
+            reason = b"quota exhausted token=hidden"
+
+            def read(self) -> bytes:
+                return b'{"message":"try later secret=hidden"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 429", message)
+        self.assertIn("quota exhausted", message)
+        self.assertIn("try later", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_returned_redirect_status_before_mapping(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data",
+                                "result_fields": {
+                                    "result": "$.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            code = "302"
+            msg = "Found secret=hidden"
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 302", message)
+        self.assertIn("Found", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_empty_success_body_with_stable_message(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 204
+            reason = "No Content"
+
+            def getheader(self, name: str, default: object = None) -> object:
+                return "application/json" if name.lower() == "content-type" else default
+
+            def read(self) -> bytes:
+                return b""
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("empty JSON response", message)
+        self.assertIn("HTTP 204", message)
+        self.assertNotIn("Expecting value", message)
+
     def test_run_tool_canonical_override_redacts_http_json_root_output_without_result_fields(
         self,
     ) -> None:
@@ -43726,6 +45050,44 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertTrue(raised.exception.fatal)
         self.assertIn("Unsupported tool execution kind", str(raised.exception))
 
+    def test_run_tool_canonical_override_redacts_sensitive_unknown_execution_kind(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "api_key=hidden",
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        with self.assertRaises(MockToolExecutionError) as raised:
+            run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+
+        message = str(raised.exception)
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("Unsupported tool execution kind [redacted]", message)
+        self.assertNotIn("api_key", message)
+        self.assertNotIn("hidden", message)
+
     def test_run_tool_canonical_override_rejects_invalid_http_json_method_without_get_fallback(
         self,
     ) -> None:
@@ -43883,6 +45245,40 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
+    def test_tool_registry_execution_diagnostics_reject_http_json_url_fragment_without_echo(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search#token=hidden",
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution url must not include fragments",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
     def test_run_tool_canonical_override_rejects_rendered_relative_http_json_url_without_request(
         self,
     ) -> None:
@@ -43938,6 +45334,65 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(urlopen_calls, [])
         self.assertTrue(raised.exception.fatal)
         self.assertIn("url must be an absolute http(s) URL", str(raised.exception))
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_url_fragment_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc#$fragment",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered url fragment must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "fragment": "secret=hidden",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("url must not include fragments", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
 
     def test_run_tool_canonical_override_rejects_rendered_http_json_url_credentials_without_request(
         self,
@@ -44171,6 +45626,79 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("rate limited", str(raised.exception))
         self.assertIn("[redacted]", str(raised.exception))
         self.assertNotIn("hidden", str(raised.exception))
+        self.assertNotIn("secret", str(raised.exception))
+
+    def test_run_tool_canonical_override_reports_http_json_compressed_http_error_body(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            def raise_http_error(request, timeout=0):
+                del request, timeout
+                raise tool_runtime_module.HTTPError(  # type: ignore[attr-defined]
+                    "https://provider.example/calc",
+                    429,
+                    "Too Many Requests",
+                    hdrs={
+                        "Content-Encoding": "gzip",
+                        "Content-Type": "application/json",
+                    },
+                    fp=io.BytesIO(
+                        gzip.compress(
+                            b'{"message":"rate limited token=hidden","secret":"hidden"}'
+                        )
+                    ),
+                )
+
+            tool_runtime_module.urlopen = raise_http_error  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 429", message)
+        self.assertIn("Too Many Requests", message)
+        self.assertIn("rate limited", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
 
     def test_run_tool_canonical_override_reports_http_json_http_error_reason_safely(
         self,
@@ -44293,9 +45821,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         message = str(raised.exception)
         self.assertFalse(raised.exception.fatal)
         self.assertIn("HTTP 401", message)
-        self.assertIn("upstream token=", message)
-        self.assertIn("api_key=", message)
+        self.assertIn("upstream", message)
         self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("api_key", message)
         self.assertNotIn("hidden", message)
 
     def test_run_tool_canonical_override_reports_limited_http_json_http_error_reason(
@@ -44423,6 +45952,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("login expired", str(raised.exception))
         self.assertIn("[redacted]", str(raised.exception))
         self.assertNotIn("hidden", str(raised.exception))
+        self.assertNotIn("secret", str(raised.exception))
 
     def test_run_tool_canonical_override_reports_invalid_utf8_http_json_response_body_preview(
         self,
@@ -44484,6 +46014,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("login expired", str(raised.exception))
         self.assertIn("[redacted]", str(raised.exception))
         self.assertNotIn("hidden", str(raised.exception))
+        self.assertNotIn("secret", str(raised.exception))
 
     def test_run_tool_canonical_override_reports_http_json_transport_error_safely(
         self,
@@ -44540,6 +46071,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("transport error", str(raised.exception))
         self.assertIn("connection refused", str(raised.exception))
         self.assertIn("[redacted]", str(raised.exception))
+        self.assertNotIn("api_key", str(raised.exception))
         self.assertNotIn("urlopen error", str(raised.exception))
         self.assertNotIn("hidden", str(raised.exception))
 
@@ -44598,6 +46130,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("transport error", message)
         self.assertIn("gateway timeout", message)
         self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
         self.assertNotIn("hidden", message)
         self.assertLessEqual(len(message), 320)
         self.assertTrue(message.endswith("..."))
@@ -44741,6 +46274,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
+    def test_tool_registry_execution_diagnostics_reject_http_json_query_param_protocol_names(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "query_params": {
+                                    "bad&name": "open",
+                                    "access_token=secret": "hidden",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution query_params.bad&name must use safe query parameter names",
+                "provider_search: http_json execution query_params.[redacted] must use safe query parameter names",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("access_token", joined_diagnostics)
+        self.assertNotIn("secret", joined_diagnostics)
+
     def test_tool_registry_execution_diagnostics_reject_http_json_header_protocol_shapes(
         self,
     ) -> None:
@@ -44777,6 +46349,243 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
         self.assertNotIn("Injected", "\n".join(diagnostics["invalid_tool_executions"]))
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_duplicate_header_names(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": "application/json",
+                                    "accept": "text/html; token=hidden",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers must not include duplicate HTTP header names",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_body_non_json_content_type(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": "text/plain; token=hidden",
+                                },
+                                "json_body": {
+                                    "query": "$query",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Content-Type must be application/json or a +json media type when json_body is defined: text/plain; [redacted]",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_body_non_utf8_content_type_charset(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": (
+                                        "application/json; charset=utf-16; "
+                                        "token=hidden"
+                                    ),
+                                },
+                                "json_body": {
+                                    "query": "$query",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Content-Type charset must be utf-8 when json_body is defined: application/json; charset=utf-16; [redacted]",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_non_json_accept_header(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": "text/html; token=hidden",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Accept must allow application/json or a +json media type: text/html; [redacted]",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_zero_quality_accept_header(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": "application/json; q=0; token=hidden, text/html",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Accept must allow application/json or a +json media type: application/json; q=0; [redacted], text/html",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_invalid_quality_accept_header(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": (
+                                        "application/json; q=2; token=hidden, "
+                                        "text/html"
+                                    ),
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Accept must allow application/json or a +json media type: application/json; q=2; [redacted], text/html",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
 
     def test_tool_registry_execution_diagnostics_reject_http_json_body_non_finite_values(
         self,
@@ -44877,6 +46686,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertTrue(raised.exception.fatal)
         self.assertIn("query_params.filter", str(raised.exception))
         self.assertIn("string, number, boolean, or list", str(raised.exception))
+
+    def test_run_tool_canonical_override_rejects_http_json_query_param_protocol_name_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "query_params": {
+                                    "api_key&token": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("invalid query param name must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn(
+            "query_params.[redacted] must use safe query parameter names",
+            message,
+        )
+        self.assertNotIn("api_key", message)
+        self.assertNotIn("token", message)
 
     def test_run_tool_canonical_override_rejects_rendered_http_json_header_injection_without_request(
         self,
@@ -44997,6 +46868,594 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertTrue(raised.exception.fatal)
         self.assertIn("headers.X-Trace must not contain control characters", str(raised.exception))
         self.assertNotIn("ok\x00bad", str(raised.exception))
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_body_non_json_content_type_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": "$content_type",
+                                },
+                                "json_body": {
+                                    "expression": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered non-json content-type must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "content_type": "text/plain; secret=hidden",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Content-Type must be application/json", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_body_non_utf8_content_type_charset_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": "$content_type",
+                                },
+                                "json_body": {
+                                    "expression": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered non-utf8 content-type charset must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "content_type": "application/problem+json; charset=latin-1; secret=hidden",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Content-Type charset must be utf-8", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_non_json_accept_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "$accept",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered non-json accept must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "accept": "text/html; secret=hidden",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Accept must allow application/json", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_zero_quality_accept_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "$accept",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered q=0 accept must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "accept": "application/json; q=0; secret=hidden, text/html",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Accept must allow application/json", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_invalid_quality_accept_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "$accept",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered invalid q accept must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "accept": "application/json; q=nan; secret=hidden, text/html",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Accept must allow application/json", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_duplicate_header_names_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": "application/json",
+                                    "content-type": "text/plain; secret=hidden",
+                                },
+                                "json_body": {
+                                    "expression": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("duplicate header names must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers must not include duplicate HTTP header names", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_accepts_http_json_lowercase_plus_json_content_type(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "method": "POST",
+                                "headers": {
+                                    "content-type": "application/problem+json; charset=utf-8",
+                                },
+                                "json_body": {
+                                    "expression": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return b'{"data":{"value":7}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or FakeHttpResponse()
+            )
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 7)
+        self.assertEqual(len(urlopen_calls), 1)
+        request = urlopen_calls[0]
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"expression": "1+2*3"},
+        )
+
+    def test_run_tool_canonical_override_accepts_http_json_plus_json_accept_header(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "accept": "application/vnd.api+json; charset=utf-8",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return b'{"data":{"value":7}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or FakeHttpResponse()
+            )
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 7)
+        self.assertEqual(len(urlopen_calls), 1)
+
+    def test_run_tool_canonical_override_accepts_http_json_plus_json_accept_with_quality(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "text/html, application/problem+json; q=0.7",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return b'{"data":{"value":7}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or FakeHttpResponse()
+            )
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 7)
+        self.assertEqual(len(urlopen_calls), 1)
 
     def test_run_tool_canonical_override_rejects_rendered_http_json_body_non_finite_without_request(
         self,
@@ -45749,9 +48208,10 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(urlopen_calls, [])
         self.assertTrue(raised.exception.fatal)
         self.assertIn(
-            "missing runtime template variable runtime_access_token in json_body.[redacted]",
+            "missing runtime template variable [redacted] in json_body.[redacted]",
             str(raised.exception),
         )
+        self.assertNotIn("runtime_access_token", str(raised.exception))
         self.assertNotIn("json_body.access_token", str(raised.exception))
 
     def test_run_tool_canonical_override_rejects_missing_http_json_response_path_without_root_fallback(
@@ -45948,9 +48408,11 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         message = str(raised.exception)
         self.assertTrue(raised.exception.fatal)
-        self.assertIn("$.data.token=", message)
+        self.assertIn("$.data.[redacted]", message)
         self.assertIn("[redacted]", message)
         self.assertNotIn("hidden", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("api_key", message)
 
     def test_run_tool_canonical_override_limits_http_json_result_field_mapping_errors(
         self,
@@ -46021,6 +48483,137 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("and 7 more", message)
         self.assertNotIn("field_11", message)
         self.assertLessEqual(len(message), 420)
+
+    def test_run_tool_canonical_override_redacts_sensitive_http_json_result_field_mapping_names(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "access_token": "$.missing.token",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"status": "ok"}
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("[redacted] -> $.missing.[redacted]", message)
+        self.assertNotIn("access_token", message)
+        self.assertNotIn("token", message)
+
+    def test_run_tool_canonical_override_redacts_sensitive_http_json_result_field_mapping_paths(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.meta.api_key",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"status": "ok"}
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("result -> $.meta.[redacted]", message)
+        self.assertNotIn("api_key", message)
 
     def test_run_tool_canonical_override_rejects_http_json_result_fields_with_blank_field_name_without_fallback(
         self,

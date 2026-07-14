@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import math
 import re
+import gzip
+import zlib
+import codecs
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -357,8 +360,10 @@ _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE = re.compile(
     re.IGNORECASE,
 )
 _HTTP_JSON_URL_CONTROL_OR_SPACE_RE = re.compile(r"[\x00-\x20\x7f]")
+_HTTP_JSON_QUERY_PARAM_NAME_UNSAFE_RE = re.compile(r"[\x00-\x20\x7f=&?#]")
 _HTTP_JSON_HEADER_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 _HTTP_JSON_HEADER_VALUE_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_HTTP_JSON_SUPPORTED_CONTENT_ENCODINGS = ("identity", "gzip", "deflate")
 
 
 def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
@@ -1325,7 +1330,8 @@ def _render_required_tool_execution_template(
     if missing_references:
         formatted_references = tuple(
             dict.fromkeys(
-                f"{variable_name} in {_format_safe_tool_execution_diagnostic_path(reference_path)}"
+                f"{_format_safe_tool_execution_template_variable_name(variable_name)} "
+                f"in {_format_safe_tool_execution_diagnostic_path(reference_path)}"
                 for reference_path, variable_name in missing_references
             )
         )
@@ -1445,7 +1451,9 @@ def _collect_tool_execution_runtime_template_validation_errors(
             continue
         messages.append(
             "http_json execution references unsupported runtime template "
-            f"variable {variable_name} in {_format_safe_tool_execution_diagnostic_path(path)}"
+            "variable "
+            f"{_format_safe_tool_execution_template_variable_name(variable_name)} "
+            f"in {_format_safe_tool_execution_diagnostic_path(path)}"
         )
     return tuple(dict.fromkeys(messages))
 
@@ -1591,6 +1599,7 @@ def _is_supported_tool_execution_http_url(raw_value: object) -> bool:
         and bool(parsed_url.netloc)
         and parsed_url.username is None
         and parsed_url.password is None
+        and not parsed_url.fragment
     )
 
 
@@ -1615,6 +1624,12 @@ def _describe_tool_execution_http_url_validation_error(
             return (
                 "http_json execution url must include a valid port when port is provided"
             )
+        if (
+            parsed_url.scheme in {"http", "https"}
+            and parsed_url.netloc
+            and parsed_url.fragment
+        ):
+            return "http_json execution url must not include fragments"
     return "http_json execution url must be an absolute http(s) URL"
 
 
@@ -1646,16 +1661,12 @@ def _format_safe_tool_execution_http_url_path(parsed_url: object) -> str | None:
             safe_segments.append("[redacted]")
             redact_next_segment = False
             continue
-        redacted_segment = _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
-            lambda match: f"{match.group(1)}[redacted]",
-            segment,
-        )
-        safe_segments.append(redacted_segment)
-        if (
-            redacted_segment == segment
-            and _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.fullmatch(segment)
-        ):
+        if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.fullmatch(segment):
+            safe_segments.append("[redacted]")
             redact_next_segment = True
+            continue
+        redacted_segment = _redact_http_json_diagnostic_text(segment)
+        safe_segments.append(redacted_segment)
     return "/".join(safe_segments)
 
 
@@ -1704,6 +1715,20 @@ def _format_safe_tool_execution_diagnostic_path(raw_value: object) -> str:
     return ".".join(safe_segments)
 
 
+def _format_safe_tool_execution_template_variable_name(raw_value: object) -> str:
+    normalized = str(raw_value).strip()
+    if not normalized:
+        return ""
+    return _format_safe_tool_execution_summary_field_name(normalized)
+
+
+def _format_safe_tool_execution_kind(raw_value: object) -> str:
+    normalized = str(raw_value).strip()
+    if not normalized:
+        return ""
+    return _format_safe_tool_execution_summary_field_name(normalized)
+
+
 def _raise_http_json_rendered_url_validation_error(raw_value: object) -> None:
     validation_error = _describe_tool_execution_http_url_validation_error(raw_value)
     if validation_error is None:
@@ -1738,6 +1763,14 @@ def _is_supported_tool_execution_http_query_value(raw_value: object) -> bool:
     return False
 
 
+def _is_supported_tool_execution_http_query_param_name(raw_value: object) -> bool:
+    if not isinstance(raw_value, str) or raw_value != raw_value.strip():
+        return False
+    return bool(raw_value) and not _HTTP_JSON_QUERY_PARAM_NAME_UNSAFE_RE.search(
+        raw_value
+    )
+
+
 def _is_supported_tool_execution_http_header_name(raw_value: object) -> bool:
     if not isinstance(raw_value, str) or raw_value != raw_value.strip():
         return False
@@ -1754,6 +1787,207 @@ def _http_header_value_contains_control_character(raw_value: object) -> bool:
     )
 
 
+def _http_headers_contain_duplicate_names(headers: object) -> bool:
+    if not isinstance(headers, dict):
+        return False
+    seen_header_names: set[str] = set()
+    for raw_key in headers:
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            continue
+        normalized_key = raw_key.strip().lower()
+        if normalized_key in seen_header_names:
+            return True
+        seen_header_names.add(normalized_key)
+    return False
+
+
+def _get_tool_execution_http_header_value(
+    headers: object,
+    header_name: str,
+) -> object | None:
+    if not isinstance(headers, dict):
+        return None
+    normalized_header_name = header_name.strip().lower()
+    for raw_key, raw_value in headers.items():
+        if (
+            isinstance(raw_key, str)
+            and raw_key.strip().lower() == normalized_header_name
+        ):
+            return raw_value
+    return None
+
+
+def _is_supported_http_json_media_type(raw_value: object) -> bool:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return False
+    media_type = raw_value.split(";", 1)[0].strip().lower()
+    return media_type == "application/json" or media_type.endswith("+json")
+
+
+def _get_http_json_media_type_parameter(
+    raw_value: object,
+    parameter_name: str,
+) -> str | None:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return None
+    for raw_part in raw_value.split(";")[1:]:
+        raw_name, separator, raw_parameter_value = raw_part.partition("=")
+        if separator != "=" or raw_name.strip().lower() != parameter_name:
+            continue
+        parameter_value = raw_parameter_value.strip().strip("\"'")
+        return parameter_value if parameter_value else ""
+    return None
+
+
+def _is_supported_http_json_accept_header(raw_value: object) -> bool:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return False
+    for item in raw_value.split(","):
+        raw_parts = item.split(";")
+        media_type = raw_parts[0].strip().lower()
+        q_value = 1.0
+        for raw_part in raw_parts[1:]:
+            parameter_name, separator, parameter_value = raw_part.partition("=")
+            if separator != "=" or parameter_name.strip().lower() != "q":
+                continue
+            try:
+                q_value = float(parameter_value.strip())
+            except ValueError:
+                q_value = 0.0
+            break
+        if not math.isfinite(q_value) or q_value <= 0 or q_value > 1:
+            continue
+        if media_type in {"application/json", "application/*", "*/*"}:
+            return True
+        if media_type.endswith("+json"):
+            return True
+    return False
+
+
+def _format_http_json_request_content_type_validation_error(
+    raw_value: object,
+) -> str:
+    safe_content_type = _format_http_json_error_body_preview(raw_value)
+    return (
+        "http_json execution headers.Content-Type must be application/json or "
+        "a +json media type when json_body is defined: "
+        f"{safe_content_type}"
+    )
+
+
+def _format_http_json_request_content_type_charset_validation_error(
+    raw_value: object,
+) -> str:
+    safe_content_type = _format_http_json_error_body_preview(raw_value)
+    return (
+        "http_json execution headers.Content-Type charset must be utf-8 when "
+        "json_body is defined: "
+        f"{safe_content_type}"
+    )
+
+
+def _describe_http_json_request_content_type_validation_errors(
+    *,
+    headers: object,
+) -> tuple[str, ...]:
+    raw_content_type = _get_tool_execution_http_header_value(headers, "Content-Type")
+    if raw_content_type is None:
+        return ()
+    if _iter_tool_execution_template_variable_references(
+        raw_content_type,
+        path="headers.Content-Type",
+    ):
+        return ()
+    if not (
+        isinstance(raw_content_type, str)
+        and _is_supported_http_json_media_type(raw_content_type)
+    ):
+        return (_format_http_json_request_content_type_validation_error(raw_content_type),)
+    charset = _get_http_json_media_type_parameter(raw_content_type, "charset")
+    if charset is not None and charset.lower().replace("_", "-") not in {
+        "utf-8",
+        "utf8",
+    }:
+        return (
+            _format_http_json_request_content_type_charset_validation_error(
+                raw_content_type
+            ),
+        )
+    return ()
+
+
+def _raise_http_json_rendered_request_content_type_validation_error(
+    *,
+    headers: object,
+) -> None:
+    validation_errors = _describe_http_json_request_content_type_validation_errors(
+        headers=headers
+    )
+    if not validation_errors:
+        return
+    message = validation_errors[0].removeprefix("http_json execution ")
+    raise MockToolExecutionError(
+        f"HTTP JSON tool {message}.",
+        fatal=True,
+    )
+
+
+def _ensure_http_json_request_content_type_header(
+    headers: dict[str, str],
+) -> None:
+    if _get_tool_execution_http_header_value(headers, "Content-Type") is None:
+        headers["Content-Type"] = "application/json"
+
+
+def _format_http_json_request_accept_validation_error(raw_value: object) -> str:
+    safe_accept = _format_http_json_error_body_preview(raw_value)
+    return (
+        "http_json execution headers.Accept must allow application/json or "
+        "a +json media type: "
+        f"{safe_accept}"
+    )
+
+
+def _describe_http_json_request_accept_validation_errors(
+    *,
+    headers: object,
+) -> tuple[str, ...]:
+    raw_accept = _get_tool_execution_http_header_value(headers, "Accept")
+    if raw_accept is None:
+        return ()
+    if _iter_tool_execution_template_variable_references(
+        raw_accept,
+        path="headers.Accept",
+    ):
+        return ()
+    if isinstance(raw_accept, str) and _is_supported_http_json_accept_header(
+        raw_accept
+    ):
+        return ()
+    return (_format_http_json_request_accept_validation_error(raw_accept),)
+
+
+def _raise_http_json_rendered_request_accept_validation_error(
+    *,
+    headers: object,
+) -> None:
+    validation_errors = _describe_http_json_request_accept_validation_errors(
+        headers=headers
+    )
+    if not validation_errors:
+        return
+    message = validation_errors[0].removeprefix("http_json execution ")
+    raise MockToolExecutionError(
+        f"HTTP JSON tool {message}.",
+        fatal=True,
+    )
+
+
+def _ensure_http_json_request_accept_header(headers: dict[str, str]) -> None:
+    if _get_tool_execution_http_header_value(headers, "Accept") is None:
+        headers["Accept"] = "application/json"
+
+
 def _describe_tool_execution_http_value_validation_errors(
     *,
     field_name: str,
@@ -1762,6 +1996,12 @@ def _describe_tool_execution_http_value_validation_errors(
     if not isinstance(raw_mapping, dict):
         return ()
     validation_errors: list[str] = []
+    if field_name == "headers" and _http_headers_contain_duplicate_names(
+        raw_mapping
+    ):
+        validation_errors.append(
+            "http_json execution headers must not include duplicate HTTP header names"
+        )
     for raw_key, raw_item in raw_mapping.items():
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
@@ -1791,13 +2031,17 @@ def _describe_tool_execution_http_value_validation_errors(
                     f"http_json execution {safe_path} must not contain control characters"
                 )
             continue
-        if field_name == "query_params" and not _is_supported_tool_execution_http_query_value(
-            raw_item
-        ):
-            validation_errors.append(
-                f"http_json execution {safe_path} must be a "
-                "string, number, boolean, or list of those values"
-            )
+        if field_name == "query_params":
+            if not _is_supported_tool_execution_http_query_param_name(raw_key):
+                validation_errors.append(
+                    f"http_json execution {safe_path} must use safe query parameter names"
+                )
+                continue
+            if not _is_supported_tool_execution_http_query_value(raw_item):
+                validation_errors.append(
+                    f"http_json execution {safe_path} must be a "
+                    "string, number, boolean, or list of those values"
+                )
     return tuple(validation_errors)
 
 
@@ -2009,8 +2253,30 @@ def _normalize_http_json_safe_output_shape(output: dict[str, object]) -> dict[st
     return normalized_output
 
 
+def _redact_http_json_diagnostic_text(raw_value: str) -> str:
+    return _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
+        "[redacted]",
+        raw_value,
+    )
+
+
 def _redact_http_json_error_body_value(raw_value: object) -> object:
-    return _redact_http_json_sensitive_payload_value(raw_value)
+    if isinstance(raw_value, dict):
+        redacted: dict[str, object] = {}
+        for key, value in raw_value.items():
+            safe_key = _format_safe_tool_execution_summary_field_name(key)
+            if safe_key == "[redacted]":
+                redacted[safe_key] = "[redacted]"
+                continue
+            redacted[safe_key] = _redact_http_json_error_body_value(value)
+        return redacted
+    if isinstance(raw_value, list):
+        return [_redact_http_json_error_body_value(item) for item in raw_value]
+    if isinstance(raw_value, tuple):
+        return tuple(_redact_http_json_error_body_value(item) for item in raw_value)
+    if isinstance(raw_value, str):
+        return _redact_http_json_diagnostic_text(raw_value)
+    return raw_value
 
 
 def _coerce_http_json_error_body_preview_text(raw_body: object) -> str:
@@ -2021,10 +2287,7 @@ def _coerce_http_json_error_body_preview_text(raw_body: object) -> str:
     try:
         parsed_body = json.loads(raw_text)
     except (TypeError, ValueError):
-        return _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
-            lambda match: f"{match.group(1)}[redacted]",
-            raw_text,
-        )
+        return _redact_http_json_diagnostic_text(raw_text)
     redacted_body = _redact_http_json_error_body_value(parsed_body)
     return json.dumps(redacted_body, ensure_ascii=False, separators=(",", ":"))
 
@@ -2045,25 +2308,322 @@ def _format_http_json_http_error(exc: HTTPError) -> str:
     if reason:
         message = f"{message} {reason}"
     try:
-        body_preview = _format_http_json_error_body_preview(exc.read())
-    except (OSError, ValueError):
+        body = _coerce_http_json_response_body_bytes(exc.read())
+        body = _decode_http_json_response_body_for_content_encoding(
+            raw_body=body,
+            content_encoding=_get_http_json_response_content_encoding(exc),
+        )
+        body_preview = _format_http_json_error_body_preview(body)
+    except (OSError, TypeError, ValueError):
         body_preview = ""
     if body_preview:
         message = f"{message}; body: {body_preview}"
     return message
 
 
+def _coerce_http_json_response_status_code(raw_value: object) -> int | None:
+    if isinstance(raw_value, bool):
+        return None
+    if isinstance(raw_value, int):
+        return raw_value
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip()
+        if normalized.isdigit():
+            return int(normalized)
+    return None
+
+
+def _get_http_json_response_status_code(response: object) -> int | None:
+    for attr_name in ("status", "code", "status_code"):
+        status_code = _coerce_http_json_response_status_code(
+            getattr(response, attr_name, None)
+        )
+        if status_code is not None:
+            return status_code
+    getcode = getattr(response, "getcode", None)
+    if callable(getcode):
+        try:
+            return _coerce_http_json_response_status_code(getcode())
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _get_http_json_response_reason(response: object) -> object:
+    for attr_name in ("reason", "msg"):
+        raw_value = getattr(response, attr_name, None)
+        if isinstance(raw_value, str) and raw_value.strip():
+            return raw_value.strip()
+        if isinstance(raw_value, bytes) and raw_value.strip():
+            return raw_value
+    return ""
+
+
+def _format_http_json_unexpected_status_response(
+    *,
+    status_code: int,
+    reason: object,
+    raw_body: bytes,
+) -> str:
+    message = f"HTTP JSON tool failed: HTTP {status_code}"
+    reason_preview = _format_http_json_error_body_preview(reason or "")
+    if reason_preview:
+        message = f"{message} {reason_preview}"
+    body_preview = _format_http_json_error_body_preview(raw_body)
+    if body_preview:
+        message = f"{message}; body: {body_preview}"
+    return message
+
+
+def _format_http_json_empty_response(
+    *,
+    status_code: int | None,
+    reason: object,
+) -> str:
+    message = "HTTP JSON tool failed: empty JSON response"
+    if status_code is not None:
+        message = f"{message}: HTTP {status_code}"
+    reason_preview = _format_http_json_error_body_preview(reason or "")
+    if reason_preview:
+        message = f"{message} {reason_preview}"
+    return message
+
+
+def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
+    if isinstance(raw_body, bytes):
+        return raw_body
+    if isinstance(raw_body, bytearray):
+        return bytes(raw_body)
+    if isinstance(raw_body, memoryview):
+        return raw_body.tobytes()
+    if isinstance(raw_body, str):
+        return raw_body.encode("utf-8")
+    raise TypeError("response body must be bytes or text")
+
+
 def _format_http_json_invalid_json_response(
     *,
     raw_body: bytes,
     error: json.JSONDecodeError | UnicodeDecodeError,
+    charset: str = "utf-8",
 ) -> str:
     error_message = (
         error.msg
         if isinstance(error, json.JSONDecodeError)
-        else f"invalid UTF-8 response body: {error.reason}"
+        else f"invalid {_format_http_json_error_body_preview(charset)} response body: {error.reason}"
     )
     message = f"HTTP JSON tool failed: invalid JSON response: {error_message}"
+    body_preview = _format_http_json_error_body_preview(raw_body)
+    if body_preview:
+        message = f"{message}; body: {body_preview}"
+    return message
+
+
+def _format_http_json_invalid_charset_response(
+    *,
+    charset: str,
+    raw_body: bytes,
+) -> str:
+    safe_charset = _format_http_json_error_body_preview(charset)
+    message = f"HTTP JSON tool failed: invalid JSON response charset: {safe_charset}"
+    body_preview = _format_http_json_error_body_preview(raw_body)
+    if body_preview:
+        message = f"{message}; body: {body_preview}"
+    return message
+
+
+def _coerce_http_json_header_text(raw_value: object) -> str | None:
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip()
+        return normalized or None
+    if isinstance(raw_value, bytes):
+        normalized = raw_value.decode("utf-8", errors="replace").strip()
+        return normalized or None
+    if isinstance(raw_value, bytearray):
+        normalized = bytes(raw_value).decode("utf-8", errors="replace").strip()
+        return normalized or None
+    if isinstance(raw_value, memoryview):
+        normalized = raw_value.tobytes().decode("utf-8", errors="replace").strip()
+        return normalized or None
+    return None
+
+
+def _get_http_json_response_content_type(response: object) -> str | None:
+    getheader = getattr(response, "getheader", None)
+    if callable(getheader):
+        try:
+            raw_value = getheader("Content-Type")
+        except (TypeError, ValueError):
+            raw_value = None
+        header_value = _coerce_http_json_header_text(raw_value)
+        if header_value is not None:
+            return header_value
+    headers = getattr(response, "headers", None)
+    if headers is not None:
+        get_header = getattr(headers, "get", None)
+        if callable(get_header):
+            for header_name in ("Content-Type", "content-type"):
+                raw_value = get_header(header_name)
+                header_value = _coerce_http_json_header_text(raw_value)
+                if header_value is not None:
+                    return header_value
+    info = getattr(response, "info", None)
+    if callable(info):
+        try:
+            info_headers = info()
+        except (TypeError, ValueError):
+            info_headers = None
+        get_info_header = getattr(info_headers, "get", None)
+        if callable(get_info_header):
+            raw_value = get_info_header("Content-Type")
+            header_value = _coerce_http_json_header_text(raw_value)
+            if header_value is not None:
+                return header_value
+    return None
+
+
+def _get_http_json_response_content_encoding(response: object) -> str | None:
+    getheader = getattr(response, "getheader", None)
+    if callable(getheader):
+        try:
+            raw_value = getheader("Content-Encoding")
+        except (TypeError, ValueError):
+            raw_value = None
+        header_value = _coerce_http_json_header_text(raw_value)
+        if header_value is not None:
+            return header_value
+    headers = getattr(response, "headers", None)
+    if headers is not None:
+        get_header = getattr(headers, "get", None)
+        if callable(get_header):
+            for header_name in ("Content-Encoding", "content-encoding"):
+                raw_value = get_header(header_name)
+                header_value = _coerce_http_json_header_text(raw_value)
+                if header_value is not None:
+                    return header_value
+    info = getattr(response, "info", None)
+    if callable(info):
+        try:
+            info_headers = info()
+        except (TypeError, ValueError):
+            info_headers = None
+        get_info_header = getattr(info_headers, "get", None)
+        if callable(get_info_header):
+            raw_value = get_info_header("Content-Encoding")
+            header_value = _coerce_http_json_header_text(raw_value)
+            if header_value is not None:
+                return header_value
+    return None
+
+
+def _get_http_json_response_charset(raw_content_type: object) -> str:
+    if not isinstance(raw_content_type, str) or ";" not in raw_content_type:
+        return "utf-8"
+    for raw_parameter in raw_content_type.split(";")[1:]:
+        raw_name, separator, raw_value = raw_parameter.partition("=")
+        if not separator or raw_name.strip().lower() != "charset":
+            continue
+        normalized_value = raw_value.strip().strip("\"'")
+        if normalized_value:
+            return normalized_value
+    return "utf-8"
+
+
+def _decode_http_json_response_text(
+    *,
+    raw_body: bytes,
+    content_type: object,
+) -> str:
+    charset = _get_http_json_response_charset(content_type)
+    try:
+        codecs.lookup(charset)
+    except LookupError as exc:
+        raise MockToolExecutionError(
+            _format_http_json_invalid_charset_response(
+                charset=charset,
+                raw_body=raw_body,
+            ),
+            fatal=False,
+        ) from exc
+    try:
+        return raw_body.decode(charset)
+    except UnicodeDecodeError as exc:
+        raise MockToolExecutionError(
+            _format_http_json_invalid_json_response(
+                raw_body=raw_body,
+                error=exc,
+                charset=charset,
+            ),
+            fatal=False,
+        ) from exc
+
+
+def _normalize_http_json_content_encoding(raw_value: object) -> str | None:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return None
+    encodings = [
+        item.strip().lower()
+        for item in raw_value.split(",")
+        if item.strip()
+    ]
+    if not encodings:
+        return None
+    if len(encodings) > 1:
+        return ",".join(encodings)
+    return encodings[0]
+
+
+def _decode_http_json_response_body_for_content_encoding(
+    *,
+    raw_body: bytes,
+    content_encoding: object,
+) -> bytes:
+    normalized_encoding = _normalize_http_json_content_encoding(content_encoding)
+    if normalized_encoding is None or normalized_encoding == "identity":
+        return raw_body
+    if normalized_encoding == "gzip":
+        try:
+            return gzip.decompress(raw_body)
+        except (OSError, EOFError, zlib.error) as exc:
+            body_preview = _format_http_json_error_body_preview(raw_body)
+            message = "invalid gzip response body"
+            if body_preview:
+                message = f"{message}; body: {body_preview}"
+            raise ValueError(message) from exc
+    if normalized_encoding == "deflate":
+        try:
+            return zlib.decompress(raw_body)
+        except zlib.error as exc:
+            body_preview = _format_http_json_error_body_preview(raw_body)
+            message = "invalid deflate response body"
+            if body_preview:
+                message = f"{message}; body: {body_preview}"
+            raise ValueError(message) from exc
+    safe_encoding = _format_http_json_error_body_preview(normalized_encoding)
+    body_preview = _format_http_json_error_body_preview(raw_body)
+    message = f"unsupported response content-encoding: {safe_encoding}"
+    if body_preview:
+        message = f"{message}; body: {body_preview}"
+    raise ValueError(message)
+
+
+def _is_supported_http_json_response_content_type(raw_value: object) -> bool:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return True
+    media_type = raw_value.split(";", 1)[0].strip().lower()
+    return media_type == "application/json" or media_type.endswith("+json")
+
+
+def _format_http_json_invalid_content_type_response(
+    *,
+    content_type: str,
+    raw_body: bytes,
+) -> str:
+    safe_content_type = _format_http_json_error_body_preview(content_type)
+    message = (
+        "HTTP JSON tool failed: invalid JSON response content-type: "
+        f"{safe_content_type}"
+    )
     body_preview = _format_http_json_error_body_preview(raw_body)
     if body_preview:
         message = f"{message}; body: {body_preview}"
@@ -2080,7 +2640,8 @@ def _format_http_json_transport_error(exc: BaseException) -> str:
 
 
 def _format_http_json_mapping_path_for_error(raw_path: object) -> str:
-    return _format_http_json_error_body_preview(str(raw_path).strip())
+    safe_path = _format_safe_tool_execution_diagnostic_path(str(raw_path).strip())
+    return _format_http_json_error_body_preview(safe_path)
 
 
 def _format_http_json_result_field_mapping_error(
@@ -2088,7 +2649,7 @@ def _format_http_json_result_field_mapping_error(
     field_name: str,
     raw_path: object,
 ) -> str:
-    safe_field_name = _format_http_json_error_body_preview(field_name.strip())
+    safe_field_name = _format_safe_tool_execution_summary_field_name(field_name)
     safe_path = _format_http_json_mapping_path_for_error(raw_path)
     return f"{safe_field_name} -> {safe_path}"
 
@@ -2172,6 +2733,9 @@ def _build_http_json_tool_runner(
         rendered_query_params = _normalize_tool_execution_http_query_params(
             rendered_query_params_value
         )
+        _raise_http_json_rendered_request_accept_validation_error(
+            headers=rendered_headers
+        )
         query_string = urlencode(rendered_query_params, doseq=True)
         full_url = rendered_url.strip()
         if query_string:
@@ -2189,6 +2753,9 @@ def _build_http_json_tool_runner(
                     "HTTP JSON tool json_body must resolve to an object.",
                     fatal=True,
                 )
+            _raise_http_json_rendered_request_content_type_validation_error(
+                headers=rendered_headers
+            )
             _raise_http_json_rendered_json_body_validation_error(rendered_json_body)
             try:
                 request_data = json.dumps(
@@ -2200,9 +2767,9 @@ def _build_http_json_tool_runner(
                 raise MockToolExecutionError(
                     "HTTP JSON tool json_body must be valid JSON.",
                     fatal=True,
-                ) from exc
-            rendered_headers.setdefault("Content-Type", "application/json")
-        rendered_headers.setdefault("Accept", "application/json")
+            ) from exc
+            _ensure_http_json_request_content_type_header(rendered_headers)
+        _ensure_http_json_request_accept_header(rendered_headers)
         request = Request(
             full_url,
             data=request_data,
@@ -2214,11 +2781,59 @@ def _build_http_json_tool_runner(
                 request,
                 timeout=max(0.1, timeout_ms / 1000),
             ) as response:
-                response_body = response.read()
+                response_body = _coerce_http_json_response_body_bytes(
+                    response.read()
+                )
+                response_content_encoding = _get_http_json_response_content_encoding(
+                    response
+                )
+                response_body = _decode_http_json_response_body_for_content_encoding(
+                    raw_body=response_body,
+                    content_encoding=response_content_encoding,
+                )
+                response_status_code = _get_http_json_response_status_code(response)
+                response_reason = _get_http_json_response_reason(response)
+                if (
+                    response_status_code is not None
+                    and not 200 <= response_status_code <= 299
+                ):
+                    raise MockToolExecutionError(
+                        _format_http_json_unexpected_status_response(
+                            status_code=response_status_code,
+                            reason=response_reason,
+                            raw_body=response_body,
+                        ),
+                        fatal=False,
+                    )
+                response_content_type = _get_http_json_response_content_type(response)
+                if (
+                    response_content_type
+                    and not _is_supported_http_json_response_content_type(
+                        response_content_type
+                    )
+                ):
+                    raise MockToolExecutionError(
+                        _format_http_json_invalid_content_type_response(
+                            content_type=response_content_type,
+                            raw_body=response_body,
+                        ),
+                        fatal=False,
+                    )
+                if not response_body.strip():
+                    raise MockToolExecutionError(
+                        _format_http_json_empty_response(
+                            status_code=response_status_code,
+                            reason=response_reason,
+                        ),
+                        fatal=False,
+                    )
                 try:
-                    response_text = response_body.decode("utf-8")
+                    response_text = _decode_http_json_response_text(
+                        raw_body=response_body,
+                        content_type=response_content_type,
+                    )
                     response_payload = json.loads(response_text)
-                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                except json.JSONDecodeError as exc:
                     raise MockToolExecutionError(
                         _format_http_json_invalid_json_response(
                             raw_body=response_body,
@@ -2231,7 +2846,7 @@ def _build_http_json_tool_runner(
                 _format_http_json_http_error(exc),
                 fatal=False,
             ) from exc
-        except (URLError, OSError, ValueError) as exc:
+        except (URLError, OSError, TypeError, ValueError) as exc:
             raise MockToolExecutionError(
                 _format_http_json_transport_error(exc),
                 fatal=False,
@@ -2333,7 +2948,10 @@ def _build_tool_runner_from_execution_spec(
             message="Invalid tool execution spec: execution.kind is required.",
         )
     return _build_invalid_tool_execution_runner(
-        message=f"Unsupported tool execution kind: {execution_kind}",
+        message=(
+            "Unsupported tool execution kind: "
+            f"{_format_safe_tool_execution_kind(execution_kind)}"
+        ),
     )
 
 
@@ -2411,7 +3029,9 @@ def _build_tool_execution_summary_from_spec(
         )
     raw_response_path = execution_spec.get("response_path")
     if isinstance(raw_response_path, str) and raw_response_path.strip():
-        summary["response_path"] = raw_response_path.strip()
+        summary["response_path"] = _format_http_json_mapping_path_for_error(
+            raw_response_path
+        )
     raw_result_fields = execution_spec.get("result_fields")
     if isinstance(raw_result_fields, dict) and raw_result_fields:
         result_field_names = tuple(
@@ -2451,7 +3071,10 @@ def _describe_tool_execution_spec_validation_errors(
     if execution_kind is None:
         return ("invalid tool execution spec: execution.kind is required",)
     if execution_kind != "http_json":
-        return (f"unsupported tool execution kind {execution_kind}",)
+        return (
+            "unsupported tool execution kind "
+            f"{_format_safe_tool_execution_kind(execution_kind)}",
+        )
     raw_url = execution_spec.get("url")
     if not isinstance(raw_url, str) or not raw_url.strip():
         return ("http_json execution requires a non-empty url",)
@@ -2518,6 +3141,22 @@ def _describe_tool_execution_spec_validation_errors(
             "http_json execution GET method must not define json_body; "
             "use query_params or a body-capable method"
         )
+    effective_method = (
+        normalized_method
+        if normalized_method is not None
+        else ("POST" if raw_json_body is not None else "GET")
+    )
+    if raw_json_body is not None and effective_method != "GET":
+        validation_errors.extend(
+            _describe_http_json_request_content_type_validation_errors(
+                headers=headers_for_validation,
+            )
+        )
+    validation_errors.extend(
+        _describe_http_json_request_accept_validation_errors(
+            headers=headers_for_validation,
+        )
+    )
     raw_response_path = execution_spec.get("response_path")
     if raw_response_path is not None and not isinstance(raw_response_path, str):
         validation_errors.append("http_json execution response_path must be a string")
@@ -2585,16 +3224,19 @@ def _describe_tool_execution_spec_validation_errors(
                 has_blank_result_field_name = True
                 continue
             has_valid_result_field_name = True
+            safe_result_field_path = _format_safe_tool_execution_diagnostic_path(
+                f"result_fields.{raw_key.strip()}"
+            )
             if isinstance(raw_path, str) and raw_path.strip():
                 if not _is_supported_tool_execution_response_path(raw_path):
                     validation_errors.append(
-                        "http_json execution result_fields."
-                        f"{raw_key.strip()} must use dot fields and numeric indexes"
+                        f"http_json execution {safe_result_field_path} must use dot "
+                        "fields and numeric indexes"
                     )
                 continue
             validation_errors.append(
-                "http_json execution result_fields."
-                f"{raw_key.strip()} must be a non-empty string path"
+                f"http_json execution {safe_result_field_path} must be a non-empty "
+                "string path"
             )
         if has_blank_result_field_name and has_valid_result_field_name:
             validation_errors.append(
