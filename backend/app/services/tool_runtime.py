@@ -346,6 +346,7 @@ _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS = (
 _HTTP_JSON_ALLOWED_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 _TOOL_TIMEOUT_MAX_MS = 2_147_483_647
 _HTTP_JSON_ERROR_BODY_PREVIEW_MAX_LENGTH = 240
+_HTTP_JSON_RESULT_FIELD_MAPPING_ERROR_MAX_ITEMS = 5
 _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE = re.compile(
     r"(authorization|api[_-]?key|credential|password|secret|token)",
     re.IGNORECASE,
@@ -355,6 +356,9 @@ _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE = re.compile(
     r"\b(?:\"|')?\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|[^\s,;<>}]+)",
     re.IGNORECASE,
 )
+_HTTP_JSON_URL_CONTROL_OR_SPACE_RE = re.compile(r"[\x00-\x20\x7f]")
+_HTTP_JSON_HEADER_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+_HTTP_JSON_HEADER_VALUE_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
@@ -1106,6 +1110,23 @@ def _normalize_result_output_keys(raw_value: object) -> tuple[str, ...]:
     return _normalize_result_preview_keys(raw_value)
 
 
+def _is_sensitive_result_key(raw_value: object) -> bool:
+    return _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(str(raw_value).strip()) is not None
+
+
+def _normalize_safe_explicit_result_keys(
+    raw_value: object,
+    *,
+    fallback_keys: tuple[str, ...],
+) -> tuple[str, ...]:
+    if not isinstance(raw_value, (list, tuple)):
+        return fallback_keys
+    normalized_keys = _normalize_result_preview_keys(raw_value)
+    if not normalized_keys:
+        return fallback_keys
+    return tuple(key for key in normalized_keys if not _is_sensitive_result_key(key))
+
+
 def _normalize_runtime_semantic_kind(raw_value: object) -> str | None:
     if not isinstance(raw_value, str):
         return None
@@ -1304,7 +1325,7 @@ def _render_required_tool_execution_template(
     if missing_references:
         formatted_references = tuple(
             dict.fromkeys(
-                f"{variable_name} in {reference_path}"
+                f"{variable_name} in {_format_safe_tool_execution_diagnostic_path(reference_path)}"
                 for reference_path, variable_name in missing_references
             )
         )
@@ -1316,6 +1337,41 @@ def _render_required_tool_execution_template(
             fatal=True,
         )
     return _render_tool_execution_template(value, context=context)
+
+
+def _render_tool_execution_template_for_static_analysis(
+    value: object,
+    *,
+    context: dict[str, object] | None,
+    path: str,
+) -> object:
+    analysis_context = context or {}
+    missing_references = _iter_missing_tool_execution_template_variables(
+        value,
+        context=analysis_context,
+        path=path,
+    )
+    if missing_references:
+        return _TOOL_EXECUTION_TEMPLATE_MISSING
+    return _render_tool_execution_template(value, context=analysis_context)
+
+
+def _resolve_tool_execution_template_value_for_static_validation(
+    value: object,
+    *,
+    context: dict[str, object] | None,
+    path: str,
+) -> object:
+    if not _iter_tool_execution_template_variable_references(value, path=path):
+        return value
+    rendered_value = _render_tool_execution_template_for_static_analysis(
+        value,
+        context=context,
+        path=path,
+    )
+    if rendered_value is _TOOL_EXECUTION_TEMPLATE_MISSING:
+        return value
+    return rendered_value
 
 
 def _iter_tool_execution_template_variable_references(
@@ -1389,7 +1445,7 @@ def _collect_tool_execution_runtime_template_validation_errors(
             continue
         messages.append(
             "http_json execution references unsupported runtime template "
-            f"variable {variable_name} in {path}"
+            f"variable {variable_name} in {_format_safe_tool_execution_diagnostic_path(path)}"
         )
     return tuple(dict.fromkeys(messages))
 
@@ -1523,8 +1579,19 @@ def _normalize_tool_execution_http_query_params(
 def _is_supported_tool_execution_http_url(raw_value: object) -> bool:
     if not isinstance(raw_value, str) or not raw_value.strip():
         return False
+    if _HTTP_JSON_URL_CONTROL_OR_SPACE_RE.search(raw_value):
+        return False
     parsed_url = urlparse(raw_value.strip())
-    return parsed_url.scheme in {"http", "https"} and bool(parsed_url.netloc)
+    try:
+        parsed_url.port
+    except ValueError:
+        return False
+    return (
+        parsed_url.scheme in {"http", "https"}
+        and bool(parsed_url.netloc)
+        and parsed_url.username is None
+        and parsed_url.password is None
+    )
 
 
 def _describe_tool_execution_http_url_validation_error(
@@ -1532,7 +1599,109 @@ def _describe_tool_execution_http_url_validation_error(
 ) -> str | None:
     if _is_supported_tool_execution_http_url(raw_value):
         return None
+    if isinstance(raw_value, str) and raw_value.strip():
+        if _HTTP_JSON_URL_CONTROL_OR_SPACE_RE.search(raw_value):
+            return "http_json execution url must not contain control characters or spaces"
+        parsed_url = urlparse(raw_value.strip())
+        if (
+            parsed_url.scheme in {"http", "https"}
+            and parsed_url.netloc
+            and (parsed_url.username is not None or parsed_url.password is not None)
+        ):
+            return "http_json execution url must not include credentials"
+        try:
+            parsed_url.port
+        except ValueError:
+            return (
+                "http_json execution url must include a valid port when port is provided"
+            )
     return "http_json execution url must be an absolute http(s) URL"
+
+
+def _format_safe_tool_execution_http_url_origin(parsed_url: object) -> str | None:
+    scheme = getattr(parsed_url, "scheme", "")
+    hostname = getattr(parsed_url, "hostname", None)
+    if scheme not in {"http", "https"} or not isinstance(hostname, str) or not hostname:
+        return None
+    try:
+        port = getattr(parsed_url, "port", None)
+    except ValueError:
+        return None
+    if isinstance(port, int):
+        return f"{scheme}://{hostname}:{port}"
+    return f"{scheme}://{hostname}"
+
+
+def _format_safe_tool_execution_http_url_path(parsed_url: object) -> str | None:
+    path = getattr(parsed_url, "path", "")
+    if not isinstance(path, str) or not path:
+        return None
+    safe_segments: list[str] = []
+    redact_next_segment = False
+    for segment in path.split("/"):
+        if not segment:
+            safe_segments.append(segment)
+            continue
+        if redact_next_segment:
+            safe_segments.append("[redacted]")
+            redact_next_segment = False
+            continue
+        redacted_segment = _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
+            lambda match: f"{match.group(1)}[redacted]",
+            segment,
+        )
+        safe_segments.append(redacted_segment)
+        if (
+            redacted_segment == segment
+            and _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.fullmatch(segment)
+        ):
+            redact_next_segment = True
+    return "/".join(safe_segments)
+
+
+def _format_safe_tool_execution_summary_field_name(raw_value: object) -> str:
+    normalized = str(raw_value).strip()
+    if not normalized:
+        return ""
+    if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(normalized):
+        return "[redacted]"
+    return _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
+        lambda match: f"{match.group(1)}[redacted]",
+        normalized,
+    )
+
+
+def _format_safe_tool_execution_diagnostic_path(raw_value: object) -> str:
+    raw_path = str(raw_value).strip()
+    if not raw_path:
+        return ""
+    path_segments = raw_path.split(".")
+    root_segment = path_segments[0]
+    safe_segments: list[str] = []
+    for index, segment in enumerate(path_segments):
+        if not segment:
+            continue
+        if index == 0:
+            safe_segments.append(segment)
+            continue
+        bracket_index = segment.find("[")
+        if bracket_index == -1:
+            field_name = segment
+            suffix = ""
+        else:
+            field_name = segment[:bracket_index]
+            suffix = segment[bracket_index:]
+        if not field_name:
+            safe_segments.append(segment)
+            continue
+        if (
+            not (root_segment == "headers" and field_name.lower() == "authorization")
+            and _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(field_name)
+        ):
+            safe_segments.append(f"[redacted]{suffix}")
+            continue
+        safe_segments.append(segment)
+    return ".".join(safe_segments)
 
 
 def _raise_http_json_rendered_url_validation_error(raw_value: object) -> None:
@@ -1569,6 +1738,22 @@ def _is_supported_tool_execution_http_query_value(raw_value: object) -> bool:
     return False
 
 
+def _is_supported_tool_execution_http_header_name(raw_value: object) -> bool:
+    if not isinstance(raw_value, str) or raw_value != raw_value.strip():
+        return False
+    return bool(_HTTP_JSON_HEADER_NAME_RE.fullmatch(raw_value))
+
+
+def _http_header_value_contains_line_break(raw_value: object) -> bool:
+    return isinstance(raw_value, str) and ("\r" in raw_value or "\n" in raw_value)
+
+
+def _http_header_value_contains_control_character(raw_value: object) -> bool:
+    return isinstance(raw_value, str) and bool(
+        _HTTP_JSON_HEADER_VALUE_CONTROL_RE.search(raw_value)
+    )
+
+
 def _describe_tool_execution_http_value_validation_errors(
     *,
     field_name: str,
@@ -1581,21 +1766,92 @@ def _describe_tool_execution_http_value_validation_errors(
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
         normalized_key = raw_key.strip()
+        safe_path = _format_safe_tool_execution_diagnostic_path(
+            f"{field_name}.{normalized_key}"
+        )
         if field_name == "headers":
+            if not _is_supported_tool_execution_http_header_name(raw_key):
+                validation_errors.append(
+                    "http_json execution headers must use valid HTTP header names"
+                )
+                continue
             if not _is_supported_tool_execution_http_scalar_value(raw_item):
                 validation_errors.append(
-                    f"http_json execution headers.{normalized_key} must be a "
+                    f"http_json execution {safe_path} must be a "
                     "string, number, or boolean"
+                )
+                continue
+            if _http_header_value_contains_line_break(raw_item):
+                validation_errors.append(
+                    f"http_json execution {safe_path} must not contain CR or LF"
+                )
+                continue
+            if _http_header_value_contains_control_character(raw_item):
+                validation_errors.append(
+                    f"http_json execution {safe_path} must not contain control characters"
                 )
             continue
         if field_name == "query_params" and not _is_supported_tool_execution_http_query_value(
             raw_item
         ):
             validation_errors.append(
-                f"http_json execution query_params.{normalized_key} must be a "
+                f"http_json execution {safe_path} must be a "
                 "string, number, boolean, or list of those values"
             )
     return tuple(validation_errors)
+
+
+def _format_tool_execution_json_body_child_path(path: str, raw_key: str) -> str:
+    normalized_key = raw_key.strip()
+    if re.fullmatch(r"[A-Za-z_][0-9A-Za-z_]*", normalized_key):
+        return _format_safe_tool_execution_diagnostic_path(f"{path}.{normalized_key}")
+    return f"{path}.<field>"
+
+
+def _describe_tool_execution_json_body_validation_errors(
+    raw_value: object,
+    *,
+    path: str = "json_body",
+) -> tuple[str, ...]:
+    if raw_value is None:
+        return ()
+    if isinstance(raw_value, bool):
+        return ()
+    if isinstance(raw_value, int):
+        return ()
+    if isinstance(raw_value, float):
+        if math.isfinite(raw_value):
+            return ()
+        return (f"http_json execution {path} must be valid JSON",)
+    if isinstance(raw_value, str):
+        return ()
+    if isinstance(raw_value, dict):
+        validation_errors: list[str] = []
+        for raw_key, raw_item in raw_value.items():
+            if not isinstance(raw_key, str) or not raw_key.strip():
+                if path != "json_body":
+                    validation_errors.append(
+                        f"http_json execution {path} must use non-empty string object field names"
+                    )
+                continue
+            validation_errors.extend(
+                _describe_tool_execution_json_body_validation_errors(
+                    raw_item,
+                    path=_format_tool_execution_json_body_child_path(path, raw_key),
+                )
+            )
+        return tuple(validation_errors)
+    if isinstance(raw_value, (list, tuple)):
+        validation_errors = []
+        for index, raw_item in enumerate(raw_value):
+            validation_errors.extend(
+                _describe_tool_execution_json_body_validation_errors(
+                    raw_item,
+                    path=f"{path}[{index}]",
+                )
+            )
+        return tuple(validation_errors)
+    return (f"http_json execution {path} must be valid JSON",)
 
 
 def _raise_http_json_rendered_value_validation_error(
@@ -1607,6 +1863,17 @@ def _raise_http_json_rendered_value_validation_error(
         field_name=field_name,
         raw_mapping=raw_mapping,
     )
+    if not validation_errors:
+        return
+    message = validation_errors[0].removeprefix("http_json execution ")
+    raise MockToolExecutionError(
+        f"HTTP JSON tool {message}.",
+        fatal=True,
+    )
+
+
+def _raise_http_json_rendered_json_body_validation_error(raw_value: object) -> None:
+    validation_errors = _describe_tool_execution_json_body_validation_errors(raw_value)
     if not validation_errors:
         return
     message = validation_errors[0].removeprefix("http_json execution ")
@@ -1712,7 +1979,7 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
     return normalized_output
 
 
-def _redact_http_json_error_body_value(raw_value: object) -> object:
+def _redact_http_json_sensitive_payload_value(raw_value: object) -> object:
     if isinstance(raw_value, dict):
         redacted: dict[str, object] = {}
         for key, value in raw_value.items():
@@ -1720,11 +1987,30 @@ def _redact_http_json_error_body_value(raw_value: object) -> object:
             if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(normalized_key):
                 redacted[normalized_key] = "[redacted]"
                 continue
-            redacted[normalized_key] = _redact_http_json_error_body_value(value)
+            redacted[normalized_key] = _redact_http_json_sensitive_payload_value(value)
         return redacted
     if isinstance(raw_value, list):
-        return [_redact_http_json_error_body_value(item) for item in raw_value]
+        return [_redact_http_json_sensitive_payload_value(item) for item in raw_value]
+    if isinstance(raw_value, tuple):
+        return tuple(_redact_http_json_sensitive_payload_value(item) for item in raw_value)
+    if isinstance(raw_value, str):
+        return _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
+            lambda match: f"{match.group(1)}[redacted]",
+            raw_value,
+        )
     return raw_value
+
+
+def _normalize_http_json_safe_output_shape(output: dict[str, object]) -> dict[str, object]:
+    normalized_output = _normalize_http_json_output_shape(output)
+    redacted_output = _redact_http_json_sensitive_payload_value(normalized_output)
+    if isinstance(redacted_output, dict):
+        return redacted_output
+    return normalized_output
+
+
+def _redact_http_json_error_body_value(raw_value: object) -> object:
+    return _redact_http_json_sensitive_payload_value(raw_value)
 
 
 def _coerce_http_json_error_body_preview_text(raw_body: object) -> str:
@@ -1753,7 +2039,9 @@ def _format_http_json_error_body_preview(raw_body: object) -> str:
 
 def _format_http_json_http_error(exc: HTTPError) -> str:
     message = f"HTTP JSON tool failed: HTTP {exc.code}"
-    reason = str(getattr(exc, "reason", "") or "").strip()
+    reason = _format_http_json_error_body_preview(
+        getattr(exc, "reason", "") or ""
+    )
     if reason:
         message = f"{message} {reason}"
     try:
@@ -1780,6 +2068,41 @@ def _format_http_json_invalid_json_response(
     if body_preview:
         message = f"{message}; body: {body_preview}"
     return message
+
+
+def _format_http_json_transport_error(exc: BaseException) -> str:
+    raw_reason = getattr(exc, "reason", None)
+    reason = raw_reason if raw_reason is not None else exc
+    reason_preview = _format_http_json_error_body_preview(reason)
+    if reason_preview:
+        return f"HTTP JSON tool failed: transport error: {reason_preview}"
+    return "HTTP JSON tool failed: transport error"
+
+
+def _format_http_json_mapping_path_for_error(raw_path: object) -> str:
+    return _format_http_json_error_body_preview(str(raw_path).strip())
+
+
+def _format_http_json_result_field_mapping_error(
+    *,
+    field_name: str,
+    raw_path: object,
+) -> str:
+    safe_field_name = _format_http_json_error_body_preview(field_name.strip())
+    safe_path = _format_http_json_mapping_path_for_error(raw_path)
+    return f"{safe_field_name} -> {safe_path}"
+
+
+def _format_http_json_missing_result_field_mappings(
+    missing_result_fields: list[str],
+) -> str:
+    visible_mappings = missing_result_fields[
+        :_HTTP_JSON_RESULT_FIELD_MAPPING_ERROR_MAX_ITEMS
+    ]
+    hidden_count = len(missing_result_fields) - len(visible_mappings)
+    if hidden_count > 0:
+        visible_mappings.append(f"and {hidden_count} more")
+    return "; ".join(visible_mappings)
 
 
 def _build_http_json_tool_runner(
@@ -1866,7 +2189,18 @@ def _build_http_json_tool_runner(
                     "HTTP JSON tool json_body must resolve to an object.",
                     fatal=True,
                 )
-            request_data = json.dumps(rendered_json_body, ensure_ascii=False).encode("utf-8")
+            _raise_http_json_rendered_json_body_validation_error(rendered_json_body)
+            try:
+                request_data = json.dumps(
+                    rendered_json_body,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ).encode("utf-8")
+            except (TypeError, ValueError) as exc:
+                raise MockToolExecutionError(
+                    "HTTP JSON tool json_body must be valid JSON.",
+                    fatal=True,
+                ) from exc
             rendered_headers.setdefault("Content-Type", "application/json")
         rendered_headers.setdefault("Accept", "application/json")
         request = Request(
@@ -1899,7 +2233,7 @@ def _build_http_json_tool_runner(
             ) from exc
         except (URLError, OSError, ValueError) as exc:
             raise MockToolExecutionError(
-                f"HTTP JSON tool failed: {exc}",
+                _format_http_json_transport_error(exc),
                 fatal=False,
             ) from exc
 
@@ -1909,9 +2243,12 @@ def _build_http_json_tool_runner(
         )
         if scoped_payload is _TOOL_EXECUTION_TEMPLATE_MISSING:
             if isinstance(raw_response_path, str) and raw_response_path.strip():
+                safe_response_path = _format_http_json_mapping_path_for_error(
+                    raw_response_path
+                )
                 raise MockToolExecutionError(
                     "HTTP JSON tool response_path could not resolve any payload at "
-                    f"{raw_response_path.strip()}.",
+                    f"{safe_response_path}.",
                     fatal=True,
                 )
             scoped_payload = response_payload
@@ -1928,21 +2265,27 @@ def _build_http_json_tool_runner(
                 )
                 if mapped_value is _TOOL_EXECUTION_TEMPLATE_MISSING:
                     missing_result_fields.append(
-                        f"{normalized_key} -> {str(raw_path).strip()}"
+                        _format_http_json_result_field_mapping_error(
+                            field_name=normalized_key,
+                            raw_path=raw_path,
+                        )
                     )
                     continue
                 mapped_output[normalized_key] = mapped_value
             if missing_result_fields and not mapped_output:
+                formatted_mappings = _format_http_json_missing_result_field_mappings(
+                    missing_result_fields
+                )
                 raise MockToolExecutionError(
                     "HTTP JSON tool result_fields could not resolve any configured "
-                    f"mapping: {'; '.join(missing_result_fields)}.",
+                    f"mapping: {formatted_mappings}.",
                     fatal=True,
                 )
-            return _normalize_http_json_output_shape(mapped_output)
+            return _normalize_http_json_safe_output_shape(mapped_output)
         if isinstance(scoped_payload, dict):
-            return _normalize_http_json_output_shape(dict(scoped_payload))
+            return _normalize_http_json_safe_output_shape(dict(scoped_payload))
         return {
-            "value": scoped_payload,
+            "value": _redact_http_json_sensitive_payload_value(scoped_payload),
         }
 
     return runner
@@ -1969,7 +2312,8 @@ def _build_tool_runner_from_execution_spec(
     if execution_spec is None:
         return fallback_runner
     validation_errors = _describe_tool_execution_spec_validation_errors(
-        execution_spec
+        execution_spec,
+        template_context=template_context,
     )
     if validation_errors:
         return _build_invalid_tool_execution_runner(
@@ -2001,6 +2345,8 @@ def _resolve_tool_execution_kind_from_spec(execution_spec: object) -> str | None
 
 def _build_tool_execution_summary_from_spec(
     execution_spec: object,
+    *,
+    template_context: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
     if not isinstance(execution_spec, dict):
         return None
@@ -2017,12 +2363,25 @@ def _build_tool_execution_summary_from_spec(
         )
     }
     raw_url = execution_spec.get("url")
-    if isinstance(raw_url, str) and raw_url.strip():
-        parsed_url = urlparse(raw_url.strip())
-        if parsed_url.scheme and parsed_url.netloc:
-            summary["url_origin"] = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        if parsed_url.path:
-            summary["url_path"] = parsed_url.path
+    summary_url: object = raw_url
+    if _iter_tool_execution_template_variable_references(raw_url, path="url"):
+        rendered_url = _render_tool_execution_template_for_static_analysis(
+            raw_url,
+            context=template_context,
+            path="url",
+        )
+        if rendered_url is not _TOOL_EXECUTION_TEMPLATE_MISSING:
+            summary_url = rendered_url
+        elif not _is_supported_tool_execution_http_url(raw_url):
+            summary_url = None
+    if isinstance(summary_url, str) and summary_url.strip():
+        parsed_url = urlparse(summary_url.strip())
+        safe_origin = _format_safe_tool_execution_http_url_origin(parsed_url)
+        if safe_origin:
+            summary["url_origin"] = safe_origin
+        safe_path = _format_safe_tool_execution_http_url_path(parsed_url)
+        if safe_path:
+            summary["url_path"] = safe_path
     raw_headers = execution_spec.get("headers")
     if isinstance(raw_headers, dict) and raw_headers:
         summary["header_count"] = len(
@@ -2056,7 +2415,7 @@ def _build_tool_execution_summary_from_spec(
     raw_result_fields = execution_spec.get("result_fields")
     if isinstance(raw_result_fields, dict) and raw_result_fields:
         result_field_names = tuple(
-            raw_key.strip()
+            _format_safe_tool_execution_summary_field_name(raw_key)
             for raw_key in raw_result_fields
             if isinstance(raw_key, str) and raw_key.strip()
         )
@@ -2067,13 +2426,20 @@ def _build_tool_execution_summary_from_spec(
 
 def _describe_tool_execution_spec_validation_error(
     execution_spec: object,
+    *,
+    template_context: dict[str, object] | None = None,
 ) -> str | None:
-    validation_errors = _describe_tool_execution_spec_validation_errors(execution_spec)
+    validation_errors = _describe_tool_execution_spec_validation_errors(
+        execution_spec,
+        template_context=template_context,
+    )
     return validation_errors[0] if validation_errors else None
 
 
 def _describe_tool_execution_spec_validation_errors(
     execution_spec: object,
+    *,
+    template_context: dict[str, object] | None = None,
 ) -> tuple[str, ...]:
     if execution_spec is None:
         return ()
@@ -2090,9 +2456,22 @@ def _describe_tool_execution_spec_validation_errors(
     if not isinstance(raw_url, str) or not raw_url.strip():
         return ("http_json execution requires a non-empty url",)
     validation_errors: list[str] = []
-    url_error = _describe_tool_execution_http_url_validation_error(raw_url)
-    if url_error:
-        validation_errors.append(url_error)
+    url_for_validation: object | None = raw_url
+    if _iter_tool_execution_template_variable_references(raw_url, path="url"):
+        rendered_url = _render_tool_execution_template_for_static_analysis(
+            raw_url,
+            context=template_context,
+            path="url",
+        )
+        url_for_validation = (
+            None
+            if rendered_url is _TOOL_EXECUTION_TEMPLATE_MISSING
+            else rendered_url
+        )
+    if url_for_validation is not None:
+        url_error = _describe_tool_execution_http_url_validation_error(url_for_validation)
+        if url_error:
+            validation_errors.append(url_error)
     normalized_method: str | None = None
     if "method" in execution_spec:
         method_error = _describe_tool_execution_http_method_validation_error(
@@ -2119,6 +2498,21 @@ def _describe_tool_execution_spec_validation_errors(
     raw_json_body = execution_spec.get("json_body")
     if raw_json_body is not None and not isinstance(raw_json_body, dict):
         validation_errors.append("http_json execution json_body must be an object")
+    headers_for_validation = _resolve_tool_execution_template_value_for_static_validation(
+        raw_headers,
+        context=template_context,
+        path="headers",
+    )
+    query_params_for_validation = _resolve_tool_execution_template_value_for_static_validation(
+        raw_query_params,
+        context=template_context,
+        path="query_params",
+    )
+    json_body_for_validation = _resolve_tool_execution_template_value_for_static_validation(
+        raw_json_body,
+        context=template_context,
+        path="json_body",
+    )
     if normalized_method == "GET" and raw_json_body is not None:
         validation_errors.append(
             "http_json execution GET method must not define json_body; "
@@ -2166,14 +2560,17 @@ def _describe_tool_execution_spec_validation_errors(
     validation_errors.extend(
         _describe_tool_execution_http_value_validation_errors(
             field_name="headers",
-            raw_mapping=raw_headers,
+            raw_mapping=headers_for_validation,
         )
     )
     validation_errors.extend(
         _describe_tool_execution_http_value_validation_errors(
             field_name="query_params",
-            raw_mapping=raw_query_params,
+            raw_mapping=query_params_for_validation,
         )
+    )
+    validation_errors.extend(
+        _describe_tool_execution_json_body_validation_errors(json_body_for_validation)
     )
     if isinstance(raw_result_fields, dict):
         if not raw_result_fields:
@@ -2263,9 +2660,13 @@ def _group_invalid_tool_execution_messages_by_tool(
 def _collect_invalid_tool_execution_messages_from_extra_tool_specs(
     *,
     extra_tool_specs: object,
+    settings: object | None = None,
 ) -> tuple[str, ...]:
     if not isinstance(extra_tool_specs, dict):
         return ()
+    runtime_template_context = _build_tool_execution_runtime_template_context(
+        settings=settings,
+    )
     messages: list[str] = []
     for tool_name, spec in extra_tool_specs.items():
         if not isinstance(tool_name, str) or not isinstance(spec, dict):
@@ -2279,7 +2680,10 @@ def _collect_invalid_tool_execution_messages_from_extra_tool_specs(
                 validation_errors.append(timeout_error)
         if "execution" in spec:
             validation_errors.extend(
-                _describe_tool_execution_spec_validation_errors(spec.get("execution"))
+                _describe_tool_execution_spec_validation_errors(
+                    spec.get("execution"),
+                    template_context=runtime_template_context,
+                )
             )
         if not validation_errors:
             continue
@@ -2295,9 +2699,13 @@ def _collect_invalid_tool_execution_messages_from_override_specs(
     *,
     override_specs: object,
     base_registry: dict[str, ToolRegistration],
+    settings: object | None = None,
 ) -> tuple[str, ...]:
     if not isinstance(override_specs, dict):
         return ()
+    runtime_template_context = _build_tool_execution_runtime_template_context(
+        settings=settings,
+    )
     messages: list[str] = []
     for tool_name, spec in override_specs.items():
         if not isinstance(tool_name, str) or not isinstance(spec, dict):
@@ -2314,7 +2722,10 @@ def _collect_invalid_tool_execution_messages_from_override_specs(
                 validation_errors.append(timeout_error)
         if "execution" in spec:
             validation_errors.extend(
-                _describe_tool_execution_spec_validation_errors(spec.get("execution"))
+                _describe_tool_execution_spec_validation_errors(
+                    spec.get("execution"),
+                    template_context=runtime_template_context,
+                )
             )
         if not validation_errors:
             continue
@@ -2343,7 +2754,8 @@ def build_tool_registry_settings_execution_diagnostics(
             extra_tool_specs = parsed_extra_tool_specs
 
     extra_tool_messages = _collect_invalid_tool_execution_messages_from_extra_tool_specs(
-        extra_tool_specs=extra_tool_specs
+        extra_tool_specs=extra_tool_specs,
+        settings=settings,
     )
 
     known_registrations = (
@@ -2373,6 +2785,7 @@ def build_tool_registry_settings_execution_diagnostics(
     override_messages = _collect_invalid_tool_execution_messages_from_override_specs(
         override_specs=override_specs,
         base_registry=known_registrations,
+        settings=settings,
     )
     return _build_invalid_tool_execution_diagnostics(
         messages=(*extra_tool_messages, *override_messages),
@@ -2517,7 +2930,8 @@ def _build_tool_registry_from_file_registry(
     if not any(key in payload for key in manifest_keys):
         _diagnostics["invalid_tool_executions"].extend(
             _collect_invalid_tool_execution_messages_from_extra_tool_specs(
-                extra_tool_specs=payload
+                extra_tool_specs=payload,
+                settings=settings,
             )
         )
         return build_tool_registry_extra_tools_from_specs(
@@ -2647,7 +3061,8 @@ def _build_tool_registry_from_file_registry(
         extra_tool_specs = payload
     _diagnostics["invalid_tool_executions"].extend(
         _collect_invalid_tool_execution_messages_from_extra_tool_specs(
-            extra_tool_specs=extra_tool_specs
+            extra_tool_specs=extra_tool_specs,
+            settings=settings,
         )
     )
     extra_tools = build_tool_registry_extra_tools_from_specs(
@@ -2668,6 +3083,7 @@ def _build_tool_registry_from_file_registry(
         _collect_invalid_tool_execution_messages_from_override_specs(
             override_specs=payload.get("overrides"),
             base_registry=base_registry,
+            settings=settings,
         )
     )
     source_overrides, disabled_tool_names = _build_registry_overrides_from_specs(
@@ -2868,7 +3284,8 @@ def build_tool_registry_loaders_from_settings_artifacts(
             diagnostics,
             _build_invalid_tool_execution_diagnostics(
                 messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
-                    extra_tool_specs=spec.get("extra_tools")
+                    extra_tool_specs=spec.get("extra_tools"),
+                    settings=settings,
                 )
             ),
         )
@@ -2946,7 +3363,8 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
             diagnostics,
             _build_invalid_tool_execution_diagnostics(
                 messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
-                    extra_tool_specs=spec.get("extra_tools")
+                    extra_tool_specs=spec.get("extra_tools"),
+                    settings=settings,
                 )
             ),
         )
@@ -3053,7 +3471,8 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
             diagnostics,
             _build_invalid_tool_execution_diagnostics(
                 messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
-                    extra_tool_specs=spec.get("extra_tools")
+                    extra_tool_specs=spec.get("extra_tools"),
+                    settings=settings,
                 )
             ),
         )
@@ -3471,7 +3890,8 @@ def build_tool_registry_providers_from_settings_artifacts(
             diagnostics,
             _build_invalid_tool_execution_diagnostics(
                 messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
-                    extra_tool_specs=spec.get("extra_tools")
+                    extra_tool_specs=spec.get("extra_tools"),
+                    settings=settings,
                 )
             ),
         )
@@ -3648,7 +4068,8 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                 diagnostics,
                 _build_invalid_tool_execution_diagnostics(
                     messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
-                        extra_tool_specs=spec.get("extra_tools")
+                        extra_tool_specs=spec.get("extra_tools"),
+                        settings=settings,
                     )
                 ),
                 settings_execution_diagnostics,
@@ -3680,7 +4101,8 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
             _empty_tool_registry_file_diagnostics(),
             _build_invalid_tool_execution_diagnostics(
                 messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
-                    extra_tool_specs=spec
+                    extra_tool_specs=spec,
+                    settings=settings,
                 )
             ),
             settings_execution_diagnostics,
@@ -3744,7 +4166,10 @@ def build_tool_registry_extra_tools_from_settings(
             if timeout_error:
                 validation_errors.append(timeout_error)
         validation_errors.extend(
-            _describe_tool_execution_spec_validation_errors(execution_spec)
+            _describe_tool_execution_spec_validation_errors(
+                execution_spec,
+                template_context=runtime_template_context,
+            )
         )
         extra_tools[name] = replace(
             template_registration,
@@ -3767,20 +4192,23 @@ def build_tool_registry_extra_tools_from_settings(
             supports_result_preview=bool(
                 spec.get("supports_result_preview", template_registration.supports_result_preview)
             ),
-            result_preview_keys=(
-                _normalize_result_preview_keys(spec.get("result_preview_keys"))
-                or template_registration.result_preview_keys
+            result_preview_keys=_normalize_safe_explicit_result_keys(
+                spec.get("result_preview_keys"),
+                fallback_keys=template_registration.result_preview_keys,
             ),
-            result_output_keys=(
-                _normalize_result_output_keys(spec.get("result_output_keys"))
-                or template_registration.result_output_keys
+            result_output_keys=_normalize_safe_explicit_result_keys(
+                spec.get("result_output_keys"),
+                fallback_keys=template_registration.result_output_keys,
             ),
             runtime_semantic_kind=(
                 _normalize_runtime_semantic_kind(spec.get("runtime_semantic_kind"))
                 or template_registration.runtime_semantic_kind
             ),
             execution_kind=resolved_execution_kind or template_registration.execution_kind,
-            execution_summary=_build_tool_execution_summary_from_spec(execution_spec)
+            execution_summary=_build_tool_execution_summary_from_spec(
+                execution_spec,
+                template_context=runtime_template_context,
+            )
             or template_registration.execution_summary,
             execution_diagnostics=(
                 tuple(dict.fromkeys(validation_errors))
@@ -3849,7 +4277,10 @@ def _build_registry_overrides_from_specs(
             if timeout_error:
                 validation_errors.append(timeout_error)
         validation_errors.extend(
-            _describe_tool_execution_spec_validation_errors(execution_spec)
+            _describe_tool_execution_spec_validation_errors(
+                execution_spec,
+                template_context=runtime_template_context,
+            )
         )
         overrides[normalized_name] = replace(
             base_registration,
@@ -3871,20 +4302,23 @@ def _build_registry_overrides_from_specs(
             supports_result_preview=bool(
                 spec.get("supports_result_preview", base_registration.supports_result_preview)
             ),
-            result_preview_keys=(
-                _normalize_result_preview_keys(spec.get("result_preview_keys"))
-                or base_registration.result_preview_keys
+            result_preview_keys=_normalize_safe_explicit_result_keys(
+                spec.get("result_preview_keys"),
+                fallback_keys=base_registration.result_preview_keys,
             ),
-            result_output_keys=(
-                _normalize_result_output_keys(spec.get("result_output_keys"))
-                or base_registration.result_output_keys
+            result_output_keys=_normalize_safe_explicit_result_keys(
+                spec.get("result_output_keys"),
+                fallback_keys=base_registration.result_output_keys,
             ),
             runtime_semantic_kind=(
                 _normalize_runtime_semantic_kind(spec.get("runtime_semantic_kind"))
                 or base_registration.runtime_semantic_kind
             ),
             execution_kind=resolved_execution_kind or base_registration.execution_kind,
-            execution_summary=_build_tool_execution_summary_from_spec(execution_spec)
+            execution_summary=_build_tool_execution_summary_from_spec(
+                execution_spec,
+                template_context=runtime_template_context,
+            )
             or base_registration.execution_summary,
             execution_diagnostics=(
                 tuple(dict.fromkeys(validation_errors))
