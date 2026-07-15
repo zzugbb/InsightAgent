@@ -1946,30 +1946,33 @@ def _get_tool_execution_http_header_value(
 def _is_supported_http_json_media_type(raw_value: object) -> bool:
     if not isinstance(raw_value, str) or not raw_value.strip():
         return False
-    media_type = raw_value.split(";", 1)[0].strip().lower()
+    media_type = _split_http_json_header_parameters(raw_value)[0].strip().lower()
     return media_type == "application/json" or media_type.endswith("+json")
 
 
-def _get_http_json_media_type_parameter(
+def _get_http_json_media_type_parameter_values(
     raw_value: object,
     parameter_name: str,
-) -> str | None:
+) -> tuple[str, ...]:
     if not isinstance(raw_value, str) or not raw_value.strip():
-        return None
-    for raw_part in raw_value.split(";")[1:]:
+        return ()
+    parameter_values: list[str] = []
+    for raw_part in _split_http_json_header_parameters(raw_value)[1:]:
         raw_name, separator, raw_parameter_value = raw_part.partition("=")
         if separator != "=" or raw_name.strip().lower() != parameter_name:
             continue
         parameter_value = raw_parameter_value.strip().strip("\"'")
-        return parameter_value if parameter_value else ""
-    return None
+        parameter_values.append(parameter_value if parameter_value else "")
+    return tuple(parameter_values)
 
 
 def _is_supported_http_json_accept_header(raw_value: object) -> bool:
     if not isinstance(raw_value, str) or not raw_value.strip():
         return False
-    for item in raw_value.split(","):
-        raw_parts = item.split(";")
+    for item in _split_http_json_header_values(raw_value):
+        raw_parts = _split_http_json_header_parameters(item)
+        if not raw_parts:
+            continue
         media_type = raw_parts[0].strip().lower()
         q_value = 1.0
         for raw_part in raw_parts[1:]:
@@ -1977,7 +1980,7 @@ def _is_supported_http_json_accept_header(raw_value: object) -> bool:
             if separator != "=" or parameter_name.strip().lower() != "q":
                 continue
             try:
-                q_value = float(parameter_value.strip())
+                q_value = float(parameter_value.strip().strip("\"'"))
             except ValueError:
                 q_value = 0.0
             break
@@ -2029,11 +2032,15 @@ def _describe_http_json_request_content_type_validation_errors(
         and _is_supported_http_json_media_type(raw_content_type)
     ):
         return (_format_http_json_request_content_type_validation_error(raw_content_type),)
-    charset = _get_http_json_media_type_parameter(raw_content_type, "charset")
-    if charset is not None and charset.lower().replace("_", "-") not in {
-        "utf-8",
-        "utf8",
-    }:
+    charset_values = _get_http_json_media_type_parameter_values(
+        raw_content_type,
+        "charset",
+    )
+    normalized_charsets = {
+        charset.lower().replace("_", "-")
+        for charset in charset_values
+    }
+    if normalized_charsets and not normalized_charsets <= {"utf-8", "utf8"}:
         return (
             _format_http_json_request_content_type_charset_validation_error(
                 raw_content_type
@@ -2426,6 +2433,33 @@ def _format_http_json_error_body_preview(raw_body: object) -> str:
     return f"{normalized[:_HTTP_JSON_ERROR_BODY_PREVIEW_MAX_LENGTH]}..."
 
 
+def _coerce_http_json_body_preview_bytes(raw_body: object) -> bytes | None:
+    if isinstance(raw_body, bytes):
+        return raw_body
+    if isinstance(raw_body, bytearray):
+        return bytes(raw_body)
+    if isinstance(raw_body, memoryview):
+        return raw_body.tobytes()
+    return None
+
+
+def _format_http_json_response_body_preview(
+    raw_body: object,
+    *,
+    content_type: object = None,
+) -> str:
+    raw_bytes = _coerce_http_json_body_preview_bytes(raw_body)
+    if raw_bytes is None:
+        return _format_http_json_error_body_preview(raw_body)
+    charset = _get_http_json_response_charset(content_type)
+    try:
+        codecs.lookup(charset)
+        raw_text = raw_bytes.decode(charset)
+    except (LookupError, UnicodeError):
+        return _format_http_json_error_body_preview(raw_bytes)
+    return _format_http_json_error_body_preview(raw_text)
+
+
 def _format_http_json_http_error(exc: HTTPError) -> str:
     message = f"HTTP JSON tool failed: HTTP {exc.code}"
     reason = _format_http_json_error_body_preview(
@@ -2433,15 +2467,20 @@ def _format_http_json_http_error(exc: HTTPError) -> str:
     )
     if reason:
         message = f"{message} {reason}"
+    content_type = _get_http_json_response_content_type(exc)
     try:
-        body = _coerce_http_json_response_body_bytes(exc.read())
+        body = _read_http_json_response_body_bytes(exc)
         body = _decode_http_json_response_body_for_content_encoding(
             raw_body=body,
             content_encoding=_get_http_json_response_content_encoding(exc),
+            content_type=content_type,
         )
-        body_preview = _format_http_json_error_body_preview(body)
-    except (OSError, TypeError):
-        body_preview = ""
+        body_preview = _format_http_json_response_body_preview(
+            body,
+            content_type=content_type,
+        )
+    except (OSError, TypeError) as exc:
+        body_preview = _format_http_json_error_body_preview(exc)
     except ValueError as exc:
         body_preview = _format_http_json_error_body_preview(exc)
     if body_preview:
@@ -2454,52 +2493,223 @@ def _coerce_http_json_response_status_code(raw_value: object) -> int | None:
         return None
     if isinstance(raw_value, int):
         return raw_value
+    if isinstance(raw_value, float):
+        if math.isfinite(raw_value) and raw_value.is_integer():
+            return int(raw_value)
+        return None
+    if isinstance(raw_value, bytes):
+        raw_value = raw_value.decode("utf-8", errors="replace")
+    if isinstance(raw_value, bytearray):
+        raw_value = bytes(raw_value).decode("utf-8", errors="replace")
+    if isinstance(raw_value, memoryview):
+        raw_value = raw_value.tobytes().decode("utf-8", errors="replace")
     if isinstance(raw_value, str):
         normalized = raw_value.strip()
-        if normalized.isdigit():
-            return int(normalized)
+        match = re.match(r"^(\d{3})(?:\b|$)", normalized)
+        if match:
+            return int(match.group(1))
     return None
 
 
-def _get_http_json_response_status_code(response: object) -> int | None:
+def _http_json_response_status_value_is_present(raw_value: object) -> bool:
+    if raw_value is None:
+        return False
+    if isinstance(raw_value, str):
+        return bool(raw_value.strip())
+    if isinstance(raw_value, (bytes, bytearray)):
+        return bool(bytes(raw_value).strip())
+    if isinstance(raw_value, memoryview):
+        return bool(raw_value.tobytes().strip())
+    return True
+
+
+def _format_http_json_invalid_status_response(
+    *,
+    raw_status: object,
+    raw_body: object,
+    content_type: object = None,
+) -> str:
+    status_preview = _format_http_json_error_body_preview(raw_status)
+    message = "HTTP JSON tool failed: invalid HTTP response status"
+    if status_preview:
+        message = f"{message}: {status_preview}"
+    body_preview = _format_http_json_response_body_preview(
+        raw_body,
+        content_type=content_type,
+    )
+    if body_preview:
+        message = f"{message}; body: {body_preview}"
+    return message
+
+
+def _get_http_json_adapter_attr(adapter: object, attr_name: str) -> object | None:
+    try:
+        return getattr(adapter, attr_name, None)
+    except Exception:
+        return None
+
+
+def _call_http_json_adapter_method(
+    method: object,
+    *args: object,
+    **kwargs: object,
+) -> object | None:
+    if not callable(method):
+        return None
+    try:
+        return method(*args, **kwargs)
+    except Exception:
+        return None
+
+
+def _call_http_json_getheader_adapter(
+    getheader: object,
+    header_name: str,
+) -> object | None:
+    raw_value = _call_http_json_adapter_method(getheader, header_name, None)
+    if raw_value is not None:
+        return raw_value
+    return _call_http_json_adapter_method(getheader, header_name)
+
+
+def _get_http_json_response_status_code(
+    response: object,
+) -> tuple[int | None, object | None]:
     for attr_name in ("status", "code", "status_code"):
-        status_code = _coerce_http_json_response_status_code(
-            getattr(response, attr_name, None)
-        )
-        if status_code is not None:
-            return status_code
-    getcode = getattr(response, "getcode", None)
+        raw_status = _get_http_json_adapter_attr(response, attr_name)
+        if not _http_json_response_status_value_is_present(raw_status):
+            continue
+        status_code = _coerce_http_json_response_status_code(raw_status)
+        if status_code is None or not 100 <= status_code <= 599:
+            return None, raw_status
+        return status_code, None
+    getcode = _get_http_json_adapter_attr(response, "getcode")
     if callable(getcode):
-        try:
-            return _coerce_http_json_response_status_code(getcode())
-        except (TypeError, ValueError):
-            return None
+        raw_status = _call_http_json_adapter_method(getcode)
+        if not _http_json_response_status_value_is_present(raw_status):
+            return None, None
+        status_code = _coerce_http_json_response_status_code(raw_status)
+        if status_code is None or not 100 <= status_code <= 599:
+            return None, raw_status
+        return status_code, None
+    return None, None
+
+
+def _coerce_http_json_response_text(raw_value: object) -> str | None:
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip()
+        return normalized or None
+    if isinstance(raw_value, bytes):
+        normalized = raw_value.decode("utf-8", errors="replace").strip()
+        return normalized or None
+    if isinstance(raw_value, bytearray):
+        normalized = bytes(raw_value).decode("utf-8", errors="replace").strip()
+        return normalized or None
+    if isinstance(raw_value, memoryview):
+        normalized = raw_value.tobytes().decode("utf-8", errors="replace").strip()
+        return normalized or None
     return None
 
 
 def _get_http_json_response_reason(response: object) -> object:
     for attr_name in ("reason", "msg"):
-        raw_value = getattr(response, attr_name, None)
-        if isinstance(raw_value, str) and raw_value.strip():
-            return raw_value.strip()
-        if isinstance(raw_value, bytes) and raw_value.strip():
-            return raw_value
+        reason = _coerce_http_json_response_text(
+            _get_http_json_adapter_attr(response, attr_name)
+        )
+        if reason is not None:
+            return reason
     return ""
 
 
 def _get_http_json_response_url(response: object) -> str | None:
-    geturl = getattr(response, "geturl", None)
+    geturl = _get_http_json_adapter_attr(response, "geturl")
     if callable(geturl):
-        try:
-            raw_value = geturl()
-        except (TypeError, ValueError):
-            raw_value = None
-        if isinstance(raw_value, str) and raw_value.strip():
-            return raw_value.strip()
-    raw_value = getattr(response, "url", None)
-    if isinstance(raw_value, str) and raw_value.strip():
-        return raw_value.strip()
+        raw_value = _call_http_json_adapter_method(geturl)
+        response_url = _coerce_http_json_response_text(raw_value)
+        if response_url is not None:
+            return response_url
+    response_url = _coerce_http_json_response_text(
+        _get_http_json_adapter_attr(response, "url")
+    )
+    if response_url is not None:
+        return response_url
     return None
+
+
+_HTTP_JSON_UNRESERVED_URL_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+)
+
+
+def _normalize_http_json_unreserved_percent_encoding(value: str) -> str:
+    def replace_match(match: re.Match[str]) -> str:
+        encoded_value = match.group(0)
+        decoded_char = chr(int(encoded_value[1:], 16))
+        if decoded_char in _HTTP_JSON_UNRESERVED_URL_CHARS:
+            return decoded_char
+        return encoded_value.upper()
+
+    return re.sub(r"%[0-9A-Fa-f]{2}", replace_match, value)
+
+
+def _normalize_http_json_query_for_drift_check(
+    raw_query: str,
+) -> tuple[tuple[str, str], ...] | None:
+    try:
+        query_pairs = parse_qsl(raw_query, keep_blank_values=True)
+    except ValueError:
+        return None
+    return tuple(sorted(query_pairs))
+
+
+def _normalize_http_json_url_for_drift_check(
+    raw_url: str,
+) -> tuple[str, str, str, str, tuple[tuple[str, str], ...]] | None:
+    parsed = urlparse(raw_url)
+    hostname = parsed.hostname
+    if not parsed.scheme or hostname is None:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    scheme = parsed.scheme.lower()
+    normalized_host = hostname.lower()
+    default_port = (
+        (scheme == "http" and port == 80)
+        or (scheme == "https" and port == 443)
+    )
+    normalized_authority = (
+        normalized_host
+        if port is None or default_port
+        else f"{normalized_host}:{port}"
+    )
+    normalized_query = _normalize_http_json_query_for_drift_check(parsed.query)
+    if normalized_query is None:
+        return None
+    return (
+        scheme,
+        normalized_authority,
+        _normalize_http_json_unreserved_percent_encoding(parsed.path or "/"),
+        _normalize_http_json_unreserved_percent_encoding(parsed.params),
+        normalized_query,
+    )
+
+
+def _http_json_response_url_matches_request_url(
+    *,
+    response_url: str,
+    request_url: str,
+) -> bool:
+    if response_url == request_url:
+        return True
+    normalized_response_url = _normalize_http_json_url_for_drift_check(response_url)
+    normalized_request_url = _normalize_http_json_url_for_drift_check(request_url)
+    return (
+        normalized_response_url is not None
+        and normalized_request_url is not None
+        and normalized_response_url == normalized_request_url
+    )
 
 
 def _format_http_json_redirected_response_url_error() -> str:
@@ -2513,12 +2723,32 @@ def _format_http_json_unexpected_status_response(
     status_code: int,
     reason: object,
     raw_body: bytes,
+    content_type: object = None,
 ) -> str:
     message = f"HTTP JSON tool failed: HTTP {status_code}"
     reason_preview = _format_http_json_error_body_preview(reason or "")
     if reason_preview:
         message = f"{message} {reason_preview}"
-    body_preview = _format_http_json_error_body_preview(raw_body)
+    body_preview = _format_http_json_response_body_preview(
+        raw_body,
+        content_type=content_type,
+    )
+    if body_preview:
+        message = f"{message}; body: {body_preview}"
+    return message
+
+
+def _format_http_json_unexpected_status_response_body_decode_error(
+    *,
+    status_code: int,
+    reason: object,
+    error: Exception,
+) -> str:
+    message = f"HTTP JSON tool failed: HTTP {status_code}"
+    reason_preview = _format_http_json_error_body_preview(reason or "")
+    if reason_preview:
+        message = f"{message} {reason_preview}"
+    body_preview = _format_http_json_error_body_preview(error)
     if body_preview:
         message = f"{message}; body: {body_preview}"
     return message
@@ -2550,11 +2780,24 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
     raise TypeError("response body must be bytes or text")
 
 
+def _read_http_json_response_body_bytes(response: object) -> bytes:
+    read = _get_http_json_adapter_attr(response, "read")
+    if not callable(read):
+        raise TypeError("response body reader is unavailable")
+    try:
+        return _coerce_http_json_response_body_bytes(read())
+    except TypeError:
+        raise
+    except Exception as exc:
+        raise TypeError(f"response read failed: {exc}") from exc
+
+
 def _format_http_json_invalid_json_response(
     *,
     raw_body: bytes,
     error: json.JSONDecodeError | UnicodeDecodeError,
     charset: str = "utf-8",
+    content_type: object = None,
 ) -> str:
     error_message = (
         error.msg
@@ -2562,7 +2805,10 @@ def _format_http_json_invalid_json_response(
         else f"invalid {_format_http_json_error_body_preview(charset)} response body: {error.reason}"
     )
     message = f"HTTP JSON tool failed: invalid JSON response: {error_message}"
-    body_preview = _format_http_json_error_body_preview(raw_body)
+    body_preview = _format_http_json_response_body_preview(
+        raw_body,
+        content_type=content_type,
+    )
     if body_preview:
         message = f"{message}; body: {body_preview}"
     return message
@@ -2594,88 +2840,221 @@ def _coerce_http_json_header_text(raw_value: object) -> str | None:
     if isinstance(raw_value, memoryview):
         normalized = raw_value.tobytes().decode("utf-8", errors="replace").strip()
         return normalized or None
+    if isinstance(raw_value, (list, tuple)):
+        values = [
+            header_value
+            for item in raw_value
+            if (header_value := _coerce_http_json_header_text(item)) is not None
+        ]
+        return ", ".join(values) if values else None
+    return None
+
+
+def _coerce_http_json_header_name_text(raw_value: object) -> str | None:
+    header_name = _coerce_http_json_response_text(raw_value)
+    return header_name.lower() if header_name is not None else None
+
+
+def _get_http_json_header_items(headers: object) -> object:
+    for method_name in ("items", "raw_items", "multi_items"):
+        items = _get_http_json_adapter_attr(headers, method_name)
+        if callable(items):
+            header_items = _call_http_json_adapter_method(items)
+            if header_items is not None:
+                return header_items
+    if isinstance(headers, (list, tuple)):
+        return headers
+    return ()
+
+
+def _get_http_json_header_value_from_method(
+    *,
+    headers: object,
+    method_name: str,
+    header_name: str,
+) -> str | None:
+    method = _get_http_json_adapter_attr(headers, method_name)
+    if not callable(method):
+        return None
+    for candidate_name in (
+        header_name,
+        header_name.lower(),
+        header_name.upper(),
+        header_name.encode("ascii"),
+        header_name.lower().encode("ascii"),
+        header_name.upper().encode("ascii"),
+    ):
+        raw_value = _call_http_json_adapter_method(
+            method,
+            candidate_name,
+            None,
+        )
+        header_value = _coerce_http_json_header_text(raw_value)
+        if header_value is not None:
+            return header_value
+        raw_value = _call_http_json_adapter_method(
+            method,
+            candidate_name,
+        )
+        header_value = _coerce_http_json_header_text(raw_value)
+        if header_value is not None:
+            return header_value
+    return None
+
+
+def _get_http_json_header_text_from_mapping(
+    headers: object,
+    header_name: str,
+) -> str | None:
+    normalized_header_name = header_name.strip().lower()
+    header_values: list[str] = []
+    header_items = _get_http_json_header_items(headers)
+    for raw_item in header_items:
+        try:
+            raw_key, raw_value = raw_item
+        except (TypeError, ValueError):
+            continue
+        if _coerce_http_json_header_name_text(raw_key) == normalized_header_name:
+            header_value = _coerce_http_json_header_text(raw_value)
+            if header_value is not None:
+                header_values.append(header_value)
+    if header_values:
+        return ", ".join(header_values)
+    for method_name in ("get_all", "getheaders", "get"):
+        header_value = _get_http_json_header_value_from_method(
+            headers=headers,
+            method_name=method_name,
+            header_name=header_name,
+        )
+        if header_value is not None:
+            return header_value
     return None
 
 
 def _get_http_json_response_content_type(response: object) -> str | None:
-    getheader = getattr(response, "getheader", None)
+    getheader = _get_http_json_adapter_attr(response, "getheader")
     if callable(getheader):
-        try:
-            raw_value = getheader("Content-Type")
-        except (TypeError, ValueError):
-            raw_value = None
+        raw_value = _call_http_json_getheader_adapter(getheader, "Content-Type")
         header_value = _coerce_http_json_header_text(raw_value)
         if header_value is not None:
             return header_value
-    headers = getattr(response, "headers", None)
+    headers = _get_http_json_adapter_attr(response, "headers")
     if headers is not None:
-        get_header = getattr(headers, "get", None)
-        if callable(get_header):
-            for header_name in ("Content-Type", "content-type"):
-                raw_value = get_header(header_name)
-                header_value = _coerce_http_json_header_text(raw_value)
-                if header_value is not None:
-                    return header_value
-    info = getattr(response, "info", None)
+        header_value = _get_http_json_header_text_from_mapping(
+            headers,
+            "Content-Type",
+        )
+        if header_value is not None:
+            return header_value
+    info = _get_http_json_adapter_attr(response, "info")
     if callable(info):
-        try:
-            info_headers = info()
-        except (TypeError, ValueError):
-            info_headers = None
-        get_info_header = getattr(info_headers, "get", None)
-        if callable(get_info_header):
-            raw_value = get_info_header("Content-Type")
-            header_value = _coerce_http_json_header_text(raw_value)
-            if header_value is not None:
-                return header_value
+        info_headers = _call_http_json_adapter_method(info)
+        header_value = _get_http_json_header_text_from_mapping(
+            info_headers,
+            "Content-Type",
+        )
+        if header_value is not None:
+            return header_value
     return None
 
 
 def _get_http_json_response_content_encoding(response: object) -> str | None:
-    getheader = getattr(response, "getheader", None)
+    getheader = _get_http_json_adapter_attr(response, "getheader")
     if callable(getheader):
-        try:
-            raw_value = getheader("Content-Encoding")
-        except (TypeError, ValueError):
-            raw_value = None
+        raw_value = _call_http_json_getheader_adapter(getheader, "Content-Encoding")
         header_value = _coerce_http_json_header_text(raw_value)
         if header_value is not None:
             return header_value
-    headers = getattr(response, "headers", None)
+    headers = _get_http_json_adapter_attr(response, "headers")
     if headers is not None:
-        get_header = getattr(headers, "get", None)
-        if callable(get_header):
-            for header_name in ("Content-Encoding", "content-encoding"):
-                raw_value = get_header(header_name)
-                header_value = _coerce_http_json_header_text(raw_value)
-                if header_value is not None:
-                    return header_value
-    info = getattr(response, "info", None)
+        header_value = _get_http_json_header_text_from_mapping(
+            headers,
+            "Content-Encoding",
+        )
+        if header_value is not None:
+            return header_value
+    info = _get_http_json_adapter_attr(response, "info")
     if callable(info):
-        try:
-            info_headers = info()
-        except (TypeError, ValueError):
-            info_headers = None
-        get_info_header = getattr(info_headers, "get", None)
-        if callable(get_info_header):
-            raw_value = get_info_header("Content-Encoding")
-            header_value = _coerce_http_json_header_text(raw_value)
-            if header_value is not None:
-                return header_value
+        info_headers = _call_http_json_adapter_method(info)
+        header_value = _get_http_json_header_text_from_mapping(
+            info_headers,
+            "Content-Encoding",
+        )
+        if header_value is not None:
+            return header_value
     return None
+
+
+def _split_http_json_header_value(
+    raw_value: str,
+    *,
+    separator: str,
+) -> tuple[str, ...]:
+    values: list[str] = []
+    current_value: list[str] = []
+    quote_char: str | None = None
+    escaped = False
+    for char in raw_value:
+        if escaped:
+            current_value.append(char)
+            escaped = False
+            continue
+        if quote_char is not None:
+            current_value.append(char)
+            if char == "\\":
+                escaped = True
+            elif char == quote_char:
+                quote_char = None
+            continue
+        if char in ("'", '"'):
+            quote_char = char
+            current_value.append(char)
+            continue
+        if char == separator:
+            normalized_value = "".join(current_value).strip()
+            if normalized_value:
+                values.append(normalized_value)
+            current_value = []
+            continue
+        current_value.append(char)
+    normalized_value = "".join(current_value).strip()
+    if normalized_value:
+        values.append(normalized_value)
+    return tuple(values)
+
+
+def _split_http_json_header_values(raw_value: str) -> tuple[str, ...]:
+    return _split_http_json_header_value(raw_value, separator=",")
+
+
+def _split_http_json_header_parameters(raw_value: str) -> tuple[str, ...]:
+    return _split_http_json_header_value(raw_value, separator=";")
 
 
 def _get_http_json_response_charset(raw_content_type: object) -> str:
     if not isinstance(raw_content_type, str) or ";" not in raw_content_type:
         return "utf-8"
-    for raw_parameter in raw_content_type.split(";")[1:]:
-        raw_name, separator, raw_value = raw_parameter.partition("=")
-        if not separator or raw_name.strip().lower() != "charset":
-            continue
-        normalized_value = raw_value.strip().strip("\"'")
-        if normalized_value:
-            return normalized_value
-    return "utf-8"
+    charset_values: list[str] = []
+    for content_type_value in _split_http_json_header_values(raw_content_type):
+        for raw_parameter in _split_http_json_header_parameters(content_type_value)[1:]:
+            raw_name, separator, raw_value = raw_parameter.partition("=")
+            if not separator or raw_name.strip().lower() != "charset":
+                continue
+            normalized_value = raw_value.strip().strip("\"'")
+            if normalized_value:
+                charset_values.append(normalized_value)
+    if not charset_values:
+        return "utf-8"
+    normalized_charset_values = {
+        charset_value.lower().replace("_", "-")
+        for charset_value in charset_values
+    }
+    if len(normalized_charset_values) > 1:
+        safe_values = ", ".join(charset_values[:3])
+        if len(charset_values) > 3:
+            safe_values = f"{safe_values}, ..."
+        return f"ambiguous response charset: {safe_values}"
+    return charset_values[0]
 
 
 def _decode_http_json_response_text(
@@ -2702,6 +3081,7 @@ def _decode_http_json_response_text(
                 raw_body=raw_body,
                 error=exc,
                 charset=charset,
+                content_type=content_type,
             ),
             fatal=False,
         ) from exc
@@ -2718,10 +3098,21 @@ def _normalize_http_json_content_encodings(raw_value: object) -> tuple[str, ...]
     return tuple(encodings)
 
 
+def _decompress_http_json_deflate_body(raw_body: bytes) -> bytes:
+    try:
+        return zlib.decompress(raw_body)
+    except zlib.error as wrapped_exc:
+        try:
+            return zlib.decompress(raw_body, -zlib.MAX_WBITS)
+        except zlib.error as raw_exc:
+            raise raw_exc from wrapped_exc
+
+
 def _decode_http_json_response_body_for_content_encoding(
     *,
     raw_body: bytes,
     content_encoding: object,
+    content_type: object = None,
 ) -> bytes:
     decoded_body = raw_body
     normalized_encodings = _normalize_http_json_content_encodings(content_encoding)
@@ -2734,7 +3125,10 @@ def _decode_http_json_response_body_for_content_encoding(
             try:
                 decoded_body = gzip.decompress(decoded_body)
             except (OSError, EOFError, zlib.error) as exc:
-                body_preview = _format_http_json_error_body_preview(decoded_body)
+                body_preview = _format_http_json_response_body_preview(
+                    decoded_body,
+                    content_type=content_type,
+                )
                 message = "invalid gzip response body"
                 if body_preview:
                     message = f"{message}; body: {body_preview}"
@@ -2742,9 +3136,12 @@ def _decode_http_json_response_body_for_content_encoding(
             continue
         if normalized_encoding == "deflate":
             try:
-                decoded_body = zlib.decompress(decoded_body)
+                decoded_body = _decompress_http_json_deflate_body(decoded_body)
             except zlib.error as exc:
-                body_preview = _format_http_json_error_body_preview(decoded_body)
+                body_preview = _format_http_json_response_body_preview(
+                    decoded_body,
+                    content_type=content_type,
+                )
                 message = "invalid deflate response body"
                 if body_preview:
                     message = f"{message}; body: {body_preview}"
@@ -2753,7 +3150,10 @@ def _decode_http_json_response_body_for_content_encoding(
         safe_encoding = _format_http_json_error_body_preview(
             ",".join(normalized_encodings)
         )
-        body_preview = _format_http_json_error_body_preview(decoded_body)
+        body_preview = _format_http_json_response_body_preview(
+            decoded_body,
+            content_type=content_type,
+        )
         message = f"unsupported response content-encoding: {safe_encoding}"
         if body_preview:
             message = f"{message}; body: {body_preview}"
@@ -2764,8 +3164,14 @@ def _decode_http_json_response_body_for_content_encoding(
 def _is_supported_http_json_response_content_type(raw_value: object) -> bool:
     if not isinstance(raw_value, str) or not raw_value.strip():
         return True
-    media_type = raw_value.split(";", 1)[0].strip().lower()
-    return media_type == "application/json" or media_type.endswith("+json")
+    content_type_values = _split_http_json_header_values(raw_value)
+    if not content_type_values:
+        return False
+    for content_type_value in content_type_values:
+        media_type = content_type_value.split(";", 1)[0].strip().lower()
+        if not (media_type == "application/json" or media_type.endswith("+json")):
+            return False
+    return True
 
 
 def _format_http_json_invalid_content_type_response(
@@ -2778,7 +3184,10 @@ def _format_http_json_invalid_content_type_response(
         "HTTP JSON tool failed: invalid JSON response content-type: "
         f"{safe_content_type}"
     )
-    body_preview = _format_http_json_error_body_preview(raw_body)
+    body_preview = _format_http_json_response_body_preview(
+        raw_body,
+        content_type=content_type,
+    )
     if body_preview:
         message = f"{message}; body: {body_preview}"
     return message
@@ -2939,18 +3348,71 @@ def _build_http_json_tool_runner(
                 request,
                 timeout=max(0.1, timeout_ms / 1000),
             ) as response:
-                response_body = _coerce_http_json_response_body_bytes(
-                    response.read()
-                )
                 response_content_encoding = _get_http_json_response_content_encoding(
                     response
                 )
-                response_body = _decode_http_json_response_body_for_content_encoding(
-                    raw_body=response_body,
-                    content_encoding=response_content_encoding,
+                response_status_code, invalid_response_status = (
+                    _get_http_json_response_status_code(response)
                 )
-                response_status_code = _get_http_json_response_status_code(response)
                 response_reason = _get_http_json_response_reason(response)
+                response_content_type = _get_http_json_response_content_type(response)
+                try:
+                    response_body = _read_http_json_response_body_bytes(response)
+                except TypeError as exc:
+                    if invalid_response_status is not None:
+                        raise MockToolExecutionError(
+                            _format_http_json_invalid_status_response(
+                                raw_status=invalid_response_status,
+                                raw_body=exc,
+                                content_type=response_content_type,
+                            ),
+                            fatal=False,
+                        ) from exc
+                    if (
+                        response_status_code is not None
+                        and not 200 <= response_status_code <= 299
+                    ):
+                        raise MockToolExecutionError(
+                            _format_http_json_unexpected_status_response_body_decode_error(
+                                status_code=response_status_code,
+                                reason=response_reason,
+                                error=exc,
+                            ),
+                            fatal=False,
+                        ) from exc
+                    raise
+                if invalid_response_status is not None:
+                    raise MockToolExecutionError(
+                        _format_http_json_invalid_status_response(
+                            raw_status=invalid_response_status,
+                            raw_body=response_body,
+                            content_type=response_content_type,
+                        ),
+                        fatal=False,
+                    )
+                try:
+                    response_body = _decode_http_json_response_body_for_content_encoding(
+                        raw_body=response_body,
+                        content_encoding=response_content_encoding,
+                        content_type=response_content_type,
+                    )
+                except ValueError as exc:
+                    if (
+                        response_status_code is not None
+                        and not 200 <= response_status_code <= 299
+                    ):
+                        raise MockToolExecutionError(
+                            _format_http_json_unexpected_status_response_body_decode_error(
+                                status_code=response_status_code,
+                                reason=response_reason,
+                                error=exc,
+                            ),
+                            fatal=False,
+                        ) from exc
+                    raise MockToolExecutionError(
+                        f"HTTP JSON tool failed: {exc}",
+                        fatal=False,
+                    ) from exc
                 if (
                     response_status_code is not None
                     and not 200 <= response_status_code <= 299
@@ -2960,16 +3422,22 @@ def _build_http_json_tool_runner(
                             status_code=response_status_code,
                             reason=response_reason,
                             raw_body=response_body,
+                            content_type=response_content_type,
                         ),
                         fatal=False,
                     )
                 response_url = _get_http_json_response_url(response)
-                if response_url is not None and response_url != full_url:
+                if (
+                    response_url is not None
+                    and not _http_json_response_url_matches_request_url(
+                        response_url=response_url,
+                        request_url=full_url,
+                    )
+                ):
                     raise MockToolExecutionError(
                         _format_http_json_redirected_response_url_error(),
                         fatal=False,
                     )
-                response_content_type = _get_http_json_response_content_type(response)
                 if (
                     response_content_type
                     and not _is_supported_http_json_response_content_type(
@@ -3002,6 +3470,7 @@ def _build_http_json_tool_runner(
                         _format_http_json_invalid_json_response(
                             raw_body=response_body,
                             error=exc,
+                            content_type=response_content_type,
                         ),
                         fatal=False,
                     ) from exc
@@ -3011,6 +3480,13 @@ def _build_http_json_tool_runner(
                 fatal=False,
             ) from exc
         except (URLError, OSError, TypeError, ValueError) as exc:
+            raise MockToolExecutionError(
+                _format_http_json_transport_error(exc),
+                fatal=False,
+            ) from exc
+        except Exception as exc:
+            if isinstance(exc, MockToolExecutionError):
+                raise
             raise MockToolExecutionError(
                 _format_http_json_transport_error(exc),
                 fatal=False,
