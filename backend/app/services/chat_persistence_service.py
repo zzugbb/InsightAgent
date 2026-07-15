@@ -15,6 +15,9 @@ from app.services.task_status_service import (
     task_status_rank,
 )
 from app.services.tool_runtime import (
+    _get_safe_http_json_request_id_display_value,
+    _normalize_http_json_output_shape,
+    _normalize_http_json_safe_output_shape,
     get_configured_tool_registry_provider,
     get_tool_display_name,
     normalize_tool_registry_name,
@@ -1093,26 +1096,112 @@ def _coerce_trace_tool_output_mapping(value: object) -> dict[str, object] | None
     return _parse_trace_tool_json_mapping_string(value)
 
 
-def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | None:
-    output_keys = tool_meta.get("effective_result_output_keys")
-    if not isinstance(output_keys, (list, tuple)):
-        return None
-    normalized_keys = [
+def _trace_tool_meta_uses_http_json_execution(tool_meta: dict[str, object]) -> bool:
+    raw_execution_kind = tool_meta.get("execution_kind")
+    if not isinstance(raw_execution_kind, str):
+        return False
+    return raw_execution_kind.strip().lower() == "http_json"
+
+
+def _normalize_trace_http_json_tool_output(
+    tool_meta: dict[str, object],
+    output: dict[str, object],
+) -> dict[str, object]:
+    if _trace_tool_meta_uses_http_json_execution(tool_meta):
+        return _normalize_http_json_safe_output_shape(output)
+    return output
+
+
+def _normalize_trace_tool_output_request_id(
+    output: dict[str, object],
+) -> dict[str, object]:
+    if "request_id" not in output:
+        return output
+    normalized_output = dict(output)
+    safe_request_id = _get_safe_http_json_request_id_display_value(
+        normalized_output.get("request_id")
+    )
+    if safe_request_id is None:
+        normalized_output.pop("request_id", None)
+    else:
+        normalized_output["request_id"] = safe_request_id
+    return normalized_output
+
+
+def _normalize_trace_tool_output_key_list(raw_value: object) -> list[str]:
+    if not isinstance(raw_value, (list, tuple)):
+        return []
+    return [
         key.strip()
-        for key in output_keys
+        for key in raw_value
         if isinstance(key, str) and key.strip()
     ]
+
+
+def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | None:
+    normalized_keys = _normalize_trace_tool_output_key_list(
+        tool_meta.get("effective_result_output_keys")
+    )
     if not normalized_keys:
         return None
     output = tool_meta.get("output")
     output_mapping = _coerce_trace_tool_output_mapping(output)
     if not isinstance(output_mapping, dict):
         return output
+    output_mapping = _normalize_trace_tool_output_request_id(
+        _normalize_trace_http_json_tool_output(tool_meta, output_mapping)
+    )
     return {
         key: output_mapping[key]
         for key in normalized_keys
         if key in output_mapping
     }
+
+
+def _infer_trace_tool_preview_output_keys(output: dict[str, object]) -> list[str]:
+    if (
+        "documents_total" in output
+        or "hit_count" in output
+        or "knowledge_base_id" in output
+    ):
+        return ["documents_total", "hit_count", "knowledge_base_id", "request_id"]
+    if "expression" in output or "result" in output:
+        return ["expression", "result", "request_id"]
+    if "plan" in output or "steps" in output:
+        return ["plan", "steps", "request_id"]
+    return []
+
+
+def _resolve_trace_tool_output_preview(tool_meta: dict[str, object]) -> object | None:
+    preview_value = tool_meta.get("output_preview")
+    if preview_value is None:
+        return None
+    preview_mapping = _coerce_trace_tool_output_preview_mapping(preview_value)
+    if not isinstance(preview_mapping, dict):
+        return preview_value
+    preview_mapping = _normalize_trace_tool_output_request_id(
+        _normalize_trace_http_json_tool_output(
+            tool_meta,
+            preview_mapping,
+        )
+    )
+    preview_keys = _normalize_trace_tool_output_key_list(
+        tool_meta.get("effective_result_preview_keys")
+    )
+    if not preview_keys:
+        preview_keys = _normalize_trace_tool_output_key_list(
+            tool_meta.get("result_preview_keys")
+        )
+    if not preview_keys and _trace_tool_meta_uses_http_json_execution(tool_meta):
+        preview_keys = _infer_trace_tool_preview_output_keys(preview_mapping)
+    if not preview_keys:
+        return preview_mapping
+    projected_preview = {
+        key: preview_mapping[key]
+        for key in preview_keys
+        if key in preview_mapping
+    }
+    return projected_preview or preview_mapping
 
 
 def _stringify_trace_safe_tool_output(tool_meta: dict[str, object]) -> str:
@@ -1131,7 +1220,9 @@ def _resolve_trace_tool_result_summary_input(
         tool_meta.get("output_preview")
     )
     if isinstance(preview_output, dict):
-        return preview_output
+        return _normalize_trace_tool_output_request_id(
+            _normalize_trace_http_json_tool_output(tool_meta, preview_output)
+        )
     return None
 
 
@@ -1509,7 +1600,7 @@ def get_trace_step_display_content(step: TraceStep) -> str:
                 part for part in (content, normalized_result_summary) if part
             )
     preview_text = _stringify_trace_tool_output_preview(
-        tool_meta.get("output_preview")
+        _resolve_trace_tool_output_preview(tool_meta)
     )
     safe_output_text = _stringify_trace_safe_tool_output(tool_meta)
     preview_line = (
@@ -1553,10 +1644,20 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
     tool_meta = payload.get("tool")
     if isinstance(tool_meta, dict):
         sanitized_tool_meta = dict(tool_meta)
-        preview_value = sanitized_tool_meta.get("output_preview")
+        raw_preview_value = sanitized_tool_meta.get("output_preview")
+        projected_preview_value = _resolve_trace_tool_output_preview(sanitized_tool_meta)
+        if projected_preview_value is not None:
+            sanitized_tool_meta["output_preview"] = projected_preview_value
         safe_output_value = _resolve_trace_safe_tool_output(sanitized_tool_meta)
-        if preview_value is not None and safe_output_value is None:
-            sanitized_tool_meta["output"] = preview_value
+        if raw_preview_value is not None and safe_output_value is None:
+            preview_mapping = _coerce_trace_tool_output_preview_mapping(raw_preview_value)
+            if isinstance(preview_mapping, dict):
+                sanitized_tool_meta["output"] = _normalize_trace_http_json_tool_output(
+                    sanitized_tool_meta,
+                    preview_mapping,
+                )
+            else:
+                sanitized_tool_meta["output"] = raw_preview_value
         elif safe_output_value is not None:
             sanitized_tool_meta["output"] = safe_output_value
         payload["tool"] = sanitized_tool_meta

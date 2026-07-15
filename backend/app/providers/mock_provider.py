@@ -6,6 +6,18 @@ from typing import Iterator
 from app.providers.base import ProviderResponse, ProviderUsage
 
 
+_MOCK_REQUEST_ID_SENSITIVE_ASSIGNMENT_RE = re.compile(
+    r"((?:\"|')?\b(?:authorization|api[_-]?key|credential|password|secret|token)"
+    r"\b(?:\"|')?\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|[^\s,;<>}]+)",
+    re.IGNORECASE,
+)
+_MOCK_SENSITIVE_KEY_RE = re.compile(
+    r"\b(?:authorization|api[_-]?key|credential|password|secret|"
+    r"(?:access|refresh|session|id)?[_-]?token)\b",
+    re.IGNORECASE,
+)
+
+
 class MockLLMProvider:
     def __init__(self, model: str = "mock-gpt", provider: str = "mock"):
         self.model = model
@@ -24,7 +36,11 @@ class MockLLMProvider:
             if observation_summary:
                 content += f"Summary: {observation_summary} "
             else:
-                content += f"Tool context: {' | '.join(tool_observations)} "
+                safe_observations = [
+                    _redact_mock_observation_text(observation)
+                    for observation in tool_observations
+                ]
+                content += f"Tool context: {' | '.join(safe_observations)} "
         content += f"Prompt received: {prompt_preview}"
         usage = ProviderUsage(
             prompt_tokens=_mock_estimate_token_count(normalized_prompt),
@@ -129,6 +145,31 @@ def _label_implies_real_calc_summary(label: str) -> bool:
     }
 
 
+def _get_safe_mock_request_id_display_value(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized or len(normalized) > 128:
+        return None
+    if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in normalized):
+        return None
+    redacted = _MOCK_REQUEST_ID_SENSITIVE_ASSIGNMENT_RE.sub("[redacted]", normalized)
+    if redacted != normalized:
+        return None
+    return normalized
+
+
+def _redact_mock_sensitive_assignment_text(value: str) -> str:
+    return _MOCK_REQUEST_ID_SENSITIVE_ASSIGNMENT_RE.sub(
+        lambda match: f"{match.group(1)}[redacted]",
+        value,
+    )
+
+
+def _redact_mock_observation_text(value: str) -> str:
+    return _redact_mock_sensitive_assignment_text(value.strip())
+
+
 def _summarize_tool_observations(observations: list[str]) -> str | None:
     summaries: list[str] = []
     for observation in observations:
@@ -145,7 +186,7 @@ def _summarize_tool_observation(observation: str) -> str | None:
     if payload is None:
         _, separator, raw_payload = observation.partition(":")
         if separator and raw_payload.strip():
-            return raw_payload.strip()
+            return _redact_mock_observation_text(raw_payload)
         return None
 
     structured_summary = _summarize_structured_mock_tool_payload(
@@ -187,7 +228,7 @@ def _summarize_structured_mock_tool_payload(
 
     expression = payload.get("expression")
     result = payload.get("result")
-    request_id = payload.get("request_id")
+    request_id = _get_safe_mock_request_id_display_value(payload.get("request_id"))
     if isinstance(expression, str) and expression.strip() and result is not None:
         if isinstance(request_id, str) and request_id.strip():
             return (
@@ -366,6 +407,14 @@ def _summarize_generic_tool_payload(payload: dict[str, object]) -> str | None:
         normalized_key = key.strip()
         if not normalized_key:
             continue
+        if _MOCK_SENSITIVE_KEY_RE.search(normalized_key):
+            continue
+        if normalized_key == "request_id":
+            safe_request_id = _get_safe_mock_request_id_display_value(value)
+            if safe_request_id is None:
+                continue
+            parts.append(f"{normalized_key}={safe_request_id}")
+            continue
         if isinstance(value, bool):
             parts.append(f"{normalized_key}={'true' if value else 'false'}")
             continue
@@ -375,6 +424,9 @@ def _summarize_generic_tool_payload(payload: dict[str, object]) -> str | None:
         if isinstance(value, str):
             normalized_value = value.strip()
             if normalized_value:
+                normalized_value = _redact_mock_sensitive_assignment_text(
+                    normalized_value
+                )
                 parts.append(f"{normalized_key}={normalized_value}")
             continue
     if not parts:

@@ -14343,6 +14343,186 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_get_trace_step_markdown_meta_normalizes_http_json_aliases_for_safe_output(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-http-json-safe-output-alias-meta",
+            seq=10,
+            type="action",
+            content="Tool done: Provider Search",
+            meta={
+                "tool": {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "status": "done",
+                    "execution_kind": "http_json",
+                    "effective_result_output_keys": [
+                        "documents_total",
+                        "request_id",
+                    ],
+                    "output": {
+                        "documents_total": "unknown",
+                        "items": [
+                            {"id": "doc-1"},
+                            {"id": "doc-2"},
+                        ],
+                        "request_id": "req-meta-items-1",
+                    },
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        self.assertEqual(
+            markdown_meta["tool"]["output"],  # type: ignore[index]
+            {
+                "documents_total": 2,
+                "request_id": "req-meta-items-1",
+            },
+        )
+
+    def test_get_trace_step_markdown_meta_normalizes_http_json_aliases_for_preview_fallback(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-http-json-preview-alias-meta",
+            seq=11,
+            type="action",
+            content="Tool done: Provider Search",
+            meta={
+                "tool": {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "status": "done",
+                    "execution_kind": "http_json",
+                    "output_preview": {
+                        "hit_count": "unknown",
+                        "matches": [
+                            {"id": "vec-1"},
+                            {"id": "vec-2"},
+                        ],
+                        "knowledge_base_id": "provider-kb",
+                    },
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        self.assertEqual(
+            markdown_meta["tool"]["output"],  # type: ignore[index]
+            {
+                "hit_count": 2,
+                "matches": [
+                    {"id": "vec-1"},
+                    {"id": "vec-2"},
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+
+    def test_get_trace_step_display_content_normalizes_http_json_aliases_for_preview_and_output(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-http-json-display-content-alias-meta",
+            seq=12,
+            type="action",
+            content="Tool done: Provider Search",
+            meta={
+                "tool": {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "status": "done",
+                    "execution_kind": "http_json",
+                    "effective_result_output_keys": [
+                        "hit_count",
+                        "request_id",
+                    ],
+                    "output_preview": {
+                        "documents_total": "unknown",
+                        "items": [
+                            {"id": "doc-1"},
+                            {"id": "doc-2"},
+                        ],
+                        "secret": "hidden",
+                    },
+                    "output": {
+                        "hit_count": "unknown",
+                        "matches": [
+                            {"id": "vec-1"},
+                            {"id": "vec-2"},
+                        ],
+                        "request_id": "req-display-matches-1",
+                        "secret": "hidden",
+                    },
+                }
+            },
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIn(
+            "Retrieved 2 hits (request id req-display-matches-1).",
+            content,
+        )
+        self.assertIn('Preview: {"documents_total":2}', content)
+        self.assertIn(
+            'Output: {"hit_count":2,"request_id":"req-display-matches-1"}',
+            content,
+        )
+        self.assertNotIn('"secret"', content)
+        self.assertNotIn('"documents_total":"unknown"', content)
+        self.assertNotIn('"hit_count":"unknown"', content)
+
+    def test_get_trace_step_display_content_redacts_raw_http_json_preview_without_projection_keys(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-http-json-display-content-safe-preview-meta",
+            seq=13,
+            type="action",
+            content="Tool done: Provider Status",
+            meta={
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "status": "done",
+                    "execution_kind": "http_json",
+                    "output_preview": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "hidden",
+                        "request_id": "Bearer secret-token",
+                        "nested": {"api_key": "hidden"},
+                    },
+                }
+            },
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIn("Preview:", content)
+        self.assertIn('"status":"ready"', content)
+        self.assertIn('"message":"gateway token=[redacted]"', content)
+        self.assertIn('"access_token":"[redacted]"', content)
+        self.assertIn('"nested":{"api_key":"[redacted]"}', content)
+        self.assertNotIn("Bearer", content)
+        self.assertNotIn("secret-token", content)
+        self.assertNotIn("hidden", content)
+
     def test_get_trace_step_markdown_meta_filters_json_string_safe_output(
         self,
     ) -> None:
@@ -14378,6 +14558,43 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
         self.assertNotIn("secret", markdown_meta["tool"]["output"])  # type: ignore[index]
+
+    def test_get_trace_step_markdown_meta_redacts_raw_http_json_preview_without_projection_keys(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-http-json-markdown-meta-safe-preview",
+            seq=10,
+            type="action",
+            content="Tool done: Provider Status",
+            meta={
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "status": "done",
+                    "execution_kind": "http_json",
+                    "output_preview": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "hidden",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        output = markdown_meta["tool"]["output"]  # type: ignore[index]
+        self.assertEqual(output["status"], "ready")  # type: ignore[index]
+        self.assertEqual(output["message"], "gateway token=[redacted]")  # type: ignore[index]
+        self.assertEqual(output["access_token"], "[redacted]")  # type: ignore[index]
+        self.assertNotIn("request_id", output)  # type: ignore[operator]
+        self.assertNotIn("hidden", json.dumps(output))
+        self.assertNotIn("Bearer", json.dumps(output))
 
     def test_get_trace_step_markdown_meta_filters_quoted_json_string_safe_output(
         self,
@@ -18401,6 +18618,151 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             markdown,
         )
 
+    def test_build_session_export_markdown_normalizes_http_json_aliases_for_real_tool_preview_excerpt(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-09T12:00:00",
+            session=session_routes_module.SessionResponse(
+                id="session-http-json-alias-preview",
+                title="HTTP JSON Alias Preview Session",
+                created_at="2026-07-09T11:59:00",
+                updated_at="2026-07-09T12:00:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-http-json-alias-preview",
+                    prompt="Search provider index with alias fields",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-09T11:59:30",
+                    updated_at="2026-07-09T12:00:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-http-json-alias",
+                            seq=10,
+                            type="action",
+                            title="Provider Search [retrieval]",
+                            content_excerpt='Provider Search: {"documents_total":"unknown","items":[{"id":"doc-1"},{"id":"doc-2"}],"request_id":"req-items-preview-1"}',
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "seq=10 · Provider Search [retrieval] · Retrieved 2 documents (request id req-items-preview-1).",
+            markdown,
+        )
+        self.assertNotIn("documents_total\":\"unknown", markdown)
+
+    def test_build_session_export_markdown_normalizes_http_json_aliases_for_explicit_preview_and_output(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-09T12:30:00",
+            session=session_routes_module.SessionResponse(
+                id="session-http-json-explicit-preview-alias",
+                title="HTTP JSON Explicit Preview Alias Session",
+                created_at="2026-07-09T12:29:00",
+                updated_at="2026-07-09T12:30:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-http-json-explicit-preview-alias",
+                    prompt="Search provider index with explicit preview and output",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-09T12:29:30",
+                    updated_at="2026-07-09T12:30:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-http-json-explicit-alias",
+                            seq=11,
+                            type="action",
+                            title="Provider Search [retrieval]",
+                            content_excerpt=(
+                                'Tool done: Provider Search Preview: {"documents_total":"unknown",'
+                                '"items":[{"id":"doc-1"},{"id":"doc-2"}],"secret":"hidden"} '
+                                'Output: {"hit_count":"unknown","matches":[{"id":"vec-1"},'
+                                '{"id":"vec-2"}],"request_id":"req-matches-preview-1",'
+                                '"secret":"hidden"}'
+                            ),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            'seq=11 · Provider Search [retrieval] · Retrieved 2 hits (request id req-matches-preview-1). '
+            'Preview: {"documents_total":2} Output: {"hit_count":2,"request_id":"req-matches-preview-1"}',
+            markdown,
+        )
+        self.assertNotIn('"secret"', markdown)
+        self.assertNotIn('"documents_total":"unknown"', markdown)
+        self.assertNotIn('"hit_count":"unknown"', markdown)
+
     def test_build_session_export_markdown_infers_calc_summary_from_structural_kind_preview_without_semantic_family(
         self,
     ) -> None:
@@ -18826,6 +19188,160 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Hosted Planner: {"steps":["Analyze request","Synthesize final answer"]}',
             markdown,
         )
+
+    def test_build_session_export_markdown_redacts_generic_http_json_preview_without_summary(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-10T11:00:00",
+            session=session_routes_module.SessionResponse(
+                id="session-generic-http-json-safe-preview",
+                title="Generic HTTP JSON Safe Preview Session",
+                created_at="2026-07-10T10:59:00",
+                updated_at="2026-07-10T11:00:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-generic-http-json-safe-preview",
+                    prompt="Check provider status",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-10T10:59:30",
+                    updated_at="2026-07-10T11:00:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-provider-status-safe",
+                            seq=13,
+                            type="action",
+                            title="Provider Status [provider_status]",
+                            content_excerpt=(
+                                'Provider Status: {"status":"ready",'
+                                '"message":"gateway token=hidden",'
+                                '"access_token":"hidden",'
+                                '"request_id":"Bearer secret-token"}'
+                            ),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn("seq=13 · Provider Status [provider_status] · Preview: ", markdown)
+        self.assertIn('"status":"ready"', markdown)
+        self.assertIn('"message":"gateway token=[redacted]"', markdown)
+        self.assertIn('"access_token":"[redacted]"', markdown)
+        self.assertNotIn("Provider Status: {", markdown)
+        self.assertNotIn("request_id", markdown)
+        self.assertNotIn("Bearer", markdown)
+        self.assertNotIn("secret-token", markdown)
+        self.assertNotIn("hidden", markdown)
+
+    def test_build_session_export_markdown_redacts_generic_http_json_explicit_preview_and_output_without_summary(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-10T11:30:00",
+            session=session_routes_module.SessionResponse(
+                id="session-generic-http-json-safe-explicit-preview",
+                title="Generic HTTP JSON Explicit Safe Preview Session",
+                created_at="2026-07-10T11:29:00",
+                updated_at="2026-07-10T11:30:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-generic-http-json-safe-explicit-preview",
+                    prompt="Check provider status",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-10T11:29:30",
+                    updated_at="2026-07-10T11:30:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-provider-status-safe-explicit",
+                            seq=14,
+                            type="action",
+                            title="Provider Status [provider_status]",
+                            content_excerpt=(
+                                'Tool done: Provider Status Preview: '
+                                '{"status":"ready","token":"hidden"} Output: '
+                                '{"status":"ready","message":"secret=hidden",'
+                                '"request_id":"Bearer secret-token"}'
+                            ),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            'seq=14 · Provider Status [provider_status] · Preview: {"status":"ready","token":"[redacted]"} Output: {"status":"ready","message":"secret=[redacted]"}',
+            markdown,
+        )
+        self.assertNotIn("Tool done: Provider Status", markdown)
+        self.assertNotIn("request_id", markdown)
+        self.assertNotIn("Bearer", markdown)
+        self.assertNotIn("secret-token", markdown)
+        self.assertNotIn("hidden", markdown)
 
     def test_build_session_export_payload_trusts_service_task_governance_shape(
         self,
@@ -19670,6 +20186,27 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result.content,
         )
 
+    def test_mock_llm_provider_generate_drops_unsafe_request_id_for_projected_calc_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Math: {"result": 7, "request_id": "Bearer secret-token", "tool_kind": "provider_calc"}'
+        )
+
+        self.assertIn(
+            "Summary: Calculated result = 7.",
+            result.content,
+        )
+        self.assertNotIn("request id Bearer", result.content)
+        self.assertNotIn("secret-token", result.content)
+        self.assertNotIn(
+            'Provider Math: {"result": 7, "request_id": "Bearer secret-token", "tool_kind": "provider_calc"}',
+            result.content,
+        )
+
     def test_mock_llm_provider_generate_infers_calc_summary_for_productized_calculator_label_without_semantic_hints(
         self,
     ) -> None:
@@ -19872,6 +20409,94 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Provider Status: {"status": "ready", "provider_source": "suite_a"}',
             result.content,
         )
+
+    def test_mock_llm_provider_generate_drops_unsafe_request_id_from_generic_structured_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Status: {"status": "ready", "request_id": "Bearer secret-token", "provider_source": "suite_a"}'
+        )
+
+        self.assertIn(
+            "Summary: Provider Status output - status=ready, provider_source=suite_a.",
+            result.content,
+        )
+        self.assertNotIn("Bearer", result.content)
+        self.assertNotIn("secret-token", result.content)
+        self.assertNotIn("request_id=Bearer", result.content)
+
+    def test_mock_llm_provider_generate_drops_sensitive_keys_from_generic_structured_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Status: {"status": "ready", "access_token": "hidden", "api_key": "sk-hidden", "provider_source": "suite_a"}'
+        )
+
+        self.assertIn(
+            "Summary: Provider Status output - status=ready, provider_source=suite_a.",
+            result.content,
+        )
+        self.assertNotIn("access_token", result.content)
+        self.assertNotIn("api_key", result.content)
+        self.assertNotIn("sk-hidden", result.content)
+        self.assertNotIn("hidden", result.content)
+
+    def test_mock_llm_provider_generate_redacts_sensitive_assignments_in_generic_structured_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Status: {"status": "ready", "message": "gateway token=hidden"}'
+        )
+
+        self.assertIn(
+            "Summary: Provider Status output - status=ready, message=gateway token=[redacted].",
+            result.content,
+        )
+        self.assertNotIn("token=hidden", result.content)
+        self.assertNotIn("hidden", result.content)
+
+    def test_mock_llm_provider_generate_redacts_sensitive_assignments_in_text_observation_summary(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            "Provider Status: upstream gateway token=hidden"
+        )
+
+        self.assertIn(
+            "Summary: upstream gateway token=[redacted]",
+            result.content,
+        )
+        self.assertNotIn("token=hidden", result.content)
+        self.assertNotIn("hidden", result.content)
+
+    def test_mock_llm_provider_generate_redacts_sensitive_assignments_in_tool_context_fallback(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            "unstructured upstream secret=hidden"
+        )
+
+        self.assertIn(
+            "Tool context: unstructured upstream secret=[redacted]",
+            result.content,
+        )
+        self.assertNotIn("secret=hidden", result.content)
+        self.assertNotIn("hidden", result.content)
 
     def test_openai_compatible_provider_generate_accepts_output_text_message_parts(
         self,
@@ -22160,6 +22785,1100 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "knowledge_base_id": "provider-kb",
                 "tool_kind": "provider_search",
             },
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_normalizes_http_json_documents_total_string(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "documents_total": "$.meta.total",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total"],
+                        "result_output_keys": ["documents_total", "request_id"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "meta": {
+                        "total": "2",
+                        "request_id": "req-doc-total-string-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["documents_total"], 2)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "request_id": "req-doc-total-string-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 documents (request id req-doc-total-string-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_normalizes_http_json_documents_total_decimal_string(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "documents_total": "$.meta.total",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total"],
+                        "result_output_keys": ["documents_total", "request_id"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "meta": {
+                        "total": "2.0",
+                        "request_id": "req-doc-total-decimal-string-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["documents_total"], 2)
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "request_id": "req-doc-total-decimal-string-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 documents (request id req-doc-total-decimal-string-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_normalizes_http_json_hit_count_whole_float(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "hit_count": "$.meta.hit_count",
+                                "knowledge_base_id": "$.meta.knowledge_base_id",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["hit_count", "knowledge_base_id"],
+                        "result_output_keys": [
+                            "hit_count",
+                            "knowledge_base_id",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "meta": {
+                        "hit_count": 2.0,
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-hit-count-float-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["hit_count"], 2)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-hit-count-float-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 hits (request id req-hit-count-float-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_documents_total_from_items_alias(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "items": "$.data.items",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total"],
+                        "result_output_keys": ["documents_total", "request_id"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "items": [
+                            {"title": "alpha"},
+                            {"title": "beta"},
+                        ]
+                    },
+                    "meta": {
+                        "request_id": "req-items-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["documents_total"], 2)
+        self.assertEqual(output["items"], [{"title": "alpha"}, {"title": "beta"}])
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "request_id": "req-items-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 documents (request id req-items-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_documents_total_from_items_when_documents_is_metadata(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "documents": "$.data.documents",
+                                "items": "$.data.items",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total"],
+                        "result_output_keys": ["documents_total", "request_id"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "documents": {"total": 10, "source": "metadata"},
+                        "items": [
+                            {"title": "alpha"},
+                            {"title": "beta"},
+                        ],
+                    },
+                    "meta": {
+                        "request_id": "req-items-meta-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["documents_total"], 2)
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "request_id": "req-items-meta-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 documents (request id req-items-meta-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_documents_total_from_items_when_total_is_invalid(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "documents_total": "$.meta.total",
+                                "items": "$.data.items",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total"],
+                        "result_output_keys": ["documents_total", "request_id"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "items": [
+                            {"title": "alpha"},
+                            {"title": "beta"},
+                        ],
+                    },
+                    "meta": {
+                        "total": "unknown",
+                        "request_id": "req-items-invalid-total-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["documents_total"], 2)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "request_id": "req-items-invalid-total-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 documents (request id req-items-invalid-total-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_hit_count_from_results_alias(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "results": "$.data.results",
+                                "knowledge_base_id": "$.meta.knowledge_base_id",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["hit_count", "knowledge_base_id"],
+                        "result_output_keys": [
+                            "hit_count",
+                            "knowledge_base_id",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "results": [
+                            {"title": "alpha"},
+                            {"title": "beta"},
+                            {"title": "gamma"},
+                        ]
+                    },
+                    "meta": {
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-results-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["hit_count"], 3)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 3,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 3,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-results-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 3 hits (request id req-results-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_hit_count_from_matches_alias(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "matches": "$.data.matches",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["hit_count"],
+                        "result_output_keys": ["hit_count", "request_id"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "matches": [
+                            {"id": "vec-1"},
+                            {"id": "vec-2"},
+                        ]
+                    },
+                    "meta": {
+                        "request_id": "req-matches-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["hit_count"], 2)
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "request_id": "req-matches-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 hits (request id req-matches-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_hit_count_from_matches_when_results_is_metadata(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "results": "$.data.results",
+                                "matches": "$.data.matches",
+                                "knowledge_base_id": "$.meta.knowledge_base_id",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["hit_count", "knowledge_base_id"],
+                        "result_output_keys": [
+                            "hit_count",
+                            "knowledge_base_id",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "results": {"total": 20, "source": "metadata"},
+                        "matches": [
+                            {"id": "vec-1"},
+                            {"id": "vec-2"},
+                        ],
+                    },
+                    "meta": {
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-matches-meta-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["hit_count"], 2)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-matches-meta-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 hits (request id req-matches-meta-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_hit_count_from_matches_when_count_is_invalid(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "hit_count": "$.meta.hit_count",
+                                "matches": "$.data.matches",
+                                "knowledge_base_id": "$.meta.knowledge_base_id",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["hit_count", "knowledge_base_id"],
+                        "result_output_keys": [
+                            "hit_count",
+                            "knowledge_base_id",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "matches": [
+                            {"id": "vec-1"},
+                            {"id": "vec-2"},
+                        ],
+                    },
+                    "meta": {
+                        "hit_count": -1,
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-matches-invalid-count-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["hit_count"], 2)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-matches-invalid-count-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 hits (request id req-matches-invalid-count-1).",
         )
 
     def test_build_tool_registry_extra_tools_from_settings_supports_http_json_execution_runtime_template_context(
@@ -36764,6 +38483,189 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Provider Search: Retrieved 2 documents (request id req-1).",
         )
 
+    def test_build_tool_result_helpers_normalize_http_json_items_alias_for_raw_output(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            runtime_semantic_kind="provider_search",
+            execution_kind="http_json",
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total", "request_id"),
+            runner=lambda *, tool_input, prompt, user_id: {
+                "items": [{"id": "doc-1"}, {"id": "doc-2"}],
+                "request_id": "req-items-raw-1",
+            },
+        )
+        output = {
+            "items": [{"id": "doc-1"}, {"id": "doc-2"}],
+            "request_id": "req-items-raw-1",
+        }
+
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "request_id": "req-items-raw-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Retrieved 2 documents (request id req-items-raw-1).",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Provider Search: Retrieved 2 documents (request id req-items-raw-1).",
+        )
+
+    def test_build_tool_result_helpers_normalize_http_json_matches_when_raw_count_is_invalid(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            runtime_semantic_kind="provider_search",
+            execution_kind="http_json",
+            result_preview_keys=("hit_count", "knowledge_base_id"),
+            result_output_keys=("hit_count", "knowledge_base_id", "request_id"),
+            runner=lambda *, tool_input, prompt, user_id: {
+                "hit_count": "unknown",
+                "matches": [{"id": "vec-1"}, {"id": "vec-2"}],
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-matches-raw-1",
+            },
+        )
+        output = {
+            "hit_count": "unknown",
+            "matches": [{"id": "vec-1"}, {"id": "vec-2"}],
+            "knowledge_base_id": "provider-kb",
+            "request_id": "req-matches-raw-1",
+        }
+
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-matches-raw-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Retrieved 2 hits (request id req-matches-raw-1).",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Provider Search: Retrieved 2 hits (request id req-matches-raw-1).",
+        )
+
+    def test_build_tool_result_helpers_do_not_infer_http_json_aliases_for_non_http_json_raw_output(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            runtime_semantic_kind="provider_search",
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total", "request_id"),
+            runner=lambda *, tool_input, prompt, user_id: {
+                "items": [{"id": "doc-1"}, {"id": "doc-2"}],
+                "request_id": "req-items-raw-1",
+            },
+        )
+        output = {
+            "items": [{"id": "doc-1"}, {"id": "doc-2"}],
+            "request_id": "req-items-raw-1",
+        }
+
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {},
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "request_id": "req-items-raw-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registration=registration,
+            ),
+            "Provider Search output - request_id=req-items-raw-1.",
+        )
+
     def test_build_tool_result_helpers_preserve_request_id_for_runtime_override_real_retrieval_hit_projection(
         self,
     ) -> None:
@@ -36924,6 +38826,57 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 registration=registration,
             ),
             "Provider Math: Calculated result = 7 (request id req-calc-1).",
+        )
+
+    def test_build_tool_result_helpers_drop_unsafe_request_id_for_http_json_provider_calc(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_math",
+            kind="provider_calc",
+            label="Provider Math",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "result": 7,
+                "request_id": "Bearer secret-token",
+                "tool_kind": "provider_calc",
+            },
+        )
+        output = {
+            "result": 7,
+            "request_id": "Bearer secret-token",
+            "tool_kind": "provider_calc",
+        }
+
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_math",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "result": 7,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_math",
+                output=output,
+                registration=registration,
+            ),
+            "Calculated result = 7.",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_math",
+                output=output,
+                registration=registration,
+            ),
+            "Provider Math: Calculated result = 7.",
         )
 
     def test_build_tool_start_and_error_payload_keep_current_shape(self) -> None:
@@ -38562,6 +40515,99 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Provider Search: Retrieved 2 hits (request id req-1).",
         )
 
+    def test_build_tool_observation_entry_normalizes_numeric_string_counts_from_step_meta_output(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=None,
+                step_tool_meta={
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "kind": "provider_retrieval",
+                    "semantic_kind": "provider_search",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "hit_count",
+                        "knowledge_base_id",
+                        "request_id",
+                    ],
+                    "output": {
+                        "hit_count": "2",
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-string-count-1",
+                    },
+                    "output_preview": {
+                        "hit_count": "2",
+                        "knowledge_base_id": "provider-kb",
+                    },
+                },
+            ),
+            "Provider Search: Retrieved 2 hits (request id req-string-count-1).",
+        )
+
+    def test_build_tool_observation_entry_normalizes_http_json_aliases_from_step_meta_output_without_registration(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=None,
+                step_tool_meta={
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "kind": "provider_retrieval",
+                    "semantic_kind": "provider_search",
+                    "semantic_family": "knowledge_retrieval",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "effective_result_output_keys": [
+                        "hit_count",
+                        "knowledge_base_id",
+                        "request_id",
+                    ],
+                    "output": {
+                        "hit_count": "unknown",
+                        "matches": [
+                            {"id": "vec-1"},
+                            {"id": "vec-2"},
+                        ],
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-step-matches-1",
+                    },
+                },
+            ),
+            "Provider Search: Retrieved 2 hits (request id req-step-matches-1).",
+        )
+
+    def test_build_tool_observation_entry_normalizes_http_json_aliases_from_step_meta_preview_without_registration(
+        self,
+    ) -> None:
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="provider_search",
+                output=None,
+                step_tool_meta={
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "kind": "provider_retrieval",
+                    "semantic_kind": "provider_search",
+                    "semantic_family": "knowledge_retrieval",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "output_preview": {
+                        "items": [
+                            {"id": "doc-1"},
+                            {"id": "doc-2"},
+                        ],
+                        "request_id": "req-step-items-1",
+                    },
+                },
+            ),
+            "Provider Search: Retrieved 2 documents (request id req-step-items-1).",
+        )
+
     def test_build_tool_observation_entry_does_not_imply_local_kb_for_productized_retrieval_label_without_registration(
         self,
     ) -> None:
@@ -38665,6 +40711,94 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
             'Custom Lookup: {"tool_kind": "custom_lookup", "hit_count": 1}',
         )
+
+    def test_build_tool_observation_entry_redacts_http_json_step_meta_preview_fallback(
+        self,
+    ) -> None:
+        observation = build_tool_observation_entry(
+            name="provider_status",
+            output=None,
+            step_tool_meta={
+                "name": "provider_status",
+                "label": "Provider Status",
+                "status": "done",
+                "execution_kind": "http_json",
+                "output_preview": {
+                    "status": "ready",
+                    "access_token": "hidden",
+                    "message": "gateway token=hidden",
+                    "request_id": "Bearer secret-token",
+                },
+            },
+        )
+
+        self.assertEqual(
+            observation,
+            'Provider Status: {"status": "ready", "access_token": "[redacted]", "message": "gateway token=[redacted]"}',
+        )
+        self.assertNotIn("Bearer", observation)
+        self.assertNotIn("secret-token", observation)
+        self.assertNotIn("hidden", observation)
+
+    def test_build_tool_observation_entry_redacts_http_json_direct_output_fallback(
+        self,
+    ) -> None:
+        observation = build_tool_observation_entry(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "api_key": "sk-hidden",
+                "message": "gateway secret=hidden",
+                "request_id": "Bearer secret-token",
+            },
+            step_tool_meta={
+                "name": "provider_status",
+                "label": "Provider Status",
+                "status": "done",
+                "execution_kind": "http_json",
+            },
+        )
+
+        self.assertEqual(
+            observation,
+            'Provider Status: {"status": "ready", "api_key": "[redacted]", "message": "gateway secret=[redacted]"}',
+        )
+        self.assertNotIn("Bearer", observation)
+        self.assertNotIn("secret-token", observation)
+        self.assertNotIn("sk-hidden", observation)
+        self.assertNotIn("hidden", observation)
+
+    def test_build_tool_result_summary_redacts_generic_payload_sensitive_fields(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            result_output_keys=("status", "message", "access_token"),
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        summary = build_tool_result_summary(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "message": "gateway token=hidden",
+                "access_token": "hidden",
+            },
+            registration=registration,
+        )
+
+        self.assertEqual(
+            summary,
+            "Provider Status output - status=ready, message=gateway token=[redacted].",
+        )
+        self.assertNotIn("access_token", summary or "")
+        self.assertNotIn("hidden", summary or "")
 
     def test_build_tool_observation_entry_infers_summary_from_json_string_step_meta_preview_without_output(
         self,
@@ -38925,6 +41059,43 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'Calculated result = 7 (request id req-calc-1).\nPreview: {"result":7}\nOutput: {"result":7,"request_id":"req-calc-1"}',
         )
         self.assertNotIn("Tool done: Provider Math", content)
+
+    def test_get_trace_step_display_content_drops_unsafe_request_id_from_old_safe_output(
+        self,
+    ) -> None:
+        step = SimpleNamespace(
+            id="step-provider-math-unsafe-request-id",
+            seq=7,
+            type="action",
+            content="Tool done: Provider Math",
+            meta=SimpleNamespace(
+                tool={
+                    "name": "provider_math",
+                    "label": "Provider Math",
+                    "kind": "provider_calc",
+                    "semantic_kind": "local_calculator",
+                    "status": "done",
+                    "effective_result_preview_keys": ["result"],
+                    "effective_result_output_keys": ["result", "request_id"],
+                    "output_preview": {
+                        "result": 7,
+                    },
+                    "output": {
+                        "result": 7,
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            ),
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(step)
+
+        self.assertEqual(
+            content,
+            'Calculated result = 7.\nPreview: {"result":7}',
+        )
+        self.assertNotIn("Bearer", content)
+        self.assertNotIn("secret-token", content)
 
     def test_get_trace_step_display_content_appends_tool_registry_diagnostics_entries(
         self,
@@ -40373,6 +42544,9 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     {"snippet": "alpha snippet"},
                     {"content": "beta content"},
                     {"text": "gamma text"},
+                    {"excerpt": "delta excerpt"},
+                    {"summary": "epsilon summary"},
+                    {"description": "zeta description"},
                     "delta string",
                     {"title": "ignored title only"},
                 ],
@@ -40394,9 +42568,206 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "alpha snippet",
                     "beta content",
                     "gamma text",
+                    "delta excerpt",
+                    "epsilon summary",
+                    "zeta description",
                     "delta string",
                 ],
                 "knowledge_base_id": "demo",
+            },
+        )
+
+    def test_build_tool_rag_followup_extracts_chunks_from_http_json_list_aliases_for_real_tool(
+        self,
+    ) -> None:
+        for alias_name in ("items", "results", "matches"):
+            with self.subTest(alias_name=alias_name):
+                followup = build_tool_rag_followup(
+                    task_id="task-1",
+                    step_id="rag-1",
+                    seq=4,
+                    model="mock-gpt",
+                    tool_name="provider_search",
+                    tool_kind="provider_search",
+                    tool_semantic_family="knowledge_retrieval",
+                    display_name="Provider Search",
+                    output={
+                        alias_name: [
+                            {"snippet": "alpha snippet"},
+                            {"content": "beta content"},
+                            {"excerpt": "gamma excerpt"},
+                            {"summary": "delta summary"},
+                            "gamma string",
+                            {"title": "ignored title only"},
+                        ],
+                        "knowledge_base_id": "provider-kb",
+                    },
+                    token_count=2,
+                )
+
+                self.assertIsNotNone(followup)
+                assert followup is not None
+                self.assertEqual(
+                    followup["step"]["content"],
+                    "Provider Search returned snippets.",
+                )
+                self.assertEqual(
+                    followup["step"]["meta"]["rag"],
+                    {
+                        "chunks": [
+                            "alpha snippet",
+                            "beta content",
+                            "gamma excerpt",
+                            "delta summary",
+                            "gamma string",
+                        ],
+                        "knowledge_base_id": "provider-kb",
+                    },
+                )
+
+    def test_build_tool_rag_followup_extracts_chunks_from_http_json_summary_fields_for_real_tool(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "items": [
+                    {"excerpt": "alpha excerpt"},
+                    {"summary": "beta summary"},
+                    {"description": "gamma description"},
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"]["meta"]["rag"],
+            {
+                "chunks": [
+                    "alpha excerpt",
+                    "beta summary",
+                    "gamma description",
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+
+    def test_build_tool_rag_followup_extracts_chunks_from_nested_http_json_match_fields_for_real_tool(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "matches": [
+                    {"metadata": {"text": "alpha metadata text"}},
+                    {"metadata": {"summary": "beta metadata summary"}},
+                    {"document": {"content": "gamma document content"}},
+                    {"metadata": {"title": "ignored title only"}},
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"]["meta"]["rag"],
+            {
+                "chunks": [
+                    "alpha metadata text",
+                    "beta metadata summary",
+                    "gamma document content",
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+
+    def test_build_tool_rag_followup_extracts_chunks_from_deep_nested_http_json_match_fields_for_real_tool(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "matches": [
+                    {"metadata": {"chunk": {"text": "alpha nested chunk text"}}},
+                    {"payload": {"document": {"content": "beta payload document"}}},
+                    {"node": {"metadata": {"summary": "gamma node summary"}}},
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"]["meta"]["rag"],
+            {
+                "chunks": [
+                    "alpha nested chunk text",
+                    "beta payload document",
+                    "gamma node summary",
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+
+    def test_build_tool_rag_followup_falls_back_to_http_json_alias_when_documents_have_no_snippets_for_real_tool(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "documents": [
+                    {"id": "doc-1", "title": "Metadata only"},
+                ],
+                "matches": [
+                    {"metadata": {"text": "fallback match text"}},
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"]["meta"]["rag"],
+            {
+                "chunks": ["fallback match text"],
+                "knowledge_base_id": "provider-kb",
             },
         )
 
@@ -43595,6 +45966,357 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_run_tool_canonical_override_inherits_http_json_header_request_id_for_success_output(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-header-1",
+            }
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            output,
+            {
+                "result": 7,
+                "request_id": "req-header-1",
+                "tool_kind": "provider_calc",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="calc_eval",
+                output=output,
+                registration=registry_provider.load_tool_registry()["calc_eval"],
+            ),
+            "Calculated result = 7 (request id req-header-1).",
+        )
+
+    def test_run_tool_canonical_override_does_not_inherit_sensitive_http_json_header_request_id_for_success_output(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-secret=hidden",
+            }
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            output,
+            {
+                "result": 7,
+                "tool_kind": "provider_calc",
+            },
+        )
+
+    def test_run_tool_canonical_override_prefers_safe_http_json_header_request_id_over_sensitive_body_request_id(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                    "request_id": "$.data.request_id",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-header-safe-1",
+            }
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7,"request_id":"token=hidden"}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            output,
+            {
+                "result": 7,
+                "request_id": "req-header-safe-1",
+                "tool_kind": "provider_calc",
+            },
+        )
+        self.assertNotIn("token=", json.dumps(output))
+
+    def test_run_tool_canonical_override_drops_sensitive_http_json_body_request_id_without_safe_header(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                    "request_id": "$.data.request_id",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            headers = {
+                "Content-Type": "application/json",
+            }
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7,"request_id":"api_key=hidden"}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            output,
+            {
+                "result": 7,
+                "tool_kind": "provider_calc",
+            },
+        )
+        self.assertNotIn("api_key", json.dumps(output))
+
+    def test_run_tool_canonical_override_rejects_bearer_like_http_json_body_request_id(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                    "request_id": "$.data.request_id",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-header-safe-2",
+            }
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7,"request_id":"Bearer secret-token"}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            output,
+            {
+                "result": 7,
+                "request_id": "req-header-safe-2",
+                "tool_kind": "provider_calc",
+            },
+        )
+        self.assertNotIn("Bearer", json.dumps(output))
+
     def test_run_tool_canonical_override_accepts_http_json_problem_json_content_type(
         self,
     ) -> None:
@@ -45290,6 +48012,61 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("token", message)
         self.assertNotIn("hidden", message)
 
+    def test_run_tool_canonical_override_reports_unknown_charset_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json; charset=x-upstream-private",
+                "X-Request-ID": "req-charset-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+                "Location": "https://login.example/callback?token=hidden",
+            }
+
+            def read(self) -> bytes:
+                return b'{"message":"gateway token=hidden"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response charset", message)
+        self.assertIn("request id: req-charset-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertIn("gateway", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("Location", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
     def test_run_tool_canonical_override_reports_http_json_declared_charset_decode_error(
         self,
     ) -> None:
@@ -45354,6 +48131,57 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertFalse(raised.exception.fatal)
         self.assertIn("invalid JSON response", message)
         self.assertIn("invalid utf-16 response body", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_charset_decode_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json; charset=utf-16",
+                "X-Request-ID": "req-decode-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+            }
+
+            def read(self) -> bytes:
+                return b"\xff<html>secret=hidden</html>"
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response", message)
+        self.assertIn("invalid utf-16 response body", message)
+        self.assertIn("request id: req-decode-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
         self.assertIn("[redacted]", message)
         self.assertNotIn("secret", message)
         self.assertNotIn("hidden", message)
@@ -46956,6 +49784,145 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(output["result"], 787)
 
+    def test_run_tool_canonical_override_rejects_http_json_malformed_charset_content_type_header(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {"Content-Type": "application/json; charset; token=hidden"}
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":792},"message":"token=body-secret"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response charset", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token=hidden", message)
+        self.assertNotIn("token=body-secret", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_malformed_charset_duplicate_content_type_header(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHeaderMapping:
+            def get_all(self, name: object, default: object = None) -> object:
+                if isinstance(name, str) and name.lower() == "content-type":
+                    return [
+                        "application/json; charset; api_key=hidden",
+                        "application/json; charset=utf-8",
+                    ]
+                return default
+
+        class FakeHttpResponse:
+            status = 200
+            headers = FakeHeaderMapping()
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":793},"message":"api_key=body-secret"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response charset", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("api_key=hidden", message)
+        self.assertNotIn("api_key=body-secret", message)
+
     def test_run_tool_canonical_override_ignores_http_json_quoted_profile_charset_parameter(
         self,
     ) -> None:
@@ -47019,6 +49986,76 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
 
         self.assertEqual(output["result"], 788)
+
+    def test_run_tool_canonical_override_rejects_http_json_unclosed_quote_content_type_header(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": (
+                    'application/json; profile="demo, text/html; token=hidden'
+                )
+            }
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":790},"message":"token=body-secret"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response content-type", message)
+        self.assertIn("application/json; profile=\"demo, text/html", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token=hidden", message)
+        self.assertNotIn("token=body-secret", message)
 
     def test_run_tool_canonical_override_accepts_http_json_quoted_semicolon_duplicate_content_type_header(
         self,
@@ -47087,6 +50124,80 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
 
         self.assertEqual(output["result"], 789)
+
+    def test_run_tool_canonical_override_rejects_http_json_unclosed_quote_duplicate_content_type_header(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHeaderMapping:
+            def get_all(self, name: object, default: object = None) -> object:
+                if isinstance(name, str) and name.lower() == "content-type":
+                    return [
+                        'application/problem+json; profile="a;b,c',
+                        "application/json; charset=utf-8",
+                    ]
+                return default
+
+        class FakeHttpResponse:
+            status = 200
+            headers = FakeHeaderMapping()
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":791},"message":"api_key=body-secret"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response content-type", message)
+        self.assertIn('application/problem+json; profile="a;b,c', message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("api_key=body-secret", message)
 
     def test_run_tool_canonical_override_accepts_http_json_string_response_body_from_adapter(
         self,
@@ -47324,6 +50435,57 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("transport error", message)
         self.assertIn("response body reader is unavailable", message)
 
+    def test_run_tool_canonical_override_reports_missing_response_reader_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-reader-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+                "Location": "https://login.example/callback?token=hidden",
+            }
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("transport error", message)
+        self.assertIn("response body reader is unavailable", message)
+        self.assertIn("request id: req-reader-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertNotIn("Location", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
     def test_run_tool_canonical_override_reports_http_json_response_read_error_safely(
         self,
     ) -> None:
@@ -47387,6 +50549,108 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("response read failed", message)
         self.assertIn("[redacted]", message)
         self.assertNotIn("token", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_response_read_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-read-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+            }
+
+            def read(self) -> bytes:
+                raise RuntimeError("read failed token=hidden")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("transport error", message)
+        self.assertIn("response read failed", message)
+        self.assertIn("request id: req-read-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_response_body_type_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-body-type-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+            }
+
+            def read(self) -> None:
+                return None
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("transport error", message)
+        self.assertIn("response body must be bytes or text", message)
+        self.assertIn("request id: req-body-type-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertNotIn("secret", message)
         self.assertNotIn("hidden", message)
 
     def test_run_tool_canonical_override_reports_http_json_response_enter_error_safely(
@@ -48421,6 +51685,267 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("redirected response url does not match request url", message)
         self.assertNotIn("login.example", message)
         self.assertNotIn("token", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_redirected_response_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-redirect-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+                "Location": "https://login.example/callback?token=hidden",
+            }
+
+            def geturl(self) -> str:
+                return "https://login.example/callback?token=hidden"
+
+            def read(self) -> bytes:
+                return b'{"data":{"value":7}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("redirected response url does not match request url", message)
+        self.assertIn("request id: req-redirect-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertNotIn("Location", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_redirected_response_url_before_body_read_error(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data",
+                                "result_fields": {
+                                    "result": "$.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def geturl(self) -> str:
+                return "https://login.example/callback?token=hidden"
+
+            def getheader(self, name: str, default: object = None) -> object:
+                return "application/json" if name.lower() == "content-type" else default
+
+            def read(self) -> bytes:
+                raise RuntimeError("login body read failed secret=hidden")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("redirected response url does not match request url", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("body read failed", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_redirect_header_hints_before_body_read_error(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-redirect-read-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+            }
+
+            def geturl(self) -> str:
+                return "https://login.example/callback?token=hidden"
+
+            def read(self) -> bytes:
+                raise RuntimeError("login body read failed secret=hidden")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("redirected response url does not match request url", message)
+        self.assertIn("request id: req-redirect-read-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("body read failed", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_http_json_redirected_response_url_before_bad_content_encoding(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data",
+                                "result_fields": {
+                                    "result": "$.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+
+            def geturl(self) -> str:
+                return "https://login.example/callback?token=hidden"
+
+            def getheader(self, name: str, default: object = None) -> object:
+                if name.lower() == "content-type":
+                    return "application/json"
+                if name.lower() == "content-encoding":
+                    return "gzip"
+                return default
+
+            def read(self) -> bytes:
+                return b"not gzip secret=hidden"
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("redirected response url does not match request url", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("invalid gzip response body", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
         self.assertNotIn("hidden", message)
 
     def test_run_tool_canonical_override_rejects_http_json_bytes_redirected_response_url_before_mapping(
@@ -49572,6 +53097,107 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(output, {"value": "token=[redacted]", "tool_kind": "provider_calc"})
         self.assertNotIn("hidden", json.dumps(output))
+
+    def test_build_tool_result_output_redacts_raw_http_json_helper_output(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        output = build_tool_result_output(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "access_token": "hidden",
+                "message": "upstream token=hidden",
+                "request_id": "Bearer secret-token",
+                "nested": {"api_key": "hidden"},
+            },
+            registration=registration,
+        )
+
+        output_json = json.dumps(output)
+        self.assertEqual(output["status"], "ready")
+        self.assertEqual(output["access_token"], "[redacted]")
+        self.assertEqual(output["message"], "upstream token=[redacted]")
+        self.assertEqual(output["nested"], {"api_key": "[redacted]"})
+        self.assertNotIn("request_id", output)
+        self.assertNotIn("hidden", output_json)
+        self.assertNotIn("Bearer", output_json)
+        self.assertNotIn("secret-token", output_json)
+
+    def test_build_tool_result_preview_redacts_raw_http_json_helper_output(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        preview = build_tool_result_preview(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "message": "gateway secret=hidden",
+                "nested": {"password": "hidden"},
+            },
+            registration=registration,
+        )
+
+        self.assertIsNotNone(preview)
+        assert preview is not None
+        preview_json = json.dumps(preview)
+        self.assertEqual(preview["status"], "ready")
+        self.assertEqual(preview["message"], "gateway secret=[redacted]")
+        self.assertEqual(preview["nested"], {"password": "[redacted]"})
+        self.assertNotIn("hidden", preview_json)
+
+    def test_build_tool_result_summary_redacts_raw_http_json_generic_payload(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            result_output_keys=("status", "message", "request_id"),
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        summary = build_tool_result_summary(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "message": "gateway token=hidden",
+                "request_id": "Bearer secret-token",
+            },
+            registration=registration,
+        )
+
+        self.assertEqual(
+            summary,
+            "Provider Status output - status=ready, message=gateway token=[redacted].",
+        )
 
     def test_run_tool_canonical_override_rejects_unknown_execution_kind_without_fallback(
         self,
@@ -51048,6 +54674,103 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("secret", message)
         self.assertNotIn("hidden", message)
 
+    def test_run_tool_canonical_override_reports_http_json_http_error_retry_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            def raise_http_error(request, timeout=0):
+                del request, timeout
+                raise tool_runtime_module.HTTPError(  # type: ignore[attr-defined]
+                    "https://provider.example/calc",
+                    429,
+                    "Too Many Requests",
+                    hdrs={
+                        "Retry-After": "30",
+                        "X-Request-ID": "req-upstream-1",
+                        "X-Correlation-ID": "corr-secret=hidden",
+                        "X-Ignored-Secret": "secret=hidden",
+                    },
+                    fp=io.BytesIO(b'{"message":"rate limited token=hidden"}'),
+                )
+
+            tool_runtime_module.urlopen = raise_http_error  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 429", message)
+        self.assertIn("retry-after: 30", message)
+        self.assertIn("request id: req-upstream-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertIn("rate limited", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("X-Ignored-Secret", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret=hidden", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_skips_unsafe_http_json_request_id_header_hint(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            def raise_http_error(request, timeout=0):
+                del request, timeout
+                raise tool_runtime_module.HTTPError(  # type: ignore[attr-defined]
+                    "https://provider.example/calc",
+                    429,
+                    "Too Many Requests",
+                    hdrs={
+                        "Retry-After": "30",
+                        "X-Request-ID": "Bearer secret-token",
+                    },
+                    fp=io.BytesIO(b'{"message":"rate limited"}'),
+                )
+
+            tool_runtime_module.urlopen = raise_http_error  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 429", message)
+        self.assertIn("retry-after: 30", message)
+        self.assertNotIn("request id:", message)
+        self.assertNotIn("Bearer", message)
+        self.assertNotIn("secret-token", message)
+
     def test_run_tool_canonical_override_reports_non_2xx_body_with_declared_charset(
         self,
     ) -> None:
@@ -51101,6 +54824,63 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("[redacted]", message)
         self.assertNotIn("token", message)
         self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_non_2xx_http_json_retry_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 503
+            reason = "Service Unavailable"
+            headers = {
+                "Retry-After": "120",
+                "X-Request-ID": "req-adapter-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+                "X-Ignored-Secret": "secret=hidden",
+                "Content-Type": "application/json",
+            }
+
+            def read(self) -> bytes:
+                return b'{"message":"maintenance token=hidden"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 503", message)
+        self.assertIn("retry-after: 120", message)
+        self.assertIn("request id: req-adapter-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertIn("maintenance", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("X-Ignored-Secret", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret=hidden", message)
         self.assertNotIn("hidden", message)
 
     def test_run_tool_canonical_override_reports_invalid_status_body_with_declared_charset(
@@ -51205,6 +54985,61 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("secret", message)
         self.assertNotIn("hidden", message)
 
+    def test_run_tool_canonical_override_reports_invalid_content_type_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            reason = "OK"
+            headers = {
+                "Content-Type": "text/html; charset=utf-8",
+                "X-Request-ID": "req-html-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+                "Location": "https://login.example/callback?token=hidden",
+            }
+
+            def read(self) -> bytes:
+                return b"<html>login expired token=hidden</html>"
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response content-type", message)
+        self.assertIn("request id: req-html-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertIn("login expired", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("Location", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("hidden", message)
+
     def test_run_tool_canonical_override_reports_invalid_json_body_with_declared_charset(
         self,
     ) -> None:
@@ -51251,6 +55086,58 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("login expired", message)
         self.assertIn("[redacted]", message)
         self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_invalid_json_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            reason = "OK"
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-json-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+            }
+
+            def read(self) -> bytes:
+                return b'{"message":"login expired token=hidden"'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("invalid JSON response", message)
+        self.assertIn("request id: req-json-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertIn("login expired", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("token", message)
         self.assertNotIn("hidden", message)
 
     def test_run_tool_canonical_override_reports_unsupported_encoding_body_with_declared_charset(
@@ -51306,6 +55193,60 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("[redacted]", message)
         self.assertNotIn("token", message)
         self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_success_encoding_error_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class FakeHttpResponse:
+            status = 200
+            reason = "OK"
+            headers = {
+                "Content-Encoding": "br",
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-encoding-1",
+                "Retry-After": "15",
+            }
+
+            def read(self) -> bytes:
+                return b'{"message":"gateway token=hidden"}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("unsupported response content-encoding: br", message)
+        self.assertIn("retry-after: 15", message)
+        self.assertIn("request id: req-encoding-1", message)
+        self.assertIn("gateway", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("transport error", message)
+        self.assertNotIn("token", message)
         self.assertNotIn("hidden", message)
 
     def test_run_tool_canonical_override_reports_raw_deflate_http_error_body(
@@ -52544,6 +56485,49 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("token", joined_diagnostics)
         self.assertNotIn("hidden", joined_diagnostics)
 
+    def test_tool_registry_execution_diagnostics_reject_http_json_body_malformed_content_type_charset(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": (
+                                        "application/json; charset; token=hidden"
+                                    ),
+                                },
+                                "json_body": {
+                                    "query": "$query",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Content-Type charset must be utf-8 when json_body is defined: application/json; charset; [redacted]",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
     def test_tool_registry_execution_diagnostics_accept_http_json_body_duplicate_utf8_content_type_charset(
         self,
     ) -> None:
@@ -52615,6 +56599,50 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertEqual(diagnostics["invalid_tool_executions"], ())
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_content_type_unclosed_quote_parameter(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": (
+                                        'application/json; profile="demo;'
+                                        'charset=latin-1; token=hidden'
+                                    ),
+                                },
+                                "json_body": {
+                                    "query": "$query",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Content-Type must use balanced quoted parameters: application/json; profile=\"demo;charset=latin-1; [redacted]",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
 
     def test_tool_registry_execution_diagnostics_reject_http_json_non_json_accept_header(
         self,
@@ -52690,6 +56718,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("token", joined_diagnostics)
         self.assertNotIn("hidden", joined_diagnostics)
 
+    def test_tool_registry_execution_diagnostics_reject_http_json_zero_quality_accept_masked_by_wildcard(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": (
+                                        "application/json; q=0; token=hidden, */*"
+                                    ),
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Accept must allow application/json or a +json media type: application/json; q=0; [redacted], */*",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
     def test_tool_registry_execution_diagnostics_reject_http_json_invalid_quality_accept_header(
         self,
     ) -> None:
@@ -52730,6 +56797,154 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("token", joined_diagnostics)
         self.assertNotIn("hidden", joined_diagnostics)
 
+    def test_tool_registry_execution_diagnostics_reject_http_json_malformed_quality_accept_header(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": (
+                                        "application/json; q; token=hidden, */*"
+                                    ),
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Accept must allow application/json or a +json media type: application/json; q; [redacted], */*",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_invalid_quality_accept_masked_by_wildcard(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": (
+                                        "application/json; q=nan; "
+                                        "token=hidden, */*"
+                                    ),
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Accept must allow application/json or a +json media type: application/json; q=nan; [redacted], */*",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_conflicting_quality_accept_header(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": (
+                                        "application/json; q=1; q=0; "
+                                        "token=hidden, text/html"
+                                    ),
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Accept must allow application/json or a +json media type: application/json; q=1; q=0; [redacted], text/html",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
+
+    def test_tool_registry_execution_diagnostics_accept_http_json_duplicate_valid_quality_accept_header(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": "application/json; q=1; q=0.7",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(diagnostics["invalid_tool_executions"], ())
+
     def test_tool_registry_execution_diagnostics_accept_http_json_quoted_accept_quality_parameter(
         self,
     ) -> None:
@@ -52761,6 +56976,46 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertEqual(diagnostics["invalid_tool_executions"], ())
+
+    def test_tool_registry_execution_diagnostics_reject_http_json_accept_unclosed_quote_parameter(
+        self,
+    ) -> None:
+        diagnostics = build_tool_registry_settings_execution_diagnostics(
+            settings=SimpleNamespace(
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/search",
+                                "headers": {
+                                    "Accept": (
+                                        'application/json; profile="demo;'
+                                        'q=0; token=hidden, */*'
+                                    ),
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        self.assertEqual(
+            diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: http_json execution headers.Accept must use balanced quoted parameters: application/json; profile=\"demo;q=0; [redacted], */*",
+            ),
+        )
+        joined_diagnostics = "\n".join(diagnostics["invalid_tool_executions"])
+        self.assertNotIn("token", joined_diagnostics)
+        self.assertNotIn("hidden", joined_diagnostics)
 
     def test_tool_registry_execution_diagnostics_reject_http_json_body_non_finite_values(
         self,
@@ -53248,6 +57503,73 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("secret", message)
         self.assertNotIn("hidden", message)
 
+    def test_run_tool_canonical_override_rejects_rendered_http_json_body_malformed_content_type_charset_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": "$content_type",
+                                },
+                                "json_body": {
+                                    "expression": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("malformed content-type charset must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "content_type": "application/json; charset; secret=hidden",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Content-Type charset must be utf-8", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
     def test_run_tool_canonical_override_accepts_rendered_http_json_body_duplicate_utf8_content_type_charset(
         self,
     ) -> None:
@@ -53397,6 +57719,76 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             'application/problem+json; profile="demo;charset=latin-1"',
         )
 
+    def test_run_tool_canonical_override_rejects_rendered_http_json_content_type_unclosed_quote_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "method": "POST",
+                                "headers": {
+                                    "Content-Type": "$content_type",
+                                },
+                                "json_body": {
+                                    "expression": "$expression",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("unclosed content-type quote must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "content_type": (
+                            'application/json; profile="demo;'
+                            "charset=latin-1; secret=hidden"
+                        ),
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Content-Type must use balanced quoted parameters", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
     def test_run_tool_canonical_override_rejects_rendered_http_json_non_json_accept_without_request(
         self,
     ) -> None:
@@ -53523,6 +57915,69 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("secret", message)
         self.assertNotIn("hidden", message)
 
+    def test_run_tool_canonical_override_rejects_rendered_http_json_zero_quality_accept_masked_by_wildcard_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "$accept",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered q=0 accept must fail before wildcard request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "accept": "application/json; q=0; secret=hidden, */*",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Accept must allow application/json", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
     def test_run_tool_canonical_override_rejects_rendered_http_json_invalid_quality_accept_without_request(
         self,
     ) -> None:
@@ -53585,6 +58040,265 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("[redacted]", message)
         self.assertNotIn("secret", message)
         self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_malformed_quality_accept_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "$accept",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered malformed q accept must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "accept": "application/json; q; secret=hidden, */*",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Accept must allow application/json", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_invalid_quality_accept_masked_by_wildcard_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "$accept",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered invalid q accept must fail before wildcard request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "accept": "application/json; q=nan; secret=hidden, */*",
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Accept must allow application/json", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_conflicting_quality_accept_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "$accept",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("rendered conflicting q accept must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "accept": (
+                            "application/json; q=1; q=0; secret=hidden, "
+                            "text/html"
+                        ),
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Accept must allow application/json", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_accepts_rendered_http_json_duplicate_valid_quality_accept_header(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "$accept",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return b'{"data":{"value":7}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or FakeHttpResponse()
+            )
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={
+                    "expression": "1+2*3",
+                    "accept": "application/json; q=1; q=0.7",
+                },
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 7)
+        self.assertEqual(len(urlopen_calls), 1)
 
     def test_run_tool_canonical_override_accepts_rendered_http_json_quoted_accept_quality_parameter(
         self,
@@ -53656,6 +58370,72 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             urlopen_calls[0].headers["Accept"],
             'application/json; profile="demo;q=0", text/html',
         )
+
+    def test_run_tool_canonical_override_rejects_rendered_http_json_accept_unclosed_quote_without_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "headers": {
+                                    "Accept": "$accept",
+                                },
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or self.fail("unclosed accept quote must fail before request")
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={
+                        "expression": "1+2*3",
+                        "accept": (
+                            'application/json; profile="demo;'
+                            "q=0; secret=hidden, */*"
+                        ),
+                    },
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertEqual(urlopen_calls, [])
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("headers.Accept must use balanced quoted parameters", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
 
     def test_run_tool_canonical_override_rejects_http_json_duplicate_header_names_without_request(
         self,
@@ -54744,6 +59524,232 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("response_path", str(raised.exception))
         self.assertIn("$.data.result", str(raised.exception))
 
+    def test_run_tool_canonical_override_reports_safe_http_json_response_path_payload_shape(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data.result",
+                                "result_fields": {
+                                    "result": "$.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "meta": {"count": 1},
+                    "items": [{"title": "ok"}],
+                    "access_token": "upstream-secret",
+                }
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("response_path", message)
+        self.assertIn("$.data.result", message)
+        self.assertIn("available response keys: meta, items, [redacted]", message)
+        self.assertNotIn("access_token", message)
+        self.assertNotIn("upstream-secret", message)
+
+    def test_run_tool_canonical_override_reports_response_path_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data.result",
+                                "result_fields": {
+                                    "result": "$.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-path-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+                "Location": "https://login.example/callback?token=hidden",
+            }
+
+            def read(self) -> bytes:
+                return json.dumps({"meta": {"count": 1}, "items": []}).encode("utf-8")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("response_path", message)
+        self.assertIn("$.data.result", message)
+        self.assertIn("request id: req-path-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertNotIn("Location", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_limits_http_json_mapping_payload_shape_summary(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data.result",
+                                "result_fields": {
+                                    "result": "$.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        payload = {
+            f"very_long_response_field_{index}_{'x' * 140}": index
+            for index in range(8)
+        }
+        payload["access_token"] = "upstream-secret"
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                payload
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("available response keys:", message)
+        self.assertIn("very_long_response_field_0_", message)
+        self.assertIn("and 4 more", message)
+        self.assertNotIn("access_token", message)
+        self.assertNotIn("upstream-secret", message)
+        self.assertNotIn("x" * 80, message)
+        self.assertLessEqual(len(message), 520)
+
     def test_run_tool_canonical_override_rejects_http_json_result_fields_when_no_mapping_resolves(
         self,
     ) -> None:
@@ -54809,6 +59815,237 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("result_fields", str(raised.exception))
         self.assertIn("result", str(raised.exception))
         self.assertIn("$.data.value", str(raised.exception))
+
+    def test_run_tool_canonical_override_reports_safe_http_json_result_fields_payload_shape(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data",
+                                "result_fields": {
+                                    "result": "$.answer",
+                                    "request_id": "$.request_id",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "total": 3,
+                        "documents": [{"title": "ok"}],
+                        "api_key": "upstream-secret",
+                    }
+                }
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("result_fields", message)
+        self.assertIn("available response keys: total, documents, [redacted]", message)
+        self.assertNotIn("api_key", message)
+        self.assertNotIn("upstream-secret", message)
+
+    def test_run_tool_canonical_override_reports_result_fields_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data",
+                                "result_fields": {
+                                    "result": "$.answer",
+                                    "request_id": "$.request_id",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json",
+                "X-Request-ID": "req-fields-1",
+                "X-Correlation-ID": "corr-secret=hidden",
+                "Location": "https://login.example/callback?token=hidden",
+            }
+
+            def read(self) -> bytes:
+                return json.dumps({"data": {"total": 3, "documents": []}}).encode(
+                    "utf-8"
+                )
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("result_fields", message)
+        self.assertIn("request id: req-fields-1", message)
+        self.assertIn("correlation id: corr-[redacted]", message)
+        self.assertNotIn("Location", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret", message)
+        self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_reports_http_json_result_fields_list_item_payload_shape(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.items",
+                                "result_fields": {
+                                    "result": "$.answer",
+                                    "request_id": "$.request_id",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "items": [
+                        {
+                            "title": "ok",
+                            "score": 0.9,
+                            "api_key": "upstream-secret",
+                        },
+                        {"title": "next"},
+                    ]
+                }
+            )
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertTrue(raised.exception.fatal)
+        self.assertIn("response payload is a list with 2 items", message)
+        self.assertIn("first item keys: title, score, [redacted]", message)
+        self.assertNotIn("api_key", message)
+        self.assertNotIn("upstream-secret", message)
 
     def test_run_tool_canonical_override_redacts_http_json_mapping_error_paths(
         self,
@@ -55707,6 +60944,85 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 for item in final_item["result"]["service_actions"]
             ],
             [("trace_write", "step-1"), ("trace_write", "rag-1"), ("continue", None)],
+        )
+
+    def test_execute_tool_plan_item_service_execution_builds_rag_followup_from_items_for_real_search_tool(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "documents_total": 2,
+                    "items": [
+                        {"snippet": "alpha item snippet"},
+                        {"content": "beta item content"},
+                    ],
+                    "knowledge_base_id": "provider-kb",
+                },
+                result_preview_keys=("documents_total",),
+                result_output_keys=("documents_total",),
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-1",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        final_item = items[-1]
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 2,
+            },
+        )
+        rag_followup = final_item["result"]["loop_execution_result"]["success_effects"][
+            "rag_followup"
+        ]
+        self.assertIsNotNone(rag_followup)
+        assert rag_followup is not None
+        self.assertEqual(
+            rag_followup["step"]["content"],
+            "Provider Search returned snippets.",
+        )
+        self.assertEqual(
+            rag_followup["step"]["meta"]["rag"],
+            {
+                "chunks": ["alpha item snippet", "beta item content"],
+                "knowledge_base_id": "provider-kb",
+            },
         )
 
     def test_execute_tool_plan_item_service_execution_rewrites_real_search_tool_kind_to_runtime_semantic_kind(

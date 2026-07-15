@@ -26,6 +26,7 @@ from app.services.chat_persistence_service import (
     list_sessions,
     update_session_title,
 )
+from app.services.tool_runtime import _normalize_http_json_safe_output_shape
 
 
 router = APIRouter()
@@ -439,6 +440,64 @@ def _infer_trace_preview_effective_output_keys(
     return list(output.keys())
 
 
+def _trace_preview_title_implies_http_json_execution(title: str) -> bool:
+    semantic_kind, semantic_family = _extract_trace_preview_tool_semantics(title)
+    semantic_hints = {
+        value.strip().lower()
+        for value in (semantic_kind, semantic_family)
+        if isinstance(value, str) and value.strip()
+    }
+    if any(value.startswith("provider_") for value in semantic_hints):
+        return True
+    if semantic_hints.intersection(
+        {
+            "calculator",
+            "local_calculator",
+            "planner",
+            "provider_calc",
+            "provider_math",
+            "provider_planner",
+            "provider_retrieval",
+            "provider_search",
+            "retrieval",
+            "task_planner",
+        }
+    ):
+        return True
+    normalized_label = " ".join(
+        _extract_trace_preview_tool_label(title).lower().replace("_", " ").split()
+    )
+    return normalized_label.startswith("provider ") or normalized_label.startswith(
+        "hosted "
+    )
+
+
+def _normalize_trace_preview_http_json_output(
+    title: str,
+    output: dict[str, object] | None,
+) -> dict[str, object] | None:
+    if output is None:
+        return None
+    if not _trace_preview_title_implies_http_json_execution(title):
+        return output
+    return _normalize_http_json_safe_output_shape(output)
+
+
+def _resolve_trace_preview_projected_output(
+    title: str,
+    output: dict[str, object] | None,
+) -> dict[str, object] | None:
+    output = _normalize_trace_preview_http_json_output(title, output)
+    if output is None:
+        return None
+    effective_keys = _infer_trace_preview_effective_output_keys(
+        title=title,
+        output=output,
+    )
+    projected = {key: output[key] for key in effective_keys if key in output}
+    return projected or output
+
+
 def _build_trace_preview_inferred_tool_meta(
     title: str,
     content_excerpt: str,
@@ -475,6 +534,8 @@ def _build_trace_preview_inferred_tool_meta(
         safe_output = preview_output
     if safe_output is None:
         return None
+    safe_output = _normalize_trace_preview_http_json_output(title, safe_output)
+    preview_output = _normalize_trace_preview_http_json_output(title, preview_output)
 
     semantic_kind, semantic_family = _extract_trace_preview_tool_semantics(title)
     effective_result_output_keys = _infer_trace_preview_effective_output_keys(
@@ -485,6 +546,8 @@ def _build_trace_preview_inferred_tool_meta(
         "output": safe_output,
         "effective_result_output_keys": effective_result_output_keys,
     }
+    if _trace_preview_title_implies_http_json_execution(title):
+        inferred_tool_meta["execution_kind"] = "http_json"
     title_label = _extract_trace_preview_tool_label(title)
     if title_label:
         inferred_tool_meta["label"] = title_label
@@ -566,12 +629,42 @@ def _normalize_session_trace_preview_excerpt(
         inferred_tool_meta
     )
     if not inferred_summary:
-        return normalized
+        if not _trace_preview_title_implies_http_json_execution(title):
+            return normalized
+        fallback_lines: list[str] = []
+        projected_preview_output = _resolve_trace_preview_projected_output(
+            title,
+            preview_output,
+        )
+        preview_text = (
+            chat_persistence_service._stringify_trace_tool_output_preview(projected_preview_output)  # type: ignore[attr-defined]
+            if projected_preview_output is not None
+            else ""
+        )
+        safe_output_text = chat_persistence_service._stringify_trace_tool_output_preview(  # type: ignore[attr-defined]
+            chat_persistence_service._resolve_trace_safe_tool_output(inferred_tool_meta)  # type: ignore[attr-defined]
+        )
+        if has_explicit_preview and preview_text:
+            fallback_lines.append(f"Preview: {preview_text}")
+        if has_explicit_output and safe_output_text and safe_output_text != preview_text:
+            fallback_lines.append(f"Output: {safe_output_text}")
+        if not has_explicit_preview and not has_explicit_output and safe_output_text:
+            fallback_lines.append(f"Preview: {safe_output_text}")
+        if not fallback_lines:
+            return normalized
+        return chat_persistence_service._normalize_trace_preview_excerpt(  # type: ignore[attr-defined]
+            " ".join(fallback_lines),
+            limit=160,
+        )
 
     lines = [inferred_summary]
+    projected_preview_output = _resolve_trace_preview_projected_output(
+        title,
+        preview_output,
+    )
     preview_text = (
-        chat_persistence_service._stringify_trace_tool_output_preview(preview_output)  # type: ignore[attr-defined]
-        if preview_output is not None
+        chat_persistence_service._stringify_trace_tool_output_preview(projected_preview_output)  # type: ignore[attr-defined]
+        if projected_preview_output is not None
         else ""
     )
     safe_output_text = chat_persistence_service._stringify_trace_tool_output_preview(  # type: ignore[attr-defined]

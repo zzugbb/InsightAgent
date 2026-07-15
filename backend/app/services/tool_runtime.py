@@ -350,6 +350,8 @@ _HTTP_JSON_ALLOWED_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 _TOOL_TIMEOUT_MAX_MS = 2_147_483_647
 _HTTP_JSON_ERROR_BODY_PREVIEW_MAX_LENGTH = 240
 _HTTP_JSON_RESULT_FIELD_MAPPING_ERROR_MAX_ITEMS = 5
+_HTTP_JSON_MAPPING_PAYLOAD_SHAPE_KEY_MAX_ITEMS = 5
+_HTTP_JSON_MAPPING_PAYLOAD_SHAPE_KEY_MAX_LENGTH = 48
 _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE = re.compile(
     r"(authorization|api[_-]?key|credential|password|secret|token)",
     re.IGNORECASE,
@@ -364,6 +366,22 @@ _HTTP_JSON_QUERY_PARAM_NAME_UNSAFE_RE = re.compile(r"[\x00-\x20\x7f=&?#]")
 _HTTP_JSON_HEADER_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 _HTTP_JSON_HEADER_VALUE_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _HTTP_JSON_SUPPORTED_CONTENT_ENCODINGS = ("identity", "gzip", "deflate")
+_HTTP_JSON_RESPONSE_DIAGNOSTIC_HEADER_HINTS = (
+    ("Retry-After", "retry-after"),
+    ("X-RateLimit-Reset", "rate-limit-reset"),
+    ("X-Request-ID", "request id"),
+    ("Request-ID", "request id"),
+    ("X-Correlation-ID", "correlation id"),
+    ("X-Amzn-RequestId", "request id"),
+    ("X-Amzn-Trace-Id", "trace id"),
+    ("CF-Ray", "request id"),
+)
+_HTTP_JSON_RESPONSE_REQUEST_ID_HEADER_NAMES = (
+    "X-Request-ID",
+    "Request-ID",
+    "X-Amzn-RequestId",
+    "CF-Ray",
+)
 
 
 def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
@@ -1959,11 +1977,34 @@ def _get_http_json_media_type_parameter_values(
     parameter_values: list[str] = []
     for raw_part in _split_http_json_header_parameters(raw_value)[1:]:
         raw_name, separator, raw_parameter_value = raw_part.partition("=")
-        if separator != "=" or raw_name.strip().lower() != parameter_name:
+        if raw_name.strip().lower() != parameter_name:
+            continue
+        if separator != "=":
+            parameter_values.append("")
             continue
         parameter_value = raw_parameter_value.strip().strip("\"'")
         parameter_values.append(parameter_value if parameter_value else "")
     return tuple(parameter_values)
+
+
+def _http_json_header_value_has_balanced_quoted_parameters(raw_value: object) -> bool:
+    if not isinstance(raw_value, str):
+        return True
+    quote_char: str | None = None
+    escaped = False
+    for char in raw_value:
+        if escaped:
+            escaped = False
+            continue
+        if quote_char is not None:
+            if char == "\\":
+                escaped = True
+            elif char == quote_char:
+                quote_char = None
+            continue
+        if char in ("'", '"'):
+            quote_char = char
+    return quote_char is None
 
 
 def _is_supported_http_json_accept_header(raw_value: object) -> bool:
@@ -1974,21 +2015,32 @@ def _is_supported_http_json_accept_header(raw_value: object) -> bool:
         if not raw_parts:
             continue
         media_type = raw_parts[0].strip().lower()
-        q_value = 1.0
+        json_compatible = (
+            media_type in {"application/json", "application/*", "*/*"}
+            or media_type.endswith("+json")
+        )
+        q_values: list[float] = []
         for raw_part in raw_parts[1:]:
             parameter_name, separator, parameter_value = raw_part.partition("=")
-            if separator != "=" or parameter_name.strip().lower() != "q":
+            if parameter_name.strip().lower() != "q":
+                continue
+            if separator != "=":
+                q_values.append(0.0)
                 continue
             try:
-                q_value = float(parameter_value.strip().strip("\"'"))
+                q_values.append(float(parameter_value.strip().strip("\"'")))
             except ValueError:
-                q_value = 0.0
-            break
-        if not math.isfinite(q_value) or q_value <= 0 or q_value > 1:
+                q_values.append(0.0)
+        if not q_values:
+            q_values = [1.0]
+        if any(
+            not math.isfinite(q_value) or q_value <= 0 or q_value > 1
+            for q_value in q_values
+        ):
+            if json_compatible:
+                return False
             continue
-        if media_type in {"application/json", "application/*", "*/*"}:
-            return True
-        if media_type.endswith("+json"):
+        if json_compatible:
             return True
     return False
 
@@ -2015,6 +2067,18 @@ def _format_http_json_request_content_type_charset_validation_error(
     )
 
 
+def _format_http_json_request_header_quote_validation_error(
+    *,
+    header_name: str,
+    raw_value: object,
+) -> str:
+    safe_value = _format_http_json_error_body_preview(raw_value)
+    return (
+        f"http_json execution headers.{header_name} must use balanced quoted "
+        f"parameters: {safe_value}"
+    )
+
+
 def _describe_http_json_request_content_type_validation_errors(
     *,
     headers: object,
@@ -2027,6 +2091,15 @@ def _describe_http_json_request_content_type_validation_errors(
         path="headers.Content-Type",
     ):
         return ()
+    if isinstance(
+        raw_content_type, str
+    ) and not _http_json_header_value_has_balanced_quoted_parameters(raw_content_type):
+        return (
+            _format_http_json_request_header_quote_validation_error(
+                header_name="Content-Type",
+                raw_value=raw_content_type,
+            ),
+        )
     if not (
         isinstance(raw_content_type, str)
         and _is_supported_http_json_media_type(raw_content_type)
@@ -2093,6 +2166,15 @@ def _describe_http_json_request_accept_validation_errors(
         path="headers.Accept",
     ):
         return ()
+    if isinstance(
+        raw_accept, str
+    ) and not _http_json_header_value_has_balanced_quoted_parameters(raw_accept):
+        return (
+            _format_http_json_request_header_quote_validation_error(
+                header_name="Accept",
+                raw_value=raw_accept,
+            ),
+        )
     if isinstance(raw_accept, str) and _is_supported_http_json_accept_header(
         raw_accept
     ):
@@ -2345,14 +2427,64 @@ def _extract_tool_execution_response_value(
     return current
 
 
+def _normalize_nonnegative_int_count_value(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        if value >= 0:
+            return value
+        return None
+    if isinstance(value, float):
+        if value >= 0 and value.is_integer():
+            return int(value)
+        return None
+    if isinstance(value, str):
+        normalized_value = value.strip()
+        if normalized_value.isdigit():
+            return int(normalized_value)
+        if "." in normalized_value:
+            whole_part, fractional_part = normalized_value.split(".", 1)
+            if (
+                whole_part.isdigit()
+                and fractional_part
+                and all(char == "0" for char in fractional_part)
+            ):
+                return int(whole_part)
+    return None
+
+
 def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, object]:
     normalized_output = dict(output)
-    documents = normalized_output.get("documents")
-    if "documents_total" not in normalized_output and isinstance(documents, (list, tuple)):
-        normalized_output["documents_total"] = len(documents)
-    hits = normalized_output.get("hits")
-    if "hit_count" not in normalized_output and isinstance(hits, (list, tuple)):
-        normalized_output["hit_count"] = len(hits)
+    if "request_id" in normalized_output:
+        safe_request_id = _get_safe_http_json_request_id_display_value(
+            normalized_output.get("request_id")
+        )
+        if safe_request_id is None:
+            normalized_output.pop("request_id", None)
+        else:
+            normalized_output["request_id"] = safe_request_id
+    documents_total = _normalize_nonnegative_int_count_value(
+        normalized_output.get("documents_total")
+    )
+    if documents_total is not None:
+        normalized_output["documents_total"] = documents_total
+    else:
+        for alias_name in ("documents", "items"):
+            alias_value = normalized_output.get(alias_name)
+            if isinstance(alias_value, (list, tuple)):
+                normalized_output["documents_total"] = len(alias_value)
+                break
+    hit_count = _normalize_nonnegative_int_count_value(
+        normalized_output.get("hit_count")
+    )
+    if hit_count is not None:
+        normalized_output["hit_count"] = hit_count
+    else:
+        for alias_name in ("hits", "results", "matches"):
+            alias_value = normalized_output.get(alias_name)
+            if isinstance(alias_value, (list, tuple)):
+                normalized_output["hit_count"] = len(alias_value)
+                break
     return normalized_output
 
 
@@ -2384,6 +2516,16 @@ def _normalize_http_json_safe_output_shape(output: dict[str, object]) -> dict[st
     if isinstance(redacted_output, dict):
         return redacted_output
     return normalized_output
+
+
+def _normalize_tool_result_projection_output(
+    output: dict[str, object],
+    *,
+    registration: ToolRegistration | None,
+) -> dict[str, object]:
+    if registration is not None and registration.execution_kind == "http_json":
+        return _normalize_http_json_safe_output_shape(output)
+    return output
 
 
 def _redact_http_json_diagnostic_text(raw_value: str) -> str:
@@ -2460,6 +2602,16 @@ def _format_http_json_response_body_preview(
     return _format_http_json_error_body_preview(raw_text)
 
 
+def _append_http_json_response_header_diagnostic_hints(
+    message: str,
+    response: object,
+) -> str:
+    header_hints = _format_http_json_response_header_diagnostic_hints(response)
+    if not header_hints:
+        return message
+    return f"{message}; headers: {header_hints}"
+
+
 def _format_http_json_http_error(exc: HTTPError) -> str:
     message = f"HTTP JSON tool failed: HTTP {exc.code}"
     reason = _format_http_json_error_body_preview(
@@ -2467,6 +2619,7 @@ def _format_http_json_http_error(exc: HTTPError) -> str:
     )
     if reason:
         message = f"{message} {reason}"
+    message = _append_http_json_response_header_diagnostic_hints(message, exc)
     content_type = _get_http_json_response_content_type(exc)
     try:
         body = _read_http_json_response_body_bytes(exc)
@@ -2528,11 +2681,14 @@ def _format_http_json_invalid_status_response(
     raw_status: object,
     raw_body: object,
     content_type: object = None,
+    response: object | None = None,
 ) -> str:
     status_preview = _format_http_json_error_body_preview(raw_status)
     message = "HTTP JSON tool failed: invalid HTTP response status"
     if status_preview:
         message = f"{message}: {status_preview}"
+    if response is not None:
+        message = _append_http_json_response_header_diagnostic_hints(message, response)
     body_preview = _format_http_json_response_body_preview(
         raw_body,
         content_type=content_type,
@@ -2712,10 +2868,16 @@ def _http_json_response_url_matches_request_url(
     )
 
 
-def _format_http_json_redirected_response_url_error() -> str:
-    return (
-        "HTTP JSON tool failed: redirected response url does not match request url"
-    )
+def _format_http_json_redirected_response_url_error(
+    response: object | None = None,
+) -> str:
+    message = "HTTP JSON tool failed: redirected response url does not match request url"
+    if response is not None:
+        message = _append_http_json_response_header_diagnostic_hints(
+            message,
+            response,
+        )
+    return message
 
 
 def _format_http_json_unexpected_status_response(
@@ -2724,11 +2886,14 @@ def _format_http_json_unexpected_status_response(
     reason: object,
     raw_body: bytes,
     content_type: object = None,
+    response: object | None = None,
 ) -> str:
     message = f"HTTP JSON tool failed: HTTP {status_code}"
     reason_preview = _format_http_json_error_body_preview(reason or "")
     if reason_preview:
         message = f"{message} {reason_preview}"
+    if response is not None:
+        message = _append_http_json_response_header_diagnostic_hints(message, response)
     body_preview = _format_http_json_response_body_preview(
         raw_body,
         content_type=content_type,
@@ -2743,11 +2908,14 @@ def _format_http_json_unexpected_status_response_body_decode_error(
     status_code: int,
     reason: object,
     error: Exception,
+    response: object | None = None,
 ) -> str:
     message = f"HTTP JSON tool failed: HTTP {status_code}"
     reason_preview = _format_http_json_error_body_preview(reason or "")
     if reason_preview:
         message = f"{message} {reason_preview}"
+    if response is not None:
+        message = _append_http_json_response_header_diagnostic_hints(message, response)
     body_preview = _format_http_json_error_body_preview(error)
     if body_preview:
         message = f"{message}; body: {body_preview}"
@@ -2758,10 +2926,16 @@ def _format_http_json_empty_response(
     *,
     status_code: int | None,
     reason: object,
+    response: object | None = None,
 ) -> str:
     message = "HTTP JSON tool failed: empty JSON response"
     if status_code is not None:
         message = f"{message}: HTTP {status_code}"
+    if response is not None:
+        message = _append_http_json_response_header_diagnostic_hints(
+            message,
+            response,
+        )
     reason_preview = _format_http_json_error_body_preview(reason or "")
     if reason_preview:
         message = f"{message} {reason_preview}"
@@ -2798,6 +2972,7 @@ def _format_http_json_invalid_json_response(
     error: json.JSONDecodeError | UnicodeDecodeError,
     charset: str = "utf-8",
     content_type: object = None,
+    response: object | None = None,
 ) -> str:
     error_message = (
         error.msg
@@ -2805,6 +2980,11 @@ def _format_http_json_invalid_json_response(
         else f"invalid {_format_http_json_error_body_preview(charset)} response body: {error.reason}"
     )
     message = f"HTTP JSON tool failed: invalid JSON response: {error_message}"
+    if response is not None:
+        message = _append_http_json_response_header_diagnostic_hints(
+            message,
+            response,
+        )
     body_preview = _format_http_json_response_body_preview(
         raw_body,
         content_type=content_type,
@@ -2818,9 +2998,15 @@ def _format_http_json_invalid_charset_response(
     *,
     charset: str,
     raw_body: bytes,
+    response: object | None = None,
 ) -> str:
     safe_charset = _format_http_json_error_body_preview(charset)
     message = f"HTTP JSON tool failed: invalid JSON response charset: {safe_charset}"
+    if response is not None:
+        message = _append_http_json_response_header_diagnostic_hints(
+            message,
+            response,
+        )
     body_preview = _format_http_json_error_body_preview(raw_body)
     if body_preview:
         message = f"{message}; body: {body_preview}"
@@ -2931,19 +3117,21 @@ def _get_http_json_header_text_from_mapping(
     return None
 
 
-def _get_http_json_response_content_type(response: object) -> str | None:
+def _get_http_json_response_header_text(
+    response: object,
+    header_name: str,
+) -> str | None:
     getheader = _get_http_json_adapter_attr(response, "getheader")
     if callable(getheader):
-        raw_value = _call_http_json_getheader_adapter(getheader, "Content-Type")
+        raw_value = _call_http_json_getheader_adapter(getheader, header_name)
         header_value = _coerce_http_json_header_text(raw_value)
         if header_value is not None:
             return header_value
-    headers = _get_http_json_adapter_attr(response, "headers")
-    if headers is not None:
-        header_value = _get_http_json_header_text_from_mapping(
-            headers,
-            "Content-Type",
-        )
+    for attr_name in ("headers", "hdrs"):
+        headers = _get_http_json_adapter_attr(response, attr_name)
+        if headers is None:
+            continue
+        header_value = _get_http_json_header_text_from_mapping(headers, header_name)
         if header_value is not None:
             return header_value
     info = _get_http_json_adapter_attr(response, "info")
@@ -2951,38 +3139,91 @@ def _get_http_json_response_content_type(response: object) -> str | None:
         info_headers = _call_http_json_adapter_method(info)
         header_value = _get_http_json_header_text_from_mapping(
             info_headers,
-            "Content-Type",
+            header_name,
         )
         if header_value is not None:
             return header_value
     return None
+
+
+def _format_http_json_response_header_diagnostic_hints(response: object) -> str:
+    hint_parts: list[str] = []
+    seen_labels: set[str] = set()
+    for header_name, label in _HTTP_JSON_RESPONSE_DIAGNOSTIC_HEADER_HINTS:
+        if label in seen_labels:
+            continue
+        header_value = _get_http_json_response_header_text(response, header_name)
+        if header_value is None:
+            continue
+        if label == "request id" and not _is_safe_http_json_request_id_value(header_value):
+            continue
+        safe_header_value = _format_http_json_error_body_preview(header_value)
+        if not safe_header_value:
+            continue
+        hint_parts.append(f"{label}: {safe_header_value}")
+        seen_labels.add(label)
+    return "; ".join(hint_parts)
+
+
+def _get_http_json_response_request_id(response: object) -> str | None:
+    for header_name in _HTTP_JSON_RESPONSE_REQUEST_ID_HEADER_NAMES:
+        header_value = _get_http_json_response_header_text(response, header_name)
+        if header_value is None:
+            continue
+        normalized = header_value.strip()
+        if not normalized:
+            continue
+        if not _is_safe_http_json_request_id_value(normalized):
+            continue
+        return normalized
+    return None
+
+
+def _is_safe_http_json_request_id_value(value: str) -> bool:
+    normalized = value.strip()
+    if not normalized:
+        return False
+    if len(normalized) > 128:
+        return False
+    if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in normalized):
+        return False
+    safe_value = _format_http_json_error_body_preview(normalized)
+    return safe_value == normalized
+
+
+def _get_safe_http_json_request_id_display_value(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not _is_safe_http_json_request_id_value(normalized):
+        return None
+    return normalized
+
+
+def _attach_http_json_response_request_id(
+    output: dict[str, object],
+    request_id: str | None,
+) -> dict[str, object]:
+    safe_existing_request_id = _get_safe_http_json_request_id_display_value(
+        output.get("request_id")
+    )
+    if safe_existing_request_id is not None:
+        output["request_id"] = safe_existing_request_id
+        return output
+    if "request_id" in output:
+        output.pop("request_id", None)
+    if not request_id:
+        return output
+    output["request_id"] = request_id
+    return output
+
+
+def _get_http_json_response_content_type(response: object) -> str | None:
+    return _get_http_json_response_header_text(response, "Content-Type")
 
 
 def _get_http_json_response_content_encoding(response: object) -> str | None:
-    getheader = _get_http_json_adapter_attr(response, "getheader")
-    if callable(getheader):
-        raw_value = _call_http_json_getheader_adapter(getheader, "Content-Encoding")
-        header_value = _coerce_http_json_header_text(raw_value)
-        if header_value is not None:
-            return header_value
-    headers = _get_http_json_adapter_attr(response, "headers")
-    if headers is not None:
-        header_value = _get_http_json_header_text_from_mapping(
-            headers,
-            "Content-Encoding",
-        )
-        if header_value is not None:
-            return header_value
-    info = _get_http_json_adapter_attr(response, "info")
-    if callable(info):
-        info_headers = _call_http_json_adapter_method(info)
-        header_value = _get_http_json_header_text_from_mapping(
-            info_headers,
-            "Content-Encoding",
-        )
-        if header_value is not None:
-            return header_value
-    return None
+    return _get_http_json_response_header_text(response, "Content-Encoding")
 
 
 def _split_http_json_header_value(
@@ -3038,11 +3279,13 @@ def _get_http_json_response_charset(raw_content_type: object) -> str:
     for content_type_value in _split_http_json_header_values(raw_content_type):
         for raw_parameter in _split_http_json_header_parameters(content_type_value)[1:]:
             raw_name, separator, raw_value = raw_parameter.partition("=")
-            if not separator or raw_name.strip().lower() != "charset":
+            if raw_name.strip().lower() != "charset":
+                continue
+            if not separator:
+                charset_values.append("")
                 continue
             normalized_value = raw_value.strip().strip("\"'")
-            if normalized_value:
-                charset_values.append(normalized_value)
+            charset_values.append(normalized_value if normalized_value else "")
     if not charset_values:
         return "utf-8"
     normalized_charset_values = {
@@ -3061,6 +3304,7 @@ def _decode_http_json_response_text(
     *,
     raw_body: bytes,
     content_type: object,
+    response: object | None = None,
 ) -> str:
     charset = _get_http_json_response_charset(content_type)
     try:
@@ -3070,6 +3314,7 @@ def _decode_http_json_response_text(
             _format_http_json_invalid_charset_response(
                 charset=charset,
                 raw_body=raw_body,
+                response=response,
             ),
             fatal=False,
         ) from exc
@@ -3082,6 +3327,7 @@ def _decode_http_json_response_text(
                 error=exc,
                 charset=charset,
                 content_type=content_type,
+                response=response,
             ),
             fatal=False,
         ) from exc
@@ -3164,6 +3410,8 @@ def _decode_http_json_response_body_for_content_encoding(
 def _is_supported_http_json_response_content_type(raw_value: object) -> bool:
     if not isinstance(raw_value, str) or not raw_value.strip():
         return True
+    if not _http_json_header_value_has_balanced_quoted_parameters(raw_value):
+        return False
     content_type_values = _split_http_json_header_values(raw_value)
     if not content_type_values:
         return False
@@ -3178,12 +3426,18 @@ def _format_http_json_invalid_content_type_response(
     *,
     content_type: str,
     raw_body: bytes,
+    response: object | None = None,
 ) -> str:
     safe_content_type = _format_http_json_error_body_preview(content_type)
     message = (
         "HTTP JSON tool failed: invalid JSON response content-type: "
         f"{safe_content_type}"
     )
+    if response is not None:
+        message = _append_http_json_response_header_diagnostic_hints(
+            message,
+            response,
+        )
     body_preview = _format_http_json_response_body_preview(
         raw_body,
         content_type=content_type,
@@ -3193,18 +3447,77 @@ def _format_http_json_invalid_content_type_response(
     return message
 
 
-def _format_http_json_transport_error(exc: BaseException) -> str:
+def _format_http_json_transport_error(
+    exc: BaseException,
+    response: object | None = None,
+) -> str:
     raw_reason = getattr(exc, "reason", None)
     reason = raw_reason if raw_reason is not None else exc
     reason_preview = _format_http_json_error_body_preview(reason)
     if reason_preview:
-        return f"HTTP JSON tool failed: transport error: {reason_preview}"
-    return "HTTP JSON tool failed: transport error"
+        message = f"HTTP JSON tool failed: transport error: {reason_preview}"
+    else:
+        message = "HTTP JSON tool failed: transport error"
+    if response is not None:
+        message = _append_http_json_response_header_diagnostic_hints(
+            message,
+            response,
+        )
+    return message
 
 
 def _format_http_json_mapping_path_for_error(raw_path: object) -> str:
     safe_path = _format_safe_tool_execution_diagnostic_path(str(raw_path).strip())
     return _format_http_json_error_body_preview(safe_path)
+
+
+def _format_http_json_mapping_payload_shape_key_for_error(raw_key: object) -> str:
+    safe_key = _format_safe_tool_execution_summary_field_name(raw_key)
+    if not safe_key:
+        return ""
+    safe_key = _format_http_json_error_body_preview(safe_key)
+    if len(safe_key) <= _HTTP_JSON_MAPPING_PAYLOAD_SHAPE_KEY_MAX_LENGTH:
+        return safe_key
+    return f"{safe_key[:_HTTP_JSON_MAPPING_PAYLOAD_SHAPE_KEY_MAX_LENGTH]}..."
+
+
+def _format_http_json_mapping_payload_shape_keys_for_error(payload: dict) -> str:
+    safe_keys: list[str] = []
+    seen_keys: set[str] = set()
+    for raw_key in payload.keys():
+        safe_key = _format_http_json_mapping_payload_shape_key_for_error(raw_key)
+        if not safe_key or safe_key in seen_keys:
+            continue
+        seen_keys.add(safe_key)
+        safe_keys.append(safe_key)
+    if not safe_keys:
+        return "none"
+    visible_keys = safe_keys[:_HTTP_JSON_MAPPING_PAYLOAD_SHAPE_KEY_MAX_ITEMS]
+    hidden_count = len(safe_keys) - len(visible_keys)
+    if hidden_count > 0:
+        visible_keys.append(f"and {hidden_count} more")
+    return ", ".join(visible_keys)
+
+
+def _format_http_json_mapping_payload_shape_for_error(payload: object) -> str:
+    if isinstance(payload, dict):
+        keys = _format_http_json_mapping_payload_shape_keys_for_error(payload)
+        return f"available response keys: {keys}"
+    if isinstance(payload, list):
+        message = f"response payload is a list with {len(payload)} items"
+        if payload and isinstance(payload[0], dict):
+            keys = _format_http_json_mapping_payload_shape_keys_for_error(payload[0])
+            message = f"{message}; first item keys: {keys}"
+        return message
+    if payload is None:
+        return "response payload is null"
+    if isinstance(payload, bool):
+        return "response payload is a boolean"
+    if isinstance(payload, (int, float)):
+        return "response payload is a number"
+    if isinstance(payload, str):
+        return "response payload is a string"
+    return "response payload has an unsupported shape"
 
 
 def _format_http_json_result_field_mapping_error(
@@ -3343,6 +3656,7 @@ def _build_http_json_tool_runner(
             headers=rendered_headers,
             method=method,
         )
+        response_request_id: str | None = None
         try:
             with urlopen(
                 request,
@@ -3356,6 +3670,24 @@ def _build_http_json_tool_runner(
                 )
                 response_reason = _get_http_json_response_reason(response)
                 response_content_type = _get_http_json_response_content_type(response)
+                response_url = _get_http_json_response_url(response)
+                response_request_id = _get_http_json_response_request_id(response)
+                if (
+                    invalid_response_status is None
+                    and (
+                        response_status_code is None
+                        or 200 <= response_status_code <= 299
+                    )
+                    and response_url is not None
+                    and not _http_json_response_url_matches_request_url(
+                        response_url=response_url,
+                        request_url=full_url,
+                    )
+                ):
+                    raise MockToolExecutionError(
+                        _format_http_json_redirected_response_url_error(response),
+                        fatal=False,
+                    )
                 try:
                     response_body = _read_http_json_response_body_bytes(response)
                 except TypeError as exc:
@@ -3365,6 +3697,7 @@ def _build_http_json_tool_runner(
                                 raw_status=invalid_response_status,
                                 raw_body=exc,
                                 content_type=response_content_type,
+                                response=response,
                             ),
                             fatal=False,
                         ) from exc
@@ -3377,16 +3710,21 @@ def _build_http_json_tool_runner(
                                 status_code=response_status_code,
                                 reason=response_reason,
                                 error=exc,
+                                response=response,
                             ),
                             fatal=False,
                         ) from exc
-                    raise
+                    raise MockToolExecutionError(
+                        _format_http_json_transport_error(exc, response=response),
+                        fatal=False,
+                    ) from exc
                 if invalid_response_status is not None:
                     raise MockToolExecutionError(
                         _format_http_json_invalid_status_response(
                             raw_status=invalid_response_status,
                             raw_body=response_body,
                             content_type=response_content_type,
+                            response=response,
                         ),
                         fatal=False,
                     )
@@ -3406,11 +3744,17 @@ def _build_http_json_tool_runner(
                                 status_code=response_status_code,
                                 reason=response_reason,
                                 error=exc,
+                                response=response,
                             ),
                             fatal=False,
                         ) from exc
+                    message = f"HTTP JSON tool failed: {exc}"
+                    message = _append_http_json_response_header_diagnostic_hints(
+                        message,
+                        response,
+                    )
                     raise MockToolExecutionError(
-                        f"HTTP JSON tool failed: {exc}",
+                        message,
                         fatal=False,
                     ) from exc
                 if (
@@ -3423,19 +3767,8 @@ def _build_http_json_tool_runner(
                             reason=response_reason,
                             raw_body=response_body,
                             content_type=response_content_type,
+                            response=response,
                         ),
-                        fatal=False,
-                    )
-                response_url = _get_http_json_response_url(response)
-                if (
-                    response_url is not None
-                    and not _http_json_response_url_matches_request_url(
-                        response_url=response_url,
-                        request_url=full_url,
-                    )
-                ):
-                    raise MockToolExecutionError(
-                        _format_http_json_redirected_response_url_error(),
                         fatal=False,
                     )
                 if (
@@ -3448,6 +3781,7 @@ def _build_http_json_tool_runner(
                         _format_http_json_invalid_content_type_response(
                             content_type=response_content_type,
                             raw_body=response_body,
+                            response=response,
                         ),
                         fatal=False,
                     )
@@ -3456,6 +3790,7 @@ def _build_http_json_tool_runner(
                         _format_http_json_empty_response(
                             status_code=response_status_code,
                             reason=response_reason,
+                            response=response,
                         ),
                         fatal=False,
                     )
@@ -3463,6 +3798,7 @@ def _build_http_json_tool_runner(
                     response_text = _decode_http_json_response_text(
                         raw_body=response_body,
                         content_type=response_content_type,
+                        response=response,
                     )
                     response_payload = json.loads(response_text)
                 except json.JSONDecodeError as exc:
@@ -3471,6 +3807,7 @@ def _build_http_json_tool_runner(
                             raw_body=response_body,
                             error=exc,
                             content_type=response_content_type,
+                            response=response,
                         ),
                         fatal=False,
                     ) from exc
@@ -3501,9 +3838,19 @@ def _build_http_json_tool_runner(
                 safe_response_path = _format_http_json_mapping_path_for_error(
                     raw_response_path
                 )
-                raise MockToolExecutionError(
+                payload_shape = _format_http_json_mapping_payload_shape_for_error(
+                    response_payload
+                )
+                message = (
                     "HTTP JSON tool response_path could not resolve any payload at "
-                    f"{safe_response_path}.",
+                    f"{safe_response_path}; {payload_shape}."
+                )
+                message = _append_http_json_response_header_diagnostic_hints(
+                    message,
+                    response,
+                )
+                raise MockToolExecutionError(
+                    message,
                     fatal=True,
                 )
             scoped_payload = response_payload
@@ -3531,17 +3878,35 @@ def _build_http_json_tool_runner(
                 formatted_mappings = _format_http_json_missing_result_field_mappings(
                     missing_result_fields
                 )
-                raise MockToolExecutionError(
+                payload_shape = _format_http_json_mapping_payload_shape_for_error(
+                    scoped_payload
+                )
+                message = (
                     "HTTP JSON tool result_fields could not resolve any configured "
-                    f"mapping: {formatted_mappings}.",
+                    f"mapping: {formatted_mappings}; {payload_shape}."
+                )
+                message = _append_http_json_response_header_diagnostic_hints(
+                    message,
+                    response,
+                )
+                raise MockToolExecutionError(
+                    message,
                     fatal=True,
                 )
+            _attach_http_json_response_request_id(
+                mapped_output,
+                response_request_id,
+            )
             return _normalize_http_json_safe_output_shape(mapped_output)
         if isinstance(scoped_payload, dict):
-            return _normalize_http_json_safe_output_shape(dict(scoped_payload))
-        return {
+            output = dict(scoped_payload)
+            _attach_http_json_response_request_id(output, response_request_id)
+            return _normalize_http_json_safe_output_shape(output)
+        output = {
             "value": _redact_http_json_sensitive_payload_value(scoped_payload),
         }
+        _attach_http_json_response_request_id(output, response_request_id)
+        return output
 
     return runner
 
@@ -7745,6 +8110,10 @@ def build_tool_result_preview(
         return output
     if not resolved_registration.supports_result_preview:
         return None
+    normalized_output = _normalize_tool_result_projection_output(
+        output,
+        registration=resolved_registration,
+    )
     result_preview_keys = get_tool_effective_result_preview_keys(
         name=name,
         registration=resolved_registration,
@@ -7758,7 +8127,9 @@ def build_tool_result_preview(
     )
     if result_preview_keys:
         preview = {
-            key: output[key] for key in result_preview_keys if key in output
+            key: normalized_output[key]
+            for key in result_preview_keys
+            if key in normalized_output
         }
         if semantic_kind == "task_planner":
             normalized_steps = _normalize_tool_result_plan_steps(preview.get("steps"))
@@ -7766,12 +8137,14 @@ def build_tool_result_preview(
                 preview["steps"] = normalized_steps
         return preview
     if semantic_kind == "task_planner":
-        normalized_output = dict(output)
-        normalized_steps = _normalize_tool_result_plan_steps(normalized_output.get("steps"))
+        task_planner_output = dict(normalized_output)
+        normalized_steps = _normalize_tool_result_plan_steps(
+            task_planner_output.get("steps")
+        )
         if normalized_steps:
-            normalized_output["steps"] = normalized_steps
-        return normalized_output
-    return output
+            task_planner_output["steps"] = normalized_steps
+        return task_planner_output
+    return normalized_output
 
 
 def build_tool_result_output(
@@ -7791,6 +8164,10 @@ def build_tool_result_output(
     )
     if resolved_registration is None:
         return output
+    normalized_source_output = _normalize_tool_result_projection_output(
+        output,
+        registration=resolved_registration,
+    )
     result_output_keys = get_tool_effective_result_output_keys(
         name=name,
         registration=resolved_registration,
@@ -7804,15 +8181,19 @@ def build_tool_result_output(
     )
     if not result_output_keys:
         if semantic_kind == "task_planner":
-            normalized_output = dict(output)
+            normalized_output = dict(normalized_source_output)
             normalized_steps = _normalize_tool_result_plan_steps(
                 normalized_output.get("steps")
             )
             if normalized_steps:
                 normalized_output["steps"] = normalized_steps
             return normalized_output
-        return output
-    normalized_output = {key: output[key] for key in result_output_keys if key in output}
+        return normalized_source_output
+    normalized_output = {
+        key: normalized_source_output[key]
+        for key in result_output_keys
+        if key in normalized_source_output
+    }
     if semantic_kind == "task_planner":
         normalized_steps = _normalize_tool_result_plan_steps(normalized_output.get("steps"))
         if normalized_steps:
@@ -7839,16 +8220,23 @@ def _summarize_generic_tool_result_payload(payload: dict[str, object]) -> str | 
         normalized_key = str(key).strip()
         if not normalized_key:
             continue
+        safe_key = _format_safe_tool_execution_summary_field_name(normalized_key)
+        if safe_key == "[redacted]":
+            continue
         if isinstance(value, bool):
-            parts.append(f"{normalized_key}={'true' if value else 'false'}")
+            parts.append(f"{safe_key}={'true' if value else 'false'}")
             continue
         if isinstance(value, (int, float)):
-            parts.append(f"{normalized_key}={value}")
+            parts.append(f"{safe_key}={value}")
             continue
         if isinstance(value, str):
             normalized_value = value.strip()
             if normalized_value:
-                parts.append(f"{normalized_key}={normalized_value}")
+                safe_value = _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
+                    lambda match: f"{match.group(1)}[redacted]",
+                    normalized_value,
+                )
+                parts.append(f"{safe_key}={safe_value}")
             continue
     if not parts:
         return None
@@ -7916,7 +8304,9 @@ def build_tool_result_summary(
 
     expression = outward_output.get("expression")
     result = outward_output.get("result")
-    request_id = outward_output.get("request_id")
+    request_id = _get_safe_http_json_request_id_display_value(
+        outward_output.get("request_id")
+    )
     if isinstance(expression, str) and expression.strip() and result is not None:
         if isinstance(request_id, str) and request_id.strip():
             return (
@@ -7940,9 +8330,9 @@ def build_tool_result_summary(
             return f"Calculated result = {result} (request id {request_id.strip()})."
         return f"Calculated result = {result}."
 
-    hit_count = outward_output.get("hit_count")
+    hit_count = _normalize_nonnegative_int_count_value(outward_output.get("hit_count"))
     knowledge_base_id = outward_output.get("knowledge_base_id")
-    if isinstance(hit_count, int) and hit_count >= 0:
+    if hit_count is not None:
         hit_label = "hit" if hit_count == 1 else "hits"
         if (
             runtime_semantic_kind == "knowledge_retrieval"
@@ -7969,8 +8359,10 @@ def build_tool_result_summary(
             return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
         return f"Retrieved {hit_count} {hit_label}."
 
-    documents_total = outward_output.get("documents_total")
-    if isinstance(documents_total, int) and documents_total >= 0:
+    documents_total = _normalize_nonnegative_int_count_value(
+        outward_output.get("documents_total")
+    )
+    if documents_total is not None:
         document_label = "document" if documents_total == 1 else "documents"
         if isinstance(request_id, str) and request_id.strip():
             return (
@@ -9319,11 +9711,21 @@ def _resolve_step_tool_safe_output(
     output_mapping = _coerce_tool_output_mapping(output)
     if not isinstance(output_mapping, dict):
         return output
+    if _step_tool_meta_uses_http_json_execution(step_tool_meta):
+        output_mapping = _normalize_http_json_safe_output_shape(output_mapping)
     return {
         key: output_mapping[key]
         for key in normalized_keys
         if key in output_mapping
     }
+
+
+def _step_tool_meta_uses_http_json_execution(
+    step_tool_meta: dict[str, object] | None,
+) -> bool:
+    if not isinstance(step_tool_meta, dict):
+        return False
+    return _normalize_tool_execution_kind(step_tool_meta.get("execution_kind")) == "http_json"
 
 
 def _build_tool_result_summary_from_step_meta_semantics(
@@ -9333,6 +9735,8 @@ def _build_tool_result_summary_from_step_meta_semantics(
 ) -> str | None:
     if not isinstance(output, dict):
         return None
+    if _step_tool_meta_uses_http_json_execution(step_tool_meta):
+        output = _normalize_http_json_safe_output_shape(output)
     meta_label = (
         str(step_tool_meta.get("label")).strip()
         if isinstance(step_tool_meta, dict)
@@ -9419,7 +9823,9 @@ def _build_tool_result_summary_from_step_meta_semantics(
 
     expression = output.get("expression")
     result = output.get("result")
-    request_id = output.get("request_id")
+    request_id = _get_safe_http_json_request_id_display_value(
+        output.get("request_id")
+    )
     if isinstance(expression, str) and expression.strip() and result is not None:
         if isinstance(request_id, str) and request_id.strip():
             return (
@@ -9441,9 +9847,9 @@ def _build_tool_result_summary_from_step_meta_semantics(
             return f"Calculated result = {result} (request id {request_id.strip()})."
         return f"Calculated result = {result}."
 
-    hit_count = output.get("hit_count")
+    hit_count = _normalize_nonnegative_int_count_value(output.get("hit_count"))
     knowledge_base_id = output.get("knowledge_base_id")
-    if isinstance(hit_count, int) and hit_count >= 0:
+    if hit_count is not None:
         hit_label = "hit" if hit_count == 1 else "hits"
         if (
             allow_local_knowledge_base_summary
@@ -9467,8 +9873,10 @@ def _build_tool_result_summary_from_step_meta_semantics(
             return f"Retrieved {hit_count} {hit_label} (request id {request_id.strip()})."
         return f"Retrieved {hit_count} {hit_label}."
 
-    documents_total = output.get("documents_total")
-    if isinstance(documents_total, int) and documents_total >= 0:
+    documents_total = _normalize_nonnegative_int_count_value(
+        output.get("documents_total")
+    )
+    if documents_total is not None:
         document_label = "document" if documents_total == 1 else "documents"
         if isinstance(request_id, str) and request_id.strip():
             return (
@@ -9548,6 +9956,10 @@ def build_tool_observation_entry(
     )
     meta_preview_mapping = _coerce_tool_output_preview_mapping(meta_preview_output)
     if isinstance(meta_preview_mapping, dict) and not isinstance(output, dict):
+        if _step_tool_meta_uses_http_json_execution(step_tool_meta):
+            meta_preview_mapping = _normalize_http_json_safe_output_shape(
+                meta_preview_mapping
+            )
         result_summary = build_tool_result_summary(
             name=canonical_name,
             output=meta_preview_mapping,
@@ -9565,6 +9977,13 @@ def build_tool_observation_entry(
         if result_summary:
             return f"{resolved_display_name}: {result_summary}"
     if meta_preview_output is not None and not isinstance(output, dict):
+        if isinstance(meta_preview_mapping, dict) and _step_tool_meta_uses_http_json_execution(
+            step_tool_meta
+        ):
+            return (
+                f"{resolved_display_name}: "
+                f"{json.dumps(meta_preview_mapping, ensure_ascii=False)}"
+            )
         return (
             f"{resolved_display_name}: "
             f"{json.dumps(meta_preview_output, ensure_ascii=False)}"
@@ -9622,6 +10041,13 @@ def build_tool_observation_entry(
             )
             if preview_output is not None:
                 observation_output = preview_output
+        if (
+            isinstance(observation_output, dict)
+            and _step_tool_meta_uses_http_json_execution(step_tool_meta)
+        ):
+            observation_output = _normalize_http_json_safe_output_shape(
+                observation_output
+            )
     return (
         f"{resolved_display_name}: "
         f"{json.dumps(observation_output, ensure_ascii=False)}"
@@ -9724,19 +10150,80 @@ def _build_tool_rag_followup_content(
     return "Knowledge Retrieval returned snippets from the selected knowledge base."
 
 
-def _extract_tool_rag_chunks_from_output(output: dict[str, object]) -> list[str]:
-    raw_chunks = output.get("chunks")
-    if isinstance(raw_chunks, (list, tuple)):
-        return [
-            chunk.strip()
-            for chunk in raw_chunks
-            if isinstance(chunk, str) and chunk.strip()
-        ]
+_TOOL_RAG_DOCUMENT_TEXT_FIELDS = (
+    "snippet",
+    "content",
+    "text",
+    "excerpt",
+    "summary",
+    "description",
+    "body",
+    "chunk",
+    "page_content",
+    "document_text",
+)
+_TOOL_RAG_DOCUMENT_CONTAINER_FIELDS = (
+    "metadata",
+    "document",
+    "payload",
+    "chunk",
+    "node",
+    "data",
+    "record",
+    "item",
+)
+_TOOL_RAG_DOCUMENT_LIST_FIELDS = ("documents", "items", "results", "hits", "matches")
 
-    raw_documents = output.get("documents")
+
+def _extract_tool_rag_chunk_from_document_mapping(
+    raw_document: dict,
+    *,
+    depth: int = 0,
+    visited: set[int] | None = None,
+) -> str | None:
+    if depth > 4:
+        return None
+    if visited is None:
+        visited = set()
+    document_id = id(raw_document)
+    if document_id in visited:
+        return None
+    visited.add(document_id)
+    for field_name in _TOOL_RAG_DOCUMENT_TEXT_FIELDS:
+        raw_value = raw_document.get(field_name)
+        if not isinstance(raw_value, str):
+            continue
+        normalized_chunk = raw_value.strip()
+        if normalized_chunk:
+            return normalized_chunk
+    for field_name in _TOOL_RAG_DOCUMENT_TEXT_FIELDS:
+        nested_document = raw_document.get(field_name)
+        if not isinstance(nested_document, dict):
+            continue
+        nested_chunk = _extract_tool_rag_chunk_from_document_mapping(
+            nested_document,
+            depth=depth + 1,
+            visited=visited,
+        )
+        if nested_chunk:
+            return nested_chunk
+    for container_name in _TOOL_RAG_DOCUMENT_CONTAINER_FIELDS:
+        nested_document = raw_document.get(container_name)
+        if not isinstance(nested_document, dict):
+            continue
+        nested_chunk = _extract_tool_rag_chunk_from_document_mapping(
+            nested_document,
+            depth=depth + 1,
+            visited=visited,
+        )
+        if nested_chunk:
+            return nested_chunk
+    return None
+
+
+def _extract_tool_rag_chunks_from_document_list(raw_documents: object) -> list[str]:
     if not isinstance(raw_documents, (list, tuple)):
         return []
-
     extracted_chunks: list[str] = []
     for raw_document in raw_documents:
         if isinstance(raw_document, str):
@@ -9746,24 +10233,28 @@ def _extract_tool_rag_chunks_from_output(output: dict[str, object]) -> list[str]
             continue
         if not isinstance(raw_document, dict):
             continue
-        for field_name in (
-            "snippet",
-            "content",
-            "text",
-            "body",
-            "chunk",
-            "page_content",
-            "document_text",
-        ):
-            raw_value = raw_document.get(field_name)
-            if not isinstance(raw_value, str):
-                continue
-            normalized_chunk = raw_value.strip()
-            if not normalized_chunk:
-                continue
+        normalized_chunk = _extract_tool_rag_chunk_from_document_mapping(raw_document)
+        if normalized_chunk:
             extracted_chunks.append(normalized_chunk)
-            break
     return extracted_chunks
+
+
+def _extract_tool_rag_chunks_from_output(output: dict[str, object]) -> list[str]:
+    raw_chunks = output.get("chunks")
+    if isinstance(raw_chunks, (list, tuple)):
+        return [
+            chunk.strip()
+            for chunk in raw_chunks
+            if isinstance(chunk, str) and chunk.strip()
+        ]
+
+    for list_field_name in _TOOL_RAG_DOCUMENT_LIST_FIELDS:
+        extracted_chunks = _extract_tool_rag_chunks_from_document_list(
+            output.get(list_field_name)
+        )
+        if extracted_chunks:
+            return extracted_chunks
+    return []
 
 
 def build_tool_prompt_with_observations(
@@ -11442,6 +11933,19 @@ def get_tool_effective_result_output_keys(
         registry_loader=registry_loader,
     )
     if resolved_registration.result_preview_keys:
+        semantic_family = get_tool_semantic_kind(
+            name=normalized_name,
+            registration=resolved_registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        )
+        output_keys = _augment_http_json_local_calculator_output_keys(
+            output_keys=output_keys,
+            registration=resolved_registration,
+            semantic_kind=semantic_kind,
+            semantic_family=semantic_family,
+        )
         return output_keys
     semantic_family = get_tool_semantic_kind(
         name=normalized_name,
