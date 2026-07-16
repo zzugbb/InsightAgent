@@ -61,6 +61,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_attempt_loop_result,
     build_tool_attempt_loop_terminal_result,
     build_tool_plan_item_retry_loop_result,
+    build_tool_plan_item_retry_loop_execution_result,
     build_tool_attempt_error_transition,
     build_tool_attempt_outcome,
     build_tool_attempt_result,
@@ -10676,6 +10677,101 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_get_task_trace_export_summary_sanitizes_http_json_tool_meta_for_json_export(
+        self,
+    ) -> None:
+        original_loader = chat_persistence_module.get_task_trace_steps_from_task  # type: ignore[attr-defined]
+        original_rag_helper = chat_persistence_module.get_trace_rag_export_summary  # type: ignore[attr-defined]
+        raw_step = chat_persistence_module.TraceStep(  # type: ignore[attr-defined]
+            id="export-step-http-json-sensitive",
+            type="action",
+            content="Tool done: Provider Status",
+            seq=5,
+            meta={
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "input": {
+                        "query": "status token=hidden",
+                        "access_token": "hidden",
+                        "headers": {
+                            "Authorization": "Bearer hidden",
+                        },
+                    },
+                    "effective_result_preview_keys": ["status", "message"],
+                    "effective_result_output_keys": [
+                        "status",
+                        "message",
+                        "request_id",
+                    ],
+                    "output_preview": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "hidden",
+                        "request_id": "Bearer secret-token",
+                    },
+                    "output": {
+                        "status": "ready",
+                        "message": "secret=hidden",
+                        "access_token": "hidden",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            },
+        )
+        try:
+            chat_persistence_module.get_task_trace_steps_from_task = lambda _task: [  # type: ignore[attr-defined]
+                raw_step
+            ]
+            chat_persistence_module.get_trace_rag_export_summary = lambda _trace_steps: {  # type: ignore[attr-defined]
+                "rag_hit_count": 0,
+                "rag_knowledge_base_ids": [],
+                "rag_chunks": [],
+            }
+
+            payload = chat_persistence_module.get_task_trace_export_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-export-trace-json"}
+            )
+        finally:
+            chat_persistence_module.get_task_trace_steps_from_task = original_loader  # type: ignore[attr-defined]
+            chat_persistence_module.get_trace_rag_export_summary = original_rag_helper  # type: ignore[attr-defined]
+
+        exported_step = payload["steps"][0]
+        tool_meta = exported_step.meta.tool  # type: ignore[union-attr]
+
+        self.assertEqual(
+            tool_meta["input"],
+            {
+                "query": "status token=[redacted]",
+                "access_token": "[redacted]",
+                "headers": {
+                    "Authorization": "[redacted]",
+                },
+            },
+        )
+        self.assertEqual(
+            tool_meta["output_preview"],
+            {
+                "status": "ready",
+                "message": "gateway token=[redacted]",
+            },
+        )
+        self.assertEqual(
+            tool_meta["output"],
+            {
+                "status": "ready",
+                "message": "secret=[redacted]",
+            },
+        )
+        exported_json = json.dumps(exported_step.model_dump(), ensure_ascii=False)
+        self.assertNotIn('"access_token": "hidden"', exported_json)
+        self.assertNotIn("Bearer hidden", exported_json)
+        self.assertNotIn("secret-token", exported_json)
+        self.assertNotIn("token=hidden", exported_json)
+        self.assertNotIn("secret=hidden", exported_json)
 
     def test_get_task_trace_export_summary_from_task_coerces_model_rag_chunks(
         self,
@@ -22547,6 +22643,74 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertFalse(extra_tools["calc_eval_fast"].retryable_by_default)
         self.assertEqual(extra_tools["calc_eval_fast"].kind, "local_calculator")
 
+    def test_build_tool_registry_extra_tools_from_settings_sanitizes_inherited_execution_meta(
+        self,
+    ) -> None:
+        original_registration = tool_runtime_module._REGISTERED_TOOLS["task_retrieve"]  # type: ignore[attr-defined]
+        inherited_registration = ToolRegistration(
+            **{
+                **original_registration.__dict__,
+                "execution_kind": "http_json",
+                "execution_summary": {
+                    "method": "GET",
+                    "url_path": "/v1/token=hidden/api_key/secret/search",
+                    "response_path": "$.data.access_token",
+                    "result_field_names": ["documents_total", "access_token"],
+                },
+                "execution_diagnostics": (
+                    "unsupported tool execution kind api_key=hidden",
+                    "http_json execution query_params.access_token must be safe",
+                ),
+            }
+        )
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                    }
+                }
+            )
+        )
+        try:
+            tool_runtime_module._REGISTERED_TOOLS["task_retrieve"] = inherited_registration  # type: ignore[attr-defined]
+
+            extra_tools = build_tool_registry_extra_tools_from_settings(
+                settings=settings,
+            )
+        finally:
+            tool_runtime_module._REGISTERED_TOOLS["task_retrieve"] = original_registration  # type: ignore[attr-defined]
+
+        provider_search = extra_tools["provider_search"]
+        self.assertEqual(
+            provider_search.execution_summary,
+            {
+                "method": "GET",
+                "url_path": "/v1/[redacted]/[redacted]/[redacted]/search",
+                "response_path": "$.data.[redacted]",
+                "result_field_names": ["documents_total", "[redacted]"],
+            },
+        )
+        self.assertEqual(
+            provider_search.execution_diagnostics,
+            (
+                "unsupported tool execution kind [redacted]",
+                "http_json execution [redacted] must be safe",
+            ),
+        )
+        combined = json.dumps(
+            {
+                "summary": provider_search.execution_summary,
+                "diagnostics": provider_search.execution_diagnostics,
+            },
+            ensure_ascii=False,
+        )
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("api_key/secret", combined)
+        self.assertNotIn("access_token", combined)
+
     def test_build_tool_registry_extra_tools_from_settings_diagnoses_invalid_default_timeout(
         self,
     ) -> None:
@@ -27663,6 +27827,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_registry_diagnostics_runtime_artifacts_redacts_sensitive_values(
+        self,
+    ) -> None:
+        diagnostics = {
+            "skipped_registry_sources": (),
+            "missing_registry_sources": (),
+            "skipped_registry_files": (),
+            "missing_registry_files": (),
+            "skipped_registry_dirs": (),
+            "missing_registry_dirs": (),
+            "invalid_tool_executions": (
+                "provider_status: unsupported tool execution kind api_key=hidden",
+                "provider_search: http_json execution query_params.access_token must be safe",
+            ),
+        }
+
+        result = build_tool_registry_diagnostics_runtime_artifacts(
+            task_id="task-1",
+            step_id="step-1",
+            seq=4,
+            model="mock-gpt",
+            provider_source_name="file_source",
+            diagnostics=diagnostics,
+        )
+
+        self.assertTrue(result["summary"]["has_diagnostics"])
+        self.assertEqual(
+            result["summary"]["entries"][0]["values"],
+            (
+                "provider_status: unsupported tool execution kind [redacted]",
+                "provider_search: http_json execution [redacted] must be safe",
+            ),
+        )
+        content = result["trace_step"]["content"]
+        self.assertIn("unsupported tool execution kind [redacted]", content)
+        self.assertIn("http_json execution [redacted] must be safe", content)
+        self.assertNotIn("api_key=hidden", content)
+        self.assertNotIn("access_token", content)
+
     def test_get_task_export_payload_summary_reuses_shared_helpers(self) -> None:
         original_export_helper = chat_persistence_module.get_task_export_summary_from_task
         captured: list[object] = []
@@ -29001,6 +29204,56 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("internal_trace_write", "record_audit_event"),
         )
 
+    def test_build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts_redacts_raw_diagnostics(
+        self,
+    ) -> None:
+        result = build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts(
+            service_actions=[
+                {
+                    "kind": "internal_trace_write",
+                    "trace_step": {
+                        "id": "step-registry",
+                        "content": (
+                            "provider_search: unsupported tool execution kind api_key=hidden"
+                        ),
+                    },
+                    "trace_event": {
+                        "step": {
+                            "content": (
+                                "provider_search: http_json execution query_params.access_token must be safe"
+                            ),
+                        },
+                    },
+                    "persist_force": True,
+                },
+                {
+                    "kind": "record_audit_event",
+                    "kwargs": {
+                        "event_type": "tool_registry_diagnostics",
+                        "detail": {
+                            "entries": (
+                                {
+                                    "kind": "invalid",
+                                    "target": "tool_executions",
+                                    "count": 1,
+                                    "values": (
+                                        "provider_search: http_json execution headers.x-api-key must be safe",
+                                    ),
+                                },
+                            ),
+                        },
+                    },
+                },
+            ],
+        )
+
+        serialized = json.dumps(result.to_dict(), default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+
     def test_execute_configured_tool_registry_provider_runtime_service_actions_records_audit(
         self,
     ) -> None:
@@ -30175,6 +30428,156 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result.provider_source_name, "file_source")
         self.assertEqual(result.diagnostics_runtime.summary.total, 3)
         self.assertEqual(result.audit_event, {"event_type": "tool_registry_diagnostics"})
+
+    def test_build_configured_tool_registry_provider_runtime_artifacts_model_from_dict_redacts_raw_diagnostics(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        result = build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+            provider=provider,
+            provider_source_name="provider_suite",
+            runtime_artifacts={
+                "provider_source_name": "provider_suite",
+                "selected_source_diagnostics": {
+                    "invalid_tool_executions": (
+                        "provider_search: unsupported tool execution kind api_key=hidden",
+                        "provider_search: http_json execution query_params.access_token must be safe",
+                    ),
+                },
+                "source_diagnostics": {
+                    "provider_suite": {
+                        "invalid_tool_executions": (
+                            "provider_search: unsupported tool execution kind api_key=hidden",
+                            "provider_search: http_json execution headers.x-api-key must be safe",
+                        ),
+                    },
+                },
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": True,
+                        "skipped_total": 0,
+                        "missing_total": 0,
+                        "total": 2,
+                        "entries": (),
+                    },
+                    "trace_step": None,
+                    "trace_event": None,
+                    "audit_detail": None,
+                },
+            },
+        )
+
+        self.assertEqual(
+            result.selected_source_diagnostics["invalid_tool_executions"],
+            (
+                "provider_search: unsupported tool execution kind [redacted]",
+                "provider_search: http_json execution [redacted] must be safe",
+            ),
+        )
+        self.assertEqual(
+            result.source_diagnostics["provider_suite"]["invalid_tool_executions"],
+            (
+                "provider_search: unsupported tool execution kind [redacted]",
+                "provider_search: http_json execution [redacted] must be safe",
+            ),
+        )
+        serialized = json.dumps(result.to_dict(), default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("x-api-key", serialized)
+
+    def test_build_configured_tool_registry_provider_runtime_artifacts_model_from_dict_redacts_diagnostics_runtime_payload(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        result = build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+            provider=provider,
+            provider_source_name="provider_suite",
+            runtime_artifacts={
+                "provider_source_name": "provider_suite",
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": True,
+                        "skipped_total": 0,
+                        "missing_total": 0,
+                        "total": 2,
+                        "entries": (
+                            {
+                                "kind": "invalid",
+                                "target": "tool_executions",
+                                "count": 2,
+                                "values": (
+                                    "provider_search: unsupported tool execution kind api_key=hidden",
+                                    "provider_search: http_json execution query_params.access_token must be safe",
+                                ),
+                            },
+                        ),
+                    },
+                    "trace_step": {
+                        "id": "step-registry",
+                        "content": (
+                            "provider_search: unsupported tool execution kind api_key=hidden\n"
+                            "provider_search: http_json execution headers.x-api-key must be safe"
+                        ),
+                    },
+                    "trace_event": {
+                        "step": {
+                            "content": (
+                                "provider_search: http_json execution query_params.access_token must be safe"
+                            ),
+                        },
+                    },
+                    "audit_detail": {
+                        "entries": (
+                            {
+                                "kind": "invalid",
+                                "target": "tool_executions",
+                                "count": 1,
+                                "values": (
+                                    "provider_search: unsupported tool execution kind token=hidden",
+                                ),
+                            },
+                        ),
+                    },
+                },
+                "audit_event": {
+                    "event_type": "tool_registry_diagnostics",
+                    "detail": {
+                        "entries": (
+                            {
+                                "kind": "invalid",
+                                "target": "tool_executions",
+                                "count": 1,
+                                "values": (
+                                    "provider_search: http_json execution json_body.client_secret must be safe",
+                                ),
+                            },
+                        ),
+                    },
+                },
+            },
+        )
+
+        summary_values = result.diagnostics_runtime.summary.entries[0]["values"]
+        self.assertEqual(
+            summary_values,
+            (
+                "provider_search: unsupported tool execution kind [redacted]",
+                "provider_search: http_json execution [redacted] must be safe",
+            ),
+        )
+        serialized = json.dumps(result.to_dict(), default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn("client_secret", serialized)
 
     def test_build_configured_tool_registry_provider_service_execution_model_from_dict_keeps_fields(
         self,
@@ -32027,6 +32430,72 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 },
             ),
         )
+
+    def test_build_configured_tool_registry_provider_preflight_summary_model_redacts_sensitive_execution_diagnostics(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            registry={
+                "provider_search": ToolRegistration(
+                    name="provider_search",
+                    kind="provider_retrieval",
+                    label="Provider Search",
+                    retryable_by_default=False,
+                    default_timeout_ms=15_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "query": str(tool_input.get("query", "")),
+                        "hit_count": 1,
+                    },
+                ),
+            }
+        )
+
+        result = build_configured_tool_registry_provider_preflight_summary_model_from_parts(
+            provider=provider,
+            provider_source_name="provider_suite",
+            runtime_artifacts=build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+                provider=provider,
+                provider_source_name="provider_suite",
+                runtime_artifacts={
+                    "provider_source_name": "provider_suite",
+                    "selected_source_diagnostics": {
+                        "invalid_tool_executions": (
+                            "provider_search: unsupported tool execution kind api_key=hidden",
+                            "provider_search: http_json execution query_params.access_token must be safe",
+                        ),
+                    },
+                    "diagnostics_runtime": {
+                        "summary": {
+                            "has_diagnostics": True,
+                            "skipped_total": 0,
+                            "missing_total": 0,
+                            "total": 2,
+                            "entries": (),
+                        },
+                        "trace_step": None,
+                        "trace_event": None,
+                        "audit_detail": None,
+                    },
+                },
+            ),
+            service_actions=(),
+            trace_write_count=0,
+            audit_event_count=0,
+        )
+
+        provider_search = result.tool_details[0]
+        self.assertEqual(
+            provider_search["execution_diagnostics"],
+            (
+                "unsupported tool execution kind [redacted]",
+                "http_json execution [redacted] must be safe",
+            ),
+        )
+        joined_diagnostics = "\n".join(provider_search["execution_diagnostics"])
+        self.assertNotIn("api_key=hidden", joined_diagnostics)
+        self.assertNotIn("access_token", joined_diagnostics)
 
     def test_build_configured_tool_registry_provider_preflight_summary_model_humanizes_unlabeled_real_tool_names(
         self,
@@ -38215,6 +38684,72 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "knowledge_retrieval",
         )
 
+    def test_build_tool_success_meta_redacts_http_json_raw_last_error(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=("status",),
+            result_output_keys=("status",),
+        )
+        base_step = build_action_step_initial_step(
+            step_id="step-1",
+            seq=3,
+            name="provider_status",
+            meta=build_action_step_initial_meta(
+                name="provider_status",
+                tool_input={"query": "status"},
+                model="mock-gpt",
+                label="tool_1",
+                token_count=5,
+                registration=registration,
+            ),
+            registration=registration,
+        )
+
+        success_meta = build_tool_success_meta(
+            name="provider_status",
+            tool_input={"query": "status"},
+            output={"status": "ready"},
+            retry_count=1,
+            last_error="retry failed token=hidden api_key=hidden",
+            registration=registration,
+        )
+        success_step = build_tool_step_success_update(
+            action_step=base_step,
+            name="provider_status",
+            tool_input={"query": "status"},
+            output={"status": "ready"},
+            retry_count=1,
+            token_count=7,
+            last_error="retry failed token=hidden api_key=hidden",
+            registration=registration,
+        )
+
+        self.assertEqual(
+            success_meta["tool"]["error"],
+            "retry failed [redacted] [redacted]",
+        )
+        self.assertEqual(
+            success_step["meta"]["tool"]["error"],  # type: ignore[index]
+            "retry failed [redacted] [redacted]",
+        )
+        combined = json.dumps(
+            {"meta": success_meta, "step": success_step},
+            ensure_ascii=False,
+        )
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("api_key=hidden", combined)
+        self.assertNotIn("hidden", combined)
+
     def test_build_tool_success_and_end_payload_include_result_summary_for_real_tool(
         self,
     ) -> None:
@@ -39056,6 +39591,108 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_start_and_action_meta_redact_http_json_sensitive_tool_input(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 1,
+                "tool_kind": "provider_retrieval",
+            },
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total",),
+            runtime_semantic_kind="provider_search",
+        )
+        tool_input = {
+            "query": "revenue trend token=hidden",
+            "access_token": "hidden",
+            "filters": {
+                "client_secret": "hidden",
+                "region": "us",
+            },
+            "headers": [
+                {
+                    "Authorization": "Bearer hidden",
+                    "label": "primary token=hidden",
+                }
+            ],
+        }
+
+        start_payload = build_tool_start_payload(
+            task_id="task-1",
+            step_id="step-1",
+            name="provider_search",
+            tool_input=tool_input,
+            retry_count=0,
+            registration=registration,
+        )
+        action_meta = build_action_step_initial_meta(
+            name="provider_search",
+            tool_input=tool_input,
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            registration=registration,
+        )
+        success_meta = build_tool_success_meta(
+            name="provider_search",
+            tool_input=tool_input,
+            output={"documents_total": 1},
+            retry_count=0,
+            last_error=None,
+            registration=registration,
+        )
+        error_meta = build_tool_error_meta(
+            name="provider_search",
+            tool_input=tool_input,
+            retry_count=0,
+            error_message="upstream failed",
+            registration=registration,
+        )
+
+        expected_safe_input = {
+            "query": "revenue trend token=[redacted]",
+            "access_token": "[redacted]",
+            "filters": {
+                "client_secret": "[redacted]",
+                "region": "us",
+            },
+            "headers": [
+                {
+                    "Authorization": "[redacted]",
+                    "label": "primary token=[redacted]",
+                }
+            ],
+        }
+        self.assertEqual(
+            start_payload["input"],
+            expected_safe_input,
+        )
+        self.assertEqual(action_meta["tool"]["input"], start_payload["input"])  # type: ignore[index]
+        self.assertEqual(success_meta["tool"]["input"], expected_safe_input)  # type: ignore[index]
+        self.assertEqual(error_meta["tool"]["input"], expected_safe_input)  # type: ignore[index]
+        combined = json.dumps(
+            {
+                "start": start_payload,
+                "meta": action_meta,
+                "success": success_meta,
+                "error": error_meta,
+            },
+            ensure_ascii=False,
+        )
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("Bearer hidden", combined)
+        self.assertNotIn("client_secret\": \"hidden", combined)
+        self.assertNotIn("access_token\": \"hidden", combined)
+
     def test_build_tool_start_and_error_payload_include_execution_diagnostics_for_invalid_real_tool_execution(
         self,
     ) -> None:
@@ -39135,6 +39772,177 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "error": "Unsupported tool execution kind: unsupported_transport",
             },
         )
+
+    def test_build_tool_runtime_semantics_meta_redacts_sensitive_execution_diagnostics(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            execution_diagnostics=(
+                "unsupported tool execution kind api_key=hidden",
+                "http_json execution query_params.access_token must be safe",
+            ),
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 1,
+            },
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total",),
+            runtime_semantic_kind="provider_search",
+        )
+
+        start_payload = build_tool_start_payload(
+            task_id="task-1",
+            step_id="step-1",
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            retry_count=0,
+            registration=registration,
+        )
+        action_meta = build_action_step_initial_meta(
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            registration=registration,
+        )
+
+        self.assertEqual(
+            start_payload["execution_diagnostics"],
+            [
+                "unsupported tool execution kind [redacted]",
+                "http_json execution [redacted] must be safe",
+            ],
+        )
+        self.assertEqual(
+            action_meta["tool"]["execution_diagnostics"],  # type: ignore[index]
+            start_payload["execution_diagnostics"],
+        )
+        combined = json.dumps(
+            {"start": start_payload, "action_meta": action_meta},
+            ensure_ascii=False,
+        )
+        self.assertNotIn("api_key=hidden", combined)
+        self.assertNotIn("access_token", combined)
+
+    def test_build_tool_runtime_semantics_meta_redacts_sensitive_execution_summary(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            execution_summary={
+                "method": "GET",
+                "url_origin": "https://provider.example",
+                "url_path": "/v1/token=hidden/api_key/secret/search",
+                "response_path": "$.data.access_token",
+                "result_field_names": ["documents_total", "access_token"],
+            },
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 1,
+            },
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total",),
+            runtime_semantic_kind="provider_search",
+        )
+
+        start_payload = build_tool_start_payload(
+            task_id="task-1",
+            step_id="step-1",
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            retry_count=0,
+            registration=registration,
+        )
+        action_meta = build_action_step_initial_meta(
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            registration=registration,
+        )
+
+        expected_summary = {
+            "method": "GET",
+            "url_origin": "https://provider.example",
+            "url_path": "/v1/[redacted]/[redacted]/[redacted]/search",
+            "response_path": "$.data.[redacted]",
+            "result_field_names": ["documents_total", "[redacted]"],
+        }
+        self.assertEqual(start_payload["execution_summary"], expected_summary)
+        self.assertEqual(
+            action_meta["tool"]["execution_summary"],  # type: ignore[index]
+            expected_summary,
+        )
+        combined = json.dumps(
+            {"start": start_payload, "action_meta": action_meta},
+            ensure_ascii=False,
+        )
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("access_token", combined)
+        self.assertNotIn("api_key/secret", combined)
+
+    def test_build_tool_error_payload_and_meta_redact_http_json_raw_error_message(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        error_meta = build_tool_error_meta(
+            name="provider_status",
+            tool_input={"query": "demo"},
+            retry_count=0,
+            error_message="upstream failed token=hidden",
+            registration=registration,
+        )
+        error_payload = build_tool_error_payload(
+            name="provider_status",
+            task_id="task-1",
+            step_id="step-1",
+            error_message="upstream failed api_key=hidden",
+            retry_count=0,
+            registration=registration,
+        )
+
+        self.assertEqual(
+            error_meta["tool"]["error"],
+            "upstream failed [redacted]",
+        )
+        self.assertEqual(
+            error_payload["output_preview"],
+            {"error": "upstream failed [redacted]"},
+        )
+        self.assertEqual(error_payload["error"], "upstream failed [redacted]")
+        combined = json.dumps(
+            {"meta": error_meta, "payload": error_payload},
+            ensure_ascii=False,
+        )
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("api_key=hidden", combined)
+        self.assertNotIn("hidden", combined)
 
     def test_build_tool_phase_and_policy_keep_current_calc_defaults(self) -> None:
         ctx = build_tool_runtime_context(
@@ -39602,6 +40410,81 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNone(loop_result["success_effects"])
         self.assertIsNotNone(loop_result["terminal_effects"])
 
+    def test_build_tool_attempt_loop_result_redacts_terminal_diagnostics_payload(
+        self,
+    ) -> None:
+        attempt_execution = {
+            "tool_end_event": {
+                "status": "error",
+                "message": "provider_search failed with token=hidden",
+            },
+            "error_event": {
+                "code": "tool_execution_error",
+                "message": (
+                    "provider_search: http_json execution query_params.access_token must be safe"
+                ),
+            },
+            "retryable": False,
+            "next_action_step": {
+                "id": "step-1",
+                "seq": 3,
+                "content": (
+                    "provider_search: unsupported tool execution kind api_key=hidden"
+                ),
+            },
+            "last_error": "provider_search failed with token=hidden",
+            "plan_item_result": {
+                "outcome": "terminal_failure",
+                "error": "headers.x-api-key is invalid",
+            },
+            "postprocess": None,
+            "success_effects": None,
+            "terminal_effects": {
+                "trace_step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: unsupported tool execution kind api_key=hidden"
+                    ),
+                },
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {
+                        "id": "step-1",
+                        "seq": 3,
+                        "content": (
+                            "provider_search: http_json execution json_body.client_secret must be safe"
+                        ),
+                    },
+                },
+                "status": "failed",
+                "error_message": "provider_search failed with token=hidden",
+                "audit_detail": {
+                    "path": "query_params.access_token",
+                    "message": "api_key=hidden",
+                },
+                "state": {
+                    "task_id": "task-1",
+                    "phase": "error",
+                    "message": "token=hidden",
+                },
+            },
+        }
+
+        loop_result = build_tool_attempt_loop_result(
+            attempt_execution=attempt_execution,
+        )
+
+        serialized = json.dumps(loop_result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+
     def test_build_tool_attempt_loop_terminal_result_keeps_success_shape(self) -> None:
         iteration_ctx = build_tool_iteration_context(
             step_id="step-1",
@@ -39697,6 +40580,55 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertTrue(bool(terminal["should_return"]))
         self.assertIsNotNone(terminal["terminal_effects"])
         self.assertEqual(terminal["terminal_effects"]["state"]["phase"], "error")
+
+    def test_build_tool_attempt_loop_terminal_result_redacts_diagnostics_payload(
+        self,
+    ) -> None:
+        loop_result = {
+            "terminal_effects": {
+                "trace_step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: unsupported tool execution kind api_key=hidden"
+                    ),
+                },
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {
+                        "id": "step-1",
+                        "seq": 3,
+                        "content": (
+                            "provider_search: http_json execution headers.x-api-key must be safe"
+                        ),
+                    },
+                },
+                "status": "failed",
+                "error_message": "provider_search failed with token=hidden",
+                "audit_detail": {
+                    "path": "json_body.client_secret",
+                    "message": "api_key=hidden",
+                },
+                "state": {
+                    "task_id": "task-1",
+                    "phase": "error",
+                    "message": "token=hidden",
+                },
+            },
+        }
+
+        result = build_tool_attempt_loop_terminal_result(
+            loop_result=loop_result,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
 
     def test_build_tool_plan_item_retry_loop_result_keeps_success_shape(self) -> None:
         action_step = {
@@ -39798,6 +40730,135 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNone(result["success_effects"])
         self.assertIsNotNone(result["terminal_effects"])
 
+    def test_build_tool_plan_item_retry_loop_result_redacts_terminal_diagnostics_payload(
+        self,
+    ) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": (
+                "provider_search: unsupported tool execution kind api_key=hidden"
+            ),
+        }
+        terminal_effects = {
+            "trace_step": action_step,
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    **action_step,
+                    "content": (
+                        "provider_search: http_json execution query_params.access_token must be safe"
+                    ),
+                },
+            },
+            "status": "failed",
+            "error_message": "provider_search failed with token=hidden",
+            "audit_detail": {
+                "path": "headers.x-api-key",
+                "message": "json_body.client_secret is invalid",
+            },
+            "state": {
+                "task_id": "task-1",
+                "phase": "error",
+                "message": "api_key=hidden",
+            },
+        }
+        loop_result = {
+            "tool_end_event": {"status": "error"},
+            "error_event": {"code": "tool_execution_error"},
+            "retryable": False,
+            "next_action_step": action_step,
+            "last_error": "provider_search failed with token=hidden",
+            "plan_item_result": {"outcome": "terminal_failure"},
+            "postprocess": None,
+            "success_effects": None,
+            "terminal_effects": terminal_effects,
+        }
+
+        result = build_tool_plan_item_retry_loop_result(
+            loop_result=loop_result,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+
+    def test_build_tool_plan_item_retry_loop_execution_result_redacts_loop_diagnostics_payload(
+        self,
+    ) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": (
+                "provider_search: unsupported tool execution kind api_key=hidden"
+            ),
+        }
+        terminal_effects = {
+            "trace_step": action_step,
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    **action_step,
+                    "content": (
+                        "provider_search: http_json execution json_body.client_secret must be safe"
+                    ),
+                },
+            },
+            "status": "failed",
+            "error_message": "provider_search failed with token=hidden",
+            "audit_detail": {
+                "path": "query_params.access_token",
+                "message": "headers.x-api-key is invalid",
+            },
+            "state": {
+                "task_id": "task-1",
+                "phase": "error",
+                "message": "api_key=hidden",
+            },
+        }
+        loop_result = {
+            "tool_end_event": {
+                "status": "error",
+                "message": "provider_search failed with token=hidden",
+            },
+            "error_event": {
+                "code": "tool_execution_error",
+                "message": "headers.x-api-key is invalid",
+            },
+            "retryable": False,
+            "next_action_step": action_step,
+            "last_error": "provider_search failed with token=hidden",
+            "plan_item_result": {
+                "outcome": "terminal_failure",
+                "error": "json_body.client_secret is invalid",
+            },
+            "postprocess": None,
+            "success_effects": None,
+            "terminal_effects": terminal_effects,
+        }
+
+        result = build_tool_plan_item_retry_loop_execution_result(
+            loop_result=loop_result,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+
     def test_build_tool_step_updates_keep_current_shape(self) -> None:
         base_step = {
             "id": "step-1",
@@ -39847,6 +40908,56 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(success_step["meta"]["tool"]["status"], "done")
         self.assertEqual(error_step["content"], "Tool error: Calculator")
         self.assertEqual(error_step["meta"]["tool"]["status"], "error")
+
+    def test_build_tool_step_error_update_redacts_legacy_error_payload(self) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {},
+            execution_kind="http_json",
+        )
+        base_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool running: Provider Search",
+            "meta": {
+                "model": "mock-gpt",
+                "step_type": "tool_call",
+                "legacy_error": (
+                    "provider_search: http_json execution query_params.access_token must be safe"
+                ),
+                "tool": {
+                    "name": "provider_search",
+                    "status": "running",
+                    "legacy_error": (
+                        "provider_search: unsupported tool execution kind api_key=hidden"
+                    ),
+                },
+            },
+        }
+
+        error_step = build_tool_step_error_update(
+            action_step=base_step,
+            name="provider_search",
+            tool_input={"query": "demo"},
+            retry_count=1,
+            token_count=9,
+            error_message="provider_search failed with token=hidden",
+            registration=registration,
+        )
+
+        serialized = json.dumps(error_step, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+        self.assertIn("provider_search failed with [redacted]", serialized)
 
     def test_build_tool_step_updates_support_registry_provider_without_explicit_label_or_registration(
         self,
@@ -40050,6 +41161,89 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "step_id": "step-1",
             },
         )
+
+    def test_build_tool_attempt_error_transition_redacts_http_json_error_event_message(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+        base_step = build_action_step_initial_step(
+            step_id="step-1",
+            seq=3,
+            name="provider_status",
+            meta=build_action_step_initial_meta(
+                name="provider_status",
+                tool_input={"query": "status"},
+                model="mock-gpt",
+                label="tool_1",
+                token_count=5,
+                registration=registration,
+            ),
+            registration=registration,
+        )
+        ctx = build_tool_runtime_context(
+            name="provider_status",
+            prompt="status",
+            user_id="user-1",
+            attempt=0,
+            registry={"provider_status": registration},
+        )
+        exc = MockToolExecutionError(
+            "upstream failed token=hidden api_key=hidden",
+            fatal=True,
+        )
+
+        transition = build_tool_attempt_error_transition(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=base_step,
+            runtime_ctx=ctx,
+            name="provider_status",
+            tool_input={"query": "status"},
+            exc=exc,
+            token_count=9,
+            registry={"provider_status": registration},
+        )
+        terminal = build_tool_terminal_failure_transition(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=transition["action_step"],  # type: ignore[arg-type]
+            error_message=str(transition["error_message"]),
+            retry_count=int(transition["retry_count"]),
+        )
+
+        self.assertEqual(
+            transition["events"]["tool_end"]["output_preview"],
+            {"error": "upstream failed [redacted] [redacted]"},
+        )
+        self.assertEqual(
+            transition["events"]["error"]["message"],  # type: ignore[index]
+            "upstream failed [redacted] [redacted]",
+        )
+        self.assertEqual(
+            transition["error_message"],
+            "upstream failed [redacted] [redacted]",
+        )
+        self.assertEqual(
+            terminal["error_message"],
+            "upstream failed [redacted] [redacted]",
+        )
+        combined = json.dumps(
+            {"transition": transition, "terminal": terminal},
+            ensure_ascii=False,
+        )
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("api_key=hidden", combined)
+        self.assertNotIn("hidden", combined)
 
     def test_build_tool_attempt_error_transition_honors_runtime_timeout(self) -> None:
         base_step = {
@@ -41139,6 +42333,45 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "missing registry files: /tmp/missing-registry.json",
         )
 
+    def test_get_trace_step_display_content_redacts_tool_registry_diagnostics_values(
+        self,
+    ) -> None:
+        step = SimpleNamespace(
+            id="step-tool-registry-diagnostics-sensitive",
+            seq=5,
+            type="observation",
+            content="Tool registry diagnostics: source=file_source skipped=0 missing=0",
+            meta=SimpleNamespace(
+                tool_registry={
+                    "provider_source": "file_source",
+                    "has_diagnostics": True,
+                    "skipped_total": 0,
+                    "missing_total": 0,
+                    "total": 1,
+                    "entries": (
+                        {
+                            "kind": "invalid",
+                            "target": "tool_executions",
+                            "count": 1,
+                            "values": (
+                                "provider_status: unsupported tool execution kind token=hidden",
+                            ),
+                        },
+                    ),
+                }
+            ),
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(step)
+
+        self.assertEqual(
+            content,
+            "Tool registry diagnostics: source=file_source skipped=0 missing=0\n"
+            "invalid tool executions: "
+            "provider_status: unsupported tool execution kind [redacted]",
+        )
+        self.assertNotIn("token=hidden", content)
+
     def test_build_tool_step_updates_and_observation_use_display_label_for_mock_plan(
         self,
     ) -> None:
@@ -41321,6 +42554,43 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(transition["status"], "failed")
         self.assertEqual(transition["error_message"], "transient")
 
+    def test_build_tool_terminal_failure_transition_redacts_raw_diagnostics_payload(
+        self,
+    ) -> None:
+        step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": (
+                "provider_search: unsupported tool execution kind api_key=hidden"
+            ),
+            "meta": {
+                "tool": {
+                    "name": "provider_search",
+                    "status": "error",
+                    "error": (
+                        "provider_search: http_json execution query_params.access_token must be safe"
+                    ),
+                }
+            },
+        }
+
+        transition = build_tool_terminal_failure_transition(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=step,
+            error_message="provider_search failed with token=hidden",
+            retry_count=1,
+        )
+
+        serialized = json.dumps(transition, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+        self.assertIn("provider_search failed with [redacted]", serialized)
+
     def test_build_tool_rag_step_keeps_current_shape(self) -> None:
         self.assertEqual(
             build_tool_rag_step(
@@ -41410,6 +42680,55 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "retry_count": 0,
             },
         )
+
+    def test_build_tool_attempt_result_redacts_error_payload(self) -> None:
+        step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": (
+                "provider_search: unsupported tool execution kind api_key=hidden"
+            ),
+            "meta": {
+                "tool": {
+                    "name": "provider_search",
+                    "status": "error",
+                    "error": (
+                        "provider_search: http_json execution query_params.access_token must be safe"
+                    ),
+                }
+            },
+        }
+
+        result = build_tool_attempt_result(
+            outcome="error",
+            action_step=step,
+            events={
+                "tool_end": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "status": "error",
+                    "error": "headers.x-api-key is invalid",
+                },
+                "error": {
+                    "task_id": "task-1",
+                    "message": "provider_search failed with token=hidden",
+                    "code": "tool_execution_error",
+                },
+            },
+            retryable=False,
+            error_message="provider_search failed with token=hidden",
+            retry_count=1,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+        self.assertIn("provider_search failed with [redacted]", serialized)
 
     def test_build_tool_attempt_outcome_keeps_success_shape(self) -> None:
         base_step = {
@@ -41510,6 +42829,63 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(outcome["retry_count"], 1)
         self.assertEqual(outcome["action_step"]["content"], "Tool error: Calculator")
         self.assertEqual(outcome["events"]["tool_end"]["status"], "error")
+
+    def test_build_tool_attempt_outcome_redacts_error_payload(self) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {},
+            execution_kind="http_json",
+        )
+        registry = {"provider_search": registration}
+        base_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool running: Provider Search",
+            "meta": {
+                "model": "mock-gpt",
+                "step_type": "tool_call",
+                "legacy_error": (
+                    "provider_search: http_json execution json_body.client_secret must be safe"
+                ),
+                "tool": {
+                    "name": "provider_search",
+                    "status": "running",
+                },
+            },
+        }
+
+        outcome = build_tool_attempt_outcome(
+            task_id="task-1",
+            step_id="step-1",
+            action_step=base_step,
+            runtime_ctx=build_tool_runtime_context(
+                name="provider_search",
+                prompt="search",
+                user_id="user-1",
+                attempt=0,
+                registry=registry,
+            ),
+            name="provider_search",
+            tool_input={"query": "demo"},
+            output=None,
+            exc=MockToolExecutionError("provider_search failed with token=hidden", fatal=True),
+            token_count=9,
+            last_error=None,
+            registry=registry,
+        )
+
+        serialized = json.dumps(outcome, default=str)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+        self.assertIn("provider_search failed with [redacted]", serialized)
 
     def test_build_tool_attempt_outcome_honors_runtime_preview_policy(self) -> None:
         base_step = {
@@ -42700,6 +44076,84 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_plan_item_execution_redacts_http_json_rag_followup_chunks_from_raw_adapter_output(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total",),
+            runtime_semantic_kind="provider_search",
+            execution_kind="http_json",
+        )
+        registry = {"provider_search": registration}
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "demo"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+            registry=registry,
+        )
+        runtime_ctx = build_tool_runtime_context(
+            name="provider_search",
+            prompt="search demo",
+            user_id="user-1",
+            attempt=0,
+            registry=registry,
+        )
+
+        execution = build_tool_plan_item_execution(
+            task_id="task-1",
+            iteration_ctx=iteration_ctx,
+            action_step=iteration_ctx["action_step"],
+            runtime_ctx=runtime_ctx,
+            name="provider_search",
+            tool_input={"query": "demo"},
+            output={
+                "documents_total": 2,
+                "chunks": [
+                    "alpha token=hidden",
+                    "beta secret=hidden",
+                ],
+                "access_token": "hidden",
+                "request_id": "Bearer secret-token",
+            },
+            exc=None,
+            token_count=7,
+            last_error=None,
+            model="mock-gpt",
+            rag_step_id="rag-1",
+            rag_token_count=2,
+            registry=registry,
+        )
+
+        rag_followup = execution["success_effects"]["rag_followup"]
+        self.assertIsNotNone(rag_followup)
+        assert rag_followup is not None
+        rag_json = json.dumps(rag_followup, ensure_ascii=False)
+        self.assertEqual(
+            rag_followup["step"]["meta"]["rag"]["chunks"],
+            [
+                "alpha token=[redacted]",
+                "beta secret=[redacted]",
+            ],
+        )
+        self.assertNotIn("token=hidden", rag_json)
+        self.assertNotIn("secret=hidden", rag_json)
+        self.assertNotIn("access_token", rag_json)
+        self.assertNotIn("secret-token", rag_json)
+
     def test_build_tool_rag_followup_extracts_chunks_from_deep_nested_http_json_match_fields_for_real_tool(
         self,
     ) -> None:
@@ -43175,6 +44629,56 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIsNone(result["success_bundle"])
         self.assertEqual(result["terminal_failure"]["status"], "failed")
 
+    def test_build_tool_plan_item_result_redacts_terminal_failure_payload(self) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": (
+                "provider_search: unsupported tool execution kind api_key=hidden"
+            ),
+        }
+        terminal_failure = {
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    **action_step,
+                    "content": (
+                        "provider_search: http_json execution headers.x-api-key must be safe"
+                    ),
+                },
+            },
+            "audit_detail": {
+                "step_id": "step-1",
+                "retry_count": 2,
+                "message": "json_body.client_secret is invalid",
+            },
+            "state": {
+                "task_id": "task-1",
+                "phase": "error",
+                "message": "api_key=hidden",
+            },
+            "status": "failed",
+            "error_message": "provider_search failed with token=hidden",
+        }
+
+        result = build_tool_plan_item_result(
+            outcome="terminal_failure",
+            action_step=action_step,
+            last_error="provider_search failed with token=hidden",
+            success_bundle=None,
+            terminal_failure=terminal_failure,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+
     def test_build_tool_plan_item_execution_result_keeps_success_shape(self) -> None:
         action_step = {
             "id": "step-1",
@@ -43255,6 +44759,63 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result["last_error"], "transient")
         self.assertIsNone(result["success_bundle"])
         self.assertEqual(result["terminal_failure"]["status"], "failed")
+
+    def test_build_tool_plan_item_execution_result_redacts_terminal_failure_payload(
+        self,
+    ) -> None:
+        action_step = {
+            "id": "step-1",
+            "seq": 3,
+            "type": "action",
+            "content": (
+                "provider_search: unsupported tool execution kind api_key=hidden"
+            ),
+        }
+        terminal_failure = {
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    **action_step,
+                    "content": (
+                        "provider_search: http_json execution query_params.access_token must be safe"
+                    ),
+                },
+            },
+            "audit_detail": {
+                "step_id": "step-1",
+                "retry_count": 2,
+                "message": "headers.x-api-key is invalid",
+            },
+            "state": {
+                "task_id": "task-1",
+                "phase": "error",
+                "message": "api_key=hidden",
+            },
+            "status": "failed",
+            "error_message": "provider_search failed with token=hidden",
+        }
+        iteration_execution = {
+            "outcome": {
+                "action_step": action_step,
+                "error_message": "provider_search failed with token=hidden",
+            },
+            "success_artifacts": None,
+            "terminal_failure": terminal_failure,
+        }
+
+        result = build_tool_plan_item_execution_result(
+            iteration_execution=iteration_execution,
+            rag_followup=None,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
 
     def test_build_tool_plan_item_execution_keeps_success_shape(self) -> None:
         iteration_ctx = build_tool_iteration_context(
@@ -44193,6 +45754,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual([step["id"] for step in result["trace_steps"]], ["step-1"])
         self.assertEqual([event["step_id"] for event in result["trace_events"]], ["step-1"])
 
+    def test_build_tool_plan_item_stream_effects_redacts_raw_diagnostics_payload(
+        self,
+    ) -> None:
+        loop_execution_result = {
+            "trace_event": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: http_json execution query_params.access_token must be safe"
+                    ),
+                },
+            },
+            "success_effects": {
+                "trace_step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: unsupported tool execution kind api_key=hidden"
+                    ),
+                },
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {
+                        "id": "step-1",
+                        "seq": 3,
+                        "content": (
+                            "provider_search: http_json execution headers.x-api-key must be safe"
+                        ),
+                    },
+                },
+                "observation": "provider_search failed with token=hidden",
+                "rag_followup": None,
+            },
+            "terminal_effects": None,
+            "should_return": False,
+        }
+
+        result = build_tool_plan_item_stream_effects(
+            loop_execution_result=loop_execution_result,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+
     def test_build_tool_plan_item_terminal_return_effects_keeps_shape(self) -> None:
         terminal_effects = {
             "trace_step": {
@@ -44228,6 +45842,54 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result["failure_event"]["detail"],
             {"step_id": "step-1", "retry_count": 1},
         )
+
+    def test_build_tool_plan_item_terminal_return_effects_redacts_raw_diagnostics_payload(
+        self,
+    ) -> None:
+        terminal_effects = {
+            "trace_step": {
+                "id": "step-1",
+                "seq": 3,
+                "content": (
+                    "provider_search: unsupported tool execution kind api_key=hidden"
+                ),
+            },
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: http_json execution headers.x-api-key must be safe"
+                    ),
+                },
+            },
+            "status": "failed",
+            "error_message": "provider_search failed with token=hidden",
+            "audit_detail": {
+                "path": "query_params.access_token",
+                "message": "json_body.client_secret is invalid",
+            },
+            "state": {
+                "task_id": "task-1",
+                "phase": "error",
+                "message": "api_key=hidden",
+            },
+        }
+
+        result = build_tool_plan_item_terminal_return_effects(
+            terminal_effects=terminal_effects,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("provider_search failed with [redacted]", serialized)
+        self.assertIn("[redacted] is invalid", serialized)
 
     def test_build_tool_plan_item_return_action_keeps_shape(self) -> None:
         terminal_return_effects = {
@@ -44379,6 +46041,63 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "state_event": next_action["terminal_return_effects"]["state_event"],
             },
         )
+
+    def test_build_tool_plan_item_next_action_execution_redacts_raw_diagnostics_payload(
+        self,
+    ) -> None:
+        next_action = {
+            "kind": "return",
+            "continue_update": {
+                "tool_observations": [
+                    "provider_search failed with token=hidden",
+                ],
+                "seq_increment": 0,
+            },
+            "terminal_return_effects": {
+                "task_status": "failed",
+                "state_event": {
+                    "task_id": "task-1",
+                    "phase": "error",
+                    "message": "api_key=hidden",
+                },
+                "failure_event": {
+                    "event_type": "task_failed",
+                    "code": "tool_execution_error",
+                    "message": (
+                        "provider_search: http_json execution query_params.access_token must be safe"
+                    ),
+                    "detail": {
+                        "path": "headers.x-api-key",
+                        "message": "json_body.client_secret is invalid",
+                    },
+                },
+            },
+        }
+        trace_steps = [
+            {
+                "id": "step-1",
+                "seq": 3,
+                "content": (
+                    "provider_search: unsupported tool execution kind api_key=hidden"
+                ),
+            },
+        ]
+
+        result = build_tool_plan_item_next_action_execution(
+            task_id="task-1",
+            trace_steps=trace_steps,
+            user_id="user-1",
+            next_action=next_action,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
 
     def test_build_tool_plan_item_trace_write_service_action_keeps_shape(self) -> None:
         trace_write_action = {
@@ -44599,6 +46318,91 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_build_tool_plan_item_service_actions_redacts_raw_diagnostics_payload(
+        self,
+    ) -> None:
+        service_execution = {
+            "trace_write_actions": [
+                {
+                    "trace_step": {
+                        "id": "step-1",
+                        "seq": 3,
+                        "content": (
+                            "provider_search: unsupported tool execution kind api_key=hidden"
+                        ),
+                    },
+                    "trace_event": {
+                        "task_id": "task-1",
+                        "step_id": "step-1",
+                        "step": {
+                            "id": "step-1",
+                            "seq": 3,
+                            "content": (
+                                "provider_search: http_json execution query_params.access_token must be safe"
+                            ),
+                        },
+                    },
+                    "persist_force": True,
+                },
+            ],
+            "next_action_execution": {
+                "kind": "return",
+                "continue_update": {
+                    "tool_observations": [],
+                    "seq_increment": 0,
+                },
+                "continue_action": {
+                    "tool_observations": [],
+                    "seq_increment": 0,
+                },
+                "return_action": {
+                    "complete_task_kwargs": {
+                        "task_id": "task-1",
+                        "trace_steps": [
+                            {
+                                "id": "step-1",
+                                "seq": 3,
+                                "content": (
+                                    "provider_search failed with token=hidden"
+                                ),
+                            },
+                        ],
+                        "user_id": "user-1",
+                        "status": "failed",
+                    },
+                    "failure_event_kwargs": {
+                        "event_type": "task_failed",
+                        "code": "tool_execution_error",
+                        "message": (
+                            "provider_search: http_json execution headers.x-api-key must be safe"
+                        ),
+                        "detail": {
+                            "path": "json_body.client_secret",
+                            "message": "api_key=hidden",
+                        },
+                    },
+                    "state_event": {
+                        "task_id": "task-1",
+                        "phase": "error",
+                        "message": "token=hidden",
+                    },
+                },
+            },
+        }
+
+        result = build_tool_plan_item_service_actions(
+            service_execution=service_execution,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
 
     def test_build_tool_plan_item_service_effects_execution_keeps_continue_shape(self) -> None:
         service_effects = {
@@ -44873,6 +46677,62 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "failed",
         )
 
+    def test_build_tool_plan_item_service_execution_redacts_raw_diagnostics_payload(
+        self,
+    ) -> None:
+        loop_execution_result = {
+            "trace_event": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: http_json execution query_params.access_token must be safe"
+                    ),
+                },
+            },
+            "success_effects": {
+                "trace_step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: unsupported tool execution kind api_key=hidden"
+                    ),
+                },
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {
+                        "id": "step-1",
+                        "seq": 3,
+                        "content": (
+                            "provider_search: http_json execution headers.x-api-key must be safe"
+                        ),
+                    },
+                },
+                "observation": "provider_search failed with token=hidden",
+                "rag_followup": None,
+            },
+            "terminal_effects": None,
+            "should_return": False,
+        }
+
+        result = build_tool_plan_item_service_execution(
+            task_id="task-1",
+            trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+            user_id="user-1",
+            loop_execution_result=loop_execution_result,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+
     def test_build_tool_plan_item_service_effects_keeps_success_shape(self) -> None:
         loop_execution_result = {
             "trace_event": {
@@ -44957,6 +46817,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result["seq_increment"], 1)
         self.assertEqual([step["id"] for step in result["trace_steps"]], ["step-1", "rag-1"])
         self.assertEqual([event["step_id"] for event in result["trace_events"]], ["step-1", "rag-1"])
+
+    def test_build_tool_plan_item_service_effects_redacts_raw_diagnostics_payload(
+        self,
+    ) -> None:
+        loop_execution_result = {
+            "trace_event": {
+                "task_id": "task-1",
+                "step_id": "step-1",
+                "step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: http_json execution query_params.access_token must be safe"
+                    ),
+                },
+            },
+            "success_effects": {
+                "trace_step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: unsupported tool execution kind api_key=hidden"
+                    ),
+                },
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {
+                        "id": "step-1",
+                        "seq": 3,
+                        "content": (
+                            "provider_search: http_json execution headers.x-api-key must be safe"
+                        ),
+                    },
+                },
+                "observation": "provider_search failed with token=hidden",
+                "rag_followup": None,
+            },
+            "terminal_effects": None,
+            "should_return": False,
+        }
+
+        result = build_tool_plan_item_service_effects(
+            loop_execution_result=loop_execution_result,
+        )
+
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
 
     def test_build_tool_plan_item_service_effects_keeps_terminal_shape(self) -> None:
         terminal_effects = {
@@ -61538,6 +63451,102 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(persist_forces, [False])
         self.assertEqual(complete_calls, [])
         self.assertEqual(failure_calls, [])
+
+    def test_execute_tool_plan_item_service_actions_redacts_raw_diagnostics(
+        self,
+    ) -> None:
+        trace_steps = [{"id": "existing-1", "seq": 2, "content": "Existing"}]
+        tool_observations: list[str] = []
+        persist_forces: list[bool] = []
+        complete_calls: list[dict[str, object]] = []
+        failure_calls: list[dict[str, object]] = []
+        service_actions = [
+            {
+                "kind": "trace_write",
+                "trace_step": {
+                    "id": "step-1",
+                    "seq": 3,
+                    "content": (
+                        "provider_search: unsupported tool execution kind api_key=hidden"
+                    ),
+                },
+                "trace_event": {
+                    "task_id": "task-1",
+                    "step_id": "step-1",
+                    "step": {
+                        "id": "step-1",
+                        "seq": 3,
+                        "content": (
+                            "provider_search: http_json execution query_params.access_token must be safe"
+                        ),
+                    },
+                },
+                "persist_force": True,
+            },
+            {
+                "kind": "continue",
+                "tool_observations": [
+                    "provider_search: unsupported tool execution kind token=hidden",
+                ],
+                "seq_increment": 1,
+            },
+            {
+                "kind": "record_failure_event",
+                "kwargs": {
+                    "event_type": "task_failed",
+                    "code": "tool_execution_error",
+                    "message": "provider_search failed with secret=hidden",
+                    "detail": {
+                        "reason": (
+                            "provider_search: http_json execution headers.x-api-key must be safe"
+                        ),
+                    },
+                },
+            },
+            {
+                "kind": "emit_state",
+                "event": "state",
+                "data": {
+                    "task_id": "task-1",
+                    "phase": "error",
+                    "detail": (
+                        "provider_search: http_json execution json_body.client_secret must be safe"
+                    ),
+                },
+            },
+        ]
+
+        items = list(
+            execute_tool_plan_item_service_actions(
+                service_actions=service_actions,
+                trace_steps=trace_steps,
+                tool_observations=tool_observations,
+                seq_cursor=3,
+                persist_trace_fn=lambda *, force: persist_forces.append(bool(force)),
+                complete_task_fn=lambda **kwargs: complete_calls.append(kwargs),
+                record_failure_event_fn=lambda **kwargs: failure_calls.append(kwargs),
+            )
+        )
+
+        serialized = json.dumps(
+            {
+                "items": items,
+                "trace_steps": trace_steps,
+                "tool_observations": tool_observations,
+                "failure_calls": failure_calls,
+            },
+            default=str,
+        )
+        self.assertNotIn("api_key=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn("secret=hidden", serialized)
+        self.assertNotIn("x-api-key", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertIn("unsupported tool execution kind [redacted]", serialized)
+        self.assertIn("http_json execution [redacted] must be safe", serialized)
+        self.assertEqual(persist_forces, [True])
+        self.assertEqual(complete_calls, [])
 
     def test_execute_tool_plan_item_service_actions_keeps_return_shape(self) -> None:
         trace_steps = [{"id": "existing-1", "seq": 2, "content": "Existing"}]

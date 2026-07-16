@@ -199,7 +199,9 @@ class ToolRegistryDiagnosticsSummaryModel:
             "skipped_total": self.skipped_total,
             "missing_total": self.missing_total,
             "total": self.total,
-            "entries": self.entries,
+            "entries": sanitize_tool_registry_diagnostics_summary_entries(
+                self.entries
+            ),
         }
 
 
@@ -213,9 +215,15 @@ class ToolRegistryDiagnosticsRuntimeArtifactsModel:
     def to_dict(self) -> dict[str, object]:
         return {
             "summary": self.summary.to_dict(),
-            "trace_step": self.trace_step,
-            "trace_event": self.trace_event,
-            "audit_detail": self.audit_detail,
+            "trace_step": sanitize_tool_registry_diagnostics_artifact_payload(
+                self.trace_step
+            ),
+            "trace_event": sanitize_tool_registry_diagnostics_artifact_payload(
+                self.trace_event
+            ),
+            "audit_detail": sanitize_tool_registry_diagnostics_artifact_payload(
+                self.audit_detail
+            ),
         }
 
 
@@ -234,10 +242,16 @@ class ConfiguredToolRegistryProviderRuntimeArtifactsModel:
             "provider": self.provider,
             "provider_source_name": self.provider_source_name,
             "provider_sources": self.provider_sources,
-            "selected_source_diagnostics": self.selected_source_diagnostics,
-            "source_diagnostics": self.source_diagnostics,
+            "selected_source_diagnostics": sanitize_tool_registry_file_diagnostics(
+                self.selected_source_diagnostics
+            ),
+            "source_diagnostics": sanitize_tool_registry_source_diagnostics(
+                self.source_diagnostics
+            ),
             "diagnostics_runtime": self.diagnostics_runtime.to_dict(),
-            "audit_event": self.audit_event,
+            "audit_event": sanitize_tool_registry_diagnostics_artifact_payload(
+                self.audit_event
+            ),
         }
 
 
@@ -254,13 +268,19 @@ class ConfiguredToolRegistryProviderRuntimeServiceActionModel:
             "kind": self.kind,
         }
         if self.trace_step is not None:
-            payload["trace_step"] = self.trace_step
+            payload["trace_step"] = sanitize_tool_registry_diagnostics_artifact_payload(
+                self.trace_step
+            )
         if self.trace_event is not None:
-            payload["trace_event"] = self.trace_event
+            payload["trace_event"] = sanitize_tool_registry_diagnostics_artifact_payload(
+                self.trace_event
+            )
         if self.persist_force:
             payload["persist_force"] = self.persist_force
         if self.kwargs is not None:
-            payload["kwargs"] = self.kwargs
+            payload["kwargs"] = sanitize_tool_registry_diagnostics_artifact_payload(
+                self.kwargs
+            )
         return payload
 
 
@@ -360,6 +380,10 @@ _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE = re.compile(
     r"((?:\"|')?\b(?:authorization|api[_-]?key|credential|password|secret|token)"
     r"\b(?:\"|')?\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|[^\s,;<>}]+)",
     re.IGNORECASE,
+)
+_TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE = re.compile(
+    r"\b(?:headers|query_params|json_body|result_fields)"
+    r"(?:\.[A-Za-z0-9_\-\[\]]+)+"
 )
 _HTTP_JSON_URL_CONTROL_OR_SPACE_RE = re.compile(r"[\x00-\x20\x7f]")
 _HTTP_JSON_QUERY_PARAM_NAME_UNSAFE_RE = re.compile(r"[\x00-\x20\x7f=&?#]")
@@ -2535,6 +2559,20 @@ def _redact_http_json_diagnostic_text(raw_value: str) -> str:
     )
 
 
+def _redact_tool_registry_diagnostic_value(raw_value: object) -> str:
+    text = _redact_http_json_diagnostic_text(str(raw_value).strip())
+    if not text:
+        return ""
+
+    def redact_path(match: re.Match[str]) -> str:
+        safe_path = _format_safe_tool_execution_diagnostic_path(match.group(0))
+        if "[redacted]" in safe_path:
+            return "[redacted]"
+        return safe_path
+
+    return _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE.sub(redact_path, text)
+
+
 def _redact_http_json_error_body_value(raw_value: object) -> object:
     if isinstance(raw_value, dict):
         redacted: dict[str, object] = {}
@@ -4049,6 +4087,80 @@ def _build_tool_execution_summary_from_spec(
     return summary
 
 
+def _format_safe_tool_execution_summary_url_path(raw_value: object) -> str:
+    raw_path = str(raw_value).strip()
+    if not raw_path:
+        return ""
+    path = unquote(raw_path)
+    safe_segments: list[str] = []
+    redact_next_segment = False
+    for segment in path.split("/"):
+        if not segment:
+            safe_segments.append(segment)
+            continue
+        if redact_next_segment:
+            safe_segments.append("[redacted]")
+            redact_next_segment = False
+            continue
+        if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.fullmatch(segment):
+            safe_segments.append("[redacted]")
+            redact_next_segment = True
+            continue
+        safe_segments.append(_redact_http_json_diagnostic_text(segment))
+    return "/".join(safe_segments)
+
+
+def _sanitize_tool_execution_summary_value(key: str, value: object) -> object:
+    normalized_key = key.strip()
+    if normalized_key == "url_path" and isinstance(value, str):
+        return _format_safe_tool_execution_summary_url_path(value)
+    if normalized_key == "response_path" and isinstance(value, str):
+        return _format_http_json_mapping_path_for_error(value)
+    if normalized_key == "result_field_names" and isinstance(value, (list, tuple)):
+        return [
+            safe_field_name
+            for safe_field_name in (
+                _format_safe_tool_execution_summary_field_name(item)
+                for item in value
+            )
+            if safe_field_name
+        ]
+    if isinstance(value, str):
+        return _redact_tool_registry_diagnostic_value(value)
+    return value
+
+
+def sanitize_tool_execution_summary(
+    execution_summary: object,
+) -> dict[str, object] | None:
+    if not isinstance(execution_summary, dict) or not execution_summary:
+        return None
+    sanitized_summary: dict[str, object] = {}
+    for raw_key, raw_value in execution_summary.items():
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            continue
+        safe_value = _sanitize_tool_execution_summary_value(raw_key, raw_value)
+        if safe_value in ("", [], ()):
+            continue
+        sanitized_summary[raw_key.strip()] = safe_value
+    return sanitized_summary or None
+
+
+def sanitize_tool_execution_diagnostics(diagnostics: object) -> tuple[str, ...]:
+    if not isinstance(diagnostics, (list, tuple)):
+        return ()
+    safe_diagnostics = tuple(
+        safe_diagnostic
+        for safe_diagnostic in (
+            _redact_tool_registry_diagnostic_value(diagnostic)
+            for diagnostic in diagnostics
+            if isinstance(diagnostic, str)
+        )
+        if safe_diagnostic
+    )
+    return tuple(dict.fromkeys(safe_diagnostics))
+
+
 def _describe_tool_execution_spec_validation_error(
     execution_spec: object,
     *,
@@ -4300,7 +4412,7 @@ def _group_invalid_tool_execution_messages_by_tool(
         if not separator:
             continue
         normalized_tool_name = normalize_tool_registry_name(tool_name)
-        normalized_detail = detail.strip()
+        normalized_detail = _redact_tool_registry_diagnostic_value(detail)
         if not normalized_tool_name or not normalized_detail:
             continue
         grouped_messages.setdefault(normalized_tool_name, [])
@@ -4542,10 +4654,105 @@ def _merge_tool_registry_file_diagnostics(
             if not isinstance(values, (list, tuple)):
                 continue
             for value in values:
-                if not isinstance(value, str) or value in merged[key]:
+                safe_value = _redact_tool_registry_diagnostic_value(value)
+                if not safe_value or safe_value in merged[key]:
                     continue
-                merged[key].append(value)
+                merged[key].append(safe_value)
     return _normalize_tool_registry_file_diagnostics(merged)
+
+
+def sanitize_tool_registry_file_diagnostics(
+    diagnostics: object,
+) -> dict[str, tuple[str, ...]]:
+    if not isinstance(diagnostics, dict):
+        return _empty_tool_registry_file_diagnostics()
+    sanitized: dict[str, list[str]] = {
+        key: [] for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS
+    }
+    for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
+        values = diagnostics.get(key, ())
+        if not isinstance(values, (list, tuple)):
+            continue
+        for raw_value in values:
+            safe_value = _redact_tool_registry_diagnostic_value(raw_value)
+            if not safe_value or safe_value in sanitized[key]:
+                continue
+            sanitized[key].append(safe_value)
+    return _normalize_tool_registry_file_diagnostics(sanitized)
+
+
+def sanitize_tool_registry_source_diagnostics(
+    source_diagnostics: object,
+) -> dict[str, dict[str, tuple[str, ...]]]:
+    if not isinstance(source_diagnostics, dict):
+        return {}
+    sanitized: dict[str, dict[str, tuple[str, ...]]] = {}
+    for source_name, diagnostics in source_diagnostics.items():
+        normalized_source_name = str(source_name).strip()
+        if not normalized_source_name:
+            continue
+        sanitized[normalized_source_name] = sanitize_tool_registry_file_diagnostics(
+            diagnostics
+        )
+    return sanitized
+
+
+def sanitize_tool_registry_diagnostics_summary_entries(
+    entries: object,
+) -> tuple[dict[str, object], ...]:
+    if not isinstance(entries, (list, tuple)):
+        return ()
+    sanitized_entries: list[dict[str, object]] = []
+    for raw_entry in entries:
+        if not isinstance(raw_entry, dict):
+            continue
+        sanitized_entry: dict[str, object] = {}
+        safe_values: tuple[str, ...] | None = None
+        for key, value in raw_entry.items():
+            if key == "values" and isinstance(value, (list, tuple)):
+                safe_values = tuple(
+                    safe_value
+                    for safe_value in (
+                        _redact_tool_registry_diagnostic_value(raw_value)
+                        for raw_value in value
+                    )
+                    if safe_value
+                )
+                sanitized_entry[key] = safe_values
+                continue
+            sanitized_entry[key] = sanitize_tool_registry_diagnostics_artifact_payload(
+                value
+            )
+        if safe_values is not None:
+            sanitized_entry["count"] = len(safe_values)
+        sanitized_entries.append(sanitized_entry)
+    return tuple(sanitized_entries)
+
+
+def sanitize_tool_registry_diagnostics_artifact_payload(payload: object) -> object:
+    if isinstance(payload, dict):
+        sanitized: dict[object, object] = {}
+        for key, value in payload.items():
+            if key == "entries":
+                sanitized[key] = sanitize_tool_registry_diagnostics_summary_entries(
+                    value
+                )
+                continue
+            sanitized[key] = sanitize_tool_registry_diagnostics_artifact_payload(value)
+        return sanitized
+    if isinstance(payload, tuple):
+        return tuple(
+            sanitize_tool_registry_diagnostics_artifact_payload(value)
+            for value in payload
+        )
+    if isinstance(payload, list):
+        return [
+            sanitize_tool_registry_diagnostics_artifact_payload(value)
+            for value in payload
+        ]
+    if isinstance(payload, str):
+        return _redact_tool_registry_diagnostic_value(payload)
+    return payload
 
 
 def _build_tool_registry_from_file_registry(
@@ -5864,9 +6071,9 @@ def build_tool_registry_extra_tools_from_settings(
                 execution_spec,
                 template_context=runtime_template_context,
             )
-            or template_registration.execution_summary,
-            execution_diagnostics=(
-                tuple(dict.fromkeys(validation_errors))
+            or sanitize_tool_execution_summary(template_registration.execution_summary),
+            execution_diagnostics=sanitize_tool_execution_diagnostics(
+                validation_errors
                 if validation_errors
                 else template_registration.execution_diagnostics
             ),
@@ -5974,9 +6181,9 @@ def _build_registry_overrides_from_specs(
                 execution_spec,
                 template_context=runtime_template_context,
             )
-            or base_registration.execution_summary,
-            execution_diagnostics=(
-                tuple(dict.fromkeys(validation_errors))
+            or sanitize_tool_execution_summary(base_registration.execution_summary),
+            execution_diagnostics=sanitize_tool_execution_diagnostics(
+                validation_errors
                 if validation_errors
                 else base_registration.execution_diagnostics
             ),
@@ -6082,14 +6289,18 @@ def get_configured_tool_registry_provider_artifacts(
         ),
         "provider_source_name": provider_source_name,
         "provider_sources": provider_sources,
-        "selected_source_diagnostics": _merge_tool_registry_file_diagnostics(
-            source_artifacts["source_diagnostics"].get(
-                provider_source_name,
-                _empty_tool_registry_file_diagnostics(),
+        "selected_source_diagnostics": sanitize_tool_registry_file_diagnostics(
+            _merge_tool_registry_file_diagnostics(
+                source_artifacts["source_diagnostics"].get(
+                    provider_source_name,
+                    _empty_tool_registry_file_diagnostics(),
+                ),
+                settings_execution_diagnostics,
             ),
-            settings_execution_diagnostics,
         ),
-        "source_diagnostics": source_artifacts["source_diagnostics"],
+        "source_diagnostics": sanitize_tool_registry_source_diagnostics(
+            source_artifacts["source_diagnostics"]
+        ),
     }
 
 
@@ -6105,19 +6316,29 @@ def build_tool_registry_diagnostics_summary_model(
         values = diagnostics.get(key, ())
         if not isinstance(values, (list, tuple)) or not values:
             continue
+        safe_values = tuple(
+            value
+            for value in (
+                _redact_tool_registry_diagnostic_value(raw_value)
+                for raw_value in values
+            )
+            if value
+        )
+        if not safe_values:
+            continue
         kind, target = key.split("_", 1)
         entry = {
             "kind": kind,
             "target": target,
-            "count": len(values),
-            "values": tuple(values),
+            "count": len(safe_values),
+            "values": safe_values,
         }
         entries.append(entry)
-        total += len(values)
+        total += len(safe_values)
         if kind == "skipped":
-            skipped_total += len(values)
+            skipped_total += len(safe_values)
         elif kind == "missing":
-            missing_total += len(values)
+            missing_total += len(safe_values)
     return ToolRegistryDiagnosticsSummaryModel(
         has_diagnostics=bool(entries),
         skipped_total=skipped_total,
@@ -6425,14 +6646,20 @@ def build_configured_tool_registry_provider_runtime_service_action_model_from_di
 ) -> ConfiguredToolRegistryProviderRuntimeServiceActionModel:
     return ConfiguredToolRegistryProviderRuntimeServiceActionModel(
         kind=str(service_action.get("kind")),
-        trace_step=service_action.get("trace_step")
+        trace_step=sanitize_tool_registry_diagnostics_artifact_payload(
+            service_action.get("trace_step")
+        )
         if isinstance(service_action.get("trace_step"), dict)
         else None,
-        trace_event=service_action.get("trace_event")
+        trace_event=sanitize_tool_registry_diagnostics_artifact_payload(
+            service_action.get("trace_event")
+        )
         if isinstance(service_action.get("trace_event"), dict)
         else None,
         persist_force=bool(service_action.get("persist_force")),
-        kwargs=service_action.get("kwargs")
+        kwargs=sanitize_tool_registry_diagnostics_artifact_payload(
+            service_action.get("kwargs")
+        )
         if isinstance(service_action.get("kwargs"), dict)
         else None,
     )
@@ -6481,21 +6708,43 @@ def build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
         provider=provider,
         provider_source_name=str(runtime_artifacts.get("provider_source_name", provider_source_name)),
         provider_sources=runtime_artifacts.get("provider_sources", {}),
-        selected_source_diagnostics=runtime_artifacts.get("selected_source_diagnostics", {}),
-        source_diagnostics=runtime_artifacts.get("source_diagnostics", {}),
+        selected_source_diagnostics=sanitize_tool_registry_file_diagnostics(
+            runtime_artifacts.get("selected_source_diagnostics", {})
+        ),
+        source_diagnostics=sanitize_tool_registry_source_diagnostics(
+            runtime_artifacts.get("source_diagnostics", {})
+        ),
         diagnostics_runtime=ToolRegistryDiagnosticsRuntimeArtifactsModel(
             summary=ToolRegistryDiagnosticsSummaryModel(
                 has_diagnostics=bool(summary_payload.get("has_diagnostics", False)),
                 skipped_total=int(summary_payload.get("skipped_total", 0) or 0),
                 missing_total=int(summary_payload.get("missing_total", 0) or 0),
                 total=int(summary_payload.get("total", 0) or 0),
-                entries=tuple(summary_payload.get("entries", ())),
+                entries=sanitize_tool_registry_diagnostics_summary_entries(
+                    summary_payload.get("entries", ())
+                ),
             ),
-            trace_step=diagnostics_runtime_payload.get("trace_step"),
-            trace_event=diagnostics_runtime_payload.get("trace_event"),
-            audit_detail=diagnostics_runtime_payload.get("audit_detail"),
+            trace_step=sanitize_tool_registry_diagnostics_artifact_payload(
+                diagnostics_runtime_payload.get("trace_step")
+            )
+            if isinstance(diagnostics_runtime_payload.get("trace_step"), dict)
+            else None,
+            trace_event=sanitize_tool_registry_diagnostics_artifact_payload(
+                diagnostics_runtime_payload.get("trace_event")
+            )
+            if isinstance(diagnostics_runtime_payload.get("trace_event"), dict)
+            else None,
+            audit_detail=sanitize_tool_registry_diagnostics_artifact_payload(
+                diagnostics_runtime_payload.get("audit_detail")
+            )
+            if isinstance(diagnostics_runtime_payload.get("audit_detail"), dict)
+            else None,
         ),
-        audit_event=runtime_artifacts.get("audit_event"),
+        audit_event=sanitize_tool_registry_diagnostics_artifact_payload(
+            runtime_artifacts.get("audit_event")
+        )
+        if isinstance(runtime_artifacts.get("audit_event"), dict)
+        else None,
     )
 
 
@@ -8068,6 +8317,40 @@ def build_tool_runtime_input(
     )
 
 
+def build_tool_visible_input(
+    *,
+    name: str,
+    tool_input: dict[str, object],
+    registration: ToolRegistration | None = None,
+    registry: dict[str, ToolRegistration] | None = None,
+    registry_provider: ToolRegistryProvider | None = None,
+    registry_loader: ToolRegistryLoader | None = None,
+) -> dict[str, object]:
+    canonical_name = normalize_tool_registry_name(name)
+    resolved_registration = registration or resolve_tool_registration(
+        canonical_name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    normalized_tool_input = build_tool_runtime_input(
+        name=canonical_name,
+        tool_input=tool_input,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    if (
+        resolved_registration is not None
+        and _normalize_tool_execution_kind(resolved_registration.execution_kind) == "http_json"
+    ):
+        safe_tool_input = _redact_http_json_sensitive_payload_value(normalized_tool_input)
+        if isinstance(safe_tool_input, dict):
+            return safe_tool_input
+    return normalized_tool_input
+
+
 def _with_action_step_tool_input(
     action_step: dict[str, object],
     *,
@@ -8419,13 +8702,13 @@ def build_tool_runtime_semantics_meta(
     execution_kind = _normalize_tool_execution_kind(resolved_registration.execution_kind)
     if execution_kind is not None:
         meta["execution_kind"] = execution_kind
-    execution_summary = resolved_registration.execution_summary
-    if isinstance(execution_summary, dict) and execution_summary:
-        meta["execution_summary"] = dict(execution_summary)
-    execution_diagnostics = tuple(
-        diagnostic.strip()
-        for diagnostic in resolved_registration.execution_diagnostics
-        if isinstance(diagnostic, str) and diagnostic.strip()
+    execution_summary = sanitize_tool_execution_summary(
+        resolved_registration.execution_summary,
+    )
+    if execution_summary is not None:
+        meta["execution_summary"] = execution_summary
+    execution_diagnostics = sanitize_tool_execution_diagnostics(
+        resolved_registration.execution_diagnostics,
     )
     if execution_diagnostics:
         meta["execution_diagnostics"] = list(execution_diagnostics)
@@ -8591,7 +8874,15 @@ def build_tool_success_meta(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    normalized_tool_input = build_tool_runtime_input(
+    safe_last_error = (
+        _normalize_tool_error_message_for_registration(
+            last_error,
+            registration=resolved_registration,
+        )
+        if isinstance(last_error, str)
+        else last_error
+    )
+    normalized_tool_input = build_tool_visible_input(
         name=canonical_name,
         tool_input=tool_input,
         registration=resolved_registration,
@@ -8636,7 +8927,7 @@ def build_tool_success_meta(
             ),
             "status": "done",
             "retry_count": retry_count,
-            "error": last_error,
+            "error": safe_last_error,
             **({"result_summary": result_summary} if result_summary else {}),
             **build_tool_runtime_semantics_meta(
                 name=canonical_name,
@@ -8647,6 +8938,19 @@ def build_tool_success_meta(
             ),
         },
     }
+
+
+def _normalize_tool_error_message_for_registration(
+    error_message: str,
+    *,
+    registration: ToolRegistration | None,
+) -> str:
+    if (
+        registration is not None
+        and _normalize_tool_execution_kind(registration.execution_kind) == "http_json"
+    ):
+        return _redact_http_json_diagnostic_text(error_message)
+    return error_message
 
 
 def build_tool_error_meta(
@@ -8668,7 +8972,11 @@ def build_tool_error_meta(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    normalized_tool_input = build_tool_runtime_input(
+    safe_error_message = _normalize_tool_error_message_for_registration(
+        error_message,
+        registration=resolved_registration,
+    )
+    normalized_tool_input = build_tool_visible_input(
         name=canonical_name,
         tool_input=tool_input,
         registration=resolved_registration,
@@ -8687,7 +8995,7 @@ def build_tool_error_meta(
             "input": normalized_tool_input,
             "status": "error",
             "retry_count": retry_count,
-            "error": error_message,
+            "error": safe_error_message,
             **build_tool_runtime_semantics_meta(
                 name=canonical_name,
                 registration=resolved_registration,
@@ -8719,7 +9027,7 @@ def build_tool_start_payload(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    normalized_tool_input = build_tool_runtime_input(
+    normalized_tool_input = build_tool_visible_input(
         name=canonical_name,
         tool_input=tool_input,
         registration=resolved_registration,
@@ -8766,12 +9074,27 @@ def build_tool_error_payload(
         normalize_tool_registry_name(name) if isinstance(name, str) and name.strip() else None
     )
     if normalized_name is not None:
-        semantic_meta = build_tool_runtime_semantics_meta(
-            name=normalized_name,
-            registration=registration,
+        resolved_registration = registration or resolve_tool_registration(
+            normalized_name,
             registry=registry,
             registry_provider=registry_provider,
             registry_loader=registry_loader,
+        )
+        error_message = _normalize_tool_error_message_for_registration(
+            error_message,
+            registration=resolved_registration,
+        )
+        semantic_meta = build_tool_runtime_semantics_meta(
+            name=normalized_name,
+            registration=resolved_registration,
+            registry=registry,
+            registry_provider=registry_provider,
+            registry_loader=registry_loader,
+        )
+    else:
+        error_message = _normalize_tool_error_message_for_registration(
+            error_message,
+            registration=registration,
         )
     return {
         "task_id": task_id,
@@ -8817,7 +9140,7 @@ def build_action_step_initial_meta(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    normalized_tool_input = build_tool_runtime_input(
+    normalized_tool_input = build_tool_visible_input(
         name=canonical_name,
         tool_input=tool_input,
         registration=resolved_registration,
@@ -8981,11 +9304,19 @@ def build_tool_step_error_update(
             ),
         )
     )
+    sanitized_action_step = sanitize_tool_registry_diagnostics_artifact_payload(
+        action_step
+    )
+    assert isinstance(sanitized_action_step, dict)
+    sanitized_meta = sanitize_tool_registry_diagnostics_artifact_payload(
+        dict(sanitized_action_step.get("meta", {}))
+    )
+    assert isinstance(sanitized_meta, dict)
     return {
-        **action_step,
+        **sanitized_action_step,
         "content": f"Tool error: {resolved_display_name}",
         "meta": {
-            **dict(action_step.get("meta", {})),
+            **sanitized_meta,
             "step_type": "tool_call",
             "retryCount": retry_count,
             "tokens": token_count,
@@ -9131,36 +9462,84 @@ def build_tool_attempt_loop_result(
     *,
     attempt_execution: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "tool_end_event": attempt_execution["tool_end_event"],
-        "error_event": attempt_execution["error_event"],
-        "retryable": attempt_execution["retryable"],
-        "next_action_step": attempt_execution["next_action_step"],
-        "last_error": attempt_execution["last_error"],
-        "plan_item_result": attempt_execution["plan_item_result"],
-        "postprocess": attempt_execution["postprocess"],
-        "success_effects": attempt_execution["success_effects"],
-        "terminal_effects": attempt_execution["terminal_effects"],
-    }
+    return _sanitize_tool_plan_attempt_loop_result_payload(
+        {
+            "tool_end_event": attempt_execution["tool_end_event"],
+            "error_event": attempt_execution["error_event"],
+            "retryable": attempt_execution["retryable"],
+            "next_action_step": attempt_execution["next_action_step"],
+            "last_error": attempt_execution["last_error"],
+            "plan_item_result": attempt_execution["plan_item_result"],
+            "postprocess": attempt_execution["postprocess"],
+            "success_effects": attempt_execution["success_effects"],
+            "terminal_effects": attempt_execution["terminal_effects"],
+        }
+    )
+
+
+def _sanitize_tool_plan_attempt_loop_result_payload(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    sanitized = dict(payload)
+    for key in (
+        "tool_end_event",
+        "error_event",
+        "next_action_step",
+        "last_error",
+        "plan_item_result",
+        "terminal_effects",
+    ):
+        if key in sanitized:
+            sanitized[key] = sanitize_tool_registry_diagnostics_artifact_payload(
+                sanitized[key]
+            )
+    return sanitized
+
+
+def _sanitize_tool_plan_retry_loop_result_payload(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    sanitized = dict(payload)
+    for key in ("trace_event", "terminal_effects"):
+        if key in sanitized:
+            sanitized[key] = sanitize_tool_registry_diagnostics_artifact_payload(
+                sanitized[key]
+            )
+    return sanitized
+
+
+def _sanitize_tool_plan_loop_terminal_result_payload(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    sanitized = dict(payload)
+    if "terminal_effects" in sanitized:
+        sanitized["terminal_effects"] = sanitize_tool_registry_diagnostics_artifact_payload(
+            sanitized["terminal_effects"]
+        )
+    return sanitized
 
 
 def build_tool_attempt_loop_terminal_result(
     *,
     loop_result: dict[str, object],
 ) -> dict[str, object]:
-    terminal_effects = loop_result["terminal_effects"]
-    return {
-        "should_return": terminal_effects is not None,
-        "terminal_effects": terminal_effects,
-    }
+    sanitized_loop_result = _sanitize_tool_plan_attempt_loop_result_payload(loop_result)
+    terminal_effects = sanitized_loop_result["terminal_effects"]
+    return _sanitize_tool_plan_loop_terminal_result_payload(
+        {
+            "should_return": terminal_effects is not None,
+            "terminal_effects": terminal_effects,
+        }
+    )
 
 
 def build_tool_plan_item_retry_loop_result(
     *,
     loop_result: dict[str, object],
 ) -> dict[str, object]:
-    success_effects = loop_result["success_effects"]
-    terminal_effects = loop_result["terminal_effects"]
+    sanitized_loop_result = _sanitize_tool_plan_attempt_loop_result_payload(loop_result)
+    success_effects = sanitized_loop_result["success_effects"]
+    terminal_effects = sanitized_loop_result["terminal_effects"]
     trace_event = (
         success_effects["trace"]
         if success_effects is not None
@@ -9168,34 +9547,39 @@ def build_tool_plan_item_retry_loop_result(
         if terminal_effects is not None
         else None
     )
-    return {
-        "outcome": "success" if success_effects is not None else "terminal_failure",
-        "trace_event": trace_event,
-        "success_effects": success_effects,
-        "terminal_effects": terminal_effects,
-    }
+    return _sanitize_tool_plan_retry_loop_result_payload(
+        {
+            "outcome": "success" if success_effects is not None else "terminal_failure",
+            "trace_event": trace_event,
+            "success_effects": success_effects,
+            "terminal_effects": terminal_effects,
+        }
+    )
 
 
 def build_tool_plan_item_retry_loop_execution_result(
     *,
     loop_result: dict[str, object],
 ) -> dict[str, object]:
+    sanitized_loop_result = _sanitize_tool_plan_attempt_loop_result_payload(loop_result)
     retry_loop_result = build_tool_plan_item_retry_loop_result(
-        loop_result=loop_result,
+        loop_result=sanitized_loop_result,
     )
     loop_terminal_result = build_tool_attempt_loop_terminal_result(
-        loop_result=loop_result,
+        loop_result=sanitized_loop_result,
     )
-    return {
-        "outcome": retry_loop_result["outcome"],
-        "trace_event": retry_loop_result["trace_event"],
-        "success_effects": retry_loop_result["success_effects"],
-        "terminal_effects": retry_loop_result["terminal_effects"],
-        "should_return": loop_terminal_result["should_return"],
-        "loop_result": loop_result,
-        "retry_loop_result": retry_loop_result,
-        "loop_terminal_result": loop_terminal_result,
-    }
+    return _sanitize_tool_plan_retry_loop_result_payload(
+        {
+            "outcome": retry_loop_result["outcome"],
+            "trace_event": retry_loop_result["trace_event"],
+            "success_effects": retry_loop_result["success_effects"],
+            "terminal_effects": retry_loop_result["terminal_effects"],
+            "should_return": loop_terminal_result["should_return"],
+            "loop_result": sanitized_loop_result,
+            "retry_loop_result": retry_loop_result,
+            "loop_terminal_result": loop_terminal_result,
+        }
+    )
 
 
 def execute_tool_plan_item_retry_loop(
@@ -9421,7 +9805,11 @@ def execute_tool_plan_item_service_execution(
             user_id=user_id,
             loop_execution_result=loop_execution_result,
         )
-        service_execution["loop_execution_result"] = loop_execution_result
+        service_execution["loop_execution_result"] = (
+            sanitize_tool_registry_diagnostics_artifact_payload(
+                loop_execution_result
+            )
+        )
         yield {
             "kind": "result",
             "result": service_execution,
@@ -9440,7 +9828,12 @@ def execute_tool_plan_item_service_actions(
     record_failure_event_fn: Callable[..., None],
 ) -> Iterator[dict[str, object]]:
     current_seq_cursor = int(seq_cursor)
-    for service_action in service_actions:
+    for raw_service_action in service_actions:
+        service_action = sanitize_tool_registry_diagnostics_artifact_payload(
+            raw_service_action
+        )
+        if not isinstance(service_action, dict):
+            continue
         kind = str(service_action["kind"])
         if kind == "trace_write":
             trace_steps.append(service_action["trace_step"])
@@ -9591,6 +9984,10 @@ def build_tool_attempt_error_transition(
     registry_loader: ToolRegistryLoader | None = None,
 ) -> dict[str, object]:
     error_message = str(exc)
+    safe_error_message = _normalize_tool_error_message_for_registration(
+        error_message,
+        registration=runtime_ctx.registration,
+    )
     retry_count = runtime_ctx.attempt + 1
     retryable = compute_tool_retry_decision(ctx=runtime_ctx, exc=exc)
     return {
@@ -9600,7 +9997,7 @@ def build_tool_attempt_error_transition(
             tool_input=tool_input,
             retry_count=retry_count,
             token_count=token_count,
-            error_message=error_message,
+            error_message=safe_error_message,
             display_name=display_name,
             registration=runtime_ctx.registration,
             registry=registry,
@@ -9612,14 +10009,14 @@ def build_tool_attempt_error_transition(
                 name=name,
                 task_id=task_id,
                 step_id=step_id,
-                error_message=error_message,
+                error_message=safe_error_message,
                 retry_count=retry_count,
                 latency_ms=max(1, runtime_ctx.default_timeout_ms // 250),
                 registration=runtime_ctx.registration,
             ),
             "error": {
                 "task_id": task_id,
-                "message": error_message,
+                "message": safe_error_message,
                 "code": "tool_execution_error",
                 "fatal": not retryable,
                 "retryable": retryable,
@@ -9628,7 +10025,7 @@ def build_tool_attempt_error_transition(
             },
         },
         "retryable": retryable,
-        "error_message": error_message,
+        "error_message": safe_error_message,
         "retry_count": retry_count,
     }
 
@@ -10075,23 +10472,47 @@ def build_tool_terminal_failure_transition(
     error_message: str,
     retry_count: int,
 ) -> dict[str, object]:
-    return {
-        "trace": build_tool_trace_event(
-            task_id=task_id,
-            step_id=step_id,
-            step=action_step,
-        ),
-        "audit_detail": {
-            "step_id": step_id,
-            "retry_count": retry_count,
-        },
-        "state": {
-            "task_id": task_id,
-            "phase": "error",
-        },
-        "status": "failed",
-        "error_message": error_message,
-    }
+    return _sanitize_tool_terminal_failure_payload(
+        {
+            "trace": build_tool_trace_event(
+                task_id=task_id,
+                step_id=step_id,
+                step=action_step,
+            ),
+            "audit_detail": {
+                "step_id": step_id,
+                "retry_count": retry_count,
+            },
+            "state": {
+                "task_id": task_id,
+                "phase": "error",
+            },
+            "status": "failed",
+            "error_message": error_message,
+        }
+    )
+
+
+def _sanitize_tool_terminal_failure_payload(
+    payload: dict[str, object] | None,
+) -> dict[str, object] | None:
+    if payload is None:
+        return None
+    sanitized = sanitize_tool_registry_diagnostics_artifact_payload(payload)
+    assert isinstance(sanitized, dict)
+    return sanitized
+
+
+def _sanitize_tool_plan_item_result_payload(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    sanitized = dict(payload)
+    for key in ("action_step", "last_error", "terminal_failure"):
+        if key in sanitized:
+            sanitized[key] = sanitize_tool_registry_diagnostics_artifact_payload(
+                sanitized[key]
+            )
+    return sanitized
 
 
 def build_tool_rag_step(
@@ -10276,7 +10697,7 @@ def build_tool_attempt_result(
     error_message: str | None,
     retry_count: int,
 ) -> dict[str, object]:
-    return {
+    result = {
         "outcome": outcome,
         "action_step": action_step,
         "events": events,
@@ -10284,6 +10705,21 @@ def build_tool_attempt_result(
         "error_message": error_message,
         "retry_count": retry_count,
     }
+    if outcome == "success" and error_message is None:
+        return result
+    return _sanitize_tool_attempt_error_result_payload(result)
+
+
+def _sanitize_tool_attempt_error_result_payload(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    sanitized = dict(payload)
+    for key in ("action_step", "events", "error_message"):
+        if key in sanitized:
+            sanitized[key] = sanitize_tool_registry_diagnostics_artifact_payload(
+                sanitized[key]
+            )
+    return sanitized
 
 
 def build_tool_attempt_outcome(
@@ -10613,13 +11049,15 @@ def build_tool_plan_item_result(
     success_bundle: dict[str, object] | None,
     terminal_failure: dict[str, object] | None,
 ) -> dict[str, object]:
-    return {
-        "outcome": outcome,
-        "action_step": action_step,
-        "last_error": last_error,
-        "success_bundle": success_bundle,
-        "terminal_failure": terminal_failure,
-    }
+    return _sanitize_tool_plan_item_result_payload(
+        {
+            "outcome": outcome,
+            "action_step": action_step,
+            "last_error": last_error,
+            "success_bundle": success_bundle,
+            "terminal_failure": terminal_failure,
+        }
+    )
 
 
 def build_tool_plan_item_execution_result(
@@ -10767,6 +11205,22 @@ def build_tool_plan_item_postprocess(
     }
 
 
+def _sanitize_tool_plan_item_payload_dict(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    sanitized = sanitize_tool_registry_diagnostics_artifact_payload(payload)
+    assert isinstance(sanitized, dict)
+    return sanitized
+
+
+def _sanitize_tool_plan_item_payload_list(
+    payload: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    sanitized = sanitize_tool_registry_diagnostics_artifact_payload(payload)
+    assert isinstance(sanitized, list)
+    return sanitized
+
+
 def build_tool_plan_item_success_effects(
     *,
     action_step: dict[str, object],
@@ -10810,62 +11264,72 @@ def build_tool_plan_item_stream_effects(
         if rag_followup is not None:
             trace_steps.append(rag_followup["step"])
             trace_events.append(rag_followup["trace"])
-        return {
-            "trace_steps": trace_steps,
-            "trace_events": trace_events,
-            "observation": success_effects["observation"],
-            "tool_observations": [success_effects["observation"]],
-            "terminal_effects": None,
-            "seq_increment": 1 if rag_followup is not None else 0,
-            "should_return": False,
-        }
+        return _sanitize_tool_plan_item_payload_dict(
+            {
+                "trace_steps": trace_steps,
+                "trace_events": trace_events,
+                "observation": success_effects["observation"],
+                "tool_observations": [success_effects["observation"]],
+                "terminal_effects": None,
+                "seq_increment": 1 if rag_followup is not None else 0,
+                "should_return": False,
+            }
+        )
 
     assert terminal_effects is not None
-    return {
-        "trace_steps": [terminal_effects["trace_step"]],
-        "trace_events": [terminal_effects["trace"]],
-        "observation": None,
-        "tool_observations": [],
-        "terminal_effects": terminal_effects,
-        "seq_increment": 0,
-        "should_return": bool(loop_execution_result["should_return"]),
-    }
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "trace_steps": [terminal_effects["trace_step"]],
+            "trace_events": [terminal_effects["trace"]],
+            "observation": None,
+            "tool_observations": [],
+            "terminal_effects": terminal_effects,
+            "seq_increment": 0,
+            "should_return": bool(loop_execution_result["should_return"]),
+        }
+    )
 
 
 def build_tool_plan_item_terminal_return_effects(
     *,
     terminal_effects: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "task_status": terminal_effects["status"],
-        "state_event": terminal_effects["state"],
-        "failure_event": {
-            "event_type": "task_failed",
-            "code": "tool_execution_error",
-            "message": terminal_effects["error_message"],
-            "detail": terminal_effects["audit_detail"],
-        },
-    }
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "task_status": terminal_effects["status"],
+            "state_event": terminal_effects["state"],
+            "failure_event": {
+                "event_type": "task_failed",
+                "code": "tool_execution_error",
+                "message": terminal_effects["error_message"],
+                "detail": terminal_effects["audit_detail"],
+            },
+        }
+    )
 
 
 def build_tool_plan_item_continue_update(
     *,
     stream_effects: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "tool_observations": list(stream_effects["tool_observations"]),
-        "seq_increment": int(stream_effects["seq_increment"]),
-    }
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "tool_observations": list(stream_effects["tool_observations"]),
+            "seq_increment": int(stream_effects["seq_increment"]),
+        }
+    )
 
 
 def build_tool_plan_item_continue_action(
     *,
     continue_update: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "tool_observations": list(continue_update["tool_observations"]),
-        "seq_increment": int(continue_update["seq_increment"]),
-    }
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "tool_observations": list(continue_update["tool_observations"]),
+            "seq_increment": int(continue_update["seq_increment"]),
+        }
+    )
 
 
 def build_tool_plan_item_next_action(
@@ -10873,11 +11337,13 @@ def build_tool_plan_item_next_action(
     continue_update: dict[str, object],
     terminal_return_effects: dict[str, object] | None,
 ) -> dict[str, object]:
-    return {
-        "kind": "return" if terminal_return_effects is not None else "continue",
-        "continue_update": continue_update,
-        "terminal_return_effects": terminal_return_effects,
-    }
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "kind": "return" if terminal_return_effects is not None else "continue",
+            "continue_update": continue_update,
+            "terminal_return_effects": terminal_return_effects,
+        }
+    )
 
 
 def build_tool_plan_item_return_action(
@@ -10887,27 +11353,31 @@ def build_tool_plan_item_return_action(
     user_id: str,
     terminal_return_effects: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "complete_task_kwargs": {
-            "task_id": task_id,
-            "trace_steps": trace_steps,
-            "user_id": user_id,
-            "status": str(terminal_return_effects["task_status"]),
-        },
-        "failure_event_kwargs": terminal_return_effects["failure_event"],
-        "state_event": terminal_return_effects["state_event"],
-    }
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "complete_task_kwargs": {
+                "task_id": task_id,
+                "trace_steps": trace_steps,
+                "user_id": user_id,
+                "status": str(terminal_return_effects["task_status"]),
+            },
+            "failure_event_kwargs": terminal_return_effects["failure_event"],
+            "state_event": terminal_return_effects["state_event"],
+        }
+    )
 
 
 def build_tool_plan_item_trace_write_action(
     *,
     trace_write: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "trace_step": trace_write["step"],
-        "trace_event": trace_write["event"],
-        "persist_force": bool(trace_write["force_persist"]),
-    }
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "trace_step": trace_write["step"],
+            "trace_event": trace_write["event"],
+            "persist_force": bool(trace_write["force_persist"]),
+        }
+    )
 
 
 def build_tool_plan_item_next_action_execution(
@@ -10923,23 +11393,27 @@ def build_tool_plan_item_next_action_execution(
     if str(next_action["kind"]) == "return":
         terminal_return_effects = next_action["terminal_return_effects"]
         assert terminal_return_effects is not None
-        return {
-            "kind": "return",
+        return _sanitize_tool_plan_item_payload_dict(
+            {
+                "kind": "return",
+                "continue_update": next_action["continue_update"],
+                "continue_action": continue_action,
+                "return_action": build_tool_plan_item_return_action(
+                    task_id=task_id,
+                    trace_steps=trace_steps,
+                    user_id=user_id,
+                    terminal_return_effects=terminal_return_effects,
+                ),
+            }
+        )
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "kind": "continue",
             "continue_update": next_action["continue_update"],
             "continue_action": continue_action,
-            "return_action": build_tool_plan_item_return_action(
-                task_id=task_id,
-                trace_steps=trace_steps,
-                user_id=user_id,
-                terminal_return_effects=terminal_return_effects,
-            ),
+            "return_action": None,
         }
-    return {
-        "kind": "continue",
-        "continue_update": next_action["continue_update"],
-        "continue_action": continue_action,
-        "return_action": None,
-    }
+    )
 
 
 def build_tool_plan_item_service_actions(
@@ -10956,67 +11430,77 @@ def build_tool_plan_item_service_actions(
     if str(next_action_execution["kind"]) == "return":
         return_action = next_action_execution["return_action"]
         assert return_action is not None
-        return [
-            *actions,
-            *build_tool_plan_item_return_service_actions(
-                return_action=return_action,
-            ),
-        ]
+        return _sanitize_tool_plan_item_payload_list(
+            [
+                *actions,
+                *build_tool_plan_item_return_service_actions(
+                    return_action=return_action,
+                ),
+            ]
+        )
 
     continue_action = next_action_execution["continue_action"]
-    return [
-        *actions,
-        build_tool_plan_item_continue_service_action(
-            continue_action=continue_action,
-        ),
-    ]
+    return _sanitize_tool_plan_item_payload_list(
+        [
+            *actions,
+            build_tool_plan_item_continue_service_action(
+                continue_action=continue_action,
+            ),
+        ]
+    )
 
 
 def build_tool_plan_item_trace_write_service_action(
     *,
     trace_write_action: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "kind": "trace_write",
-        "trace_step": trace_write_action["trace_step"],
-        "trace_event": trace_write_action["trace_event"],
-        "persist_force": bool(trace_write_action["persist_force"]),
-    }
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "kind": "trace_write",
+            "trace_step": trace_write_action["trace_step"],
+            "trace_event": trace_write_action["trace_event"],
+            "persist_force": bool(trace_write_action["persist_force"]),
+        }
+    )
 
 
 def build_tool_plan_item_continue_service_action(
     *,
     continue_action: dict[str, object],
 ) -> dict[str, object]:
-    return {
-        "kind": "continue",
-        "tool_observations": list(continue_action["tool_observations"]),
-        "seq_increment": int(continue_action["seq_increment"]),
-    }
+    return _sanitize_tool_plan_item_payload_dict(
+        {
+            "kind": "continue",
+            "tool_observations": list(continue_action["tool_observations"]),
+            "seq_increment": int(continue_action["seq_increment"]),
+        }
+    )
 
 
 def build_tool_plan_item_return_service_actions(
     *,
     return_action: dict[str, object],
 ) -> list[dict[str, object]]:
-    return [
-        {
-            "kind": "complete_task",
-            "kwargs": return_action["complete_task_kwargs"],
-        },
-        {
-            "kind": "record_failure_event",
-            "kwargs": return_action["failure_event_kwargs"],
-        },
-        {
-            "kind": "emit_state",
-            "event": "state",
-            "data": return_action["state_event"],
-        },
-        {
-            "kind": "return",
-        },
-    ]
+    return _sanitize_tool_plan_item_payload_list(
+        [
+            {
+                "kind": "complete_task",
+                "kwargs": return_action["complete_task_kwargs"],
+            },
+            {
+                "kind": "record_failure_event",
+                "kwargs": return_action["failure_event_kwargs"],
+            },
+            {
+                "kind": "emit_state",
+                "event": "state",
+                "data": return_action["state_event"],
+            },
+            {
+                "kind": "return",
+            },
+        ]
+    )
 
 
 def build_tool_plan_item_service_effects_execution(
@@ -11038,7 +11522,11 @@ def build_tool_plan_item_service_effects_execution(
     service_execution["service_actions"] = build_tool_plan_item_service_actions(
         service_execution=service_execution,
     )
-    return service_execution
+    sanitized_service_execution = sanitize_tool_registry_diagnostics_artifact_payload(
+        service_execution
+    )
+    assert isinstance(sanitized_service_execution, dict)
+    return sanitized_service_execution
 
 
 def build_tool_plan_item_service_execution(
@@ -11097,7 +11585,7 @@ def build_tool_plan_item_service_effects(
         build_tool_plan_item_trace_write_action(trace_write=trace_write)
         for trace_write in trace_writes
     ]
-    return {
+    service_effects = {
         "trace_steps": stream_effects["trace_steps"],
         "trace_events": stream_effects["trace_events"],
         "trace_writes": trace_writes,
@@ -11109,6 +11597,11 @@ def build_tool_plan_item_service_effects(
         "should_return": should_return,
         "terminal_return_effects": terminal_return_effects,
     }
+    sanitized_service_effects = sanitize_tool_registry_diagnostics_artifact_payload(
+        service_effects
+    )
+    assert isinstance(sanitized_service_effects, dict)
+    return sanitized_service_effects
 
 
 def _extract_calc_expression(prompt: str) -> str | None:
@@ -12107,10 +12600,8 @@ def build_configured_tool_registry_provider_preflight_tool_details(
     details: list[dict[str, object]] = []
     for tool_name in sorted(tool_registry):
         registration = tool_registry[tool_name]
-        registration_execution_diagnostics = tuple(
-            diagnostic.strip()
-            for diagnostic in registration.execution_diagnostics
-            if isinstance(diagnostic, str) and diagnostic.strip()
+        registration_execution_diagnostics = sanitize_tool_execution_diagnostics(
+            registration.execution_diagnostics,
         )
         merged_execution_diagnostics = tuple(
             dict.fromkeys(
@@ -12159,10 +12650,14 @@ def build_configured_tool_registry_provider_preflight_tool_details(
                 ),
                 **(
                     {
-                        "execution_summary": dict(registration.execution_summary),
+                        "execution_summary": execution_summary,
                     }
-                    if isinstance(registration.execution_summary, dict)
-                    and registration.execution_summary
+                    if (
+                        execution_summary := sanitize_tool_execution_summary(
+                            registration.execution_summary
+                        )
+                    )
+                    is not None
                     else {}
                 ),
                 **(
@@ -12198,6 +12693,8 @@ def normalize_tool_output_for_registration(
     registration: ToolRegistration,
 ) -> dict[str, object]:
     normalized_output = dict(output)
+    if _normalize_tool_execution_kind(registration.execution_kind) == "http_json":
+        normalized_output = _normalize_http_json_safe_output_shape(normalized_output)
     normalized_name = normalize_tool_registry_name(registration.name)
     default_registration = _REGISTERED_TOOLS.get(normalized_name)
     explicit_runtime_tool_kind = _normalize_runtime_semantic_kind(

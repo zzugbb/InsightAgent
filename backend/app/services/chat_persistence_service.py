@@ -18,6 +18,8 @@ from app.services.tool_runtime import (
     _get_safe_http_json_request_id_display_value,
     _normalize_http_json_output_shape,
     _normalize_http_json_safe_output_shape,
+    _redact_http_json_sensitive_payload_value,
+    _redact_tool_registry_diagnostic_value,
     get_configured_tool_registry_provider,
     get_tool_display_name,
     normalize_tool_registry_name,
@@ -1112,6 +1114,18 @@ def _normalize_trace_http_json_tool_output(
     return output
 
 
+def _normalize_trace_http_json_tool_input(
+    tool_meta: dict[str, object],
+    tool_input: dict[str, object],
+) -> dict[str, object]:
+    if not _trace_tool_meta_uses_http_json_execution(tool_meta):
+        return tool_input
+    safe_tool_input = _redact_http_json_sensitive_payload_value(tool_input)
+    if isinstance(safe_tool_input, dict):
+        return safe_tool_input
+    return tool_input
+
+
 def _normalize_trace_tool_output_request_id(
     output: dict[str, object],
 ) -> dict[str, object]:
@@ -1550,6 +1564,7 @@ def get_trace_step_display_content(step: TraceStep) -> str:
     tool_meta = getattr(meta, "tool", None) if meta is not None else None
     tool_registry_lines: list[str] = []
     if isinstance(tool_registry_meta, dict):
+        content = _redact_tool_registry_diagnostic_value(content)
         raw_entries = tool_registry_meta.get("entries", ())
         if isinstance(raw_entries, (list, tuple)):
             for entry in raw_entries:
@@ -1559,15 +1574,12 @@ def get_trace_step_display_content(step: TraceStep) -> str:
                 target = str(entry.get("target", "")).strip().lower().replace("_", " ")
                 label = f"{kind} {target}".strip()
                 raw_values = entry.get("values", ())
-                values = (
-                    [
-                        str(value).strip()
-                        for value in raw_values
-                        if str(value).strip()
-                    ]
-                    if isinstance(raw_values, (list, tuple))
-                    else []
-                )
+                values: list[str] = []
+                if isinstance(raw_values, (list, tuple)):
+                    for value in raw_values:
+                        safe_value = _redact_tool_registry_diagnostic_value(value)
+                        if safe_value:
+                            values.append(safe_value)
                 if values:
                     tool_registry_lines.append(f"{label}: {', '.join(values)}")
                     continue
@@ -1644,6 +1656,12 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
     tool_meta = payload.get("tool")
     if isinstance(tool_meta, dict):
         sanitized_tool_meta = dict(tool_meta)
+        raw_input_value = sanitized_tool_meta.get("input")
+        if isinstance(raw_input_value, dict):
+            sanitized_tool_meta["input"] = _normalize_trace_http_json_tool_input(
+                sanitized_tool_meta,
+                raw_input_value,
+            )
         raw_preview_value = sanitized_tool_meta.get("output_preview")
         projected_preview_value = _resolve_trace_tool_output_preview(sanitized_tool_meta)
         if projected_preview_value is not None:
@@ -1666,6 +1684,25 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
 
 def _trace_preview_title(step: TraceStep) -> str:
     return get_trace_step_display_title(step)
+
+
+def _sanitize_trace_step_for_export(step: TraceStep) -> TraceStep:
+    sanitized_meta = get_trace_step_markdown_meta(step)
+    if sanitized_meta is None:
+        return step
+    original_meta = getattr(step, "meta", None)
+    original_meta_payload = (
+        original_meta.model_dump(exclude_none=True)
+        if hasattr(original_meta, "model_dump")
+        else dict(original_meta)
+        if isinstance(original_meta, dict)
+        else None
+    )
+    if sanitized_meta == original_meta_payload:
+        return step
+    payload = step.model_dump(exclude_none=True)
+    payload["meta"] = sanitized_meta
+    return TraceStep.model_validate(payload)
 
 
 def get_task_trace_preview_summary_from_task(
@@ -1745,6 +1782,7 @@ def get_trace_rag_export_summary(
 def get_task_trace_export_summary_from_task(task: dict) -> dict[str, object]:
     trace_steps = get_task_trace_steps_from_task(task)
     rag_summary = get_trace_rag_export_summary(trace_steps)
+    export_steps = [_sanitize_trace_step_for_export(step) for step in trace_steps]
     rag_knowledge_base_ids = [
         str(item)
         for item in rag_summary.get("rag_knowledge_base_ids", [])
@@ -1754,7 +1792,7 @@ def get_task_trace_export_summary_from_task(task: dict) -> dict[str, object]:
         rag_summary.get("rag_chunks")
     )
     return {
-        "steps": trace_steps,
+        "steps": export_steps,
         "step_count": len(trace_steps),
         "rag_hit_count": int(rag_summary.get("rag_hit_count", 0) or 0),
         "rag_knowledge_base_ids": rag_knowledge_base_ids,
