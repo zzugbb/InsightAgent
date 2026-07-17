@@ -145,6 +145,15 @@ def _label_implies_real_calc_summary(label: str) -> bool:
     }
 
 
+def _label_implies_real_retrieval_summary(label: str) -> bool:
+    normalized = _normalize_mock_observation_label(label)
+    return normalized in {
+        "provider search",
+        "hosted search",
+        "provider retrieval",
+    }
+
+
 def _get_safe_mock_request_id_display_value(value: object) -> str | None:
     if not isinstance(value, str):
         return None
@@ -306,12 +315,27 @@ def _summarize_structured_mock_tool_payload(
     documents_total = payload.get("documents_total")
     if isinstance(documents_total, int) and documents_total >= 0:
         document_label = "document" if documents_total == 1 else "documents"
+        source_suffix = ""
+        if isinstance(knowledge_base_id, str) and knowledge_base_id.strip():
+            if explicit_semantic_kind == "knowledge_retrieval":
+                source_suffix = f" from knowledge base {knowledge_base_id.strip()}"
+            elif (
+                semantic_kind != "knowledge_retrieval"
+                and semantic_family == "knowledge_retrieval"
+            ):
+                source_suffix = f" from {knowledge_base_id.strip()}"
+            elif (
+                semantic_kind is None
+                and semantic_family is None
+                and _label_implies_real_retrieval_summary(label)
+            ):
+                source_suffix = f" from {knowledge_base_id.strip()}"
         if isinstance(request_id, str) and request_id.strip():
             return (
-                f"Retrieved {documents_total} {document_label} "
+                f"Retrieved {documents_total} {document_label}{source_suffix} "
                 f"(request id {request_id.strip()})."
             )
-        return f"Retrieved {documents_total} {document_label}."
+        return f"Retrieved {documents_total} {document_label}{source_suffix}."
 
     return None
 

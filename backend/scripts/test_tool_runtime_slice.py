@@ -108,6 +108,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_tool_result_output,
     build_tool_result_preview,
     build_tool_result_summary,
+    build_tool_runtime_semantics_meta,
     build_tool_terminal_failure_transition,
     build_tool_phase,
     build_tool_plan_summary,
@@ -130,6 +131,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     get_tool_effective_result_output_keys,
     get_tool_effective_result_preview_keys,
     get_tool_semantic_kind,
+    normalize_tool_output_for_registration,
     build_tool_registry,
     build_tool_registry_extra_tools_from_settings,
     build_tool_registry_from_file_artifacts,
@@ -218,6 +220,7 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
     build_configured_tool_registry_provider_preflight_summary_model_from_dict,
     build_configured_tool_registry_provider_preflight_summary_model_from_models,
     build_configured_tool_registry_provider_preflight_summary_model_from_result_model,
+    build_configured_tool_registry_provider_preflight_tool_details,
     build_configured_tool_registry_provider_preflight_models_from_models,
     build_configured_tool_registry_provider_preflight_result_model_from_models,
     build_configured_tool_registry_provider_preflight_result_model,
@@ -5365,6 +5368,91 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload["status"], "completed")
         self.assertEqual(payload["governance"], {"profile": "planning_only"})
 
+    def test_get_task_response_summary_from_task_sanitizes_http_json_trace_json(
+        self,
+    ) -> None:
+        trace_json = json.dumps(
+            [
+                {
+                    "id": "task-response-trace-http-json",
+                    "type": "action",
+                    "content": (
+                        'Tool done: Provider Status Preview: {"status":"ready",'
+                        '"message":"gateway token=hidden",'
+                        '"access_token":"hidden",'
+                        '"request_id":"Bearer secret-token"}'
+                    ),
+                    "seq": 8,
+                    "meta": {
+                        "tool": {
+                            "name": "provider_status",
+                            "label": "Provider Status",
+                            "execution_kind": "http_json",
+                            "status": "done",
+                            "effective_result_preview_keys": ["status", "message"],
+                            "output_preview": {
+                                "status": "ready",
+                                "message": "gateway token=hidden",
+                                "access_token": "hidden",
+                                "request_id": "Bearer secret-token",
+                            },
+                        }
+                    },
+                }
+            ]
+        )
+
+        payload = chat_persistence_module.get_task_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": "task-response-trace-json-safe",
+                "session_id": "session-response-trace-json-safe",
+                "prompt": "response trace json safe",
+                "status": "completed",
+                "trace_json": trace_json,
+                "usage_json": None,
+                "created_at": "2026-07-16T10:00:00",
+                "updated_at": "2026-07-16T10:01:00",
+            }
+        )
+
+        serialized = str(payload["trace_json"])
+        parsed = json.loads(serialized)
+
+        self.assertIsInstance(payload["trace_json"], str)
+        self.assertIn("gateway token=[redacted]", parsed[0]["content"])
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
+    def test_get_task_response_summary_from_task_redacts_unparseable_trace_json(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_task_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": "task-response-bad-trace-json-safe",
+                "session_id": "session-response-bad-trace-json-safe",
+                "prompt": "response bad trace json safe",
+                "status": "failed",
+                "trace_json": (
+                    "bad trace payload provider_status token=hidden "
+                    "query_params.access_token Bearer secret-token"
+                ),
+                "usage_json": None,
+                "created_at": "2026-07-16T10:02:00",
+                "updated_at": "2026-07-16T10:03:00",
+            }
+        )
+
+        serialized = str(payload["trace_json"])
+
+        self.assertIsInstance(payload["trace_json"], str)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_task_cancel_response_summary_from_task_reuses_shared_status_summary(
         self,
     ) -> None:
@@ -9553,6 +9641,58 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(latest_seq, 5)
         self.assertEqual(latest_step_id, "typed-delta-step")
 
+    def test_get_task_trace_delta_snapshot_from_task_sanitizes_legacy_http_json_content(
+        self,
+    ) -> None:
+        original_loader = chat_persistence_module.get_task_trace_steps_from_task  # type: ignore[attr-defined]
+        raw_step = chat_persistence_module.TraceStep(  # type: ignore[attr-defined]
+            id="delta-step-http-json-legacy-content",
+            type="action",
+            content=(
+                'Tool done: Provider Status Preview: {"status":"ready",'
+                '"message":"gateway token=hidden","access_token":"hidden",'
+                '"request_id":"Bearer secret-token"}'
+            ),
+            seq=9,
+            meta={
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "effective_result_preview_keys": ["status", "message"],
+                    "output_preview": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "hidden",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            },
+        )
+        try:
+            chat_persistence_module.get_task_trace_steps_from_task = lambda _task: [  # type: ignore[attr-defined]
+                raw_step
+            ]
+            payload, next_cursor, has_more, latest_seq, latest_step_id = chat_persistence_module.get_task_trace_delta_snapshot_from_task(  # type: ignore[attr-defined]
+                {"status": "completed", "trace_json": "guarded-delta-trace-json"},
+                after_seq=0,
+                limit=20,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_steps_from_task = original_loader  # type: ignore[attr-defined]
+
+        serialized = json.dumps([step.model_dump() for step in payload], ensure_ascii=False)
+        self.assertEqual(next_cursor, 9)
+        self.assertFalse(has_more)
+        self.assertEqual(latest_seq, 9)
+        self.assertEqual(latest_step_id, "delta-step-http-json-legacy-content")
+        self.assertIn("gateway token=[redacted]", payload[0].content)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_task_route_module_no_longer_exposes_task_trace_delta_steps_helper(self) -> None:
         self.assertFalse(hasattr(task_routes_module, "get_task_trace_delta_steps_from_task"))
 
@@ -10772,6 +10912,74 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("secret-token", exported_json)
         self.assertNotIn("token=hidden", exported_json)
         self.assertNotIn("secret=hidden", exported_json)
+
+    def test_get_task_trace_export_summary_sanitizes_legacy_http_json_content_for_json_export(
+        self,
+    ) -> None:
+        original_loader = chat_persistence_module.get_task_trace_steps_from_task  # type: ignore[attr-defined]
+        original_rag_helper = chat_persistence_module.get_trace_rag_export_summary  # type: ignore[attr-defined]
+        raw_step = chat_persistence_module.TraceStep(  # type: ignore[attr-defined]
+            id="export-step-http-json-legacy-content",
+            type="action",
+            content=(
+                'Tool done: Provider Status Preview: {"status":"ready",'
+                '"message":"gateway token=hidden","access_token":"hidden",'
+                '"request_id":"Bearer secret-token"} Output: {"status":"ready",'
+                '"message":"secret=hidden","access_token":"hidden",'
+                '"request_id":"Bearer secret-token"}'
+            ),
+            seq=6,
+            meta={
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "effective_result_preview_keys": ["status", "message"],
+                    "effective_result_output_keys": ["status", "message"],
+                    "output_preview": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "hidden",
+                        "request_id": "Bearer secret-token",
+                    },
+                    "output": {
+                        "status": "ready",
+                        "message": "secret=hidden",
+                        "access_token": "hidden",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            },
+        )
+        try:
+            chat_persistence_module.get_task_trace_steps_from_task = lambda _task: [  # type: ignore[attr-defined]
+                raw_step
+            ]
+            chat_persistence_module.get_trace_rag_export_summary = lambda _trace_steps: {  # type: ignore[attr-defined]
+                "rag_hit_count": 0,
+                "rag_knowledge_base_ids": [],
+                "rag_chunks": [],
+            }
+
+            payload = chat_persistence_module.get_task_trace_export_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-export-legacy-content"}
+            )
+        finally:
+            chat_persistence_module.get_task_trace_steps_from_task = original_loader  # type: ignore[attr-defined]
+            chat_persistence_module.get_trace_rag_export_summary = original_rag_helper  # type: ignore[attr-defined]
+
+        exported_step = payload["steps"][0]
+        exported_json = json.dumps(exported_step.model_dump(), ensure_ascii=False)
+
+        self.assertIn("Provider Status: ", exported_step.content)
+        self.assertIn("gateway token=[redacted]", exported_step.content)
+        self.assertIn("secret=[redacted]", exported_step.content)
+        self.assertNotIn("access_token", exported_json)
+        self.assertNotIn("token=hidden", exported_json)
+        self.assertNotIn("secret=hidden", exported_json)
+        self.assertNotIn("Bearer", exported_json)
+        self.assertNotIn("secret-token", exported_json)
 
     def test_get_task_trace_export_summary_from_task_coerces_model_rag_chunks(
         self,
@@ -18570,6 +18778,154 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn("Tool done: Provider Search", markdown)
 
+    def test_build_session_export_markdown_includes_provider_kb_for_real_documents_total_preview(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-16T10:00:00",
+            session=session_routes_module.SessionResponse(
+                id="session-provider-documents-kb-preview",
+                title="Provider Documents KB Preview Session",
+                created_at="2026-07-16T09:59:00",
+                updated_at="2026-07-16T10:00:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-provider-documents-kb-preview",
+                    prompt="Search the hosted provider index",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-16T09:59:30",
+                    updated_at="2026-07-16T10:00:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-provider-documents-kb",
+                            seq=4,
+                            type="action",
+                            title="Hosted Search [hosted_search_gateway · knowledge_retrieval]",
+                            content_excerpt=(
+                                'Tool done: Hosted Search Preview: {"documents_total":2,"knowledge_base_id":"hosted-kb"} '
+                                'Output: {"documents_total":2,"knowledge_base_id":"hosted-kb","request_id":"req-hosted-1"}'
+                            ),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            'seq=4 · Hosted Search [hosted_search_gateway · knowledge_retrieval] · Retrieved 2 documents from hosted-kb (request id req-hosted-1).',
+            markdown,
+        )
+        self.assertNotIn("from knowledge base hosted-kb", markdown)
+        self.assertNotIn("Tool done: Hosted Search", markdown)
+
+    def test_build_session_export_markdown_infers_provider_kb_for_label_only_real_documents_total_preview(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-16T10:05:00",
+            session=session_routes_module.SessionResponse(
+                id="session-label-only-provider-documents-kb-preview",
+                title="Label Only Provider Documents KB Preview Session",
+                created_at="2026-07-16T10:04:00",
+                updated_at="2026-07-16T10:05:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-label-only-provider-documents-kb-preview",
+                    prompt="Search the hosted provider index",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-16T10:04:30",
+                    updated_at="2026-07-16T10:05:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-label-only-provider-documents-kb",
+                            seq=4,
+                            type="action",
+                            title="Hosted Search",
+                            content_excerpt=(
+                                'Hosted Search: {"documents_total":2,'
+                                '"knowledge_base_id":"hosted-kb",'
+                                '"request_id":"req-hosted-1"}'
+                            ),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "seq=4 · Hosted Search [retrieval] · Retrieved 2 documents from hosted-kb (request id req-hosted-1).",
+            markdown,
+        )
+        self.assertNotIn("from knowledge base hosted-kb", markdown)
+        self.assertNotIn(
+            'Hosted Search: {"documents_total":2,"knowledge_base_id":"hosted-kb","request_id":"req-hosted-1"}',
+            markdown,
+        )
+
     def test_build_session_export_markdown_does_not_imply_local_kb_for_name_only_real_tool_preview(
         self,
     ) -> None:
@@ -20179,6 +20535,47 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Provider Search completed.", result.content)
         self.assertNotIn(
             'Provider Search: {"documents_total": 2, "request_id": "req-1"}',
+            result.content,
+        )
+
+    def test_mock_llm_provider_generate_includes_provider_kb_for_real_documents_total_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Hosted Search: {"semantic_kind": "hosted_search_gateway", "semantic_family": "knowledge_retrieval", '
+            '"documents_total": 2, "knowledge_base_id": "hosted-kb", "request_id": "req-hosted-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Retrieved 2 documents from hosted-kb (request id req-hosted-1).",
+            result.content,
+        )
+        self.assertNotIn("from knowledge base hosted-kb", result.content)
+        self.assertNotIn(
+            'Hosted Search: {"semantic_kind": "hosted_search_gateway"',
+            result.content,
+        )
+
+    def test_mock_llm_provider_generate_infers_provider_kb_for_label_only_real_documents_total_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Hosted Search: {"documents_total": 2, "knowledge_base_id": "hosted-kb", "request_id": "req-hosted-1"}'
+        )
+
+        self.assertIn(
+            "Summary: Retrieved 2 documents from hosted-kb (request id req-hosted-1).",
+            result.content,
+        )
+        self.assertNotIn("from knowledge base hosted-kb", result.content)
+        self.assertNotIn(
+            'Hosted Search: {"documents_total": 2, "knowledge_base_id": "hosted-kb", "request_id": "req-hosted-1"}',
             result.content,
         )
 
@@ -21834,6 +22231,102 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             tool_input={
                 "prompt_preview": "请帮我规划",
                 "planned_tool_names": ["calc_eval_fast"],
+            },
+            prompt="普通问答，不包含显式计算标记",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Evaluate calculation -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Evaluate calculation",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "请帮我规划",
+                "echo": True,
+            },
+        )
+
+    def test_run_tool_task_plan_infers_label_only_real_retrieval_tool_semantics(
+        self,
+    ) -> None:
+        registry_provider = StaticToolRegistryProvider(
+            {
+                "task_plan": get_default_tool_registry()["task_plan"],
+                "hosted_search_gateway": ToolRegistration(
+                    name="hosted_search_gateway",
+                    kind=None,
+                    label="Hosted Search",
+                    retryable_by_default=False,
+                    default_timeout_ms=21_000,
+                    requires_user_context=True,
+                    supports_result_preview=True,
+                    execution_kind="http_json",
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "documents_total": 2,
+                    },
+                ),
+            }
+        )
+
+        output = run_tool(
+            name="task_plan",
+            tool_input={
+                "prompt_preview": "请帮我规划",
+                "planned_tool_names": ["hosted_search_gateway"],
+            },
+            prompt="普通问答，不包含显式检索标记",
+            user_id="user-1",
+            attempt=0,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Retrieve supporting context -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Retrieve supporting context",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "请帮我规划",
+                "echo": True,
+            },
+        )
+
+    def test_run_tool_task_plan_infers_label_only_real_calculator_tool_semantics(
+        self,
+    ) -> None:
+        registry_provider = StaticToolRegistryProvider(
+            {
+                "task_plan": get_default_tool_registry()["task_plan"],
+                "hosted_math_gateway": ToolRegistration(
+                    name="hosted_math_gateway",
+                    kind=None,
+                    label="Hosted Math",
+                    retryable_by_default=False,
+                    default_timeout_ms=21_000,
+                    requires_user_context=True,
+                    supports_result_preview=True,
+                    execution_kind="http_json",
+                    runner=lambda *, tool_input, prompt, user_id: {
+                        "result": 3.0,
+                    },
+                ),
+            }
+        )
+
+        output = run_tool(
+            name="task_plan",
+            tool_input={
+                "prompt_preview": "请帮我规划",
+                "planned_tool_names": ["hosted_math_gateway"],
             },
             prompt="普通问答，不包含显式计算标记",
             user_id="user-1",
@@ -39832,6 +40325,490 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("api_key=hidden", combined)
         self.assertNotIn("access_token", combined)
 
+    def test_build_tool_runtime_semantics_meta_infers_label_only_real_tool_family(
+        self,
+    ) -> None:
+        registrations = {
+            "hosted_math_gateway": ToolRegistration(
+                name="hosted_math_gateway",
+                kind="",
+                label="Hosted Math",
+                retryable_by_default=False,
+                default_timeout_ms=12_000,
+                requires_user_context=False,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {},
+            ),
+            "hosted_search_gateway": ToolRegistration(
+                name="hosted_search_gateway",
+                kind="",
+                label="Hosted Search",
+                retryable_by_default=False,
+                default_timeout_ms=12_000,
+                requires_user_context=False,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {},
+            ),
+            "hosted_planner_gateway": ToolRegistration(
+                name="hosted_planner_gateway",
+                kind="",
+                label="Hosted Planner",
+                retryable_by_default=False,
+                default_timeout_ms=12_000,
+                requires_user_context=False,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {},
+            ),
+        }
+
+        math_meta = build_tool_runtime_semantics_meta(
+            name="hosted_math_gateway",
+            registration=registrations["hosted_math_gateway"],
+        )
+        search_meta = build_tool_runtime_semantics_meta(
+            name="hosted_search_gateway",
+            registration=registrations["hosted_search_gateway"],
+        )
+        planner_meta = build_tool_runtime_semantics_meta(
+            name="hosted_planner_gateway",
+            registration=registrations["hosted_planner_gateway"],
+        )
+
+        self.assertEqual(math_meta["semantic_kind"], "hosted_math_gateway")
+        self.assertEqual(math_meta["semantic_family"], "local_calculator")
+        self.assertEqual(math_meta["effective_result_preview_keys"], ["expression", "result"])
+        self.assertEqual(
+            math_meta["effective_result_output_keys"],
+            ["expression", "result", "request_id"],
+        )
+        self.assertEqual(search_meta["semantic_kind"], "hosted_search_gateway")
+        self.assertEqual(search_meta["semantic_family"], "knowledge_retrieval")
+        self.assertEqual(
+            search_meta["effective_result_preview_keys"],
+            ["documents_total", "hit_count", "knowledge_base_id"],
+        )
+        self.assertEqual(
+            search_meta["effective_result_output_keys"],
+            ["documents_total", "hit_count", "knowledge_base_id", "request_id"],
+        )
+        self.assertEqual(planner_meta["semantic_kind"], "hosted_planner_gateway")
+        self.assertEqual(planner_meta["semantic_family"], "task_planner")
+        self.assertEqual(planner_meta["effective_result_preview_keys"], ["plan", "steps"])
+        self.assertEqual(planner_meta["effective_result_output_keys"], ["plan", "steps"])
+
+    def test_label_only_real_retrieval_with_explicit_preview_keys_infers_output_diagnostic_keys(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind=None,
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=("documents_total",),
+        )
+        output = {
+            "documents_total": 2,
+            "knowledge_base_id": "hosted-kb",
+            "request_id": "req-hosted-1",
+            "documents": [{"id": "doc-1"}, {"id": "doc-2"}],
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            ("documents_total",),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            ("documents_total", "knowledge_base_id", "request_id"),
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "knowledge_base_id": "hosted-kb",
+                "request_id": "req-hosted-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Retrieved 2 documents from hosted-kb (request id req-hosted-1).",
+        )
+
+    def test_label_only_real_retrieval_preview_only_output_keys_filter_sensitive_legacy_keys(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind=None,
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=("documents_total", "access_token"),
+        )
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            ("documents_total",),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            ("documents_total", "knowledge_base_id", "request_id"),
+        )
+        self.assertEqual(
+            build_tool_runtime_semantics_meta(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            {
+                "kind": None,
+                "semantic_kind": "hosted_search_gateway",
+                "execution_kind": "http_json",
+                "semantic_family": "knowledge_retrieval",
+                "supports_result_preview": True,
+                "effective_result_preview_keys": ["documents_total"],
+                "effective_result_output_keys": [
+                    "documents_total",
+                    "knowledge_base_id",
+                    "request_id",
+                ],
+            },
+        )
+
+    def test_label_only_real_retrieval_explicit_output_keys_filter_sensitive_legacy_keys(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind=None,
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total", "access_token", "request_id"),
+        )
+        output = {
+            "documents_total": 2,
+            "access_token": "secret-token",
+            "request_id": "req-hosted-1",
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            ("documents_total", "request_id"),
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "request_id": "req-hosted-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_runtime_semantics_meta(
+                name="hosted_search_gateway",
+                registration=registration,
+            )["effective_result_output_keys"],
+            ["documents_total", "request_id"],
+        )
+
+    def test_label_only_real_retrieval_sensitive_only_preview_keys_do_not_fallback_to_default_projection(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind=None,
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=("access_token",),
+        )
+        output = {
+            "documents_total": 2,
+            "knowledge_base_id": "hosted-kb",
+            "access_token": "secret-token",
+            "request_id": "req-hosted-1",
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            (),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            (),
+        )
+        self.assertEqual(
+            build_tool_result_preview(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {},
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {},
+        )
+
+    def test_label_only_real_retrieval_sensitive_only_output_keys_do_not_fallback_to_default_projection(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind=None,
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=("documents_total",),
+            result_output_keys=("access_token",),
+        )
+        output = {
+            "documents_total": 2,
+            "knowledge_base_id": "hosted-kb",
+            "access_token": "secret-token",
+            "request_id": "req-hosted-1",
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            (),
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {},
+        )
+        success_meta = build_tool_success_meta(
+            name="hosted_search_gateway",
+            tool_input={"query": "quarterly revenue"},
+            output=output,
+            retry_count=0,
+            last_error=None,
+            registration=registration,
+        )
+        self.assertEqual(success_meta["tool"]["output"], {})
+        self.assertNotIn("result_summary", success_meta["tool"])
+
+    def test_label_only_real_http_json_output_normalization_does_not_emit_null_tool_kind(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind=None,
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        output = normalize_tool_output_for_registration(
+            output={
+                "documents_total": 2,
+                "access_token": "secret-token",
+                "message": "gateway token=hidden",
+            },
+            registration=registration,
+        )
+
+        self.assertEqual(output["documents_total"], 2)
+        self.assertEqual(output["access_token"], "[redacted]")
+        self.assertEqual(output["message"], "gateway token=[redacted]")
+        self.assertNotIn("tool_kind", output)
+
+    def test_label_only_real_planner_with_explicit_preview_keys_infers_output_keys(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_planner_gateway",
+            kind=None,
+            label="Hosted Planner",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=("plan",),
+        )
+        output = {
+            "plan": "Analyze request -> Synthesize final answer",
+            "steps": ["Analyze request", "Synthesize final answer"],
+            "debug": "ignored",
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="hosted_planner_gateway",
+                registration=registration,
+            ),
+            ("plan",),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_planner_gateway",
+                registration=registration,
+            ),
+            ("plan",),
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_planner_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "plan": "Analyze request -> Synthesize final answer",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="hosted_planner_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Planned steps - Analyze request -> Synthesize final answer.",
+        )
+
+    def test_preflight_tool_details_infer_label_only_real_tool_family(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            registry={
+                "hosted_math_gateway": ToolRegistration(
+                    name="hosted_math_gateway",
+                    kind="",
+                    label="Hosted Math",
+                    retryable_by_default=False,
+                    default_timeout_ms=12_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    execution_kind="http_json",
+                    runner=lambda *, tool_input, prompt, user_id: {},
+                ),
+                "hosted_search_gateway": ToolRegistration(
+                    name="hosted_search_gateway",
+                    kind="",
+                    label="Hosted Search",
+                    retryable_by_default=False,
+                    default_timeout_ms=12_000,
+                    requires_user_context=False,
+                    supports_result_preview=True,
+                    execution_kind="http_json",
+                    runner=lambda *, tool_input, prompt, user_id: {},
+                ),
+            }
+        )
+
+        details = {
+            item["name"]: item
+            for item in build_configured_tool_registry_provider_preflight_tool_details(
+                provider=provider
+            )
+        }
+
+        self.assertEqual(
+            details["hosted_math_gateway"]["semantic_kind"],
+            "hosted_math_gateway",
+        )
+        self.assertEqual(
+            details["hosted_math_gateway"]["semantic_family"],
+            "local_calculator",
+        )
+        self.assertEqual(
+            details["hosted_math_gateway"]["effective_result_preview_keys"],
+            ("expression", "result"),
+        )
+        self.assertEqual(
+            details["hosted_math_gateway"]["effective_result_output_keys"],
+            ("expression", "result", "request_id"),
+        )
+        self.assertEqual(
+            details["hosted_search_gateway"]["semantic_kind"],
+            "hosted_search_gateway",
+        )
+        self.assertEqual(
+            details["hosted_search_gateway"]["semantic_family"],
+            "knowledge_retrieval",
+        )
+        self.assertEqual(
+            details["hosted_search_gateway"]["effective_result_preview_keys"],
+            ("documents_total", "hit_count", "knowledge_base_id"),
+        )
+        self.assertEqual(
+            details["hosted_search_gateway"]["effective_result_output_keys"],
+            ("documents_total", "hit_count", "knowledge_base_id", "request_id"),
+        )
+
     def test_build_tool_runtime_semantics_meta_redacts_sensitive_execution_summary(
         self,
     ) -> None:
@@ -55048,6 +56025,41 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", output_json)
         self.assertNotIn("secret-token", output_json)
 
+    def test_build_tool_result_output_redacts_half_migrated_http_json_execution_kind(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind=" HTTP_JSON ",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        output = build_tool_result_output(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "access_token": "hidden",
+                "message": "gateway token=hidden",
+                "request_id": "Bearer secret-token",
+            },
+            registration=registration,
+        )
+
+        output_json = json.dumps(output)
+        self.assertEqual(output["status"], "ready")
+        self.assertEqual(output["access_token"], "[redacted]")
+        self.assertEqual(output["message"], "gateway token=[redacted]")
+        self.assertNotIn("request_id", output)
+        self.assertNotIn("hidden", output_json)
+        self.assertNotIn("Bearer", output_json)
+        self.assertNotIn("secret-token", output_json)
+
     def test_build_tool_result_preview_redacts_raw_http_json_helper_output(
         self,
     ) -> None:
@@ -55110,6 +56122,233 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             summary,
             "Provider Status output - status=ready, message=gateway token=[redacted].",
+        )
+
+    def test_build_tool_result_summary_uses_label_for_untyped_real_calc_tool(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_math_gateway",
+            kind="",
+            label="Hosted Math",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            result_output_keys=("result", "request_id"),
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        self.assertEqual(
+            build_tool_result_summary(
+                name="hosted_math_gateway",
+                output={"result": 7, "request_id": "req-calc-1"},
+                registration=registration,
+            ),
+            "Calculated result = 7 (request id req-calc-1).",
+        )
+
+    def test_build_tool_result_helpers_infer_keys_for_untyped_real_calc_label(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_math_gateway",
+            kind="",
+            label="Hosted Math",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+        output = {
+            "expression": "1+2*3",
+            "result": 7,
+            "request_id": "req-calc-1",
+            "access_token": "hidden",
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="hosted_math_gateway",
+                registration=registration,
+            ),
+            ("expression", "result"),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_math_gateway",
+                registration=registration,
+            ),
+            ("expression", "result", "request_id"),
+        )
+        self.assertEqual(
+            build_tool_result_preview(
+                name="hosted_math_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {"expression": "1+2*3", "result": 7},
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_math_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {"expression": "1+2*3", "result": 7, "request_id": "req-calc-1"},
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="hosted_math_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Calculated 1+2*3 = 7 (request id req-calc-1).",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_math_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Hosted Math: Calculated 1+2*3 = 7 (request id req-calc-1).",
+        )
+
+    def test_build_tool_result_helpers_infer_keys_for_untyped_real_retrieval_label(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind="",
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+        output = {
+            "documents_total": 2,
+            "request_id": "req-search-1",
+            "access_token": "hidden",
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            ("documents_total", "hit_count", "knowledge_base_id"),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            ("documents_total", "hit_count", "knowledge_base_id", "request_id"),
+        )
+        self.assertEqual(
+            build_tool_result_preview(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {"documents_total": 2},
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {"documents_total": 2, "request_id": "req-search-1"},
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Retrieved 2 documents (request id req-search-1).",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Hosted Search: Retrieved 2 documents (request id req-search-1).",
+        )
+
+    def test_build_tool_result_helpers_infer_keys_for_untyped_real_planner_label(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_planner_gateway",
+            kind="",
+            label="Hosted Planner",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+        output = {
+            "steps": ["gather", "calculate"],
+            "request_id": "req-plan-1",
+            "access_token": "hidden",
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="hosted_planner_gateway",
+                registration=registration,
+            ),
+            ("plan", "steps"),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_planner_gateway",
+                registration=registration,
+            ),
+            ("plan", "steps"),
+        )
+        self.assertEqual(
+            build_tool_result_preview(
+                name="hosted_planner_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {"steps": ["gather", "calculate"]},
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_planner_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {"steps": ["gather", "calculate"]},
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="hosted_planner_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Planned steps - gather -> calculate.",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_planner_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Hosted Planner: Planned steps - gather -> calculate.",
         )
 
     def test_run_tool_canonical_override_rejects_unknown_execution_kind_without_fallback(
@@ -63359,6 +64598,106 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             {
                 "documents_total": 2,
                 "request_id": "req-1",
+            },
+        )
+
+    def test_execute_tool_plan_item_service_execution_infers_label_only_real_search_tool_semantics(
+        self,
+    ) -> None:
+        registry = {
+            "hosted_search_gateway": ToolRegistration(
+                name="hosted_search_gateway",
+                kind=None,
+                label="Hosted Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "documents_total": 2,
+                    "documents": [
+                        {"snippet": "alpha snippet"},
+                        {"content": "beta content"},
+                    ],
+                    "knowledge_base_id": "hosted-kb",
+                    "request_id": "req-hosted-1",
+                },
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="hosted_search_gateway",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Hosted Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="hosted_search_gateway",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-1",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_start_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_start"
+        )
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(tool_start_event["semantic_kind"], "hosted_search_gateway")
+        self.assertEqual(tool_start_event["semantic_family"], "knowledge_retrieval")
+        self.assertEqual(
+            tool_end_event["output"],
+            {
+                "documents_total": 2,
+                "knowledge_base_id": "hosted-kb",
+                "request_id": "req-hosted-1",
+            },
+        )
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "documents_total": 2,
+                "knowledge_base_id": "hosted-kb",
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
+            "Hosted Search: Retrieved 2 documents from hosted-kb (request id req-hosted-1).",
+        )
+        rag_followup = final_item["result"]["loop_execution_result"]["success_effects"][
+            "rag_followup"
+        ]
+        self.assertIsNotNone(rag_followup)
+        assert rag_followup is not None
+        self.assertEqual(rag_followup["step"]["content"], "Hosted Search returned snippets.")
+        self.assertEqual(
+            rag_followup["step"]["meta"]["rag"],
+            {
+                "chunks": ["alpha snippet", "beta content"],
+                "knowledge_base_id": "hosted-kb",
             },
         )
 

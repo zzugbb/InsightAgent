@@ -1361,6 +1361,10 @@ def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
         _trace_tool_label_implies_real_calc_summary(tool_meta.get("label"))
         or _trace_tool_label_implies_real_calc_summary(tool_meta.get("name"))
     )
+    label_implies_real_retrieval = (
+        _trace_tool_label_implies_real_retrieval_summary(tool_meta.get("label"))
+        or _trace_tool_label_implies_real_retrieval_summary(tool_meta.get("name"))
+    )
 
     plan = output.get("plan")
     if isinstance(plan, str) and plan.strip():
@@ -1441,12 +1445,27 @@ def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
     documents_total = output.get("documents_total")
     if isinstance(documents_total, int) and documents_total >= 0:
         document_label = "document" if documents_total == 1 else "documents"
+        source_suffix = ""
+        if isinstance(knowledge_base_id, str) and knowledge_base_id.strip():
+            if explicit_semantic_kind == "knowledge_retrieval":
+                source_suffix = f" from knowledge base {knowledge_base_id.strip()}"
+            elif (
+                runtime_semantic_kind != "knowledge_retrieval"
+                and semantic_family == "knowledge_retrieval"
+            ):
+                source_suffix = f" from {knowledge_base_id.strip()}"
+            elif (
+                runtime_semantic_kind is None
+                and semantic_family is None
+                and label_implies_real_retrieval
+            ):
+                source_suffix = f" from {knowledge_base_id.strip()}"
         if isinstance(request_id, str) and request_id.strip():
             return (
-                f"Retrieved {documents_total} {document_label} "
+                f"Retrieved {documents_total} {document_label}{source_suffix} "
                 f"(request id {request_id.strip()})."
             )
-        return f"Retrieved {documents_total} {document_label}."
+        return f"Retrieved {documents_total} {document_label}{source_suffix}."
     return ""
 
 
@@ -1669,7 +1688,16 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
         safe_output_value = _resolve_trace_safe_tool_output(sanitized_tool_meta)
         if raw_preview_value is not None and safe_output_value is None:
             preview_mapping = _coerce_trace_tool_output_preview_mapping(raw_preview_value)
-            if isinstance(preview_mapping, dict):
+            preview_keys = _normalize_trace_tool_output_key_list(
+                sanitized_tool_meta.get("effective_result_preview_keys")
+            )
+            if (
+                preview_keys
+                and _trace_tool_meta_uses_http_json_execution(sanitized_tool_meta)
+                and projected_preview_value is not None
+            ):
+                sanitized_tool_meta["output"] = projected_preview_value
+            elif isinstance(preview_mapping, dict):
                 sanitized_tool_meta["output"] = _normalize_trace_http_json_tool_output(
                     sanitized_tool_meta,
                     preview_mapping,
@@ -1682,14 +1710,81 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
     return payload
 
 
+_TRACE_HTTP_JSON_EXPORT_CONTENT_SENSITIVE_RE = re.compile(
+    r"(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|authorization|bearer\s+\S+|token\s*=|secret\s*=)"
+)
+
+
+def _trace_http_json_export_content_needs_sanitization(content: str) -> bool:
+    if not content:
+        return False
+    if _TRACE_HTTP_JSON_EXPORT_CONTENT_SENSITIVE_RE.search(content):
+        return True
+    redacted_content = _redact_tool_registry_diagnostic_value(content)
+    if isinstance(redacted_content, str) and redacted_content != content:
+        return True
+    safe_content = _redact_http_json_sensitive_payload_value(content)
+    return isinstance(safe_content, str) and safe_content != content
+
+
+def _redact_trace_http_json_export_content_fallback(content: str) -> str:
+    safe_content = _redact_http_json_sensitive_payload_value(content)
+    if not isinstance(safe_content, str):
+        safe_content = content
+    redacted_content = _redact_tool_registry_diagnostic_value(safe_content)
+    safe_text = redacted_content if isinstance(redacted_content, str) else safe_content
+    return re.sub(r"(?i)\bbearer\s+\S+", "[redacted]", safe_text)
+
+
+def _build_trace_http_json_export_content(
+    tool_meta: dict[str, object],
+    *,
+    fallback_content: str,
+) -> str:
+    label = _resolve_trace_tool_display_label(tool_meta)
+    summary = _infer_trace_tool_result_summary(tool_meta)
+    preview_text = _stringify_trace_tool_output_preview(
+        _resolve_trace_tool_output_preview(tool_meta)
+    )
+    safe_output_text = _stringify_trace_safe_tool_output(tool_meta)
+
+    lines: list[str] = []
+    if summary:
+        lines.append(summary)
+    elif label:
+        lines.append(f"{label}:")
+    if preview_text:
+        lines.append(f"Preview: {preview_text}")
+    if safe_output_text and safe_output_text != preview_text:
+        lines.append(f"Output: {safe_output_text}")
+    safe_content = " ".join(lines).strip()
+    if safe_content:
+        return safe_content
+    return _redact_trace_http_json_export_content_fallback(fallback_content)
+
+
+def _sanitize_trace_step_content_for_export(step: TraceStep) -> str:
+    content = str(getattr(step, "content", "") or "")
+    meta = getattr(step, "meta", None)
+    tool_meta = getattr(meta, "tool", None) if meta is not None else None
+    if not isinstance(tool_meta, dict):
+        return content
+    if not _trace_tool_meta_uses_http_json_execution(tool_meta):
+        return content
+    if not _trace_http_json_export_content_needs_sanitization(content):
+        return content
+    return _build_trace_http_json_export_content(
+        tool_meta,
+        fallback_content=content,
+    )
+
+
 def _trace_preview_title(step: TraceStep) -> str:
     return get_trace_step_display_title(step)
 
 
 def _sanitize_trace_step_for_export(step: TraceStep) -> TraceStep:
     sanitized_meta = get_trace_step_markdown_meta(step)
-    if sanitized_meta is None:
-        return step
     original_meta = getattr(step, "meta", None)
     original_meta_payload = (
         original_meta.model_dump(exclude_none=True)
@@ -1698,10 +1793,18 @@ def _sanitize_trace_step_for_export(step: TraceStep) -> TraceStep:
         if isinstance(original_meta, dict)
         else None
     )
-    if sanitized_meta == original_meta_payload:
-        return step
     payload = step.model_dump(exclude_none=True)
-    payload["meta"] = sanitized_meta
+    if sanitized_meta is not None:
+        payload["meta"] = sanitized_meta
+    sanitized_step = TraceStep.model_validate(payload)
+    sanitized_content = _sanitize_trace_step_content_for_export(sanitized_step)
+    if sanitized_content != str(getattr(step, "content", "") or ""):
+        payload["content"] = sanitized_content
+    if (
+        sanitized_meta == original_meta_payload
+        and payload.get("content") == getattr(step, "content", None)
+    ):
+        return step
     return TraceStep.model_validate(payload)
 
 
@@ -1841,6 +1944,21 @@ def get_task_trace_delta_response_summary_from_task(
     }
 
 
+def _sanitize_task_response_trace_json(trace_json: object) -> object:
+    if not isinstance(trace_json, str) or not trace_json.strip():
+        return trace_json
+    trace_steps = _load_parsed_trace_steps_from_trace_json(trace_json)
+    if not trace_steps:
+        if _trace_http_json_export_content_needs_sanitization(trace_json):
+            return _redact_trace_http_json_export_content_fallback(trace_json)
+        return trace_json
+    sanitized_steps = [_sanitize_trace_step_for_export(step) for step in trace_steps]
+    return json.dumps(
+        [step.model_dump(exclude_none=True) for step in sanitized_steps],
+        ensure_ascii=False,
+    )
+
+
 def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
     task = _coerce_export_payload_block_to_dict(task)
     return {
@@ -1849,7 +1967,7 @@ def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
         "prompt": str(task.get("prompt", "")),
         **_get_task_status_summary_from_task(task),
         "governance": _normalize_task_governance_payload(task.get("governance")),
-        "trace_json": task.get("trace_json"),
+        "trace_json": _sanitize_task_response_trace_json(task.get("trace_json")),
         "usage_json": task.get("usage_json"),
         "created_at": str(task.get("created_at", "")),
         "updated_at": str(task.get("updated_at", "")),
@@ -2029,7 +2147,10 @@ def get_task_trace_delta_snapshot_from_task(
 ) -> tuple[list[TraceStep], int, bool, int, str | None]:
     task = _coerce_export_payload_block_to_dict(task)
     bounded_limit = max(1, int(limit))
-    trace_steps = get_task_trace_steps_from_task(task)
+    trace_steps = [
+        _sanitize_trace_step_for_export(step)
+        for step in get_task_trace_steps_from_task(task)
+    ]
     latest_seq = max((int(step.seq or 0) for step in trace_steps), default=0)
     latest_step_id = trace_steps[-1].id if trace_steps else None
     all_delta_steps = [step for step in trace_steps if int(step.seq or 0) > after_seq]

@@ -2547,7 +2547,10 @@ def _normalize_tool_result_projection_output(
     *,
     registration: ToolRegistration | None,
 ) -> dict[str, object]:
-    if registration is not None and registration.execution_kind == "http_json":
+    if (
+        registration is not None
+        and _normalize_tool_execution_kind(registration.execution_kind) == "http_json"
+    ):
         return _normalize_http_json_safe_output_shape(output)
     return output
 
@@ -8401,6 +8404,9 @@ def build_tool_result_preview(
         name=name,
         registration=resolved_registration,
     )
+    has_explicit_preview_keys = bool(
+        _normalize_result_preview_keys(resolved_registration.result_preview_keys)
+    )
     semantic_kind = get_tool_semantic_kind(
         name=name,
         registration=resolved_registration,
@@ -8419,6 +8425,8 @@ def build_tool_result_preview(
             if normalized_steps:
                 preview["steps"] = normalized_steps
         return preview
+    if has_explicit_preview_keys:
+        return {}
     if semantic_kind == "task_planner":
         task_planner_output = dict(normalized_output)
         normalized_steps = _normalize_tool_result_plan_steps(
@@ -8455,6 +8463,12 @@ def build_tool_result_output(
         name=name,
         registration=resolved_registration,
     )
+    has_explicit_output_keys = bool(
+        _normalize_result_output_keys(resolved_registration.result_output_keys)
+    )
+    has_explicit_preview_keys = bool(
+        _normalize_result_preview_keys(resolved_registration.result_preview_keys)
+    )
     semantic_kind = get_tool_semantic_kind(
         name=name,
         registration=resolved_registration,
@@ -8463,6 +8477,13 @@ def build_tool_result_output(
         registry_loader=registry_loader,
     )
     if not result_output_keys:
+        if has_explicit_output_keys:
+            return {}
+        if has_explicit_preview_keys and not get_tool_effective_result_preview_keys(
+            name=name,
+            registration=resolved_registration,
+        ):
+            return {}
         if semantic_kind == "task_planner":
             normalized_output = dict(normalized_source_output)
             normalized_steps = _normalize_tool_result_plan_steps(
@@ -8604,8 +8625,8 @@ def build_tool_result_summary(
             and semantic_family is None
             and runtime_semantic_kind is None
             and (
-                _label_implies_real_calc_summary(tool_name)
-                or _label_implies_real_calc_summary(display_name)
+                _label_implies_real_calc_summary(canonical_name)
+                or _label_implies_real_calc_summary(resolved_display_name)
             )
         )
     ) and result is not None:
@@ -8647,12 +8668,18 @@ def build_tool_result_summary(
     )
     if documents_total is not None:
         document_label = "document" if documents_total == 1 else "documents"
+        source_suffix = ""
+        if isinstance(knowledge_base_id, str) and knowledge_base_id.strip():
+            if runtime_semantic_kind == "knowledge_retrieval":
+                source_suffix = f" from knowledge base {knowledge_base_id.strip()}"
+            elif semantic_family == "knowledge_retrieval":
+                source_suffix = f" from {knowledge_base_id.strip()}"
         if isinstance(request_id, str) and request_id.strip():
             return (
-                f"Retrieved {documents_total} {document_label} "
+                f"Retrieved {documents_total} {document_label}{source_suffix} "
                 f"(request id {request_id.strip()})."
             )
-        return f"Retrieved {documents_total} {document_label}."
+        return f"Retrieved {documents_total} {document_label}{source_suffix}."
 
     generic_payload_summary = _summarize_generic_tool_result_payload(outward_output)
     if generic_payload_summary:
@@ -12282,6 +12309,145 @@ def _label_implies_real_calc_summary(raw_value: object) -> bool:
     }
 
 
+def _label_implies_real_planner_summary(raw_value: object) -> bool:
+    normalized = _normalize_tool_observation_label(raw_value)
+    return normalized in {
+        "provider plan",
+        "provider planner",
+        "hosted plan",
+        "hosted planner",
+    }
+
+
+def _get_label_implied_semantic_family(
+    *,
+    name: str,
+    registration: ToolRegistration,
+) -> str | None:
+    if _label_implies_real_calc_summary(name) or _label_implies_real_calc_summary(
+        registration.label
+    ):
+        return "local_calculator"
+    if _label_implies_real_retrieval_summary(
+        name
+    ) or _label_implies_real_retrieval_summary(registration.label):
+        return "knowledge_retrieval"
+    if _label_implies_real_planner_summary(name) or _label_implies_real_planner_summary(
+        registration.label
+    ):
+        return "task_planner"
+    return None
+
+
+def _has_known_tool_semantic_family(
+    *,
+    semantic_kind: str | None,
+    semantic_family: str | None,
+) -> bool:
+    known_families = {"knowledge_retrieval", "local_calculator", "task_planner"}
+    return (
+        _normalize_tool_semantic_kind(semantic_kind) in known_families
+        or _normalize_tool_semantic_kind(semantic_family) in known_families
+    )
+
+
+def _get_label_implied_result_preview_keys(
+    *,
+    name: str,
+    registration: ToolRegistration,
+    semantic_kind: str | None,
+    semantic_family: str | None,
+) -> tuple[str, ...]:
+    del semantic_kind, semantic_family
+    if (
+        _normalize_tool_semantic_kind(registration.kind) is not None
+        or _normalize_runtime_semantic_kind(registration.runtime_semantic_kind)
+        is not None
+    ):
+        return ()
+    if _label_implies_real_calc_summary(name) or _label_implies_real_calc_summary(
+        registration.label
+    ):
+        return _REGISTERED_TOOLS["calc_eval"].result_preview_keys
+    if _label_implies_real_retrieval_summary(
+        name
+    ) or _label_implies_real_retrieval_summary(registration.label):
+        return ("documents_total", *_REGISTERED_TOOLS["task_retrieve"].result_preview_keys)
+    if _label_implies_real_planner_summary(name) or _label_implies_real_planner_summary(
+        registration.label
+    ):
+        return _REGISTERED_TOOLS["task_plan"].result_preview_keys
+    return ()
+
+
+def _get_label_implied_result_output_keys(
+    *,
+    name: str,
+    registration: ToolRegistration,
+    semantic_kind: str | None,
+    semantic_family: str | None,
+) -> tuple[str, ...]:
+    output_keys = _get_label_implied_result_preview_keys(
+        name=name,
+        registration=registration,
+        semantic_kind=semantic_kind,
+        semantic_family=semantic_family,
+    )
+    if not output_keys:
+        return ()
+    if _normalize_tool_execution_kind(registration.execution_kind) != "http_json":
+        return ()
+    if (
+        _label_implies_real_calc_summary(name)
+        or _label_implies_real_calc_summary(registration.label)
+        or _label_implies_real_retrieval_summary(name)
+        or _label_implies_real_retrieval_summary(registration.label)
+    ) and "request_id" not in output_keys:
+        return (*output_keys, "request_id")
+    return output_keys
+
+
+def _get_label_implied_http_json_output_keys_from_preview(
+    *,
+    name: str,
+    registration: ToolRegistration,
+) -> tuple[str, ...]:
+    if _normalize_tool_execution_kind(registration.execution_kind) != "http_json":
+        return ()
+    if (
+        _normalize_tool_semantic_kind(registration.kind) is not None
+        or _normalize_runtime_semantic_kind(registration.runtime_semantic_kind)
+        is not None
+    ):
+        return ()
+    output_keys = list(
+        _normalize_safe_explicit_result_keys(
+            registration.result_preview_keys,
+            fallback_keys=(),
+        )
+    )
+    if not output_keys:
+        return ()
+    if _label_implies_real_retrieval_summary(
+        name
+    ) or _label_implies_real_retrieval_summary(registration.label):
+        for diagnostic_key in ("knowledge_base_id", "request_id"):
+            if diagnostic_key not in output_keys:
+                output_keys.append(diagnostic_key)
+        return tuple(output_keys)
+    if _label_implies_real_calc_summary(name) or _label_implies_real_calc_summary(
+        registration.label
+    ):
+        if "request_id" not in output_keys:
+            output_keys.append("request_id")
+        return tuple(output_keys)
+    if _label_implies_real_planner_summary(name) or _label_implies_real_planner_summary(
+        registration.label
+    ):
+        return tuple(output_keys)
+    return ()
+
+
 def get_tool_semantic_kind(
     *,
     name: str,
@@ -12302,10 +12468,26 @@ def get_tool_semantic_kind(
         if template_registration is not None:
             return _normalize_tool_semantic_kind(template_registration.kind)
         if default_registration is not None:
-            return _normalize_tool_semantic_kind(default_registration.kind)
-        return _normalize_tool_semantic_kind(registration.kind)
+            default_semantic_kind = _normalize_tool_semantic_kind(
+                default_registration.kind
+            )
+            if default_semantic_kind is not None:
+                return default_semantic_kind
+        registration_semantic_kind = _normalize_tool_semantic_kind(registration.kind)
+        if registration_semantic_kind is not None:
+            return registration_semantic_kind
+        return _get_label_implied_semantic_family(
+            name=normalized_name,
+            registration=registration,
+        )
     if default_registration is not None:
-        return _normalize_tool_semantic_kind(default_registration.kind)
+        default_semantic_kind = _normalize_tool_semantic_kind(default_registration.kind)
+        if default_semantic_kind is not None:
+            return default_semantic_kind
+        return _get_label_implied_semantic_family(
+            name=normalized_name,
+            registration=default_registration,
+        )
     return None
 
 
@@ -12399,7 +12581,10 @@ def get_tool_effective_result_output_keys(
     if resolved_registration is None:
         return ()
     if resolved_registration.result_output_keys:
-        return resolved_registration.result_output_keys
+        return _normalize_safe_explicit_result_keys(
+            resolved_registration.result_output_keys,
+            fallback_keys=(),
+        )
     if not resolved_registration.supports_result_preview:
         return ()
     explicit_runtime_semantic_kind = _normalize_runtime_semantic_kind(
@@ -12413,8 +12598,37 @@ def get_tool_effective_result_output_keys(
         registry_loader=registry_loader,
     )
     raw_kind = _normalize_runtime_semantic_kind(resolved_registration.kind)
+    semantic_family = get_tool_semantic_kind(
+        name=normalized_name,
+        registration=resolved_registration,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    if resolved_registration.result_preview_keys:
+        label_implied_output_keys = (
+            _get_label_implied_http_json_output_keys_from_preview(
+                name=normalized_name,
+                registration=resolved_registration,
+            )
+        )
+        if label_implied_output_keys:
+            return label_implied_output_keys
+    if not resolved_registration.result_preview_keys:
+        label_implied_output_keys = _get_label_implied_result_output_keys(
+            name=normalized_name,
+            registration=resolved_registration,
+            semantic_kind=semantic_kind,
+            semantic_family=semantic_family,
+        )
+        if label_implied_output_keys:
+            return label_implied_output_keys
     should_infer_output_keys = explicit_runtime_semantic_kind is not None or (
         semantic_kind is not None and raw_kind is not None and raw_kind != semantic_kind
+    ) or (
+        semantic_kind is not None
+        and semantic_family is not None
+        and semantic_family != semantic_kind
     )
     if not should_infer_output_keys:
         return ()
@@ -12426,13 +12640,6 @@ def get_tool_effective_result_output_keys(
         registry_loader=registry_loader,
     )
     if resolved_registration.result_preview_keys:
-        semantic_family = get_tool_semantic_kind(
-            name=normalized_name,
-            registration=resolved_registration,
-            registry=registry,
-            registry_provider=registry_provider,
-            registry_loader=registry_loader,
-        )
         output_keys = _augment_http_json_local_calculator_output_keys(
             output_keys=output_keys,
             registration=resolved_registration,
@@ -12440,13 +12647,6 @@ def get_tool_effective_result_output_keys(
             semantic_family=semantic_family,
         )
         return output_keys
-    semantic_family = get_tool_semantic_kind(
-        name=normalized_name,
-        registration=resolved_registration,
-        registry=registry,
-        registry_provider=registry_provider,
-        registry_loader=registry_loader,
-    )
     output_keys = _augment_runtime_override_retrieval_output_keys(
         output_keys=output_keys,
         registration=resolved_registration,
@@ -12479,7 +12679,10 @@ def get_tool_effective_result_preview_keys(
     if resolved_registration is None or not resolved_registration.supports_result_preview:
         return ()
     if resolved_registration.result_preview_keys:
-        return resolved_registration.result_preview_keys
+        return _normalize_safe_explicit_result_keys(
+            resolved_registration.result_preview_keys,
+            fallback_keys=(),
+        )
     semantic_kind = get_tool_runtime_semantic_kind(
         name=normalized_name,
         registration=resolved_registration,
@@ -12494,6 +12697,14 @@ def get_tool_effective_result_preview_keys(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
+    label_implied_preview_keys = _get_label_implied_result_preview_keys(
+        name=normalized_name,
+        registration=resolved_registration,
+        semantic_kind=semantic_kind,
+        semantic_family=semantic_family,
+    )
+    if label_implied_preview_keys:
+        return label_implied_preview_keys
     preview_keys = _get_default_result_preview_keys_for_semantic_kind(semantic_kind)
     if not preview_keys and semantic_family and semantic_family != semantic_kind:
         preview_keys = _get_default_result_preview_keys_for_semantic_kind(
@@ -12611,14 +12822,29 @@ def build_configured_tool_registry_provider_preflight_tool_details(
                 )
             )
         )
-        semantic_kind = get_tool_runtime_semantic_kind(
-            name=tool_name,
-            registration=registration,
-        )
         semantic_family = get_tool_semantic_kind(
             name=tool_name,
             registration=registration,
         )
+        label_implied_semantic_family = _get_label_implied_semantic_family(
+            name=tool_name,
+            registration=registration,
+        )
+        if (
+            label_implied_semantic_family is not None
+            and _normalize_tool_semantic_kind(registration.kind) is None
+            and _normalize_runtime_semantic_kind(registration.runtime_semantic_kind)
+            is None
+        ):
+            semantic_kind = _get_tool_runtime_trace_semantic_kind(
+                name=tool_name,
+                registration=registration,
+            )
+        else:
+            semantic_kind = get_tool_runtime_semantic_kind(
+                name=tool_name,
+                registration=registration,
+            )
         effective_result_preview_keys = get_tool_effective_result_preview_keys(
             name=tool_name,
             registration=registration,
@@ -12701,40 +12927,45 @@ def normalize_tool_output_for_registration(
         registration.runtime_semantic_kind
     )
     desired_tool_kind = explicit_runtime_tool_kind or registration.kind
+    desired_tool_kind_text = (
+        str(desired_tool_kind).strip() if desired_tool_kind is not None else ""
+    )
+    if not desired_tool_kind_text:
+        return normalized_output
     if (
         default_registration is not None
         and registration.runner is default_registration.runner
         and registration.kind == default_registration.kind
-        and desired_tool_kind == registration.kind
+        and desired_tool_kind_text == str(registration.kind).strip()
     ):
         return normalized_output
 
     current_kind = normalized_output.get("tool_kind")
     current_kind_text = str(current_kind).strip() if current_kind is not None else ""
     if not current_kind_text:
-        normalized_output["tool_kind"] = desired_tool_kind
+        normalized_output["tool_kind"] = desired_tool_kind_text
         return normalized_output
-    if current_kind_text == desired_tool_kind:
+    if current_kind_text == desired_tool_kind_text:
         return normalized_output
 
     template_registration = _find_builtin_registration_by_runner(registration.runner)
     if (
         template_registration is not None
         and current_kind_text == template_registration.kind
-        and desired_tool_kind != template_registration.kind
+        and desired_tool_kind_text != template_registration.kind
     ):
-        normalized_output["tool_kind"] = desired_tool_kind
+        normalized_output["tool_kind"] = desired_tool_kind_text
     elif (
         default_registration is not None
         and current_kind_text == default_registration.kind
-        and desired_tool_kind != default_registration.kind
+        and desired_tool_kind_text != default_registration.kind
     ):
-        normalized_output["tool_kind"] = desired_tool_kind
+        normalized_output["tool_kind"] = desired_tool_kind_text
     elif (
-        current_kind_text == registration.kind
-        and desired_tool_kind != registration.kind
+        current_kind_text == str(registration.kind).strip()
+        and desired_tool_kind_text != str(registration.kind).strip()
     ):
-        normalized_output["tool_kind"] = desired_tool_kind
+        normalized_output["tool_kind"] = desired_tool_kind_text
     return normalized_output
 
 
