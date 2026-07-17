@@ -60065,22 +60065,32 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", message)
         self.assertNotIn("secret-token", message)
 
-    def test_run_tool_canonical_override_closes_http_json_http_error_body(
+    def test_run_tool_canonical_override_redacts_http_json_error_body_response_path_text(
         self,
     ) -> None:
-        registry_provider = self._make_http_json_calc_registry_provider()
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
 
-        class TrackableBody:
-            def __init__(self) -> None:
-                self.closed = False
-
-            def read(self) -> bytes:
-                return b'{"message":"upstream"}'
-
-            def close(self) -> None:
-                self.closed = True
-
-        body = TrackableBody()
         original_urlopen = getattr(tool_runtime_module, "urlopen", None)
         try:
             def raise_http_error(request, timeout=0):
@@ -60090,7 +60100,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     401,
                     "Unauthorized",
                     hdrs=None,
-                    fp=body,
+                    fp=io.BytesIO(
+                        b'{"message":"upstream response_path.data.access_token Bearer secret-token"}'
+                    ),
+                )
+
+            tool_runtime_module.urlopen = raise_http_error  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 401", message)
+        self.assertIn("upstream", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("response_path.data.access_token", message)
+        self.assertNotIn("Bearer", message)
+        self.assertNotIn("secret-token", message)
+
+    def test_run_tool_canonical_override_closes_http_json_http_error_response_wrapper(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class TrackableHTTPError(tool_runtime_module.HTTPError):  # type: ignore[misc, name-defined]
+            closed_wrapper = False
+
+            def close(self) -> None:
+                type(self).closed_wrapper = True
+                super().close()
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            def raise_http_error(request, timeout=0):
+                del request, timeout
+                raise TrackableHTTPError(
+                    "https://provider.example/calc",
+                    401,
+                    "Unauthorized",
+                    hdrs=None,
+                    fp=io.BytesIO(b'{"message":"upstream"}'),
                 )
 
             tool_runtime_module.urlopen = raise_http_error  # type: ignore[attr-defined]
@@ -60110,7 +60172,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             else:
                 tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
 
-        self.assertTrue(body.closed)
+        self.assertTrue(TrackableHTTPError.closed_wrapper)
 
     def test_run_tool_canonical_override_reports_limited_http_json_http_error_reason(
         self,

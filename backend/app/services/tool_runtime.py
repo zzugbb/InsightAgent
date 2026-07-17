@@ -383,7 +383,7 @@ _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE = re.compile(
 )
 _HTTP_JSON_BARE_BEARER_TOKEN_RE = re.compile(r"\bbearer\s+\S+", re.IGNORECASE)
 _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE = re.compile(
-    r"\b(?:headers|query_params|json_body|result_fields)"
+    r"\b(?:headers|query_params|json_body|response_path|result_fields)"
     r"(?:\.[A-Za-z0-9_\-\[\]]+)+"
 )
 _HTTP_JSON_URL_CONTROL_OR_SPACE_RE = re.compile(r"[\x00-\x20\x7f]")
