@@ -381,6 +381,7 @@ _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE = re.compile(
     r"\b(?:\"|')?\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|[^\s,;<>}]+)",
     re.IGNORECASE,
 )
+_HTTP_JSON_BARE_BEARER_TOKEN_RE = re.compile(r"\bbearer\s+\S+", re.IGNORECASE)
 _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE = re.compile(
     r"\b(?:headers|query_params|json_body|result_fields)"
     r"(?:\.[A-Za-z0-9_\-\[\]]+)+"
@@ -2512,6 +2513,21 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
     return normalized_output
 
 
+def _redact_http_json_sensitive_payload_text(raw_value: str) -> str:
+    redacted = _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
+        lambda match: f"{match.group(1)}[redacted]",
+        raw_value,
+    )
+
+    def redact_path(match: re.Match[str]) -> str:
+        raw_path = match.group(0)
+        safe_path = _format_safe_tool_execution_diagnostic_path(raw_path)
+        return "[redacted]" if "[redacted]" in safe_path else raw_path
+
+    redacted = _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE.sub(redact_path, redacted)
+    return _HTTP_JSON_BARE_BEARER_TOKEN_RE.sub("[redacted]", redacted)
+
+
 def _redact_http_json_sensitive_payload_value(raw_value: object) -> object:
     if isinstance(raw_value, dict):
         redacted: dict[str, object] = {}
@@ -2527,10 +2543,7 @@ def _redact_http_json_sensitive_payload_value(raw_value: object) -> object:
     if isinstance(raw_value, tuple):
         return tuple(_redact_http_json_sensitive_payload_value(item) for item in raw_value)
     if isinstance(raw_value, str):
-        return _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
-            lambda match: f"{match.group(1)}[redacted]",
-            raw_value,
-        )
+        return _redact_http_json_sensitive_payload_text(raw_value)
     return raw_value
 
 
@@ -2573,7 +2586,24 @@ def _redact_tool_registry_diagnostic_value(raw_value: object) -> str:
             return "[redacted]"
         return safe_path
 
-    return _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE.sub(redact_path, text)
+    text = _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE.sub(redact_path, text)
+    return _HTTP_JSON_BARE_BEARER_TOKEN_RE.sub("[redacted]", text)
+
+
+def _redact_http_json_raw_fallback_value(raw_value: object) -> object:
+    if isinstance(raw_value, dict):
+        return {
+            key: _redact_http_json_raw_fallback_value(value)
+            for key, value in raw_value.items()
+        }
+    if isinstance(raw_value, list):
+        return [_redact_http_json_raw_fallback_value(value) for value in raw_value]
+    if isinstance(raw_value, tuple):
+        return tuple(_redact_http_json_raw_fallback_value(value) for value in raw_value)
+    if isinstance(raw_value, str):
+        safe_text = _redact_tool_registry_diagnostic_value(raw_value)
+        return _HTTP_JSON_BARE_BEARER_TOKEN_RE.sub("[redacted]", safe_text)
+    return raw_value
 
 
 def _redact_http_json_error_body_value(raw_value: object) -> object:
@@ -2591,7 +2621,8 @@ def _redact_http_json_error_body_value(raw_value: object) -> object:
     if isinstance(raw_value, tuple):
         return tuple(_redact_http_json_error_body_value(item) for item in raw_value)
     if isinstance(raw_value, str):
-        return _redact_http_json_diagnostic_text(raw_value)
+        safe_value = _redact_http_json_raw_fallback_value(raw_value)
+        return safe_value if isinstance(safe_value, str) else "[redacted]"
     return raw_value
 
 
@@ -2603,7 +2634,8 @@ def _coerce_http_json_error_body_preview_text(raw_body: object) -> str:
     try:
         parsed_body = json.loads(raw_text)
     except (TypeError, ValueError):
-        return _redact_http_json_diagnostic_text(raw_text)
+        safe_text = _redact_http_json_raw_fallback_value(raw_text)
+        return safe_text if isinstance(safe_text, str) else "[redacted]"
     redacted_body = _redact_http_json_error_body_value(parsed_body)
     return json.dumps(redacted_body, ensure_ascii=False, separators=(",", ":"))
 
@@ -3005,6 +3037,16 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         raise
     except Exception as exc:
         raise TypeError(f"response read failed: {exc}") from exc
+
+
+def _close_http_json_response(response: object) -> None:
+    close = _get_http_json_adapter_attr(response, "close")
+    if not callable(close):
+        return
+    try:
+        close()
+    except Exception:
+        return
 
 
 def _format_http_json_invalid_json_response(
@@ -3853,8 +3895,12 @@ def _build_http_json_tool_runner(
                         fatal=False,
                     ) from exc
         except HTTPError as exc:
+            try:
+                message = _format_http_json_http_error(exc)
+            finally:
+                _close_http_json_response(exc)
             raise MockToolExecutionError(
-                _format_http_json_http_error(exc),
+                message,
                 fatal=False,
             ) from exc
         except (URLError, OSError, TypeError, ValueError) as exc:
@@ -8536,10 +8582,7 @@ def _summarize_generic_tool_result_payload(payload: dict[str, object]) -> str | 
         if isinstance(value, str):
             normalized_value = value.strip()
             if normalized_value:
-                safe_value = _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
-                    lambda match: f"{match.group(1)}[redacted]",
-                    normalized_value,
-                )
+                safe_value = _redact_http_json_raw_fallback_value(normalized_value)
                 parts.append(f"{safe_key}={safe_value}")
             continue
     if not parts:
@@ -8976,7 +9019,8 @@ def _normalize_tool_error_message_for_registration(
         registration is not None
         and _normalize_tool_execution_kind(registration.execution_kind) == "http_json"
     ):
-        return _redact_http_json_diagnostic_text(error_message)
+        safe_message = _redact_http_json_raw_fallback_value(error_message)
+        return safe_message if isinstance(safe_message, str) else "[redacted]"
     return error_message
 
 
@@ -10349,6 +10393,15 @@ def build_tool_observation_entry(
         else ""
     )
     if meta_result_summary:
+        if _step_tool_meta_uses_http_json_execution(step_tool_meta) or (
+            resolved_registration is not None
+            and _normalize_tool_execution_kind(resolved_registration.execution_kind)
+            == "http_json"
+        ):
+            safe_summary = _redact_http_json_raw_fallback_value(meta_result_summary)
+            meta_result_summary = (
+                safe_summary if isinstance(safe_summary, str) else "[redacted]"
+            )
         return f"{resolved_display_name}: {meta_result_summary}"
     meta_safe_output = _resolve_step_tool_safe_output(step_tool_meta)
     if isinstance(meta_safe_output, dict) and not isinstance(output, dict):
@@ -10369,6 +10422,8 @@ def build_tool_observation_entry(
         if result_summary:
             return f"{resolved_display_name}: {result_summary}"
     if meta_safe_output is not None and not isinstance(output, dict):
+        if _step_tool_meta_uses_http_json_execution(step_tool_meta):
+            meta_safe_output = _redact_http_json_raw_fallback_value(meta_safe_output)
         return (
             f"{resolved_display_name}: "
             f"{json.dumps(meta_safe_output, ensure_ascii=False)}"
@@ -10408,6 +10463,10 @@ def build_tool_observation_entry(
                 f"{resolved_display_name}: "
                 f"{json.dumps(meta_preview_mapping, ensure_ascii=False)}"
             )
+        if _step_tool_meta_uses_http_json_execution(step_tool_meta):
+            meta_preview_output = _redact_http_json_raw_fallback_value(
+                meta_preview_output
+            )
         return (
             f"{resolved_display_name}: "
             f"{json.dumps(meta_preview_output, ensure_ascii=False)}"
@@ -10436,6 +10495,10 @@ def build_tool_observation_entry(
                 f"{json.dumps(meta_safe_output, ensure_ascii=False)}"
             )
         if meta_preview_output is not None:
+            if _step_tool_meta_uses_http_json_execution(step_tool_meta):
+                meta_preview_output = _redact_http_json_raw_fallback_value(
+                    meta_preview_output
+                )
             return (
                 f"{resolved_display_name}: "
                 f"{json.dumps(meta_preview_output, ensure_ascii=False)}"
@@ -10623,6 +10686,10 @@ _TOOL_RAG_DOCUMENT_CONTAINER_FIELDS = (
 _TOOL_RAG_DOCUMENT_LIST_FIELDS = ("documents", "items", "results", "hits", "matches")
 
 
+def _redact_tool_rag_chunk_text(raw_value: str) -> str:
+    return _redact_http_json_sensitive_payload_text(raw_value)
+
+
 def _extract_tool_rag_chunk_from_document_mapping(
     raw_document: dict,
     *,
@@ -10643,7 +10710,7 @@ def _extract_tool_rag_chunk_from_document_mapping(
             continue
         normalized_chunk = raw_value.strip()
         if normalized_chunk:
-            return normalized_chunk
+            return _redact_tool_rag_chunk_text(normalized_chunk)
     for field_name in _TOOL_RAG_DOCUMENT_TEXT_FIELDS:
         nested_document = raw_document.get(field_name)
         if not isinstance(nested_document, dict):
@@ -10677,7 +10744,7 @@ def _extract_tool_rag_chunks_from_document_list(raw_documents: object) -> list[s
         if isinstance(raw_document, str):
             normalized_chunk = raw_document.strip()
             if normalized_chunk:
-                extracted_chunks.append(normalized_chunk)
+                extracted_chunks.append(_redact_tool_rag_chunk_text(normalized_chunk))
             continue
         if not isinstance(raw_document, dict):
             continue
@@ -10691,7 +10758,7 @@ def _extract_tool_rag_chunks_from_output(output: dict[str, object]) -> list[str]
     raw_chunks = output.get("chunks")
     if isinstance(raw_chunks, (list, tuple)):
         return [
-            chunk.strip()
+            _redact_tool_rag_chunk_text(chunk.strip())
             for chunk in raw_chunks
             if isinstance(chunk, str) and chunk.strip()
         ]

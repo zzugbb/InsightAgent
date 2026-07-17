@@ -63,6 +63,26 @@ def _coerce_payload_model_dump_list(value: object) -> object:
     return items
 
 
+def _coerce_trace_steps_for_route(value: object) -> object:
+    trace_steps = _coerce_payload_model_dump_list(value)
+    if not isinstance(trace_steps, list):
+        return trace_steps
+    normalized_steps: list[object] = []
+    for item in trace_steps:
+        step = item if isinstance(item, TraceStep) else None
+        if step is None:
+            payload = _coerce_payload_mapping(item)
+            if payload:
+                step = TraceStep.model_validate(payload)
+        if step is None:
+            normalized_steps.append(item)
+            continue
+        normalized_steps.append(
+            chat_persistence_service._sanitize_trace_step_for_export(step)
+        )
+    return normalized_steps
+
+
 def _coerce_task_governance_for_route(
     value: object,
     *,
@@ -118,11 +138,11 @@ def _coerce_task_export_summary(value: object) -> dict[str, Any]:
                 normalize_dict=not summary_is_dict,
             )
         if "rag_chunks" in trace:
-            trace["rag_chunks"] = _coerce_payload_model_dump_list(
+            trace["rag_chunks"] = chat_persistence_service._sanitize_export_rag_chunk_rows(
                 trace.get("rag_chunks")
             )
         if "steps" in trace:
-            trace["steps"] = _coerce_payload_model_dump_list(trace.get("steps"))
+            trace["steps"] = _coerce_trace_steps_for_route(trace.get("steps"))
         summary["trace"] = trace
     return summary
 

@@ -8557,6 +8557,120 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "preview model body",
         )
 
+    def test_get_session_export_response_summary_redacts_provider_trace_preview_excerpt(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_session_export_payload_summary
+        )
+
+        try:
+            chat_persistence_module.get_session_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "usage_summary": {"tasks_total": 1},
+                    "tasks": [
+                        {
+                            "id": "task-provider-preview",
+                            "prompt": "provider preview prompt",
+                            "status": "completed",
+                            "status_normalized": "completed",
+                            "status_label": "Completed",
+                            "status_rank": 10,
+                            "created_at": "2026-07-02T10:00:00",
+                            "updated_at": "2026-07-02T10:01:00",
+                            "usage": None,
+                            "trace_step_count": 1,
+                            "rag_hit_count": 0,
+                            "trace_preview": [
+                                {
+                                    "id": "preview-provider-raw",
+                                    "seq": 2,
+                                    "type": "action",
+                                    "title": "Provider Search [provider_search · knowledge_retrieval]",
+                                    "content_excerpt": (
+                                        "Tool done: Provider Search Preview: "
+                                        "query_params.access_token Bearer secret-token"
+                                    ),
+                                }
+                            ],
+                            "governance": None,
+                        }
+                    ],
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 1,
+                        "rag_hit_count": 0,
+                    },
+                    "governance": None,
+                    "messages": [],
+                }
+            )
+            payload = chat_persistence_module.get_session_export_response_summary(  # type: ignore[attr-defined]
+                usage_summary={"tasks_total": 1},
+                task_rows=[],
+                message_rows=[],
+            )
+        finally:
+            chat_persistence_module.get_session_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        excerpt = payload["tasks"][0]["trace_preview"][0]["content_excerpt"]
+        self.assertIn("[redacted]", excerpt)
+        self.assertNotIn("access_token", excerpt)
+        self.assertNotIn("Bearer", excerpt)
+        self.assertNotIn("secret-token", excerpt)
+
+    def test_session_export_summary_coercion_redacts_provider_trace_preview_excerpt(
+        self,
+    ) -> None:
+        summary = {
+            "usage_summary": {"tasks_total": 1},
+            "tasks": [
+                {
+                    "id": "task-provider-preview",
+                    "prompt": "provider preview prompt",
+                    "status": "completed",
+                    "status_normalized": "completed",
+                    "status_label": "Completed",
+                    "status_rank": 10,
+                    "created_at": "2026-07-02T10:00:00",
+                    "updated_at": "2026-07-02T10:01:00",
+                    "usage": None,
+                    "trace_step_count": 1,
+                    "rag_hit_count": 0,
+                    "trace_preview": [
+                        {
+                            "id": "preview-provider-raw-route",
+                            "seq": 2,
+                            "type": "action",
+                            "title": "Provider Search [provider_search · knowledge_retrieval]",
+                            "content_excerpt": (
+                                "Tool done: Provider Search Preview: "
+                                "query_params.access_token Bearer secret-token"
+                            ),
+                        }
+                    ],
+                    "governance": None,
+                }
+            ],
+            "stats": {
+                "task_count": 1,
+                "message_count": 0,
+                "trace_step_count": 1,
+                "rag_hit_count": 0,
+            },
+            "governance": None,
+            "messages": [],
+        }
+
+        normalized = session_routes_module._coerce_session_export_summary(summary)  # type: ignore[attr-defined]
+
+        excerpt = normalized["tasks"][0]["trace_preview"][0]["content_excerpt"]
+        self.assertIn("[redacted]", excerpt)
+        self.assertNotIn("access_token", excerpt)
+        self.assertNotIn("Bearer", excerpt)
+        self.assertNotIn("secret-token", excerpt)
+
     def test_get_tasks_forwards_query_to_list_and_count(self) -> None:
         original_get_session = task_routes_module.get_session
         original_list_tasks = task_routes_module.list_tasks
@@ -14900,6 +15014,254 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("hidden", json.dumps(output))
         self.assertNotIn("Bearer", json.dumps(output))
 
+    def test_get_trace_step_markdown_meta_redacts_malformed_http_json_preview_string(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-http-json-markdown-meta-malformed-preview",
+            seq=11,
+            type="action",
+            content="Tool done: Provider Status",
+            meta={
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "status": "done",
+                    "execution_kind": "http_json",
+                    "output_preview": (
+                        "status=ready token=hidden "
+                        "query_params.access_token Bearer secret-token"
+                    ),
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+        content = chat_persistence_module.get_trace_step_display_content(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        assert markdown_meta is not None
+        self.assertEqual(
+            markdown_meta["tool"]["output"],  # type: ignore[index]
+            "status=ready [redacted] [redacted] [redacted]",
+        )
+        self.assertIn(
+            'Preview: status=ready [redacted] [redacted] [redacted]',
+            content,
+        )
+        serialized = json.dumps(markdown_meta) + content
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
+    def test_get_trace_step_markdown_meta_redacts_provider_tool_input_without_execution_kind(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-provider-input-half-migrated",
+            seq=12,
+            type="action",
+            content="Tool done: Hosted Math",
+            meta={
+                "tool": {
+                    "name": "hosted_math",
+                    "label": "Hosted Math",
+                    "status": "done",
+                    "input": {
+                        "expression": "1+1",
+                        "json_body": {
+                            "client_secret": "top-secret",
+                        },
+                        "query_params": {
+                            "access_token": "secret-token",
+                        },
+                    },
+                    "output": {
+                        "result": 2,
+                    },
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        assert markdown_meta is not None
+        serialized = json.dumps(markdown_meta, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("top-secret", serialized)
+        self.assertNotIn("secret-token", serialized)
+
+    def test_get_trace_step_display_content_redacts_provider_content_without_execution_kind(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-provider-content-half-migrated",
+            seq=13,
+            type="action",
+            content=(
+                "Upstream diagnostic: query_params.access_token "
+                "json_body.client_secret Bearer secret-token"
+            ),
+            meta={
+                "tool": {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "status": "error",
+                }
+            },
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIn("[redacted]", content)
+        self.assertNotIn("access_token", content)
+        self.assertNotIn("client_secret", content)
+        self.assertNotIn("Bearer", content)
+        self.assertNotIn("secret-token", content)
+
+    def test_get_trace_step_display_content_redacts_provider_result_summary(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-provider-result-summary-leak",
+            seq=14,
+            type="action",
+            content="Tool done: Provider Status",
+            meta={
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "result_summary": (
+                        "gateway query_params.access_token Bearer secret-token"
+                    ),
+                }
+            },
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIn("[redacted]", content)
+        self.assertNotIn("access_token", content)
+        self.assertNotIn("Bearer", content)
+        self.assertNotIn("secret-token", content)
+
+    def test_get_trace_step_markdown_meta_redacts_provider_result_summary(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-provider-result-summary-meta",
+            seq=15,
+            type="action",
+            content="Tool done: Provider Status",
+            meta={
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "result_summary": (
+                        "gateway query_params.access_token Bearer secret-token"
+                    ),
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        assert markdown_meta is not None
+        serialized = json.dumps(markdown_meta, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
+    def test_get_trace_step_markdown_meta_redacts_provider_nested_rag_chunks(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-provider-nested-rag",
+            seq=16,
+            type="action",
+            content="Tool done: Provider Search",
+            meta={
+                "tool": {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "status": "done",
+                },
+                "rag": {
+                    "knowledge_base_id": "kb-provider",
+                    "chunks": [
+                        "Matched snippet query_params.access_token Bearer secret-token"
+                    ],
+                },
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        assert markdown_meta is not None
+        serialized = json.dumps(markdown_meta, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
+    def test_get_trace_step_markdown_meta_redacts_provider_output_preview_without_execution_kind(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-provider-preview-half-migrated",
+            seq=17,
+            type="action",
+            content="Tool done: Provider Status",
+            meta={
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "status": "done",
+                    "output_preview": {
+                        "message": "gateway token=hidden",
+                        "access_token": "hidden",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        assert markdown_meta is not None
+        serialized = json.dumps(markdown_meta, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"access_token": "hidden"', serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_trace_step_markdown_meta_filters_quoted_json_string_safe_output(
         self,
     ) -> None:
@@ -18778,6 +19140,159 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn("Tool done: Provider Search", markdown)
 
+    def test_build_session_export_markdown_sanitizes_nested_http_json_preview_excerpt(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-17T10:45:00",
+            session=session_routes_module.SessionResponse(
+                id="session-nested-http-json-preview",
+                title="Nested HTTP JSON Preview Session",
+                created_at="2026-07-17T10:44:00",
+                updated_at="2026-07-17T10:45:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-nested-http-json-preview",
+                    prompt="Check provider status",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-17T10:44:30",
+                    updated_at="2026-07-17T10:45:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-nested-provider-status",
+                            seq=5,
+                            type="action",
+                            title="Provider Status [provider_status]",
+                            content_excerpt=(
+                                'Tool done: Provider Status Preview: {"status":"ready",'
+                                '"nested":{"access_token":"hidden"},'
+                                '"request_id":"Bearer secret-token"} '
+                                'Output: {"status":"ready",'
+                                '"nested":{"api_key":"hidden"},'
+                                '"request_id":"Bearer secret-token"}'
+                            ),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            'seq=5 · Provider Status [provider_status] · Preview: {"status":"ready","nested":{"access_token":"[redacted]"}} Output: {"status":"ready","nested":{"api_key":"[redacted]"}}',
+            markdown,
+        )
+        self.assertNotIn("Tool done: Provider Status", markdown)
+        self.assertNotIn("hidden", markdown)
+        self.assertNotIn("Bearer", markdown)
+        self.assertNotIn("secret-token", markdown)
+
+    def test_build_session_export_markdown_redacts_malformed_http_json_preview_excerpt(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-17T10:48:00",
+            session=session_routes_module.SessionResponse(
+                id="session-malformed-http-json-preview",
+                title="Malformed HTTP JSON Preview Session",
+                created_at="2026-07-17T10:47:00",
+                updated_at="2026-07-17T10:48:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-malformed-http-json-preview",
+                    prompt="Check provider status with malformed preview",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-17T10:47:30",
+                    updated_at="2026-07-17T10:48:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-malformed-provider-status",
+                            seq=6,
+                            type="action",
+                            title="Provider Status [provider_status]",
+                            content_excerpt=(
+                                "Tool done: Provider Status Preview: "
+                                "status=ready token=hidden "
+                                "query_params.access_token Bearer secret-token"
+                            ),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn(
+            "status=ready [redacted] [redacted] [redacted]",
+            markdown,
+        )
+        self.assertNotIn("token=hidden", markdown)
+        self.assertNotIn("access_token", markdown)
+        self.assertNotIn("Bearer", markdown)
+        self.assertNotIn("secret-token", markdown)
+
     def test_build_session_export_markdown_includes_provider_kb_for_real_documents_total_preview(
         self,
     ) -> None:
@@ -20507,6 +21022,24 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result.content,
         )
 
+    def test_mock_llm_provider_generate_redacts_sensitive_text_in_structured_plan_steps(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Task Planner Suite: {"steps": ["Analyze request", "Call gateway token=hidden", "Auth Bearer secret-token"]}'
+        )
+
+        self.assertIn(
+            "Summary: Planned steps - Analyze request -> Call gateway token=[redacted] -> Auth [redacted].",
+            result.content,
+        )
+        self.assertNotIn("token=hidden", result.content)
+        self.assertNotIn("Bearer", result.content)
+        self.assertNotIn("secret-token", result.content)
+
     def test_mock_provider_normalize_plan_steps_accepts_tuple(self) -> None:
         self.assertEqual(
             mock_provider_module._normalize_plan_steps(  # type: ignore[attr-defined]
@@ -20834,6 +21367,26 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("output_preview=", result.content)
         self.assertNotIn("secret", result.content)
 
+    def test_mock_llm_provider_generate_redacts_malformed_observation_text_field_paths(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            "Provider Status: status=ready token=hidden "
+            "query_params.access_token Bearer secret-token"
+        )
+
+        self.assertIn(
+            "Summary: status=ready token=[redacted] [redacted] [redacted]",
+            result.content,
+        )
+        self.assertNotIn("token=hidden", result.content)
+        self.assertNotIn("access_token", result.content)
+        self.assertNotIn("Bearer", result.content)
+        self.assertNotIn("secret-token", result.content)
+
     def test_mock_llm_provider_generate_keeps_real_retrieval_semantics_from_nested_safe_output(
         self,
     ) -> None:
@@ -20940,6 +21493,23 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("sk-hidden", result.content)
         self.assertNotIn("hidden", result.content)
 
+    def test_mock_llm_provider_generate_drops_compound_secret_keys_from_generic_structured_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Status: {"status": "ready", "client_secret": "cs-hidden", "provider_source": "suite_a"}'
+        )
+
+        self.assertIn(
+            "Summary: Provider Status output - status=ready, provider_source=suite_a.",
+            result.content,
+        )
+        self.assertNotIn("client_secret", result.content)
+        self.assertNotIn("cs-hidden", result.content)
+
     def test_mock_llm_provider_generate_redacts_sensitive_assignments_in_generic_structured_outputs(
         self,
     ) -> None:
@@ -20955,6 +21525,23 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result.content,
         )
         self.assertNotIn("token=hidden", result.content)
+        self.assertNotIn("hidden", result.content)
+
+    def test_mock_llm_provider_generate_redacts_access_token_assignments_in_generic_structured_outputs(
+        self,
+    ) -> None:
+        provider = MockLLMProvider()
+
+        result = provider.generate(
+            "need answer\n\nTool observations:\n"
+            'Provider Status: {"status": "ready", "message": "access_token=hidden"}'
+        )
+
+        self.assertIn(
+            "Summary: Provider Status output - status=ready, message=access_token=[redacted].",
+            result.content,
+        )
+        self.assertNotIn("access_token=hidden", result.content)
         self.assertNotIn("hidden", result.content)
 
     def test_mock_llm_provider_generate_redacts_sensitive_assignments_in_text_observation_summary(
@@ -29052,6 +29639,64 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_get_task_export_response_summary_redacts_provider_rag_chunk_rows(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_task_export_payload_summary
+        )
+
+        try:
+            chat_persistence_module.get_task_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "task": {
+                        "id": "task-export-response-rag-redact",
+                        "session_id": "session-export-response-rag-redact",
+                        "prompt": "shared prompt",
+                        "status": "completed",
+                        "status_normalized": "normalized::completed",
+                        "status_label": "label::completed",
+                        "status_rank": 9,
+                        "created_at": "2026-06-22T16:01:00",
+                        "updated_at": "2026-06-22T16:02:00",
+                    },
+                    "usage": None,
+                    "messages": [],
+                    "trace": {
+                        "governance": None,
+                        "steps": [],
+                        "step_count": 0,
+                        "rag_hit_count": 1,
+                        "rag_knowledge_base_ids": ["kb-provider"],
+                        "rag_chunks": [
+                            {
+                                "step_id": "step-provider-rag",
+                                "knowledge_base_id": "kb-provider",
+                                "content": (
+                                    "Matched snippet query_params.access_token "
+                                    "Bearer secret-token"
+                                ),
+                            }
+                        ],
+                    },
+                }
+            )
+            payload = chat_persistence_module.get_task_export_response_summary(  # type: ignore[attr-defined]
+                {"id": "task-export-response-rag-redact"},
+                [],
+            )
+        finally:
+            chat_persistence_module.get_task_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        serialized_chunks = json.dumps(
+            payload["trace"]["rag_chunks"],
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", serialized_chunks)
+        self.assertNotIn("access_token", serialized_chunks)
+        self.assertNotIn("Bearer", serialized_chunks)
+        self.assertNotIn("secret-token", serialized_chunks)
+
     def test_get_task_export_response_summary_coerces_model_dump_trace_step_dicts(
         self,
     ) -> None:
@@ -29170,6 +29815,192 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(len(payload["trace"]["steps"]), 1)
         self.assertEqual(payload["trace"]["steps"][0].id, "step-model-row")
         self.assertEqual(payload["trace"]["steps"][0].content, "model step body")
+
+    def test_get_task_export_response_summary_redacts_provider_trace_step_rows(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_task_export_payload_summary
+        )
+
+        try:
+            chat_persistence_module.get_task_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "task": {
+                        "id": "task-export-provider-step-row",
+                        "session_id": "session-export-provider-step-row",
+                        "prompt": "shared prompt",
+                        "status": "completed",
+                        "status_normalized": "normalized::completed",
+                        "status_label": "label::completed",
+                        "status_rank": 9,
+                        "created_at": "2026-07-02T11:30:00",
+                        "updated_at": "2026-07-02T11:31:00",
+                    },
+                    "usage": None,
+                    "messages": [],
+                    "trace": {
+                        "governance": None,
+                        "steps": [
+                            {
+                                "id": "step-provider-row",
+                                "type": "action",
+                                "content": (
+                                    "Tool done: Provider Search Preview: "
+                                    "query_params.access_token Bearer secret-token"
+                                ),
+                                "seq": 3,
+                                "meta": {
+                                    "tool": {
+                                        "name": "provider_search",
+                                        "label": "Provider Search",
+                                        "status": "done",
+                                        "input": {
+                                            "query_params": {
+                                                "access_token": "top-secret",
+                                            }
+                                        },
+                                    }
+                                },
+                            }
+                        ],
+                        "step_count": 1,
+                        "rag_hit_count": 0,
+                        "rag_knowledge_base_ids": [],
+                        "rag_chunks": [],
+                    },
+                }
+            )
+            payload = chat_persistence_module.get_task_export_response_summary(  # type: ignore[attr-defined]
+                {"id": "task-export-provider-step-row"},
+                [],
+            )
+        finally:
+            chat_persistence_module.get_task_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        step = payload["trace"]["steps"][0]
+        serialized_step = json.dumps(step.model_dump(exclude_none=True), ensure_ascii=False)
+        self.assertIn("[redacted]", serialized_step)
+        self.assertNotIn("Bearer", serialized_step)
+        self.assertNotIn("secret-token", serialized_step)
+        self.assertNotIn("top-secret", serialized_step)
+
+    def test_task_export_summary_coercion_redacts_provider_trace_step_rows(
+        self,
+    ) -> None:
+        summary = {
+            "task": {
+                "id": "task-export-route-provider-step",
+                "session_id": "session-export-route-provider-step",
+                "prompt": "shared prompt",
+                "status": "completed",
+                "status_normalized": "normalized::completed",
+                "status_label": "label::completed",
+                "status_rank": 9,
+                "created_at": "2026-07-02T11:30:00",
+                "updated_at": "2026-07-02T11:31:00",
+            },
+            "usage": None,
+            "messages": [],
+            "trace": {
+                "governance": None,
+                "steps": [
+                    {
+                        "id": "step-provider-route-row",
+                        "type": "action",
+                        "content": (
+                            "Tool done: Provider Search Preview: "
+                            "query_params.access_token Bearer secret-token"
+                        ),
+                        "seq": 3,
+                        "meta": {
+                            "tool": {
+                                "name": "provider_search",
+                                "label": "Provider Search",
+                                "status": "done",
+                                "input": {
+                                    "query_params": {
+                                        "access_token": "top-secret",
+                                    }
+                                },
+                            }
+                        },
+                    }
+                ],
+                "step_count": 1,
+                "rag_hit_count": 0,
+                "rag_knowledge_base_ids": [],
+                "rag_chunks": [],
+            },
+        }
+
+        normalized = task_routes_module._coerce_task_export_summary(summary)  # type: ignore[attr-defined]
+
+        response = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-07-02T11:32:00",
+            **normalized,
+        )
+        serialized_step = json.dumps(
+            response.trace.steps[0].model_dump(exclude_none=True),
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", serialized_step)
+        self.assertNotIn("Bearer", serialized_step)
+        self.assertNotIn("secret-token", serialized_step)
+        self.assertNotIn("top-secret", serialized_step)
+
+    def test_task_export_summary_coercion_redacts_provider_rag_chunk_rows(
+        self,
+    ) -> None:
+        summary = {
+            "task": {
+                "id": "task-export-route-provider-rag",
+                "session_id": "session-export-route-provider-rag",
+                "prompt": "shared prompt",
+                "status": "completed",
+                "status_normalized": "normalized::completed",
+                "status_label": "label::completed",
+                "status_rank": 9,
+                "created_at": "2026-07-02T11:30:00",
+                "updated_at": "2026-07-02T11:31:00",
+            },
+            "usage": None,
+            "messages": [],
+            "trace": {
+                "governance": None,
+                "steps": [],
+                "step_count": 0,
+                "rag_hit_count": 1,
+                "rag_knowledge_base_ids": ["kb-provider"],
+                "rag_chunks": [
+                    {
+                        "step_id": "step-provider-rag-route",
+                        "knowledge_base_id": "kb-provider",
+                        "content": (
+                            "Matched snippet query_params.access_token "
+                            "Bearer secret-token"
+                        ),
+                    }
+                ],
+            },
+        }
+
+        normalized = task_routes_module._coerce_task_export_summary(summary)  # type: ignore[attr-defined]
+
+        response = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-07-02T11:32:00",
+            **normalized,
+        )
+        serialized_chunks = json.dumps(
+            [chunk.model_dump(exclude_none=True) for chunk in response.trace.rag_chunks],
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", serialized_chunks)
+        self.assertNotIn("access_token", serialized_chunks)
+        self.assertNotIn("Bearer", serialized_chunks)
+        self.assertNotIn("secret-token", serialized_chunks)
 
     def test_get_task_export_response_summary_accepts_tuple_trace_steps(
         self,
@@ -40921,6 +41752,73 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("api_key=hidden", combined)
         self.assertNotIn("hidden", combined)
 
+    def test_build_tool_error_payload_and_meta_redact_http_json_error_field_paths_and_bearer(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        error_meta = build_tool_error_meta(
+            name="provider_status",
+            tool_input={"query": "demo"},
+            retry_count=0,
+            error_message="upstream failed query_params.access_token Bearer secret-token",
+            registration=registration,
+        )
+        error_payload = build_tool_error_payload(
+            name="provider_status",
+            task_id="task-1",
+            step_id="step-1",
+            error_message="upstream failed json_body.client_secret Bearer secret-token",
+            retry_count=0,
+            registration=registration,
+        )
+
+        combined = json.dumps(
+            {"meta": error_meta, "payload": error_payload},
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", combined)
+        self.assertNotIn("access_token", combined)
+        self.assertNotIn("client_secret", combined)
+        self.assertNotIn("Bearer", combined)
+        self.assertNotIn("secret-token", combined)
+
+    def test_sanitize_tool_registry_artifact_payload_redacts_bare_bearer_text(
+        self,
+    ) -> None:
+        payload = {
+            "last_error": "gateway failed Bearer secret-token",
+            "trace_event": {
+                "step": {
+                    "meta": {
+                        "tool": {
+                            "error": "provider failed query_params.access_token Bearer secret-token",
+                        }
+                    }
+                }
+            },
+        }
+
+        sanitized = tool_runtime_module.sanitize_tool_registry_diagnostics_artifact_payload(
+            payload
+        )
+
+        serialized = json.dumps(sanitized, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_build_tool_phase_and_policy_keep_current_calc_defaults(self) -> None:
         ctx = build_tool_runtime_context(
             name="calc_eval",
@@ -42461,6 +43359,33 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Provider Search: Retrieved 2 documents (request id req-1).",
         )
 
+    def test_build_tool_observation_entry_redacts_http_json_step_meta_result_summary(
+        self,
+    ) -> None:
+        observation = build_tool_observation_entry(
+            name="provider_status",
+            output=None,
+            step_tool_meta={
+                "name": "provider_status",
+                "label": "Provider Status",
+                "status": "done",
+                "execution_kind": "http_json",
+                "result_summary": (
+                    "Provider Status output - status=ready, "
+                    "message=query_params.access_token Bearer secret-token."
+                ),
+            },
+        )
+
+        self.assertEqual(
+            observation,
+            "Provider Status: Provider Status output - status=ready, "
+            "message=[redacted] [redacted]",
+        )
+        self.assertNotIn("access_token", observation)
+        self.assertNotIn("Bearer", observation)
+        self.assertNotIn("secret-token", observation)
+
     def test_build_tool_observation_entry_infers_result_summary_from_step_meta_safe_output_without_output(
         self,
     ) -> None:
@@ -42911,6 +43836,33 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("secret-token", observation)
         self.assertNotIn("hidden", observation)
 
+    def test_build_tool_observation_entry_redacts_malformed_http_json_step_meta_preview(
+        self,
+    ) -> None:
+        observation = build_tool_observation_entry(
+            name="provider_status",
+            output=None,
+            step_tool_meta={
+                "name": "provider_status",
+                "label": "Provider Status",
+                "status": "done",
+                "execution_kind": "http_json",
+                "output_preview": (
+                    "status=ready token=hidden "
+                    "query_params.access_token Bearer secret-token"
+                ),
+            },
+        )
+
+        self.assertEqual(
+            observation,
+            'Provider Status: "status=ready [redacted] [redacted] [redacted]"',
+        )
+        self.assertNotIn("token=hidden", observation)
+        self.assertNotIn("access_token", observation)
+        self.assertNotIn("Bearer", observation)
+        self.assertNotIn("secret-token", observation)
+
     def test_build_tool_observation_entry_redacts_http_json_direct_output_fallback(
         self,
     ) -> None:
@@ -42966,7 +43918,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             summary,
-            "Provider Status output - status=ready, message=gateway token=[redacted].",
+            "Provider Status output - status=ready, message=gateway [redacted].",
         )
         self.assertNotIn("access_token", summary or "")
         self.assertNotIn("hidden", summary or "")
@@ -45052,6 +46004,42 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "knowledge_base_id": "provider-kb",
             },
         )
+
+    def test_build_tool_rag_followup_redacts_http_json_chunk_field_paths(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "chunks": [
+                    "alpha query_params.access_token",
+                    "beta Bearer secret-token",
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        rag_json = json.dumps(followup, ensure_ascii=False)
+        self.assertEqual(
+            followup["step"]["meta"]["rag"]["chunks"],
+            [
+                "alpha [redacted]",
+                "beta [redacted]",
+            ],
+        )
+        self.assertNotIn("query_params.access_token", rag_json)
+        self.assertNotIn("Bearer", rag_json)
+        self.assertNotIn("secret-token", rag_json)
 
     def test_build_tool_plan_item_execution_redacts_http_json_rag_followup_chunks_from_raw_adapter_output(
         self,
@@ -56025,6 +57013,37 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", output_json)
         self.assertNotIn("secret-token", output_json)
 
+    def test_build_tool_result_output_redacts_http_json_text_value_field_paths(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        output = build_tool_result_output(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "message": "gateway query_params.access_token Bearer secret-token",
+            },
+            registration=registration,
+        )
+
+        output_json = json.dumps(output)
+        self.assertEqual(output["status"], "ready")
+        self.assertEqual(output["message"], "gateway [redacted] [redacted]")
+        self.assertNotIn("query_params.access_token", output_json)
+        self.assertNotIn("Bearer", output_json)
+        self.assertNotIn("secret-token", output_json)
+
     def test_build_tool_result_output_redacts_half_migrated_http_json_execution_kind(
         self,
     ) -> None:
@@ -56121,8 +57140,41 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(
             summary,
-            "Provider Status output - status=ready, message=gateway token=[redacted].",
+            "Provider Status output - status=ready, message=gateway [redacted].",
         )
+
+    def test_build_tool_result_summary_redacts_http_json_generic_text_field_paths(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            result_output_keys=("status", "message"),
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        summary = build_tool_result_summary(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "message": "gateway query_params.access_token Bearer secret-token",
+            },
+            registration=registration,
+        )
+
+        self.assertEqual(
+            summary,
+            "Provider Status output - status=ready, message=gateway [redacted] [redacted].",
+        )
+        self.assertNotIn("query_params.access_token", summary)
+        self.assertNotIn("Bearer", summary)
+        self.assertNotIn("secret-token", summary)
 
     def test_build_tool_result_summary_uses_label_for_untyped_real_calc_tool(
         self,
@@ -58946,6 +59998,119 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("token", message)
         self.assertNotIn("api_key", message)
         self.assertNotIn("hidden", message)
+
+    def test_run_tool_canonical_override_redacts_http_json_error_body_field_path_text(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            def raise_http_error(request, timeout=0):
+                del request, timeout
+                raise tool_runtime_module.HTTPError(  # type: ignore[attr-defined]
+                    "https://provider.example/calc",
+                    401,
+                    "Unauthorized",
+                    hdrs=None,
+                    fp=io.BytesIO(
+                        b'{"message":"upstream query_params.access_token Bearer secret-token"}'
+                    ),
+                )
+
+            tool_runtime_module.urlopen = raise_http_error  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 401", message)
+        self.assertIn("upstream", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("query_params.access_token", message)
+        self.assertNotIn("Bearer", message)
+        self.assertNotIn("secret-token", message)
+
+    def test_run_tool_canonical_override_closes_http_json_http_error_body(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        class TrackableBody:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def read(self) -> bytes:
+                return b'{"message":"upstream"}'
+
+            def close(self) -> None:
+                self.closed = True
+
+        body = TrackableBody()
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            def raise_http_error(request, timeout=0):
+                del request, timeout
+                raise tool_runtime_module.HTTPError(  # type: ignore[attr-defined]
+                    "https://provider.example/calc",
+                    401,
+                    "Unauthorized",
+                    hdrs=None,
+                    fp=body,
+                )
+
+            tool_runtime_module.urlopen = raise_http_error  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError):
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertTrue(body.closed)
 
     def test_run_tool_canonical_override_reports_limited_http_json_http_error_reason(
         self,

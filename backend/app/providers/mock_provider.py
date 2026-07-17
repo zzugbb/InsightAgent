@@ -7,15 +7,21 @@ from app.providers.base import ProviderResponse, ProviderUsage
 
 
 _MOCK_REQUEST_ID_SENSITIVE_ASSIGNMENT_RE = re.compile(
-    r"((?:\"|')?\b(?:authorization|api[_-]?key|credential|password|secret|token)"
+    r"((?:\"|')?\b(?:authorization|api[_-]?key|credential|password|secret|"
+    r"(?:access|refresh|session|id)?[_-]?token)"
     r"\b(?:\"|')?\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|[^\s,;<>}]+)",
     re.IGNORECASE,
 )
 _MOCK_SENSITIVE_KEY_RE = re.compile(
-    r"\b(?:authorization|api[_-]?key|credential|password|secret|"
-    r"(?:access|refresh|session|id)?[_-]?token)\b",
+    r"(?:authorization|api[_-]?key|credential|password|secret|"
+    r"(?:access|refresh|session|id)?[_-]?token)",
     re.IGNORECASE,
 )
+_MOCK_SENSITIVE_FIELD_PATH_RE = re.compile(
+    r"\b(?:headers|query_params|json_body|result_fields)"
+    r"(?:\.[A-Za-z0-9_\-\[\]]+)+"
+)
+_MOCK_BARE_BEARER_TOKEN_RE = re.compile(r"\bbearer\s+\S+", re.IGNORECASE)
 
 
 class MockLLMProvider:
@@ -169,10 +175,12 @@ def _get_safe_mock_request_id_display_value(value: object) -> str | None:
 
 
 def _redact_mock_sensitive_assignment_text(value: str) -> str:
-    return _MOCK_REQUEST_ID_SENSITIVE_ASSIGNMENT_RE.sub(
+    redacted = _MOCK_REQUEST_ID_SENSITIVE_ASSIGNMENT_RE.sub(
         lambda match: f"{match.group(1)}[redacted]",
         value,
     )
+    redacted = _MOCK_SENSITIVE_FIELD_PATH_RE.sub("[redacted]", redacted)
+    return _MOCK_BARE_BEARER_TOKEN_RE.sub("[redacted]", redacted)
 
 
 def _redact_mock_observation_text(value: str) -> str:
@@ -230,7 +238,8 @@ def _summarize_structured_mock_tool_payload(
 ) -> str | None:
     plan = payload.get("plan")
     if isinstance(plan, str) and plan.strip():
-        return f"Planned steps - {plan.strip()}."
+        safe_plan = _redact_mock_sensitive_assignment_text(plan.strip())
+        return f"Planned steps - {safe_plan}."
     steps = _normalize_plan_steps(payload.get("steps"))
     if steps:
         return f"Planned steps - {' -> '.join(steps)}."
@@ -419,7 +428,7 @@ def _normalize_plan_steps(raw_steps: object) -> list[str]:
     for raw_step in raw_steps:
         if not isinstance(raw_step, str):
             continue
-        step = raw_step.strip()
+        step = _redact_mock_sensitive_assignment_text(raw_step.strip())
         if step:
             normalized_steps.append(step)
     return normalized_steps

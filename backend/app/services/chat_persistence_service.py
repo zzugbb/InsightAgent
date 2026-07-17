@@ -18,6 +18,7 @@ from app.services.tool_runtime import (
     _get_safe_http_json_request_id_display_value,
     _normalize_http_json_output_shape,
     _normalize_http_json_safe_output_shape,
+    _redact_http_json_raw_fallback_value,
     _redact_http_json_sensitive_payload_value,
     _redact_tool_registry_diagnostic_value,
     get_configured_tool_registry_provider,
@@ -1100,16 +1101,41 @@ def _coerce_trace_tool_output_mapping(value: object) -> dict[str, object] | None
 
 def _trace_tool_meta_uses_http_json_execution(tool_meta: dict[str, object]) -> bool:
     raw_execution_kind = tool_meta.get("execution_kind")
-    if not isinstance(raw_execution_kind, str):
-        return False
-    return raw_execution_kind.strip().lower() == "http_json"
+    if (
+        isinstance(raw_execution_kind, str)
+        and raw_execution_kind.strip().lower() == "http_json"
+    ):
+        return True
+    for raw_value in (tool_meta.get("label"), tool_meta.get("name")):
+        if (
+            _trace_tool_label_implies_real_retrieval_summary(raw_value)
+            or _trace_tool_label_implies_real_calc_summary(raw_value)
+        ):
+            return True
+    return False
+
+
+def _trace_tool_meta_implies_provider_or_hosted_tool(
+    tool_meta: dict[str, object],
+) -> bool:
+    if _trace_tool_meta_uses_http_json_execution(tool_meta):
+        return True
+    for raw_value in (tool_meta.get("label"), tool_meta.get("name")):
+        normalized_label = _normalize_trace_tool_label(raw_value)
+        if normalized_label.startswith(("provider ", "hosted ")):
+            return True
+        if isinstance(raw_value, str) and raw_value.strip().lower().startswith(
+            ("provider_", "hosted_")
+        ):
+            return True
+    return False
 
 
 def _normalize_trace_http_json_tool_output(
     tool_meta: dict[str, object],
     output: dict[str, object],
 ) -> dict[str, object]:
-    if _trace_tool_meta_uses_http_json_execution(tool_meta):
+    if _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta):
         return _normalize_http_json_safe_output_shape(output)
     return output
 
@@ -1118,7 +1144,7 @@ def _normalize_trace_http_json_tool_input(
     tool_meta: dict[str, object],
     tool_input: dict[str, object],
 ) -> dict[str, object]:
-    if not _trace_tool_meta_uses_http_json_execution(tool_meta):
+    if not _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta):
         return tool_input
     safe_tool_input = _redact_http_json_sensitive_payload_value(tool_input)
     if isinstance(safe_tool_input, dict):
@@ -1161,6 +1187,8 @@ def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | No
     output = tool_meta.get("output")
     output_mapping = _coerce_trace_tool_output_mapping(output)
     if not isinstance(output_mapping, dict):
+        if _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta):
+            return _redact_http_json_raw_fallback_value(output)
         return output
     output_mapping = _normalize_trace_tool_output_request_id(
         _normalize_trace_http_json_tool_output(tool_meta, output_mapping)
@@ -1192,6 +1220,8 @@ def _resolve_trace_tool_output_preview(tool_meta: dict[str, object]) -> object |
         return None
     preview_mapping = _coerce_trace_tool_output_preview_mapping(preview_value)
     if not isinstance(preview_mapping, dict):
+        if _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta):
+            return _redact_http_json_raw_fallback_value(preview_value)
         return preview_value
     preview_mapping = _normalize_trace_tool_output_request_id(
         _normalize_trace_http_json_tool_output(
@@ -1613,6 +1643,14 @@ def get_trace_step_display_content(step: TraceStep) -> str:
             line for line in tool_registry_lines if line not in base_lines
         ]
         return "\n".join([*base_lines, *diagnostics_lines])
+    if (
+        _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta)
+        and _trace_http_json_export_content_needs_sanitization(content)
+    ):
+        content = _build_trace_http_json_export_content(
+            tool_meta,
+            fallback_content=content,
+        )
     result_summary = tool_meta.get("result_summary")
     normalized_result_summary = (
         result_summary.strip()
@@ -1621,6 +1659,10 @@ def get_trace_step_display_content(step: TraceStep) -> str:
     )
     if not normalized_result_summary:
         normalized_result_summary = _infer_trace_tool_result_summary(tool_meta)
+    elif _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta):
+        normalized_result_summary = _sanitize_trace_tool_result_summary_text(
+            normalized_result_summary
+        )
     primary_content = content
     if normalized_result_summary:
         stripped_content = content.strip()
@@ -1703,10 +1745,30 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
                     preview_mapping,
                 )
             else:
-                sanitized_tool_meta["output"] = raw_preview_value
+                sanitized_tool_meta["output"] = (
+                    _redact_http_json_raw_fallback_value(raw_preview_value)
+                    if _trace_tool_meta_implies_provider_or_hosted_tool(
+                        sanitized_tool_meta
+                    )
+                    else raw_preview_value
+                )
         elif safe_output_value is not None:
             sanitized_tool_meta["output"] = safe_output_value
+        raw_result_summary = sanitized_tool_meta.get("result_summary")
+        if isinstance(raw_result_summary, str) and raw_result_summary.strip():
+            if _trace_tool_meta_implies_provider_or_hosted_tool(sanitized_tool_meta):
+                sanitized_tool_meta["result_summary"] = (
+                    _sanitize_trace_tool_result_summary_text(raw_result_summary)
+                )
         payload["tool"] = sanitized_tool_meta
+    rag_meta = payload.get("rag")
+    if isinstance(rag_meta, dict):
+        sanitized_rag_meta = dict(rag_meta)
+        raw_chunks = sanitized_rag_meta.get("chunks")
+        sanitized_chunks = _sanitize_markdown_meta_rag_chunks(raw_chunks)
+        if sanitized_chunks is not raw_chunks:
+            sanitized_rag_meta["chunks"] = sanitized_chunks
+            payload["rag"] = sanitized_rag_meta
     return payload
 
 
@@ -1736,6 +1798,46 @@ def _redact_trace_http_json_export_content_fallback(content: str) -> str:
     return re.sub(r"(?i)\bbearer\s+\S+", "[redacted]", safe_text)
 
 
+def _sanitize_trace_tool_result_summary_text(result_summary: str) -> str:
+    if not _trace_http_json_export_content_needs_sanitization(result_summary):
+        return result_summary
+    return _redact_trace_http_json_export_content_fallback(result_summary)
+
+
+def _sanitize_markdown_meta_rag_chunks(chunks: object) -> object:
+    if not isinstance(chunks, (list, tuple)):
+        return chunks
+    sanitized_chunks: list[object] = []
+    changed = False
+    for chunk in chunks:
+        if isinstance(chunk, str):
+            if _trace_http_json_export_content_needs_sanitization(chunk):
+                sanitized_chunks.append(
+                    _redact_trace_http_json_export_content_fallback(chunk)
+                )
+                changed = True
+            else:
+                sanitized_chunks.append(chunk)
+            continue
+        if isinstance(chunk, dict):
+            content = chunk.get("content")
+            if (
+                isinstance(content, str)
+                and _trace_http_json_export_content_needs_sanitization(content)
+            ):
+                sanitized_chunk = dict(chunk)
+                sanitized_chunk["content"] = (
+                    _redact_trace_http_json_export_content_fallback(content)
+                )
+                sanitized_chunks.append(sanitized_chunk)
+                changed = True
+            else:
+                sanitized_chunks.append(chunk)
+            continue
+        sanitized_chunks.append(chunk)
+    return sanitized_chunks if changed else chunks
+
+
 def _build_trace_http_json_export_content(
     tool_meta: dict[str, object],
     *,
@@ -1751,7 +1853,7 @@ def _build_trace_http_json_export_content(
     lines: list[str] = []
     if summary:
         lines.append(summary)
-    elif label:
+    elif label and (preview_text or safe_output_text):
         lines.append(f"{label}:")
     if preview_text:
         lines.append(f"Preview: {preview_text}")
@@ -1769,7 +1871,7 @@ def _sanitize_trace_step_content_for_export(step: TraceStep) -> str:
     tool_meta = getattr(meta, "tool", None) if meta is not None else None
     if not isinstance(tool_meta, dict):
         return content
-    if not _trace_tool_meta_uses_http_json_execution(tool_meta):
+    if not _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta):
         return content
     if not _trace_http_json_export_content_needs_sanitization(content):
         return content
@@ -2099,12 +2201,29 @@ def _coerce_export_trace_steps(value: object) -> list[TraceStep]:
     steps: list[TraceStep] = []
     for item in value:
         if isinstance(item, TraceStep):
-            steps.append(item)
+            steps.append(_sanitize_trace_step_for_export(item))
             continue
         row = _coerce_export_payload_block_to_dict(item)
         if row:
-            steps.append(TraceStep.model_validate(row))
+            steps.append(_sanitize_trace_step_for_export(TraceStep.model_validate(row)))
     return steps
+
+
+def _sanitize_export_rag_chunk_rows(value: object) -> list[dict[str, object]]:
+    chunks = _coerce_export_payload_block_list_to_dicts(value)
+    sanitized_chunks: list[dict[str, object]] = []
+    for chunk in chunks:
+        sanitized_chunk = dict(chunk)
+        content = sanitized_chunk.get("content")
+        if (
+            isinstance(content, str)
+            and _trace_http_json_export_content_needs_sanitization(content)
+        ):
+            sanitized_chunk["content"] = _redact_trace_http_json_export_content_fallback(
+                content
+            )
+        sanitized_chunks.append(sanitized_chunk)
+    return sanitized_chunks
 
 
 def get_task_export_response_summary(
@@ -2131,7 +2250,7 @@ def get_task_export_response_summary(
                 for item in trace_summary.get("rag_knowledge_base_ids", [])
                 if isinstance(item, str)
             ],
-            "rag_chunks": _coerce_export_payload_block_list_to_dicts(
+            "rag_chunks": _sanitize_export_rag_chunk_rows(
                 trace_summary.get("rag_chunks")
             ),
             "steps": trace_steps,
@@ -2636,6 +2755,39 @@ def get_session_export_payload_summary(
     }
 
 
+def _trace_preview_title_implies_provider_or_hosted_tool(title: object) -> bool:
+    if not isinstance(title, str):
+        return False
+    normalized = " ".join(title.strip().lower().replace("_", " ").split())
+    if not normalized:
+        return False
+    label, _, descriptor = normalized.partition("[")
+    label = label.strip()
+    descriptor = descriptor.strip(" ]")
+    if label.startswith(("provider ", "hosted ")):
+        return True
+    return "provider " in descriptor or "hosted " in descriptor
+
+
+def _sanitize_session_export_trace_preview_rows(raw_preview: object) -> list[dict[str, object]]:
+    rows = _coerce_export_payload_block_list_to_dicts(raw_preview)
+    sanitized_rows: list[dict[str, object]] = []
+    for row in rows:
+        sanitized_row = dict(row)
+        title = sanitized_row.get("title")
+        excerpt = sanitized_row.get("content_excerpt")
+        if (
+            _trace_preview_title_implies_provider_or_hosted_tool(title)
+            and isinstance(excerpt, str)
+            and _trace_http_json_export_content_needs_sanitization(excerpt)
+        ):
+            sanitized_row["content_excerpt"] = _redact_trace_http_json_export_content_fallback(
+                excerpt
+            )
+        sanitized_rows.append(sanitized_row)
+    return sanitized_rows
+
+
 def _get_session_export_task_response_summary_from_payload_row(
     row: dict[str, object],
 ) -> dict[str, object]:
@@ -2652,7 +2804,7 @@ def _get_session_export_task_response_summary_from_payload_row(
             "usage": row.get("usage"),
             "trace_step_count": int(row.get("trace_step_count", 0) or 0),
             "rag_hit_count": int(row.get("rag_hit_count", 0) or 0),
-            "trace_preview": _coerce_export_payload_block_list_to_dicts(
+            "trace_preview": _sanitize_session_export_trace_preview_rows(
                 row.get("trace_preview")
             ),
             "governance": _normalize_task_governance_payload(row.get("governance")),
@@ -2671,7 +2823,7 @@ def _get_session_export_task_response_summary_from_payload_row(
         "usage": row.get("usage"),
         "trace_step_count": int(trace_summary.get("step_count", 0) or 0),
         "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
-        "trace_preview": _coerce_export_payload_block_list_to_dicts(
+        "trace_preview": _sanitize_session_export_trace_preview_rows(
             trace_summary.get("preview")
         ),
         "governance": _normalize_task_governance_payload(

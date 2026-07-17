@@ -26,7 +26,10 @@ from app.services.chat_persistence_service import (
     list_sessions,
     update_session_title,
 )
-from app.services.tool_runtime import _normalize_http_json_safe_output_shape
+from app.services.tool_runtime import (
+    _normalize_http_json_safe_output_shape,
+    _redact_http_json_raw_fallback_value,
+)
 
 
 router = APIRouter()
@@ -93,6 +96,28 @@ def _coerce_session_governance_for_route(
     )
 
 
+def _coerce_trace_preview_for_route(value: object) -> object:
+    trace_preview = _coerce_payload_model_dump_list(value)
+    if not isinstance(trace_preview, list):
+        return trace_preview
+    normalized_preview: list[object] = []
+    for item in trace_preview:
+        item_is_dict = isinstance(item, dict)
+        preview = dict(item) if item_is_dict else _coerce_payload_mapping(item)
+        if not preview:
+            normalized_preview.append(item)
+            continue
+        title = str(preview.get("title", ""))
+        excerpt = preview.get("content_excerpt")
+        if isinstance(excerpt, str):
+            preview["content_excerpt"] = _normalize_session_trace_preview_excerpt(
+                title,
+                excerpt,
+            )
+        normalized_preview.append(preview)
+    return normalized_preview
+
+
 def _coerce_session_export_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
@@ -121,7 +146,7 @@ def _coerce_session_export_summary(value: object) -> dict[str, Any]:
                     normalize_dict=not summary_is_dict,
                 )
             if "trace_preview" in task_summary:
-                task_summary["trace_preview"] = _coerce_payload_model_dump_list(
+                task_summary["trace_preview"] = _coerce_trace_preview_for_route(
                     task_summary.get("trace_preview")
                 )
             normalized_tasks.append(task_summary)
@@ -483,6 +508,13 @@ def _normalize_trace_preview_http_json_output(
     return _normalize_http_json_safe_output_shape(output)
 
 
+def _redact_trace_preview_http_json_excerpt_fallback(title: str, text: str) -> str:
+    if not _trace_preview_title_implies_http_json_execution(title):
+        return text
+    safe_text = _redact_http_json_raw_fallback_value(text)
+    return safe_text if isinstance(safe_text, str) else text
+
+
 def _resolve_trace_preview_projected_output(
     title: str,
     output: dict[str, object] | None,
@@ -590,7 +622,7 @@ def _normalize_session_trace_preview_excerpt(
     if not normalized.startswith("Tool done:"):
         _, separator, raw_payload = normalized.partition(":")
         if not separator or not raw_payload.strip():
-            return normalized
+            return _redact_trace_preview_http_json_excerpt_fallback(title, normalized)
 
     preview_output: dict[str, object] | None = None
     safe_output: dict[str, object] | None = None
@@ -615,7 +647,7 @@ def _normalize_session_trace_preview_excerpt(
         _, _, raw_payload = normalized.partition(":")
         parsed_payload = _parse_trace_preview_json_payload(raw_payload.strip())
         if parsed_payload is None:
-            return normalized
+            return _redact_trace_preview_http_json_excerpt_fallback(title, normalized)
         safe_output = parsed_payload
     if safe_output is None:
         safe_output = preview_output
@@ -624,13 +656,13 @@ def _normalize_session_trace_preview_excerpt(
 
     inferred_tool_meta = _build_trace_preview_inferred_tool_meta(title, content_excerpt)
     if not isinstance(inferred_tool_meta, dict):
-        return normalized
+        return _redact_trace_preview_http_json_excerpt_fallback(title, normalized)
     inferred_summary = chat_persistence_service._infer_trace_tool_result_summary(  # type: ignore[attr-defined]
         inferred_tool_meta
     )
     if not inferred_summary:
         if not _trace_preview_title_implies_http_json_execution(title):
-            return normalized
+            return _redact_trace_preview_http_json_excerpt_fallback(title, normalized)
         fallback_lines: list[str] = []
         projected_preview_output = _resolve_trace_preview_projected_output(
             title,
@@ -651,7 +683,7 @@ def _normalize_session_trace_preview_excerpt(
         if not has_explicit_preview and not has_explicit_output and safe_output_text:
             fallback_lines.append(f"Preview: {safe_output_text}")
         if not fallback_lines:
-            return normalized
+            return _redact_trace_preview_http_json_excerpt_fallback(title, normalized)
         return chat_persistence_service._normalize_trace_preview_excerpt(  # type: ignore[attr-defined]
             " ".join(fallback_lines),
             limit=160,
