@@ -1131,6 +1131,13 @@ def _trace_tool_meta_implies_provider_or_hosted_tool(
     return False
 
 
+def _trace_label_implies_http_json_execution(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    normalized = " ".join(value.strip().lower().replace("_", " ").split())
+    return "http json" in normalized
+
+
 def _normalize_trace_http_json_tool_output(
     tool_meta: dict[str, object],
     output: dict[str, object],
@@ -1870,7 +1877,15 @@ def _sanitize_trace_step_content_for_export(step: TraceStep) -> str:
     meta = getattr(step, "meta", None)
     tool_meta = getattr(meta, "tool", None) if meta is not None else None
     if not isinstance(tool_meta, dict):
-        return content
+        label = getattr(meta, "label", None) if meta is not None else None
+        if not (
+            _trace_label_implies_http_json_execution(label)
+            or _trace_label_implies_http_json_execution(content)
+        ):
+            return content
+        if not _trace_http_json_export_content_needs_sanitization(content):
+            return content
+        return _redact_trace_http_json_export_content_fallback(content)
     if not _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta):
         return content
     if not _trace_http_json_export_content_needs_sanitization(content):

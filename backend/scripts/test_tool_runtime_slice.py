@@ -5425,6 +5425,51 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", serialized)
         self.assertNotIn("secret-token", serialized)
 
+    def test_get_task_response_summary_from_task_redacts_http_json_trace_json_label_only_url(
+        self,
+    ) -> None:
+        trace_json = json.dumps(
+            [
+                {
+                    "id": "task-response-trace-http-json-label-only-url",
+                    "type": "action",
+                    "content": (
+                        "Calculator [calculator via http_json]: callback "
+                        "https://provider.example/cb?"
+                        "access_token=secret-token&state=ok"
+                        "#client_secret=hidden"
+                    ),
+                    "seq": 9,
+                    "meta": {
+                        "label": "Calculator [calculator via http_json]",
+                    },
+                }
+            ]
+        )
+
+        payload = chat_persistence_module.get_task_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": "task-response-trace-json-label-only-url-safe",
+                "session_id": "session-response-trace-json-label-only-url-safe",
+                "prompt": "response trace json label-only safe",
+                "status": "completed",
+                "trace_json": trace_json,
+                "usage_json": None,
+                "created_at": "2026-07-20T11:00:00",
+                "updated_at": "2026-07-20T11:01:00",
+            }
+        )
+
+        serialized = str(payload["trace_json"])
+        parsed = json.loads(serialized)
+
+        self.assertIsInstance(payload["trace_json"], str)
+        self.assertIn("callback", parsed[0]["content"])
+        self.assertIn("[redacted]", parsed[0]["content"])
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_task_response_summary_from_task_redacts_unparseable_trace_json(
         self,
     ) -> None:
