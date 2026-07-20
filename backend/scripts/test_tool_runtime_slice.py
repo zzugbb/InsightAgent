@@ -30771,6 +30771,48 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("token=hidden", serialized)
         self.assertNotIn('"request_id"', serialized)
 
+    def test_tool_registry_diagnostics_runtime_artifacts_model_redacts_http_json_wrapper_step_and_trace_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-diagnostics-model-http-json-wrapper-output"
+        )
+        followup_step = self._make_sensitive_http_json_action_step(
+            step_id="rag-diagnostics-model-http-json-wrapper-output",
+            content="Retrieved snippets",
+        )
+        trace_event = {
+            "task_id": "task-1",
+            "step_id": "step-diagnostics-model-http-json-wrapper-output",
+            "step": raw_step,
+        }
+        followup_trace = {
+            "task_id": "task-1",
+            "step_id": "rag-diagnostics-model-http-json-wrapper-output",
+            "step": followup_step,
+        }
+        model = tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+            trace_step=raw_step,
+            trace_event=trace_event,
+            audit_detail={
+                "rag_followup": {
+                    "step": followup_step,
+                    "trace": followup_trace,
+                },
+            },
+        )
+
+        result = model.to_dict()
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
     def test_build_tool_registry_diagnostics_runtime_artifacts_keeps_empty_shape(self) -> None:
         diagnostics = {
             "skipped_registry_sources": (),

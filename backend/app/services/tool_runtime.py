@@ -214,8 +214,6 @@ def _sanitize_tool_runtime_trace_artifact_http_json_payload(payload: object) -> 
     if isinstance(payload, dict):
         if get_action_step_tool_meta(payload) is not None:
             return _sanitize_tool_trace_event_step(payload)
-        if isinstance(payload.get("step"), dict):
-            return _sanitize_tool_trace_event_payload(payload)
 
         sanitized: dict[str, object] = {}
         for key, value in payload.items():
