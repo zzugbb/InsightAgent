@@ -42188,6 +42188,70 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("access_token", combined)
         self.assertNotIn("secret-token", combined)
 
+    def test_build_tool_runtime_semantics_meta_redacts_http_json_explicit_display_name_diagnostics(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_output_keys=("message",),
+        )
+        display_name = (
+            "Provider token=hidden "
+            "https://provider.example/cb?access_token=secret-token"
+        )
+
+        success_meta = build_tool_success_meta(
+            name="provider_status",
+            tool_input={"query": "demo"},
+            output={"message": "ok"},
+            retry_count=0,
+            last_error=None,
+            display_name=display_name,
+            registration=registration,
+        )
+        error_meta = build_tool_error_meta(
+            name="provider_status",
+            tool_input={"query": "demo"},
+            retry_count=0,
+            error_message="failed",
+            display_name=display_name,
+            registration=registration,
+        )
+        result_summary = build_tool_result_summary(
+            name="provider_status",
+            output={"message": "ok"},
+            display_name=display_name,
+            registration=registration,
+        )
+        observation_entry = build_tool_observation_entry(
+            name="provider_status",
+            output={"message": "ok"},
+            display_name=display_name,
+            registration=registration,
+        )
+
+        combined = json.dumps(
+            {
+                "success_meta": success_meta,
+                "error_meta": error_meta,
+                "result_summary": result_summary,
+                "observation_entry": observation_entry,
+            },
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", combined)
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("access_token", combined)
+        self.assertNotIn("secret-token", combined)
+
     def test_build_tool_error_payload_and_meta_redact_http_json_raw_error_message(
         self,
     ) -> None:

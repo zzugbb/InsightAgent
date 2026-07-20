@@ -8822,9 +8822,17 @@ def build_tool_result_summary(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
-    resolved_display_name = display_name or get_tool_observation_display_name_from_registration(
-        name=canonical_name,
-        registration=resolved_registration,
+    resolved_display_name = (
+        _format_safe_tool_display_label(
+            display_name,
+            fallback_name=canonical_name,
+            registration=resolved_registration,
+        )
+        if display_name is not None
+        else get_tool_observation_display_name_from_registration(
+            name=canonical_name,
+            registration=resolved_registration,
+        )
     )
     runtime_semantic_kind = _get_tool_runtime_trace_semantic_kind(
         name=canonical_name,
@@ -9167,10 +9175,22 @@ def build_tool_success_meta(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
+    resolved_display_name = (
+        _format_safe_tool_display_label(
+            display_name,
+            fallback_name=canonical_name,
+            registration=resolved_registration,
+        )
+        if display_name is not None
+        else get_tool_execution_display_name_from_registration(
+            name=canonical_name,
+            registration=resolved_registration,
+        )
+    )
     result_summary = build_tool_result_summary(
         name=canonical_name,
         output=output,
-        display_name=display_name,
+        display_name=resolved_display_name,
         registry=registry,
         registration=resolved_registration,
         registry_provider=registry_provider,
@@ -9179,11 +9199,7 @@ def build_tool_success_meta(
     return {
         "tool": {
             "name": canonical_name,
-            "label": display_name
-            or get_tool_execution_display_name_from_registration(
-                name=canonical_name,
-                registration=resolved_registration,
-            ),
+            "label": resolved_display_name,
             "input": normalized_tool_input,
             "output": outward_output,
             "output_preview": build_tool_result_preview(
@@ -9254,14 +9270,22 @@ def build_tool_error_meta(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
+    resolved_display_name = (
+        _format_safe_tool_display_label(
+            display_name,
+            fallback_name=canonical_name,
+            registration=resolved_registration,
+        )
+        if display_name is not None
+        else get_tool_execution_display_name_from_registration(
+            name=canonical_name,
+            registration=resolved_registration,
+        )
+    )
     return {
         "tool": {
             "name": canonical_name,
-            "label": display_name
-            or get_tool_execution_display_name_from_registration(
-                name=canonical_name,
-                registration=resolved_registration,
-            ),
+            "label": resolved_display_name,
             "input": normalized_tool_input,
             "status": "error",
             "retry_count": retry_count,
@@ -9518,18 +9542,27 @@ def build_tool_step_success_update(
         if isinstance(tool_meta, dict) and isinstance(tool_meta.get("tool"), dict)
         else None
     )
-    resolved_display_name = display_name or (
+    resolved_registration = registration or resolve_tool_registration(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    raw_display_name = display_name or (
         str(tool_obj.get("label")).strip()
         if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
+        else None
+    )
+    resolved_display_name = (
+        _format_safe_tool_display_label(
+            raw_display_name,
+            fallback_name=name,
+            registration=resolved_registration,
+        )
+        if raw_display_name is not None
         else get_tool_execution_display_name_from_registration(
             name=name,
-            registration=registration
-            or resolve_tool_registration(
-                name,
-                registry=registry,
-                registry_provider=registry_provider,
-                registry_loader=registry_loader,
-            ),
+            registration=resolved_registration,
         )
     )
     return {
@@ -9576,18 +9609,27 @@ def build_tool_step_error_update(
         if isinstance(tool_meta, dict) and isinstance(tool_meta.get("tool"), dict)
         else None
     )
-    resolved_display_name = display_name or (
+    resolved_registration = registration or resolve_tool_registration(
+        name,
+        registry=registry,
+        registry_provider=registry_provider,
+        registry_loader=registry_loader,
+    )
+    raw_display_name = display_name or (
         str(tool_obj.get("label")).strip()
         if isinstance(tool_obj, dict) and isinstance(tool_obj.get("label"), str)
+        else None
+    )
+    resolved_display_name = (
+        _format_safe_tool_display_label(
+            raw_display_name,
+            fallback_name=name,
+            registration=resolved_registration,
+        )
+        if raw_display_name is not None
         else get_tool_execution_display_name_from_registration(
             name=name,
-            registration=registration
-            or resolve_tool_registration(
-                name,
-                registry=registry,
-                registry_provider=registry_provider,
-                registry_loader=registry_loader,
-            ),
+            registration=resolved_registration,
         )
     )
     sanitized_action_step = sanitize_tool_registry_diagnostics_artifact_payload(
@@ -10593,10 +10635,17 @@ def build_tool_observation_entry(
         if isinstance(step_tool_meta, dict) and isinstance(step_tool_meta.get("label"), str)
         else ""
     )
+    uses_http_json_step_meta = _step_tool_meta_uses_http_json_execution(step_tool_meta)
+    raw_display_name = display_name or meta_display_name
     resolved_display_name = (
-        display_name
-        or meta_display_name
-        or get_tool_observation_display_name_from_registration(
+        _format_safe_tool_display_label(
+            raw_display_name,
+            fallback_name=canonical_name,
+            registration=resolved_registration,
+            uses_http_json=uses_http_json_step_meta,
+        )
+        if raw_display_name
+        else get_tool_observation_display_name_from_registration(
             name=canonical_name,
             registration=resolved_registration,
         )
@@ -12481,13 +12530,17 @@ def _format_safe_tool_display_label(
     *,
     fallback_name: str,
     registration: ToolRegistration | None,
+    uses_http_json: bool = False,
 ) -> str:
     label = str(raw_label).strip() if isinstance(raw_label, str) else ""
     if not label:
         return _humanize_tool_display_name(normalize_tool_registry_name(fallback_name))
     if (
-        registration is not None
-        and _normalize_tool_execution_kind(registration.execution_kind) == "http_json"
+        uses_http_json
+        or (
+            registration is not None
+            and _normalize_tool_execution_kind(registration.execution_kind) == "http_json"
+        )
     ):
         safe_label = _redact_tool_registry_diagnostic_value(label)
         if safe_label:
