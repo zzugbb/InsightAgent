@@ -5470,6 +5470,55 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("client_secret", serialized)
         self.assertNotIn("secret-token", serialized)
 
+    def test_get_task_response_summary_from_task_redacts_http_json_trace_json_tool_label_diagnostics(
+        self,
+    ) -> None:
+        trace_json = json.dumps(
+            [
+                {
+                    "id": "task-response-trace-http-json-tool-label-diagnostic",
+                    "type": "action",
+                    "content": 'Tool done: Provider Status Preview: {"message":"ok"}',
+                    "seq": 10,
+                    "meta": {
+                        "tool": {
+                            "name": "provider_status",
+                            "label": (
+                                "Provider token=hidden "
+                                "https://provider.example/cb?"
+                                "access_token=secret-token"
+                            ),
+                            "execution_kind": "http_json",
+                            "status": "done",
+                            "output_preview": {"message": "ok"},
+                        }
+                    },
+                }
+            ]
+        )
+
+        payload = chat_persistence_module.get_task_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": "task-response-trace-json-tool-label-safe",
+                "session_id": "session-response-trace-json-tool-label-safe",
+                "prompt": "response trace json tool label safe",
+                "status": "completed",
+                "trace_json": trace_json,
+                "usage_json": None,
+                "created_at": "2026-07-20T11:02:00",
+                "updated_at": "2026-07-20T11:03:00",
+            }
+        )
+
+        serialized = str(payload["trace_json"])
+        parsed = json.loads(serialized)
+
+        self.assertIsInstance(payload["trace_json"], str)
+        self.assertIn("[redacted]", parsed[0]["meta"]["tool"]["label"])
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_task_response_summary_from_task_redacts_unparseable_trace_json(
         self,
     ) -> None:
@@ -10863,6 +10912,57 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             excerpt,
         )
         self.assertNotIn("Tool done: Hosted Search", excerpt)
+
+    def test_get_task_trace_preview_summary_redacts_http_json_tool_label_title_diagnostics(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-preview-http-json-tool-label-diagnostic",
+                            "type": "action",
+                            "content": (
+                                'Tool done: Provider Status Preview: {"message":"ok"}'
+                            ),
+                            "seq": 31,
+                            "meta": {
+                                "tool": {
+                                    "name": "provider_status",
+                                    "label": (
+                                        "Provider token=hidden "
+                                        "https://provider.example/cb?"
+                                        "access_token=secret-token"
+                                    ),
+                                    "execution_kind": "http_json",
+                                    "status": "done",
+                                    "output_preview": {"message": "ok"},
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertIn("[redacted]", payload["trace_preview"][0]["title"])
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("secret-token", serialized)
 
     def test_get_trace_rag_export_summary_reuses_shared_trace_steps_shape(self) -> None:
         payload = chat_persistence_module.get_trace_rag_export_summary(  # type: ignore[attr-defined]
@@ -18908,6 +19008,80 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("callback", serialized)
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("secret-token", serialized)
+
+    def test_get_session_export_response_summary_redacts_http_json_trace_preview_title_diagnostics(
+        self,
+    ) -> None:
+        original_payload_helper = getattr(
+            chat_persistence_module,
+            "get_session_export_payload_summary",
+            None,
+        )
+        try:
+            chat_persistence_module.get_session_export_payload_summary = (  # type: ignore[assignment]
+                lambda **_kwargs: {
+                    "usage_summary": {},
+                    "tasks": [
+                        {
+                            "task": {
+                                "id": "task-session-export-service-http-json-title",
+                                "prompt": "check callback title",
+                                "status": "completed",
+                                "status_normalized": "done",
+                                "status_label": "Done",
+                                "status_rank": 40,
+                                "created_at": "2026-07-20T09:00:00",
+                                "updated_at": "2026-07-20T09:01:00",
+                            },
+                            "usage": None,
+                            "trace": {
+                                "step_count": 1,
+                                "rag_hit_count": 0,
+                                "preview": [
+                                    {
+                                        "id": "preview-http-json-title-diagnostic",
+                                        "seq": 4,
+                                        "type": "action",
+                                        "title": (
+                                            "Provider token=hidden "
+                                            "https://provider.example/cb?"
+                                            "access_token=secret-token "
+                                            "[provider_status via http_json]"
+                                        ),
+                                        "content_excerpt": (
+                                            'Provider Status: {"message":"ok"}'
+                                        ),
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 1,
+                        "rag_hit_count": 0,
+                    },
+                    "governance": None,
+                    "messages": [],
+                }
+            )
+            summary = chat_persistence_module.get_session_export_response_summary(
+                usage_summary={},
+                task_rows=[],
+                message_rows=[],
+            )
+        finally:
+            if original_payload_helper is None:
+                delattr(chat_persistence_module, "get_session_export_payload_summary")
+            else:
+                chat_persistence_module.get_session_export_payload_summary = original_payload_helper  # type: ignore[assignment]
+
+        serialized = json.dumps(summary, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn("access_token", serialized)
         self.assertNotIn("secret-token", serialized)
 
     def test_build_session_export_payload_redacts_http_json_trace_preview_url_without_provider_title(

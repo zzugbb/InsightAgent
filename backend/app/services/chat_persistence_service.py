@@ -1571,11 +1571,27 @@ def _format_trace_tool_semantic_descriptor(tool_meta: dict[str, object]) -> str:
     return f"{semantic_kind} · {semantic_family}"
 
 
+def _sanitize_trace_http_json_display_label(
+    tool_meta: dict[str, object],
+    label: str,
+) -> str:
+    if not label:
+        return label
+    label_tool_meta = dict(tool_meta)
+    label_tool_meta["label"] = label
+    if not (
+        _trace_tool_meta_implies_provider_or_hosted_tool(label_tool_meta)
+        and _trace_http_json_export_content_needs_sanitization(label)
+    ):
+        return label
+    return _redact_trace_http_json_export_content_fallback(label)
+
+
 def _resolve_trace_tool_display_label(tool_meta: dict[str, object]) -> str:
     tool_name = str(tool_meta.get("name") or "").strip()
     tool_label = str(tool_meta.get("label") or "").strip()
     if not tool_name:
-        return tool_label
+        return _sanitize_trace_http_json_display_label(tool_meta, tool_label)
     canonical_label = get_tool_display_name(tool_name)
     if not tool_label:
         return canonical_label
@@ -1583,7 +1599,7 @@ def _resolve_trace_tool_display_label(tool_meta: dict[str, object]) -> str:
         tool_name
     ):
         return canonical_label
-    return tool_label
+    return _sanitize_trace_http_json_display_label(tool_meta, tool_label)
 
 
 def get_trace_step_display_title(step: TraceStep) -> str:
@@ -1730,6 +1746,12 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
     tool_meta = payload.get("tool")
     if isinstance(tool_meta, dict):
         sanitized_tool_meta = dict(tool_meta)
+        raw_label_value = sanitized_tool_meta.get("label")
+        if isinstance(raw_label_value, str) and raw_label_value.strip():
+            sanitized_tool_meta["label"] = _sanitize_trace_http_json_display_label(
+                sanitized_tool_meta,
+                raw_label_value.strip(),
+            )
         raw_input_value = sanitized_tool_meta.get("input")
         if isinstance(raw_input_value, dict):
             sanitized_tool_meta["input"] = _normalize_trace_http_json_tool_input(
@@ -2792,6 +2814,16 @@ def _trace_preview_title_implies_provider_or_hosted_tool(title: object) -> bool:
     return "provider " in descriptor or "hosted " in descriptor
 
 
+def _sanitize_session_export_trace_preview_title(title: object) -> object:
+    if not (
+        isinstance(title, str)
+        and _trace_preview_title_implies_provider_or_hosted_tool(title)
+        and _trace_http_json_export_content_needs_sanitization(title)
+    ):
+        return title
+    return _redact_trace_http_json_export_content_fallback(title)
+
+
 def _sanitize_session_export_trace_preview_rows(raw_preview: object) -> list[dict[str, object]]:
     rows = _coerce_export_payload_block_list_to_dicts(raw_preview)
     sanitized_rows: list[dict[str, object]] = []
@@ -2799,6 +2831,9 @@ def _sanitize_session_export_trace_preview_rows(raw_preview: object) -> list[dic
         sanitized_row = dict(row)
         title = sanitized_row.get("title")
         excerpt = sanitized_row.get("content_excerpt")
+        sanitized_title = _sanitize_session_export_trace_preview_title(title)
+        if sanitized_title is not title:
+            sanitized_row["title"] = sanitized_title
         if (
             _trace_preview_title_implies_provider_or_hosted_tool(title)
             and isinstance(excerpt, str)
