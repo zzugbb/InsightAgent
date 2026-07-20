@@ -394,7 +394,11 @@ _TOOL_REGISTRY_DIAGNOSTIC_MAPPING_PATH_RE = re.compile(
 _TOOL_REGISTRY_DIAGNOSTIC_BRACKET_MAPPING_PATH_RE = re.compile(
     r"\b(?P<context>response_path|result_fields(?:\.[A-Za-z0-9_\-\[\]]+)*)"
     r"(?P<separator>\s*[:=]\s*)"
-    r"(?P<path>\$(?:\[(?:\"[^\"]*\"|'[^']*'|\d+)\])+)"
+    r"(?P<path>\$(?:(?:\.[A-Za-z0-9_\-]+(?:\[\d+\])*)|"
+    r"(?:\[(?:\"[^\"]*\"|'[^']*'|\d+)\]))+)"
+)
+_TOOL_REGISTRY_DIAGNOSTIC_JSONPATH_DOT_SEGMENT_RE = re.compile(
+    r"(?P<prefix>\.)(?P<field>[A-Za-z0-9_\-]+)(?=(?:\.|\[|$))"
 )
 _TOOL_REGISTRY_DIAGNOSTIC_JSONPATH_BRACKET_SEGMENT_RE = re.compile(
     r"\[(?P<quote>['\"])(?P<field>[^'\"]*)(?P=quote)\]"
@@ -2614,6 +2618,12 @@ def _format_safe_tool_execution_bracket_jsonpath(raw_value: object) -> str:
     if not raw_path:
         return ""
 
+    def redact_dot_segment(match: re.Match[str]) -> str:
+        field_name = match.group("field")
+        if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(field_name):
+            return f"{match.group('prefix')}[redacted]"
+        return match.group(0)
+
     def redact_bracket_segment(match: re.Match[str]) -> str:
         field_name = match.group("field")
         if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(field_name):
@@ -2621,9 +2631,13 @@ def _format_safe_tool_execution_bracket_jsonpath(raw_value: object) -> str:
             return f"[{quote}[redacted]{quote}]"
         return match.group(0)
 
+    safe_path = _TOOL_REGISTRY_DIAGNOSTIC_JSONPATH_DOT_SEGMENT_RE.sub(
+        redact_dot_segment,
+        raw_path,
+    )
     return _TOOL_REGISTRY_DIAGNOSTIC_JSONPATH_BRACKET_SEGMENT_RE.sub(
         redact_bracket_segment,
-        raw_path,
+        safe_path,
     )
 
 

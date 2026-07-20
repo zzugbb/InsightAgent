@@ -5453,6 +5453,34 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", serialized)
         self.assertNotIn("secret-token", serialized)
 
+    def test_get_task_response_summary_from_task_redacts_unparseable_trace_json_mixed_jsonpath(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_task_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": "task-response-bad-trace-jsonpath-safe",
+                "session_id": "session-response-bad-trace-jsonpath-safe",
+                "prompt": "response bad trace jsonpath safe",
+                "status": "failed",
+                "trace_json": (
+                    "bad trace payload provider_status "
+                    "response_path=$.data['access_token'] Bearer secret-token"
+                ),
+                "usage_json": None,
+                "created_at": "2026-07-16T10:04:00",
+                "updated_at": "2026-07-16T10:05:00",
+            }
+        )
+
+        serialized = str(payload["trace_json"])
+
+        self.assertIsInstance(payload["trace_json"], str)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("response_path=$.data['access_token']", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_task_cancel_response_summary_from_task_reuses_shared_status_summary(
         self,
     ) -> None:
