@@ -9305,15 +9305,23 @@ def build_tool_start_payload(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
+    resolved_display_name = (
+        _format_safe_tool_display_label(
+            display_name,
+            fallback_name=canonical_name,
+            registration=resolved_registration,
+        )
+        if display_name is not None
+        else get_tool_execution_display_name_from_registration(
+            name=canonical_name,
+            registration=resolved_registration,
+        )
+    )
     return {
         "task_id": task_id,
         "step_id": step_id,
         "name": canonical_name,
-        "display_name": display_name
-        or get_tool_execution_display_name_from_registration(
-            name=canonical_name,
-            registration=resolved_registration,
-        ),
+        "display_name": resolved_display_name,
         "input": normalized_tool_input,
         **build_tool_runtime_semantics_meta(
             name=canonical_name,
@@ -9418,6 +9426,18 @@ def build_action_step_initial_meta(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
+    resolved_display_name = (
+        _format_safe_tool_display_label(
+            display_name,
+            fallback_name=canonical_name,
+            registration=resolved_registration,
+        )
+        if display_name is not None
+        else get_tool_execution_display_name_from_registration(
+            name=canonical_name,
+            registration=resolved_registration,
+        )
+    )
     return {
         "model": model,
         "step_type": "tool_call",
@@ -9427,11 +9447,7 @@ def build_action_step_initial_meta(
         "cost_estimate": None,
         "tool": {
             "name": canonical_name,
-            "label": display_name
-            or get_tool_execution_display_name_from_registration(
-                name=canonical_name,
-                registration=resolved_registration,
-            ),
+            "label": resolved_display_name,
             "input": normalized_tool_input,
             "status": "running",
             "retry_count": 0,
@@ -12452,8 +12468,31 @@ def get_tool_display_name_from_registration(
     if registration is not None:
         label = registration.label.strip()
         if label:
-            return label
+            return _format_safe_tool_display_label(
+                label,
+                fallback_name=name,
+                registration=registration,
+            )
     return _humanize_tool_display_name(normalize_tool_registry_name(name))
+
+
+def _format_safe_tool_display_label(
+    raw_label: object,
+    *,
+    fallback_name: str,
+    registration: ToolRegistration | None,
+) -> str:
+    label = str(raw_label).strip() if isinstance(raw_label, str) else ""
+    if not label:
+        return _humanize_tool_display_name(normalize_tool_registry_name(fallback_name))
+    if (
+        registration is not None
+        and _normalize_tool_execution_kind(registration.execution_kind) == "http_json"
+    ):
+        safe_label = _redact_tool_registry_diagnostic_value(label)
+        if safe_label:
+            return safe_label
+    return label
 
 
 _TOOL_DISPLAY_ACRONYMS = {
@@ -13119,8 +13158,9 @@ def build_configured_tool_registry_provider_preflight_tool_details(
             name=tool_name,
             registration=registration,
         )
-        label = registration.label.strip() or get_tool_display_name_from_registration(
-            name=tool_name,
+        label = _format_safe_tool_display_label(
+            registration.label,
+            fallback_name=tool_name,
             registration=registration,
         )
         details.append(

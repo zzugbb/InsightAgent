@@ -42132,6 +42132,62 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("client_secret", combined)
         self.assertNotIn("hidden", combined)
 
+    def test_build_tool_runtime_semantics_meta_redacts_http_json_label_diagnostics(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label=(
+                "Provider token=hidden "
+                "https://provider.example/cb?access_token=secret-token"
+            ),
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+        provider = StaticToolRegistryProvider(
+            registry={
+                "provider_status": registration,
+            }
+        )
+
+        start_payload = build_tool_start_payload(
+            task_id="task-1",
+            step_id="step-1",
+            name="provider_status",
+            tool_input={"query": "demo"},
+            retry_count=0,
+            registration=registration,
+        )
+        action_meta = build_action_step_initial_meta(
+            name="provider_status",
+            tool_input={"query": "demo"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            registration=registration,
+        )
+        tool_details = build_configured_tool_registry_provider_preflight_tool_details(
+            provider=provider,
+        )
+
+        combined = json.dumps(
+            {
+                "start": start_payload,
+                "action_meta": action_meta,
+                "tool_details": tool_details,
+            },
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", combined)
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("access_token", combined)
+        self.assertNotIn("secret-token", combined)
+
     def test_build_tool_error_payload_and_meta_redact_http_json_raw_error_message(
         self,
     ) -> None:
