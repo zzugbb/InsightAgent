@@ -4328,7 +4328,9 @@ def _format_safe_tool_execution_summary_url_path(raw_value: object) -> str:
     raw_path = str(raw_value).strip()
     if not raw_path:
         return ""
-    path = unquote(raw_path)
+    path = _redact_http_json_url_text(unquote(raw_path))
+    path, fragment_separator, fragment = path.partition("#")
+    path, query_separator, query = path.partition("?")
     safe_segments: list[str] = []
     redact_next_segment = False
     for segment in path.split("/"):
@@ -4344,7 +4346,16 @@ def _format_safe_tool_execution_summary_url_path(raw_value: object) -> str:
             redact_next_segment = True
             continue
         safe_segments.append(_redact_http_json_diagnostic_text(segment))
-    return "/".join(safe_segments)
+    safe_path = "/".join(safe_segments)
+    if query_separator:
+        safe_query = _format_safe_http_json_url_query(query)
+        if safe_query:
+            safe_path = f"{safe_path}?{safe_query}"
+    if fragment_separator:
+        safe_fragment = _format_safe_http_json_url_fragment(fragment)
+        if safe_fragment:
+            safe_path = f"{safe_path}#{safe_fragment}"
+    return safe_path
 
 
 def _sanitize_tool_execution_summary_value(key: str, value: object) -> object:

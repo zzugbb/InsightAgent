@@ -42020,6 +42020,118 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("access_token", combined)
         self.assertNotIn("api_key/secret", combined)
 
+    def test_build_tool_runtime_semantics_meta_redacts_nested_url_execution_summary_path(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            execution_summary={
+                "method": "GET",
+                "url_origin": "https://provider.example",
+                "url_path": (
+                    "/cb/https%3A%2F%2Fuser%3Apass%40inner.example%2Fcb/"
+                    "https://api_key:secret@next.example/cb"
+                ),
+                "response_path": "$.data.value",
+            },
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 1,
+            },
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total",),
+            runtime_semantic_kind="provider_search",
+        )
+
+        start_payload = build_tool_start_payload(
+            task_id="task-1",
+            step_id="step-1",
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            retry_count=0,
+            registration=registration,
+        )
+        action_meta = build_action_step_initial_meta(
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            registration=registration,
+        )
+
+        combined = json.dumps(
+            {"start": start_payload, "action_meta": action_meta},
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", combined)
+        self.assertNotIn("user:pass", combined)
+        self.assertNotIn("user%3Apass", combined)
+        self.assertNotIn("api_key:secret", combined)
+        self.assertNotIn("api_key", combined)
+        self.assertNotIn("secret@next", combined)
+
+    def test_build_tool_runtime_semantics_meta_redacts_relative_query_fragment_execution_summary_path(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            execution_summary={
+                "method": "GET",
+                "url_origin": "https://provider.example",
+                "url_path": (
+                    "/cb?access_token=secret-token&state=ok"
+                    "#client_secret=hidden"
+                ),
+            },
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 1,
+            },
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total",),
+            runtime_semantic_kind="provider_search",
+        )
+
+        start_payload = build_tool_start_payload(
+            task_id="task-1",
+            step_id="step-1",
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            retry_count=0,
+            registration=registration,
+        )
+        action_meta = build_action_step_initial_meta(
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            registration=registration,
+        )
+
+        combined = json.dumps(
+            {"start": start_payload, "action_meta": action_meta},
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", combined)
+        self.assertNotIn("access_token", combined)
+        self.assertNotIn("secret-token", combined)
+        self.assertNotIn("client_secret", combined)
+        self.assertNotIn("hidden", combined)
+
     def test_build_tool_error_payload_and_meta_redact_http_json_raw_error_message(
         self,
     ) -> None:
