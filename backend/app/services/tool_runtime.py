@@ -1823,6 +1823,7 @@ def _format_safe_tool_execution_http_url_path(parsed_url: object) -> str | None:
     if not isinstance(path, str) or not path:
         return None
     path = unquote(path)
+    path = _redact_http_json_url_text(path)
     safe_segments: list[str] = []
     redact_next_segment = False
     for segment in path.split("/"):
@@ -2622,7 +2623,7 @@ def _format_safe_http_json_url_query(raw_query: object) -> str:
 def _format_safe_http_json_url_fragment(raw_fragment: object) -> str:
     if not isinstance(raw_fragment, str) or not raw_fragment:
         return ""
-    safe_fragment = _redact_http_json_url_text(raw_fragment)
+    safe_fragment = _redact_http_json_url_text(unquote(raw_fragment))
     safe_fragment = _redact_http_json_diagnostic_text(safe_fragment)
     if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(safe_fragment):
         return "[redacted]"
