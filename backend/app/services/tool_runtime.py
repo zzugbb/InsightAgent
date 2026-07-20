@@ -382,6 +382,7 @@ _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE = re.compile(
     re.IGNORECASE,
 )
 _HTTP_JSON_BARE_BEARER_TOKEN_RE = re.compile(r"\bbearer\s+\S+", re.IGNORECASE)
+_HTTP_JSON_URL_TEXT_RE = re.compile(r"https?://[^\s<>\"'{}\[\]]+")
 _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE = re.compile(
     r"\b(?:headers|query_params|json_body|response_path|result_fields)"
     r"(?:\.[A-Za-z0-9_\-\[\]]+)+"
@@ -2536,9 +2537,10 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
 
 
 def _redact_http_json_sensitive_payload_text(raw_value: str) -> str:
+    redacted = _redact_http_json_url_text(raw_value)
     redacted = _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE.sub(
         lambda match: f"{match.group(1)}[redacted]",
-        raw_value,
+        redacted,
     )
 
     def redact_path(match: re.Match[str]) -> str:
@@ -2598,6 +2600,54 @@ def _redact_http_json_diagnostic_text(raw_value: str) -> str:
         "[redacted]",
         raw_value,
     )
+
+
+def _format_safe_http_json_url_query(raw_query: object) -> str:
+    if not isinstance(raw_query, str) or not raw_query:
+        return ""
+    safe_params: list[str] = []
+    for raw_name, raw_value in parse_qsl(raw_query, keep_blank_values=True):
+        if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(raw_name):
+            safe_params.append("[redacted]")
+            continue
+        safe_name = _redact_http_json_diagnostic_text(raw_name)
+        safe_value = _redact_http_json_diagnostic_text(raw_value)
+        if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(safe_value):
+            safe_value = "[redacted]"
+        safe_params.append(f"{safe_name}={safe_value}")
+    return "&".join(safe_params)
+
+
+def _format_safe_http_json_url_fragment(raw_fragment: object) -> str:
+    if not isinstance(raw_fragment, str) or not raw_fragment:
+        return ""
+    safe_fragment = _redact_http_json_diagnostic_text(raw_fragment)
+    if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(safe_fragment):
+        return "[redacted]"
+    return safe_fragment
+
+
+def _format_safe_http_json_url_text(raw_url: str) -> str:
+    parsed_url = urlparse(raw_url)
+    origin = _format_safe_tool_execution_http_url_origin(parsed_url)
+    if origin is None:
+        return "[redacted]"
+    path = _format_safe_tool_execution_http_url_path(parsed_url) or ""
+    safe_url = f"{origin}{path}"
+    query = _format_safe_http_json_url_query(parsed_url.query)
+    if query:
+        safe_url = f"{safe_url}?{query}"
+    fragment = _format_safe_http_json_url_fragment(parsed_url.fragment)
+    if fragment:
+        safe_url = f"{safe_url}#{fragment}"
+    return safe_url
+
+
+def _redact_http_json_url_text(raw_value: str) -> str:
+    def redact_url(match: re.Match[str]) -> str:
+        return _format_safe_http_json_url_text(match.group(0))
+
+    return _HTTP_JSON_URL_TEXT_RE.sub(redact_url, raw_value)
 
 
 def _redact_tool_registry_diagnostic_mapping_paths(raw_value: str) -> str:
@@ -2680,7 +2730,8 @@ def _redact_tool_registry_diagnostic_bracket_mapping_paths(raw_value: str) -> st
 
 
 def _redact_tool_registry_diagnostic_value(raw_value: object) -> str:
-    text = _redact_http_json_diagnostic_text(str(raw_value).strip())
+    text = _redact_http_json_url_text(str(raw_value).strip())
+    text = _redact_http_json_diagnostic_text(text)
     if not text:
         return ""
 

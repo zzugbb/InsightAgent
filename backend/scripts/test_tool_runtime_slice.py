@@ -15157,6 +15157,39 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", content)
         self.assertNotIn("secret-token", content)
 
+    def test_get_trace_step_display_content_redacts_provider_content_urls_without_execution_kind(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-provider-content-url-half-migrated",
+            seq=13,
+            type="action",
+            content=(
+                "Upstream callback https://provider.example/cb?"
+                "access_token=secret-token&state=ok#client_secret=hidden "
+                "path https://provider.example/api_key/secret-value/cb"
+            ),
+            meta={
+                "tool": {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "status": "error",
+                }
+            },
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIn("[redacted]", content)
+        self.assertIn("Upstream callback", content)
+        self.assertNotIn("access_token", content)
+        self.assertNotIn("client_secret", content)
+        self.assertNotIn("secret-token", content)
+        self.assertNotIn("api_key", content)
+        self.assertNotIn("secret-value", content)
+
     def test_get_trace_step_display_content_redacts_provider_result_summary(
         self,
     ) -> None:
@@ -57074,6 +57107,41 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", output_json)
         self.assertNotIn("secret-token", output_json)
 
+    def test_build_tool_result_output_redacts_http_json_text_value_urls(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        output = build_tool_result_output(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "message": (
+                    "callback https://provider.example/cb?"
+                    "access_token=secret-token&state=ok#client_secret=hidden"
+                ),
+            },
+            registration=registration,
+        )
+
+        output_json = json.dumps(output)
+        self.assertEqual(output["status"], "ready")
+        self.assertIn("callback", output["message"])
+        self.assertIn("[redacted]", output["message"])
+        self.assertNotIn("access_token", output_json)
+        self.assertNotIn("client_secret", output_json)
+        self.assertNotIn("secret-token", output_json)
+
     def test_build_tool_result_output_redacts_half_migrated_http_json_execution_kind(
         self,
     ) -> None:
@@ -60094,6 +60162,74 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("query_params.access_token", message)
         self.assertNotIn("Bearer", message)
         self.assertNotIn("secret-token", message)
+
+    def test_run_tool_canonical_override_redacts_http_json_error_body_url_text(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            def raise_http_error(request, timeout=0):
+                del request, timeout
+                raise tool_runtime_module.HTTPError(  # type: ignore[attr-defined]
+                    "https://provider.example/calc",
+                    401,
+                    "Unauthorized",
+                    hdrs=None,
+                    fp=io.BytesIO(
+                        b'{"message":"callback https://provider.example/cb?access_token=secret-token&state=ok#client_secret=hidden and https://provider.example/api_key/secret-value/cb"}'
+                    ),
+                )
+
+            tool_runtime_module.urlopen = raise_http_error  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 401", message)
+        self.assertIn("callback", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("access_token", message)
+        self.assertNotIn("client_secret", message)
+        self.assertNotIn("secret-token", message)
+        self.assertNotIn("api_key", message)
+        self.assertNotIn("secret-value", message)
 
     def test_run_tool_canonical_override_redacts_http_json_error_body_response_path_text(
         self,
