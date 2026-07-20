@@ -50441,6 +50441,86 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn("api_key", json.dumps(output))
 
+    def test_run_tool_canonical_override_redacts_http_json_success_payload_sensitive_diagnostic_keys(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "response_path": "$.data",
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            headers = {
+                "Content-Type": "application/json",
+            }
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "data": {
+                            "value": 7,
+                            "response_path=$.data.access_token": "missing",
+                            (
+                                "callback https://provider.example/cb?"
+                                "access_token=secret-token"
+                            ): "bad",
+                            "nested": {
+                                "response_path=$['data']['client_secret']": "missing"
+                            },
+                        }
+                    }
+                ).encode("utf-8")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="calc_eval",
+                tool_input={"expression": "1+2*3"},
+                prompt="calc",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        output_json = json.dumps(output)
+        self.assertEqual(output["value"], 7)
+        self.assertEqual(output["[redacted]"], "[redacted]")
+        self.assertEqual(output["nested"]["[redacted]"], "[redacted]")
+        self.assertNotIn("response_path=$.data.access_token", output_json)
+        self.assertNotIn("response_path=$['data']['client_secret']", output_json)
+        self.assertNotIn("access_token", output_json)
+        self.assertNotIn("client_secret", output_json)
+        self.assertNotIn("secret-token", output_json)
+
     def test_run_tool_canonical_override_rejects_bearer_like_http_json_body_request_id(
         self,
     ) -> None:
@@ -57464,6 +57544,49 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("[redacted]", output["message"])
         self.assertNotIn("user:pass", output_json)
         self.assertNotIn("user%3Apass", output_json)
+
+    def test_build_tool_result_output_redacts_http_json_sensitive_diagnostic_keys(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_status",
+            kind="provider_status",
+            label="Provider Status",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        output = build_tool_result_output(
+            name="provider_status",
+            output={
+                "status": "ready",
+                "response_path=$.data.access_token": "missing",
+                (
+                    "callback https://provider.example/cb?"
+                    "access_token=secret-token"
+                ): "bad",
+                "details": {
+                    "response_path=$['data']['client_secret']": "missing",
+                    "ok": "fine",
+                },
+            },
+            registration=registration,
+        )
+
+        output_json = json.dumps(output)
+        self.assertEqual(output["status"], "ready")
+        self.assertIn("[redacted]", output)
+        self.assertEqual(output["[redacted]"], "[redacted]")
+        self.assertEqual(output["details"]["[redacted]"], "[redacted]")
+        self.assertNotIn("response_path=$.data.access_token", output_json)
+        self.assertNotIn("response_path=$['data']['client_secret']", output_json)
+        self.assertNotIn("access_token", output_json)
+        self.assertNotIn("client_secret", output_json)
+        self.assertNotIn("secret-token", output_json)
 
     def test_build_tool_result_output_redacts_half_migrated_http_json_execution_kind(
         self,

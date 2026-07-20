@@ -2556,15 +2556,27 @@ def _redact_http_json_sensitive_payload_text(raw_value: str) -> str:
     return _HTTP_JSON_BARE_BEARER_TOKEN_RE.sub("[redacted]", redacted)
 
 
+def _format_safe_http_json_payload_key(raw_key: object) -> str:
+    normalized_key = str(raw_key)
+    safe_key = _redact_tool_registry_diagnostic_value(normalized_key)
+    if safe_key != normalized_key and "[redacted]" in safe_key:
+        return "[redacted]"
+    return normalized_key
+
+
 def _redact_http_json_sensitive_payload_value(raw_value: object) -> object:
     if isinstance(raw_value, dict):
         redacted: dict[str, object] = {}
         for key, value in raw_value.items():
             normalized_key = str(key)
-            if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(normalized_key):
-                redacted[normalized_key] = "[redacted]"
+            safe_key = _format_safe_http_json_payload_key(normalized_key)
+            if safe_key == "[redacted]":
+                redacted[safe_key] = "[redacted]"
                 continue
-            redacted[normalized_key] = _redact_http_json_sensitive_payload_value(value)
+            if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(normalized_key):
+                redacted[safe_key] = "[redacted]"
+                continue
+            redacted[safe_key] = _redact_http_json_sensitive_payload_value(value)
         return redacted
     if isinstance(raw_value, list):
         return [_redact_http_json_sensitive_payload_value(item) for item in raw_value]
@@ -2760,10 +2772,18 @@ def _redact_tool_registry_diagnostic_value(raw_value: object) -> str:
 
 def _redact_http_json_raw_fallback_value(raw_value: object) -> object:
     if isinstance(raw_value, dict):
-        return {
-            key: _redact_http_json_raw_fallback_value(value)
-            for key, value in raw_value.items()
-        }
+        redacted: dict[str, object] = {}
+        for key, value in raw_value.items():
+            normalized_key = str(key)
+            safe_key = _format_safe_http_json_payload_key(normalized_key)
+            if (
+                safe_key == "[redacted]"
+                or _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(normalized_key)
+            ):
+                redacted[safe_key] = "[redacted]"
+                continue
+            redacted[safe_key] = _redact_http_json_raw_fallback_value(value)
+        return redacted
     if isinstance(raw_value, list):
         return [_redact_http_json_raw_fallback_value(value) for value in raw_value]
     if isinstance(raw_value, tuple):
