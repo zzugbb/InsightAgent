@@ -15235,6 +15235,34 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("api_key", content)
         self.assertNotIn("secret-value", content)
 
+    def test_get_trace_step_display_content_redacts_http_json_label_only_url(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-display-http-json-label-only-url",
+            seq=14,
+            type="action",
+            content=(
+                "Calculator [calculator via http_json]: callback "
+                "https://provider.example/cb?"
+                "access_token=secret-token&state=ok"
+                "#client_secret=hidden"
+            ),
+            meta={
+                "label": "Calculator [calculator via http_json]",
+            },
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIn("callback", content)
+        self.assertIn("[redacted]", content)
+        self.assertNotIn("access_token", content)
+        self.assertNotIn("client_secret", content)
+        self.assertNotIn("secret-token", content)
+
     def test_get_trace_step_display_content_redacts_provider_result_summary(
         self,
     ) -> None:

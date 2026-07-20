@@ -1643,6 +1643,12 @@ def get_trace_step_display_content(step: TraceStep) -> str:
                 if label:
                     tool_registry_lines.append(f"{label}: {count}")
     if not isinstance(tool_meta, dict):
+        label = getattr(meta, "label", None) if meta is not None else None
+        if (
+            _trace_label_implies_http_json_execution(label)
+            or _trace_label_implies_http_json_execution(content)
+        ) and _trace_http_json_export_content_needs_sanitization(content):
+            content = _redact_trace_http_json_export_content_fallback(content)
         if not tool_registry_lines:
             return content
         base_lines = [content] if content else []
