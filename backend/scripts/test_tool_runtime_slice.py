@@ -28948,6 +28948,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "invalid_tool_executions": (
                 "provider_status: unsupported tool execution kind api_key=hidden",
                 "provider_search: http_json execution query_params.access_token must be safe",
+                "provider_search: http_json execution result_fields['access_token'] must be safe",
             ),
         }
 
@@ -28965,6 +28966,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             result["summary"]["entries"][0]["values"],
             (
                 "provider_status: unsupported tool execution kind [redacted]",
+                "provider_search: http_json execution [redacted] must be safe",
                 "provider_search: http_json execution [redacted] must be safe",
             ),
         )

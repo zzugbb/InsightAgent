@@ -386,6 +386,11 @@ _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE = re.compile(
     r"\b(?:headers|query_params|json_body|response_path|result_fields)"
     r"(?:\.[A-Za-z0-9_\-\[\]]+)+"
 )
+_TOOL_REGISTRY_DIAGNOSTIC_BRACKET_FIELD_PATH_RE = re.compile(
+    r"\b(?:headers|query_params|json_body|response_path|result_fields)"
+    r"(?:(?:\.[A-Za-z0-9_\-]+(?:\[\d+\])*)|"
+    r"(?:\[(?:\"[^\"]*\"|'[^']*'|\d+)\]))+"
+)
 _TOOL_REGISTRY_DIAGNOSTIC_MAPPING_PATH_RE = re.compile(
     r"\b(?P<context>response_path|result_fields(?:\.[A-Za-z0-9_\-\[\]]+)*)"
     r"(?P<separator>\s*[:=]\s*)"
@@ -2542,6 +2547,7 @@ def _redact_http_json_sensitive_payload_text(raw_value: str) -> str:
         return "[redacted]" if "[redacted]" in safe_path else raw_path
 
     redacted = _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE.sub(redact_path, redacted)
+    redacted = _redact_tool_registry_diagnostic_bracket_field_paths(redacted)
     redacted = _redact_tool_registry_diagnostic_mapping_paths(redacted)
     redacted = _redact_tool_registry_diagnostic_bracket_mapping_paths(redacted)
     return _HTTP_JSON_BARE_BEARER_TOKEN_RE.sub("[redacted]", redacted)
@@ -2613,6 +2619,19 @@ def _redact_tool_registry_diagnostic_mapping_paths(raw_value: str) -> str:
     )
 
 
+def _redact_tool_registry_diagnostic_bracket_field_paths(raw_value: str) -> str:
+    def redact_field_path(match: re.Match[str]) -> str:
+        safe_path = _format_safe_tool_execution_bracket_jsonpath(match.group(0))
+        if "[redacted]" in safe_path:
+            return "[redacted]"
+        return match.group(0)
+
+    return _TOOL_REGISTRY_DIAGNOSTIC_BRACKET_FIELD_PATH_RE.sub(
+        redact_field_path,
+        raw_value,
+    )
+
+
 def _format_safe_tool_execution_bracket_jsonpath(raw_value: object) -> str:
     raw_path = str(raw_value).strip()
     if not raw_path:
@@ -2672,6 +2691,7 @@ def _redact_tool_registry_diagnostic_value(raw_value: object) -> str:
         return safe_path
 
     text = _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE.sub(redact_path, text)
+    text = _redact_tool_registry_diagnostic_bracket_field_paths(text)
     text = _redact_tool_registry_diagnostic_mapping_paths(text)
     text = _redact_tool_registry_diagnostic_bracket_mapping_paths(text)
     return _HTTP_JSON_BARE_BEARER_TOKEN_RE.sub("[redacted]", text)
