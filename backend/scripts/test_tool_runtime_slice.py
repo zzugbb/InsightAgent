@@ -30743,6 +30743,34 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(result.trace_event["step_id"], "step-1")
         self.assertEqual(result.audit_detail["provider_source"], "file_source")
 
+    def test_tool_registry_diagnostics_runtime_artifacts_model_redacts_http_json_trace_step_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-diagnostics-model-http-json-output"
+        )
+        trace_event = {
+            "task_id": "task-1",
+            "step_id": "step-diagnostics-model-http-json-output",
+            "step": raw_step,
+        }
+        model = tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+            trace_step=raw_step,
+            trace_event=trace_event,
+            audit_detail={"trace": trace_event},
+        )
+
+        result = model.to_dict()
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
     def test_build_tool_registry_diagnostics_runtime_artifacts_keeps_empty_shape(self) -> None:
         diagnostics = {
             "skipped_registry_sources": (),
@@ -31211,6 +31239,66 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("x-api-key", serialized)
         self.assertIn("unsupported tool execution kind [redacted]", serialized)
         self.assertIn("http_json execution [redacted] must be safe", serialized)
+
+    def test_runtime_service_action_model_redacts_http_json_trace_step_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-service-action-model-http-json-output"
+        )
+        trace_event = {
+            "task_id": "task-1",
+            "step_id": "step-service-action-model-http-json-output",
+            "step": raw_step,
+        }
+        model = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+            kind="internal_trace_write",
+            trace_step=raw_step,
+            trace_event=trace_event,
+            persist_force=True,
+            kwargs={"trace_step": raw_step, "trace_event": trace_event},
+        )
+
+        result = model.to_dict()
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
+    def test_runtime_service_action_model_from_dict_redacts_http_json_trace_step_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-service-action-from-dict-http-json-output"
+        )
+        trace_event = {
+            "task_id": "task-1",
+            "step_id": "step-service-action-from-dict-http-json-output",
+            "step": raw_step,
+        }
+        model = build_configured_tool_registry_provider_runtime_service_action_model_from_dict(
+            {
+                "kind": "internal_trace_write",
+                "trace_step": raw_step,
+                "trace_event": trace_event,
+                "persist_force": True,
+                "kwargs": {"trace_step": raw_step, "trace_event": trace_event},
+            }
+        )
+
+        result = model.to_dict()
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
 
     def test_execute_configured_tool_registry_provider_runtime_service_actions_records_audit(
         self,

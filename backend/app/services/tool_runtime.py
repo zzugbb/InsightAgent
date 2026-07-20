@@ -205,6 +205,42 @@ class ToolRegistryDiagnosticsSummaryModel:
         }
 
 
+def _sanitize_tool_runtime_trace_artifact_payload(payload: object) -> object:
+    sanitized = sanitize_tool_registry_diagnostics_artifact_payload(payload)
+    return _sanitize_tool_runtime_trace_artifact_http_json_payload(sanitized)
+
+
+def _sanitize_tool_runtime_trace_artifact_http_json_payload(payload: object) -> object:
+    if isinstance(payload, dict):
+        if get_action_step_tool_meta(payload) is not None:
+            return _sanitize_tool_trace_event_step(payload)
+        if isinstance(payload.get("step"), dict):
+            return _sanitize_tool_trace_event_payload(payload)
+
+        sanitized: dict[str, object] = {}
+        for key, value in payload.items():
+            if key in {"trace_step", "step"} and isinstance(value, dict):
+                sanitized[key] = _sanitize_tool_trace_event_step(value)
+            elif key in {"trace_event", "trace"} and isinstance(value, dict):
+                sanitized[key] = _sanitize_tool_trace_event_payload(value)
+            else:
+                sanitized[key] = _sanitize_tool_runtime_trace_artifact_http_json_payload(
+                    value
+                )
+        return sanitized
+    if isinstance(payload, list):
+        return [
+            _sanitize_tool_runtime_trace_artifact_http_json_payload(value)
+            for value in payload
+        ]
+    if isinstance(payload, tuple):
+        return tuple(
+            _sanitize_tool_runtime_trace_artifact_http_json_payload(value)
+            for value in payload
+        )
+    return payload
+
+
 @dataclass(frozen=True)
 class ToolRegistryDiagnosticsRuntimeArtifactsModel:
     summary: ToolRegistryDiagnosticsSummaryModel
@@ -215,13 +251,13 @@ class ToolRegistryDiagnosticsRuntimeArtifactsModel:
     def to_dict(self) -> dict[str, object]:
         return {
             "summary": self.summary.to_dict(),
-            "trace_step": sanitize_tool_registry_diagnostics_artifact_payload(
+            "trace_step": _sanitize_tool_runtime_trace_artifact_payload(
                 self.trace_step
             ),
-            "trace_event": sanitize_tool_registry_diagnostics_artifact_payload(
+            "trace_event": _sanitize_tool_runtime_trace_artifact_payload(
                 self.trace_event
             ),
-            "audit_detail": sanitize_tool_registry_diagnostics_artifact_payload(
+            "audit_detail": _sanitize_tool_runtime_trace_artifact_payload(
                 self.audit_detail
             ),
         }
@@ -249,7 +285,7 @@ class ConfiguredToolRegistryProviderRuntimeArtifactsModel:
                 self.source_diagnostics
             ),
             "diagnostics_runtime": self.diagnostics_runtime.to_dict(),
-            "audit_event": sanitize_tool_registry_diagnostics_artifact_payload(
+            "audit_event": _sanitize_tool_runtime_trace_artifact_payload(
                 self.audit_event
             ),
         }
@@ -268,17 +304,17 @@ class ConfiguredToolRegistryProviderRuntimeServiceActionModel:
             "kind": self.kind,
         }
         if self.trace_step is not None:
-            payload["trace_step"] = sanitize_tool_registry_diagnostics_artifact_payload(
+            payload["trace_step"] = _sanitize_tool_runtime_trace_artifact_payload(
                 self.trace_step
             )
         if self.trace_event is not None:
-            payload["trace_event"] = sanitize_tool_registry_diagnostics_artifact_payload(
+            payload["trace_event"] = _sanitize_tool_runtime_trace_artifact_payload(
                 self.trace_event
             )
         if self.persist_force:
             payload["persist_force"] = self.persist_force
         if self.kwargs is not None:
-            payload["kwargs"] = sanitize_tool_registry_diagnostics_artifact_payload(
+            payload["kwargs"] = _sanitize_tool_runtime_trace_artifact_payload(
                 self.kwargs
             )
         return payload
@@ -6896,18 +6932,18 @@ def build_configured_tool_registry_provider_runtime_service_action_model_from_di
 ) -> ConfiguredToolRegistryProviderRuntimeServiceActionModel:
     return ConfiguredToolRegistryProviderRuntimeServiceActionModel(
         kind=str(service_action.get("kind")),
-        trace_step=sanitize_tool_registry_diagnostics_artifact_payload(
+        trace_step=_sanitize_tool_runtime_trace_artifact_payload(
             service_action.get("trace_step")
         )
         if isinstance(service_action.get("trace_step"), dict)
         else None,
-        trace_event=sanitize_tool_registry_diagnostics_artifact_payload(
+        trace_event=_sanitize_tool_runtime_trace_artifact_payload(
             service_action.get("trace_event")
         )
         if isinstance(service_action.get("trace_event"), dict)
         else None,
         persist_force=bool(service_action.get("persist_force")),
-        kwargs=sanitize_tool_registry_diagnostics_artifact_payload(
+        kwargs=_sanitize_tool_runtime_trace_artifact_payload(
             service_action.get("kwargs")
         )
         if isinstance(service_action.get("kwargs"), dict)
@@ -6974,23 +7010,23 @@ def build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
                     summary_payload.get("entries", ())
                 ),
             ),
-            trace_step=sanitize_tool_registry_diagnostics_artifact_payload(
+            trace_step=_sanitize_tool_runtime_trace_artifact_payload(
                 diagnostics_runtime_payload.get("trace_step")
             )
             if isinstance(diagnostics_runtime_payload.get("trace_step"), dict)
             else None,
-            trace_event=sanitize_tool_registry_diagnostics_artifact_payload(
+            trace_event=_sanitize_tool_runtime_trace_artifact_payload(
                 diagnostics_runtime_payload.get("trace_event")
             )
             if isinstance(diagnostics_runtime_payload.get("trace_event"), dict)
             else None,
-            audit_detail=sanitize_tool_registry_diagnostics_artifact_payload(
+            audit_detail=_sanitize_tool_runtime_trace_artifact_payload(
                 diagnostics_runtime_payload.get("audit_detail")
             )
             if isinstance(diagnostics_runtime_payload.get("audit_detail"), dict)
             else None,
         ),
-        audit_event=sanitize_tool_registry_diagnostics_artifact_payload(
+        audit_event=_sanitize_tool_runtime_trace_artifact_payload(
             runtime_artifacts.get("audit_event")
         )
         if isinstance(runtime_artifacts.get("audit_event"), dict)
