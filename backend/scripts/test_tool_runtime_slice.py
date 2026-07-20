@@ -48672,6 +48672,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual([step["id"] for step in result["trace_steps"]], ["step-1"])
         self.assertEqual([event["step_id"] for event in result["trace_events"]], ["step-1"])
 
+    def test_build_tool_plan_item_stream_effects_redacts_http_json_trace_step_outputs(
+        self,
+    ) -> None:
+        raw_step = {
+            "id": "step-http-json-stream-output",
+            "seq": 3,
+            "type": "action",
+            "content": "Tool done: Provider Status",
+            "meta": {
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "status": "done",
+                    "execution_kind": "http_json",
+                    "effective_result_output_keys": ["status", "message"],
+                    "output": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "secret-token",
+                        "request_id": "Bearer secret-token",
+                    },
+                    "output_preview": {
+                        "status": "ready",
+                        "message": "preview token=hidden",
+                        "access_token": "secret-token",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            },
+        }
+        loop_execution_result = {
+            "trace_event": {
+                "task_id": "task-1",
+                "step_id": "step-http-json-stream-output",
+                "step": raw_step,
+            },
+            "success_effects": {
+                "trace_step": raw_step,
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-http-json-stream-output",
+                    "step": raw_step,
+                },
+                "observation": "Provider Status: ok",
+                "rag_followup": None,
+            },
+            "terminal_effects": None,
+            "should_return": False,
+        }
+
+        result = build_tool_plan_item_stream_effects(
+            loop_execution_result=loop_execution_result,
+        )
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
     def test_build_tool_plan_item_stream_effects_redacts_raw_diagnostics_payload(
         self,
     ) -> None:

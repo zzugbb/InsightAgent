@@ -10858,6 +10858,20 @@ def _sanitize_tool_trace_event_step(step: dict[str, object]) -> dict[str, object
     return sanitized_step
 
 
+def _sanitize_tool_trace_event_payload(event: object) -> object:
+    if not isinstance(event, dict):
+        return event
+    step = event.get("step")
+    if not isinstance(step, dict):
+        return event
+    sanitized_step = _sanitize_tool_trace_event_step(step)
+    if sanitized_step is step:
+        return event
+    sanitized_event = dict(event)
+    sanitized_event["step"] = sanitized_step
+    return sanitized_event
+
+
 def build_tool_terminal_failure_transition(
     *,
     task_id: str,
@@ -11656,12 +11670,19 @@ def build_tool_plan_item_stream_effects(
     terminal_effects = loop_execution_result["terminal_effects"]
 
     if success_effects is not None:
-        trace_steps = [success_effects["trace_step"]]
-        trace_events = [loop_execution_result["trace_event"]]
+        trace_step = success_effects["trace_step"]
+        trace_steps = [
+            _sanitize_tool_trace_event_step(trace_step)
+            if isinstance(trace_step, dict)
+            else trace_step
+        ]
+        trace_events = [
+            _sanitize_tool_trace_event_payload(loop_execution_result["trace_event"])
+        ]
         rag_followup = success_effects["rag_followup"]
         if rag_followup is not None:
             trace_steps.append(rag_followup["step"])
-            trace_events.append(rag_followup["trace"])
+            trace_events.append(_sanitize_tool_trace_event_payload(rag_followup["trace"]))
         return _sanitize_tool_plan_item_payload_dict(
             {
                 "trace_steps": trace_steps,
@@ -11675,13 +11696,23 @@ def build_tool_plan_item_stream_effects(
         )
 
     assert terminal_effects is not None
+    terminal_trace_step = terminal_effects["trace_step"]
+    terminal_trace = terminal_effects["trace"]
+    sanitized_terminal_effects = dict(terminal_effects)
+    if isinstance(terminal_trace_step, dict):
+        sanitized_terminal_effects["trace_step"] = _sanitize_tool_trace_event_step(
+            terminal_trace_step
+        )
+    sanitized_terminal_effects["trace"] = _sanitize_tool_trace_event_payload(
+        terminal_trace
+    )
     return _sanitize_tool_plan_item_payload_dict(
         {
-            "trace_steps": [terminal_effects["trace_step"]],
-            "trace_events": [terminal_effects["trace"]],
+            "trace_steps": [sanitized_terminal_effects["trace_step"]],
+            "trace_events": [sanitized_terminal_effects["trace"]],
             "observation": None,
             "tool_observations": [],
-            "terminal_effects": terminal_effects,
+            "terminal_effects": sanitized_terminal_effects,
             "seq_increment": 0,
             "should_return": bool(loop_execution_result["should_return"]),
         }
