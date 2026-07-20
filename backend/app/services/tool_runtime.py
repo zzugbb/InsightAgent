@@ -2611,7 +2611,8 @@ def _format_safe_http_json_url_query(raw_query: object) -> str:
             safe_params.append("[redacted]")
             continue
         safe_name = _redact_http_json_diagnostic_text(raw_name)
-        safe_value = _redact_http_json_diagnostic_text(raw_value)
+        safe_value = _redact_http_json_url_text(raw_value)
+        safe_value = _redact_http_json_diagnostic_text(safe_value)
         if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(safe_value):
             safe_value = "[redacted]"
         safe_params.append(f"{safe_name}={safe_value}")
@@ -2621,7 +2622,8 @@ def _format_safe_http_json_url_query(raw_query: object) -> str:
 def _format_safe_http_json_url_fragment(raw_fragment: object) -> str:
     if not isinstance(raw_fragment, str) or not raw_fragment:
         return ""
-    safe_fragment = _redact_http_json_diagnostic_text(raw_fragment)
+    safe_fragment = _redact_http_json_url_text(raw_fragment)
+    safe_fragment = _redact_http_json_diagnostic_text(safe_fragment)
     if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(safe_fragment):
         return "[redacted]"
     return safe_fragment
@@ -2632,6 +2634,13 @@ def _format_safe_http_json_url_text(raw_url: str) -> str:
     origin = _format_safe_tool_execution_http_url_origin(parsed_url)
     if origin is None:
         return "[redacted]"
+    if (
+        getattr(parsed_url, "username", None) is not None
+        or getattr(parsed_url, "password", None) is not None
+    ):
+        origin_prefix = f"{parsed_url.scheme}://"
+        if origin.startswith(origin_prefix):
+            origin = f"{origin_prefix}[redacted]@{origin[len(origin_prefix):]}"
     path = _format_safe_tool_execution_http_url_path(parsed_url) or ""
     safe_url = f"{origin}{path}"
     query = _format_safe_http_json_url_query(parsed_url.query)
