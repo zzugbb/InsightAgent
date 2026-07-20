@@ -19017,6 +19017,116 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("client_secret", serialized)
         self.assertNotIn("secret-token", serialized)
 
+    def test_build_session_export_payload_redacts_http_json_trace_preview_title_diagnostics(
+        self,
+    ) -> None:
+        session = {
+            "id": "session-export-route-http-json-title",
+            "title": "HTTP JSON Route Preview Title",
+            "created_at": "2026-07-20T09:00:00",
+            "updated_at": "2026-07-20T09:01:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_response_helper = getattr(
+            session_routes_module.chat_persistence_service,
+            "get_session_export_response_summary",
+            None,
+        )
+        try:
+            usage_summary = {
+                "tasks_total": 1,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_usage_summary = (
+                lambda *_args, **_kwargs: usage_summary
+            )
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: []
+            session_routes_module.chat_persistence_service.get_session_export_response_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "usage_summary": usage_summary,
+                    "tasks": [
+                        {
+                            "id": "task-session-export-route-http-json-title",
+                            "prompt": "check callback title",
+                            "status": "completed",
+                            "status_normalized": "done",
+                            "status_label": "Done",
+                            "status_rank": 40,
+                            "created_at": "2026-07-20T09:00:00",
+                            "updated_at": "2026-07-20T09:01:00",
+                            "usage": None,
+                            "trace_step_count": 1,
+                            "rag_hit_count": 0,
+                            "trace_preview": [
+                                {
+                                    "id": "preview-route-http-json-title",
+                                    "seq": 4,
+                                    "type": "action",
+                                    "title": (
+                                        "Provider token=hidden "
+                                        "https://provider.example/cb?"
+                                        "access_token=secret-token "
+                                        "[provider_status via http_json]"
+                                    ),
+                                    "content_excerpt": (
+                                        'Provider Status: {"message":"ok"}'
+                                    ),
+                                }
+                            ],
+                            "governance": None,
+                        }
+                    ],
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 1,
+                        "rag_hit_count": 0,
+                    },
+                    "governance": None,
+                    "messages": [],
+                }
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-session-export-route-http-json-title",
+            )
+            markdown = session_routes_module._build_session_export_markdown(payload)  # type: ignore[attr-defined]
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            if original_response_helper is None:
+                if hasattr(
+                    session_routes_module.chat_persistence_service,
+                    "get_session_export_response_summary",
+                ):
+                    delattr(
+                        session_routes_module.chat_persistence_service,
+                        "get_session_export_response_summary",
+                    )
+            else:
+                session_routes_module.chat_persistence_service.get_session_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        serialized = payload.model_dump_json()
+        combined = f"{serialized}\n{markdown}"
+        self.assertIn("[redacted]", combined)
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("access_token", combined)
+        self.assertNotIn("secret-token", combined)
+
     def test_stream_running_task_reconnect_reuses_shared_task_usage_helper_for_done_event(
         self,
     ) -> None:

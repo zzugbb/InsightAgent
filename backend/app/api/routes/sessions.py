@@ -109,6 +109,11 @@ def _coerce_trace_preview_for_route(value: object) -> object:
             continue
         title = str(preview.get("title", ""))
         excerpt = preview.get("content_excerpt")
+        if isinstance(preview.get("title"), str):
+            preview["title"] = _normalize_session_trace_preview_title(
+                title,
+                excerpt if isinstance(excerpt, str) else "",
+            )
         if isinstance(excerpt, str):
             preview["content_excerpt"] = _normalize_session_trace_preview_excerpt(
                 title,
@@ -517,6 +522,13 @@ def _redact_trace_preview_http_json_excerpt_fallback(title: str, text: str) -> s
     return safe_text if isinstance(safe_text, str) else text
 
 
+def _redact_trace_preview_http_json_title_label(title: str, label: str) -> str:
+    if not _trace_preview_title_implies_http_json_execution(title):
+        return label
+    safe_label = _redact_http_json_raw_fallback_value(label)
+    return safe_label if isinstance(safe_label, str) and safe_label else label
+
+
 def _resolve_trace_preview_projected_output(
     title: str,
     output: dict[str, object] | None,
@@ -584,7 +596,10 @@ def _build_trace_preview_inferred_tool_meta(
         inferred_tool_meta["execution_kind"] = "http_json"
     title_label = _extract_trace_preview_tool_label(title)
     if title_label:
-        inferred_tool_meta["label"] = title_label
+        inferred_tool_meta["label"] = _redact_trace_preview_http_json_title_label(
+            title,
+            title_label,
+        )
     if semantic_kind and not (
         _is_generic_trace_preview_semantic(semantic_kind)
         and semantic_family is None
@@ -609,8 +624,15 @@ def _normalize_session_trace_preview_title(
         inferred_tool_meta
     )
     title_label = _extract_trace_preview_tool_label(normalized_title)
+    title_label = _redact_trace_preview_http_json_title_label(
+        normalized_title,
+        title_label,
+    )
     if title_label and semantic_descriptor:
         return f"{title_label} [{semantic_descriptor}]"
+    if _trace_preview_title_implies_http_json_execution(normalized_title):
+        safe_title = _redact_http_json_raw_fallback_value(normalized_title)
+        return safe_title if isinstance(safe_title, str) and safe_title else normalized_title
     return normalized_title
 
 
