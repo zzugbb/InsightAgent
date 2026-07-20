@@ -43239,6 +43239,37 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", combined)
         self.assertNotIn("secret-token", combined)
 
+    def test_sse_error_payload_redacts_http_json_message_and_detail_diagnostics(
+        self,
+    ) -> None:
+        payload = chat_execution_module.sse_error_payload(
+            task_id="task-sse-redact",
+            message=(
+                "upstream failed response_path=$.data.access_token "
+                "Bearer secret-token"
+            ),
+            code="task_stream_failure",
+            fatal=True,
+            retry_count=0,
+            detail=(
+                "callback https://provider.example/cb?access_token=secret-token"
+                "#client_secret=hidden"
+            ),
+            status_code=502,
+        )
+
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertEqual(payload["task_id"], "task-sse-redact")
+        self.assertEqual(payload["code"], "task_stream_failure")
+        self.assertEqual(payload["status_code"], 502)
+
     def test_sanitize_tool_registry_artifact_payload_redacts_bare_bearer_text(
         self,
     ) -> None:

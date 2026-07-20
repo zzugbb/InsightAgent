@@ -31,6 +31,7 @@ from app.services.tool_runtime import (
     execute_tool_plan_item_service_actions,
     execute_tool_plan_item_service_execution,
     resolve_tool_registration,
+    sanitize_tool_registry_diagnostics_artifact_payload,
 )
 
 
@@ -65,9 +66,12 @@ def sse_error_payload(
     detail: str | None = None,
     status_code: int | None = None,
 ) -> dict[str, object]:
+    safe_message = sanitize_tool_registry_diagnostics_artifact_payload(message)
+    if not isinstance(safe_message, str):
+        safe_message = message
     payload: dict[str, object] = {
         "task_id": task_id,
-        "message": message,
+        "message": safe_message,
         "code": code,
         "fatal": fatal,
         "retryable": not fatal,
@@ -76,7 +80,8 @@ def sse_error_payload(
     if step_id:
         payload["step_id"] = step_id
     if detail:
-        payload["detail"] = detail
+        safe_detail = sanitize_tool_registry_diagnostics_artifact_payload(detail)
+        payload["detail"] = safe_detail if isinstance(safe_detail, str) else detail
     if isinstance(status_code, int):
         payload["status_code"] = status_code
     return payload
