@@ -7173,7 +7173,12 @@ def execute_configured_tool_registry_provider_runtime_service_actions_result_mod
             trace_step = service_action.trace_step
             if trace_step is None:
                 continue
-            trace_steps.append(trace_step)
+            sanitized_trace_step = _sanitize_tool_runtime_trace_artifact_payload(
+                trace_step
+            )
+            if not isinstance(sanitized_trace_step, dict):
+                continue
+            trace_steps.append(sanitized_trace_step)
             persist_trace_fn(force=bool(service_action.persist_force))
             trace_write_count += 1
             continue
