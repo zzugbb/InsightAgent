@@ -10398,13 +10398,25 @@ def _coerce_tool_output_mapping(value: object) -> dict[str, object] | None:
 def build_tool_step_output(action_step: dict[str, object]) -> dict[str, object] | None:
     tool_obj = get_action_step_tool_meta(action_step)
     output = tool_obj.get("output") if isinstance(tool_obj, dict) else None
+    if _step_tool_meta_uses_http_json_execution(tool_obj):
+        safe_output = _resolve_step_tool_safe_output(tool_obj)
+        if isinstance(safe_output, dict):
+            return safe_output
+        if isinstance(output, dict):
+            return _normalize_http_json_safe_output_shape(output)
     if isinstance(output, dict):
         return output
     safe_output = _resolve_step_tool_safe_output(tool_obj)
     if isinstance(safe_output, dict):
         return safe_output
     preview_output = tool_obj.get("output_preview") if isinstance(tool_obj, dict) else None
-    return _coerce_tool_output_preview_mapping(preview_output)
+    preview_mapping = _coerce_tool_output_preview_mapping(preview_output)
+    if (
+        isinstance(preview_mapping, dict)
+        and _step_tool_meta_uses_http_json_execution(tool_obj)
+    ):
+        return _normalize_http_json_safe_output_shape(preview_mapping)
+    return preview_mapping
 
 
 def get_action_step_tool_meta(action_step: dict[str, object]) -> dict[str, object] | None:

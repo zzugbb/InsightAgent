@@ -44028,6 +44028,71 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(build_tool_step_output(step), {"result": 7.0})
 
+    def test_build_tool_step_output_redacts_http_json_raw_output_dict(self) -> None:
+        step = {
+            "meta": {
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "execution_kind": "http_json",
+                    "effective_result_output_keys": ["status", "message"],
+                    "output": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "secret-token",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            }
+        }
+
+        output = build_tool_step_output(step)
+
+        self.assertEqual(
+            output,
+            {
+                "status": "ready",
+                "message": "gateway token=[redacted]",
+            },
+        )
+        serialized = json.dumps(output, ensure_ascii=False)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+
+    def test_build_tool_step_output_redacts_http_json_raw_preview_dict(self) -> None:
+        step = {
+            "meta": {
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "execution_kind": "http_json",
+                    "output_preview": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "secret-token",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            }
+        }
+
+        output = build_tool_step_output(step)
+
+        self.assertEqual(
+            output,
+            {
+                "status": "ready",
+                "message": "gateway token=[redacted]",
+                "access_token": "[redacted]",
+            },
+        )
+        serialized = json.dumps(output, ensure_ascii=False)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+
     def test_build_tool_step_success_update_keeps_raw_output_and_stores_preview(
         self,
     ) -> None:
