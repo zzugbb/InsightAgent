@@ -391,6 +391,14 @@ _TOOL_REGISTRY_DIAGNOSTIC_MAPPING_PATH_RE = re.compile(
     r"(?P<separator>\s*[:=]\s*)"
     r"(?P<path>\$(?:\.[A-Za-z0-9_\-\[\]]+)+)"
 )
+_TOOL_REGISTRY_DIAGNOSTIC_BRACKET_MAPPING_PATH_RE = re.compile(
+    r"\b(?P<context>response_path|result_fields(?:\.[A-Za-z0-9_\-\[\]]+)*)"
+    r"(?P<separator>\s*[:=]\s*)"
+    r"(?P<path>\$(?:\[(?:\"[^\"]*\"|'[^']*'|\d+)\])+)"
+)
+_TOOL_REGISTRY_DIAGNOSTIC_JSONPATH_BRACKET_SEGMENT_RE = re.compile(
+    r"\[(?P<quote>['\"])(?P<field>[^'\"]*)(?P=quote)\]"
+)
 _HTTP_JSON_URL_CONTROL_OR_SPACE_RE = re.compile(r"[\x00-\x20\x7f]")
 _HTTP_JSON_QUERY_PARAM_NAME_UNSAFE_RE = re.compile(r"[\x00-\x20\x7f=&?#]")
 _HTTP_JSON_HEADER_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
@@ -2531,6 +2539,7 @@ def _redact_http_json_sensitive_payload_text(raw_value: str) -> str:
 
     redacted = _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE.sub(redact_path, redacted)
     redacted = _redact_tool_registry_diagnostic_mapping_paths(redacted)
+    redacted = _redact_tool_registry_diagnostic_bracket_mapping_paths(redacted)
     return _HTTP_JSON_BARE_BEARER_TOKEN_RE.sub("[redacted]", redacted)
 
 
@@ -2600,6 +2609,43 @@ def _redact_tool_registry_diagnostic_mapping_paths(raw_value: str) -> str:
     )
 
 
+def _format_safe_tool_execution_bracket_jsonpath(raw_value: object) -> str:
+    raw_path = str(raw_value).strip()
+    if not raw_path:
+        return ""
+
+    def redact_bracket_segment(match: re.Match[str]) -> str:
+        field_name = match.group("field")
+        if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(field_name):
+            quote = match.group("quote")
+            return f"[{quote}[redacted]{quote}]"
+        return match.group(0)
+
+    return _TOOL_REGISTRY_DIAGNOSTIC_JSONPATH_BRACKET_SEGMENT_RE.sub(
+        redact_bracket_segment,
+        raw_path,
+    )
+
+
+def _redact_tool_registry_diagnostic_bracket_mapping_paths(raw_value: str) -> str:
+    def redact_mapping_path(match: re.Match[str]) -> str:
+        context = match.group("context")
+        separator = match.group("separator")
+        path = match.group("path")
+        safe_context = _format_safe_tool_execution_diagnostic_path(context)
+        safe_path = _format_safe_tool_execution_bracket_jsonpath(path)
+        if "[redacted]" not in safe_context and "[redacted]" not in safe_path:
+            return match.group(0)
+        if "[redacted]" in safe_context:
+            safe_context = "[redacted]"
+        return f"{safe_context}{separator}{safe_path}"
+
+    return _TOOL_REGISTRY_DIAGNOSTIC_BRACKET_MAPPING_PATH_RE.sub(
+        redact_mapping_path,
+        raw_value,
+    )
+
+
 def _redact_tool_registry_diagnostic_value(raw_value: object) -> str:
     text = _redact_http_json_diagnostic_text(str(raw_value).strip())
     if not text:
@@ -2613,6 +2659,7 @@ def _redact_tool_registry_diagnostic_value(raw_value: object) -> str:
 
     text = _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE.sub(redact_path, text)
     text = _redact_tool_registry_diagnostic_mapping_paths(text)
+    text = _redact_tool_registry_diagnostic_bracket_mapping_paths(text)
     return _HTTP_JSON_BARE_BEARER_TOKEN_RE.sub("[redacted]", text)
 
 
