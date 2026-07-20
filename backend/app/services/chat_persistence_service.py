@@ -2766,6 +2766,8 @@ def _trace_preview_title_implies_provider_or_hosted_tool(title: object) -> bool:
     descriptor = descriptor.strip(" ]")
     if label.startswith(("provider ", "hosted ")):
         return True
+    if "http json" in descriptor:
+        return True
     return "provider " in descriptor or "hosted " in descriptor
 
 

@@ -18764,6 +18764,79 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(len(payload.tasks[0].trace_preview), 1)
         self.assertEqual(payload.tasks[0].trace_preview[0].id, "preview-1")
 
+    def test_get_session_export_response_summary_redacts_http_json_trace_preview_url_without_provider_title(
+        self,
+    ) -> None:
+        original_payload_helper = getattr(
+            chat_persistence_module,
+            "get_session_export_payload_summary",
+            None,
+        )
+        try:
+            chat_persistence_module.get_session_export_payload_summary = (  # type: ignore[assignment]
+                lambda **_kwargs: {
+                    "usage_summary": {},
+                    "tasks": [
+                        {
+                            "task": {
+                                "id": "task-session-export-http-json-url",
+                                "prompt": "check callback",
+                                "status": "completed",
+                                "status_normalized": "done",
+                                "status_label": "Done",
+                                "status_rank": 40,
+                                "created_at": "2026-07-20T09:00:00",
+                                "updated_at": "2026-07-20T09:01:00",
+                            },
+                            "usage": None,
+                            "trace": {
+                                "step_count": 1,
+                                "rag_hit_count": 0,
+                                "preview": [
+                                    {
+                                        "id": "preview-http-json-calc-url",
+                                        "seq": 4,
+                                        "type": "action",
+                                        "title": "Calculator [calculator via http_json]",
+                                        "content_excerpt": (
+                                            "Calculator: callback "
+                                            "https://provider.example/cb?"
+                                            "access_token=secret-token&state=ok"
+                                            "#client_secret=hidden"
+                                        ),
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 1,
+                        "rag_hit_count": 0,
+                    },
+                    "governance": None,
+                    "messages": [],
+                }
+            )
+            summary = chat_persistence_module.get_session_export_response_summary(
+                usage_summary={},
+                task_rows=[],
+                message_rows=[],
+            )
+        finally:
+            if original_payload_helper is None:
+                delattr(chat_persistence_module, "get_session_export_payload_summary")
+            else:
+                chat_persistence_module.get_session_export_payload_summary = original_payload_helper  # type: ignore[assignment]
+
+        serialized = json.dumps(summary, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("callback", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_stream_running_task_reconnect_reuses_shared_task_usage_helper_for_done_event(
         self,
     ) -> None:
