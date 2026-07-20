@@ -9950,6 +9950,10 @@ def _sanitize_tool_plan_loop_postprocess_payload(
     sanitized = dict(postprocess)
     if "trace" in sanitized:
         sanitized["trace"] = _sanitize_tool_trace_event_payload(sanitized["trace"])
+    if "rag_followup" in sanitized:
+        sanitized["rag_followup"] = _sanitize_tool_plan_rag_followup_payload(
+            sanitized["rag_followup"]
+        )
     return sanitized
 
 
