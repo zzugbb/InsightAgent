@@ -47989,6 +47989,49 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("unsupported tool execution kind [redacted]", serialized)
         self.assertIn("http_json execution [redacted] must be safe", serialized)
 
+    def test_build_tool_plan_item_result_redacts_http_json_success_bundle_trace_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-plan-item-result-http-json-output"
+        )
+        rag_followup_step = self._make_sensitive_http_json_action_step(
+            step_id="rag-plan-item-result-http-json-output",
+            content="Retrieved snippets",
+        )
+
+        result = build_tool_plan_item_result(
+            outcome="success",
+            action_step=raw_step,
+            last_error=None,
+            success_bundle={
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-plan-item-result-http-json-output",
+                    "step": raw_step,
+                },
+                "observation": "Provider Status: ok",
+                "output": {"status": "ready"},
+                "rag_followup": {
+                    "step": rag_followup_step,
+                    "trace": {
+                        "task_id": "task-1",
+                        "step_id": "rag-plan-item-result-http-json-output",
+                        "step": rag_followup_step,
+                    },
+                },
+            },
+            terminal_failure=None,
+        )
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
     def test_build_tool_plan_item_execution_result_keeps_success_shape(self) -> None:
         action_step = {
             "id": "step-1",

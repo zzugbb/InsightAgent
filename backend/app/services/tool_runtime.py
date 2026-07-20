@@ -11058,12 +11058,49 @@ def _sanitize_tool_plan_item_result_payload(
     payload: dict[str, object],
 ) -> dict[str, object]:
     sanitized = dict(payload)
-    for key in ("action_step", "last_error", "terminal_failure"):
+    for key in ("action_step", "terminal_failure"):
         if key in sanitized:
-            sanitized[key] = sanitize_tool_registry_diagnostics_artifact_payload(
+            sanitized[key] = _sanitize_tool_runtime_trace_artifact_payload(
                 sanitized[key]
             )
+    if "success_bundle" in sanitized:
+        sanitized["success_bundle"] = _sanitize_tool_plan_success_bundle_payload(
+            sanitized["success_bundle"]
+        )
+    if "last_error" in sanitized:
+        sanitized["last_error"] = sanitize_tool_registry_diagnostics_artifact_payload(
+            sanitized["last_error"]
+        )
     return sanitized
+
+
+def _sanitize_tool_plan_success_bundle_payload(
+    success_bundle: object,
+) -> object:
+    if not isinstance(success_bundle, dict):
+        return success_bundle
+    bundle = dict(success_bundle)
+    if "trace" in bundle:
+        bundle["trace"] = _sanitize_tool_trace_event_payload(bundle["trace"])
+    if "rag_followup" in bundle:
+        bundle["rag_followup"] = _sanitize_tool_plan_success_bundle_rag_followup_payload(
+            bundle["rag_followup"]
+        )
+    return bundle
+
+
+def _sanitize_tool_plan_success_bundle_rag_followup_payload(
+    rag_followup: object,
+) -> object:
+    if not isinstance(rag_followup, dict):
+        return rag_followup
+    followup = dict(rag_followup)
+    step = followup.get("step")
+    if isinstance(step, dict):
+        followup["step"] = _sanitize_tool_trace_event_step(step)
+    if "trace" in followup:
+        followup["trace"] = _sanitize_tool_trace_event_payload(followup["trace"])
+    return followup
 
 
 def build_tool_rag_step(
