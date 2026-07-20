@@ -9964,7 +9964,26 @@ def _sanitize_tool_plan_loop_effects_payload(
         sanitized["trace_step"] = _sanitize_tool_trace_event_step(trace_step)
     if "trace" in sanitized:
         sanitized["trace"] = _sanitize_tool_trace_event_payload(sanitized["trace"])
+    if "rag_followup" in sanitized:
+        sanitized["rag_followup"] = _sanitize_tool_plan_rag_followup_payload(
+            sanitized["rag_followup"]
+        )
     return sanitized
+
+
+def _sanitize_tool_plan_rag_followup_payload(
+    rag_followup: object,
+) -> object:
+    sanitized = sanitize_tool_registry_diagnostics_artifact_payload(rag_followup)
+    if not isinstance(sanitized, dict):
+        return sanitized
+    followup = dict(sanitized)
+    step = followup.get("step")
+    if isinstance(step, dict):
+        followup["step"] = _sanitize_tool_trace_event_step(step)
+    if "trace" in followup:
+        followup["trace"] = _sanitize_tool_trace_event_payload(followup["trace"])
+    return followup
 
 
 def build_tool_attempt_loop_terminal_result(

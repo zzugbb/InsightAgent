@@ -43391,6 +43391,57 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("token=hidden", serialized)
         self.assertNotIn('"request_id"', serialized)
 
+    def test_build_tool_attempt_loop_result_redacts_http_json_rag_followup_trace_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-attempt-loop-http-json-rag-followup-output"
+        )
+        rag_followup_step = self._make_sensitive_http_json_action_step(
+            step_id="rag-attempt-loop-http-json-output",
+            content="Retrieved snippets",
+        )
+        attempt_execution = {
+            "tool_end_event": {"status": "done"},
+            "error_event": None,
+            "retryable": False,
+            "next_action_step": raw_step,
+            "last_error": None,
+            "plan_item_result": {"outcome": "success"},
+            "postprocess": None,
+            "success_effects": {
+                "trace_step": raw_step,
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-attempt-loop-http-json-rag-followup-output",
+                    "step": raw_step,
+                },
+                "observation": "Provider Status: ok",
+                "output": {"status": "ready"},
+                "rag_followup": {
+                    "step": rag_followup_step,
+                    "trace": {
+                        "task_id": "task-1",
+                        "step_id": "rag-attempt-loop-http-json-output",
+                        "step": rag_followup_step,
+                    },
+                },
+            },
+            "terminal_effects": None,
+        }
+
+        result = build_tool_attempt_loop_result(
+            attempt_execution=attempt_execution,
+        )
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
     def test_build_tool_attempt_loop_terminal_result_keeps_success_shape(self) -> None:
         iteration_ctx = build_tool_iteration_context(
             step_id="step-1",
