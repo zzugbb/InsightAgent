@@ -472,6 +472,8 @@ def _trace_preview_title_implies_http_json_execution(title: str) -> bool:
         for value in (semantic_kind, semantic_family)
         if isinstance(value, str) and value.strip()
     }
+    if any("http json" in value.replace("_", " ") for value in semantic_hints):
+        return True
     if any(value.startswith("provider_") for value in semantic_hints):
         return True
     if semantic_hints.intersection(
