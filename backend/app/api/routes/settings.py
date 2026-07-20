@@ -22,6 +22,7 @@ from app.services.tool_runtime import (
     get_tool_registry_profile_name_from_settings,
     get_tool_registry_provider_source_name_from_settings,
     get_tool_registry_provider_source_specs_from_settings,
+    sanitize_tool_registry_diagnostics_artifact_payload,
 )
 
 
@@ -427,6 +428,17 @@ def _build_preflight_response(
     )
 
 
+def _sanitize_settings_validate_response_error(
+    result: SettingsValidateResponse,
+) -> SettingsValidateResponse:
+    if not isinstance(result.error, str):
+        return result
+    safe_error = sanitize_tool_registry_diagnostics_artifact_payload(result.error)
+    if not isinstance(safe_error, str) or safe_error == result.error:
+        return result
+    return result.model_copy(update={"error": safe_error})
+
+
 def _merge_runtime_settings_for_summary(
     *,
     settings: StoredSettings,
@@ -673,6 +685,7 @@ def validate_settings(
     )
 
     def _audit_validate(result: SettingsValidateResponse) -> SettingsValidateResponse:
+        result = _sanitize_settings_validate_response_error(result)
         safe_record_audit_event(
             user_id=user_id,
             event_type="settings_validate",

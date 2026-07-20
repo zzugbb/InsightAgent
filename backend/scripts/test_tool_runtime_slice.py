@@ -23,6 +23,7 @@ import app.services.chat_persistence_service as chat_persistence_module  # type:
 import app.services.chroma_memory_service as chroma_memory_module  # type: ignore[import-not-found]
 import app.services.chroma_rag_service as chroma_rag_module  # type: ignore[import-not-found]
 import app.services.settings_service as settings_service_module  # type: ignore[import-not-found]
+import app.services.audit_service as audit_service_module  # type: ignore[import-not-found]
 import app.api.routes.auth as auth_routes_module  # type: ignore[import-not-found]
 import app.api.routes.audit as audit_routes_module  # type: ignore[import-not-found]
 import app.api.routes.rag as rag_routes_module  # type: ignore[import-not-found]
@@ -4522,6 +4523,90 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(response.mode, "remote")
         self.assertEqual(response.provider, "openai")
         self.assertEqual(response.model, "gpt-4.1-mini")
+
+    def test_validate_settings_redacts_remote_preflight_network_error_diagnostics(
+        self,
+    ) -> None:
+        payload = settings_routes_module.SettingsUpdateRequest(
+            mode="remote",
+            provider="openai",
+            model="gpt-4.1-mini",
+            base_url="https://runtime.example/v1",
+            api_key="secret",
+        )
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_settings = settings_routes_module.get_settings
+        original_urlopen = settings_routes_module.urlopen
+        original_safe_record_audit_event = settings_routes_module.safe_record_audit_event
+        original_validate_tool_registry_selection = (
+            settings_routes_module._validate_tool_registry_selection
+        )
+        original_apply_tool_registry_preview = (
+            settings_routes_module._apply_tool_registry_preview_to_validate_response
+        )
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="remote",
+                provider="openai",
+                model="gpt-4.1-mini",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module._validate_tool_registry_selection = (  # type: ignore[assignment]
+                lambda **_kwargs: None
+            )
+            settings_routes_module._apply_tool_registry_preview_to_validate_response = (  # type: ignore[assignment]
+                lambda *, result, effective_settings: result
+            )
+
+            def fake_urlopen(request, timeout=0):
+                method = getattr(request, "get_method", lambda: "")()
+                if method == "HEAD":
+                    raise settings_routes_module.URLError(
+                        "callback https://provider.example/cb?"
+                        "access_token=secret-token#client_secret=hidden"
+                    )
+                raise RuntimeError(
+                    "GET failed response_path=$.data.access_token Bearer secret-token"
+                )
+
+            settings_routes_module.urlopen = fake_urlopen
+            settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
+
+            response = settings_routes_module.validate_settings(
+                payload,
+                current_user={"id": "user-validate-network-redaction"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_settings = original_get_settings
+            settings_routes_module.urlopen = original_urlopen
+            settings_routes_module.safe_record_audit_event = (
+                original_safe_record_audit_event
+            )
+            settings_routes_module._validate_tool_registry_selection = (
+                original_validate_tool_registry_selection
+            )
+            settings_routes_module._apply_tool_registry_preview_to_validate_response = (
+                original_apply_tool_registry_preview
+            )
+
+        self.assertFalse(response.ok)
+        self.assertEqual(response.error_code, "remote_preflight_network_error")
+        self.assertIsNotNone(response.error)
+        assert response.error is not None
+        self.assertIn("[redacted]", response.error)
+        self.assertIn("callback", response.error)
+        self.assertNotIn("access_token", response.error)
+        self.assertNotIn("client_secret", response.error)
+        self.assertNotIn("secret-token", response.error)
+        self.assertNotIn("Bearer", response.error)
 
     def test_tool_registry_profile_option_details_reuse_preview_labels(
         self,
@@ -12201,6 +12286,38 @@ class ToolRuntimeSliceTests(unittest.TestCase):
     ) -> None:
         self.assertFalse(hasattr(task_routes_module, "_build_task_response"))
 
+    def test_task_response_route_coercion_redacts_http_json_trace_json(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="task-response-route-http-json-trace-json"
+        )
+
+        payload = task_routes_module._coerce_task_response_summary(  # type: ignore[attr-defined]
+            {
+                "id": "task-response-route-trace-json-safe",
+                "session_id": "session-response-route-trace-json-safe",
+                "prompt": "response route trace json safe",
+                "status": "completed",
+                "trace_json": json.dumps([raw_step], ensure_ascii=False),
+                "usage_json": None,
+                "created_at": "2026-07-20T10:00:00",
+                "updated_at": "2026-07-20T10:01:00",
+            }
+        )
+
+        serialized = str(payload["trace_json"])
+        parsed = json.loads(serialized)
+
+        self.assertIsInstance(payload["trace_json"], str)
+        self.assertIn("gateway token=[redacted]", serialized)
+        self.assertIn("preview token=[redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+        self.assertEqual(parsed[0]["id"], "task-response-route-http-json-trace-json")
+
     def test_task_route_module_does_not_expose_dead_status_meta_helper(self) -> None:
         self.assertFalse(hasattr(task_routes_module, "_with_status_meta"))
 
@@ -16573,6 +16690,64 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(captured[0]["status_rank"], 7)
         self.assertEqual(captured[0]["steps"][0].id, "trace-outward-step")
 
+    def test_get_task_trace_detail_redacts_http_json_steps_from_response_summary(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="task-trace-route-http-json-step"
+        )
+        original_get_task = task_routes_module.get_task
+        original_trace_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_trace_response_summary_from_task",
+            None,
+        )
+        try:
+            task_routes_module.get_task = lambda _task_id, _user_id: {
+                "id": "task-trace-route-http-json",
+                "session_id": "session-trace-route-http-json",
+                "status": "completed",
+                "trace_json": "guarded-trace-json",
+            }
+            task_routes_module.chat_persistence_service.get_task_trace_response_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [raw_step],
+                    "status": "completed",
+                    "status_normalized": "completed",
+                    "status_label": "Completed",
+                    "status_rank": 3,
+                }
+            )
+            payload = task_routes_module.get_task_trace_detail(
+                "task-trace-route-http-json",
+                current_user={"id": "user-trace-route-http-json"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            if original_trace_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_trace_response_summary_from_task",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_trace_response_summary_from_task",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_trace_response_summary_from_task = original_trace_response_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(
+            [step.model_dump(exclude_none=True) for step in payload.steps],
+            ensure_ascii=False,
+        )
+
+        self.assertIn("gateway token=[redacted]", serialized)
+        self.assertIn("preview token=[redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
     def test_get_task_trace_delta_detail_reuses_shared_delta_snapshot_helper(
         self,
     ) -> None:
@@ -16730,6 +16905,66 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertFalse(captured[0]["dropped"])
         self.assertEqual(captured[0]["steps"][0].id, "delta::2::40")
         self.assertIsInstance(captured[0]["server_time"], str)
+
+    def test_get_task_trace_delta_detail_redacts_http_json_steps_from_response_summary(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="task-trace-delta-route-http-json-step"
+        )
+        original_get_task = task_routes_module.get_task
+        original_delta_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_trace_delta_response_summary_from_task",
+            None,
+        )
+        try:
+            task_routes_module.get_task = lambda _task_id, _user_id: {
+                "id": "task-trace-delta-route-http-json",
+                "session_id": "session-trace-delta-route-http-json",
+                "status": "completed",
+                "trace_json": "guarded-trace-json",
+            }
+            task_routes_module.chat_persistence_service.get_task_trace_delta_response_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task, **_kwargs: {
+                    "steps": [raw_step],
+                    "next_cursor": 3,
+                    "has_more": False,
+                    "lag_seq": 0,
+                    "dropped": False,
+                }
+            )
+            payload = task_routes_module.get_task_trace_delta_detail(
+                "task-trace-delta-route-http-json",
+                after_seq=0,
+                limit=40,
+                current_user={"id": "user-trace-delta-route-http-json"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            if original_delta_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_trace_delta_response_summary_from_task",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_trace_delta_response_summary_from_task",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_trace_delta_response_summary_from_task = original_delta_response_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(
+            [step.model_dump(exclude_none=True) for step in payload.steps],
+            ensure_ascii=False,
+        )
+
+        self.assertIn("gateway token=[redacted]", serialized)
+        self.assertIn("preview token=[redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
 
     def test_get_tasks_route_trusts_service_governance_for_items(
         self,
@@ -19334,6 +19569,99 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("token=hidden", combined)
         self.assertNotIn("access_token", combined)
         self.assertNotIn("secret-token", combined)
+
+    def test_build_session_export_payload_redacts_http_json_message_content(
+        self,
+    ) -> None:
+        session = {
+            "id": "session-export-route-http-json-message",
+            "title": "HTTP JSON Route Message",
+            "created_at": "2026-07-20T10:00:00",
+            "updated_at": "2026-07-20T10:01:00",
+        }
+        original_get_session_usage_summary = session_routes_module.get_session_usage_summary
+        original_get_session_messages = session_routes_module.get_session_messages
+        original_get_session_tasks = session_routes_module.get_session_tasks
+        original_response_helper = getattr(
+            session_routes_module.chat_persistence_service,
+            "get_session_export_response_summary",
+            None,
+        )
+        try:
+            usage_summary = {
+                "tasks_total": 0,
+                "tasks_with_usage": 0,
+                "source_tasks_provider": 0,
+                "source_tasks_estimated": 0,
+                "source_tasks_mixed": 0,
+                "source_tasks_legacy": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "cost_estimate": 0.0,
+                "avg_total_tokens": None,
+                "avg_cost_estimate": None,
+            }
+            session_routes_module.get_session_usage_summary = (
+                lambda *_args, **_kwargs: usage_summary
+            )
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: []
+            session_routes_module.get_session_tasks = lambda *_args, **_kwargs: []
+            session_routes_module.chat_persistence_service.get_session_export_response_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "usage_summary": usage_summary,
+                    "tasks": [],
+                    "stats": {
+                        "task_count": 0,
+                        "message_count": 1,
+                        "trace_step_count": 0,
+                        "rag_hit_count": 0,
+                    },
+                    "governance": None,
+                    "messages": [
+                        {
+                            "id": "message-session-export-http-json",
+                            "task_id": None,
+                            "role": "assistant",
+                            "content": (
+                                "Provider Status [provider_status via http_json] "
+                                "callback https://provider.example/cb?"
+                                "access_token=secret-token#client_secret=hidden "
+                                "Bearer secret-token"
+                            ),
+                            "created_at": "2026-07-20T10:01:00",
+                        }
+                    ],
+                }
+            )
+            payload = session_routes_module._build_session_export_payload(  # type: ignore[attr-defined]
+                session,
+                "user-session-export-route-http-json-message",
+            )
+            markdown = session_routes_module._build_session_export_markdown(payload)  # type: ignore[attr-defined]
+        finally:
+            session_routes_module.get_session_usage_summary = original_get_session_usage_summary
+            session_routes_module.get_session_messages = original_get_session_messages
+            session_routes_module.get_session_tasks = original_get_session_tasks
+            if original_response_helper is None:
+                if hasattr(
+                    session_routes_module.chat_persistence_service,
+                    "get_session_export_response_summary",
+                ):
+                    delattr(
+                        session_routes_module.chat_persistence_service,
+                        "get_session_export_response_summary",
+                    )
+            else:
+                session_routes_module.chat_persistence_service.get_session_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        combined = f"{payload.model_dump_json()}\n{markdown}"
+        self.assertIn("[redacted]", combined)
+        self.assertIn("callback", combined)
+        self.assertNotIn("access_token", combined)
+        self.assertNotIn("client_secret", combined)
+        self.assertNotIn("secret-token", combined)
+        self.assertNotIn("Bearer", combined)
 
     def test_stream_running_task_reconnect_reuses_shared_task_usage_helper_for_done_event(
         self,
@@ -31168,6 +31496,91 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.trace.step_count, 2)
         self.assertEqual(payload.trace.rag_hit_count, 1)
         self.assertEqual(payload.messages[0].id, "message-1")
+
+    def test_build_task_export_payload_redacts_http_json_message_content(
+        self,
+    ) -> None:
+        task = {
+            "id": "task-export-route-http-json-message",
+            "session_id": "session-export-route-http-json-message",
+            "prompt": "task export http json message",
+            "status": "completed",
+            "created_at": "2026-07-20T11:00:00",
+            "updated_at": "2026-07-20T11:01:00",
+            "trace_json": None,
+            "usage_json": None,
+        }
+        original_get_task_messages = task_routes_module.get_task_messages
+        original_response_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_export_response_summary",
+            None,
+        )
+        try:
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []
+            task_routes_module.chat_persistence_service.get_task_export_response_summary = (  # type: ignore[attr-defined]
+                lambda _task, _messages: {
+                    "task": {
+                        "id": "task-export-route-http-json-message",
+                        "session_id": "session-export-route-http-json-message",
+                        "prompt": "task export http json message",
+                        "status": "completed",
+                        "status_normalized": "completed",
+                        "status_label": "Completed",
+                        "status_rank": 3,
+                        "created_at": "2026-07-20T11:00:00",
+                        "updated_at": "2026-07-20T11:01:00",
+                    },
+                    "usage": None,
+                    "messages": [
+                        {
+                            "id": "message-task-export-http-json",
+                            "role": "assistant",
+                            "content": (
+                                "Provider Status [provider_status via http_json] "
+                                "callback https://provider.example/cb?"
+                                "access_token=secret-token#client_secret=hidden "
+                                "Bearer secret-token"
+                            ),
+                            "created_at": "2026-07-20T11:01:00",
+                        }
+                    ],
+                    "trace": {
+                        "governance": None,
+                        "step_count": 0,
+                        "rag_hit_count": 0,
+                        "rag_knowledge_base_ids": [],
+                        "rag_chunks": [],
+                        "steps": [],
+                    },
+                }
+            )
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                task,
+                "user-task-export-route-http-json-message",
+            )
+            markdown = task_routes_module._build_task_export_markdown(payload)  # type: ignore[attr-defined]
+        finally:
+            task_routes_module.get_task_messages = original_get_task_messages
+            if original_response_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_export_response_summary",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_export_response_summary",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_export_response_summary = original_response_helper  # type: ignore[attr-defined]
+
+        combined = f"{payload.model_dump_json()}\n{markdown}"
+        self.assertIn("[redacted]", combined)
+        self.assertIn("callback", combined)
+        self.assertNotIn("access_token", combined)
+        self.assertNotIn("client_secret", combined)
+        self.assertNotIn("secret-token", combined)
+        self.assertNotIn("Bearer", combined)
 
     def test_build_configured_tool_registry_provider_runtime_service_actions_uses_model_helper(
         self,
@@ -70248,6 +70661,125 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.items[0].task_id, "task-audit-1")
         self.assertEqual(payload.total, 2)
         self.assertFalse(payload.has_more)
+
+    def test_record_audit_event_redacts_http_json_event_detail_before_insert(self) -> None:
+        original_get_db_connection = audit_service_module.get_db_connection
+        execute_calls: list[tuple[str, tuple[object, ...]]] = []
+
+        class FakeConnection:
+            def execute(self, sql: str, params: tuple[object, ...]):
+                execute_calls.append((sql, params))
+
+            def commit(self) -> None:
+                return None
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        raw_detail: dict[str, object] = {
+            "session_id": "session-audit-insert",
+            "task_id": "task-audit-insert",
+            "diagnostic": (
+                "GET failed response_path=$.data.access_token "
+                "callback https://provider.example/cb?access_token=secret-token"
+                "#client_secret=hidden Bearer secret-token"
+            ),
+            "raw_body": {
+                "access_token": "secret-token",
+                "request_id": "Bearer secret-token",
+            },
+        }
+
+        try:
+            audit_service_module.get_db_connection = lambda: FakeContextManager()  # type: ignore[assignment]
+            audit_service_module.record_audit_event(
+                user_id="user-audit-insert",
+                event_type="task_failed",
+                detail=raw_detail,
+            )
+        finally:
+            audit_service_module.get_db_connection = original_get_db_connection  # type: ignore[assignment]
+
+        self.assertEqual(len(execute_calls), 1)
+        detail_json = execute_calls[0][1][3]
+        self.assertIsInstance(detail_json, str)
+        inserted_detail = json.loads(str(detail_json))
+        self.assertEqual(inserted_detail["session_id"], "session-audit-insert")
+        self.assertEqual(inserted_detail["task_id"], "task-audit-insert")
+        self.assertIn("response_path=$.data.[redacted]", str(detail_json))
+        self.assertNotIn("response_path=$.data.access_token", str(detail_json))
+        self.assertNotIn("access_token", str(detail_json))
+        self.assertNotIn("client_secret", str(detail_json))
+        self.assertNotIn("Bearer", str(detail_json))
+        self.assertNotIn("secret-token", str(detail_json))
+
+    def test_get_audit_logs_redacts_http_json_event_detail_diagnostics(self) -> None:
+        original_list_audit_logs = audit_routes_module.list_audit_logs
+        original_count_audit_logs = audit_routes_module.count_audit_logs
+        raw_detail = {
+            "session_id": "session-audit-redact",
+            "task_id": "task-audit-redact",
+            "provider": "http_json",
+            "diagnostic": (
+                "GET failed response_path=$.data.access_token "
+                "callback https://provider.example/cb?access_token=secret-token"
+                "#client_secret=hidden Bearer secret-token"
+            ),
+            "nested": {
+                "message": (
+                    "upstream query_params.access_token "
+                    "json_body.client_secret Bearer secret-token"
+                ),
+                "raw_body": {
+                    "access_token": "secret-token",
+                    "request_id": "Bearer secret-token",
+                },
+            },
+        }
+
+        try:
+            audit_routes_module.list_audit_logs = lambda **_kwargs: [  # type: ignore[assignment]
+                {
+                    "id": "audit-redact-1",
+                    "event_type": "task_failed",
+                    "event_detail_json": json.dumps(raw_detail),
+                    "created_at": "2026-07-02T12:45:00",
+                }
+            ]
+            audit_routes_module.count_audit_logs = lambda **_kwargs: 1  # type: ignore[assignment]
+            payload = audit_routes_module.get_audit_logs(
+                limit=20,
+                offset=0,
+                event_type=None,
+                session_id=None,
+                task_id=None,
+                start_at=None,
+                end_at=None,
+                current_user={"id": "user-audit-redact"},
+            )
+        finally:
+            audit_routes_module.list_audit_logs = original_list_audit_logs  # type: ignore[assignment]
+            audit_routes_module.count_audit_logs = original_count_audit_logs  # type: ignore[assignment]
+
+        self.assertEqual(payload.items[0].session_id, "session-audit-redact")
+        self.assertEqual(payload.items[0].task_id, "task-audit-redact")
+        serialized = json.dumps(
+            payload.model_dump() if hasattr(payload, "model_dump") else payload.dict(),
+            ensure_ascii=False,
+        )
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertIn("provider", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("query_params.access_token", serialized)
+        self.assertNotIn("json_body.client_secret", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
 
     def test_post_session_accepts_model_dump_row(self) -> None:
         original_create_session_record = session_routes_module.create_session_record

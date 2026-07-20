@@ -13,6 +13,7 @@ from app.services.audit_service import (
     count_audit_logs,
     list_audit_logs,
     normalize_audit_event_type,
+    sanitize_audit_event_detail,
 )
 
 
@@ -82,7 +83,7 @@ def _parse_event_detail(raw: object) -> dict[str, Any] | None:
     except Exception:
         return None
     if isinstance(parsed, dict):
-        return parsed
+        return sanitize_audit_event_detail(parsed)
     return None
 
 

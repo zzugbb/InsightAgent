@@ -5,6 +5,10 @@ from datetime import datetime
 from uuid import uuid4
 
 from app.db import get_db_connection
+from app.services.tool_runtime import (
+    _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE,
+    _redact_http_json_raw_fallback_value,
+)
 
 SUPPORTED_AUDIT_EVENT_TYPES = frozenset(
     {
@@ -41,6 +45,42 @@ def is_supported_audit_event_type(event_type: str) -> bool:
     return normalize_audit_event_type(event_type) in SUPPORTED_AUDIT_EVENT_TYPES
 
 
+def _redact_sensitive_event_detail_keys(value: object) -> object:
+    if isinstance(value, dict):
+        redacted: dict[str, object] = {}
+        for key, item in value.items():
+            safe_key = (
+                "[redacted]"
+                if _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE.search(str(key))
+                else str(key)
+            )
+            redacted[safe_key] = (
+                "[redacted]"
+                if safe_key == "[redacted]"
+                else _redact_sensitive_event_detail_keys(item)
+            )
+        return redacted
+    if isinstance(value, list):
+        return [_redact_sensitive_event_detail_keys(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_sensitive_event_detail_keys(item) for item in value)
+    return value
+
+
+def sanitize_audit_event_detail(
+    detail: dict[str, object] | None,
+) -> dict[str, object] | None:
+    if not detail:
+        return None
+    redacted = _redact_http_json_raw_fallback_value(detail)
+    if not isinstance(redacted, dict):
+        return None
+    safe_detail = _redact_sensitive_event_detail_keys(redacted)
+    if isinstance(safe_detail, dict):
+        return safe_detail
+    return None
+
+
 def record_audit_event(
     *,
     user_id: str | None,
@@ -51,7 +91,9 @@ def record_audit_event(
 
     detail_json: str | None = None
     if detail:
-        detail_json = json.dumps(detail, ensure_ascii=True, separators=(",", ":"))
+        safe_detail = sanitize_audit_event_detail(detail)
+        if safe_detail:
+            detail_json = json.dumps(safe_detail, ensure_ascii=True, separators=(",", ":"))
 
     with get_db_connection() as connection:
         connection.execute(

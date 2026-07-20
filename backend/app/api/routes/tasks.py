@@ -120,11 +120,42 @@ def _coerce_session_governance_for_route(
     )
 
 
+def _coerce_task_export_messages_for_route(value: object) -> object:
+    messages = _coerce_payload_model_dump_list(value)
+    if not isinstance(messages, list):
+        return messages
+    normalized_messages: list[object] = []
+    for item in messages:
+        if isinstance(item, BaseModel):
+            normalized_messages.append(item)
+            continue
+        item_is_dict = isinstance(item, dict)
+        message = dict(item) if item_is_dict else _coerce_payload_mapping(item)
+        if not message:
+            normalized_messages.append(item)
+            continue
+        content = message.get("content")
+        if isinstance(
+            content, str
+        ) and chat_persistence_service._trace_http_json_export_content_needs_sanitization(
+            content
+        ):
+            message["content"] = (
+                chat_persistence_service._redact_trace_http_json_export_content_fallback(
+                    content
+                )
+            )
+        normalized_messages.append(message)
+    return normalized_messages
+
+
 def _coerce_task_export_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
     if "messages" in summary:
-        summary["messages"] = _coerce_payload_model_dump_list(summary.get("messages"))
+        summary["messages"] = _coerce_task_export_messages_for_route(
+            summary.get("messages")
+        )
     raw_trace = summary.get("trace")
     trace = _coerce_payload_mapping(raw_trace)
     if trace and (
@@ -156,6 +187,17 @@ def _coerce_task_response_summary(value: object) -> dict[str, Any]:
                 summary.get("governance"),
                 normalize_dict=not summary_is_dict,
             )
+    if "trace_json" in summary:
+        summary["trace_json"] = chat_persistence_service._sanitize_task_response_trace_json(
+            summary.get("trace_json")
+        )
+    return summary
+
+
+def _coerce_task_trace_response_summary(value: object) -> dict[str, Any]:
+    summary = _coerce_payload_mapping(value)
+    if "steps" in summary:
+        summary["steps"] = _coerce_trace_steps_for_route(summary["steps"])
     return summary
 
 
@@ -1017,7 +1059,7 @@ def get_task_trace_detail(
         raise HTTPException(status_code=404, detail="Task not found")
     task = _coerce_payload_mapping(raw)
     trace_summary = chat_persistence_service.get_task_trace_response_summary_from_task(task)
-    trace_summary = _coerce_payload_mapping(trace_summary)
+    trace_summary = _coerce_task_trace_response_summary(trace_summary)
     return TaskTraceResponse(task_id=task_id, **trace_summary)
 
 
@@ -1043,7 +1085,7 @@ def get_task_trace_delta_detail(
         after_seq=after_seq,
         limit=limit,
     )
-    delta_summary = _coerce_payload_mapping(delta_summary)
+    delta_summary = _coerce_task_trace_response_summary(delta_summary)
     return TaskTraceDeltaResponse(
         task_id=task_id,
         server_time=datetime.now().isoformat(),
