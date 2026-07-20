@@ -10249,7 +10249,7 @@ def execute_tool_plan_item_service_execution(
             loop_execution_result=loop_execution_result,
         )
         service_execution["loop_execution_result"] = (
-            sanitize_tool_registry_diagnostics_artifact_payload(
+            _sanitize_tool_runtime_trace_artifact_payload(
                 loop_execution_result
             )
         )
@@ -10272,7 +10272,7 @@ def execute_tool_plan_item_service_actions(
 ) -> Iterator[dict[str, object]]:
     current_seq_cursor = int(seq_cursor)
     for raw_service_action in service_actions:
-        service_action = sanitize_tool_registry_diagnostics_artifact_payload(
+        service_action = _sanitize_tool_runtime_trace_artifact_payload(
             raw_service_action
         )
         if not isinstance(service_action, dict):
@@ -11735,7 +11735,7 @@ def build_tool_plan_item_postprocess(
 def _sanitize_tool_plan_item_payload_dict(
     payload: dict[str, object],
 ) -> dict[str, object]:
-    sanitized = sanitize_tool_registry_diagnostics_artifact_payload(payload)
+    sanitized = _sanitize_tool_runtime_trace_artifact_payload(payload)
     assert isinstance(sanitized, dict)
     return sanitized
 
@@ -11743,7 +11743,7 @@ def _sanitize_tool_plan_item_payload_dict(
 def _sanitize_tool_plan_item_payload_list(
     payload: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    sanitized = sanitize_tool_registry_diagnostics_artifact_payload(payload)
+    sanitized = _sanitize_tool_runtime_trace_artifact_payload(payload)
     assert isinstance(sanitized, list)
     return sanitized
 
@@ -12066,7 +12066,7 @@ def build_tool_plan_item_service_effects_execution(
     service_execution["service_actions"] = build_tool_plan_item_service_actions(
         service_execution=service_execution,
     )
-    sanitized_service_execution = sanitize_tool_registry_diagnostics_artifact_payload(
+    sanitized_service_execution = _sanitize_tool_runtime_trace_artifact_payload(
         service_execution
     )
     assert isinstance(sanitized_service_execution, dict)
@@ -12141,7 +12141,7 @@ def build_tool_plan_item_service_effects(
         "should_return": should_return,
         "terminal_return_effects": terminal_return_effects,
     }
-    sanitized_service_effects = sanitize_tool_registry_diagnostics_artifact_payload(
+    sanitized_service_effects = _sanitize_tool_runtime_trace_artifact_payload(
         service_effects
     )
     assert isinstance(sanitized_service_effects, dict)

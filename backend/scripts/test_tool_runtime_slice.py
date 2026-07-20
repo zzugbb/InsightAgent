@@ -49781,6 +49781,50 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_build_tool_plan_item_service_effects_execution_redacts_http_json_trace_step_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-service-effects-execution-http-json-output"
+        )
+        trace_event = {
+            "task_id": "task-1",
+            "step_id": "step-service-effects-execution-http-json-output",
+            "step": raw_step,
+        }
+        service_effects = {
+            "trace_write_actions": [
+                {
+                    "trace_step": raw_step,
+                    "trace_event": trace_event,
+                    "persist_force": False,
+                },
+            ],
+            "next_action": {
+                "kind": "continue",
+                "continue_update": {
+                    "tool_observations": ["Provider Status: ok"],
+                    "seq_increment": 0,
+                },
+                "terminal_return_effects": None,
+            },
+        }
+
+        result = build_tool_plan_item_service_effects_execution(
+            task_id="task-1",
+            trace_steps=[raw_step],
+            user_id="user-1",
+            service_effects=service_effects,
+        )
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
     def test_build_tool_plan_item_service_execution_keeps_success_shape(self) -> None:
         loop_execution_result = {
             "trace_event": {
@@ -67931,6 +67975,65 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("http_json execution [redacted] must be safe", serialized)
         self.assertEqual(persist_forces, [True])
         self.assertEqual(complete_calls, [])
+
+    def test_execute_tool_plan_item_service_actions_redacts_http_json_trace_step_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-direct-service-action-http-json-output"
+        )
+        trace_event = {
+            "task_id": "task-1",
+            "step_id": "step-direct-service-action-http-json-output",
+            "step": raw_step,
+        }
+        trace_steps = [{"id": "existing-1", "seq": 2, "content": "Existing"}]
+        tool_observations: list[str] = []
+        persist_forces: list[bool] = []
+        complete_calls: list[dict[str, object]] = []
+        failure_calls: list[dict[str, object]] = []
+
+        items = list(
+            execute_tool_plan_item_service_actions(
+                service_actions=[
+                    {
+                        "kind": "trace_write",
+                        "trace_step": raw_step,
+                        "trace_event": trace_event,
+                        "persist_force": True,
+                    },
+                    {
+                        "kind": "emit_state",
+                        "event": "state",
+                        "data": {"trace_step": raw_step, "trace_event": trace_event},
+                    },
+                ],
+                trace_steps=trace_steps,
+                tool_observations=tool_observations,
+                seq_cursor=3,
+                persist_trace_fn=lambda *, force: persist_forces.append(bool(force)),
+                complete_task_fn=lambda **kwargs: complete_calls.append(kwargs),
+                record_failure_event_fn=lambda **kwargs: failure_calls.append(kwargs),
+            )
+        )
+
+        serialized = json.dumps(
+            {
+                "items": items,
+                "trace_steps": trace_steps,
+                "tool_observations": tool_observations,
+                "complete_calls": complete_calls,
+                "failure_calls": failure_calls,
+            },
+            ensure_ascii=False,
+        )
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+        self.assertEqual(persist_forces, [True])
 
     def test_execute_tool_plan_item_service_actions_keeps_return_shape(self) -> None:
         trace_steps = [{"id": "existing-1", "seq": 2, "content": "Existing"}]
