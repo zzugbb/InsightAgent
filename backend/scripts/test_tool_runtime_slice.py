@@ -45333,6 +45333,62 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_trace_event_redacts_http_json_step_output_payloads(self) -> None:
+        step = {
+            "id": "step-http-json-trace-output",
+            "seq": 4,
+            "type": "action",
+            "content": "Tool done: Provider Status",
+            "meta": {
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "status": "done",
+                    "execution_kind": "http_json",
+                    "effective_result_output_keys": ["status", "message"],
+                    "output": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "secret-token",
+                        "request_id": "Bearer secret-token",
+                    },
+                    "output_preview": {
+                        "status": "ready",
+                        "message": "preview token=hidden",
+                        "access_token": "secret-token",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            },
+        }
+
+        event = build_tool_trace_event(
+            task_id="task-1",
+            step_id="step-http-json-trace-output",
+            step=step,
+        )
+
+        tool_meta = event["step"]["meta"]["tool"]
+        self.assertEqual(
+            tool_meta["output"],
+            {
+                "status": "ready",
+                "message": "gateway token=[redacted]",
+            },
+        )
+        self.assertEqual(
+            tool_meta["output_preview"],
+            {
+                "status": "ready",
+                "message": "preview token=[redacted]",
+                "access_token": "[redacted]",
+            },
+        )
+        serialized = json.dumps(event, ensure_ascii=False)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+
     def test_build_tool_terminal_failure_transition_keeps_current_shape(self) -> None:
         step = {
             "id": "step-1",

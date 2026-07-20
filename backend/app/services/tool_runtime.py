@@ -10826,8 +10826,36 @@ def build_tool_trace_event(
     return {
         "task_id": task_id,
         "step_id": step_id,
-        "step": step,
+        "step": _sanitize_tool_trace_event_step(step),
     }
+
+
+def _sanitize_tool_trace_event_step(step: dict[str, object]) -> dict[str, object]:
+    tool_obj = get_action_step_tool_meta(step)
+    if not _step_tool_meta_uses_http_json_execution(tool_obj):
+        return step
+    sanitized_step = dict(step)
+    meta = sanitized_step.get("meta")
+    if not isinstance(meta, dict):
+        return step
+    sanitized_meta = dict(meta)
+    sanitized_tool = dict(tool_obj) if isinstance(tool_obj, dict) else {}
+    safe_output = build_tool_step_output(step)
+    if isinstance(safe_output, dict):
+        sanitized_tool["output"] = safe_output
+    preview_value = sanitized_tool.get("output_preview")
+    preview_mapping = _coerce_tool_output_preview_mapping(preview_value)
+    if isinstance(preview_mapping, dict):
+        sanitized_tool["output_preview"] = _normalize_http_json_safe_output_shape(
+            preview_mapping
+        )
+    elif isinstance(preview_value, str):
+        sanitized_tool["output_preview"] = _redact_http_json_raw_fallback_value(
+            preview_value
+        )
+    sanitized_meta["tool"] = sanitized_tool
+    sanitized_step["meta"] = sanitized_meta
+    return sanitized_step
 
 
 def build_tool_terminal_failure_transition(
