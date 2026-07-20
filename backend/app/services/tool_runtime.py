@@ -3466,6 +3466,8 @@ def _get_safe_http_json_request_id_display_value(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     normalized = value.strip()
+    if normalized == "[redacted]":
+        return None
     if not _is_safe_http_json_request_id_value(normalized):
         return None
     return normalized
@@ -9815,12 +9817,31 @@ def _sanitize_tool_plan_attempt_loop_result_payload(
         "next_action_step",
         "last_error",
         "plan_item_result",
+        "postprocess",
+        "success_effects",
         "terminal_effects",
     ):
         if key in sanitized:
             sanitized[key] = sanitize_tool_registry_diagnostics_artifact_payload(
                 sanitized[key]
             )
+    next_action_step = sanitized.get("next_action_step")
+    if isinstance(next_action_step, dict):
+        sanitized["next_action_step"] = _sanitize_tool_trace_event_step(
+            next_action_step
+        )
+    if "postprocess" in sanitized:
+        sanitized["postprocess"] = _sanitize_tool_plan_loop_postprocess_payload(
+            sanitized["postprocess"]
+        )
+    if "success_effects" in sanitized:
+        sanitized["success_effects"] = _sanitize_tool_plan_loop_effects_payload(
+            sanitized["success_effects"]
+        )
+    if "terminal_effects" in sanitized:
+        sanitized["terminal_effects"] = _sanitize_tool_plan_loop_effects_payload(
+            sanitized["terminal_effects"]
+        )
     return sanitized
 
 
@@ -9828,10 +9849,40 @@ def _sanitize_tool_plan_retry_loop_result_payload(
     payload: dict[str, object],
 ) -> dict[str, object]:
     sanitized = dict(payload)
-    for key in ("trace_event", "terminal_effects"):
+    for key in ("trace_event", "success_effects", "terminal_effects"):
         if key in sanitized:
             sanitized[key] = sanitize_tool_registry_diagnostics_artifact_payload(
                 sanitized[key]
+            )
+    if "trace_event" in sanitized:
+        sanitized["trace_event"] = _sanitize_tool_trace_event_payload(
+            sanitized["trace_event"]
+        )
+    if "success_effects" in sanitized:
+        sanitized["success_effects"] = _sanitize_tool_plan_loop_effects_payload(
+            sanitized["success_effects"]
+        )
+    if "terminal_effects" in sanitized:
+        sanitized["terminal_effects"] = _sanitize_tool_plan_loop_effects_payload(
+            sanitized["terminal_effects"]
+        )
+    if "loop_result" in sanitized:
+        loop_result = sanitized["loop_result"]
+        if isinstance(loop_result, dict):
+            sanitized["loop_result"] = _sanitize_tool_plan_attempt_loop_result_payload(
+                loop_result
+            )
+    if "retry_loop_result" in sanitized:
+        retry_loop_result = sanitized["retry_loop_result"]
+        if isinstance(retry_loop_result, dict):
+            sanitized["retry_loop_result"] = _sanitize_tool_plan_retry_loop_result_payload(
+                retry_loop_result
+            )
+    if "loop_terminal_result" in sanitized:
+        loop_terminal_result = sanitized["loop_terminal_result"]
+        if isinstance(loop_terminal_result, dict):
+            sanitized["loop_terminal_result"] = _sanitize_tool_plan_loop_terminal_result_payload(
+                loop_terminal_result
             )
     return sanitized
 
@@ -9844,6 +9895,34 @@ def _sanitize_tool_plan_loop_terminal_result_payload(
         sanitized["terminal_effects"] = sanitize_tool_registry_diagnostics_artifact_payload(
             sanitized["terminal_effects"]
         )
+        sanitized["terminal_effects"] = _sanitize_tool_plan_loop_effects_payload(
+            sanitized["terminal_effects"]
+        )
+    return sanitized
+
+
+def _sanitize_tool_plan_loop_postprocess_payload(
+    postprocess: object,
+) -> object:
+    if not isinstance(postprocess, dict):
+        return postprocess
+    sanitized = dict(postprocess)
+    if "trace" in sanitized:
+        sanitized["trace"] = _sanitize_tool_trace_event_payload(sanitized["trace"])
+    return sanitized
+
+
+def _sanitize_tool_plan_loop_effects_payload(
+    effects: object,
+) -> object:
+    if not isinstance(effects, dict):
+        return effects
+    sanitized = dict(effects)
+    trace_step = sanitized.get("trace_step")
+    if isinstance(trace_step, dict):
+        sanitized["trace_step"] = _sanitize_tool_trace_event_step(trace_step)
+    if "trace" in sanitized:
+        sanitized["trace"] = _sanitize_tool_trace_event_payload(sanitized["trace"])
     return sanitized
 
 

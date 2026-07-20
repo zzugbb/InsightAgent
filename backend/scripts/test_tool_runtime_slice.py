@@ -267,6 +267,40 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             )
         )
 
+    def _make_sensitive_http_json_action_step(
+        self,
+        *,
+        step_id: str = "step-http-json-raw",
+        content: str = "Tool done: Provider Status",
+    ) -> dict[str, object]:
+        return {
+            "id": step_id,
+            "seq": 3,
+            "type": "action",
+            "content": content,
+            "meta": {
+                "tool": {
+                    "name": "provider_status",
+                    "label": "Provider Status",
+                    "status": "done",
+                    "execution_kind": "http_json",
+                    "effective_result_output_keys": ["status", "message"],
+                    "output": {
+                        "status": "ready",
+                        "message": "gateway token=hidden",
+                        "access_token": "secret-token",
+                        "request_id": "Bearer secret-token",
+                    },
+                    "output_preview": {
+                        "status": "ready",
+                        "message": "preview token=hidden",
+                        "access_token": "secret-token",
+                        "request_id": "Bearer secret-token",
+                    },
+                }
+            },
+        }
+
     def test_build_tool_plan_keeps_calc_and_retrieve_behavior(self) -> None:
         plan = build_tool_plan("请帮我检索知识库并计算 [calc:1+2*3] [kb:demo]")
 
@@ -43192,6 +43226,46 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("unsupported tool execution kind [redacted]", serialized)
         self.assertIn("http_json execution [redacted] must be safe", serialized)
 
+    def test_build_tool_attempt_loop_result_redacts_http_json_trace_step_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-attempt-loop-http-json-output"
+        )
+        attempt_execution = {
+            "tool_end_event": {"status": "done"},
+            "error_event": None,
+            "retryable": False,
+            "next_action_step": raw_step,
+            "last_error": None,
+            "plan_item_result": {"outcome": "success"},
+            "postprocess": None,
+            "success_effects": {
+                "trace_step": raw_step,
+                "trace": {
+                    "task_id": "task-1",
+                    "step_id": "step-attempt-loop-http-json-output",
+                    "step": raw_step,
+                },
+                "observation": "Provider Status: ok",
+                "output": {"status": "ready"},
+                "rag_followup": None,
+            },
+            "terminal_effects": None,
+        }
+
+        result = build_tool_attempt_loop_result(
+            attempt_execution=attempt_execution,
+        )
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
     def test_build_tool_attempt_loop_terminal_result_keeps_success_shape(self) -> None:
         iteration_ctx = build_tool_iteration_context(
             step_id="step-1",
@@ -43497,6 +43571,47 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("unsupported tool execution kind [redacted]", serialized)
         self.assertIn("http_json execution [redacted] must be safe", serialized)
 
+    def test_build_tool_plan_item_retry_loop_result_redacts_http_json_trace_step_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-retry-loop-http-json-output"
+        )
+        success_effects = {
+            "trace_step": raw_step,
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-retry-loop-http-json-output",
+                "step": raw_step,
+            },
+            "observation": "Provider Status: ok",
+            "output": {"status": "ready"},
+            "rag_followup": None,
+        }
+        loop_result = {
+            "tool_end_event": {"status": "done"},
+            "error_event": None,
+            "retryable": False,
+            "next_action_step": raw_step,
+            "last_error": None,
+            "plan_item_result": {"outcome": "success"},
+            "postprocess": {"trace": success_effects["trace"]},
+            "success_effects": success_effects,
+            "terminal_effects": None,
+        }
+
+        result = build_tool_plan_item_retry_loop_result(
+            loop_result=loop_result,
+        )
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
+
     def test_build_tool_plan_item_retry_loop_execution_result_redacts_loop_diagnostics_payload(
         self,
     ) -> None:
@@ -43565,6 +43680,47 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("token=hidden", serialized)
         self.assertIn("unsupported tool execution kind [redacted]", serialized)
         self.assertIn("http_json execution [redacted] must be safe", serialized)
+
+    def test_build_tool_plan_item_retry_loop_execution_result_redacts_http_json_trace_step_outputs(
+        self,
+    ) -> None:
+        raw_step = self._make_sensitive_http_json_action_step(
+            step_id="step-retry-loop-execution-http-json-output"
+        )
+        success_effects = {
+            "trace_step": raw_step,
+            "trace": {
+                "task_id": "task-1",
+                "step_id": "step-retry-loop-execution-http-json-output",
+                "step": raw_step,
+            },
+            "observation": "Provider Status: ok",
+            "output": {"status": "ready"},
+            "rag_followup": None,
+        }
+        loop_result = {
+            "tool_end_event": {"status": "done"},
+            "error_event": None,
+            "retryable": False,
+            "next_action_step": raw_step,
+            "last_error": None,
+            "plan_item_result": {"outcome": "success"},
+            "postprocess": {"trace": success_effects["trace"]},
+            "success_effects": success_effects,
+            "terminal_effects": None,
+        }
+
+        result = build_tool_plan_item_retry_loop_execution_result(
+            loop_result=loop_result,
+        )
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("gateway [redacted]", serialized)
+        self.assertIn("preview [redacted]", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
+        self.assertNotIn('"request_id"', serialized)
 
     def test_build_tool_step_updates_keep_current_shape(self) -> None:
         base_step = {
