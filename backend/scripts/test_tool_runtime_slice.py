@@ -70969,6 +70969,51 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload.session.id, "session-messages-model-dump")
         self.assertEqual([item.id for item in payload.messages], ["message-1", "message-2"])
 
+    def test_get_session_messages_detail_redacts_http_json_message_content(self) -> None:
+        original_get_session = session_routes_module.get_session
+        original_get_session_messages = session_routes_module.get_session_messages
+
+        try:
+            session_routes_module.get_session = lambda *_args, **_kwargs: {  # type: ignore[assignment]
+                "id": "session-messages-redact",
+                "title": "Messages Redact",
+                "created_at": "2026-07-02T13:42:00",
+                "updated_at": "2026-07-02T13:42:00",
+            }
+            session_routes_module.get_session_messages = lambda *_args, **_kwargs: [  # type: ignore[assignment]
+                {
+                    "id": "message-redact-1",
+                    "session_id": "session-messages-redact",
+                    "task_id": "task-message-redact",
+                    "role": "assistant",
+                    "content": (
+                        "Upstream failed response_path=$.data.access_token "
+                        "callback https://provider.example/cb?access_token=secret-token"
+                        "#client_secret=hidden Bearer secret-token"
+                    ),
+                    "created_at": "2026-07-02T13:43:00",
+                }
+            ]
+            payload = session_routes_module.get_session_messages_detail(
+                "session-messages-redact",
+                current_user={"id": "user-session-messages-redact"},
+            )
+        finally:
+            session_routes_module.get_session = original_get_session  # type: ignore[assignment]
+            session_routes_module.get_session_messages = original_get_session_messages  # type: ignore[assignment]
+
+        serialized = json.dumps(
+            payload.model_dump() if hasattr(payload, "model_dump") else payload.dict(),
+            ensure_ascii=False,
+        )
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertEqual(payload.messages[0].id, "message-redact-1")
+
     def test_build_session_export_payload_accepts_model_dump_session_row(self) -> None:
         original_get_session_usage_summary = session_routes_module.get_session_usage_summary
         original_get_session_messages = session_routes_module.get_session_messages

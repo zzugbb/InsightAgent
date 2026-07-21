@@ -59,6 +59,23 @@ def _coerce_payload_model_dump_list(value: object) -> object:
     return items
 
 
+def _redact_http_json_message_content_for_route(
+    message: dict[str, Any],
+) -> dict[str, Any]:
+    content = message.get("content")
+    if isinstance(
+        content, str
+    ) and chat_persistence_service._trace_http_json_export_content_needs_sanitization(
+        content
+    ):
+        message["content"] = (
+            chat_persistence_service._redact_trace_http_json_export_content_fallback(
+                content
+            )
+        )
+    return message
+
+
 def _coerce_task_governance_for_route(
     value: object,
     *,
@@ -137,19 +154,13 @@ def _coerce_session_export_messages_for_route(value: object) -> object:
         if not message:
             normalized_messages.append(item)
             continue
-        content = message.get("content")
-        if isinstance(
-            content, str
-        ) and chat_persistence_service._trace_http_json_export_content_needs_sanitization(
-            content
-        ):
-            message["content"] = (
-                chat_persistence_service._redact_trace_http_json_export_content_fallback(
-                    content
-                )
-            )
-        normalized_messages.append(message)
+        normalized_messages.append(_redact_http_json_message_content_for_route(message))
     return normalized_messages
+
+
+def _coerce_session_messages_for_route(value: object) -> list[dict[str, Any]]:
+    messages = _coerce_payload_row_list(value)
+    return [_redact_http_json_message_content_for_route(message) for message in messages]
 
 
 def _coerce_session_export_summary(value: object) -> dict[str, Any]:
@@ -1062,7 +1073,9 @@ def get_session_messages_detail(
     if raw is None:
         raise HTTPException(status_code=404, detail="Session not found")
     session = _coerce_payload_mapping(raw)
-    messages = _coerce_payload_row_list(get_session_messages(session_id, user_id))
+    messages = _coerce_session_messages_for_route(
+        get_session_messages(session_id, user_id)
+    )
     return SessionMessagesResponse(
         session=session,
         messages=messages,
