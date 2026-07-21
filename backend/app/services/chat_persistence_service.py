@@ -1808,6 +1808,7 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
     for diagnostics_key in (
         "tool_registry",
         "diagnostics_runtime",
+        "runtime_artifacts",
         "selected_source_diagnostics",
         "source_diagnostics",
         "audit_detail",
