@@ -30074,6 +30074,65 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_get_task_export_payload_summary_redacts_http_json_message_content(
+        self,
+    ) -> None:
+        original_export_helper = chat_persistence_module.get_task_export_summary_from_task
+
+        try:
+            chat_persistence_module.get_task_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "task": {
+                        "id": "task-export-payload-http-json-message",
+                        "session_id": "session-export-payload-http-json-message",
+                        "prompt": "payload summary prompt",
+                        "status": "completed",
+                        "status_normalized": "normalized::completed",
+                        "status_label": "label::completed",
+                        "status_rank": 31,
+                        "created_at": "2026-07-21T09:20:00",
+                        "updated_at": "2026-07-21T09:21:00",
+                    },
+                    "usage": None,
+                    "trace": {
+                        "governance": None,
+                        "steps": [],
+                        "step_count": 0,
+                        "rag_hit_count": 0,
+                        "rag_knowledge_base_ids": [],
+                        "rag_chunks": [],
+                    },
+                }
+            )
+            payload = chat_persistence_module.get_task_export_payload_summary(  # type: ignore[attr-defined]
+                {"id": "task-export-payload-http-json-message"},
+                [
+                    {
+                        "id": "message-http-json-payload",
+                        "role": "assistant",
+                        "content": (
+                            "Provider Search [provider_search via http_json] "
+                            "failed response_path=$.data.access_token "
+                            "callback https://provider.example/cb?"
+                            "access_token=secret-token#client_secret=hidden "
+                            "Bearer secret-token"
+                        ),
+                        "created_at": "2026-07-21T09:22:00",
+                    }
+                ],
+            )
+        finally:
+            chat_persistence_module.get_task_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload["messages"], ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_task_export_response_summary_plain_clones_governance_dict(
         self,
     ) -> None:

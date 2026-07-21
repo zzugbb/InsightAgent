@@ -2192,7 +2192,7 @@ def get_task_export_payload_summary(
             {
                 "id": str(row.get("id", "")),
                 "role": str(row.get("role", "")),
-                "content": str(row.get("content", "")),
+                "content": _sanitize_export_message_content(row.get("content", "")),
                 "created_at": str(row.get("created_at", "")),
             }
             for row in export_message_rows
@@ -2267,6 +2267,13 @@ def _sanitize_export_rag_chunk_rows(value: object) -> list[dict[str, object]]:
             )
         sanitized_chunks.append(sanitized_chunk)
     return sanitized_chunks
+
+
+def _sanitize_export_message_content(value: object) -> str:
+    content = str(value)
+    if _trace_http_json_export_content_needs_sanitization(content):
+        return _redact_trace_http_json_export_content_fallback(content)
+    return content
 
 
 def get_task_export_response_summary(
@@ -2779,7 +2786,7 @@ def get_session_export_payload_summary(
             if row.get("task_id") is not None
             else None,
             "role": str(row.get("role", "")),
-            "content": str(row.get("content", "")),
+            "content": _sanitize_export_message_content(row.get("content", "")),
             "created_at": str(row.get("created_at", "")),
         }
         for row in export_message_rows
