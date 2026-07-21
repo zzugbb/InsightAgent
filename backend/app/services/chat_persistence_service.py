@@ -24,6 +24,7 @@ from app.services.tool_runtime import (
     get_configured_tool_registry_provider,
     get_tool_display_name,
     normalize_tool_registry_name,
+    sanitize_tool_registry_diagnostics_artifact_payload,
 )
 
 
@@ -1804,6 +1805,10 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
         if sanitized_chunks is not raw_chunks:
             sanitized_rag_meta["chunks"] = sanitized_chunks
             payload["rag"] = sanitized_rag_meta
+    if "tool_registry" in payload:
+        payload["tool_registry"] = sanitize_tool_registry_diagnostics_artifact_payload(
+            payload.get("tool_registry")
+        )
     return payload
 
 
