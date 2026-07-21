@@ -15804,6 +15804,60 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", serialized)
         self.assertNotIn("secret-token", serialized)
 
+    def test_get_trace_step_markdown_meta_redacts_service_execution_diagnostics_values(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-markdown-meta-service-execution-diagnostics",
+            seq=20,
+            type="thought",
+            content="Tool registry diagnostics: source=file_source invalid=1",
+            meta={
+                "service_execution": {
+                    "provider_source_name": "file_source",
+                    "runtime_artifacts": {
+                        "provider_source_name": "file_source",
+                        "diagnostics_runtime": {
+                            "summary": {
+                                "has_diagnostics": True,
+                                "invalid_total": 1,
+                                "entries": [
+                                    {
+                                        "kind": "invalid",
+                                        "target": "tool_executions",
+                                        "count": 1,
+                                        "values": [
+                                            (
+                                                "provider_search: http_json execution "
+                                                "query_params.access_token Bearer secret-token"
+                                            )
+                                        ],
+                                    }
+                                ],
+                            },
+                            "trace_step": None,
+                            "trace_event": None,
+                            "audit_detail": None,
+                        },
+                    },
+                    "service_actions": [],
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        assert markdown_meta is not None
+        serialized = json.dumps(markdown_meta, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("query_params.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_trace_step_markdown_meta_redacts_provider_output_preview_without_execution_kind(
         self,
     ) -> None:
