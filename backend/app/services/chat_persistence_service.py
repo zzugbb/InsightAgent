@@ -2276,6 +2276,24 @@ def _sanitize_export_message_content(value: object) -> str:
     return content
 
 
+def _sanitize_export_message_rows(value: object) -> list[object]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    sanitized_messages: list[object] = []
+    for item in value:
+        row = _coerce_payload_mapping_or_none(item)
+        if row is None:
+            sanitized_messages.append(item)
+            continue
+        sanitized_row = dict(row)
+        if "content" in sanitized_row:
+            sanitized_row["content"] = _sanitize_export_message_content(
+                sanitized_row.get("content", "")
+            )
+        sanitized_messages.append(sanitized_row)
+    return sanitized_messages
+
+
 def get_task_export_response_summary(
     task: dict,
     message_rows: list[dict[str, object]] | tuple[dict[str, object], ...],
@@ -2288,7 +2306,6 @@ def get_task_export_response_summary(
     return {
         "task": payload_summary.get("task"),
         "usage": payload_summary.get("usage"),
-        "messages": payload_summary.get("messages", []),
         "trace": {
             "governance": _normalize_task_governance_payload(
                 trace_summary.get("governance")
@@ -2305,6 +2322,7 @@ def get_task_export_response_summary(
             ),
             "steps": trace_steps,
         },
+        "messages": _sanitize_export_message_rows(payload_summary.get("messages", [])),
     }
 
 
@@ -2933,7 +2951,7 @@ def get_session_export_response_summary(
         "governance": _normalize_session_governance_payload_or_original(
             payload_summary.get("governance")
         ),
-        "messages": payload_summary.get("messages", []),
+        "messages": _sanitize_export_message_rows(payload_summary.get("messages", [])),
     }
 
 

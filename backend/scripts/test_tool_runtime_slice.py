@@ -8432,6 +8432,58 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(payload["messages"], [message_sentinel])
 
+    def test_get_session_export_response_summary_redacts_http_json_message_content(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_session_export_payload_summary
+        )
+        try:
+            chat_persistence_module.get_session_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "usage_summary": {"tasks_total": 0},
+                    "tasks": [],
+                    "stats": {
+                        "task_count": 0,
+                        "message_count": 1,
+                        "trace_step_count": 0,
+                        "rag_hit_count": 0,
+                    },
+                    "governance": None,
+                    "messages": [
+                        {
+                            "id": "message-session-response-http-json",
+                            "task_id": "task-session-response-http-json",
+                            "role": "assistant",
+                            "content": (
+                                "Provider Status [provider_status via http_json] "
+                                "failed response_path=$.data.access_token "
+                                "callback https://provider.example/cb?"
+                                "access_token=secret-token#client_secret=hidden "
+                                "Bearer secret-token"
+                            ),
+                            "created_at": "2026-07-21T10:02:00",
+                        }
+                    ],
+                }
+            )
+            payload = chat_persistence_module.get_session_export_response_summary(  # type: ignore[attr-defined]
+                usage_summary={"tasks_total": 0},
+                task_rows=[],
+                message_rows=[],
+            )
+        finally:
+            chat_persistence_module.get_session_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload["messages"], ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_session_export_response_summary_accepts_model_dump_payload_summary(
         self,
     ) -> None:
@@ -30509,6 +30561,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertIs(payload["task"], task_summary)
         self.assertEqual(payload["messages"], [message_sentinel])
+
+    def test_get_task_export_response_summary_redacts_http_json_message_content(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_task_export_payload_summary
+        )
+
+        try:
+            chat_persistence_module.get_task_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "task": {
+                        "id": "task-export-response-http-json-message",
+                        "session_id": "session-export-response-http-json-message",
+                        "prompt": "response summary prompt",
+                        "status": "completed",
+                        "status_normalized": "normalized::completed",
+                        "status_label": "label::completed",
+                        "status_rank": 9,
+                        "created_at": "2026-07-21T10:00:00",
+                        "updated_at": "2026-07-21T10:01:00",
+                    },
+                    "usage": None,
+                    "messages": [
+                        {
+                            "id": "message-task-response-http-json",
+                            "role": "assistant",
+                            "content": (
+                                "Provider Search [provider_search via http_json] "
+                                "failed response_path=$.data.access_token "
+                                "callback https://provider.example/cb?"
+                                "access_token=secret-token#client_secret=hidden "
+                                "Bearer secret-token"
+                            ),
+                            "created_at": "2026-07-21T10:02:00",
+                        }
+                    ],
+                    "trace": {
+                        "governance": None,
+                        "steps": [],
+                        "step_count": 0,
+                        "rag_hit_count": 0,
+                        "rag_knowledge_base_ids": [],
+                        "rag_chunks": [],
+                    },
+                }
+            )
+            payload = chat_persistence_module.get_task_export_response_summary(  # type: ignore[attr-defined]
+                {"id": "task-export-response-http-json-message"},
+                [],
+            )
+        finally:
+            chat_persistence_module.get_task_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload["messages"], ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
 
     def test_get_task_export_response_summary_preserves_response_ready_trace_models(
         self,
