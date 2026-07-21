@@ -1805,10 +1805,17 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
         if sanitized_chunks is not raw_chunks:
             sanitized_rag_meta["chunks"] = sanitized_chunks
             payload["rag"] = sanitized_rag_meta
-    if "tool_registry" in payload:
-        payload["tool_registry"] = sanitize_tool_registry_diagnostics_artifact_payload(
-            payload.get("tool_registry")
-        )
+    for diagnostics_key in (
+        "tool_registry",
+        "diagnostics_runtime",
+        "selected_source_diagnostics",
+        "source_diagnostics",
+        "audit_detail",
+    ):
+        if diagnostics_key in payload:
+            payload[diagnostics_key] = sanitize_tool_registry_diagnostics_artifact_payload(
+                payload.get(diagnostics_key)
+            )
     return payload
 
 
