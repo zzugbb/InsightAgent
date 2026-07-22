@@ -454,6 +454,8 @@ _HTTP_JSON_RESPONSE_DIAGNOSTIC_HEADER_HINTS = (
     ("X-Request-ID", "request id"),
     ("Request-ID", "request id"),
     ("X-Correlation-ID", "correlation id"),
+    ("Traceparent", "traceparent"),
+    ("X-Trace-ID", "trace id"),
     ("X-Amzn-RequestId", "request id"),
     ("X-Amzn-Trace-Id", "trace id"),
     ("CF-Ray", "request id"),
