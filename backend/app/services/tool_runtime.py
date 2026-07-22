@@ -3262,6 +3262,21 @@ class _HttpJsonResponseBodyAttrUnavailable(TypeError):
     pass
 
 
+def _is_http_json_parsed_body_attr(raw_body: object) -> bool:
+    if isinstance(raw_body, Mapping):
+        return True
+    if isinstance(raw_body, Sequence) and not isinstance(
+        raw_body,
+        (str, bytes, bytearray, memoryview),
+    ):
+        return True
+    return (
+        callable(_get_http_json_adapter_attr(raw_body, "model_dump_json"))
+        or callable(_get_http_json_adapter_attr(raw_body, "model_dump"))
+        or callable(_get_http_json_adapter_attr(raw_body, "dict"))
+    )
+
+
 def _read_http_json_response_body_attr(
     attr_name: str,
     raw_body: object,
@@ -3275,12 +3290,7 @@ def _read_http_json_response_body_attr(
             raise TypeError(f"response body {attr_name} failed: {exc}") from exc
     if raw_body is None:
         return None
-    if attr_name in {"body", "data"} and (
-        isinstance(raw_body, (Mapping, list, tuple))
-        or callable(_get_http_json_adapter_attr(raw_body, "model_dump_json"))
-        or callable(_get_http_json_adapter_attr(raw_body, "model_dump"))
-        or callable(_get_http_json_adapter_attr(raw_body, "dict"))
-    ):
+    if attr_name in {"body", "data"} and _is_http_json_parsed_body_attr(raw_body):
         return _coerce_http_json_response_json_body_bytes(raw_body)
     return _coerce_http_json_response_body_bytes(raw_body)
 
