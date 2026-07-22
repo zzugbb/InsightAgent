@@ -1528,6 +1528,70 @@ def _iter_tool_execution_mapping_path_template_variable_references(
     return ()
 
 
+def _iter_missing_tool_execution_mapping_path_template_variables(
+    value: object,
+    *,
+    context: dict[str, object],
+    path: str,
+) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (reference_path, variable_name)
+        for reference_path, variable_name in (
+            _iter_tool_execution_mapping_path_template_variable_references(
+                value,
+                path=path,
+            )
+        )
+        if variable_name not in context
+    )
+
+
+def _render_required_tool_execution_mapping_path_template(
+    value: object,
+    *,
+    context: dict[str, object],
+    path: str,
+) -> object:
+    missing_references = _iter_missing_tool_execution_mapping_path_template_variables(
+        value,
+        context=context,
+        path=path,
+    )
+    if missing_references:
+        formatted_references = tuple(
+            dict.fromkeys(
+                f"{_format_safe_tool_execution_template_variable_name(variable_name)} "
+                f"in {_format_safe_tool_execution_diagnostic_path(reference_path)}"
+                for reference_path, variable_name in missing_references
+            )
+        )
+        qualifier = "variable" if len(formatted_references) == 1 else "variables"
+        joined_references = "; ".join(formatted_references)
+        raise MockToolExecutionError(
+            "HTTP JSON tool request template references missing runtime template "
+            f"{qualifier} {joined_references}.",
+            fatal=True,
+        )
+    return _render_tool_execution_template(value, context=context)
+
+
+def _render_tool_execution_mapping_path_template_for_static_analysis(
+    value: object,
+    *,
+    context: dict[str, object] | None,
+    path: str,
+) -> object:
+    analysis_context = context or {}
+    missing_references = _iter_missing_tool_execution_mapping_path_template_variables(
+        value,
+        context=analysis_context,
+        path=path,
+    )
+    if missing_references:
+        return _TOOL_EXECUTION_TEMPLATE_MISSING
+    return _render_tool_execution_template(value, context=analysis_context)
+
+
 def _resolve_tool_execution_mapping_path_for_static_validation(
     value: object,
     *,
@@ -1536,7 +1600,7 @@ def _resolve_tool_execution_mapping_path_for_static_validation(
 ) -> object:
     if not _is_tool_execution_mapping_path_template(value):
         return value
-    rendered_value = _render_tool_execution_template_for_static_analysis(
+    rendered_value = _render_tool_execution_mapping_path_template_for_static_analysis(
         value,
         context=context,
         path=path,
@@ -2600,7 +2664,7 @@ def _render_http_json_response_path(
     context: dict[str, object],
 ) -> object:
     if raw_value is not None and _is_tool_execution_mapping_path_template(raw_value):
-        raw_value = _render_required_tool_execution_template(
+        raw_value = _render_required_tool_execution_mapping_path_template(
             raw_value,
             context=context,
             path="response_path",
@@ -2662,7 +2726,7 @@ def _render_http_json_result_fields(
         rendered_path = raw_path
         diagnostic_path = f"result_fields.{normalized_key}"
         if _is_tool_execution_mapping_path_template(rendered_path):
-            rendered_path = _render_required_tool_execution_template(
+            rendered_path = _render_required_tool_execution_mapping_path_template(
                 rendered_path,
                 context=context,
                 path=diagnostic_path,
