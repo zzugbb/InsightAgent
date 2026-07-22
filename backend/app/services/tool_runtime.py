@@ -419,6 +419,9 @@ _HTTP_JSON_ERROR_BODY_SENSITIVE_ASSIGNMENT_RE = re.compile(
 )
 _HTTP_JSON_BARE_BEARER_TOKEN_RE = re.compile(r"\bbearer\s+\S+", re.IGNORECASE)
 _HTTP_JSON_URL_TEXT_RE = re.compile(r"https?://[^\s<>\"'{}\[\]]+")
+_TOOL_EXECUTION_ROOT_TEMPLATE_REFERENCE_RE = re.compile(
+    r"^\$([A-Za-z_][0-9A-Za-z_]*)$"
+)
 _TOOL_REGISTRY_DIAGNOSTIC_FIELD_PATH_RE = re.compile(
     r"\b(?:headers|query_params|json_body|response_path|result_fields)"
     r"(?:\.[A-Za-z0-9_\-\[\]]+)+"
@@ -1471,6 +1474,78 @@ def _render_tool_execution_template_for_static_analysis(
     return _render_tool_execution_template(value, context=analysis_context)
 
 
+def _is_tool_execution_mapping_path_template(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    raw = value.strip()
+    return (
+        bool(_TOOL_EXECUTION_ROOT_TEMPLATE_REFERENCE_RE.fullmatch(raw))
+        or "${" in value
+    )
+
+
+def _iter_tool_execution_mapping_path_template_variable_references(
+    value: object,
+    *,
+    path: str,
+) -> tuple[tuple[str, str], ...]:
+    if isinstance(value, str):
+        references: list[tuple[str, str]] = []
+        root_reference = _TOOL_EXECUTION_ROOT_TEMPLATE_REFERENCE_RE.fullmatch(
+            value.strip()
+        )
+        if root_reference:
+            references.append((path, root_reference.group(1)))
+        references.extend(
+            (path, match.group(1).strip())
+            for match in re.finditer(r"\$\{([^{}]+)\}", value)
+            if match.group(1).strip()
+        )
+        return tuple(references)
+    if isinstance(value, dict):
+        references: list[tuple[str, str]] = []
+        for raw_key, raw_item in value.items():
+            if not isinstance(raw_key, str) or not raw_key.strip():
+                continue
+            child_path = f"{path}.{raw_key.strip()}" if path else raw_key.strip()
+            references.extend(
+                _iter_tool_execution_mapping_path_template_variable_references(
+                    raw_item,
+                    path=child_path,
+                )
+            )
+        return tuple(references)
+    if isinstance(value, (list, tuple)):
+        references: list[tuple[str, str]] = []
+        for index, item in enumerate(value):
+            references.extend(
+                _iter_tool_execution_mapping_path_template_variable_references(
+                    item,
+                    path=f"{path}[{index}]",
+                )
+            )
+        return tuple(references)
+    return ()
+
+
+def _resolve_tool_execution_mapping_path_for_static_validation(
+    value: object,
+    *,
+    context: dict[str, object] | None,
+    path: str,
+) -> object:
+    if not _is_tool_execution_mapping_path_template(value):
+        return value
+    rendered_value = _render_tool_execution_template_for_static_analysis(
+        value,
+        context=context,
+        path=path,
+    )
+    if rendered_value is _TOOL_EXECUTION_TEMPLATE_MISSING:
+        return _TOOL_EXECUTION_TEMPLATE_MISSING
+    return rendered_value
+
+
 def _resolve_tool_execution_template_value_for_static_validation(
     value: object,
     *,
@@ -1535,11 +1610,7 @@ def _is_tool_execution_root_template_reference(value: object) -> bool:
     if not isinstance(value, str):
         return False
     raw = value.strip()
-    references = _iter_tool_execution_template_variable_references(
-        raw,
-        path="json_body",
-    )
-    return len(references) == 1 and raw == f"${references[0][1]}"
+    return bool(_TOOL_EXECUTION_ROOT_TEMPLATE_REFERENCE_RE.fullmatch(raw))
 
 
 def _collect_tool_execution_runtime_template_validation_errors(
@@ -1570,6 +1641,29 @@ def _collect_tool_execution_runtime_template_validation_errors(
                 path=field_name,
             )
         )
+    if "response_path" in execution_spec:
+        references.extend(
+            _iter_tool_execution_mapping_path_template_variable_references(
+                execution_spec.get("response_path"),
+                path="response_path",
+            )
+        )
+    if "result_fields" in execution_spec:
+        raw_result_fields = execution_spec.get("result_fields")
+        if _is_tool_execution_root_template_reference(raw_result_fields):
+            references.extend(
+                _iter_tool_execution_template_variable_references(
+                    raw_result_fields,
+                    path="result_fields",
+                )
+            )
+        elif isinstance(raw_result_fields, dict):
+            references.extend(
+                _iter_tool_execution_mapping_path_template_variable_references(
+                    raw_result_fields,
+                    path="result_fields",
+                )
+            )
     messages: list[str] = []
     for path, variable_name in references:
         if not variable_name.startswith(_TOOL_EXECUTION_RUNTIME_TEMPLATE_RESERVED_PREFIXES):
@@ -2478,6 +2572,122 @@ def _raise_http_json_rendered_json_body_validation_error(raw_value: object) -> N
         f"HTTP JSON tool {message}.",
         fatal=True,
     )
+
+
+def _raise_http_json_rendered_response_path_validation_error(raw_value: object) -> None:
+    if raw_value is None:
+        return
+    if not isinstance(raw_value, str):
+        raise MockToolExecutionError(
+            "HTTP JSON tool response_path must resolve to a string.",
+            fatal=True,
+        )
+    if not raw_value.strip():
+        raise MockToolExecutionError(
+            "HTTP JSON tool response_path must be a non-empty string when provided.",
+            fatal=True,
+        )
+    if not _is_supported_tool_execution_response_path(raw_value):
+        raise MockToolExecutionError(
+            "HTTP JSON tool response_path must use dot fields and numeric indexes.",
+            fatal=True,
+        )
+
+
+def _render_http_json_response_path(
+    raw_value: object,
+    *,
+    context: dict[str, object],
+) -> object:
+    if raw_value is not None and _is_tool_execution_mapping_path_template(raw_value):
+        raw_value = _render_required_tool_execution_template(
+            raw_value,
+            context=context,
+            path="response_path",
+        )
+    _raise_http_json_rendered_response_path_validation_error(raw_value)
+    return raw_value
+
+
+def _raise_http_json_rendered_result_field_validation_error(
+    *,
+    diagnostic_path: str,
+    raw_value: object,
+) -> None:
+    safe_path = _format_safe_tool_execution_diagnostic_path(diagnostic_path)
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        raise MockToolExecutionError(
+            f"HTTP JSON tool {safe_path} must be a non-empty string path.",
+            fatal=True,
+        )
+    if not _is_supported_tool_execution_response_path(raw_value):
+        raise MockToolExecutionError(
+            f"HTTP JSON tool {safe_path} must use dot fields and numeric indexes.",
+            fatal=True,
+        )
+
+
+def _render_http_json_result_fields(
+    raw_value: object,
+    *,
+    context: dict[str, object],
+) -> dict[str, object] | None:
+    if raw_value is None:
+        return None
+    if _is_tool_execution_root_template_reference(raw_value):
+        raw_value = _render_required_tool_execution_template(
+            raw_value,
+            context=context,
+            path="result_fields",
+        )
+        try:
+            raw_value = _coerce_http_json_json_compatible_body(raw_value)
+        except TypeError as exc:
+            raise MockToolExecutionError(
+                "HTTP JSON tool result_fields must resolve to an object.",
+                fatal=True,
+            ) from exc
+    if not isinstance(raw_value, Mapping):
+        raise MockToolExecutionError(
+            "HTTP JSON tool result_fields must be an object.",
+            fatal=True,
+        )
+    rendered_result_fields: dict[str, object] = {}
+    has_blank_result_field_name = False
+    for raw_key, raw_path in raw_value.items():
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            has_blank_result_field_name = True
+            continue
+        normalized_key = raw_key.strip()
+        rendered_path = raw_path
+        diagnostic_path = f"result_fields.{normalized_key}"
+        if _is_tool_execution_mapping_path_template(rendered_path):
+            rendered_path = _render_required_tool_execution_template(
+                rendered_path,
+                context=context,
+                path=diagnostic_path,
+            )
+        _raise_http_json_rendered_result_field_validation_error(
+            diagnostic_path=diagnostic_path,
+            raw_value=rendered_path,
+        )
+        rendered_result_fields[normalized_key] = rendered_path
+    if not raw_value:
+        raise MockToolExecutionError(
+            "HTTP JSON tool result_fields must include at least one field mapping.",
+            fatal=True,
+        )
+    if has_blank_result_field_name and rendered_result_fields:
+        raise MockToolExecutionError(
+            "HTTP JSON tool result_fields must not include blank field names.",
+            fatal=True,
+        )
+    if raw_value and not rendered_result_fields:
+        raise MockToolExecutionError(
+            "HTTP JSON tool result_fields must include at least one non-empty field name.",
+            fatal=True,
+        )
+    return rendered_result_fields
 
 
 def _is_supported_tool_execution_response_path_segment(segment: str) -> bool:
@@ -4221,6 +4431,14 @@ def _build_http_json_tool_runner(
             rendered_timeout_ms,
             default_timeout_ms=default_timeout_ms,
         )
+        rendered_response_path = _render_http_json_response_path(
+            raw_response_path,
+            context=context,
+        )
+        rendered_result_fields = _render_http_json_result_fields(
+            raw_result_fields,
+            context=context,
+        )
         rendered_headers_value: object = {}
         if raw_headers is not None:
             rendered_headers_value = _render_required_tool_execution_template(
@@ -4519,12 +4737,15 @@ def _build_http_json_tool_runner(
 
         scoped_payload = _extract_tool_execution_response_value(
             response_payload,
-            path=raw_response_path,
+            path=rendered_response_path,
         )
         if scoped_payload is _TOOL_EXECUTION_TEMPLATE_MISSING:
-            if isinstance(raw_response_path, str) and raw_response_path.strip():
+            if (
+                isinstance(rendered_response_path, str)
+                and rendered_response_path.strip()
+            ):
                 safe_response_path = _format_http_json_mapping_path_for_error(
-                    raw_response_path
+                    rendered_response_path
                 )
                 payload_shape = _format_http_json_mapping_payload_shape_for_error(
                     response_payload
@@ -4542,10 +4763,10 @@ def _build_http_json_tool_runner(
                     fatal=True,
                 )
             scoped_payload = response_payload
-        if isinstance(raw_result_fields, dict):
+        if isinstance(rendered_result_fields, dict):
             mapped_output: dict[str, object] = {}
             missing_result_fields: list[str] = []
-            for raw_key, raw_path in raw_result_fields.items():
+            for raw_key, raw_path in rendered_result_fields.items():
                 if not isinstance(raw_key, str) or not raw_key.strip():
                     continue
                 normalized_key = raw_key.strip()
@@ -4997,13 +5218,50 @@ def _describe_tool_execution_spec_validation_errors(
             "http_json execution response_path must be a non-empty string when provided"
         )
     if isinstance(raw_response_path, str) and raw_response_path.strip():
-        if not _is_supported_tool_execution_response_path(raw_response_path):
+        response_path_for_validation = (
+            _resolve_tool_execution_mapping_path_for_static_validation(
+                raw_response_path,
+                context=template_context,
+                path="response_path",
+            )
+        )
+        if response_path_for_validation is _TOOL_EXECUTION_TEMPLATE_MISSING:
+            pass
+        elif not isinstance(response_path_for_validation, str):
+            validation_errors.append("http_json execution response_path must be a string")
+        elif not response_path_for_validation.strip():
+            validation_errors.append(
+                "http_json execution response_path must be a non-empty string when provided"
+            )
+        elif not _is_supported_tool_execution_response_path(
+            response_path_for_validation
+        ):
             validation_errors.append(
                 "http_json execution response_path must use dot fields and "
                 "numeric indexes"
             )
     raw_result_fields = execution_spec.get("result_fields")
-    if raw_result_fields is not None and not isinstance(raw_result_fields, dict):
+    result_fields_for_validation = raw_result_fields
+    if _is_tool_execution_root_template_reference(raw_result_fields):
+        rendered_result_fields = _render_tool_execution_template_for_static_analysis(
+            raw_result_fields,
+            context=template_context,
+            path="result_fields",
+        )
+        if rendered_result_fields is _TOOL_EXECUTION_TEMPLATE_MISSING:
+            result_fields_for_validation = _TOOL_EXECUTION_TEMPLATE_MISSING
+        else:
+            try:
+                result_fields_for_validation = _coerce_http_json_json_compatible_body(
+                    rendered_result_fields
+                )
+            except TypeError:
+                result_fields_for_validation = rendered_result_fields
+    if (
+        result_fields_for_validation is not None
+        and result_fields_for_validation is not _TOOL_EXECUTION_TEMPLATE_MISSING
+        and not isinstance(result_fields_for_validation, dict)
+    ):
         validation_errors.append("http_json execution result_fields must be an object")
     for field_name, raw_mapping in (
         ("headers", raw_headers),
@@ -5043,15 +5301,15 @@ def _describe_tool_execution_spec_validation_errors(
     validation_errors.extend(
         _describe_tool_execution_json_body_validation_errors(json_body_for_validation)
     )
-    if isinstance(raw_result_fields, dict):
-        if not raw_result_fields:
+    if isinstance(result_fields_for_validation, dict):
+        if not result_fields_for_validation:
             validation_errors.append(
                 "http_json execution result_fields must include at least one "
                 "field mapping"
             )
         has_valid_result_field_name = False
         has_blank_result_field_name = False
-        for raw_key, raw_path in raw_result_fields.items():
+        for raw_key, raw_path in result_fields_for_validation.items():
             if not isinstance(raw_key, str) or not raw_key.strip():
                 has_blank_result_field_name = True
                 continue
@@ -5059,8 +5317,15 @@ def _describe_tool_execution_spec_validation_errors(
             safe_result_field_path = _format_safe_tool_execution_diagnostic_path(
                 f"result_fields.{raw_key.strip()}"
             )
-            if isinstance(raw_path, str) and raw_path.strip():
-                if not _is_supported_tool_execution_response_path(raw_path):
+            path_for_validation = _resolve_tool_execution_mapping_path_for_static_validation(
+                raw_path,
+                context=template_context,
+                path=f"result_fields.{raw_key.strip()}",
+            )
+            if path_for_validation is _TOOL_EXECUTION_TEMPLATE_MISSING:
+                continue
+            if isinstance(path_for_validation, str) and path_for_validation.strip():
+                if not _is_supported_tool_execution_response_path(path_for_validation):
                     validation_errors.append(
                         f"http_json execution {safe_result_field_path} must use dot "
                         "fields and numeric indexes"
@@ -5074,7 +5339,7 @@ def _describe_tool_execution_spec_validation_errors(
             validation_errors.append(
                 "http_json execution result_fields must not include blank field names"
             )
-        if raw_result_fields and not has_valid_result_field_name:
+        if result_fields_for_validation and not has_valid_result_field_name:
             validation_errors.append(
                 "http_json execution result_fields must include at least one "
                 "non-empty field name"
