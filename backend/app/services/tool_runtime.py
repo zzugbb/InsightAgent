@@ -7,6 +7,7 @@ import gzip
 import zlib
 import codecs
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
+from collections import UserString
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -1592,6 +1593,14 @@ def _render_tool_execution_mapping_path_template_for_static_analysis(
     return _render_tool_execution_template(value, context=analysis_context)
 
 
+def _coerce_http_json_mapping_path_value(raw_value: object) -> object:
+    if isinstance(raw_value, str):
+        return raw_value
+    if isinstance(raw_value, UserString):
+        return str(raw_value)
+    return raw_value
+
+
 def _resolve_tool_execution_mapping_path_for_static_validation(
     value: object,
     *,
@@ -1599,7 +1608,7 @@ def _resolve_tool_execution_mapping_path_for_static_validation(
     path: str,
 ) -> object:
     if not _is_tool_execution_mapping_path_template(value):
-        return value
+        return _coerce_http_json_mapping_path_value(value)
     rendered_value = _render_tool_execution_mapping_path_template_for_static_analysis(
         value,
         context=context,
@@ -1607,7 +1616,7 @@ def _resolve_tool_execution_mapping_path_for_static_validation(
     )
     if rendered_value is _TOOL_EXECUTION_TEMPLATE_MISSING:
         return _TOOL_EXECUTION_TEMPLATE_MISSING
-    return rendered_value
+    return _coerce_http_json_mapping_path_value(rendered_value)
 
 
 def _resolve_tool_execution_template_value_for_static_validation(
@@ -2669,6 +2678,7 @@ def _render_http_json_response_path(
             context=context,
             path="response_path",
         )
+    raw_value = _coerce_http_json_mapping_path_value(raw_value)
     _raise_http_json_rendered_response_path_validation_error(raw_value)
     return raw_value
 
@@ -2731,6 +2741,7 @@ def _render_http_json_result_fields(
                 context=context,
                 path=diagnostic_path,
             )
+        rendered_path = _coerce_http_json_mapping_path_value(rendered_path)
         _raise_http_json_rendered_result_field_validation_error(
             diagnostic_path=diagnostic_path,
             raw_value=rendered_path,
