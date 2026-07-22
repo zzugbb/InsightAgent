@@ -1811,6 +1811,7 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
         "runtime_artifacts",
         "service_execution",
         "preflight_result",
+        "execution_result",
         "selected_source_diagnostics",
         "source_diagnostics",
         "audit_detail",
