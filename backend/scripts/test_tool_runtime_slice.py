@@ -20722,6 +20722,144 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn("Tool done: Provider Search", markdown)
 
+    def test_build_session_export_markdown_redacts_http_json_message_content(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-22T12:20:00",
+            session=session_routes_module.SessionResponse(
+                id="session-markdown-message-redact",
+                title="Markdown Message Redact Session",
+                created_at="2026-07-22T12:19:00",
+                updated_at="2026-07-22T12:20:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=0,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=0,
+                message_count=1,
+                trace_step_count=0,
+                rag_hit_count=0,
+            ),
+            messages=[
+                session_routes_module.SessionExportMessage(
+                    id="message-session-markdown-http-json",
+                    task_id=None,
+                    role="assistant",
+                    content=(
+                        "Provider Search [provider_search via http_json] "
+                        "failed response_path=$.data.access_token "
+                        "callback https://provider.example/cb?"
+                        "access_token=secret-token#client_secret=hidden "
+                        "Bearer secret-token"
+                    ),
+                    created_at="2026-07-22T12:19:30",
+                )
+            ],
+            tasks=[],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn("[redacted]", markdown)
+        self.assertIn("response_path=$.data.[redacted]", markdown)
+        self.assertNotIn("response_path=$.data.access_token", markdown)
+        self.assertNotIn("access_token", markdown)
+        self.assertNotIn("client_secret", markdown)
+        self.assertNotIn("Bearer", markdown)
+        self.assertNotIn("secret-token", markdown)
+
+    def test_build_session_export_markdown_redacts_http_json_generic_trace_preview_excerpt(
+        self,
+    ) -> None:
+        payload = session_routes_module.SessionExportJsonResponse(
+            version="1",
+            exported_at="2026-07-22T12:25:00",
+            session=session_routes_module.SessionResponse(
+                id="session-markdown-preview-redact",
+                title="Markdown Preview Redact Session",
+                created_at="2026-07-22T12:24:00",
+                updated_at="2026-07-22T12:25:00",
+            ),
+            usage_summary=session_routes_module.SessionUsageSummaryResponse(
+                tasks_total=1,
+                tasks_with_usage=0,
+                source_tasks_provider=0,
+                source_tasks_estimated=0,
+                source_tasks_mixed=0,
+                source_tasks_legacy=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                cost_estimate=0.0,
+                avg_total_tokens=None,
+                avg_cost_estimate=None,
+            ),
+            stats=session_routes_module.SessionExportStats(
+                task_count=1,
+                message_count=0,
+                trace_step_count=1,
+                rag_hit_count=0,
+            ),
+            messages=[],
+            tasks=[
+                session_routes_module.SessionExportTaskSummary(
+                    id="task-session-markdown-preview-redact",
+                    prompt="export sensitive generic preview",
+                    status="completed",
+                    status_normalized="done",
+                    status_label="Done",
+                    status_rank=40,
+                    created_at="2026-07-22T12:24:30",
+                    updated_at="2026-07-22T12:25:00",
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(
+                            id="preview-session-markdown-generic-http-json",
+                            seq=8,
+                            type="observation",
+                            title="Tool observation",
+                            content_excerpt=(
+                                "Tool done: Provider Status "
+                                "response_path=$.data.access_token "
+                                "callback https://provider.example/cb?"
+                                "access_token=secret-token#client_secret=hidden "
+                                "Bearer secret-token"
+                            ),
+                        )
+                    ],
+                )
+            ],
+        )
+
+        markdown = session_routes_module._build_session_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn("[redacted]", markdown)
+        self.assertIn("response_path=$.data.[redacted]", markdown)
+        self.assertNotIn("response_path=$.data.access_token", markdown)
+        self.assertNotIn("access_token", markdown)
+        self.assertNotIn("client_secret", markdown)
+        self.assertNotIn("Bearer", markdown)
+        self.assertNotIn("secret-token", markdown)
+
     def test_build_session_export_markdown_sanitizes_nested_http_json_preview_excerpt(
         self,
     ) -> None:

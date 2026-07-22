@@ -428,6 +428,17 @@ def _append_fenced_block(lines: list[str], content: str, language: str = "text")
     lines.append(fence)
 
 
+def _sanitize_session_export_markdown_text(value: object) -> str:
+    content = str(value or "")
+    if chat_persistence_service._trace_http_json_export_content_needs_sanitization(
+        content
+    ):
+        return chat_persistence_service._redact_trace_http_json_export_content_fallback(
+            content
+        )
+    return content
+
+
 def _parse_trace_preview_json_payload(value: str) -> dict[str, object] | None:
     try:
         parsed = json.loads(value)
@@ -851,7 +862,11 @@ def _build_session_export_markdown(payload: SessionExportJsonResponse) -> str:
             ref = f" · task={msg.task_id}" if msg.task_id else ""
             lines.append(f"### {idx}. {msg.role.upper()} · {msg.created_at}{ref}")
             lines.append("")
-            _append_fenced_block(lines, msg.content or "", "text")
+            _append_fenced_block(
+                lines,
+                _sanitize_session_export_markdown_text(msg.content),
+                "text",
+            )
             lines.append("")
 
     lines.append("## Tasks")
@@ -907,10 +922,17 @@ def _build_session_export_markdown(payload: SessionExportJsonResponse) -> str:
                         if preview_title.casefold() != preview_type.casefold()
                         else preview_type
                     )
+                    raw_preview_excerpt = preview.content_excerpt
                     preview_excerpt = _normalize_session_trace_preview_excerpt(
                         preview.title,
-                        preview.content_excerpt,
+                        raw_preview_excerpt,
                     )
+                    if preview_excerpt == " ".join(
+                        (raw_preview_excerpt or "").strip().split()
+                    ):
+                        preview_excerpt = _sanitize_session_export_markdown_text(
+                            preview_excerpt,
+                        )
                     lines.append(
                         f"  - seq={seq} · {preview_heading} · {preview_excerpt or '(empty)'}",
                     )
