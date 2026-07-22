@@ -3257,12 +3257,13 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
 
 
 def _read_http_json_response_body_bytes(response: object) -> bytes:
+    read_type_error: TypeError | None = None
     read = _get_http_json_adapter_attr(response, "read")
     if callable(read):
         try:
             return _coerce_http_json_response_body_bytes(read())
-        except TypeError:
-            raise
+        except TypeError as exc:
+            read_type_error = exc
         except Exception as exc:
             raise TypeError(f"response read failed: {exc}") from exc
     for attr_name in ("content", "body", "data"):
@@ -3270,6 +3271,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         if raw_body is None:
             continue
         return _coerce_http_json_response_body_bytes(raw_body)
+    if read_type_error is not None:
+        raise read_type_error
     raise TypeError("response body reader is unavailable")
 
 
