@@ -1815,6 +1815,7 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
         "selected_source_diagnostics",
         "source_diagnostics",
         "audit_detail",
+        "audit_event",
     ):
         if diagnostics_key in payload:
             payload[diagnostics_key] = sanitize_tool_registry_diagnostics_artifact_payload(
