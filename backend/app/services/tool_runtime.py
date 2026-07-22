@@ -451,6 +451,11 @@ _HTTP_JSON_SUPPORTED_CONTENT_ENCODINGS = ("identity", "gzip", "deflate")
 _HTTP_JSON_RESPONSE_DIAGNOSTIC_HEADER_HINTS = (
     ("Retry-After", "retry-after"),
     ("X-RateLimit-Reset", "rate-limit-reset"),
+    ("RateLimit-Reset", "rate-limit-reset"),
+    ("X-RateLimit-Remaining", "rate-limit-remaining"),
+    ("RateLimit-Remaining", "rate-limit-remaining"),
+    ("X-RateLimit-Limit", "rate-limit-limit"),
+    ("RateLimit-Limit", "rate-limit-limit"),
     ("X-Request-ID", "request id"),
     ("Request-ID", "request id"),
     ("X-Correlation-ID", "correlation id"),

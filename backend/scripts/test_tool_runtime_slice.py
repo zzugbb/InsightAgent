@@ -62128,6 +62128,58 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("secret=hidden", message)
         self.assertNotIn("hidden", message)
 
+    def test_run_tool_canonical_override_reports_http_json_standard_rate_limit_header_hints_safely(
+        self,
+    ) -> None:
+        registry_provider = self._make_http_json_calc_registry_provider()
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            def raise_http_error(request, timeout=0):
+                del request, timeout
+                raise tool_runtime_module.HTTPError(  # type: ignore[attr-defined]
+                    "https://provider.example/calc",
+                    429,
+                    "Too Many Requests",
+                    hdrs={
+                        "RateLimit-Reset": "reset-secret=hidden",
+                        "RateLimit-Remaining": "0",
+                        "RateLimit-Limit": "100",
+                        "Location": "https://login.example/callback?token=hidden",
+                    },
+                    fp=io.BytesIO(b'{"message":"rate limited token=hidden"}'),
+                )
+
+            tool_runtime_module.urlopen = raise_http_error  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertFalse(raised.exception.fatal)
+        self.assertIn("HTTP 429", message)
+        self.assertIn("rate-limit-reset: reset-[redacted]", message)
+        self.assertIn("rate-limit-remaining: 0", message)
+        self.assertIn("rate-limit-limit: 100", message)
+        self.assertIn("[redacted]", message)
+        self.assertNotIn("Location", message)
+        self.assertNotIn("login.example", message)
+        self.assertNotIn("token", message)
+        self.assertNotIn("secret=hidden", message)
+        self.assertNotIn("hidden", message)
+
     def test_run_tool_canonical_override_reports_http_json_trace_header_hints_safely(
         self,
     ) -> None:
