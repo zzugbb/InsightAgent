@@ -3633,9 +3633,13 @@ def _read_http_json_response_body_attr(
 
 
 def _coerce_http_json_json_compatible_body(raw_body: object) -> object:
+    if isinstance(raw_body, UserString):
+        return str(raw_body)
     if isinstance(raw_body, Mapping):
         return {
-            key: _coerce_http_json_json_compatible_body(value)
+            _coerce_http_json_json_compatible_mapping_key(key): (
+                _coerce_http_json_json_compatible_body(value)
+            )
             for key, value in raw_body.items()
         }
     if isinstance(raw_body, Sequence) and not isinstance(
@@ -3654,6 +3658,12 @@ def _coerce_http_json_json_compatible_body(raw_body: object) -> object:
             _call_http_json_json_body_dump_method(method_name, model_dump)
         )
     return raw_body
+
+
+def _coerce_http_json_json_compatible_mapping_key(raw_key: object) -> object:
+    if isinstance(raw_key, UserString):
+        return str(raw_key)
+    return raw_key
 
 
 def _call_http_json_json_body_dump_method(
