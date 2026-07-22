@@ -3258,6 +3258,9 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
     raise TypeError("response body must be bytes or text")
 
 
+_HTTP_JSON_BODY_DUMP_MISSING = object()
+
+
 class _HttpJsonResponseBodyAttrUnavailable(TypeError):
     pass
 
@@ -3309,6 +3312,16 @@ def _coerce_http_json_json_compatible_body(raw_body: object) -> object:
         (str, bytes, bytearray, memoryview),
     ):
         return [_coerce_http_json_json_compatible_body(value) for value in raw_body]
+    dumped_json_body = _coerce_http_json_json_body_dump_json_compatible(raw_body)
+    if dumped_json_body is not _HTTP_JSON_BODY_DUMP_MISSING:
+        return _coerce_http_json_json_compatible_body(dumped_json_body)
+    for method_name in ("model_dump", "dict", "to_dict"):
+        model_dump = _get_http_json_adapter_attr(raw_body, method_name)
+        if not callable(model_dump):
+            continue
+        return _coerce_http_json_json_compatible_body(
+            _call_http_json_json_body_dump_method(method_name, model_dump)
+        )
     return raw_body
 
 
@@ -3329,16 +3342,44 @@ def _call_http_json_json_body_dump_method(
         raise TypeError(f"response json body {method_name} failed: {exc}") from exc
 
 
+def _call_http_json_json_body_dump_json_method(
+    method_name: str,
+    model_dump_json: object,
+) -> bytes:
+    try:
+        dumped_body = model_dump_json()  # type: ignore[operator]
+    except Exception as exc:
+        raise TypeError(f"response json body {method_name} failed: {exc}") from exc
+    return _coerce_http_json_response_body_bytes(dumped_body)
+
+
+def _coerce_http_json_json_body_dump_json_compatible(raw_body: object) -> object:
+    for method_name in ("model_dump_json", "to_json", "json"):
+        model_dump_json = _get_http_json_adapter_attr(raw_body, method_name)
+        if not callable(model_dump_json):
+            continue
+        dumped_body = _call_http_json_json_body_dump_json_method(
+            method_name,
+            model_dump_json,
+        )
+        try:
+            return json.loads(dumped_body.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise TypeError(
+                f"response json body {method_name} must be valid JSON: {exc}"
+            ) from exc
+    return _HTTP_JSON_BODY_DUMP_MISSING
+
+
 def _read_http_json_json_body_dump_json_bytes(raw_body: object) -> bytes | None:
     for method_name in ("model_dump_json", "to_json", "json"):
         model_dump_json = _get_http_json_adapter_attr(raw_body, method_name)
         if not callable(model_dump_json):
             continue
-        try:
-            dumped_body = model_dump_json()
-        except Exception as exc:
-            raise TypeError(f"response json body {method_name} failed: {exc}") from exc
-        return _coerce_http_json_response_body_bytes(dumped_body)
+        return _call_http_json_json_body_dump_json_method(
+            method_name,
+            model_dump_json,
+        )
     return None
 
 
