@@ -1531,6 +1531,17 @@ def _iter_tool_execution_template_variable_references(
     return ()
 
 
+def _is_tool_execution_root_template_reference(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    raw = value.strip()
+    references = _iter_tool_execution_template_variable_references(
+        raw,
+        path="json_body",
+    )
+    return len(references) == 1 and raw == f"${references[0][1]}"
+
+
 def _collect_tool_execution_runtime_template_validation_errors(
     *,
     execution_spec: object,
@@ -2376,7 +2387,7 @@ def _describe_tool_execution_json_body_validation_errors(
         return (f"http_json execution {path} must be valid JSON",)
     if isinstance(raw_value, str):
         return ()
-    if isinstance(raw_value, dict):
+    if isinstance(raw_value, Mapping):
         validation_errors: list[str] = []
         for raw_key, raw_item in raw_value.items():
             if not isinstance(raw_key, str) or not raw_key.strip():
@@ -2392,7 +2403,9 @@ def _describe_tool_execution_json_body_validation_errors(
                 )
             )
         return tuple(validation_errors)
-    if isinstance(raw_value, (list, tuple)):
+    if isinstance(raw_value, Sequence) and not isinstance(
+        raw_value, (str, bytes, bytearray, memoryview)
+    ):
         validation_errors = []
         for index, raw_item in enumerate(raw_value):
             validation_errors.extend(
@@ -4199,11 +4212,21 @@ def _build_http_json_tool_runner(
                 context=context,
                 path="json_body",
             )
-            if not isinstance(rendered_json_body, dict):
+            try:
+                rendered_json_body = _coerce_http_json_json_compatible_body(
+                    rendered_json_body
+                )
+            except TypeError as exc:
+                raise MockToolExecutionError(
+                    "HTTP JSON tool json_body must be valid JSON.",
+                    fatal=True,
+                ) from exc
+            if not isinstance(rendered_json_body, Mapping):
                 raise MockToolExecutionError(
                     "HTTP JSON tool json_body must resolve to an object.",
                     fatal=True,
                 )
+            rendered_json_body = dict(rendered_json_body)
             _raise_http_json_rendered_request_content_type_validation_error(
                 headers=rendered_headers
             )
@@ -4784,7 +4807,11 @@ def _describe_tool_execution_spec_validation_errors(
     if raw_query_params is not None and not isinstance(raw_query_params, dict):
         validation_errors.append("http_json execution query_params must be an object")
     raw_json_body = execution_spec.get("json_body")
-    if raw_json_body is not None and not isinstance(raw_json_body, dict):
+    if (
+        raw_json_body is not None
+        and not isinstance(raw_json_body, dict)
+        and not _is_tool_execution_root_template_reference(raw_json_body)
+    ):
         validation_errors.append("http_json execution json_body must be an object")
     headers_for_validation = _resolve_tool_execution_template_value_for_static_validation(
         raw_headers,
