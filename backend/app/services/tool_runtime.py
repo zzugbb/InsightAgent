@@ -3273,6 +3273,7 @@ def _is_http_json_parsed_body_attr(raw_body: object) -> bool:
     return (
         callable(_get_http_json_adapter_attr(raw_body, "model_dump_json"))
         or callable(_get_http_json_adapter_attr(raw_body, "to_json"))
+        or callable(_get_http_json_adapter_attr(raw_body, "json"))
         or callable(_get_http_json_adapter_attr(raw_body, "model_dump"))
         or callable(_get_http_json_adapter_attr(raw_body, "dict"))
         or callable(_get_http_json_adapter_attr(raw_body, "to_dict"))
@@ -3329,7 +3330,7 @@ def _call_http_json_json_body_dump_method(
 
 
 def _read_http_json_json_body_dump_json_bytes(raw_body: object) -> bytes | None:
-    for method_name in ("model_dump_json", "to_json"):
+    for method_name in ("model_dump_json", "to_json", "json"):
         model_dump_json = _get_http_json_adapter_attr(raw_body, method_name)
         if not callable(model_dump_json):
             continue
