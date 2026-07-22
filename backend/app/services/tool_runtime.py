@@ -3331,7 +3331,7 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         if raw_body is None:
             continue
         return _coerce_http_json_response_body_bytes(raw_body)
-    for method_name in ("iter_bytes", "iter_content", "iter_text"):
+    for method_name in ("iter_bytes", "iter_content", "iter_text", "iter_lines"):
         body_iterator = _get_http_json_adapter_attr(response, method_name)
         if callable(body_iterator):
             return _read_http_json_response_body_iterator(body_iterator)
