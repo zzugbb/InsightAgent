@@ -3274,6 +3274,7 @@ def _is_http_json_parsed_body_attr(raw_body: object) -> bool:
         callable(_get_http_json_adapter_attr(raw_body, "model_dump_json"))
         or callable(_get_http_json_adapter_attr(raw_body, "model_dump"))
         or callable(_get_http_json_adapter_attr(raw_body, "dict"))
+        or callable(_get_http_json_adapter_attr(raw_body, "to_dict"))
     )
 
 
@@ -3341,7 +3342,7 @@ def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
     dumped_json_body = _read_http_json_json_body_dump_json_bytes(raw_body)
     if dumped_json_body is not None:
         return dumped_json_body
-    for method_name in ("model_dump", "dict"):
+    for method_name in ("model_dump", "dict", "to_dict"):
         model_dump = _get_http_json_adapter_attr(raw_body, method_name)
         if not callable(model_dump):
             continue
