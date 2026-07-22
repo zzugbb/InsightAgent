@@ -8964,6 +8964,69 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", excerpt)
         self.assertNotIn("secret-token", excerpt)
 
+    def test_session_export_summary_coercion_redacts_http_json_base_model_task_trace_preview(
+        self,
+    ) -> None:
+        summary = {
+            "usage_summary": {"tasks_total": 1},
+            "tasks": [
+                session_routes_module.SessionExportTaskSummary(  # type: ignore[attr-defined]
+                    id="task-model-preview-http-json",
+                    prompt="model preview prompt",
+                    status="completed",
+                    status_normalized="completed",
+                    status_label="Completed",
+                    status_rank=10,
+                    created_at="2026-07-22T11:00:00",
+                    updated_at="2026-07-22T11:01:00",
+                    usage=None,
+                    trace_step_count=1,
+                    rag_hit_count=0,
+                    trace_preview=[
+                        session_routes_module.SessionExportTracePreviewStep(  # type: ignore[attr-defined]
+                            id="preview-model-http-json",
+                            seq=2,
+                            type="action",
+                            title="Provider Status [provider_status via http_json]",
+                            content_excerpt=(
+                                "Tool done: Provider Status Preview: "
+                                "response_path=$.data.access_token "
+                                "callback https://provider.example/cb?"
+                                "access_token=secret-token#client_secret=hidden "
+                                "Bearer secret-token"
+                            ),
+                        )
+                    ],
+                    governance=None,
+                )
+            ],
+            "stats": {
+                "task_count": 1,
+                "message_count": 0,
+                "trace_step_count": 1,
+                "rag_hit_count": 0,
+            },
+            "governance": None,
+            "messages": [],
+        }
+
+        normalized = session_routes_module._coerce_session_export_summary(summary)  # type: ignore[attr-defined]
+
+        serialized = json.dumps(
+            [
+                item.model_dump() if hasattr(item, "model_dump") else item
+                for item in normalized["tasks"]
+            ],
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_session_export_summary_coercion_redacts_http_json_base_model_message_content(
         self,
     ) -> None:

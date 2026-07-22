@@ -166,6 +166,24 @@ def _coerce_session_messages_for_route(value: object) -> list[dict[str, Any]]:
     return [_redact_http_json_message_content_for_route(message) for message in messages]
 
 
+def _coerce_session_export_task_for_route(
+    task: dict[str, Any],
+    *,
+    summary_is_dict: bool,
+) -> dict[str, Any]:
+    task_summary = dict(task)
+    if not summary_is_dict or not isinstance(task_summary.get("governance"), dict):
+        task_summary["governance"] = _coerce_task_governance_for_route(
+            task_summary.get("governance"),
+            normalize_dict=not summary_is_dict,
+        )
+    if "trace_preview" in task_summary:
+        task_summary["trace_preview"] = _coerce_trace_preview_for_route(
+            task_summary.get("trace_preview")
+        )
+    return task_summary
+
+
 def _coerce_session_export_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
@@ -183,23 +201,20 @@ def _coerce_session_export_summary(value: object) -> dict[str, Any]:
     if isinstance(tasks, list):
         normalized_tasks: list[object] = []
         for task in tasks:
+            task_is_model = isinstance(task, BaseModel)
             task_is_dict = isinstance(task, dict)
-            if summary_is_dict and not task_is_dict and isinstance(task, BaseModel):
-                normalized_tasks.append(task)
-                continue
             task_summary = dict(task) if task_is_dict else _coerce_payload_mapping(task)
             if not task_summary:
+                normalized_tasks.append(task)
                 continue
-            if not summary_is_dict or not isinstance(task_summary.get("governance"), dict):
-                task_summary["governance"] = _coerce_task_governance_for_route(
-                    task_summary.get("governance"),
-                    normalize_dict=not summary_is_dict,
-                )
-            if "trace_preview" in task_summary:
-                task_summary["trace_preview"] = _coerce_trace_preview_for_route(
-                    task_summary.get("trace_preview")
-                )
-            normalized_tasks.append(task_summary)
+            normalized_task = _coerce_session_export_task_for_route(
+                task_summary,
+                summary_is_dict=summary_is_dict,
+            )
+            if summary_is_dict and task_is_model and normalized_task == task_summary:
+                normalized_tasks.append(task)
+                continue
+            normalized_tasks.append(normalized_task)
         summary["tasks"] = normalized_tasks
     return summary
 
