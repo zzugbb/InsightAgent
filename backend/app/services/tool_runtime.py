@@ -3287,7 +3287,7 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
                 pass
         except Exception as exc:
             raise TypeError(f"response read failed: {exc}") from exc
-    for attr_name in ("content", "body", "data"):
+    for attr_name in ("content", "body", "data", "text"):
         raw_body = _get_http_json_adapter_attr(response, attr_name)
         if raw_body is None:
             continue
