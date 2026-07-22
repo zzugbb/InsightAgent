@@ -150,6 +150,30 @@ def _coerce_task_export_messages_for_route(value: object) -> object:
     return normalized_messages
 
 
+def _coerce_task_export_trace_for_route(
+    trace: dict[str, Any],
+    *,
+    summary_is_dict: bool,
+) -> dict[str, Any]:
+    normalized_trace = dict(trace)
+    if not summary_is_dict or not isinstance(normalized_trace.get("governance"), dict):
+        normalized_trace["governance"] = _coerce_task_governance_for_route(
+            normalized_trace.get("governance"),
+            normalize_dict=not summary_is_dict,
+        )
+    if "rag_chunks" in normalized_trace:
+        normalized_trace["rag_chunks"] = (
+            chat_persistence_service._sanitize_export_rag_chunk_rows(
+                normalized_trace.get("rag_chunks")
+            )
+        )
+    if "steps" in normalized_trace:
+        normalized_trace["steps"] = _coerce_trace_steps_for_route(
+            normalized_trace.get("steps")
+        )
+    return normalized_trace
+
+
 def _coerce_task_export_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
@@ -164,18 +188,17 @@ def _coerce_task_export_summary(value: object) -> dict[str, Any]:
         or isinstance(raw_trace, dict)
         or not isinstance(raw_trace, BaseModel)
     ):
-        if not summary_is_dict or not isinstance(trace.get("governance"), dict):
-            trace["governance"] = _coerce_task_governance_for_route(
-                trace.get("governance"),
-                normalize_dict=not summary_is_dict,
-            )
-        if "rag_chunks" in trace:
-            trace["rag_chunks"] = chat_persistence_service._sanitize_export_rag_chunk_rows(
-                trace.get("rag_chunks")
-            )
-        if "steps" in trace:
-            trace["steps"] = _coerce_trace_steps_for_route(trace.get("steps"))
-        summary["trace"] = trace
+        summary["trace"] = _coerce_task_export_trace_for_route(
+            trace,
+            summary_is_dict=summary_is_dict,
+        )
+    elif trace and isinstance(raw_trace, BaseModel):
+        safe_trace = _coerce_task_export_trace_for_route(
+            trace,
+            summary_is_dict=summary_is_dict,
+        )
+        if safe_trace != trace:
+            summary["trace"] = safe_trace
     return summary
 
 

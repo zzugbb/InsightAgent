@@ -31539,6 +31539,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", serialized_chunks)
         self.assertNotIn("secret-token", serialized_chunks)
 
+    def test_task_export_summary_coercion_redacts_http_json_base_model_trace_rag_chunks(
+        self,
+    ) -> None:
+        summary = {
+            "task": {
+                "id": "task-export-route-model-trace-rag",
+                "session_id": "session-export-route-model-trace-rag",
+                "prompt": "shared prompt",
+                "status": "completed",
+                "status_normalized": "normalized::completed",
+                "status_label": "label::completed",
+                "status_rank": 9,
+                "created_at": "2026-07-22T10:20:00",
+                "updated_at": "2026-07-22T10:21:00",
+            },
+            "usage": None,
+            "messages": [],
+            "trace": task_routes_module.TaskExportTrace(  # type: ignore[attr-defined]
+                governance=None,
+                step_count=0,
+                rag_hit_count=1,
+                rag_knowledge_base_ids=["kb-http-json"],
+                rag_chunks=[
+                    task_routes_module.TaskExportRagChunk(  # type: ignore[attr-defined]
+                        step_id="step-model-trace-rag",
+                        knowledge_base_id="kb-http-json",
+                        content=(
+                            "Matched snippet query_params.access_token "
+                            "response_path=$.data.access_token "
+                            "Bearer secret-token"
+                        ),
+                    )
+                ],
+                steps=[],
+            ),
+        }
+
+        normalized = task_routes_module._coerce_task_export_summary(summary)  # type: ignore[attr-defined]
+
+        response = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-07-22T10:23:00",
+            **normalized,
+        )
+        serialized = response.model_dump_json()
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("query_params.access_token", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_task_export_summary_coercion_redacts_http_json_base_model_message_content(
         self,
     ) -> None:
