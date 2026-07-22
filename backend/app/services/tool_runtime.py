@@ -3285,6 +3285,33 @@ def _read_http_json_response_body_chunked(read: object) -> bytes:
     return b"".join(chunks)
 
 
+def _read_http_json_response_body_iterator(iterator_method: object) -> bytes:
+    try:
+        raw_iterator = iterator_method()
+    except TypeError:
+        try:
+            raw_iterator = iterator_method(_HTTP_JSON_RESPONSE_BODY_READ_CHUNK_SIZE)
+        except TypeError:
+            raise
+        except Exception as exc:
+            raise TypeError(f"response body iterator failed: {exc}") from exc
+    except Exception as exc:
+        raise TypeError(f"response body iterator failed: {exc}") from exc
+    if raw_iterator is None:
+        raise TypeError("response body iterator is unavailable")
+    chunks: list[bytes] = []
+    try:
+        for raw_chunk in raw_iterator:
+            chunk = _coerce_http_json_response_body_bytes(raw_chunk)
+            if chunk:
+                chunks.append(chunk)
+    except TypeError:
+        raise
+    except Exception as exc:
+        raise TypeError(f"response body iteration failed: {exc}") from exc
+    return b"".join(chunks)
+
+
 def _read_http_json_response_body_bytes(response: object) -> bytes:
     read_type_error: TypeError | None = None
     read = _get_http_json_adapter_attr(response, "read")
@@ -3304,6 +3331,10 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         if raw_body is None:
             continue
         return _coerce_http_json_response_body_bytes(raw_body)
+    for method_name in ("iter_bytes", "iter_content"):
+        body_iterator = _get_http_json_adapter_attr(response, method_name)
+        if callable(body_iterator):
+            return _read_http_json_response_body_iterator(body_iterator)
     json_body = _get_http_json_adapter_attr(response, "json")
     if callable(json_body):
         try:
