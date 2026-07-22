@@ -3258,12 +3258,15 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
 
 
 def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
-    model_dump = _get_http_json_adapter_attr(raw_body, "model_dump")
-    if callable(model_dump):
+    for method_name in ("model_dump", "dict"):
+        model_dump = _get_http_json_adapter_attr(raw_body, method_name)
+        if not callable(model_dump):
+            continue
         try:
             raw_body = model_dump()
         except Exception as exc:
-            raise TypeError(f"response json body model_dump failed: {exc}") from exc
+            raise TypeError(f"response json body {method_name} failed: {exc}") from exc
+        break
     try:
         return json.dumps(
             raw_body,
