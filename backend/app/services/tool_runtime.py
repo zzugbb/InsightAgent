@@ -1674,7 +1674,7 @@ def _describe_tool_default_timeout_ms_validation_error(
 
 
 def _normalize_tool_execution_http_headers(raw_value: object) -> dict[str, str]:
-    if not isinstance(raw_value, dict):
+    if not isinstance(raw_value, Mapping):
         return {}
     headers: dict[str, str] = {}
     for raw_key, raw_item in raw_value.items():
@@ -2039,7 +2039,7 @@ def _http_header_value_contains_control_character(raw_value: object) -> bool:
 
 
 def _http_headers_contain_duplicate_names(headers: object) -> bool:
-    if not isinstance(headers, dict):
+    if not isinstance(headers, Mapping):
         return False
     seen_header_names: set[str] = set()
     for raw_key in headers:
@@ -4139,7 +4139,7 @@ def _build_http_json_tool_runner(
     method = _normalize_tool_execution_http_method(
         execution_spec.get("method", "POST" if execution_spec.get("json_body") else "GET")
     )
-    headers = _normalize_tool_execution_http_headers(execution_spec.get("headers"))
+    raw_headers = execution_spec.get("headers")
     raw_query_params = execution_spec.get("query_params")
     raw_json_body = execution_spec.get("json_body")
     raw_response_path = execution_spec.get("response_path")
@@ -4173,11 +4173,27 @@ def _build_http_json_tool_runner(
                 fatal=True,
             )
         _raise_http_json_rendered_url_validation_error(rendered_url)
-        rendered_headers_value = _render_required_tool_execution_template(
-            headers,
-            context=context,
-            path="headers",
-        )
+        rendered_headers_value: object = {}
+        if raw_headers is not None:
+            rendered_headers_value = _render_required_tool_execution_template(
+                raw_headers,
+                context=context,
+                path="headers",
+            )
+            try:
+                rendered_headers_value = _coerce_http_json_json_compatible_body(
+                    rendered_headers_value
+                )
+            except TypeError as exc:
+                raise MockToolExecutionError(
+                    "HTTP JSON tool headers must resolve to an object.",
+                    fatal=True,
+                ) from exc
+            if not isinstance(rendered_headers_value, Mapping):
+                raise MockToolExecutionError(
+                    "HTTP JSON tool headers must resolve to an object.",
+                    fatal=True,
+                )
         _raise_http_json_rendered_value_validation_error(
             field_name="headers",
             raw_mapping=rendered_headers_value,
@@ -4821,7 +4837,11 @@ def _describe_tool_execution_spec_validation_errors(
         if timeout_error:
             validation_errors.append(timeout_error)
     raw_headers = execution_spec.get("headers")
-    if raw_headers is not None and not isinstance(raw_headers, dict):
+    if (
+        raw_headers is not None
+        and not isinstance(raw_headers, dict)
+        and not _is_tool_execution_root_template_reference(raw_headers)
+    ):
         validation_errors.append("http_json execution headers must be an object")
     raw_query_params = execution_spec.get("query_params")
     if (
