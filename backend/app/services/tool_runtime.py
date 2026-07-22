@@ -403,6 +403,7 @@ _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS = (
 _HTTP_JSON_ALLOWED_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 _TOOL_TIMEOUT_MAX_MS = 2_147_483_647
 _HTTP_JSON_ERROR_BODY_PREVIEW_MAX_LENGTH = 240
+_HTTP_JSON_RESPONSE_BODY_READ_CHUNK_SIZE = 64 * 1024
 _HTTP_JSON_RESULT_FIELD_MAPPING_ERROR_MAX_ITEMS = 5
 _HTTP_JSON_MAPPING_PAYLOAD_SHAPE_KEY_MAX_ITEMS = 5
 _HTTP_JSON_MAPPING_PAYLOAD_SHAPE_KEY_MAX_LENGTH = 48
@@ -3256,6 +3257,22 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
     raise TypeError("response body must be bytes or text")
 
 
+def _read_http_json_response_body_chunked(read: object) -> bytes:
+    chunks: list[bytes] = []
+    while True:
+        try:
+            raw_chunk = read(_HTTP_JSON_RESPONSE_BODY_READ_CHUNK_SIZE)
+        except TypeError:
+            raise
+        except Exception as exc:
+            raise TypeError(f"response read failed: {exc}") from exc
+        chunk = _coerce_http_json_response_body_bytes(raw_chunk)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def _read_http_json_response_body_bytes(response: object) -> bytes:
     read_type_error: TypeError | None = None
     read = _get_http_json_adapter_attr(response, "read")
@@ -3264,6 +3281,10 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
             return _coerce_http_json_response_body_bytes(read())
         except TypeError as exc:
             read_type_error = exc
+            try:
+                return _read_http_json_response_body_chunked(read)
+            except TypeError:
+                pass
         except Exception as exc:
             raise TypeError(f"response read failed: {exc}") from exc
     for attr_name in ("content", "body", "data"):
