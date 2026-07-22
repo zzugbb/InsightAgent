@@ -3287,6 +3287,8 @@ def _read_http_json_response_body_chunked(read: object) -> bytes:
             raise
         except Exception as exc:
             raise TypeError(f"response read failed: {exc}") from exc
+        if raw_chunk is None:
+            break
         chunk = _coerce_http_json_response_body_bytes(raw_chunk)
         if not chunk:
             break
