@@ -3274,6 +3274,12 @@ def _read_http_json_response_body_attr(
             raise TypeError(f"response body {attr_name} failed: {exc}") from exc
     if raw_body is None:
         return None
+    if attr_name in {"body", "data"} and (
+        isinstance(raw_body, (dict, list, tuple))
+        or callable(_get_http_json_adapter_attr(raw_body, "model_dump"))
+        or callable(_get_http_json_adapter_attr(raw_body, "dict"))
+    ):
+        return _coerce_http_json_response_json_body_bytes(raw_body)
     return _coerce_http_json_response_body_bytes(raw_body)
 
 
