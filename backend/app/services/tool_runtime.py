@@ -3277,6 +3277,7 @@ def _read_http_json_response_body_attr(
         return None
     if attr_name in {"body", "data"} and (
         isinstance(raw_body, (Mapping, list, tuple))
+        or callable(_get_http_json_adapter_attr(raw_body, "model_dump_json"))
         or callable(_get_http_json_adapter_attr(raw_body, "model_dump"))
         or callable(_get_http_json_adapter_attr(raw_body, "dict"))
     ):
@@ -3315,7 +3316,21 @@ def _call_http_json_json_body_dump_method(
         raise TypeError(f"response json body {method_name} failed: {exc}") from exc
 
 
+def _read_http_json_json_body_dump_json_bytes(raw_body: object) -> bytes | None:
+    model_dump_json = _get_http_json_adapter_attr(raw_body, "model_dump_json")
+    if not callable(model_dump_json):
+        return None
+    try:
+        dumped_body = model_dump_json()
+    except Exception as exc:
+        raise TypeError(f"response json body model_dump_json failed: {exc}") from exc
+    return _coerce_http_json_response_body_bytes(dumped_body)
+
+
 def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
+    dumped_json_body = _read_http_json_json_body_dump_json_bytes(raw_body)
+    if dumped_json_body is not None:
+        return dumped_json_body
     for method_name in ("model_dump", "dict"):
         model_dump = _get_http_json_adapter_attr(raw_body, method_name)
         if not callable(model_dump):
