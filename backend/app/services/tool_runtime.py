@@ -3257,6 +3257,10 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
     raise TypeError("response body must be bytes or text")
 
 
+class _HttpJsonResponseBodyAttrUnavailable(TypeError):
+    pass
+
+
 def _read_http_json_response_body_attr(
     attr_name: str,
     raw_body: object,
@@ -3264,8 +3268,8 @@ def _read_http_json_response_body_attr(
     if callable(raw_body):
         try:
             raw_body = raw_body()
-        except TypeError:
-            raise
+        except TypeError as exc:
+            raise _HttpJsonResponseBodyAttrUnavailable(str(exc)) from exc
         except Exception as exc:
             raise TypeError(f"response body {attr_name} failed: {exc}") from exc
     if raw_body is None:
@@ -3364,6 +3368,7 @@ def _read_http_json_response_body_iterator(iterator_method: object) -> bytes:
 
 def _read_http_json_response_body_bytes(response: object) -> bytes:
     read_type_error: TypeError | None = None
+    attr_type_error: TypeError | None = None
     read = _get_http_json_adapter_attr(response, "read")
     if callable(read):
         try:
@@ -3380,7 +3385,11 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         raw_body = _get_http_json_adapter_attr(response, attr_name)
         if raw_body is None:
             continue
-        body = _read_http_json_response_body_attr(attr_name, raw_body)
+        try:
+            body = _read_http_json_response_body_attr(attr_name, raw_body)
+        except _HttpJsonResponseBodyAttrUnavailable as exc:
+            attr_type_error = exc
+            continue
         if body is not None:
             return body
     for method_name in ("iter_bytes", "iter_content", "iter_text", "iter_lines"):
@@ -3404,6 +3413,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         return _coerce_http_json_response_json_body_bytes(json_body)
     if read_type_error is not None:
         raise read_type_error
+    if attr_type_error is not None:
+        raise attr_type_error
     raise TypeError("response body reader is unavailable")
 
 
