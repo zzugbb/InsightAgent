@@ -3298,15 +3298,29 @@ def _coerce_http_json_json_compatible_body(raw_body: object) -> object:
     return raw_body
 
 
+def _call_http_json_json_body_dump_method(
+    method_name: str,
+    model_dump: object,
+) -> object:
+    if method_name == "model_dump":
+        try:
+            return model_dump(mode="json")  # type: ignore[operator]
+        except TypeError:
+            pass
+        except Exception as exc:
+            raise TypeError(f"response json body {method_name} failed: {exc}") from exc
+    try:
+        return model_dump()  # type: ignore[operator]
+    except Exception as exc:
+        raise TypeError(f"response json body {method_name} failed: {exc}") from exc
+
+
 def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
     for method_name in ("model_dump", "dict"):
         model_dump = _get_http_json_adapter_attr(raw_body, method_name)
         if not callable(model_dump):
             continue
-        try:
-            raw_body = model_dump()
-        except Exception as exc:
-            raise TypeError(f"response json body {method_name} failed: {exc}") from exc
+        raw_body = _call_http_json_json_body_dump_method(method_name, model_dump)
         break
     raw_body = _coerce_http_json_json_compatible_body(raw_body)
     try:
