@@ -15088,6 +15088,111 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("kb=default", markdown)
         self.assertNotIn("selected knowledge base", markdown)
 
+    def test_build_task_export_markdown_redacts_http_json_message_content(
+        self,
+    ) -> None:
+        payload = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-07-22T12:00:00",
+            task=task_routes_module.TaskExportTask(  # type: ignore[attr-defined]
+                id="task-export-markdown-message-redact",
+                session_id="session-export-markdown-message-redact",
+                prompt="export sensitive message",
+                status="completed",
+                status_normalized="completed",
+                status_label="Completed",
+                status_rank=4,
+                created_at="2026-07-22T11:55:00",
+                updated_at="2026-07-22T12:00:00",
+            ),
+            usage=None,
+            messages=[
+                task_routes_module.TaskExportMessage(  # type: ignore[attr-defined]
+                    id="message-task-markdown-http-json",
+                    role="assistant",
+                    content=(
+                        "Provider Search [provider_search via http_json] "
+                        "failed response_path=$.data.access_token "
+                        "callback https://provider.example/cb?"
+                        "access_token=secret-token#client_secret=hidden "
+                        "Bearer secret-token"
+                    ),
+                    created_at="2026-07-22T11:59:00",
+                )
+            ],
+            trace=task_routes_module.TaskExportTrace(  # type: ignore[attr-defined]
+                governance=None,
+                step_count=0,
+                rag_hit_count=0,
+                rag_knowledge_base_ids=[],
+                rag_chunks=[],
+                steps=[],
+            ),
+        )
+
+        markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn("[redacted]", markdown)
+        self.assertIn("response_path=$.data.[redacted]", markdown)
+        self.assertNotIn("response_path=$.data.access_token", markdown)
+        self.assertNotIn("access_token", markdown)
+        self.assertNotIn("client_secret", markdown)
+        self.assertNotIn("Bearer", markdown)
+        self.assertNotIn("secret-token", markdown)
+
+    def test_build_task_export_markdown_redacts_http_json_rag_chunk_content(
+        self,
+    ) -> None:
+        payload = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-07-22T12:10:00",
+            task=task_routes_module.TaskExportTask(  # type: ignore[attr-defined]
+                id="task-export-markdown-rag-redact",
+                session_id="session-export-markdown-rag-redact",
+                prompt="export sensitive rag chunk",
+                status="completed",
+                status_normalized="completed",
+                status_label="Completed",
+                status_rank=4,
+                created_at="2026-07-22T12:05:00",
+                updated_at="2026-07-22T12:10:00",
+            ),
+            usage=None,
+            messages=[],
+            trace=task_routes_module.TaskExportTrace(  # type: ignore[attr-defined]
+                governance=None,
+                step_count=0,
+                rag_hit_count=1,
+                rag_knowledge_base_ids=["kb-http-json"],
+                rag_chunks=[
+                    task_routes_module.TaskExportRagChunk(  # type: ignore[attr-defined]
+                        step_id="step-markdown-rag-http-json",
+                        knowledge_base_id="kb-http-json",
+                        content=(
+                            "Matched snippet query_params.access_token "
+                            "response_path=$.data.access_token "
+                            "Bearer secret-token"
+                        ),
+                    )
+                ],
+                steps=[],
+            ),
+        )
+
+        markdown = task_routes_module._build_task_export_markdown(  # type: ignore[attr-defined]
+            payload,
+        )
+
+        self.assertIn("[redacted]", markdown)
+        self.assertIn("response_path=$.data.[redacted]", markdown)
+        self.assertNotIn("query_params.access_token", markdown)
+        self.assertNotIn("response_path=$.data.access_token", markdown)
+        self.assertNotIn("access_token", markdown)
+        self.assertNotIn("Bearer", markdown)
+        self.assertNotIn("secret-token", markdown)
+
     def test_get_trace_step_markdown_meta_preserves_safe_tool_output_when_effective_result_output_keys_present(
         self,
     ) -> None:

@@ -633,6 +633,17 @@ def _append_fenced_block(lines: list[str], content: str, language: str = "text")
     lines.append(fence)
 
 
+def _sanitize_task_export_markdown_text(value: object) -> str:
+    content = str(value or "")
+    if chat_persistence_service._trace_http_json_export_content_needs_sanitization(
+        content
+    ):
+        return chat_persistence_service._redact_trace_http_json_export_content_fallback(
+            content
+        )
+    return content
+
+
 def _build_task_export_markdown(payload: TaskExportJsonResponse) -> str:
     lines: list[str] = []
     lines.append("# InsightAgent Task Export")
@@ -670,7 +681,11 @@ def _build_task_export_markdown(payload: TaskExportJsonResponse) -> str:
         for idx, msg in enumerate(payload.messages, start=1):
             lines.append(f"### {idx}. {msg.role.upper()} · {msg.created_at}")
             lines.append("")
-            _append_fenced_block(lines, msg.content or "", "text")
+            _append_fenced_block(
+                lines,
+                _sanitize_task_export_markdown_text(msg.content),
+                "text",
+            )
             lines.append("")
 
     lines.append("## Trace Summary")
@@ -714,7 +729,11 @@ def _build_task_export_markdown(payload: TaskExportJsonResponse) -> str:
                 header += f" · kb={chunk.knowledge_base_id}"
             lines.append(header)
             lines.append("")
-            _append_fenced_block(lines, chunk.content, "text")
+            _append_fenced_block(
+                lines,
+                _sanitize_task_export_markdown_text(chunk.content),
+                "text",
+            )
             lines.append("")
 
     lines.append("## Trace Steps")
