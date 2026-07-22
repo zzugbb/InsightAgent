@@ -7,6 +7,7 @@ import gzip
 import zlib
 import codecs
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -3275,12 +3276,25 @@ def _read_http_json_response_body_attr(
     if raw_body is None:
         return None
     if attr_name in {"body", "data"} and (
-        isinstance(raw_body, (dict, list, tuple))
+        isinstance(raw_body, (Mapping, list, tuple))
         or callable(_get_http_json_adapter_attr(raw_body, "model_dump"))
         or callable(_get_http_json_adapter_attr(raw_body, "dict"))
     ):
         return _coerce_http_json_response_json_body_bytes(raw_body)
     return _coerce_http_json_response_body_bytes(raw_body)
+
+
+def _coerce_http_json_json_compatible_body(raw_body: object) -> object:
+    if isinstance(raw_body, Mapping):
+        return {
+            key: _coerce_http_json_json_compatible_body(value)
+            for key, value in raw_body.items()
+        }
+    if isinstance(raw_body, list):
+        return [_coerce_http_json_json_compatible_body(value) for value in raw_body]
+    if isinstance(raw_body, tuple):
+        return tuple(_coerce_http_json_json_compatible_body(value) for value in raw_body)
+    return raw_body
 
 
 def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
@@ -3293,6 +3307,7 @@ def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
         except Exception as exc:
             raise TypeError(f"response json body {method_name} failed: {exc}") from exc
         break
+    raw_body = _coerce_http_json_json_compatible_body(raw_body)
     try:
         return json.dumps(
             raw_body,
