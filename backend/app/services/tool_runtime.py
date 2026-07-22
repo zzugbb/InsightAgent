@@ -3304,6 +3304,8 @@ def _read_http_json_response_body_chunks(raw_iterator: object) -> bytes:
     chunks: list[bytes] = []
     try:
         for raw_chunk in raw_iterator:
+            if raw_chunk is None:
+                continue
             chunk = _coerce_http_json_response_body_bytes(raw_chunk)
             if chunk:
                 chunks.append(chunk)
@@ -3326,7 +3328,7 @@ def _read_http_json_response_body_iterator(iterator_method: object) -> bytes:
     for args, kwargs in attempts:
         try:
             raw_iterator = iterator_method(*args, **kwargs)
-        except _HttpJsonResponseBodyInitialIteratorTypeError as exc:
+        except TypeError as exc:
             type_error = exc
             continue
         except Exception as exc:
@@ -3336,7 +3338,7 @@ def _read_http_json_response_body_iterator(iterator_method: object) -> bytes:
             continue
         try:
             return _read_http_json_response_body_chunks(raw_iterator)
-        except TypeError as exc:
+        except _HttpJsonResponseBodyInitialIteratorTypeError as exc:
             type_error = exc
             continue
     if type_error is not None:
