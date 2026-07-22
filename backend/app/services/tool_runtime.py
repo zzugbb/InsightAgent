@@ -3257,6 +3257,22 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
     raise TypeError("response body must be bytes or text")
 
 
+def _read_http_json_response_body_attr(
+    attr_name: str,
+    raw_body: object,
+) -> bytes | None:
+    if callable(raw_body):
+        try:
+            raw_body = raw_body()
+        except TypeError:
+            raise
+        except Exception as exc:
+            raise TypeError(f"response body {attr_name} failed: {exc}") from exc
+    if raw_body is None:
+        return None
+    return _coerce_http_json_response_body_bytes(raw_body)
+
+
 def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
     for method_name in ("model_dump", "dict"):
         model_dump = _get_http_json_adapter_attr(raw_body, method_name)
@@ -3364,7 +3380,9 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         raw_body = _get_http_json_adapter_attr(response, attr_name)
         if raw_body is None:
             continue
-        return _coerce_http_json_response_body_bytes(raw_body)
+        body = _read_http_json_response_body_attr(attr_name, raw_body)
+        if body is not None:
+            return body
     for method_name in ("iter_bytes", "iter_content", "iter_text", "iter_lines"):
         body_iterator = _get_http_json_adapter_attr(response, method_name)
         if callable(body_iterator):
