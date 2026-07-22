@@ -3258,6 +3258,12 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
 
 
 def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
+    model_dump = _get_http_json_adapter_attr(raw_body, "model_dump")
+    if callable(model_dump):
+        try:
+            raw_body = model_dump()
+        except Exception as exc:
+            raise TypeError(f"response json body model_dump failed: {exc}") from exc
     try:
         return json.dumps(
             raw_body,
