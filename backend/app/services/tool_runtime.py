@@ -1476,6 +1476,7 @@ def _render_tool_execution_template_for_static_analysis(
 
 
 def _is_tool_execution_mapping_path_template(value: object) -> bool:
+    value = _coerce_http_json_mapping_path_value(value)
     if not isinstance(value, str):
         return False
     raw = value.strip()
@@ -1490,6 +1491,7 @@ def _iter_tool_execution_mapping_path_template_variable_references(
     *,
     path: str,
 ) -> tuple[tuple[str, str], ...]:
+    value = _coerce_http_json_mapping_path_value(value)
     if isinstance(value, str):
         references: list[tuple[str, str]] = []
         root_reference = _TOOL_EXECUTION_ROOT_TEMPLATE_REFERENCE_RE.fullmatch(
@@ -1594,6 +1596,14 @@ def _render_tool_execution_mapping_path_template_for_static_analysis(
 
 
 def _coerce_http_json_mapping_path_value(raw_value: object) -> object:
+    if isinstance(raw_value, str):
+        return raw_value
+    if isinstance(raw_value, UserString):
+        return str(raw_value)
+    return raw_value
+
+
+def _coerce_http_json_mapping_field_name(raw_value: object) -> object:
     if isinstance(raw_value, str):
         return raw_value
     if isinstance(raw_value, UserString):
@@ -2729,6 +2739,7 @@ def _render_http_json_result_fields(
     rendered_result_fields: dict[str, object] = {}
     has_blank_result_field_name = False
     for raw_key, raw_path in raw_value.items():
+        raw_key = _coerce_http_json_mapping_field_name(raw_key)
         if not isinstance(raw_key, str) or not raw_key.strip():
             has_blank_result_field_name = True
             continue
@@ -5296,13 +5307,7 @@ def _describe_tool_execution_spec_validation_errors(
     if duplicate_query_param_error:
         validation_errors.append(duplicate_query_param_error)
     raw_response_path = execution_spec.get("response_path")
-    if raw_response_path is not None and not isinstance(raw_response_path, str):
-        validation_errors.append("http_json execution response_path must be a string")
-    if isinstance(raw_response_path, str) and not raw_response_path.strip():
-        validation_errors.append(
-            "http_json execution response_path must be a non-empty string when provided"
-        )
-    if isinstance(raw_response_path, str) and raw_response_path.strip():
+    if raw_response_path is not None:
         response_path_for_validation = (
             _resolve_tool_execution_mapping_path_for_static_validation(
                 raw_response_path,
@@ -5345,7 +5350,7 @@ def _describe_tool_execution_spec_validation_errors(
     if (
         result_fields_for_validation is not None
         and result_fields_for_validation is not _TOOL_EXECUTION_TEMPLATE_MISSING
-        and not isinstance(result_fields_for_validation, dict)
+        and not isinstance(result_fields_for_validation, Mapping)
     ):
         validation_errors.append("http_json execution result_fields must be an object")
     for field_name, raw_mapping in (
@@ -5386,7 +5391,7 @@ def _describe_tool_execution_spec_validation_errors(
     validation_errors.extend(
         _describe_tool_execution_json_body_validation_errors(json_body_for_validation)
     )
-    if isinstance(result_fields_for_validation, dict):
+    if isinstance(result_fields_for_validation, Mapping):
         if not result_fields_for_validation:
             validation_errors.append(
                 "http_json execution result_fields must include at least one "
@@ -5395,17 +5400,19 @@ def _describe_tool_execution_spec_validation_errors(
         has_valid_result_field_name = False
         has_blank_result_field_name = False
         for raw_key, raw_path in result_fields_for_validation.items():
-            if not isinstance(raw_key, str) or not raw_key.strip():
+            result_field_name = _coerce_http_json_mapping_field_name(raw_key)
+            if not isinstance(result_field_name, str) or not result_field_name.strip():
                 has_blank_result_field_name = True
                 continue
             has_valid_result_field_name = True
+            normalized_result_field_name = result_field_name.strip()
             safe_result_field_path = _format_safe_tool_execution_diagnostic_path(
-                f"result_fields.{raw_key.strip()}"
+                f"result_fields.{normalized_result_field_name}"
             )
             path_for_validation = _resolve_tool_execution_mapping_path_for_static_validation(
                 raw_path,
                 context=template_context,
-                path=f"result_fields.{raw_key.strip()}",
+                path=f"result_fields.{normalized_result_field_name}",
             )
             if path_for_validation is _TOOL_EXECUTION_TEMPLATE_MISSING:
                 continue
