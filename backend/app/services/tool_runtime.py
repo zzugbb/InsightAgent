@@ -3257,6 +3257,18 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
     raise TypeError("response body must be bytes or text")
 
 
+def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
+    try:
+        return json.dumps(
+            raw_body,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"response json body must be JSON serializable: {exc}") from exc
+
+
 def _read_http_json_response_body_chunked(read: object) -> bytes:
     chunks: list[bytes] = []
     while True:
@@ -3292,6 +3304,13 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         if raw_body is None:
             continue
         return _coerce_http_json_response_body_bytes(raw_body)
+    json_body = _get_http_json_adapter_attr(response, "json")
+    if callable(json_body):
+        try:
+            raw_json_body = json_body()
+        except Exception as exc:
+            raise TypeError(f"response json failed: {exc}") from exc
+        return _coerce_http_json_response_json_body_bytes(raw_json_body)
     if read_type_error is not None:
         raise read_type_error
     raise TypeError("response body reader is unavailable")
