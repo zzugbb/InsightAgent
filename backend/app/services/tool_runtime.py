@@ -1554,7 +1554,14 @@ def _collect_tool_execution_runtime_template_validation_errors(
     if execution_kind != "http_json":
         return ()
     references: list[tuple[str, str]] = []
-    for field_name in ("url", "headers", "query_params", "json_body"):
+    for field_name in (
+        "url",
+        "method",
+        "timeout_ms",
+        "headers",
+        "query_params",
+        "json_body",
+    ):
         if field_name not in execution_spec:
             continue
         references.extend(
@@ -1960,6 +1967,28 @@ def _format_safe_tool_execution_kind(raw_value: object) -> str:
 
 def _raise_http_json_rendered_url_validation_error(raw_value: object) -> None:
     validation_error = _describe_tool_execution_http_url_validation_error(raw_value)
+    if validation_error is None:
+        return
+    message = validation_error.removeprefix("http_json execution ")
+    raise MockToolExecutionError(
+        f"HTTP JSON tool {message}.",
+        fatal=True,
+    )
+
+
+def _raise_http_json_rendered_method_validation_error(raw_value: object) -> None:
+    validation_error = _describe_tool_execution_http_method_validation_error(raw_value)
+    if validation_error is None:
+        return
+    message = validation_error.removeprefix("http_json ")
+    raise MockToolExecutionError(
+        f"HTTP JSON tool {message}.",
+        fatal=True,
+    )
+
+
+def _raise_http_json_rendered_timeout_ms_validation_error(raw_value: object) -> None:
+    validation_error = _describe_tool_execution_timeout_ms_validation_error(raw_value)
     if validation_error is None:
         return
     message = validation_error.removeprefix("http_json execution ")
@@ -4136,18 +4165,16 @@ def _build_http_json_tool_runner(
     default_timeout_ms: int,
     template_context: dict[str, object] | None = None,
 ) -> ToolRunner:
-    method = _normalize_tool_execution_http_method(
-        execution_spec.get("method", "POST" if execution_spec.get("json_body") else "GET")
+    raw_method = execution_spec.get(
+        "method",
+        "POST" if execution_spec.get("json_body") else "GET",
     )
     raw_headers = execution_spec.get("headers")
     raw_query_params = execution_spec.get("query_params")
     raw_json_body = execution_spec.get("json_body")
     raw_response_path = execution_spec.get("response_path")
     raw_result_fields = execution_spec.get("result_fields")
-    timeout_ms = _coerce_tool_execution_timeout_ms(
-        execution_spec.get("timeout_ms"),
-        default_timeout_ms=default_timeout_ms,
-    )
+    raw_timeout_ms = execution_spec.get("timeout_ms")
 
     def runner(*, tool_input: dict[str, object], prompt: str, user_id: str) -> dict[str, object]:
         raw_url = execution_spec.get("url")
@@ -4173,6 +4200,27 @@ def _build_http_json_tool_runner(
                 fatal=True,
             )
         _raise_http_json_rendered_url_validation_error(rendered_url)
+        rendered_method = _render_required_tool_execution_template(
+            raw_method,
+            context=context,
+            path="method",
+        )
+        _raise_http_json_rendered_method_validation_error(rendered_method)
+        method = _normalize_tool_execution_http_method(rendered_method)
+        rendered_timeout_ms: object = default_timeout_ms
+        if raw_timeout_ms is not None:
+            rendered_timeout_ms = _render_required_tool_execution_template(
+                raw_timeout_ms,
+                context=context,
+                path="timeout_ms",
+            )
+            _raise_http_json_rendered_timeout_ms_validation_error(
+                rendered_timeout_ms
+            )
+        timeout_ms = _coerce_tool_execution_timeout_ms(
+            rendered_timeout_ms,
+            default_timeout_ms=default_timeout_ms,
+        )
         rendered_headers_value: object = {}
         if raw_headers is not None:
             rendered_headers_value = _render_required_tool_execution_template(
@@ -4279,6 +4327,12 @@ def _build_http_json_tool_runner(
                     fatal=True,
             ) from exc
             _ensure_http_json_request_content_type_header(rendered_headers)
+        if raw_json_body is not None and method == "GET":
+            raise MockToolExecutionError(
+                "HTTP JSON tool GET method must not define json_body; "
+                "use query_params or a body-capable method.",
+                fatal=True,
+            )
         _ensure_http_json_request_accept_header(rendered_headers)
         request = Request(
             full_url,
@@ -4821,21 +4875,55 @@ def _describe_tool_execution_spec_validation_errors(
             validation_errors.append(url_error)
     normalized_method: str | None = None
     if "method" in execution_spec:
-        method_error = _describe_tool_execution_http_method_validation_error(
-            execution_spec.get("method")
-        )
-        if method_error:
-            validation_errors.append(method_error)
-        else:
-            normalized_method = _normalize_tool_execution_http_method(
-                execution_spec.get("method")
+        raw_method = execution_spec.get("method")
+        method_for_validation: object | None = raw_method
+        if _iter_tool_execution_template_variable_references(
+            raw_method,
+            path="method",
+        ):
+            rendered_method = _render_tool_execution_template_for_static_analysis(
+                raw_method,
+                context=template_context,
+                path="method",
             )
+            method_for_validation = (
+                None
+                if rendered_method is _TOOL_EXECUTION_TEMPLATE_MISSING
+                else rendered_method
+            )
+        if method_for_validation is not None:
+            method_error = _describe_tool_execution_http_method_validation_error(
+                method_for_validation
+            )
+            if method_error:
+                validation_errors.append(method_error)
+            else:
+                normalized_method = _normalize_tool_execution_http_method(
+                    method_for_validation
+                )
     if "timeout_ms" in execution_spec:
-        timeout_error = _describe_tool_execution_timeout_ms_validation_error(
-            execution_spec.get("timeout_ms")
-        )
-        if timeout_error:
-            validation_errors.append(timeout_error)
+        raw_timeout_ms = execution_spec.get("timeout_ms")
+        timeout_ms_for_validation: object | None = raw_timeout_ms
+        if _iter_tool_execution_template_variable_references(
+            raw_timeout_ms,
+            path="timeout_ms",
+        ):
+            rendered_timeout_ms = _render_tool_execution_template_for_static_analysis(
+                raw_timeout_ms,
+                context=template_context,
+                path="timeout_ms",
+            )
+            timeout_ms_for_validation = (
+                None
+                if rendered_timeout_ms is _TOOL_EXECUTION_TEMPLATE_MISSING
+                else rendered_timeout_ms
+            )
+        if timeout_ms_for_validation is not None:
+            timeout_error = _describe_tool_execution_timeout_ms_validation_error(
+                timeout_ms_for_validation
+            )
+            if timeout_error:
+                validation_errors.append(timeout_error)
     raw_headers = execution_spec.get("headers")
     if (
         raw_headers is not None
