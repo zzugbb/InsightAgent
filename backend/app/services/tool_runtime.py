@@ -1689,7 +1689,7 @@ def _normalize_tool_execution_http_headers(raw_value: object) -> dict[str, str]:
 def _normalize_tool_execution_http_query_params(
     raw_value: object,
 ) -> dict[str, object]:
-    if not isinstance(raw_value, dict):
+    if not isinstance(raw_value, Mapping):
         return {}
     query_params: dict[str, object] = {}
     for raw_key, raw_item in raw_value.items():
@@ -1697,7 +1697,9 @@ def _normalize_tool_execution_http_query_params(
             continue
         if raw_item is None:
             continue
-        if isinstance(raw_item, tuple):
+        if isinstance(raw_item, Sequence) and not isinstance(
+            raw_item, (str, bytes, bytearray, memoryview)
+        ):
             query_params[raw_key] = list(raw_item)
             continue
         query_params[raw_key] = raw_item
@@ -2002,7 +2004,9 @@ def _is_supported_tool_execution_http_scalar_value(raw_value: object) -> bool:
 def _is_supported_tool_execution_http_query_value(raw_value: object) -> bool:
     if _is_supported_tool_execution_http_scalar_value(raw_value):
         return True
-    if isinstance(raw_value, (list, tuple)):
+    if isinstance(raw_value, Sequence) and not isinstance(
+        raw_value, (str, bytes, bytearray, memoryview)
+    ):
         return all(
             _is_supported_tool_execution_http_scalar_value(item)
             for item in raw_value
@@ -2311,7 +2315,7 @@ def _describe_tool_execution_http_value_validation_errors(
     field_name: str,
     raw_mapping: object,
 ) -> tuple[str, ...]:
-    if not isinstance(raw_mapping, dict):
+    if not isinstance(raw_mapping, Mapping):
         return ()
     validation_errors: list[str] = []
     if field_name == "headers" and _http_headers_contain_duplicate_names(
@@ -4181,11 +4185,27 @@ def _build_http_json_tool_runner(
         rendered_headers = _normalize_tool_execution_http_headers(
             rendered_headers_value
         )
-        rendered_query_params_value = _render_required_tool_execution_template(
-            raw_query_params,
-            context=context,
-            path="query_params",
-        )
+        rendered_query_params_value: object = {}
+        if raw_query_params is not None:
+            rendered_query_params_value = _render_required_tool_execution_template(
+                raw_query_params,
+                context=context,
+                path="query_params",
+            )
+            try:
+                rendered_query_params_value = _coerce_http_json_json_compatible_body(
+                    rendered_query_params_value
+                )
+            except TypeError as exc:
+                raise MockToolExecutionError(
+                    "HTTP JSON tool query_params must resolve to an object.",
+                    fatal=True,
+                ) from exc
+            if not isinstance(rendered_query_params_value, Mapping):
+                raise MockToolExecutionError(
+                    "HTTP JSON tool query_params must resolve to an object.",
+                    fatal=True,
+                )
         _raise_http_json_rendered_value_validation_error(
             field_name="query_params",
             raw_mapping=rendered_query_params_value,
@@ -4804,7 +4824,11 @@ def _describe_tool_execution_spec_validation_errors(
     if raw_headers is not None and not isinstance(raw_headers, dict):
         validation_errors.append("http_json execution headers must be an object")
     raw_query_params = execution_spec.get("query_params")
-    if raw_query_params is not None and not isinstance(raw_query_params, dict):
+    if (
+        raw_query_params is not None
+        and not isinstance(raw_query_params, dict)
+        and not _is_tool_execution_root_template_reference(raw_query_params)
+    ):
         validation_errors.append("http_json execution query_params must be an object")
     raw_json_body = execution_spec.get("json_body")
     if (
