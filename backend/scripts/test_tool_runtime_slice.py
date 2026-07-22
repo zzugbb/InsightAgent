@@ -8964,6 +8964,53 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", excerpt)
         self.assertNotIn("secret-token", excerpt)
 
+    def test_session_export_summary_coercion_redacts_http_json_base_model_message_content(
+        self,
+    ) -> None:
+        summary = {
+            "usage_summary": {"tasks_total": 0},
+            "tasks": [],
+            "stats": {
+                "task_count": 0,
+                "message_count": 1,
+                "trace_step_count": 0,
+                "rag_hit_count": 0,
+            },
+            "governance": None,
+            "messages": [
+                session_routes_module.SessionExportMessage(  # type: ignore[attr-defined]
+                    id="message-session-model-http-json",
+                    task_id=None,
+                    role="assistant",
+                    content=(
+                        "Provider Status [provider_status via http_json] "
+                        "failed response_path=$.data.access_token "
+                        "callback https://provider.example/cb?"
+                        "access_token=secret-token#client_secret=hidden "
+                        "Bearer secret-token"
+                    ),
+                    created_at="2026-07-22T09:10:00",
+                )
+            ],
+        }
+
+        normalized = session_routes_module._coerce_session_export_summary(summary)  # type: ignore[attr-defined]
+
+        serialized = json.dumps(
+            [
+                item.model_dump() if hasattr(item, "model_dump") else item
+                for item in normalized["messages"]
+            ],
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_tasks_forwards_query_to_list_and_count(self) -> None:
         original_get_session = task_routes_module.get_session
         original_list_tasks = task_routes_module.list_tasks
@@ -31491,6 +31538,62 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("access_token", serialized_chunks)
         self.assertNotIn("Bearer", serialized_chunks)
         self.assertNotIn("secret-token", serialized_chunks)
+
+    def test_task_export_summary_coercion_redacts_http_json_base_model_message_content(
+        self,
+    ) -> None:
+        summary = {
+            "task": {
+                "id": "task-export-route-model-message",
+                "session_id": "session-export-route-model-message",
+                "prompt": "shared prompt",
+                "status": "completed",
+                "status_normalized": "normalized::completed",
+                "status_label": "label::completed",
+                "status_rank": 9,
+                "created_at": "2026-07-22T09:20:00",
+                "updated_at": "2026-07-22T09:21:00",
+            },
+            "usage": None,
+            "messages": [
+                task_routes_module.TaskExportMessage(  # type: ignore[attr-defined]
+                    id="message-task-model-http-json",
+                    role="assistant",
+                    content=(
+                        "Provider Search [provider_search via http_json] "
+                        "failed response_path=$.data.access_token "
+                        "callback https://provider.example/cb?"
+                        "access_token=secret-token#client_secret=hidden "
+                        "Bearer secret-token"
+                    ),
+                    created_at="2026-07-22T09:22:00",
+                )
+            ],
+            "trace": {
+                "governance": None,
+                "steps": [],
+                "step_count": 0,
+                "rag_hit_count": 0,
+                "rag_knowledge_base_ids": [],
+                "rag_chunks": [],
+            },
+        }
+
+        normalized = task_routes_module._coerce_task_export_summary(summary)  # type: ignore[attr-defined]
+
+        response = task_routes_module.TaskExportJsonResponse(  # type: ignore[attr-defined]
+            version="1.0",
+            exported_at="2026-07-22T09:23:00",
+            **normalized,
+        )
+        serialized = response.model_dump_json()
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
 
     def test_get_task_export_response_summary_accepts_tuple_trace_steps(
         self,

@@ -146,15 +146,18 @@ def _coerce_session_export_messages_for_route(value: object) -> object:
         return messages
     normalized_messages: list[object] = []
     for item in messages:
-        if isinstance(item, BaseModel):
-            normalized_messages.append(item)
-            continue
+        item_is_model = isinstance(item, BaseModel)
         item_is_dict = isinstance(item, dict)
         message = dict(item) if item_is_dict else _coerce_payload_mapping(item)
         if not message:
             normalized_messages.append(item)
             continue
-        normalized_messages.append(_redact_http_json_message_content_for_route(message))
+        original_content = message.get("content")
+        redacted_message = _redact_http_json_message_content_for_route(message)
+        if item_is_model and redacted_message.get("content") == original_content:
+            normalized_messages.append(item)
+            continue
+        normalized_messages.append(redacted_message)
     return normalized_messages
 
 

@@ -126,9 +126,7 @@ def _coerce_task_export_messages_for_route(value: object) -> object:
         return messages
     normalized_messages: list[object] = []
     for item in messages:
-        if isinstance(item, BaseModel):
-            normalized_messages.append(item)
-            continue
+        item_is_model = isinstance(item, BaseModel)
         item_is_dict = isinstance(item, dict)
         message = dict(item) if item_is_dict else _coerce_payload_mapping(item)
         if not message:
@@ -145,6 +143,9 @@ def _coerce_task_export_messages_for_route(value: object) -> object:
                     content
                 )
             )
+        elif item_is_model:
+            normalized_messages.append(item)
+            continue
         normalized_messages.append(message)
     return normalized_messages
 
