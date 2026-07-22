@@ -7,7 +7,7 @@ import gzip
 import zlib
 import codecs
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -3290,10 +3290,11 @@ def _coerce_http_json_json_compatible_body(raw_body: object) -> object:
             key: _coerce_http_json_json_compatible_body(value)
             for key, value in raw_body.items()
         }
-    if isinstance(raw_body, list):
+    if isinstance(raw_body, Sequence) and not isinstance(
+        raw_body,
+        (str, bytes, bytearray, memoryview),
+    ):
         return [_coerce_http_json_json_compatible_body(value) for value in raw_body]
-    if isinstance(raw_body, tuple):
-        return tuple(_coerce_http_json_json_compatible_body(value) for value in raw_body)
     return raw_body
 
 
