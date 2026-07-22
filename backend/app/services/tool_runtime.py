@@ -3351,6 +3351,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         except Exception as exc:
             raise TypeError(f"response json failed: {exc}") from exc
         return _coerce_http_json_response_json_body_bytes(raw_json_body)
+    if json_body is not None:
+        return _coerce_http_json_response_json_body_bytes(json_body)
     if read_type_error is not None:
         raise read_type_error
     raise TypeError("response body reader is unavailable")
