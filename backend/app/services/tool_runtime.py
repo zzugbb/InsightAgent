@@ -1359,7 +1359,7 @@ def _render_tool_execution_template(
                 else _TOOL_EXECUTION_TEMPLATE_MISSING
             )
         return value
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         rendered_mapping: dict[str, object] = {}
         for raw_key, raw_value in value.items():
             if not isinstance(raw_key, str) or not raw_key.strip():
@@ -1372,7 +1372,9 @@ def _render_tool_execution_template(
                 continue
             rendered_mapping[raw_key] = rendered_value
         return rendered_mapping
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray, memoryview)
+    ):
         rendered_items: list[object] = []
         for item in value:
             rendered_item = _render_tool_execution_template(item, context=context)
@@ -1401,7 +1403,7 @@ def _iter_missing_tool_execution_template_variables(
             if lookup_key and lookup_key not in context:
                 missing.append((path, lookup_key))
         return tuple(missing)
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         missing: list[tuple[str, str]] = []
         for raw_key, raw_item in value.items():
             if not isinstance(raw_key, str) or not raw_key.strip():
@@ -1415,7 +1417,9 @@ def _iter_missing_tool_execution_template_variables(
                 )
             )
         return tuple(missing)
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray, memoryview)
+    ):
         missing: list[tuple[str, str]] = []
         for index, item in enumerate(value):
             missing.extend(
@@ -1505,9 +1509,10 @@ def _iter_tool_execution_mapping_path_template_variable_references(
             if match.group(1).strip()
         )
         return tuple(references)
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         references: list[tuple[str, str]] = []
         for raw_key, raw_item in value.items():
+            raw_key = _coerce_http_json_mapping_field_name(raw_key)
             if not isinstance(raw_key, str) or not raw_key.strip():
                 continue
             child_path = f"{path}.{raw_key.strip()}" if path else raw_key.strip()
@@ -1518,7 +1523,9 @@ def _iter_tool_execution_mapping_path_template_variable_references(
                 )
             )
         return tuple(references)
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray, memoryview)
+    ):
         references: list[tuple[str, str]] = []
         for index, item in enumerate(value):
             references.extend(
@@ -1663,7 +1670,7 @@ def _iter_tool_execution_template_variable_references(
             if match.group(1).strip()
         )
         return tuple(references)
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         references: list[tuple[str, str]] = []
         for raw_key, raw_item in value.items():
             if not isinstance(raw_key, str) or not raw_key.strip():
@@ -1676,7 +1683,9 @@ def _iter_tool_execution_template_variable_references(
                 )
             )
         return tuple(references)
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray, memoryview)
+    ):
         references: list[tuple[str, str]] = []
         for index, item in enumerate(value):
             references.extend(
@@ -1740,7 +1749,7 @@ def _collect_tool_execution_runtime_template_validation_errors(
                     path="result_fields",
                 )
             )
-        elif isinstance(raw_result_fields, dict):
+        elif isinstance(raw_result_fields, Mapping):
             references.extend(
                 _iter_tool_execution_mapping_path_template_variable_references(
                     raw_result_fields,
@@ -5244,21 +5253,21 @@ def _describe_tool_execution_spec_validation_errors(
     raw_headers = execution_spec.get("headers")
     if (
         raw_headers is not None
-        and not isinstance(raw_headers, dict)
+        and not isinstance(raw_headers, Mapping)
         and not _is_tool_execution_root_template_reference(raw_headers)
     ):
         validation_errors.append("http_json execution headers must be an object")
     raw_query_params = execution_spec.get("query_params")
     if (
         raw_query_params is not None
-        and not isinstance(raw_query_params, dict)
+        and not isinstance(raw_query_params, Mapping)
         and not _is_tool_execution_root_template_reference(raw_query_params)
     ):
         validation_errors.append("http_json execution query_params must be an object")
     raw_json_body = execution_spec.get("json_body")
     if (
         raw_json_body is not None
-        and not isinstance(raw_json_body, dict)
+        and not isinstance(raw_json_body, Mapping)
         and not _is_tool_execution_root_template_reference(raw_json_body)
     ):
         validation_errors.append("http_json execution json_body must be an object")
@@ -5358,7 +5367,7 @@ def _describe_tool_execution_spec_validation_errors(
         ("query_params", raw_query_params),
         ("json_body", raw_json_body),
     ):
-        if not isinstance(raw_mapping, dict):
+        if not isinstance(raw_mapping, Mapping):
             continue
         has_valid_field_name = False
         has_blank_field_name = False

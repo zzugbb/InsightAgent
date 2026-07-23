@@ -70704,6 +70704,76 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
+    def test_tool_execution_spec_validation_rejects_http_json_result_fields_mapping_wrapper_unsupported_runtime_template(
+        self,
+    ) -> None:
+        validation_errors = (
+            tool_runtime_module._describe_tool_execution_spec_validation_errors(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": "https://provider.example/search",
+                    "result_fields": UserDict(
+                        {
+                            UserString("documents_total"): UserString(
+                                "$.${tool_registry_result_scope_typo}.total"
+                            ),
+                        }
+                    ),
+                }
+            )
+        )
+
+        self.assertEqual(
+            validation_errors,
+            (
+                "http_json execution references unsupported runtime template variable tool_registry_result_scope_typo in result_fields.documents_total",
+            ),
+        )
+
+    def test_tool_execution_spec_validation_rejects_http_json_request_mapping_wrappers_unsupported_runtime_templates(
+        self,
+    ) -> None:
+        validation_errors = (
+            tool_runtime_module._describe_tool_execution_spec_validation_errors(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": "https://provider.example/search",
+                    "headers": UserDict(
+                        {
+                            "Authorization": "Bearer ${settings_api_keey}",
+                        }
+                    ),
+                    "query_params": UserDict(
+                        {
+                            "source": "$tool_registry_provider_sourcee",
+                        }
+                    ),
+                    "json_body": UserDict(
+                        {
+                            "filters": UserList(
+                                [
+                                    UserDict(
+                                        {
+                                            "rank": "$settings_rank_typo",
+                                        }
+                                    )
+                                ]
+                            ),
+                        }
+                    ),
+                }
+            )
+        )
+
+        self.assertEqual(
+            validation_errors,
+            (
+                "http_json execution references unsupported runtime template variable settings_api_keey in headers.Authorization",
+                "http_json execution references unsupported runtime template variable tool_registry_provider_sourcee in query_params.source",
+                "http_json execution references unsupported runtime template variable settings_rank_typo in json_body.filters[0].rank",
+            ),
+        )
+
     def test_tool_registry_execution_diagnostics_accept_http_json_mapping_interpolation_templates(
         self,
     ) -> None:
