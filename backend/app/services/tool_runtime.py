@@ -1362,15 +1362,17 @@ def _render_tool_execution_template(
     if isinstance(value, Mapping):
         rendered_mapping: dict[str, object] = {}
         for raw_key, raw_value in value.items():
+            raw_key = _coerce_http_json_mapping_field_name(raw_key)
             if not isinstance(raw_key, str) or not raw_key.strip():
                 continue
+            normalized_key = raw_key.strip()
             rendered_value = _render_tool_execution_template(
                 raw_value,
                 context=context,
             )
             if rendered_value is _TOOL_EXECUTION_TEMPLATE_MISSING or rendered_value is None:
                 continue
-            rendered_mapping[raw_key] = rendered_value
+            rendered_mapping[normalized_key] = rendered_value
         return rendered_mapping
     if isinstance(value, Sequence) and not isinstance(
         value, (str, bytes, bytearray, memoryview)
@@ -1406,6 +1408,7 @@ def _iter_missing_tool_execution_template_variables(
     if isinstance(value, Mapping):
         missing: list[tuple[str, str]] = []
         for raw_key, raw_item in value.items():
+            raw_key = _coerce_http_json_mapping_field_name(raw_key)
             if not isinstance(raw_key, str) or not raw_key.strip():
                 continue
             child_path = f"{path}.{raw_key.strip()}" if path else raw_key.strip()
@@ -1618,6 +1621,18 @@ def _coerce_http_json_mapping_field_name(raw_value: object) -> object:
     return raw_value
 
 
+def _iter_http_json_mapping_field_names(raw_mapping: object) -> tuple[str, ...]:
+    if not isinstance(raw_mapping, Mapping):
+        return ()
+    field_names: list[str] = []
+    for raw_key in raw_mapping:
+        raw_key = _coerce_http_json_mapping_field_name(raw_key)
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            continue
+        field_names.append(raw_key.strip())
+    return tuple(field_names)
+
+
 def _resolve_tool_execution_mapping_path_for_static_validation(
     value: object,
     *,
@@ -1673,6 +1688,7 @@ def _iter_tool_execution_template_variable_references(
     if isinstance(value, Mapping):
         references: list[tuple[str, str]] = []
         for raw_key, raw_item in value.items():
+            raw_key = _coerce_http_json_mapping_field_name(raw_key)
             if not isinstance(raw_key, str) or not raw_key.strip():
                 continue
             child_path = f"{path}.{raw_key.strip()}" if path else raw_key.strip()
@@ -1871,11 +1887,12 @@ def _normalize_tool_execution_http_headers(raw_value: object) -> dict[str, str]:
         return {}
     headers: dict[str, str] = {}
     for raw_key, raw_item in raw_value.items():
+        raw_key = _coerce_http_json_mapping_field_name(raw_key)
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
         if raw_item is None:
             continue
-        headers[raw_key] = str(raw_item)
+        headers[raw_key.strip()] = str(raw_item)
     return headers
 
 
@@ -1886,16 +1903,18 @@ def _normalize_tool_execution_http_query_params(
         return {}
     query_params: dict[str, object] = {}
     for raw_key, raw_item in raw_value.items():
+        raw_key = _coerce_http_json_mapping_field_name(raw_key)
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
         if raw_item is None:
             continue
+        normalized_key = raw_key.strip()
         if isinstance(raw_item, Sequence) and not isinstance(
             raw_item, (str, bytes, bytearray, memoryview)
         ):
-            query_params[raw_key] = list(raw_item)
+            query_params[normalized_key] = list(raw_item)
             continue
-        query_params[raw_key] = raw_item
+        query_params[normalized_key] = raw_item
     return query_params
 
 
@@ -1990,7 +2009,7 @@ def _describe_tool_execution_http_duplicate_query_param_validation_error(
     url: object,
     query_params: object,
 ) -> str | None:
-    if not isinstance(query_params, dict) or not query_params:
+    if not isinstance(query_params, Mapping) or not query_params:
         return None
     url_query_param_names = {
         query_param_name
@@ -2000,6 +2019,7 @@ def _describe_tool_execution_http_duplicate_query_param_validation_error(
     if not url_query_param_names:
         return None
     for raw_key in query_params:
+        raw_key = _coerce_http_json_mapping_field_name(raw_key)
         if (
             isinstance(raw_key, str)
             and _is_supported_tool_execution_http_query_param_name(raw_key)
@@ -2258,6 +2278,7 @@ def _http_headers_contain_duplicate_names(headers: object) -> bool:
         return False
     seen_header_names: set[str] = set()
     for raw_key in headers:
+        raw_key = _coerce_http_json_mapping_field_name(raw_key)
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
         normalized_key = raw_key.strip().lower()
@@ -2271,10 +2292,11 @@ def _get_tool_execution_http_header_value(
     headers: object,
     header_name: str,
 ) -> object | None:
-    if not isinstance(headers, dict):
+    if not isinstance(headers, Mapping):
         return None
     normalized_header_name = header_name.strip().lower()
     for raw_key, raw_value in headers.items():
+        raw_key = _coerce_http_json_mapping_field_name(raw_key)
         if (
             isinstance(raw_key, str)
             and raw_key.strip().lower() == normalized_header_name
@@ -2540,6 +2562,7 @@ def _describe_tool_execution_http_value_validation_errors(
             "http_json execution headers must not include duplicate HTTP header names"
         )
     for raw_key, raw_item in raw_mapping.items():
+        raw_key = _coerce_http_json_mapping_field_name(raw_key)
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
         normalized_key = raw_key.strip()
@@ -2609,6 +2632,7 @@ def _describe_tool_execution_json_body_validation_errors(
     if isinstance(raw_value, Mapping):
         validation_errors: list[str] = []
         for raw_key, raw_item in raw_value.items():
+            raw_key = _coerce_http_json_mapping_field_name(raw_key)
             if not isinstance(raw_key, str) or not raw_key.strip():
                 if path != "json_body":
                     validation_errors.append(
@@ -5020,43 +5044,28 @@ def _build_tool_execution_summary_from_spec(
         if safe_path:
             summary["url_path"] = safe_path
     raw_headers = execution_spec.get("headers")
-    if isinstance(raw_headers, dict) and raw_headers:
-        summary["header_count"] = len(
-            [
-                raw_key
-                for raw_key in raw_headers
-                if isinstance(raw_key, str) and raw_key.strip()
-            ]
-        )
+    header_names = _iter_http_json_mapping_field_names(raw_headers)
+    if header_names:
+        summary["header_count"] = len(header_names)
     raw_query_params = execution_spec.get("query_params")
-    if isinstance(raw_query_params, dict) and raw_query_params:
-        summary["query_param_count"] = len(
-            [
-                raw_key
-                for raw_key in raw_query_params
-                if isinstance(raw_key, str) and raw_key.strip()
-            ]
-        )
+    query_param_names = _iter_http_json_mapping_field_names(raw_query_params)
+    if query_param_names:
+        summary["query_param_count"] = len(query_param_names)
     raw_json_body = execution_spec.get("json_body")
-    if isinstance(raw_json_body, dict) and raw_json_body:
-        summary["json_body_field_count"] = len(
-            [
-                raw_key
-                for raw_key in raw_json_body
-                if isinstance(raw_key, str) and raw_key.strip()
-            ]
-        )
+    json_body_field_names = _iter_http_json_mapping_field_names(raw_json_body)
+    if json_body_field_names:
+        summary["json_body_field_count"] = len(json_body_field_names)
     raw_response_path = execution_spec.get("response_path")
     if isinstance(raw_response_path, str) and raw_response_path.strip():
         summary["response_path"] = _format_http_json_mapping_path_for_error(
             raw_response_path
         )
     raw_result_fields = execution_spec.get("result_fields")
-    if isinstance(raw_result_fields, dict) and raw_result_fields:
+    result_field_names = _iter_http_json_mapping_field_names(raw_result_fields)
+    if result_field_names:
         result_field_names = tuple(
             _format_safe_tool_execution_summary_field_name(raw_key)
-            for raw_key in raw_result_fields
-            if isinstance(raw_key, str) and raw_key.strip()
+            for raw_key in result_field_names
         )
         if result_field_names:
             summary["result_field_names"] = list(result_field_names)
@@ -5369,11 +5378,11 @@ def _describe_tool_execution_spec_validation_errors(
     ):
         if not isinstance(raw_mapping, Mapping):
             continue
-        has_valid_field_name = False
+        has_valid_field_name = bool(_iter_http_json_mapping_field_names(raw_mapping))
         has_blank_field_name = False
         for raw_key in raw_mapping:
+            raw_key = _coerce_http_json_mapping_field_name(raw_key)
             if isinstance(raw_key, str) and raw_key.strip():
-                has_valid_field_name = True
                 continue
             has_blank_field_name = True
         if has_blank_field_name:
