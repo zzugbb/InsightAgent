@@ -3629,6 +3629,8 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
         return bytes(raw_body)
     if isinstance(raw_body, memoryview):
         return raw_body.tobytes()
+    if isinstance(raw_body, UserString):
+        return str(raw_body).encode("utf-8")
     if isinstance(raw_body, str):
         return raw_body.encode("utf-8")
     raise TypeError("response body must be bytes or text")
