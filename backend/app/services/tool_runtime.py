@@ -3874,7 +3874,8 @@ def _read_http_json_response_body_iterator(iterator_method: object) -> bytes:
             type_error = exc
             continue
         except Exception as exc:
-            raise TypeError(f"response body iterator failed: {exc}") from exc
+            type_error = TypeError(f"response body iterator failed: {exc}")
+            continue
         if raw_iterator is None:
             type_error = TypeError("response body iterator is unavailable")
             continue
