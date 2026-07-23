@@ -3888,6 +3888,13 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
             if body:
                 return body
             read_empty_body = body
+            try:
+                body = _read_http_json_response_body_chunked(read)
+                if body:
+                    return body
+                read_empty_body = body
+            except TypeError:
+                pass
         except TypeError as exc:
             read_type_error = exc
             try:
