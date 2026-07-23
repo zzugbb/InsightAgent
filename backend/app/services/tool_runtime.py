@@ -3971,7 +3971,14 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
     except TypeError:
         response_iterator = None
     if response_iterator is not None:
-        return _read_http_json_response_body_chunks(response_iterator)
+        try:
+            body = _read_http_json_response_body_chunks(response_iterator)
+            if body:
+                return body
+            iterator_empty_body = body
+        except _HttpJsonResponseBodyInitialIteratorTypeError as exc:
+            if iterator_type_error is None:
+                iterator_type_error = exc
     if iterator_empty_body is not None:
         return iterator_empty_body
     if attr_empty_body is not None:
