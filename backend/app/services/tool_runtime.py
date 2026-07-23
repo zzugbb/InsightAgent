@@ -3743,10 +3743,13 @@ def _coerce_http_json_json_body_dump_json_compatible(raw_body: object) -> object
         model_dump_json = _get_http_json_adapter_attr(raw_body, method_name)
         if not callable(model_dump_json):
             continue
-        dumped_body = _call_http_json_json_body_dump_json_method(
-            method_name,
-            model_dump_json,
-        )
+        try:
+            dumped_body = _call_http_json_json_body_dump_json_method(
+                method_name,
+                model_dump_json,
+            )
+        except TypeError:
+            continue
         try:
             return json.loads(dumped_body.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -3761,10 +3764,13 @@ def _read_http_json_json_body_dump_json_bytes(raw_body: object) -> bytes | None:
         model_dump_json = _get_http_json_adapter_attr(raw_body, method_name)
         if not callable(model_dump_json):
             continue
-        return _call_http_json_json_body_dump_json_method(
-            method_name,
-            model_dump_json,
-        )
+        try:
+            return _call_http_json_json_body_dump_json_method(
+                method_name,
+                model_dump_json,
+            )
+        except TypeError:
+            continue
     return None
 
 
@@ -3861,6 +3867,7 @@ def _read_http_json_response_body_iterator(iterator_method: object) -> bytes:
 def _read_http_json_response_body_bytes(response: object) -> bytes:
     read_type_error: TypeError | None = None
     attr_type_error: TypeError | None = None
+    json_type_error: TypeError | None = None
     read = _get_http_json_adapter_attr(response, "read")
     if callable(read):
         try:
@@ -3892,10 +3899,13 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
     if callable(json_body):
         try:
             raw_json_body = json_body()
+        except TypeError as exc:
+            json_type_error = exc
         except Exception as exc:
             raise TypeError(f"response json failed: {exc}") from exc
-        return _coerce_http_json_response_json_body_bytes(raw_json_body)
-    if json_body is not None:
+        else:
+            return _coerce_http_json_response_json_body_bytes(raw_json_body)
+    if json_body is not None and not callable(json_body):
         return _coerce_http_json_response_json_body_bytes(json_body)
     try:
         response_iterator = iter(response)
@@ -3907,6 +3917,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         raise read_type_error
     if attr_type_error is not None:
         raise attr_type_error
+    if json_type_error is not None:
+        raise json_type_error
     raise TypeError("response body reader is unavailable")
 
 
