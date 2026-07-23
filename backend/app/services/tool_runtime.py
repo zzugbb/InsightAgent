@@ -3918,9 +3918,15 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         except Exception as exc:
             raise TypeError(f"response json failed: {exc}") from exc
         else:
-            return _coerce_http_json_response_json_body_bytes(raw_json_body)
+            try:
+                return _coerce_http_json_response_json_body_bytes(raw_json_body)
+            except TypeError as exc:
+                json_type_error = exc
     if json_body is not None and not callable(json_body):
-        return _coerce_http_json_response_json_body_bytes(json_body)
+        try:
+            return _coerce_http_json_response_json_body_bytes(json_body)
+        except TypeError as exc:
+            json_type_error = exc
     try:
         response_iterator = iter(response)
     except TypeError:
