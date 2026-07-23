@@ -74328,6 +74328,143 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
 
+    def test_tool_execution_spec_validation_accepts_http_json_typed_request_values(
+        self,
+    ) -> None:
+        class HeaderValue:
+            def to_json(self) -> UserString:
+                return UserString('"typed-provider"')
+
+        class QueryTags:
+            def model_dump_json(self) -> UserString:
+                return UserString('["fresh","provider"]')
+
+        class BodyPayload:
+            def model_dump_json(self) -> UserString:
+                return UserString(
+                    '{"expression":"1+2*3","filters":[{"kind":"provider"}]}'
+                )
+
+        validation_errors = (
+            tool_runtime_module._describe_tool_execution_spec_validation_errors(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": "https://provider.example/search",
+                    "method": "POST",
+                    "headers": UserDict(
+                        {
+                            UserString("Content-Type"): "application/json",
+                            "X-Provider": HeaderValue(),
+                        }
+                    ),
+                    "query_params": UserDict(
+                        {
+                            UserString("tag"): QueryTags(),
+                        }
+                    ),
+                    "json_body": BodyPayload(),
+                }
+            )
+        )
+
+        self.assertEqual(validation_errors, ())
+
+    def test_tool_execution_spec_validation_accepts_http_json_typed_template_request_values(
+        self,
+    ) -> None:
+        class HeaderValue:
+            def model_dump_json(self) -> UserString:
+                return UserString('"typed-provider"')
+
+        class QueryTags:
+            def to_json(self) -> UserString:
+                return UserString('["fresh","provider"]')
+
+        class BodyPayload:
+            def to_dict(self) -> UserDict:
+                return UserDict(
+                    {
+                        UserString("expression"): "1+2*3",
+                        "tags": UserList(["math", "typed"]),
+                    }
+                )
+
+        validation_errors = (
+            tool_runtime_module._describe_tool_execution_spec_validation_errors(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": "https://provider.example/search",
+                    "method": "POST",
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "X-Provider": "$settings_api_key",
+                    },
+                    "query_params": {
+                        "tag": "$tool_registry_provider_source",
+                    },
+                    "json_body": "$settings_model",
+                },
+                template_context={
+                    "settings_api_key": HeaderValue(),
+                    "tool_registry_provider_source": QueryTags(),
+                    "settings_model": BodyPayload(),
+                },
+            )
+        )
+
+        self.assertEqual(validation_errors, ())
+
+    def test_tool_execution_spec_validation_rejects_http_json_typed_request_value_unsupported_runtime_templates(
+        self,
+    ) -> None:
+        class HeaderMapping:
+            def model_dump(self) -> UserDict:
+                return UserDict(
+                    {
+                        UserString("Authorization"): UserString(
+                            "Bearer ${settings_api_keey}"
+                        ),
+                    }
+                )
+
+        class QueryMapping:
+            def to_dict(self) -> UserDict:
+                return UserDict(
+                    {
+                        UserString("source"): UserString(
+                            "$tool_registry_provider_sourcee"
+                        ),
+                    }
+                )
+
+        class BodyPayload:
+            def model_dump_json(self) -> UserString:
+                return UserString(
+                    '{"filters":[{"rank":"$settings_rank_typo"}]}'
+                )
+
+        validation_errors = (
+            tool_runtime_module._describe_tool_execution_spec_validation_errors(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": "https://provider.example/search",
+                    "method": "POST",
+                    "headers": HeaderMapping(),
+                    "query_params": QueryMapping(),
+                    "json_body": BodyPayload(),
+                }
+            )
+        )
+
+        self.assertEqual(
+            validation_errors,
+            (
+                "http_json execution references unsupported runtime template variable settings_api_keey in headers.Authorization",
+                "http_json execution references unsupported runtime template variable tool_registry_provider_sourcee in query_params.source",
+                "http_json execution references unsupported runtime template variable settings_rank_typo in json_body.filters[0].rank",
+            ),
+        )
+
     def test_tool_registry_execution_diagnostics_accept_http_json_mapping_interpolation_templates(
         self,
     ) -> None:

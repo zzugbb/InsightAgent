@@ -1670,6 +1670,13 @@ def _resolve_tool_execution_template_value_for_static_validation(
     return rendered_value
 
 
+def _coerce_tool_execution_value_for_static_validation(value: object) -> object:
+    try:
+        return _coerce_http_json_json_compatible_body(value)
+    except TypeError:
+        return value
+
+
 def _iter_tool_execution_template_variable_references(
     value: object,
     *,
@@ -5426,41 +5433,47 @@ def _describe_tool_execution_spec_validation_errors(
             if timeout_error:
                 validation_errors.append(timeout_error)
     raw_headers = execution_spec.get("headers")
+    headers_for_validation = _coerce_tool_execution_value_for_static_validation(
+        _resolve_tool_execution_template_value_for_static_validation(
+            raw_headers,
+            context=template_context,
+            path="headers",
+        )
+    )
     if (
         raw_headers is not None
-        and not isinstance(raw_headers, Mapping)
+        and not isinstance(headers_for_validation, Mapping)
         and not _is_tool_execution_root_template_reference(raw_headers)
     ):
         validation_errors.append("http_json execution headers must be an object")
     raw_query_params = execution_spec.get("query_params")
+    query_params_for_validation = _coerce_tool_execution_value_for_static_validation(
+        _resolve_tool_execution_template_value_for_static_validation(
+            raw_query_params,
+            context=template_context,
+            path="query_params",
+        )
+    )
     if (
         raw_query_params is not None
-        and not isinstance(raw_query_params, Mapping)
+        and not isinstance(query_params_for_validation, Mapping)
         and not _is_tool_execution_root_template_reference(raw_query_params)
     ):
         validation_errors.append("http_json execution query_params must be an object")
     raw_json_body = execution_spec.get("json_body")
+    json_body_for_validation = _coerce_tool_execution_value_for_static_validation(
+        _resolve_tool_execution_template_value_for_static_validation(
+            raw_json_body,
+            context=template_context,
+            path="json_body",
+        )
+    )
     if (
         raw_json_body is not None
-        and not isinstance(raw_json_body, Mapping)
+        and not isinstance(json_body_for_validation, Mapping)
         and not _is_tool_execution_root_template_reference(raw_json_body)
     ):
         validation_errors.append("http_json execution json_body must be an object")
-    headers_for_validation = _resolve_tool_execution_template_value_for_static_validation(
-        raw_headers,
-        context=template_context,
-        path="headers",
-    )
-    query_params_for_validation = _resolve_tool_execution_template_value_for_static_validation(
-        raw_query_params,
-        context=template_context,
-        path="query_params",
-    )
-    json_body_for_validation = _resolve_tool_execution_template_value_for_static_validation(
-        raw_json_body,
-        context=template_context,
-        path="json_body",
-    )
     if normalized_method == "GET" and raw_json_body is not None:
         validation_errors.append(
             "http_json execution GET method must not define json_body; "
@@ -5538,9 +5551,9 @@ def _describe_tool_execution_spec_validation_errors(
     ):
         validation_errors.append("http_json execution result_fields must be an object")
     for field_name, raw_mapping in (
-        ("headers", raw_headers),
-        ("query_params", raw_query_params),
-        ("json_body", raw_json_body),
+        ("headers", headers_for_validation),
+        ("query_params", query_params_for_validation),
+        ("json_body", json_body_for_validation),
     ):
         if not isinstance(raw_mapping, Mapping):
             continue
@@ -5620,9 +5633,17 @@ def _describe_tool_execution_spec_validation_errors(
                 "http_json execution result_fields must include at least one "
                 "non-empty field name"
             )
+    runtime_template_validation_spec = {
+        **execution_spec,
+        "headers": headers_for_validation,
+        "query_params": query_params_for_validation,
+        "json_body": json_body_for_validation,
+    }
+    if result_fields_for_validation is not _TOOL_EXECUTION_TEMPLATE_MISSING:
+        runtime_template_validation_spec["result_fields"] = result_fields_for_validation
     validation_errors.extend(
         _collect_tool_execution_runtime_template_validation_errors(
-            execution_spec=execution_spec,
+            execution_spec=runtime_template_validation_spec,
         )
     )
     return tuple(dict.fromkeys(validation_errors))
