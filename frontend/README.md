@@ -26,6 +26,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - HTTP JSON typed dump callable signature metadata fallback 继续对齐后端：如果真实 SDK callable 的 `__signature__` 元数据本身抛错或不可检查，后端会继续尝试真实 dump 调用；根层/嵌套 response parsed body、request `json_body`、`query_params` 与 `headers` 的 typed dump 不会因为坏 signature metadata 在前端表现成 transport/config 假错误。
   - HTTP JSON typed dump-json string wrapper fallback 继续对齐后端：`model_dump_json()` / `to_json()` / typed `.json()` 返回 `UserString` 这类 string-like wrapper 时，后端会按 UTF-8 JSON 文本处理；前端不会再看到这类 wrapper 被误报成 body/query/header 协议错误。
   - HTTP JSON static diagnostics 继续对齐后端：direct typed request value 与 supported runtime template 渲染出的 typed header/query/body value 会先按真实 request coercion 归一化后再进入 settings/preflight 诊断；前端 model settings / preflight 不会再把可执行 typed wrapper 误报成 header/query/body 协议错误，也能提前看到 typed adapter dump 内的 reserved template typo。
+  - HTTP JSON execution summary 继续对齐后端：direct typed request mapping、`UserString` response_path 与 root template 渲染出的 typed `result_fields` 会进入安全摘要；前端 model settings、preflight tool details 与 trace/tool_start 不会再因为 wrapper 摘要侧路缺失 header/query/body count、response_path 或 result_field_names。
+  - HTTP JSON control field string wrapper 继续对齐后端：`url`、`method`、`timeout_ms` 的 `UserString` 和 `method` runtime template 会正确进入 validation、runner 与 execution_summary；前端看到的 tool details / trace method 与真实执行器保持一致。
   - HTTP JSON `read()` body 错误诊断继续对齐后端：当显式 `read()` 返回坏 body 类型，而泛型 `__iter__` 只是空 metadata iterator 时，前端会看到 reader body type 诊断，不会被误报成 `empty JSON response`；空 `read()` / 空 chunked read 的成功 fallback 不变。
   - HTTP JSON `read()` 调用形态 fallback 继续对齐后端：当无参 `read()` 与 `read(amt)` 都只是 SDK 方法签名不适配，但 `.content` 等后续 source 明确为空时，前端仍会看到稳定的 `empty JSON response`，不会被误报成 `transport error`。
   - HTTP JSON body 属性 fallback 继续对齐后端：当 `.content` / `.body` / `.data` / `.text` 属性值本身不可读时，后端会继续尝试后续属性与 `.json()` parsed body；如果 callable accessor 抛出真实运行时异常，前端仍会看到稳定的 `transport error` 诊断，而不是被错误 fallback 成假成功。
@@ -121,7 +123,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
   - 后端 mock final-answer observation parser 现在也会恢复 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串；因此前端最终回答在旧 observation 只剩嵌套 preview 时，也会继续显示 real calc / real retrieval 摘要，而不是 `output_preview=...` 或旁路字段。
 - 当前最近一次已记录校验基线：
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1514/1514`）
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1519/1519`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）

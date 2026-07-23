@@ -30224,6 +30224,154 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             json.dumps(extra_tools["provider_search"].execution_summary),
         )
 
+    def test_build_tool_execution_summary_accepts_http_json_typed_request_values(
+        self,
+    ) -> None:
+        class HeaderMapping:
+            def model_dump(self) -> UserDict:
+                return UserDict(
+                    {
+                        UserString("Content-Type"): "application/json",
+                        "X-Provider": "typed-source",
+                    }
+                )
+
+        class QueryMapping:
+            def to_json(self) -> UserString:
+                return UserString('{"source":"analytics","tag":["fresh","typed"]}')
+
+        class BodyPayload:
+            def to_dict(self) -> UserDict:
+                return UserDict(
+                    {
+                        UserString("expression"): "1+2*3",
+                        "filters": UserList(["provider", "fresh"]),
+                    }
+                )
+
+        execution_summary = (
+            tool_runtime_module._build_tool_execution_summary_from_spec(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": "https://provider.example/search",
+                    "method": "POST",
+                    "headers": HeaderMapping(),
+                    "query_params": QueryMapping(),
+                    "json_body": BodyPayload(),
+                    "response_path": UserString("$.data"),
+                    "result_fields": UserDict(
+                        {
+                            UserString("result"): UserString("$.data.value"),
+                        }
+                    ),
+                }
+            )
+        )
+
+        self.assertEqual(
+            execution_summary,
+            {
+                "method": "POST",
+                "url_origin": "https://provider.example",
+                "url_path": "/search",
+                "header_count": 2,
+                "query_param_count": 2,
+                "json_body_field_count": 2,
+                "response_path": "$.data",
+                "result_field_names": ["result"],
+            },
+        )
+
+    def test_build_tool_execution_summary_accepts_http_json_typed_template_result_fields(
+        self,
+    ) -> None:
+        class ResultFields:
+            def model_dump(self) -> UserDict:
+                return UserDict(
+                    {
+                        UserString("documents_total"): UserString("$.meta.total"),
+                        "request_id": UserString("$.meta.request_id"),
+                    }
+                )
+
+        execution_summary = (
+            tool_runtime_module._build_tool_execution_summary_from_spec(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": "https://provider.example/search",
+                    "result_fields": "$settings_model",
+                },
+                template_context={
+                    "settings_model": ResultFields(),
+                },
+            )
+        )
+
+        self.assertEqual(
+            execution_summary,
+            {
+                "method": "GET",
+                "url_origin": "https://provider.example",
+                "url_path": "/search",
+                "result_field_names": ["documents_total", "request_id"],
+            },
+        )
+
+    def test_build_tool_execution_summary_accepts_http_json_control_field_string_wrappers(
+        self,
+    ) -> None:
+        execution_summary = (
+            tool_runtime_module._build_tool_execution_summary_from_spec(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": UserString("https://provider.example/search"),
+                    "method": UserString("POST"),
+                    "json_body": {
+                        "query": "$query",
+                    },
+                }
+            )
+        )
+
+        self.assertEqual(
+            execution_summary,
+            {
+                "method": "POST",
+                "url_origin": "https://provider.example",
+                "url_path": "/search",
+                "json_body_field_count": 1,
+            },
+        )
+
+    def test_build_tool_execution_summary_renders_http_json_method_template(
+        self,
+    ) -> None:
+        execution_summary = (
+            tool_runtime_module._build_tool_execution_summary_from_spec(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": "https://provider.example/search",
+                    "method": "$settings_mode",
+                    "json_body": {
+                        "query": "$query",
+                    },
+                },
+                template_context={
+                    "settings_mode": UserString("PATCH"),
+                },
+            )
+        )
+
+        self.assertEqual(
+            execution_summary,
+            {
+                "method": "PATCH",
+                "url_origin": "https://provider.example",
+                "url_path": "/search",
+                "json_body_field_count": 1,
+            },
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_filters_sensitive_result_preview_and_output_keys(
         self,
     ) -> None:
@@ -74409,6 +74557,28 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "tool_registry_provider_source": QueryTags(),
                     "settings_model": BodyPayload(),
                 },
+            )
+        )
+
+        self.assertEqual(validation_errors, ())
+
+    def test_tool_execution_spec_validation_accepts_http_json_control_field_string_wrappers(
+        self,
+    ) -> None:
+        validation_errors = (
+            tool_runtime_module._describe_tool_execution_spec_validation_errors(  # type: ignore[attr-defined]
+                {
+                    "kind": "http_json",
+                    "url": UserString("https://provider.example/search"),
+                    "method": UserString("POST"),
+                    "timeout_ms": UserString("2500"),
+                    "headers": {
+                        "Content-Type": "application/json",
+                    },
+                    "json_body": {
+                        "query": "$query",
+                    },
+                }
             )
         )
 

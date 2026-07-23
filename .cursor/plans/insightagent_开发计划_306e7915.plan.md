@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1514/1514)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1519/1519)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -414,6 +414,8 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 335. HTTP JSON typed dump callable signature metadata fallback 已一次性补齐到 response/request 共享入口：如果真实 SDK callable 的 `__signature__` 元数据本身抛错或不可检查，runner 会按未知签名处理并继续尝试真实 dump 调用；根层 response parsed body、嵌套 response typed payload、request `json_body`、`query_params` 与 `headers` 的 typed dump 都已覆盖，避免坏 signature metadata 被误报成 transport/config 错。
 336. HTTP JSON typed dump-json string wrapper fallback 已一次性补齐到 response/request 共享入口：`model_dump_json()` / `to_json()` / typed `.json()` 返回 `UserString` 这类 string-like wrapper 时会按 UTF-8 JSON 文本处理；根层 response parsed body、嵌套 response typed payload、request `json_body`、`query_params` 与 `headers` 均已覆盖，避免真实 SDK wrapper 被误报成 body/query/header 协议错误。
 337. HTTP JSON static diagnostics 的 typed request value 归一化也已补齐：`headers`、`query_params`、`json_body` 的 direct typed value 与 supported runtime template 渲染出的 typed value 会先复用 request runtime 的 JSON-compatible coercion，再进入 object/value、Content-Type/Accept、duplicate query/header 与 reserved runtime template typo 诊断；typed adapter dump 内部的 `settings_*` / `tool_registry_*` typo 不再漏过 preflight，真实可执行 wrapper 也不再被误报成协议错误。
+338. HTTP JSON execution summary 的 typed/wrapper 侧路也已补齐：direct typed request mapping、`UserString` response_path 与 root template 渲染出的 typed `result_fields` 会先复用静态归一化，再生成 header/query/body count、response_path 与 result_field_names；通用 template render/missing/reference 扫描也会把 `UserString` 当文本处理，避免 settings/preflight 摘要递归或漏字段。
+339. HTTP JSON control field string wrapper 也已补齐：`url`、`method`、`timeout_ms` 的 `UserString` 会按明确 string-like value 进入 validation、runner 与 execution_summary；`method` runtime template 也会在 execution_summary 中按静态上下文渲染，避免 settings/preflight/tool_start 摘要方法与真实执行方法不一致。
 
 ## 当前主线判断
 

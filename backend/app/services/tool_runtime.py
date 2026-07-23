@@ -1333,6 +1333,8 @@ def _render_tool_execution_template(
     *,
     context: dict[str, object],
 ) -> object:
+    if isinstance(value, UserString):
+        value = str(value)
     if isinstance(value, str):
         raw = value.strip()
         if "${" in value:
@@ -1394,6 +1396,8 @@ def _iter_missing_tool_execution_template_variables(
     context: dict[str, object],
     path: str,
 ) -> tuple[tuple[str, str], ...]:
+    if isinstance(value, UserString):
+        value = str(value)
     if isinstance(value, str):
         missing: list[tuple[str, str]] = []
         raw = value.strip()
@@ -1622,6 +1626,12 @@ def _coerce_http_json_mapping_field_name(raw_value: object) -> object:
     return raw_value
 
 
+def _coerce_tool_execution_string_like_value(raw_value: object) -> object:
+    if isinstance(raw_value, UserString):
+        return str(raw_value)
+    return raw_value
+
+
 def _iter_http_json_mapping_field_names(raw_mapping: object) -> tuple[str, ...]:
     if not isinstance(raw_mapping, Mapping):
         return ()
@@ -1682,6 +1692,8 @@ def _iter_tool_execution_template_variable_references(
     *,
     path: str,
 ) -> tuple[tuple[str, str], ...]:
+    if isinstance(value, UserString):
+        value = str(value)
     if isinstance(value, str):
         references: list[tuple[str, str]] = []
         raw = value.strip()
@@ -1796,6 +1808,7 @@ def _collect_tool_execution_runtime_template_validation_errors(
 
 
 def _normalize_tool_execution_http_method(raw_value: object) -> str:
+    raw_value = _coerce_tool_execution_string_like_value(raw_value)
     if not isinstance(raw_value, str):
         return "GET"
     normalized = raw_value.strip().upper()
@@ -1807,6 +1820,7 @@ def _normalize_tool_execution_http_method(raw_value: object) -> str:
 def _describe_tool_execution_http_method_validation_error(
     raw_value: object,
 ) -> str | None:
+    raw_value = _coerce_tool_execution_string_like_value(raw_value)
     if not isinstance(raw_value, str):
         return (
             "http_json execution method must be one of "
@@ -1822,6 +1836,7 @@ def _describe_tool_execution_http_method_validation_error(
 
 
 def _is_supported_tool_timeout_ms(raw_value: object) -> bool:
+    raw_value = _coerce_tool_execution_string_like_value(raw_value)
     if isinstance(raw_value, bool):
         return False
     if isinstance(raw_value, int):
@@ -1832,6 +1847,12 @@ def _is_supported_tool_timeout_ms(raw_value: object) -> bool:
             and raw_value.is_integer()
             and 1 <= raw_value <= _TOOL_TIMEOUT_MAX_MS
         )
+    if isinstance(raw_value, str) and raw_value.strip():
+        try:
+            coerced_timeout_ms = int(raw_value.strip())
+        except ValueError:
+            return False
+        return 0 < coerced_timeout_ms <= _TOOL_TIMEOUT_MAX_MS
     return False
 
 
@@ -1842,6 +1863,7 @@ def _coerce_tool_execution_timeout_ms(
 ) -> int:
     if raw_value is None:
         return default_timeout_ms
+    raw_value = _coerce_tool_execution_string_like_value(raw_value)
     if _is_supported_tool_timeout_ms(raw_value):
         return int(raw_value)
     return default_timeout_ms
@@ -4689,7 +4711,7 @@ def _build_http_json_tool_runner(
     raw_timeout_ms = execution_spec.get("timeout_ms")
 
     def runner(*, tool_input: dict[str, object], prompt: str, user_id: str) -> dict[str, object]:
-        raw_url = execution_spec.get("url")
+        raw_url = _coerce_tool_execution_string_like_value(execution_spec.get("url"))
         if not isinstance(raw_url, str) or not raw_url.strip():
             raise MockToolExecutionError(
                 "HTTP JSON tool requires a non-empty url.",
@@ -4706,6 +4728,7 @@ def _build_http_json_tool_runner(
             context=context,
             path="url",
         )
+        rendered_url = _coerce_tool_execution_string_like_value(rendered_url)
         if not isinstance(rendered_url, str) or not rendered_url.strip():
             raise MockToolExecutionError(
                 "HTTP JSON tool could not resolve a valid url.",
@@ -5188,26 +5211,31 @@ def _build_tool_execution_summary_from_spec(
     if execution_kind != "http_json":
         return None
 
+    raw_summary_method = execution_spec.get(
+        "method",
+        "POST" if execution_spec.get("json_body") is not None else "GET",
+    )
+    method_for_summary = _resolve_tool_execution_string_like_summary_value(
+        raw_summary_method,
+        context=template_context,
+        path="method",
+    )
     summary: dict[str, object] = {
-        "method": _normalize_tool_execution_http_method(
-            execution_spec.get(
-                "method",
-                "POST" if execution_spec.get("json_body") is not None else "GET",
-            )
-        )
+        "method": _normalize_tool_execution_http_method(method_for_summary)
     }
     raw_url = execution_spec.get("url")
-    summary_url: object = raw_url
-    if _iter_tool_execution_template_variable_references(raw_url, path="url"):
-        rendered_url = _render_tool_execution_template_for_static_analysis(
-            raw_url,
-            context=template_context,
-            path="url",
+    summary_url: object = _resolve_tool_execution_string_like_summary_value(
+        raw_url,
+        context=template_context,
+        path="url",
+    )
+    if (
+        summary_url is _TOOL_EXECUTION_TEMPLATE_MISSING
+        and not _is_supported_tool_execution_http_url(
+            _coerce_tool_execution_string_like_value(raw_url)
         )
-        if rendered_url is not _TOOL_EXECUTION_TEMPLATE_MISSING:
-            summary_url = rendered_url
-        elif not _is_supported_tool_execution_http_url(raw_url):
-            summary_url = None
+    ):
+        summary_url = None
     if isinstance(summary_url, str) and summary_url.strip():
         parsed_url = urlparse(summary_url.strip())
         safe_origin = _format_safe_tool_execution_http_url_origin(parsed_url)
@@ -5217,24 +5245,52 @@ def _build_tool_execution_summary_from_spec(
         if safe_path:
             summary["url_path"] = safe_path
     raw_headers = execution_spec.get("headers")
-    header_names = _iter_http_json_mapping_field_names(raw_headers)
+    headers_for_summary = _resolve_tool_execution_summary_value(
+        raw_headers,
+        context=template_context,
+        path="headers",
+    )
+    header_names = _iter_http_json_mapping_field_names(headers_for_summary)
     if header_names:
         summary["header_count"] = len(header_names)
     raw_query_params = execution_spec.get("query_params")
-    query_param_names = _iter_http_json_mapping_field_names(raw_query_params)
+    query_params_for_summary = _resolve_tool_execution_summary_value(
+        raw_query_params,
+        context=template_context,
+        path="query_params",
+    )
+    query_param_names = _iter_http_json_mapping_field_names(query_params_for_summary)
     if query_param_names:
         summary["query_param_count"] = len(query_param_names)
     raw_json_body = execution_spec.get("json_body")
-    json_body_field_names = _iter_http_json_mapping_field_names(raw_json_body)
+    json_body_for_summary = _resolve_tool_execution_summary_value(
+        raw_json_body,
+        context=template_context,
+        path="json_body",
+    )
+    json_body_field_names = _iter_http_json_mapping_field_names(json_body_for_summary)
     if json_body_field_names:
         summary["json_body_field_count"] = len(json_body_field_names)
     raw_response_path = execution_spec.get("response_path")
-    if isinstance(raw_response_path, str) and raw_response_path.strip():
+    response_path_for_summary = _resolve_tool_execution_mapping_path_for_static_validation(
+        raw_response_path,
+        context=template_context,
+        path="response_path",
+    )
+    if (
+        isinstance(response_path_for_summary, str)
+        and response_path_for_summary.strip()
+    ):
         summary["response_path"] = _format_http_json_mapping_path_for_error(
-            raw_response_path
+            response_path_for_summary
         )
     raw_result_fields = execution_spec.get("result_fields")
-    result_field_names = _iter_http_json_mapping_field_names(raw_result_fields)
+    result_fields_for_summary = _resolve_tool_execution_summary_value(
+        raw_result_fields,
+        context=template_context,
+        path="result_fields",
+    )
+    result_field_names = _iter_http_json_mapping_field_names(result_fields_for_summary)
     if result_field_names:
         result_field_names = tuple(
             _format_safe_tool_execution_summary_field_name(raw_key)
@@ -5243,6 +5299,35 @@ def _build_tool_execution_summary_from_spec(
         if result_field_names:
             summary["result_field_names"] = list(result_field_names)
     return summary
+
+
+def _resolve_tool_execution_summary_value(
+    value: object,
+    *,
+    context: dict[str, object] | None,
+    path: str,
+) -> object:
+    return _coerce_tool_execution_value_for_static_validation(
+        _resolve_tool_execution_template_value_for_static_validation(
+            value,
+            context=context,
+            path=path,
+        )
+    )
+
+
+def _resolve_tool_execution_string_like_summary_value(
+    value: object,
+    *,
+    context: dict[str, object] | None,
+    path: str,
+) -> object:
+    rendered_value = _resolve_tool_execution_template_value_for_static_validation(
+        value,
+        context=context,
+        path=path,
+    )
+    return _coerce_tool_execution_string_like_value(rendered_value)
 
 
 def _format_safe_tool_execution_summary_url_path(raw_value: object) -> str:
@@ -5361,7 +5446,7 @@ def _describe_tool_execution_spec_validation_errors(
             "unsupported tool execution kind "
             f"{_format_safe_tool_execution_kind(execution_kind)}",
         )
-    raw_url = execution_spec.get("url")
+    raw_url = _coerce_tool_execution_string_like_value(execution_spec.get("url"))
     if not isinstance(raw_url, str) or not raw_url.strip():
         return ("http_json execution requires a non-empty url",)
     validation_errors: list[str] = []
@@ -5375,7 +5460,7 @@ def _describe_tool_execution_spec_validation_errors(
         url_for_validation = (
             None
             if rendered_url is _TOOL_EXECUTION_TEMPLATE_MISSING
-            else rendered_url
+            else _coerce_tool_execution_string_like_value(rendered_url)
         )
     if url_for_validation is not None:
         url_error = _describe_tool_execution_http_url_validation_error(url_for_validation)
@@ -5384,7 +5469,9 @@ def _describe_tool_execution_spec_validation_errors(
     normalized_method: str | None = None
     if "method" in execution_spec:
         raw_method = execution_spec.get("method")
-        method_for_validation: object | None = raw_method
+        method_for_validation: object | None = _coerce_tool_execution_string_like_value(
+            raw_method
+        )
         if _iter_tool_execution_template_variable_references(
             raw_method,
             path="method",
@@ -5397,7 +5484,7 @@ def _describe_tool_execution_spec_validation_errors(
             method_for_validation = (
                 None
                 if rendered_method is _TOOL_EXECUTION_TEMPLATE_MISSING
-                else rendered_method
+                else _coerce_tool_execution_string_like_value(rendered_method)
             )
         if method_for_validation is not None:
             method_error = _describe_tool_execution_http_method_validation_error(
