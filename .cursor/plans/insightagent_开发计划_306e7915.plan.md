@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1526/1526)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1531/1531)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -419,6 +419,8 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 340. HTTP JSON execution kind string wrapper 也已补齐：`execution.kind=UserString("http_json")` 会按真实执行器入口枚举进入 validation、runner dispatch 与 execution_summary；普通 object 仍保持缺失/unsupported 语义，避免随意 stringify 坏配置。
 341. HTTP JSON runtime semantic meta 的半迁移 summary/diagnostics wrapper 也已补齐：registration 自身携带的 `execution_summary` / `execution_diagnostics` 若使用 `UserString` key/value/list item，会在 `tool_start`、action meta、trace/export 入口统一按 string-like value 归一并脱敏，不再因为 wrapper 丢失摘要/诊断或泄漏敏感 path/key。
 342. HTTP JSON runtime semantic kind wrapper 也已补齐：registration 的 `kind` / `runtime_semantic_kind` 支持 `UserString` 窄归一化，noncanonical real tool 仍保留工具名级 trace `semantic_kind`，同时稳定补出 family 级 `semantic_family`，避免 settings/preflight 与运行态 trace 语义分叉。
+343. HTTP JSON result projection key wrapper 也已补齐：registration 的 `result_preview_keys` / `result_output_keys` 若来自 `UserList` 容器或 `UserString` key，会继续被视为显式投影配置并过滤敏感字段；敏感-only wrapper 不会再退回默认投影，避免 `access_token` 一类字段经 preview/output 旁路回流。
+344. HTTP JSON result summary 输出字段 wrapper 也已补齐：真实上游输出里的 planner `steps`、calc `expression`、retrieval `knowledge_base_id` 与 `request_id` 若是 `UserString` / `UserList` wrapper，会继续进入 result summary、observation、success meta、trace/export 摘要；普通非字符串对象仍不被随意当文本摘要化。
 
 ## 当前主线判断
 

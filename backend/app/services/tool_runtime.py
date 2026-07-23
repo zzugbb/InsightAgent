@@ -1214,11 +1214,15 @@ def build_tool_registry_extra_tools_from_specs(
 
 
 def _normalize_result_preview_keys(raw_value: object) -> tuple[str, ...]:
-    if not isinstance(raw_value, (list, tuple)):
+    if not isinstance(raw_value, Sequence) or isinstance(
+        raw_value,
+        (str, bytes, bytearray, memoryview),
+    ):
         return ()
     normalized_keys: list[str] = []
     seen_keys: set[str] = set()
     for raw_key in raw_value:
+        raw_key = _coerce_tool_execution_string_like_value(raw_key)
         key = str(raw_key).strip()
         if not key or key in seen_keys:
             continue
@@ -1240,7 +1244,10 @@ def _normalize_safe_explicit_result_keys(
     *,
     fallback_keys: tuple[str, ...],
 ) -> tuple[str, ...]:
-    if not isinstance(raw_value, (list, tuple)):
+    if not isinstance(raw_value, Sequence) or isinstance(
+        raw_value,
+        (str, bytes, bytearray, memoryview),
+    ):
         return fallback_keys
     normalized_keys = _normalize_result_preview_keys(raw_value)
     if not normalized_keys:
@@ -4347,6 +4354,7 @@ def _is_safe_http_json_request_id_value(value: str) -> bool:
 
 
 def _get_safe_http_json_request_id_display_value(value: object) -> str | None:
+    value = _coerce_tool_execution_string_like_value(value)
     if not isinstance(value, str):
         return None
     normalized = value.strip()
@@ -9877,10 +9885,14 @@ def build_tool_result_output(
 
 
 def _normalize_tool_result_plan_steps(raw_steps: object) -> list[str]:
-    if not isinstance(raw_steps, (list, tuple)):
+    if not isinstance(raw_steps, Sequence) or isinstance(
+        raw_steps,
+        (str, bytes, bytearray, memoryview),
+    ):
         return []
     normalized_steps: list[str] = []
     for raw_step in raw_steps:
+        raw_step = _coerce_tool_execution_string_like_value(raw_step)
         if not isinstance(raw_step, str):
             continue
         step = raw_step.strip()
@@ -9904,6 +9916,7 @@ def _summarize_generic_tool_result_payload(payload: dict[str, object]) -> str | 
         if isinstance(value, (int, float)):
             parts.append(f"{safe_key}={value}")
             continue
+        value = _coerce_tool_execution_string_like_value(value)
         if isinstance(value, str):
             normalized_value = value.strip()
             if normalized_value:
@@ -9975,14 +9988,16 @@ def build_tool_result_summary(
         registry_loader=registry_loader,
     )
 
-    plan = outward_output.get("plan")
+    plan = _coerce_tool_execution_string_like_value(outward_output.get("plan"))
     if isinstance(plan, str) and plan.strip():
         return f"Planned steps - {plan.strip()}."
     steps = _normalize_tool_result_plan_steps(outward_output.get("steps"))
     if steps:
         return f"Planned steps - {' -> '.join(steps)}."
 
-    expression = outward_output.get("expression")
+    expression = _coerce_tool_execution_string_like_value(
+        outward_output.get("expression")
+    )
     result = outward_output.get("result")
     request_id = _get_safe_http_json_request_id_display_value(
         outward_output.get("request_id")
@@ -10011,7 +10026,9 @@ def build_tool_result_summary(
         return f"Calculated result = {result}."
 
     hit_count = _normalize_nonnegative_int_count_value(outward_output.get("hit_count"))
-    knowledge_base_id = outward_output.get("knowledge_base_id")
+    knowledge_base_id = _coerce_tool_execution_string_like_value(
+        outward_output.get("knowledge_base_id")
+    )
     if hit_count is not None:
         hit_label = "hit" if hit_count == 1 else "hits"
         if (

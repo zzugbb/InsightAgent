@@ -43938,6 +43938,134 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_label_only_real_retrieval_result_key_wrappers_filter_sensitive_keys(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind=None,
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=UserList(
+                [UserString("documents_total"), UserString("access_token")]
+            ),
+            result_output_keys=UserList(
+                [
+                    UserString("documents_total"),
+                    UserString("access_token"),
+                    UserString("request_id"),
+                ]
+            ),
+        )
+        output = {
+            "documents_total": 2,
+            "access_token": "secret-token",
+            "request_id": "req-hosted-1",
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            ("documents_total",),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            ("documents_total", "request_id"),
+        )
+        self.assertEqual(
+            build_tool_result_preview(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {"documents_total": 2},
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "request_id": "req-hosted-1",
+            },
+        )
+        meta = build_tool_runtime_semantics_meta(
+            name="hosted_search_gateway",
+            registration=registration,
+        )
+        self.assertEqual(meta["effective_result_preview_keys"], ["documents_total"])
+        self.assertEqual(
+            meta["effective_result_output_keys"],
+            ["documents_total", "request_id"],
+        )
+        self.assertNotIn("access_token", json.dumps(meta, ensure_ascii=False))
+
+    def test_label_only_real_retrieval_sensitive_only_result_key_wrappers_do_not_fallback(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind=None,
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            result_preview_keys=UserList([UserString("access_token")]),
+            result_output_keys=UserList([UserString("access_token")]),
+        )
+        output = {
+            "documents_total": 2,
+            "knowledge_base_id": "hosted-kb",
+            "access_token": "secret-token",
+            "request_id": "req-hosted-1",
+        }
+
+        self.assertEqual(
+            get_tool_effective_result_preview_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            (),
+        )
+        self.assertEqual(
+            get_tool_effective_result_output_keys(
+                name="hosted_search_gateway",
+                registration=registration,
+            ),
+            (),
+        )
+        self.assertEqual(
+            build_tool_result_preview(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {},
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {},
+        )
+
     def test_label_only_real_retrieval_explicit_output_keys_filter_sensitive_legacy_keys(
         self,
     ) -> None:
@@ -65779,6 +65907,43 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Hosted Math: Calculated 1+2*3 = 7 (request id req-calc-1).",
         )
 
+    def test_build_tool_result_summary_accepts_calc_output_string_wrappers(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_math_gateway",
+            kind="",
+            label="Hosted Math",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+        output = {
+            "expression": UserString("1+2*3"),
+            "result": 7,
+            "request_id": UserString("req-calc-1"),
+        }
+
+        self.assertEqual(
+            build_tool_result_summary(
+                name="hosted_math_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Calculated 1+2*3 = 7 (request id req-calc-1).",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_math_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Hosted Math: Calculated 1+2*3 = 7 (request id req-calc-1).",
+        )
+
     def test_build_tool_result_helpers_infer_keys_for_untyped_real_retrieval_label(
         self,
     ) -> None:
@@ -65846,6 +66011,43 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Hosted Search: Retrieved 2 documents (request id req-search-1).",
         )
 
+    def test_build_tool_result_summary_accepts_retrieval_output_string_wrappers(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_search_gateway",
+            kind="",
+            label="Hosted Search",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+        output = {
+            "documents_total": 2,
+            "knowledge_base_id": UserString("hosted-kb"),
+            "request_id": UserString("req-search-1"),
+        }
+
+        self.assertEqual(
+            build_tool_result_summary(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Retrieved 2 documents from hosted-kb (request id req-search-1).",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_search_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Hosted Search: Retrieved 2 documents from hosted-kb (request id req-search-1).",
+        )
+
     def test_build_tool_result_helpers_infer_keys_for_untyped_real_planner_label(
         self,
     ) -> None:
@@ -65888,6 +66090,50 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
             {"steps": ["gather", "calculate"]},
         )
+        self.assertEqual(
+            build_tool_result_output(
+                name="hosted_planner_gateway",
+                output=output,
+                registration=registration,
+            ),
+            {"steps": ["gather", "calculate"]},
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="hosted_planner_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Planned steps - gather -> calculate.",
+        )
+        self.assertEqual(
+            build_tool_observation_entry(
+                name="hosted_planner_gateway",
+                output=output,
+                registration=registration,
+            ),
+            "Hosted Planner: Planned steps - gather -> calculate.",
+        )
+
+    def test_build_tool_result_summary_accepts_planner_output_string_wrappers(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="hosted_planner_gateway",
+            kind="",
+            label="Hosted Planner",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+        output = {
+            "steps": UserList([UserString("gather"), UserString("calculate")]),
+            "access_token": "hidden",
+        }
+
         self.assertEqual(
             build_tool_result_output(
                 name="hosted_planner_gateway",
