@@ -3888,12 +3888,6 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         body_iterator = _get_http_json_adapter_attr(response, method_name)
         if callable(body_iterator):
             return _read_http_json_response_body_iterator(body_iterator)
-    try:
-        response_iterator = iter(response)
-    except TypeError:
-        response_iterator = None
-    if response_iterator is not None:
-        return _read_http_json_response_body_chunks(response_iterator)
     json_body = _get_http_json_adapter_attr(response, "json")
     if callable(json_body):
         try:
@@ -3903,6 +3897,12 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         return _coerce_http_json_response_json_body_bytes(raw_json_body)
     if json_body is not None:
         return _coerce_http_json_response_json_body_bytes(json_body)
+    try:
+        response_iterator = iter(response)
+    except TypeError:
+        response_iterator = None
+    if response_iterator is not None:
+        return _read_http_json_response_body_chunks(response_iterator)
     if read_type_error is not None:
         raise read_type_error
     if attr_type_error is not None:
