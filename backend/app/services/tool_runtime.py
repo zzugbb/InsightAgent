@@ -3979,6 +3979,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         except _HttpJsonResponseBodyInitialIteratorTypeError as exc:
             if iterator_type_error is None:
                 iterator_type_error = exc
+    if json_type_error is not None:
+        raise json_type_error
     if iterator_empty_body is not None:
         return iterator_empty_body
     if attr_empty_body is not None:
@@ -3991,8 +3993,6 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         raise attr_type_error
     if iterator_type_error is not None:
         raise iterator_type_error
-    if json_type_error is not None:
-        raise json_type_error
     raise TypeError("response body reader is unavailable")
 
 

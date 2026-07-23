@@ -22,6 +22,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - HTTP JSON response adapter 现在会在 response 同时暴露 `.json()` / `.json` parsed body 与泛型 `__iter__` 时优先使用显式 parsed JSON body；如果 `.json()`、typed payload `.json(...)` dump 方法或首个 `iter_*` streaming 方法只是调用形态不适配，后端会继续尝试本体 iterable、`model_dump/dict/to_dict` 或后续 iterator fallback，前端看到的真实工具输出不会再因为 SDK response 的 metadata/key 迭代、typed dump 方法差异或 iterator 方法签名差异被误报成 `transport error`。
   - HTTP JSON body 属性 fallback 继续对齐后端：当 `.content` / `.body` / `.data` / `.text` 属性值本身不可读时，后端会继续尝试后续属性与 `.json()` parsed body；如果 callable accessor 抛出真实运行时异常，前端仍会看到稳定的 `transport error` 诊断，而不是被错误 fallback 成假成功。
   - HTTP JSON parsed body fallback 继续对齐后端：当 `json()` / `.json` parsed body 返回不可序列化对象但 response 本体 iterable 才是真实 body 时，后端会继续读取 iterable；如果 `json()` 自身抛真实运行时异常，前端仍会看到明确的 `response json failed` 诊断。
+  - HTTP JSON parsed body 错误诊断继续对齐后端：当显式 `json()` / `.json` parsed body 返回不可序列化对象，而泛型 `__iter__` 只是空 metadata iterator 时，前端会看到 parsed-body JSON serializable 诊断，不会被误报成 `empty JSON response`。
   - HTTP JSON 空 `read()` fallback 继续对齐后端：当 `read()` 返回空 bytes/text 但 `.content` 或 `json()` 等后续 source 持有真实 body 时，前端仍会看到成功 tool output；如果没有后续 body，原有 `empty JSON response` 错误不变。
   - HTTP JSON 默认空 `read()` 的分块 fallback 继续对齐后端：当无参 `read()` 返回空 bytes/text、但 `read(amt)` 才能读出真实 body 时，后端会先尝试分块读取；分块也不可用或为空时再继续后续 source。
   - HTTP JSON 空 chunked `read(amt)` fallback 继续对齐后端：当无参 `read()` 不适配、分块读取第一块即为空，但 `.content` 或 `json()` 等后续 source 才有真实 body 时，前端仍会看到成功 tool output；没有后续 body 时仍是 `empty JSON response`。
@@ -110,7 +111,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
   - 后端 mock final-answer observation parser 现在也会恢复 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串；因此前端最终回答在旧 observation 只剩嵌套 preview 时，也会继续显示 real calc / real retrieval 摘要，而不是 `output_preview=...` 或旁路字段。
 - 当前最近一次已记录校验基线：
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1490/1490`）
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1491/1491`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）
