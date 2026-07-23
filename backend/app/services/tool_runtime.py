@@ -3671,9 +3671,12 @@ def _read_http_json_response_body_attr(
             raise TypeError(f"response body {attr_name} failed: {exc}") from exc
     if raw_body is None:
         return None
-    if attr_name in {"body", "data"} and _is_http_json_parsed_body_attr(raw_body):
-        return _coerce_http_json_response_json_body_bytes(raw_body)
-    return _coerce_http_json_response_body_bytes(raw_body)
+    try:
+        if attr_name in {"body", "data"} and _is_http_json_parsed_body_attr(raw_body):
+            return _coerce_http_json_response_json_body_bytes(raw_body)
+        return _coerce_http_json_response_body_bytes(raw_body)
+    except TypeError as exc:
+        raise _HttpJsonResponseBodyAttrUnavailable(str(exc)) from exc
 
 
 def _coerce_http_json_json_compatible_body(raw_body: object) -> object:
