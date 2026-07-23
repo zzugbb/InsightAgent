@@ -3636,6 +3636,10 @@ def _coerce_http_json_response_body_bytes(raw_body: object) -> bytes:
 _HTTP_JSON_BODY_DUMP_MISSING = object()
 
 
+class _HttpJsonJsonBodyDumpMethodUnavailable(TypeError):
+    pass
+
+
 class _HttpJsonResponseBodyAttrUnavailable(TypeError):
     pass
 
@@ -3701,9 +3705,12 @@ def _coerce_http_json_json_compatible_body(raw_body: object) -> object:
         model_dump = _get_http_json_adapter_attr(raw_body, method_name)
         if not callable(model_dump):
             continue
-        return _coerce_http_json_json_compatible_body(
-            _call_http_json_json_body_dump_method(method_name, model_dump)
-        )
+        try:
+            return _coerce_http_json_json_compatible_body(
+                _call_http_json_json_body_dump_method(method_name, model_dump)
+            )
+        except _HttpJsonJsonBodyDumpMethodUnavailable:
+            continue
     return raw_body
 
 
@@ -3726,6 +3733,8 @@ def _call_http_json_json_body_dump_method(
             raise TypeError(f"response json body {method_name} failed: {exc}") from exc
     try:
         return model_dump()  # type: ignore[operator]
+    except TypeError as exc:
+        raise _HttpJsonJsonBodyDumpMethodUnavailable(str(exc)) from exc
     except Exception as exc:
         raise TypeError(f"response json body {method_name} failed: {exc}") from exc
 
@@ -3785,8 +3794,11 @@ def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
         model_dump = _get_http_json_adapter_attr(raw_body, method_name)
         if not callable(model_dump):
             continue
-        raw_body = _call_http_json_json_body_dump_method(method_name, model_dump)
-        break
+        try:
+            raw_body = _call_http_json_json_body_dump_method(method_name, model_dump)
+            break
+        except _HttpJsonJsonBodyDumpMethodUnavailable:
+            continue
     raw_body = _coerce_http_json_json_compatible_body(raw_body)
     try:
         return json.dumps(
