@@ -3981,6 +3981,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
                 iterator_type_error = exc
     if json_type_error is not None:
         raise json_type_error
+    if attr_empty_body is None and attr_type_error is not None:
+        raise attr_type_error
     if iterator_empty_body is not None:
         return iterator_empty_body
     if attr_empty_body is not None:
