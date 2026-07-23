@@ -59641,6 +59641,75 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("response json body must be JSON serializable", message)
         self.assertNotIn("empty JSON response", message)
 
+    def test_run_tool_canonical_override_keeps_http_json_empty_response_when_json_shape_unavailable_and_iterable_is_empty(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {"Content-Type": "application/json"}
+            text = ""
+
+            def json(self, decoder: object) -> dict[str, object]:
+                del decoder
+                return {"data": {"value": 0}}
+
+            def __iter__(self):
+                if False:
+                    yield b"unreachable"
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertIn("empty JSON response", message)
+        self.assertNotIn("transport error", message)
+        self.assertNotIn("missing", message)
+
     def test_run_tool_canonical_override_falls_back_http_json_iterable_when_json_attr_body_unavailable(
         self,
     ) -> None:
