@@ -3818,6 +3818,10 @@ class _HttpJsonResponseBodyInitialIteratorTypeError(TypeError):
     pass
 
 
+class _HttpJsonResponseBodyIteratorUnavailable(TypeError):
+    pass
+
+
 def _read_http_json_response_body_chunks(raw_iterator: object) -> bytes:
     chunks: list[bytes] = []
     try:
@@ -3860,13 +3864,16 @@ def _read_http_json_response_body_iterator(iterator_method: object) -> bytes:
             type_error = exc
             continue
     if type_error is not None:
-        raise type_error
-    raise TypeError("response body iterator is unavailable")
+        raise _HttpJsonResponseBodyIteratorUnavailable(str(type_error)) from type_error
+    raise _HttpJsonResponseBodyIteratorUnavailable(
+        "response body iterator is unavailable"
+    )
 
 
 def _read_http_json_response_body_bytes(response: object) -> bytes:
     read_type_error: TypeError | None = None
     attr_type_error: TypeError | None = None
+    iterator_type_error: TypeError | None = None
     json_type_error: TypeError | None = None
     read = _get_http_json_adapter_attr(response, "read")
     if callable(read):
@@ -3894,7 +3901,11 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
     for method_name in ("iter_bytes", "iter_content", "iter_text", "iter_lines"):
         body_iterator = _get_http_json_adapter_attr(response, method_name)
         if callable(body_iterator):
-            return _read_http_json_response_body_iterator(body_iterator)
+            try:
+                return _read_http_json_response_body_iterator(body_iterator)
+            except _HttpJsonResponseBodyIteratorUnavailable as exc:
+                iterator_type_error = exc
+                continue
     json_body = _get_http_json_adapter_attr(response, "json")
     if callable(json_body):
         try:
@@ -3917,6 +3928,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         raise read_type_error
     if attr_type_error is not None:
         raise attr_type_error
+    if iterator_type_error is not None:
+        raise iterator_type_error
     if json_type_error is not None:
         raise json_type_error
     raise TypeError("response body reader is unavailable")
