@@ -3983,6 +3983,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         raise json_type_error
     if attr_empty_body is None and attr_type_error is not None:
         raise attr_type_error
+    if read_empty_body is None and read_type_error is not None:
+        raise read_type_error
     if iterator_empty_body is not None:
         return iterator_empty_body
     if attr_empty_body is not None:
