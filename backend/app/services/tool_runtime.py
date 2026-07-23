@@ -3760,10 +3760,13 @@ def _call_http_json_json_body_dump_method(
         raise TypeError(f"response json body {method_name} failed: {exc}") from exc
 
 
-def _http_json_callable_accepts_call(callable_obj: object, **kwargs: object) -> bool | None:
+def _http_json_callable_accepts_call(
+    callable_obj: object,
+    **kwargs: object,
+) -> bool | None:
     try:
         signature = inspect.signature(callable_obj)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+    except Exception:
         return None
     try:
         signature.bind(**kwargs)
