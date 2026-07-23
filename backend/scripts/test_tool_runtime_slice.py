@@ -30323,7 +30323,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         execution_summary = (
             tool_runtime_module._build_tool_execution_summary_from_spec(  # type: ignore[attr-defined]
                 {
-                    "kind": "http_json",
+                    "kind": UserString("http_json"),
                     "url": UserString("https://provider.example/search"),
                     "method": UserString("POST"),
                     "json_body": {
@@ -30340,6 +30340,27 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "url_origin": "https://provider.example",
                 "url_path": "/search",
                 "json_body_field_count": 1,
+            },
+        )
+
+    def test_build_tool_execution_summary_accepts_http_json_kind_string_wrapper(
+        self,
+    ) -> None:
+        execution_summary = (
+            tool_runtime_module._build_tool_execution_summary_from_spec(  # type: ignore[attr-defined]
+                {
+                    "kind": UserString("http_json"),
+                    "url": "https://provider.example/search",
+                }
+            )
+        )
+
+        self.assertEqual(
+            execution_summary,
+            {
+                "method": "GET",
+                "url_origin": "https://provider.example",
+                "url_path": "/search",
             },
         )
 
@@ -43627,6 +43648,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("api_key=hidden", combined)
         self.assertNotIn("access_token", combined)
 
+    def test_build_tool_runtime_semantics_meta_redacts_wrapped_execution_diagnostics(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            execution_diagnostics=(
+                UserString("unsupported tool execution kind api_key=hidden"),
+                UserString("unsupported tool execution kind api_key=hidden"),
+                UserString(
+                    "http_json execution query_params.access_token must be safe"
+                ),
+            ),
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 1,
+            },
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total",),
+            runtime_semantic_kind="provider_search",
+        )
+
+        start_payload = build_tool_start_payload(
+            task_id="task-1",
+            step_id="step-1",
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            retry_count=0,
+            registration=registration,
+        )
+        action_meta = build_action_step_initial_meta(
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            registration=registration,
+        )
+
+        self.assertEqual(
+            start_payload["execution_diagnostics"],
+            [
+                "unsupported tool execution kind [redacted]",
+                "http_json execution [redacted] must be safe",
+            ],
+        )
+        self.assertEqual(
+            action_meta["tool"]["execution_diagnostics"],  # type: ignore[index]
+            start_payload["execution_diagnostics"],
+        )
+        combined = json.dumps(
+            {"start": start_payload, "action_meta": action_meta},
+            ensure_ascii=False,
+        )
+        self.assertNotIn("api_key=hidden", combined)
+        self.assertNotIn("access_token", combined)
+
     def test_build_tool_runtime_semantics_meta_infers_label_only_real_tool_family(
         self,
     ) -> None:
@@ -43700,6 +43783,53 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(planner_meta["semantic_family"], "task_planner")
         self.assertEqual(planner_meta["effective_result_preview_keys"], ["plan", "steps"])
         self.assertEqual(planner_meta["effective_result_output_keys"], ["plan", "steps"])
+
+    def test_build_tool_runtime_semantics_meta_accepts_kind_string_wrapper(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="typed_gateway",
+            kind=UserString("provider_retrieval"),
+            label="Typed Gateway",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+        )
+
+        meta = build_tool_runtime_semantics_meta(
+            name="typed_gateway",
+            registration=registration,
+        )
+
+        self.assertEqual(meta["semantic_kind"], "typed_gateway")
+        self.assertEqual(meta["semantic_family"], "knowledge_retrieval")
+
+    def test_build_tool_runtime_semantics_meta_accepts_runtime_kind_string_wrapper(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_gateway",
+            kind="provider_retrieval",
+            label="Provider Gateway",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            runner=lambda *, tool_input, prompt, user_id: {},
+            runtime_semantic_kind=UserString("provider_search"),
+        )
+
+        meta = build_tool_runtime_semantics_meta(
+            name="provider_gateway",
+            registration=registration,
+        )
+
+        self.assertEqual(meta["semantic_kind"], "provider_search")
+        self.assertEqual(meta["semantic_family"], "knowledge_retrieval")
 
     def test_label_only_real_retrieval_with_explicit_preview_keys_infers_output_diagnostic_keys(
         self,
@@ -44157,6 +44287,74 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         expected_summary = {
             "method": "GET",
+            "url_origin": "https://provider.example",
+            "url_path": "/v1/[redacted]/[redacted]/[redacted]/search",
+            "response_path": "$.data.[redacted]",
+            "result_field_names": ["documents_total", "[redacted]"],
+        }
+        self.assertEqual(start_payload["execution_summary"], expected_summary)
+        self.assertEqual(
+            action_meta["tool"]["execution_summary"],  # type: ignore[index]
+            expected_summary,
+        )
+        combined = json.dumps(
+            {"start": start_payload, "action_meta": action_meta},
+            ensure_ascii=False,
+        )
+        self.assertNotIn("token=hidden", combined)
+        self.assertNotIn("access_token", combined)
+        self.assertNotIn("api_key/secret", combined)
+
+    def test_build_tool_runtime_semantics_meta_redacts_wrapped_execution_summary(
+        self,
+    ) -> None:
+        registration = ToolRegistration(
+            name="provider_search",
+            kind="provider_retrieval",
+            label="Provider Search",
+            retryable_by_default=False,
+            default_timeout_ms=21_000,
+            requires_user_context=True,
+            supports_result_preview=True,
+            execution_kind="http_json",
+            execution_summary={
+                UserString("method"): UserString("POST"),
+                UserString("url_origin"): UserString("https://provider.example"),
+                UserString("url_path"): UserString(
+                    "/v1/token=hidden/api_key/secret/search"
+                ),
+                UserString("response_path"): UserString("$.data.access_token"),
+                UserString("result_field_names"): UserList(
+                    [UserString("documents_total"), UserString("access_token")]
+                ),
+            },
+            runner=lambda *, tool_input, prompt, user_id: {
+                "documents_total": 1,
+            },
+            result_preview_keys=("documents_total",),
+            result_output_keys=("documents_total",),
+            runtime_semantic_kind="provider_search",
+        )
+
+        start_payload = build_tool_start_payload(
+            task_id="task-1",
+            step_id="step-1",
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            retry_count=0,
+            registration=registration,
+        )
+        action_meta = build_action_step_initial_meta(
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_2",
+            token_count=5,
+            registration=registration,
+        )
+
+        expected_summary = {
+            "method": "POST",
             "url_origin": "https://provider.example",
             "url_path": "/v1/[redacted]/[redacted]/[redacted]/search",
             "response_path": "$.data.[redacted]",
@@ -74568,7 +74766,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         validation_errors = (
             tool_runtime_module._describe_tool_execution_spec_validation_errors(  # type: ignore[attr-defined]
                 {
-                    "kind": "http_json",
+                    "kind": UserString("http_json"),
                     "url": UserString("https://provider.example/search"),
                     "method": UserString("POST"),
                     "timeout_ms": UserString("2500"),
@@ -74583,6 +74781,69 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         self.assertEqual(validation_errors, ())
+
+    def test_tool_execution_spec_validation_accepts_http_json_kind_string_wrapper(
+        self,
+    ) -> None:
+        validation_errors = (
+            tool_runtime_module._describe_tool_execution_spec_validation_errors(  # type: ignore[attr-defined]
+                {
+                    "kind": UserString("http_json"),
+                    "url": "https://provider.example/search",
+                }
+            )
+        )
+
+        self.assertEqual(validation_errors, ())
+
+    def test_build_tool_runner_accepts_http_json_kind_string_wrapper(
+        self,
+    ) -> None:
+        runner = tool_runtime_module._build_tool_runner_from_execution_spec(  # type: ignore[attr-defined]
+            execution_spec={
+                "kind": UserString("http_json"),
+                "url": "https://provider.example/calc",
+                "result_fields": {
+                    "result": "$.data.value",
+                },
+            },
+            fallback_runner=lambda *, tool_input, prompt, user_id: self.fail(
+                "http_json kind wrapper must dispatch to the real runner"
+            ),
+            default_timeout_ms=30_000,
+        )
+        urlopen_calls: list[object] = []
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return b'{"data":{"value":488}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or FakeHttpResponse()
+            )
+
+            output = runner(
+                tool_input={},
+                prompt="calc",
+                user_id="user-1",
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["result"], 488)
+        self.assertEqual(len(urlopen_calls), 1)
 
     def test_tool_execution_spec_validation_rejects_http_json_typed_request_value_unsupported_runtime_templates(
         self,

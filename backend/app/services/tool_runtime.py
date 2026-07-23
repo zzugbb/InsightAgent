@@ -707,6 +707,8 @@ def normalize_tool_registry_names(names: tuple[str, ...] | list[str] | set[str])
 
 
 def _normalize_named_tool_registry_component_name(name: object | None) -> str | None:
+    if isinstance(name, UserString):
+        name = str(name)
     if not isinstance(name, str):
         return None
     normalized = name.strip().lower()
@@ -1247,6 +1249,8 @@ def _normalize_safe_explicit_result_keys(
 
 
 def _normalize_runtime_semantic_kind(raw_value: object) -> str | None:
+    if isinstance(raw_value, UserString):
+        raw_value = str(raw_value)
     if not isinstance(raw_value, str):
         return None
     normalized = raw_value.strip()
@@ -1254,6 +1258,8 @@ def _normalize_runtime_semantic_kind(raw_value: object) -> str | None:
 
 
 def _normalize_tool_execution_kind(raw_value: object) -> str | None:
+    if isinstance(raw_value, UserString):
+        raw_value = str(raw_value)
     if not isinstance(raw_value, str):
         return None
     normalized = raw_value.strip().lower()
@@ -5366,11 +5372,15 @@ def _format_safe_tool_execution_summary_url_path(raw_value: object) -> str:
 
 def _sanitize_tool_execution_summary_value(key: str, value: object) -> object:
     normalized_key = key.strip()
+    value = _coerce_tool_execution_string_like_value(value)
     if normalized_key == "url_path" and isinstance(value, str):
         return _format_safe_tool_execution_summary_url_path(value)
     if normalized_key == "response_path" and isinstance(value, str):
         return _format_http_json_mapping_path_for_error(value)
-    if normalized_key == "result_field_names" and isinstance(value, (list, tuple)):
+    if normalized_key == "result_field_names" and isinstance(
+        value,
+        Sequence,
+    ) and not isinstance(value, (str, bytes, bytearray, memoryview)):
         return [
             safe_field_name
             for safe_field_name in (
@@ -5387,10 +5397,11 @@ def _sanitize_tool_execution_summary_value(key: str, value: object) -> object:
 def sanitize_tool_execution_summary(
     execution_summary: object,
 ) -> dict[str, object] | None:
-    if not isinstance(execution_summary, dict) or not execution_summary:
+    if not isinstance(execution_summary, Mapping) or not execution_summary:
         return None
     sanitized_summary: dict[str, object] = {}
     for raw_key, raw_value in execution_summary.items():
+        raw_key = _coerce_tool_execution_string_like_value(raw_key)
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
         safe_value = _sanitize_tool_execution_summary_value(raw_key, raw_value)
@@ -5401,17 +5412,19 @@ def sanitize_tool_execution_summary(
 
 
 def sanitize_tool_execution_diagnostics(diagnostics: object) -> tuple[str, ...]:
-    if not isinstance(diagnostics, (list, tuple)):
+    if not isinstance(diagnostics, Sequence) or isinstance(
+        diagnostics,
+        (str, bytes, bytearray, memoryview),
+    ):
         return ()
-    safe_diagnostics = tuple(
-        safe_diagnostic
-        for safe_diagnostic in (
-            _redact_tool_registry_diagnostic_value(diagnostic)
-            for diagnostic in diagnostics
-            if isinstance(diagnostic, str)
-        )
-        if safe_diagnostic
-    )
+    safe_diagnostics: list[str] = []
+    for diagnostic in diagnostics:
+        diagnostic = _coerce_tool_execution_string_like_value(diagnostic)
+        if not isinstance(diagnostic, str):
+            continue
+        safe_diagnostic = _redact_tool_registry_diagnostic_value(diagnostic)
+        if safe_diagnostic:
+            safe_diagnostics.append(safe_diagnostic)
     return tuple(dict.fromkeys(safe_diagnostics))
 
 
@@ -13927,7 +13940,9 @@ def get_tool_observation_display_name_from_registration(
     )
 
 
-def _normalize_tool_semantic_kind(kind: str | None) -> str | None:
+def _normalize_tool_semantic_kind(kind: object) -> str | None:
+    if isinstance(kind, UserString):
+        kind = str(kind)
     normalized_kind = str(kind).strip() if isinstance(kind, str) else ""
     if not normalized_kind:
         return None

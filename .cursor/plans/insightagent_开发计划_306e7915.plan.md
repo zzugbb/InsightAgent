@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1519/1519)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1526/1526)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -416,6 +416,9 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 337. HTTP JSON static diagnostics 的 typed request value 归一化也已补齐：`headers`、`query_params`、`json_body` 的 direct typed value 与 supported runtime template 渲染出的 typed value 会先复用 request runtime 的 JSON-compatible coercion，再进入 object/value、Content-Type/Accept、duplicate query/header 与 reserved runtime template typo 诊断；typed adapter dump 内部的 `settings_*` / `tool_registry_*` typo 不再漏过 preflight，真实可执行 wrapper 也不再被误报成协议错误。
 338. HTTP JSON execution summary 的 typed/wrapper 侧路也已补齐：direct typed request mapping、`UserString` response_path 与 root template 渲染出的 typed `result_fields` 会先复用静态归一化，再生成 header/query/body count、response_path 与 result_field_names；通用 template render/missing/reference 扫描也会把 `UserString` 当文本处理，避免 settings/preflight 摘要递归或漏字段。
 339. HTTP JSON control field string wrapper 也已补齐：`url`、`method`、`timeout_ms` 的 `UserString` 会按明确 string-like value 进入 validation、runner 与 execution_summary；`method` runtime template 也会在 execution_summary 中按静态上下文渲染，避免 settings/preflight/tool_start 摘要方法与真实执行方法不一致。
+340. HTTP JSON execution kind string wrapper 也已补齐：`execution.kind=UserString("http_json")` 会按真实执行器入口枚举进入 validation、runner dispatch 与 execution_summary；普通 object 仍保持缺失/unsupported 语义，避免随意 stringify 坏配置。
+341. HTTP JSON runtime semantic meta 的半迁移 summary/diagnostics wrapper 也已补齐：registration 自身携带的 `execution_summary` / `execution_diagnostics` 若使用 `UserString` key/value/list item，会在 `tool_start`、action meta、trace/export 入口统一按 string-like value 归一并脱敏，不再因为 wrapper 丢失摘要/诊断或泄漏敏感 path/key。
+342. HTTP JSON runtime semantic kind wrapper 也已补齐：registration 的 `kind` / `runtime_semantic_kind` 支持 `UserString` 窄归一化，noncanonical real tool 仍保留工具名级 trace `semantic_kind`，同时稳定补出 family 级 `semantic_family`，避免 settings/preflight 与运行态 trace 语义分叉。
 
 ## 当前主线判断
 
