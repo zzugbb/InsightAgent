@@ -57770,6 +57770,150 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(output["result"], 488)
 
+    def test_run_tool_canonical_override_keeps_http_json_chunked_read_bad_chunk_fatal_after_body_started(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {"Content-Type": "application/json"}
+            content = b'{"data":{"value":489}}'
+
+            def __init__(self) -> None:
+                self._chunks: list[object] = [
+                    b'{"data":',
+                    object(),
+                ]
+
+            def read(self, amt: int | None = None) -> object:
+                if amt is None:
+                    raise TypeError("chunk size is required")
+                if amt <= 0:
+                    raise AssertionError("chunk size must be positive")
+                return self._chunks.pop(0)
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertIn("response body must be bytes or text", str(raised.exception))
+
+    def test_run_tool_canonical_override_keeps_http_json_chunked_read_runtime_error_fatal_after_body_started(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {"Content-Type": "application/json"}
+            content = b'{"data":{"value":490}}'
+
+            def __init__(self) -> None:
+                self._chunks = [b'{"data":']
+
+            def read(self, amt: int | None = None) -> bytes:
+                if amt is None:
+                    raise TypeError("chunk size is required")
+                if amt <= 0:
+                    raise AssertionError("chunk size must be positive")
+                if self._chunks:
+                    return self._chunks.pop(0)
+                raise RuntimeError("upstream stream broke")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertIn(
+            "response read failed: upstream stream broke",
+            str(raised.exception),
+        )
+
     def test_run_tool_canonical_override_falls_back_http_json_json_method_when_read_returns_empty_body(
         self,
     ) -> None:

@@ -3799,18 +3799,32 @@ def _coerce_http_json_response_json_body_bytes(raw_body: object) -> bytes:
         raise TypeError(f"response json body must be JSON serializable: {exc}") from exc
 
 
+class _HttpJsonResponseBodyInitialReadTypeError(TypeError):
+    pass
+
+
 def _read_http_json_response_body_chunked(read: object) -> bytes:
     chunks: list[bytes] = []
     while True:
         try:
             raw_chunk = read(_HTTP_JSON_RESPONSE_BODY_READ_CHUNK_SIZE)
-        except TypeError:
-            raise
+        except TypeError as exc:
+            if chunks:
+                raise
+            raise _HttpJsonResponseBodyInitialReadTypeError(str(exc)) from exc
         except Exception as exc:
-            raise TypeError(f"response read failed: {exc}") from exc
+            type_error = TypeError(f"response read failed: {exc}")
+            if chunks:
+                raise type_error from exc
+            raise _HttpJsonResponseBodyInitialReadTypeError(str(type_error)) from exc
         if raw_chunk is None:
             break
-        chunk = _coerce_http_json_response_body_bytes(raw_chunk)
+        try:
+            chunk = _coerce_http_json_response_body_bytes(raw_chunk)
+        except TypeError as exc:
+            if chunks:
+                raise
+            raise _HttpJsonResponseBodyInitialReadTypeError(str(exc)) from exc
         if not chunk:
             break
         chunks.append(chunk)
@@ -3893,7 +3907,7 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
                 if body:
                     return body
                 read_empty_body = body
-            except TypeError:
+            except _HttpJsonResponseBodyInitialReadTypeError:
                 pass
         except TypeError as exc:
             read_type_error = exc
@@ -3902,7 +3916,7 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
                 if body:
                     return body
                 read_empty_body = body
-            except TypeError:
+            except _HttpJsonResponseBodyInitialReadTypeError:
                 pass
         except Exception as exc:
             raise TypeError(f"response read failed: {exc}") from exc
