@@ -3877,6 +3877,7 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
     read_type_error: TypeError | None = None
     read_empty_body: bytes | None = None
     attr_type_error: TypeError | None = None
+    attr_empty_body: bytes | None = None
     iterator_type_error: TypeError | None = None
     iterator_empty_body: bytes | None = None
     json_type_error: TypeError | None = None
@@ -3907,8 +3908,10 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         except _HttpJsonResponseBodyAttrUnavailable as exc:
             attr_type_error = exc
             continue
-        if body is not None:
+        if body:
             return body
+        if body is not None:
+            attr_empty_body = body
     for method_name in ("iter_bytes", "iter_content", "iter_text", "iter_lines"):
         body_iterator = _get_http_json_adapter_attr(response, method_name)
         if callable(body_iterator):
@@ -3946,6 +3949,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         return _read_http_json_response_body_chunks(response_iterator)
     if iterator_empty_body is not None:
         return iterator_empty_body
+    if attr_empty_body is not None:
+        return attr_empty_body
     if read_empty_body is not None:
         return read_empty_body
     if read_type_error is not None:
