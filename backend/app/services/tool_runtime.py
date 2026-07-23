@@ -3893,6 +3893,7 @@ def _read_http_json_response_body_iterator(iterator_method: object) -> bytes:
 
 def _read_http_json_response_body_bytes(response: object) -> bytes:
     read_type_error: TypeError | None = None
+    read_body_type_error: TypeError | None = None
     read_empty_body: bytes | None = None
     attr_type_error: TypeError | None = None
     attr_empty_body: bytes | None = None
@@ -3902,17 +3903,7 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
     read = _get_http_json_adapter_attr(response, "read")
     if callable(read):
         try:
-            body = _coerce_http_json_response_body_bytes(read())
-            if body:
-                return body
-            read_empty_body = body
-            try:
-                body = _read_http_json_response_body_chunked(read)
-                if body:
-                    return body
-                read_empty_body = body
-            except _HttpJsonResponseBodyInitialReadTypeError:
-                pass
+            raw_body = read()
         except TypeError as exc:
             read_type_error = exc
             try:
@@ -3924,6 +3915,29 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
                 pass
         except Exception as exc:
             raise TypeError(f"response read failed: {exc}") from exc
+        else:
+            try:
+                body = _coerce_http_json_response_body_bytes(raw_body)
+            except TypeError as exc:
+                read_body_type_error = exc
+                try:
+                    body = _read_http_json_response_body_chunked(read)
+                    if body:
+                        return body
+                    read_empty_body = body
+                except _HttpJsonResponseBodyInitialReadTypeError:
+                    pass
+            else:
+                if body:
+                    return body
+                read_empty_body = body
+                try:
+                    body = _read_http_json_response_body_chunked(read)
+                    if body:
+                        return body
+                    read_empty_body = body
+                except _HttpJsonResponseBodyInitialReadTypeError:
+                    pass
     for attr_name in ("content", "body", "data", "text"):
         raw_body = _get_http_json_adapter_attr(response, attr_name)
         if raw_body is None:
@@ -3983,8 +3997,8 @@ def _read_http_json_response_body_bytes(response: object) -> bytes:
         raise json_type_error
     if attr_empty_body is None and attr_type_error is not None:
         raise attr_type_error
-    if read_empty_body is None and read_type_error is not None:
-        raise read_type_error
+    if read_empty_body is None and read_body_type_error is not None:
+        raise read_body_type_error
     if iterator_empty_body is not None:
         return iterator_empty_body
     if attr_empty_body is not None:
