@@ -4,6 +4,7 @@ import json
 import math
 import re
 import gzip
+import inspect
 import zlib
 import codecs
 from ast import Add, BinOp, Div, Expression, Mod, Mult, Pow, Sub, UAdd, USub, UnaryOp, parse
@@ -3729,28 +3730,63 @@ def _call_http_json_json_body_dump_method(
     model_dump: object,
 ) -> object:
     if method_name == "model_dump":
-        try:
-            return model_dump(mode="json")  # type: ignore[operator]
-        except TypeError:
-            pass
-        except Exception as exc:
-            raise TypeError(f"response json body {method_name} failed: {exc}") from exc
+        accepts_json_mode = _http_json_callable_accepts_call(model_dump, mode="json")
+        if accepts_json_mode is not False:
+            try:
+                return model_dump(mode="json")  # type: ignore[operator]
+            except TypeError as exc:
+                if accepts_json_mode is None:
+                    pass
+                else:
+                    raise TypeError(
+                        f"response json body {method_name} failed: {exc}"
+                    ) from exc
+            except Exception as exc:
+                raise TypeError(
+                    f"response json body {method_name} failed: {exc}"
+                ) from exc
+    accepts_no_args = _http_json_callable_accepts_call(model_dump)
+    if accepts_no_args is False:
+        raise _HttpJsonJsonBodyDumpMethodUnavailable(
+            f"response json body {method_name} signature requires arguments"
+        )
     try:
         return model_dump()  # type: ignore[operator]
     except TypeError as exc:
-        raise _HttpJsonJsonBodyDumpMethodUnavailable(str(exc)) from exc
+        if accepts_no_args is None:
+            raise _HttpJsonJsonBodyDumpMethodUnavailable(str(exc)) from exc
+        raise TypeError(f"response json body {method_name} failed: {exc}") from exc
     except Exception as exc:
         raise TypeError(f"response json body {method_name} failed: {exc}") from exc
+
+
+def _http_json_callable_accepts_call(callable_obj: object, **kwargs: object) -> bool | None:
+    try:
+        signature = inspect.signature(callable_obj)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    try:
+        signature.bind(**kwargs)
+    except TypeError:
+        return False
+    return True
 
 
 def _call_http_json_json_body_dump_json_method(
     method_name: str,
     model_dump_json: object,
 ) -> bytes:
+    accepts_no_args = _http_json_callable_accepts_call(model_dump_json)
+    if accepts_no_args is False:
+        raise _HttpJsonJsonBodyDumpJsonMethodUnavailable(
+            f"response json body {method_name} signature requires arguments"
+        )
     try:
         dumped_body = model_dump_json()  # type: ignore[operator]
     except TypeError as exc:
-        raise _HttpJsonJsonBodyDumpJsonMethodUnavailable(str(exc)) from exc
+        if accepts_no_args is None:
+            raise _HttpJsonJsonBodyDumpJsonMethodUnavailable(str(exc)) from exc
+        raise TypeError(f"response json body {method_name} failed: {exc}") from exc
     except Exception as exc:
         raise TypeError(f"response json body {method_name} failed: {exc}") from exc
     return _coerce_http_json_response_body_bytes(dumped_body)

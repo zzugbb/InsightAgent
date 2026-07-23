@@ -59270,6 +59270,78 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("transport error", message)
         self.assertIn("response json body model_dump_json failed: serializer exploded", message)
 
+    def test_run_tool_canonical_override_keeps_http_json_dump_json_type_error_when_dict_fallback_exists(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeJsonPayload:
+            def model_dump_json(self) -> str:
+                raise TypeError("serializer type exploded")
+
+            def to_dict(self) -> dict[str, object]:
+                return {"data": {"value": 478}}
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {"Content-Type": "application/json"}
+
+            def json(self) -> FakeJsonPayload:
+                return FakeJsonPayload()
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertIn("transport error", message)
+        self.assertIn(
+            "response json body model_dump_json failed: serializer type exploded",
+            message,
+        )
+
     def test_run_tool_canonical_override_accepts_http_json_to_dict_body_when_model_dump_shape_is_unavailable(
         self,
     ) -> None:
@@ -59469,6 +59541,78 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("transport error", message)
         self.assertIn(
             "response json body model_dump_json failed: nested serializer exploded",
+            message,
+        )
+
+    def test_run_tool_canonical_override_keeps_http_json_nested_dump_json_type_error_when_dict_fallback_exists(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_overrides_json=json.dumps(
+                    {
+                        "calc_eval": {
+                            "kind": "provider_calc",
+                            "label": "Provider Calculator",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/calc",
+                                "result_fields": {
+                                    "result": "$.data.item.value",
+                                },
+                            },
+                        }
+                    }
+                ),
+                tool_registry_extra_tools_json=None,
+                tool_registry_profile="default",
+                tool_registry_provider_sources_json=json.dumps({}),
+            )
+        )
+
+        class FakeNestedPayload:
+            def model_dump_json(self) -> str:
+                raise TypeError("nested serializer type exploded")
+
+            def to_dict(self) -> dict[str, object]:
+                return {"value": 479}
+
+        class FakeHttpResponse:
+            status = 200
+            headers = {"Content-Type": "application/json"}
+
+            def json(self) -> dict[str, object]:
+                return {"data": {"item": FakeNestedPayload()}}
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            with self.assertRaises(MockToolExecutionError) as raised:
+                run_tool(
+                    name="calc_eval",
+                    tool_input={"expression": "1+2*3"},
+                    prompt="calc",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        message = str(raised.exception)
+        self.assertIn("transport error", message)
+        self.assertIn(
+            "response json body model_dump_json failed: nested serializer type exploded",
             message,
         )
 
