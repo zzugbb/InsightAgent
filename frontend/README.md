@@ -26,6 +26,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - HTTP JSON 默认空 `read()` 的分块 fallback 继续对齐后端：当无参 `read()` 返回空 bytes/text、但 `read(amt)` 才能读出真实 body 时，后端会先尝试分块读取；分块也不可用或为空时再继续后续 source。
   - HTTP JSON 空 chunked `read(amt)` fallback 继续对齐后端：当无参 `read()` 不适配、分块读取第一块即为空，但 `.content` 或 `json()` 等后续 source 才有真实 body 时，前端仍会看到成功 tool output；没有后续 body 时仍是 `empty JSON response`。
   - HTTP JSON chunked `read(amt)` 中途错误诊断继续对齐后端：分块读取已产出真实 chunk 后，如果后续 chunk 类型坏掉或上游 read 抛错，前端会看到明确的 `transport error`，不会被 fallback 成假成功。
+  - HTTP JSON streaming iterator 中途错误诊断继续对齐后端：`iter_bytes()` / `iter_content()` / `iter_text()` / `iter_lines()` 在产出真实 chunk 前打开失败时仍可回退 `json()` 等后续 source；已产出真实 chunk 后再抛迭代异常时，前端会看到明确的 `transport error`，不会被 fallback 成假成功。
   - HTTP JSON 空 `iter_*` fallback 继续对齐后端：当首个 streaming iterator 为空或只有 `None` keep-alive chunk 时，后端会继续尝试后续 iterator、`json()` 与 response 本体 iterable；没有后续 body 时仍是 `empty JSON response`。
   - HTTP JSON 空 body 属性 fallback 继续对齐后端：当 `.content` / `.body` / `.data` / `.text` 属性存在但值为空 bytes/text 时，后端会继续尝试后续属性、`json()` 与 response iterable；没有后续 body 时仍是 `empty JSON response`。
   - 当后端显式配置了无效 `execution` 时，当前策略是 fail-fast 而不是静默回退 stub runner；前端后续看到的是明确的配置错误，而不是“看似成功、实际跑了本地模板”的假语义。
@@ -107,7 +108,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
   - 后端 mock final-answer observation parser 现在也会恢复 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串；因此前端最终回答在旧 observation 只剩嵌套 preview 时，也会继续显示 real calc / real retrieval 摘要，而不是 `output_preview=...` 或旁路字段。
 - 当前最近一次已记录校验基线：
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1485/1485`）
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1487/1487`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）

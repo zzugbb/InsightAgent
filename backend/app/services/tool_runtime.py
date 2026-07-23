@@ -3853,7 +3853,10 @@ def _read_http_json_response_body_chunks(raw_iterator: object) -> bytes:
             raise
         raise _HttpJsonResponseBodyInitialIteratorTypeError(str(exc)) from exc
     except Exception as exc:
-        raise TypeError(f"response body iteration failed: {exc}") from exc
+        type_error = TypeError(f"response body iteration failed: {exc}")
+        if chunks:
+            raise type_error from exc
+        raise _HttpJsonResponseBodyInitialIteratorTypeError(str(type_error)) from exc
     return b"".join(chunks)
 
 
