@@ -1196,14 +1196,16 @@ def build_tool_registry_extra_tools_from_specs(
     settings: object | None = None,
     provider_source_name: str | None = None,
 ) -> dict[str, ToolRegistration]:
+    extra_tool_specs = _coerce_tool_registry_spec_payload(extra_tool_specs)
     if not isinstance(extra_tool_specs, dict):
+        return {}
+    try:
+        extra_tools_json = json.dumps(extra_tool_specs, ensure_ascii=False)
+    except TypeError:
         return {}
     extra_tools_settings = _clone_tool_execution_settings(
         settings=settings or SimpleNamespace(),
-        tool_registry_extra_tools_json=json.dumps(
-            extra_tool_specs,
-            ensure_ascii=False,
-        ),
+        tool_registry_extra_tools_json=extra_tools_json,
         **(
             {"tool_registry_provider_source": provider_source_name}
             if provider_source_name
@@ -1211,6 +1213,13 @@ def build_tool_registry_extra_tools_from_specs(
         ),
     )
     return build_tool_registry_extra_tools_from_settings(settings=extra_tools_settings)
+
+
+def _coerce_tool_registry_spec_payload(raw_value: object) -> object:
+    try:
+        return _coerce_http_json_json_compatible_body(raw_value)
+    except TypeError:
+        return raw_value
 
 
 def _normalize_result_preview_keys(raw_value: object) -> tuple[str, ...]:
@@ -5806,6 +5815,7 @@ def _collect_invalid_tool_execution_messages_from_extra_tool_specs(
     extra_tool_specs: object,
     settings: object | None = None,
 ) -> tuple[str, ...]:
+    extra_tool_specs = _coerce_tool_registry_spec_payload(extra_tool_specs)
     if not isinstance(extra_tool_specs, dict):
         return ()
     runtime_template_context = _build_tool_execution_runtime_template_context(
@@ -5845,6 +5855,7 @@ def _collect_invalid_tool_execution_messages_from_override_specs(
     base_registry: dict[str, ToolRegistration],
     settings: object | None = None,
 ) -> tuple[str, ...]:
+    override_specs = _coerce_tool_registry_spec_payload(override_specs)
     if not isinstance(override_specs, dict):
         return ()
     runtime_template_context = _build_tool_execution_runtime_template_context(
@@ -6872,6 +6883,9 @@ def build_tool_registry_provider_adapter(
     named_providers: dict[str, ToolRegistryProvider] | None = None,
     named_sources: dict[str, ToolRegistryProvider] | None = None,
 ) -> ToolRegistryProvider | None:
+    spec = _coerce_tool_registry_spec_payload(spec)
+    if not isinstance(spec, dict):
+        return None
     provider_factory_name = spec.get("provider_factory")
     provider_name = spec.get("provider")
     loader_factory_name = spec.get("loader_factory")
@@ -6971,7 +6985,10 @@ def build_tool_registry_provider_adapter(
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
     disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
     raw_disabled_tool_names = spec.get("disabled_tool_names")
-    if isinstance(raw_disabled_tool_names, (list, tuple)):
+    if isinstance(raw_disabled_tool_names, Sequence) and not isinstance(
+        raw_disabled_tool_names,
+        (str, bytes, bytearray, memoryview),
+    ):
         disabled_tool_names.update(normalize_tool_registry_names(raw_disabled_tool_names))
 
     extra_tools = build_tool_registry_extra_tools_from_specs(
@@ -7465,6 +7482,7 @@ def _build_registry_overrides_from_specs(
     disabled_tool_names: set[str],
     settings: object | None = None,
 ) -> tuple[dict[str, ToolRegistration], set[str]]:
+    override_specs = _coerce_tool_registry_spec_payload(override_specs)
     if not isinstance(override_specs, dict):
         return {}, disabled_tool_names
 

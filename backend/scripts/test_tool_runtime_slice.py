@@ -25361,6 +25361,104 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertFalse(overrides["calc_eval"].retryable_by_default)
         self.assertEqual(overrides["calc_eval"].kind, "local_calculator")
 
+    def test_build_registry_overrides_from_specs_accepts_mapping_wrappers(self) -> None:
+        overrides, disabled_tool_names = (
+            tool_runtime_module._build_registry_overrides_from_specs(  # type: ignore[attr-defined]
+                override_specs=UserDict(
+                    {
+                        UserString("calc_eval"): UserDict(
+                            {
+                                UserString("label"): UserString(
+                                    "Provider Calculator"
+                                ),
+                                UserString("kind"): UserString("provider_calc"),
+                                UserString("execution"): UserDict(
+                                    {
+                                        UserString("kind"): UserString("http_json"),
+                                        UserString("url"): UserString(
+                                            "https://provider.example/calc"
+                                        ),
+                                        UserString("method"): UserString("POST"),
+                                        UserString("json_body"): UserDict(
+                                            {
+                                                UserString("expression"): UserString(
+                                                    "$expression"
+                                                )
+                                            }
+                                        ),
+                                        UserString("result_fields"): UserDict(
+                                            {
+                                                UserString("result"): UserString(
+                                                    "$.data.value"
+                                                )
+                                            }
+                                        ),
+                                    }
+                                ),
+                            }
+                        )
+                    }
+                ),
+                base_registry=get_default_tool_registry(),
+                disabled_tool_names=set(),
+            )
+        )
+
+        self.assertEqual(disabled_tool_names, set())
+        self.assertEqual(tuple(sorted(overrides)), ("calc_eval",))
+        override = overrides["calc_eval"]
+        self.assertEqual(override.label, "Provider Calculator")
+        self.assertEqual(override.kind, "provider_calc")
+        self.assertEqual(override.execution_kind, "http_json")
+        self.assertEqual(
+            override.execution_summary,
+            {
+                "method": "POST",
+                "url_origin": "https://provider.example",
+                "url_path": "/calc",
+                "json_body_field_count": 1,
+                "result_field_names": ["result"],
+            },
+        )
+
+    def test_build_tool_registry_provider_adapter_accepts_mapping_wrappers(self) -> None:
+        provider = tool_runtime_module.build_tool_registry_provider_adapter(
+            spec=UserDict(
+                {
+                    UserString("profile"): UserString("planning_only"),
+                    UserString("disabled_tool_names"): UserList(
+                        [UserString("task_plan")]
+                    ),
+                    UserString("extra_tools"): UserDict(
+                        {
+                            UserString("calc_eval_fast"): UserDict(
+                                {
+                                    UserString("template"): UserString("calc_eval"),
+                                    UserString("label"): UserString("Fast Calculator"),
+                                    UserString("result_preview_keys"): UserList(
+                                        [
+                                            UserString("expression"),
+                                            UserString("result"),
+                                        ]
+                                    ),
+                                }
+                            )
+                        }
+                    ),
+                }
+            )
+        )
+
+        self.assertIsNotNone(provider)
+        assert provider is not None
+        registry = provider.load_tool_registry()
+        self.assertEqual(tuple(sorted(registry)), ("calc_eval_fast",))
+        self.assertEqual(registry["calc_eval_fast"].label, "Fast Calculator")
+        self.assertEqual(
+            registry["calc_eval_fast"].result_preview_keys,
+            ("expression", "result"),
+        )
+
     def test_build_tool_registry_settings_config_supports_disabled_tools(self) -> None:
         settings = SimpleNamespace(
             tool_registry_overrides_json=json.dumps(
@@ -25443,6 +25541,81 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(extra_tools["calc_eval_fast"].default_timeout_ms, 1_500)
         self.assertFalse(extra_tools["calc_eval_fast"].retryable_by_default)
         self.assertEqual(extra_tools["calc_eval_fast"].kind, "local_calculator")
+
+    def test_build_tool_registry_extra_tools_from_specs_accepts_mapping_wrappers(
+        self,
+    ) -> None:
+        extra_tools = tool_runtime_module.build_tool_registry_extra_tools_from_specs(
+            extra_tool_specs=UserDict(
+                {
+                    UserString("provider_search"): UserDict(
+                        {
+                            UserString("template"): UserString("task_retrieve"),
+                            UserString("label"): UserString("Provider Search"),
+                            UserString("kind"): UserString("provider_retrieval"),
+                            UserString("runtime_semantic_kind"): UserString(
+                                "provider_search"
+                            ),
+                            UserString("result_preview_keys"): UserList(
+                                [UserString("documents_total")]
+                            ),
+                            UserString("result_output_keys"): UserList(
+                                [
+                                    UserString("documents_total"),
+                                    UserString("request_id"),
+                                ]
+                            ),
+                            UserString("execution"): UserDict(
+                                {
+                                    UserString("kind"): UserString("http_json"),
+                                    UserString("url"): UserString(
+                                        "https://provider.example/search"
+                                    ),
+                                    UserString("method"): UserString("POST"),
+                                    UserString("json_body"): UserDict(
+                                        {
+                                            UserString("query"): UserString("$query"),
+                                        }
+                                    ),
+                                    UserString("result_fields"): UserDict(
+                                        {
+                                            UserString("documents_total"): UserString(
+                                                "$.meta.total"
+                                            ),
+                                            UserString("request_id"): UserString(
+                                                "$.meta.request_id"
+                                            ),
+                                        }
+                                    ),
+                                }
+                            ),
+                        }
+                    )
+                }
+            )
+        )
+
+        self.assertEqual(tuple(sorted(extra_tools)), ("provider_search",))
+        provider_search = extra_tools["provider_search"]
+        self.assertEqual(provider_search.label, "Provider Search")
+        self.assertEqual(provider_search.kind, "provider_retrieval")
+        self.assertEqual(provider_search.runtime_semantic_kind, "provider_search")
+        self.assertEqual(provider_search.execution_kind, "http_json")
+        self.assertEqual(provider_search.result_preview_keys, ("documents_total",))
+        self.assertEqual(
+            provider_search.result_output_keys,
+            ("documents_total", "request_id"),
+        )
+        self.assertEqual(
+            provider_search.execution_summary,
+            {
+                "method": "POST",
+                "url_origin": "https://provider.example",
+                "url_path": "/search",
+                "json_body_field_count": 1,
+                "result_field_names": ["documents_total", "request_id"],
+            },
+        )
 
     def test_build_tool_registry_extra_tools_from_settings_sanitizes_inherited_execution_meta(
         self,
