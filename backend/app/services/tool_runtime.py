@@ -481,19 +481,30 @@ _HTTP_JSON_RESPONSE_REQUEST_ID_HEADER_NAMES = (
 
 
 def normalize_tool_spec(tool_spec: dict[str, object]) -> ToolInvocation:
-    name = str(tool_spec.get("name", "")).strip()
-    tool_input = tool_spec.get("input")
-    if not isinstance(tool_input, dict):
+    tool_spec = _coerce_tool_registry_spec_payload(tool_spec)
+    if not isinstance(tool_spec, Mapping):
+        tool_spec = {}
+    name = str(_coerce_tool_execution_string_like_value(tool_spec.get("name", ""))).strip()
+    tool_input = _coerce_tool_registry_spec_payload(tool_spec.get("input"))
+    if not isinstance(tool_input, Mapping):
         tool_input = {}
-    return ToolInvocation(name=name, tool_input=tool_input)
+    return ToolInvocation(name=name, tool_input=dict(tool_input))
+
+
+def _is_non_text_sequence(raw_value: object) -> bool:
+    return isinstance(raw_value, Sequence) and not isinstance(
+        raw_value,
+        (str, bytes, bytearray, memoryview),
+    )
 
 
 def _normalize_planned_tool_names(raw_value: object) -> list[str]:
-    if not isinstance(raw_value, (list, tuple)):
+    if not _is_non_text_sequence(raw_value):
         return []
     normalized_names: list[str] = []
     seen_names: set[str] = set()
     for raw_name in raw_value:
+        raw_name = _coerce_tool_execution_string_like_value(raw_name)
         canonical_name = normalize_tool_registry_name(str(raw_name).strip())
         if not canonical_name or canonical_name == "task_plan" or canonical_name in seen_names:
             continue
@@ -511,18 +522,20 @@ def _build_task_plan_steps(
     steps = ["Analyze request"]
     label_by_name: dict[str, str] = {}
     kind_by_name: dict[str, str] = {}
-    if isinstance(planned_tool_labels, (list, tuple)):
+    if _is_non_text_sequence(planned_tool_labels):
         for idx, raw_label in enumerate(planned_tool_labels):
             if idx >= len(planned_tool_names):
                 break
+            raw_label = _coerce_tool_execution_string_like_value(raw_label)
             label = str(raw_label).strip()
             if label:
                 label_by_name[planned_tool_names[idx]] = label
-    if isinstance(planned_tool_kinds, (list, tuple)):
+    if _is_non_text_sequence(planned_tool_kinds):
         for idx, raw_kind in enumerate(planned_tool_kinds):
             if idx >= len(planned_tool_names):
                 break
-            kind = _normalize_tool_semantic_kind(str(raw_kind).strip())
+            raw_kind = _coerce_tool_execution_string_like_value(raw_kind)
+            kind = _normalize_tool_semantic_kind(raw_kind)
             if kind:
                 kind_by_name[planned_tool_names[idx]] = kind
 
@@ -546,8 +559,8 @@ def _run_task_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) 
     del user_id
     prompt_preview = str(tool_input.get("prompt_preview", "")).strip() or prompt.strip()[:120]
     planned_tool_names = _normalize_planned_tool_names(tool_input.get("planned_tool_names"))
-    if "planned_tool_names" in tool_input and isinstance(
-        tool_input.get("planned_tool_names"), (list, tuple)
+    if "planned_tool_names" in tool_input and _is_non_text_sequence(
+        tool_input.get("planned_tool_names")
     ):
         planned_tool_labels = tool_input.get("planned_tool_labels")
         planned_tool_kinds = tool_input.get("planned_tool_kinds")
@@ -555,12 +568,12 @@ def _run_task_plan(*, tool_input: dict[str, object], prompt: str, user_id: str) 
             planned_tool_names=planned_tool_names,
             planned_tool_labels=(
                 planned_tool_labels
-                if isinstance(planned_tool_labels, (list, tuple))
+                if _is_non_text_sequence(planned_tool_labels)
                 else None
             ),
             planned_tool_kinds=(
                 planned_tool_kinds
-                if isinstance(planned_tool_kinds, (list, tuple))
+                if _is_non_text_sequence(planned_tool_kinds)
                 else None
             ),
         )
@@ -9647,7 +9660,7 @@ def _normalize_tool_input_for_registration(
 ) -> dict[str, object]:
     if get_tool_semantic_kind(name=name, registration=registration) != "task_planner":
         return tool_input
-    if not isinstance(tool_input.get("planned_tool_names"), (list, tuple)):
+    if not _is_non_text_sequence(tool_input.get("planned_tool_names")):
         return tool_input
     raw_planned_tool_names = _normalize_planned_tool_names(tool_input.get("planned_tool_names"))
     if not raw_planned_tool_names:
@@ -9672,8 +9685,9 @@ def _normalize_tool_input_for_registration(
             continue
         planned_tool_names.append(planned_tool_name)
         label = ""
-        if isinstance(existing_labels, (list, tuple)) and idx < len(existing_labels):
-            label = str(existing_labels[idx]).strip()
+        if _is_non_text_sequence(existing_labels) and idx < len(existing_labels):
+            raw_label = _coerce_tool_execution_string_like_value(existing_labels[idx])
+            label = str(raw_label).strip()
         if not label:
             label = get_tool_display_name_from_registration(
                 name=planned_tool_name,
@@ -13509,24 +13523,24 @@ def _build_provider_tool_plan_prompt(
 def _extract_provider_tool_plan_items_from_payload(
     payload: object,
 ) -> list[object] | None:
-    if isinstance(payload, tuple):
+    payload = _coerce_tool_registry_spec_payload(payload)
+    if _is_non_text_sequence(payload):
         return list(payload)
-    if isinstance(payload, list):
-        return payload
-    if not isinstance(payload, dict):
+    if not isinstance(payload, Mapping):
         return None
     tools = payload.get("tools", payload.get("plan"))
-    if isinstance(tools, tuple):
+    tools = _coerce_tool_registry_spec_payload(tools)
+    if _is_non_text_sequence(tools):
         return list(tools)
-    if isinstance(tools, list):
-        return tools
     raw_name = payload.get("name", payload.get("tool"))
+    raw_name = _coerce_tool_execution_string_like_value(raw_name)
     if isinstance(raw_name, str) and raw_name.strip():
         return [payload]
     return None
 
 
 def _extract_provider_tool_plan_items(provider_content: object) -> list[object] | None:
+    provider_content = _coerce_tool_registry_spec_payload(provider_content)
     direct_items = _extract_provider_tool_plan_items_from_payload(provider_content)
     if direct_items is not None:
         return direct_items
@@ -13551,7 +13565,9 @@ def _extract_provider_tool_plan_items(provider_content: object) -> list[object] 
 
 
 def _extract_provider_response_content(response: object) -> object:
-    if isinstance(response, dict):
+    normalized_response = _coerce_tool_registry_spec_payload(response)
+    if isinstance(normalized_response, Mapping):
+        response = normalized_response
         if any(key in response for key in ("tools", "plan", "name", "tool")):
             return response
         if "content" in response:
@@ -13591,6 +13607,7 @@ def _normalize_provider_tool_plan_item(
     *,
     registry_provider: ToolRegistryProvider | None = None,
 ) -> tuple[str, dict[str, object]] | None:
+    raw_item = _coerce_tool_registry_spec_payload(raw_item)
     if isinstance(raw_item, str):
         tool_name = _resolve_provider_tool_name(
             raw_item,
@@ -13599,7 +13616,7 @@ def _normalize_provider_tool_plan_item(
         if not tool_name:
             return None
         return tool_name, {}
-    if not isinstance(raw_item, dict):
+    if not isinstance(raw_item, Mapping):
         return None
     raw_name = raw_item.get("name", raw_item.get("tool", ""))
     tool_name = _resolve_provider_tool_name(
@@ -13608,18 +13625,19 @@ def _normalize_provider_tool_plan_item(
     )
     if not tool_name:
         return None
-    tool_input = raw_item.get("input")
-    if not isinstance(tool_input, dict):
-        tool_input = raw_item.get("arguments")
-    if not isinstance(tool_input, dict):
-        tool_input = raw_item.get("args")
-    if not isinstance(tool_input, dict):
+    tool_input = _coerce_tool_registry_spec_payload(raw_item.get("input"))
+    if not isinstance(tool_input, Mapping):
+        tool_input = _coerce_tool_registry_spec_payload(raw_item.get("arguments"))
+    if not isinstance(tool_input, Mapping):
+        tool_input = _coerce_tool_registry_spec_payload(raw_item.get("args"))
+    if not isinstance(tool_input, Mapping):
         tool_input = {
             key: value
             for key, value in raw_item.items()
             if key not in {"name", "tool", "input", "arguments", "args"}
         }
-    if not isinstance(tool_input, dict):
+    tool_input = _coerce_tool_registry_spec_payload(tool_input)
+    if not isinstance(tool_input, Mapping):
         tool_input = {}
     return tool_name, dict(tool_input)
 
@@ -13707,7 +13725,9 @@ def _normalize_provider_tool_plan(
             seen_names.add(tool_name)
             continue
         if tool_kind == "local_calculator":
-            expression = tool_input.get("expression")
+            expression = _coerce_tool_execution_string_like_value(
+                tool_input.get("expression")
+            )
             if not isinstance(expression, str) or not expression.strip():
                 expression = fallback_calc_expression
             if not isinstance(expression, str) or not expression.strip():

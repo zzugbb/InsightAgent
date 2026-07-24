@@ -422,16 +422,17 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 343. HTTP JSON result projection key wrapper 也已补齐：registration 的 `result_preview_keys` / `result_output_keys` 若来自 `UserList` 容器或 `UserString` key，会继续被视为显式投影配置并过滤敏感字段；敏感-only wrapper 不会再退回默认投影，避免 `access_token` 一类字段经 preview/output 旁路回流。
 344. HTTP JSON result summary 输出字段 wrapper 也已补齐：真实上游输出里的 planner `steps`、calc `expression`、retrieval `knowledge_base_id` 与 `request_id` 若是 `UserString` / `UserList` wrapper，会继续进入 result summary、observation、success meta、trace/export 摘要；普通非字符串对象仍不被随意当文本摘要化。
 345. HTTP JSON registry/source spec wrapper 也已补齐：direct `extra_tools`、`overrides` 与 provider adapter spec 若来自 `UserDict/UserList/UserString` 半迁移对象，会先归一成 plain registry spec，再进入 extra tool 构建、override 构建、provider/source adapter 与 invalid execution diagnostics；普通不可序列化对象仍保持跳过/诊断语义。
+346. 工具规划入口 wrapper 也已补齐：provider-generated response content 中的 `tools/plan`、单个 provider plan item、`task_plan` 的 `planned_tool_names/labels/kinds`、tool iteration context 的 action step 初始输入，以及 `normalize_tool_spec` 的 invocation input 若来自 `UserDict/UserList/UserString`，会先归一成 plain payload，再进入真实工具规划、extra planner 过滤、steps 生成与 trace 写入；普通文本仍不会被当成 sequence 拆分。完整 backend slice 当前为 `1538/1538`。
 
 ## 当前主线判断
 
 - 代码与文档当前主线是一致的：重点已经不是继续维护 archived runtime spec，而是把默认工具去 mock 化、真实工具执行本体与 registry/provider/source 治理继续产品化。
 - 全仓库审计后，final answer / Tool observations / observation fallback / export fallback 子线已基本收口；后续不再优先扩大兼容面，除非审计扫出明确红测。
-- 下一阶段最值得投入的缺口已经转向 `real-tool-execution`：那些已经能被 planner、registry、provider source 规划/注册出来的 extra/real tools，需要继续从展示与治理走向真实上游协议、请求模板、响应映射、result preview/output、trace/observation/export 诊断的一体化执行链。
+- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec 与 planner/provider wrapper 的大部分入口治理；剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的 provider/source 文件化配置、鉴权/profile 组合与端到端运行路径。
 
 ## 下一步候选
 
-1. 优先开始 `real-tool-execution`：选择 provider/source file-backed 配置中的 real search / real calc，补 failing test，推进真实请求模板、鉴权/header/query/body、response path/result_fields 与 result preview/output/summary。
+1. 继续推进 `real-tool-execution` 收尾：选择 provider/source file-backed 配置中的 real search / real calc，补 failing test，验证鉴权/header/query/body、response path/result_fields、provider planner 输出与 result preview/output/summary 在真实 source/profile 组合下贯通。
 2. 随真实工具执行一起继续治理 `registry-governance`：确保 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 使用同一套安全摘要与错误语义。
 3. 完成真实工具执行主线的下一小段后，再进入 `queue-and-concurrency-lite`：单机任务排队、并发治理、运行可靠性。
 4. `rag-governance-hardening` 排在其后：知识库版本化、来源治理与更细粒度 shared 规则。

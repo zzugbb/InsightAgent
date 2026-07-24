@@ -525,6 +525,66 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(plan[2]["input"]["expression"], "6/2")
         self.assertIn("JSON", provider.last_prompt)
 
+    def test_build_tool_plan_accepts_provider_generated_mapping_wrappers(self) -> None:
+        class FakeProvider:
+            provider = "openai"
+            last_prompt = ""
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                self.last_prompt = prompt
+                return SimpleNamespace(
+                    content=UserDict(
+                        {
+                            UserString("tools"): UserList(
+                                [
+                                    UserDict(
+                                        {
+                                            UserString("name"): UserString("task_retrieve"),
+                                            UserString("input"): UserDict(
+                                                {
+                                                    UserString("query"): UserString(
+                                                        "深入检索并整理背景"
+                                                    ),
+                                                    UserString("top_k"): 5,
+                                                    UserString("knowledge_base_id"): UserString(
+                                                        "kb-provider"
+                                                    ),
+                                                }
+                                            ),
+                                        }
+                                    ),
+                                    UserDict(
+                                        {
+                                            UserString("name"): UserString("calc_eval"),
+                                            UserString("input"): UserDict(
+                                                {
+                                                    UserString("expression"): UserString("6/2")
+                                                }
+                                            ),
+                                        }
+                                    ),
+                                ]
+                            )
+                        }
+                    )
+                )
+
+        provider = FakeProvider()
+        plan = build_tool_plan(
+            "请先检索再计算 [calc:1+2] [kb:demo]",
+            provider=provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "task_retrieve", "calc_eval"],
+        )
+        self.assertEqual(plan[1]["input"]["query"], "深入检索并整理背景")
+        self.assertEqual(plan[1]["input"]["top_k"], 5)
+        self.assertEqual(plan[1]["input"]["knowledge_base_id"], "kb-provider")
+        self.assertEqual(plan[2]["input"]["expression"], "6/2")
+        self.assertIn("JSON", provider.last_prompt)
+
     def test_build_tool_plan_provider_branch_respects_registry_provider(self) -> None:
         class FakeProvider:
             provider = "openai"
@@ -24409,6 +24469,41 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_run_tool_supports_task_plan_alias_using_sequence_wrappers(self) -> None:
+        output = run_tool(
+            name="task_plan",
+            tool_input={
+                "prompt_preview": UserString("请帮我规划"),
+                "planned_tool_names": UserList(
+                    [UserString("calc_eval"), UserString("task_retrieve")]
+                ),
+                "planned_tool_labels": UserList(
+                    [UserString("Calculator"), UserString("Knowledge Retrieval")]
+                ),
+                "planned_tool_kinds": UserList(
+                    [UserString("local_calculator"), UserString("knowledge_retrieval")]
+                ),
+            },
+            prompt="普通问答，不包含显式工具标记",
+            user_id="user-1",
+            attempt=0,
+        )
+
+        self.assertEqual(
+            output,
+            {
+                "plan": "Analyze request -> Evaluate calculation -> Retrieve supporting context -> Synthesize final answer",
+                "steps": [
+                    "Analyze request",
+                    "Evaluate calculation",
+                    "Retrieve supporting context",
+                    "Synthesize final answer",
+                ],
+                "prompt_preview": "请帮我规划",
+                "echo": True,
+            },
+        )
+
     def test_run_tool_task_plan_uses_registry_semantics_for_extra_retrieval_tool(self) -> None:
         registry_provider = get_configured_tool_registry_provider(
             settings=SimpleNamespace(
@@ -42164,6 +42259,21 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(invocation.name, "123")
         self.assertEqual(invocation.tool_input, {})
 
+    def test_normalize_tool_spec_accepts_mapping_wrappers(self) -> None:
+        invocation = normalize_tool_spec(
+            UserDict(
+                {
+                    UserString("name"): UserString("calc_eval"),
+                    UserString("input"): UserDict(
+                        {UserString("expression"): UserString("1+2")}
+                    ),
+                }
+            )
+        )
+
+        self.assertEqual(invocation.name, "calc_eval")
+        self.assertEqual(invocation.tool_input, {"expression": "1+2"})
+
     def test_resolve_tool_registration_exposes_explicit_calc_entry(self) -> None:
         registration = resolve_tool_registration("calc_eval")
 
@@ -48622,6 +48732,55 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             context["action_step"]["meta"]["tool"]["input"],
             {
                 "prompt_preview": "please plan",
+                "planned_tool_names": ["calc_eval_fast"],
+                "planned_tool_labels": ["Fast Calculator"],
+                "planned_tool_kinds": ["local_calculator"],
+            },
+        )
+
+    def test_build_tool_iteration_context_normalizes_wrapped_task_plan_inputs(self) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="planning_only",
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        },
+                        "mock_plan_brief": {
+                            "template": "mock_plan",
+                            "label": "Brief Planner",
+                        },
+                    }
+                ),
+                tool_registry_overrides_json=None,
+            )
+        )
+
+        context = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="task_plan",
+            tool_input={
+                "prompt_preview": UserString("please plan"),
+                "planned_tool_names": UserList(
+                    [UserString("mock_plan_brief"), UserString("calc_eval_fast")]
+                ),
+                "planned_tool_labels": UserList(
+                    [UserString("Brief Planner"), UserString("Fast Calculator")]
+                ),
+            },
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            context["action_step"]["meta"]["tool"]["input"],
+            {
+                "prompt_preview": UserString("please plan"),
                 "planned_tool_names": ["calc_eval_fast"],
                 "planned_tool_labels": ["Fast Calculator"],
                 "planned_tool_kinds": ["local_calculator"],
