@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1543/1543)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1545/1545)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -110,7 +110,7 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 31. frontend workbench trace subtitle/search 现已开始直接消费 `execution_summary`；真实工具运行中的安全执行摘要不再只停留在后端 trace/export JSON 中，而是能直接参与 UI 回放和排障检索。
 32. configured provider preflight / settings summary/validate 的 `tool_details`，以及 frontend model settings tool detail summary，现也继续透出并展示 `execution_summary`；source 治理面不需要进入运行态 trace，就能先看出某个 `http_json` real tool 会打到哪类 endpoint，以及大致的 query/body/response-field 形态。
 33. `http_json` 执行模板现已继续接入运行时 settings/source 上下文：global extra tool、source extra tool、registry override 与 file-backed source 都可以在 `headers/url/query/json_body` 中读取 `settings_api_key`、`settings_base_url`、`tool_registry_provider_source` 等变量，并支持 `${...}` 字符串插值来拼接鉴权/header 模板，同时保持 trace/export 仍只暴露安全 `execution_summary`。
-34. file-backed source 的 registry manifest 现也与内联 source 配置共用同一套模板上下文透传：manifest 内的 `extra_tools` 与 `overrides` 都会继续继承 source 级 `provider_source_name`，不会再出现“内联 source 可用、切到 `registry_file` 后 `http_json` 模板变量丢失”的分叉语义；provider adapter 直接通过 `registry_file` 构建 file-backed base registry 时也会使用当前 provider source 的模板上下文，避免多 source 预构建或非全局 selected source 运行时把 `$tool_registry_provider_source` 串成全局 selected 值。
+34. file-backed source 的 registry manifest 现也与内联 source 配置共用同一套模板上下文透传：manifest 内的 `extra_tools` 与 `overrides` 都会继续继承 source 级 `provider_source_name`，不会再出现“内联 source 可用、切到 `registry_file` 后 `http_json` 模板变量丢失”的分叉语义；provider adapter 直接通过 `registry_file` 构建 file-backed base registry 时也会使用当前 provider source 的模板上下文，provider/loader factory 背后的 `registry_file` 也会延迟到 source settings 下重建，避免多 source 预构建或非全局 selected source 运行时把 `$tool_registry_provider_source` 串成全局 selected 值。
 35. `http_json` 模板里保留命名空间变量的治理也已继续细化：`settings_*` / `tool_registry_*` typo 会在 settings/source diagnostics 阶段直接归一成 `invalid/tool_executions`，同时 runner 构建仍保持 fail-fast，不再静默丢 header/query 后把配置错伪装成上游请求问题。
 36. `http_json` 请求模板里那些只能到运行时才知道是否齐备的输入变量，现也会在真正发请求前直接 fail-fast：`$top_k`、`$precision` 一类缺参会明确携带 `query_params.limit`、`json_body.precision` 等路径信息，不再静默删字段后发出半残请求，把真实模板缺参伪装成上游协议或网络异常。
 37. `http_json` 的 `response_path` 现也开始按显式契约严格执行：一旦真实响应里找不到该路径，或者配置本身只是空白字符串，runner 都会直接 fail-fast，而不是悄悄退回根 payload，把 response mapping 坏配置或上游协议漂移伪装成“工具还能跑”的假成功。
@@ -424,7 +424,8 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 345. HTTP JSON registry/source spec wrapper 也已补齐：direct `extra_tools`、`overrides` 与 provider adapter spec 若来自 `UserDict/UserList/UserString` 半迁移对象，会先归一成 plain registry spec，再进入 extra tool 构建、override 构建、provider/source adapter 与 invalid execution diagnostics；普通不可序列化对象仍保持跳过/诊断语义。
 346. 工具规划入口 wrapper 也已补齐：provider-generated response content 中的 `tools/plan`、单个 provider plan item、`task_plan` 的 `planned_tool_names/labels/kinds`、tool iteration context 的 action step 初始输入，以及 `normalize_tool_spec` 的 invocation input 若来自 `UserDict/UserList/UserString`，会先归一成 plain payload，再进入真实工具规划、extra planner 过滤、steps 生成与 trace 写入；普通文本仍不会被当成 sequence 拆分。
 347. Provider/source/file-backed registry wrapper 也已补齐：`tool_registry_*_json` settings 字段若来自 `UserString`，loader/provider/source/factory artifacts 会按 JSON object 解析；file manifest 与 loader adapter 中的 `UserDict/UserList/UserString` 会先归一，再处理 profile、disabled tools、registry_files/dirs/sources、extra_tools 与 overrides，避免真实 source/profile 组合在治理入口被跳过。
-348. Provider adapter 的 file-backed source 运行路径也已补齐：当 adapter 通过 `registry_file` 构建真实 `http_json` 工具时，会把当前 provider source 作为模板上下文传给 file-backed base registry；多 source 预构建或非全局 selected source 组合运行时，`$tool_registry_provider_source` 不会再串成全局 selected 值。完整 backend slice 当前为 `1543/1543`。
+348. Provider adapter 的 file-backed source 运行路径也已补齐：当 adapter 通过 `registry_file` 构建真实 `http_json` 工具时，会把当前 provider source 作为模板上下文传给 file-backed base registry；多 source 预构建或非全局 selected source 组合运行时，`$tool_registry_provider_source` 不会再串成全局 selected 值。
+349. Provider/loader factory 的 file-backed source 运行路径也已补齐：`provider_factory` / `loader_factory` 若由 `registry_file` 支撑，会在 factory 被 source adapter 调用时按 source settings 动态重建 provider/loader，不再把 factory 定义阶段的全局 selected source 固化进真实 `http_json` 请求模板。完整 backend slice 当前为 `1545/1545`。
 
 ## 当前主线判断
 

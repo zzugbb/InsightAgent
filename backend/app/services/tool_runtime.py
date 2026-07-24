@@ -6638,7 +6638,16 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
             if loader is None:
                 continue
             factories[normalized_factory_name] = (
-                lambda settings=None, loader=loader: loader
+                lambda settings=None, registry_file=registry_file: (
+                    build_tool_registry_loader_from_file(
+                        registry_file=registry_file,
+                        settings=settings,
+                        provider_source_name=get_tool_registry_provider_source_name_from_settings(
+                            settings=settings
+                        ),
+                    )
+                    or (lambda: {})
+                )
             )
             factory_diagnostics[normalized_factory_name] = diagnostics
             continue
@@ -6737,7 +6746,16 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
             if provider is None:
                 continue
             factories[normalized_factory_name] = (
-                lambda settings=None, provider=provider: provider
+                lambda settings=None, registry_file=registry_file: (
+                    build_tool_registry_provider_from_file(
+                        registry_file=registry_file,
+                        settings=settings,
+                        provider_source_name=get_tool_registry_provider_source_name_from_settings(
+                            settings=settings
+                        ),
+                    )
+                    or StaticToolRegistryProvider(registry={})
+                )
             )
             factory_diagnostics[normalized_factory_name] = diagnostics
             continue
@@ -6918,7 +6936,16 @@ def build_tool_registry_provider_adapter(
         )
         if provider_factory is None:
             return None
-        base_provider = provider_factory(settings)
+        base_provider = provider_factory(
+            _clone_tool_execution_settings(
+                settings=settings or SimpleNamespace(),
+                **(
+                    {"tool_registry_provider_source": provider_source_name}
+                    if provider_source_name
+                    else {}
+                ),
+            )
+        )
         profile_name_hint = getattr(provider_factory, "_tool_registry_profile_name", None)
         if profile_name_hint:
             known_base_registry = get_default_tool_registry()
@@ -6951,7 +6978,16 @@ def build_tool_registry_provider_adapter(
         )
         if loader_factory is None:
             return None
-        base_loader = loader_factory(settings)
+        base_loader = loader_factory(
+            _clone_tool_execution_settings(
+                settings=settings or SimpleNamespace(),
+                **(
+                    {"tool_registry_provider_source": provider_source_name}
+                    if provider_source_name
+                    else {}
+                ),
+            )
+        )
         profile_name_hint = getattr(loader_factory, "_tool_registry_profile_name", None)
         if profile_name_hint:
             known_base_registry = get_default_tool_registry()
