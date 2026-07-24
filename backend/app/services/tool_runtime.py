@@ -6976,6 +6976,7 @@ def build_tool_registry_provider_adapter(
         base_loader = build_tool_registry_loader_from_file(
             registry_file=registry_file,
             settings=settings,
+            provider_source_name=provider_source_name,
         )
         if base_loader is None:
             return None

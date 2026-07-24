@@ -28035,6 +28035,89 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("documents_total", "request_id"),
         )
 
+    def test_build_tool_registry_provider_adapter_registry_file_uses_source_template_context(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "source-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "runtime_semantic_kind": "provider_search",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "q": "$query",
+                                    },
+                                    "result_fields": {
+                                        "documents_total": "$.meta.total",
+                                    },
+                                },
+                                "result_preview_keys": ["documents_total"],
+                                "result_output_keys": ["documents_total"],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            provider = tool_runtime_module.build_tool_registry_provider_adapter(
+                spec={"registry_file": str(registry_file)},
+                settings=SimpleNamespace(
+                    tool_registry_provider_source="global_selected",
+                ),
+                provider_source_name="file_source",
+            )
+            self.assertIsNotNone(provider)
+            assert provider is not None
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return b'{"meta":{"total":8}}'
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "cash flow"},
+                    prompt="search cash flow",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 8)
+        self.assertEqual(len(urlopen_calls), 1)
+        request = urlopen_calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://provider.example/search?source=file_source&q=cash+flow",
+        )
+
     def test_build_tool_registry_loader_adapter_accepts_tuple_disabled_tool_names(
         self,
     ) -> None:
