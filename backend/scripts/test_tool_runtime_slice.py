@@ -27921,6 +27921,35 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Planning Calculator",
         )
 
+    def test_build_tool_registry_provider_sources_from_settings_accepts_json_string_wrappers(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=UserString(
+                json.dumps(
+                    {
+                        "planning_suite": {
+                            "provider": "default",
+                            "profile": "planning_only",
+                            "disabled_tool_names": ["mock_plan"],
+                            "extra_tools": {
+                                "calc_eval_fast": {
+                                    "template": "calc_eval",
+                                    "label": "Fast Calculator",
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(sources)), ("planning_suite",))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["planning_suite"]),
+            ("calc_eval_fast",),
+        )
+
     def test_build_tool_registry_provider_sources_from_settings_ignores_bad_shapes(self) -> None:
         settings = SimpleNamespace(
             tool_registry_provider_sources_json=json.dumps(
@@ -28022,6 +28051,37 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             tuple(sorted(loader().keys())),
             ("calc_eval", "task_retrieve"),
         )
+
+    def test_build_tool_registry_loader_adapter_accepts_mapping_wrappers(
+        self,
+    ) -> None:
+        loader = tool_runtime_module.build_tool_registry_loader_adapter(
+            spec=UserDict(
+                {
+                    UserString("loader"): UserString("default"),
+                    UserString("profile"): UserString("planning_only"),
+                    UserString("disabled_tool_names"): UserList(
+                        [UserString("mock_plan")]
+                    ),
+                    UserString("extra_tools"): UserDict(
+                        {
+                            UserString("calc_eval_fast"): UserDict(
+                                {
+                                    UserString("template"): UserString("calc_eval"),
+                                    UserString("label"): UserString("Fast Calculator"),
+                                }
+                            )
+                        }
+                    ),
+                }
+            )
+        )
+
+        self.assertIsNotNone(loader)
+        assert loader is not None
+        registry = loader()
+        self.assertEqual(tuple(sorted(registry)), ("calc_eval_fast",))
+        self.assertEqual(registry["calc_eval_fast"].label, "Fast Calculator")
 
     def test_build_tool_registry_provider_adapter_accepts_tuple_disabled_tool_names(
         self,
@@ -28422,6 +28482,33 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
+    def test_build_tool_registry_loaders_from_settings_accepts_json_string_wrappers(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=UserString(
+                json.dumps(
+                    {
+                        "planning_loader": {
+                            "loader": "default",
+                            "profile": "planning_only",
+                            "disabled_tool_names": ["mock_plan"],
+                            "extra_tools": {
+                                "calc_eval_fast": {
+                                    "template": "calc_eval",
+                                    "label": "Fast Calculator",
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+        )
+
+        loaders = build_tool_registry_loaders_from_settings(settings=settings)
+        registry = loaders["planning_loader"]()
+
+        self.assertEqual(tuple(sorted(loaders)), ("planning_loader",))
+        self.assertEqual(tuple(sorted(registry)), ("calc_eval_fast",))
+
     def test_build_tool_registry_provider_from_file_supports_manifest_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             registry_file = Path(tmpdir) / "tool-registry-manifest.json"
@@ -28801,6 +28888,78 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval", "calc_eval_fast", "mock_plan_brief", "task_plan"),
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_from_file_accepts_mapping_sequence_wrappers_from_payload(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            base_file = Path(tmpdir) / "base-registry.json"
+            for file_path in (root_file, base_file):
+                file_path.write_text("{}", encoding="utf-8")
+
+            original_loader = tool_runtime_module.load_tool_registry_file_payload
+            try:
+                def fake_load_tool_registry_file_payload(*, registry_file: str, base_dir=None):
+                    resolved_registry_file = str(Path(registry_file).resolve())
+                    if resolved_registry_file == str(root_file.resolve()):
+                        return UserDict(
+                            {
+                                UserString("profile"): UserString("default"),
+                                UserString("registry_files"): UserList(
+                                    [UserString(str(base_file))]
+                                ),
+                                UserString("disabled_tool_names"): UserList(
+                                    [UserString("mock_plan")]
+                                ),
+                                UserString("extra_tools"): UserDict(
+                                    {
+                                        UserString("calc_eval_fast"): UserDict(
+                                            {
+                                                UserString("template"): UserString(
+                                                    "calc_eval"
+                                                ),
+                                                UserString("label"): UserString(
+                                                    "Fast Calculator"
+                                                ),
+                                            }
+                                        )
+                                    }
+                                ),
+                            }
+                        )
+                    if resolved_registry_file == str(base_file.resolve()):
+                        return UserDict(
+                            {
+                                UserString("overrides"): UserDict(
+                                    {
+                                        UserString("calc_eval"): UserDict(
+                                            {
+                                                UserString("enabled"): True,
+                                                UserString("label"): UserString(
+                                                    "Planning Calculator"
+                                                ),
+                                            }
+                                        )
+                                    }
+                                )
+                            }
+                        )
+                    return original_loader(registry_file=registry_file, base_dir=base_dir)
+
+                tool_runtime_module.load_tool_registry_file_payload = (  # type: ignore[attr-defined]
+                    fake_load_tool_registry_file_payload
+                )
+                registry = build_tool_registry_from_file(registry_file=str(root_file))
+            finally:
+                tool_runtime_module.load_tool_registry_file_payload = original_loader  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "calc_eval_fast", "task_retrieve"),
+        )
+        self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
+        self.assertEqual(registry["calc_eval_fast"].label, "Fast Calculator")
 
     def test_build_tool_registry_from_file_artifacts_reports_missing_tuple_registry_inputs(
         self,
