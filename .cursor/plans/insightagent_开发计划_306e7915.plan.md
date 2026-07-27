@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1598/1598)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1599/1599)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -422,7 +422,7 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 343. HTTP JSON result projection key wrapper 也已补齐：registration 的 `result_preview_keys` / `result_output_keys` 若来自 `UserList` 容器或 `UserString` key，会继续被视为显式投影配置并过滤敏感字段；敏感-only wrapper 不会再退回默认投影，避免 `access_token` 一类字段经 preview/output 旁路回流。
 344. HTTP JSON result summary 输出字段 wrapper 也已补齐：真实上游输出里的 planner `steps`、calc `expression`、retrieval `knowledge_base_id` 与 `request_id` 若是 `UserString` / `UserList` wrapper，会继续进入 result summary、observation、success meta、trace/export 摘要；普通非字符串对象仍不被随意当文本摘要化。
 345. HTTP JSON registry/source spec wrapper 也已补齐：direct `extra_tools`、`overrides` 与 provider adapter spec 若来自 `UserDict/UserList/UserString` 半迁移对象，会先归一成 plain registry spec，再进入 extra tool 构建、override 构建、provider/source adapter 与 invalid execution diagnostics；普通不可序列化对象仍保持跳过/诊断语义。
-346. 工具规划入口 wrapper 也已补齐：provider-generated response content 中的 `tools/plan`、单个 provider plan item、`task_plan` 的 `planned_tool_names/labels/kinds`、tool iteration context 的 action step 初始输入，以及 `normalize_tool_spec` 的 invocation input 若来自 `UserDict/UserList/UserString`，会先归一成 plain payload，再进入真实工具规划、extra planner 过滤、steps 生成与 trace 写入；普通文本仍不会被当成 sequence 拆分。
+346. 工具规划入口 wrapper 也已补齐：provider-generated response content 中的 `tools/plan`、单个 provider plan item、`task_plan` 的 `planned_tool_names/labels/kinds/execution_kinds`、tool iteration context 的 action step 初始输入，以及 `normalize_tool_spec` 的 invocation input 若来自 `UserDict/UserList/UserString`，会先归一成 plain payload，再进入真实工具规划、extra planner 过滤、steps 生成与 trace 写入；普通文本仍不会被当成 sequence 拆分。
 347. Provider/source/file-backed registry wrapper 也已补齐：`tool_registry_*_json` settings 字段若来自 `UserString`，loader/provider/source/factory artifacts 会按 JSON object 解析；file manifest 与 loader adapter 中的 `UserDict/UserList/UserString` 会先归一，再处理 profile、disabled tools、registry_files/dirs/sources、extra_tools 与 overrides，避免真实 source/profile 组合在治理入口被跳过。
 348. Provider adapter 的 file-backed source 运行路径也已补齐：当 adapter 通过 `registry_file` 构建真实 `http_json` 工具时，会把当前 provider source 作为模板上下文传给 file-backed base registry；多 source 预构建或非全局 selected source 组合运行时，`$tool_registry_provider_source` 不会再串成全局 selected 值。
 349. Provider/loader factory 的 file-backed source 运行路径也已补齐：`provider_factory` / `loader_factory` 若由 `registry_file` 支撑，会在 factory 被 source adapter 调用时按 source settings 动态重建 provider/loader，不再把 factory 定义阶段的全局 selected source 固化进真实 `http_json` 请求模板。
@@ -442,13 +442,14 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 363. File-backed real calc 的近 e2e 链路也已补齐回归：calculator source 的 provider planner 会接受 file-backed `provider_math` 并保留 expression input；plan item service execution 会验证 POST headers/query/body、tool_end preview/output、`Calculated 8/4 = 2` result_summary 与最终 observation；settings preflight summary 会呈现 calc source/profile 下的 header/query/body count、response_path 与 result_field_names。
 364. File-backed real calc 的 diagnostics/settings 面也已补齐回归：registry_file 中的 HTTP JSON header typo 会进入 selected source diagnostics、summary/tool details、trace step 与 audit event，并对 `headers.Authorization` 做 `[redacted]` 脱敏；settings validate preview 会把 file-backed `provider_math` 的 `execution_kind=http_json`、source/profile 渲染后的 execution_summary 与 preview/output keys 暴露给前端。
 365. File-backed real calc 的回放/导出外部契约也已补齐回归：task trace preview 会把 file-backed `provider_math` action step 显示为 `Provider Calculator [provider_math · local_calculator]`，并复用 `Calculated 8/4 = 2` result summary 与安全 output 投影；session export response 会保留同类 trace_preview 的非敏感 source/profile，不会过度脱敏。
-366. File-backed real search/calc 的 trace detail、trace delta 与 task export JSON 也已补齐半迁移回放回归：旧 trace_json 如果只有 safe output/preview 与 source/profile、缺少 `meta.tool.result_summary`，后端会在 REST/SSE reconnect 同构的 TraceStep meta 中回填 `Retrieved ...` / `Calculated ...` 结构化摘要，同时继续过滤 `api_key` / `access_token` / `client_secret` 等旁路字段。完整 backend slice 当前为 `1598/1598`。
+366. File-backed real search/calc 的 trace detail、trace delta 与 task export JSON 也已补齐半迁移回放回归：旧 trace_json 如果只有 safe output/preview 与 source/profile、缺少 `meta.tool.result_summary`，后端会在 REST/SSE reconnect 同构的 TraceStep meta 中回填 `Retrieved ...` / `Calculated ...` 结构化摘要，同时继续过滤 `api_key` / `access_token` / `client_secret` 等旁路字段。
+367. Provider planner / `task_plan` planned fields 也已补齐真实执行器类型：file-backed real search/calc 在规划阶段会把 `planned_tool_execution_kinds=["http_json", ...]` 写进 task_plan input；task planner runtime input normalizer 会在过滤 extra planner 工具后同步重建 execution kinds，避免 names/labels/kinds 与 execution kinds 错位。完整 backend slice 当前为 `1599/1599`。
 
 ## 当前主线判断
 
 - 代码与文档当前主线是一致的：重点已经不是继续维护 archived runtime spec，而是把默认工具去 mock 化、真实工具执行本体与 registry/provider/source 治理继续产品化。
 - 全仓库审计后，final answer / Tool observations / observation fallback / export fallback 子线已基本收口；后续不再优先扩大兼容面，除非审计扫出明确红测。
-- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的大部分入口治理；direct source、named provider/loader 与 provider/loader factory 背后的 file-backed real search 已有更接近 e2e 的 POST/header/body/query 回归，file-backed real calc 也已覆盖 provider planner、plan item execution、result summary、trace preview/session export response、trace detail/delta/task export JSON 回放、preflight diagnostics 与 settings validate preview，剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的鉴权/profile 组合与端到端运行路径。
+- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的大部分入口治理；direct source、named provider/loader 与 provider/loader factory 背后的 file-backed real search 已有更接近 e2e 的 POST/header/body/query 回归，file-backed real calc 也已覆盖 provider planner planned execution kinds、plan item execution、result summary、trace preview/session export response、trace detail/delta/task export JSON 回放、preflight diagnostics 与 settings validate preview，剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的鉴权/profile 组合与端到端运行路径。
 
 ## 下一步候选
 

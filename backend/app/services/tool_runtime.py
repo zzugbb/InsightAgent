@@ -815,6 +815,7 @@ def _annotate_task_plan_tool_input(
     planned_tool_names: list[str] = []
     planned_tool_labels: list[str] = []
     planned_tool_kinds: list[str] = []
+    planned_tool_execution_kinds: list[str] = []
     for item in tool_plan:
         tool_name = normalize_tool_registry_name(str(item.get("name", "")).strip())
         if not tool_name:
@@ -838,6 +839,11 @@ def _annotate_task_plan_tool_input(
             get_tool_display_name(tool_name, registry_provider=registry_provider)
         )
         planned_tool_kinds.append(semantic_kind or "")
+        planned_tool_execution_kinds.append(
+            _normalize_tool_execution_kind(registration.execution_kind) or ""
+            if registration is not None
+            else ""
+        )
 
     annotated_plan: list[dict[str, object]] = []
     task_plan_annotated = False
@@ -868,6 +874,9 @@ def _annotate_task_plan_tool_input(
         annotated_input["planned_tool_names"] = list(planned_tool_names)
         annotated_input["planned_tool_labels"] = list(planned_tool_labels)
         annotated_input["planned_tool_kinds"] = list(planned_tool_kinds)
+        annotated_input["planned_tool_execution_kinds"] = list(
+            planned_tool_execution_kinds
+        )
         annotated_plan.append(
             {
                 **item,
@@ -10126,6 +10135,7 @@ def _normalize_tool_input_for_registration(
     planned_tool_names: list[str] = []
     planned_tool_labels: list[str] = []
     planned_tool_kinds: list[str] = []
+    planned_tool_execution_kinds: list[str] = []
     for idx, planned_tool_name in enumerate(raw_planned_tool_names):
         planned_registration = resolve_tool_registration(
             planned_tool_name,
@@ -10151,11 +10161,17 @@ def _normalize_tool_input_for_registration(
             )
         planned_tool_labels.append(label)
         planned_tool_kinds.append(semantic_kind or "")
+        planned_tool_execution_kinds.append(
+            _normalize_tool_execution_kind(planned_registration.execution_kind) or ""
+            if planned_registration is not None
+            else ""
+        )
 
     normalized_input = dict(tool_input)
     normalized_input["planned_tool_names"] = list(planned_tool_names)
     normalized_input["planned_tool_labels"] = planned_tool_labels
     normalized_input["planned_tool_kinds"] = planned_tool_kinds
+    normalized_input["planned_tool_execution_kinds"] = planned_tool_execution_kinds
     return normalized_input
 
 

@@ -3524,6 +3524,129 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             {"expression": "8/4"},
         )
 
+    def test_build_tool_plan_provider_branch_annotates_file_backed_real_tool_execution_kinds(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "planner-real-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "method": "POST",
+                                    "url": "https://provider.example/search",
+                                    "json_body": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.documents_total",
+                                        "request_id": "$.request_id",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            },
+                            "provider_math": {
+                                "template": "calc_eval",
+                                "label": "Provider Calculator",
+                                "kind": "provider_calc",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "method": "POST",
+                                    "url": "https://provider.example/calc",
+                                    "json_body": {
+                                        "expression": "$expression",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "result": "$.value",
+                                        "request_id": "$.request_id",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_math",
+                            },
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="analytics_suite",
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "analytics_suite": {
+                                "registry_file": str(registry_file),
+                                "profile": "retrieval_calc",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "provider_search",
+                                    "input": {"query": "revenue trend"},
+                                },
+                                {
+                                    "name": "provider_math",
+                                    "input": {"expression": "8/4"},
+                                },
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        plan = build_tool_plan(
+            "请先检索 revenue trend，再计算 8/4",
+            provider=FakeProvider(),
+            registry_provider=registry_provider,
+        )
+
+        self.assertEqual(
+            [item["name"] for item in plan],
+            ["task_plan", "provider_search", "provider_math"],
+        )
+        self.assertEqual(
+            plan[0]["input"].get("planned_tool_names"),
+            ["provider_search", "provider_math"],
+        )
+        self.assertEqual(
+            plan[0]["input"].get("planned_tool_labels"),
+            ["Provider Search", "Provider Calculator"],
+        )
+        self.assertEqual(
+            plan[0]["input"].get("planned_tool_kinds"),
+            ["knowledge_retrieval", "local_calculator"],
+        )
+        self.assertEqual(
+            plan[0]["input"].get("planned_tool_execution_kinds"),
+            ["http_json", "http_json"],
+        )
+
     def test_build_tool_plan_rule_based_selection_keeps_canonical_override_calculator_semantics(
         self,
     ) -> None:
@@ -52677,6 +52800,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             tool_input={
                 "prompt_preview": "please plan",
                 "planned_tool_names": ["mock_plan_brief", "calc_eval_fast"],
+                "planned_tool_execution_kinds": ["mock", "http_json"],
             },
             model="mock-gpt",
             label="tool_1",
@@ -52691,6 +52815,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "planned_tool_names": ["calc_eval_fast"],
                 "planned_tool_labels": ["Fast Calculator"],
                 "planned_tool_kinds": ["local_calculator"],
+                "planned_tool_execution_kinds": [""],
             },
         )
 
@@ -52736,6 +52861,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "planned_tool_names": ["calc_eval_fast"],
                 "planned_tool_labels": ["Fast Calculator"],
                 "planned_tool_kinds": ["local_calculator"],
+                "planned_tool_execution_kinds": [""],
             },
         )
 
@@ -52785,6 +52911,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "planned_tool_names": ["calc_eval_fast"],
                 "planned_tool_labels": ["Fast Calculator"],
                 "planned_tool_kinds": ["local_calculator"],
+                "planned_tool_execution_kinds": [""],
             },
         )
 
@@ -57520,6 +57647,7 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "planned_tool_names": ["calc_eval_fast"],
             "planned_tool_labels": ["Fast Calculator"],
             "planned_tool_kinds": ["local_calculator"],
+            "planned_tool_execution_kinds": [""],
         }
 
         self.assertEqual(tool_start_event["input"], normalized_input)
