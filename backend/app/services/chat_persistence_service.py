@@ -3409,9 +3409,13 @@ def get_tasks_usage_dashboard(
 def get_tasks_usage_dashboard_response_summary(
     payload: dict[str, object],
 ) -> dict[str, object]:
-    trend_rows = _coerce_export_payload_block_list_to_dicts(payload.get("trend"))
-    session_rows = _coerce_export_payload_block_list_to_dicts(payload.get("by_session"))
-    top_task_rows = _coerce_export_payload_block_list_to_dicts(payload.get("top_tasks"))
+    trend_rows = _normalize_export_payload_block_list_to_dicts(payload.get("trend"))
+    session_rows = _normalize_export_payload_block_list_to_dicts(
+        payload.get("by_session")
+    )
+    top_task_rows = _normalize_export_payload_block_list_to_dicts(
+        payload.get("top_tasks")
+    )
     return {
         "window_days": int(payload.get("window_days", 0) or 0),
         "summary": _coerce_export_payload_block_to_dict(payload.get("summary")),

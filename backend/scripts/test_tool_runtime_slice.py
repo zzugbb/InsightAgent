@@ -14942,6 +14942,70 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "planning_only",
         )
 
+    def test_get_tasks_usage_dashboard_response_summary_normalizes_plain_wrapped_rows(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_tasks_usage_dashboard_response_summary(  # type: ignore[attr-defined]
+            {
+                "window_days": 14,
+                "summary": {
+                    "tasks_total": 2,
+                    "source_tasks_provider": 1,
+                },
+                "trend": [
+                    {
+                        "date": UserString("2026-06-22"),
+                        "tasks_with_usage": 2,
+                        "total_tokens": 123,
+                        "cost_estimate": 0.45,
+                    }
+                ],
+                "by_session": [
+                    {
+                        "session_id": UserString("session-plain-wrapped"),
+                        "session_title": UserString("Plain Wrapped Session"),
+                        "tasks_with_usage": 2,
+                        "total_tokens": 123,
+                        "cost_estimate": 0.45,
+                        "last_task_at": UserString("2026-06-22T20:00:00"),
+                        "governance": {
+                            "profiles": [UserString("planning_only")],
+                            "provider_sources": [UserString("planning_suite")],
+                            "allowed_tool_names": [UserString("task_plan")],
+                            "allowed_tool_labels": [UserString("Task Planner Suite")],
+                        },
+                    }
+                ],
+                "top_tasks": [
+                    {
+                        "task_id": UserString("task-plain-wrapped"),
+                        "session_id": UserString("session-plain-wrapped"),
+                        "session_title": UserString("Plain Wrapped Session"),
+                        "prompt_excerpt": UserString("plain wrapped task"),
+                        "total_tokens": 123,
+                        "cost_estimate": 0.45,
+                        "created_at": UserString("2026-06-22T20:00:00"),
+                        "updated_at": UserString("2026-06-22T20:05:00"),
+                        "source_kind": UserString("provider"),
+                        "governance": {
+                            "profile": UserString("planning_only"),
+                            "provider_source": UserString("planning_suite"),
+                            "allowed_tool_names": [UserString("task_plan")],
+                            "allowed_tool_labels": [UserString("Task Planner Suite")],
+                        },
+                    }
+                ],
+            }
+        )
+
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertEqual(payload["trend"][0]["date"], "2026-06-22")
+        self.assertEqual(payload["by_session"][0]["session_title"], "Plain Wrapped Session")
+        self.assertEqual(payload["by_session"][0]["governance"]["profiles"], ["planning_only"])
+        self.assertEqual(payload["top_tasks"][0]["task_id"], "task-plain-wrapped")
+        self.assertEqual(payload["top_tasks"][0]["source_kind"], "provider")
+        self.assertNotIn("UserString", serialized)
+
     def test_get_tasks_usage_dashboard_response_summary_coerces_governance_models(
         self,
     ) -> None:
