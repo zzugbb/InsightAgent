@@ -1868,8 +1868,9 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
                 )
         payload["tool"] = sanitized_tool_meta
     rag_meta = payload.get("rag")
-    if isinstance(rag_meta, dict):
-        sanitized_rag_meta = dict(rag_meta)
+    normalized_rag_meta = _normalize_trace_json_compatible_value(rag_meta)
+    if isinstance(normalized_rag_meta, dict):
+        sanitized_rag_meta = dict(normalized_rag_meta)
         raw_chunks = sanitized_rag_meta.get("chunks")
         sanitized_chunks = _sanitize_markdown_meta_rag_chunks(raw_chunks)
         if sanitized_chunks is not raw_chunks:
@@ -1927,11 +1928,13 @@ def _sanitize_trace_tool_result_summary_text(result_summary: str) -> str:
 
 
 def _sanitize_markdown_meta_rag_chunks(chunks: object) -> object:
+    chunks = _normalize_trace_json_compatible_value(chunks)
     if not isinstance(chunks, (list, tuple)):
         return chunks
     sanitized_chunks: list[object] = []
     changed = False
     for chunk in chunks:
+        chunk = _normalize_trace_json_compatible_value(chunk)
         if isinstance(chunk, str):
             if _trace_http_json_export_content_needs_sanitization(chunk):
                 sanitized_chunks.append(
@@ -2083,16 +2086,22 @@ def get_trace_rag_export_summary(
 
     for step in trace_steps:
         rag_meta = step.meta.rag if step.meta else None
+        normalized_rag_meta = _normalize_trace_json_compatible_value(rag_meta)
+        if isinstance(normalized_rag_meta, dict):
+            rag_meta = normalized_rag_meta
         if not isinstance(rag_meta, dict):
             continue
         raw_chunks = rag_meta.get("chunks")
-        kb_id = rag_meta.get("knowledge_base_id")
+        if isinstance(raw_chunks, UserList):
+            raw_chunks = raw_chunks.data
+        kb_id = _coerce_trace_string_like_value(rag_meta.get("knowledge_base_id"))
         kb_id_text = kb_id.strip() if isinstance(kb_id, str) and kb_id.strip() else None
         if kb_id_text and kb_id_text not in seen_kb_ids:
             seen_kb_ids.add(kb_id_text)
             rag_knowledge_base_ids.append(kb_id_text)
         if isinstance(raw_chunks, (list, tuple)):
             for chunk in raw_chunks:
+                chunk = _coerce_trace_string_like_value(chunk)
                 if not isinstance(chunk, str):
                     continue
                 chunk_text = chunk.strip()
@@ -2290,6 +2299,9 @@ def get_task_export_payload_summary(
 def _coerce_export_payload_block_to_dict(value: object) -> dict[str, object]:
     if isinstance(value, dict):
         return value
+    value = _normalize_trace_json_compatible_value(value)
+    if isinstance(value, dict):
+        return value
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         dumped = model_dump()
@@ -2299,6 +2311,8 @@ def _coerce_export_payload_block_to_dict(value: object) -> dict[str, object]:
 
 
 def _coerce_export_payload_block_list_to_dicts(value: object) -> list[dict[str, object]]:
+    if isinstance(value, UserList):
+        value = value.data
     if not isinstance(value, (list, tuple)):
         return []
     rows: list[dict[str, object]] = []

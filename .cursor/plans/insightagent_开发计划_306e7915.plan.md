@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1602/1602)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1604/1604)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -444,13 +444,14 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 365. File-backed real calc 的回放/导出外部契约也已补齐回归：task trace preview 会把 file-backed `provider_math` action step 显示为 `Provider Calculator [provider_math · local_calculator]`，并复用 `Calculated 8/4 = 2` result summary 与安全 output 投影；session export response 会保留同类 trace_preview 的非敏感 source/profile，不会过度脱敏。
 366. File-backed real search/calc 的 trace detail、trace delta 与 task export JSON 也已补齐半迁移回放回归：旧 trace_json 如果只有 safe output/preview 与 source/profile、缺少 `meta.tool.result_summary`，后端会在 REST/SSE reconnect 同构的 TraceStep meta 中回填 `Retrieved ...` / `Calculated ...` 结构化摘要，同时继续过滤 `api_key` / `access_token` / `client_secret` 等旁路字段。
 367. Provider planner / `task_plan` planned fields 也已补齐真实执行器类型：file-backed real search/calc 在规划阶段会把 `planned_tool_execution_kinds=["http_json", ...]` 写进 task_plan input；task planner runtime input normalizer 会在过滤 extra planner 工具后同步重建 execution kinds，避免 names/labels/kinds 与 execution kinds 错位。
-368. Chat persistence 的 trace display / markdown meta wrapper 回放也已补齐：半迁移 tool meta、输出投影 key、planner `steps`、显式 `result_summary` 与 `execution_kind=UserString("http_json")` 会先归一成 JSON-compatible 安全 payload，再进入 display、markdown meta、task/session export 与脱敏链路；自定义非 Provider/Hosted 名称的 HTTP JSON tool 不会因 wrapper kind 漏过输出投影或敏感值清洗。完整 backend slice 当前为 `1602/1602`。
+368. Chat persistence 的 trace display / markdown meta wrapper 回放也已补齐：半迁移 tool meta、输出投影 key、planner `steps`、显式 `result_summary` 与 `execution_kind=UserString("http_json")` 会先归一成 JSON-compatible 安全 payload，再进入 display、markdown meta、task/session export 与脱敏链路；自定义非 Provider/Hosted 名称的 HTTP JSON tool 不会因 wrapper kind 漏过输出投影或敏感值清洗。
+369. Chat persistence 的 RAG chunk wrapper 回放也已补齐：`meta.rag.chunks` / `knowledge_base_id` 若来自 `UserDict/UserList/UserString`，markdown meta 会先转成 JSON-compatible payload 并清洗敏感片段，RAG export summary 也会继续统计 chunk 命中与 kb id；plain dict payload 的对象身份契约保持不变。完整 backend slice 当前为 `1604/1604`。
 
 ## 当前主线判断
 
 - 代码与文档当前主线是一致的：重点已经不是继续维护 archived runtime spec，而是把默认工具去 mock 化、真实工具执行本体与 registry/provider/source 治理继续产品化。
 - 全仓库审计后，final answer / Tool observations / observation fallback / export fallback 子线已基本收口；后续不再优先扩大兼容面，除非审计扫出明确红测。
-- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的大部分入口治理；direct source、named provider/loader 与 provider/loader factory 背后的 file-backed real search 已有更接近 e2e 的 POST/header/body/query 回归，file-backed real calc 也已覆盖 provider planner planned execution kinds、plan item execution、result summary、trace preview/session export response、trace detail/delta/task export JSON 回放、preflight diagnostics、settings validate preview 与 chat persistence wrapper 回放归一化，剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的鉴权/profile 组合与端到端运行路径。
+- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的大部分入口治理；direct source、named provider/loader 与 provider/loader factory 背后的 file-backed real search 已有更接近 e2e 的 POST/header/body/query 回归，file-backed real calc 也已覆盖 provider planner planned execution kinds、plan item execution、result summary、trace preview/session export response、trace detail/delta/task export JSON 回放、preflight diagnostics、settings validate preview、chat persistence wrapper 回放归一化与 RAG chunk wrapper 回放，剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的鉴权/profile 组合与端到端运行路径。
 
 ## 下一步候选
 

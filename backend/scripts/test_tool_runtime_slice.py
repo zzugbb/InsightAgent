@@ -13478,6 +13478,48 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_get_trace_rag_export_summary_accepts_wrapped_chunks(self) -> None:
+        payload = chat_persistence_module.get_trace_rag_export_summary(  # type: ignore[attr-defined]
+            [
+                SimpleNamespace(
+                    id="step-wrapped-rag-1",
+                    type="thought",
+                    content="planner note",
+                    seq=1,
+                    meta=SimpleNamespace(
+                        rag={
+                            "chunks": UserList(
+                                [
+                                    UserString(" chunk-1 "),
+                                    UserString(""),
+                                    UserString("chunk-2"),
+                                ]
+                            ),
+                            "knowledge_base_id": UserString(" kb-1 "),
+                        }
+                    ),
+                )
+            ]
+        )
+
+        self.assertEqual(payload["rag_hit_count"], 2)
+        self.assertEqual(payload["rag_knowledge_base_ids"], ["kb-1"])
+        self.assertEqual(
+            payload["rag_chunks"],
+            [
+                {
+                    "step_id": "step-wrapped-rag-1",
+                    "knowledge_base_id": "kb-1",
+                    "content": "chunk-1",
+                },
+                {
+                    "step_id": "step-wrapped-rag-1",
+                    "knowledge_base_id": "kb-1",
+                    "content": "chunk-2",
+                },
+            ],
+        )
+
     def test_get_task_trace_export_summary_from_task_reuses_shared_helpers(
         self,
     ) -> None:
@@ -18071,6 +18113,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("[redacted]", serialized)
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
+    def test_get_trace_step_markdown_meta_redacts_wrapped_rag_chunks(
+        self,
+    ) -> None:
+        class WrappedMeta:
+            def model_dump(self, *, exclude_none: bool = True) -> dict[str, object]:
+                del exclude_none
+                return {
+                    "rag": UserDict(
+                        {
+                            UserString("chunks"): UserList(
+                                [
+                                    UserString(
+                                        "chunk query_params.access_token Bearer secret-token"
+                                    ),
+                                    UserDict(
+                                        {
+                                            UserString("content"): UserString(
+                                                "nested json_body.client_secret hidden"
+                                            ),
+                                            UserString("score"): 0.9,
+                                        }
+                                    ),
+                                ]
+                            ),
+                            UserString("knowledge_base_id"): UserString("provider-kb"),
+                        }
+                    )
+                }
+
+        step = SimpleNamespace(
+            id="step-provider-rag-chunks-wrapped-meta",
+            seq=16,
+            type="tool_result",
+            content="Retrieved chunks",
+            meta=WrappedMeta(),
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(step)
+
+        self.assertIsNotNone(markdown_meta)
+        assert markdown_meta is not None
+        self.assertEqual(
+            markdown_meta["rag"]["chunks"],  # type: ignore[index]
+            [
+                "chunk [redacted] [redacted]",
+                {"content": "nested [redacted] hidden", "score": 0.9},
+            ],
+        )
+        serialized = json.dumps(markdown_meta, ensure_ascii=False)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("client_secret", serialized)
         self.assertNotIn("secret-token", serialized)
 
     def test_get_trace_step_markdown_meta_redacts_tool_registry_diagnostics_values(
