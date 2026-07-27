@@ -84340,6 +84340,110 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual([step.id for step in payload.steps], ["trace-model-dump-step"])
         self.assertEqual(payload.status, "completed")
 
+    def test_get_task_trace_detail_backfills_file_backed_real_search_result_summary(
+        self,
+    ) -> None:
+        original_get_task = task_routes_module.get_task
+        step = {
+            "id": "step-file-backed-provider-search-trace",
+            "seq": 12,
+            "type": "action",
+            "content": "Tool done: Provider Search access_token=hidden",
+            "meta": {
+                "tool": {
+                    "name": "provider_search",
+                    "label": "Provider Search",
+                    "kind": "provider_retrieval",
+                    "semantic_kind": "provider_search",
+                    "semantic_family": "knowledge_retrieval",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "effective_result_preview_keys": [
+                        "documents_total",
+                        "knowledge_base_id",
+                        "source",
+                        "profile",
+                    ],
+                    "effective_result_output_keys": [
+                        "documents_total",
+                        "knowledge_base_id",
+                        "request_id",
+                        "source",
+                        "profile",
+                    ],
+                    "output_preview": {
+                        "documents_total": 2,
+                        "knowledge_base_id": "provider-kb",
+                        "source": "search_suite",
+                        "profile": "retrieval_only",
+                        "access_token": "secret-token",
+                    },
+                    "output": {
+                        "documents_total": 2,
+                        "knowledge_base_id": "provider-kb",
+                        "request_id": "req-search-2",
+                        "source": "search_suite",
+                        "profile": "retrieval_only",
+                        "access_token": "secret-token",
+                    },
+                }
+            },
+        }
+
+        try:
+            task_routes_module.get_task = lambda _task_id, _user_id: {
+                "id": "task-file-backed-search-trace",
+                "session_id": "session-file-backed-search-trace",
+                "status": "completed",
+                "trace_json": json.dumps([step]),
+            }
+            payload = task_routes_module.get_task_trace_detail(
+                "task-file-backed-search-trace",
+                current_user={"id": "user-file-backed-search-trace"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+
+        self.assertEqual(payload.task_id, "task-file-backed-search-trace")
+        self.assertEqual(payload.status, "completed")
+        self.assertEqual(len(payload.steps), 1)
+        trace_step = payload.steps[0]
+        self.assertIn(
+            "Retrieved 2 documents from provider-kb (request id req-search-2).",
+            trace_step.content,
+        )
+        self.assertIsNotNone(trace_step.meta)
+        assert trace_step.meta is not None
+        self.assertIsInstance(trace_step.meta.tool, dict)
+        tool_meta = trace_step.meta.tool
+        assert tool_meta is not None
+        self.assertEqual(
+            tool_meta["result_summary"],
+            "Retrieved 2 documents from provider-kb (request id req-search-2).",
+        )
+        self.assertEqual(
+            tool_meta["output_preview"],
+            {
+                "documents_total": 2,
+                "knowledge_base_id": "provider-kb",
+                "source": "search_suite",
+                "profile": "retrieval_only",
+            },
+        )
+        self.assertEqual(
+            tool_meta["output"],
+            {
+                "documents_total": 2,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-search-2",
+                "source": "search_suite",
+                "profile": "retrieval_only",
+            },
+        )
+        serialized = json.dumps(trace_step.model_dump(exclude_none=True))
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_task_trace_delta_detail_accepts_model_dump_response_summary(self) -> None:
         original_get_task = task_routes_module.get_task
         original_delta_response_helper = getattr(
@@ -84399,6 +84503,102 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual([step.id for step in payload.steps], ["trace-delta-model-dump-step"])
         self.assertEqual(payload.next_cursor, 3)
         self.assertFalse(payload.has_more)
+
+    def test_get_task_trace_delta_detail_backfills_file_backed_real_calc_result_summary(
+        self,
+    ) -> None:
+        original_get_task = task_routes_module.get_task
+        step = {
+            "id": "step-file-backed-provider-math-delta",
+            "seq": 28,
+            "type": "action",
+            "content": "Tool done: Provider Calculator token=hidden",
+            "meta": {
+                "tool": {
+                    "name": "provider_math",
+                    "label": "Provider Calculator",
+                    "kind": "provider_calc",
+                    "semantic_kind": "provider_math",
+                    "semantic_family": "local_calculator",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "effective_result_preview_keys": [
+                        "expression",
+                        "result",
+                        "source",
+                        "profile",
+                    ],
+                    "effective_result_output_keys": [
+                        "expression",
+                        "result",
+                        "request_id",
+                        "source",
+                        "profile",
+                    ],
+                    "output_preview": {
+                        "expression": "8/4",
+                        "result": 2,
+                        "source": "calculator_suite",
+                        "profile": "calculator_only",
+                        "api_key": "secret-token",
+                    },
+                    "output": {
+                        "expression": "8/4",
+                        "result": 2,
+                        "request_id": "req-calc-1",
+                        "source": "calculator_suite",
+                        "profile": "calculator_only",
+                        "api_key": "secret-token",
+                    },
+                }
+            },
+        }
+
+        try:
+            task_routes_module.get_task = lambda _task_id, _user_id: {
+                "id": "task-file-backed-calc-delta",
+                "session_id": "session-file-backed-calc-delta",
+                "status": "completed",
+                "trace_json": json.dumps([step]),
+            }
+            payload = task_routes_module.get_task_trace_delta_detail(
+                "task-file-backed-calc-delta",
+                after_seq=0,
+                limit=40,
+                current_user={"id": "user-file-backed-calc-delta"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+
+        self.assertEqual(payload.task_id, "task-file-backed-calc-delta")
+        self.assertEqual(payload.next_cursor, 28)
+        self.assertFalse(payload.has_more)
+        self.assertEqual(len(payload.steps), 1)
+        delta_step = payload.steps[0]
+        self.assertIn("Calculated 8/4 = 2 (request id req-calc-1).", delta_step.content)
+        self.assertIsNotNone(delta_step.meta)
+        assert delta_step.meta is not None
+        self.assertIsInstance(delta_step.meta.tool, dict)
+        tool_meta = delta_step.meta.tool
+        assert tool_meta is not None
+        self.assertEqual(
+            tool_meta["result_summary"],
+            "Calculated 8/4 = 2 (request id req-calc-1).",
+        )
+        self.assertEqual(
+            tool_meta["output"],
+            {
+                "expression": "8/4",
+                "result": 2,
+                "request_id": "req-calc-1",
+                "source": "calculator_suite",
+                "profile": "calculator_only",
+            },
+        )
+        serialized = json.dumps(delta_step.model_dump(exclude_none=True))
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
 
     def test_register_accepts_model_dump_user_and_issued_payload(self) -> None:
         original_create_user = auth_routes_module.create_user
@@ -85636,6 +85836,94 @@ class ToolRuntimeSliceTests(unittest.TestCase):
 
         self.assertEqual(payload.task.id, "task-export-model-dump")
         self.assertEqual(payload.trace.step_count, 0)
+
+    def test_build_task_export_payload_backfills_file_backed_real_calc_trace_result_summary(
+        self,
+    ) -> None:
+        original_get_task_messages = task_routes_module.get_task_messages
+        step = {
+            "id": "step-file-backed-provider-math-export",
+            "seq": 8,
+            "type": "action",
+            "content": "Tool done: Provider Calculator token=hidden",
+            "meta": {
+                "tool": {
+                    "name": "provider_math",
+                    "label": "Provider Calculator",
+                    "kind": "provider_calc",
+                    "semantic_kind": "provider_math",
+                    "semantic_family": "local_calculator",
+                    "execution_kind": "http_json",
+                    "status": "done",
+                    "effective_result_preview_keys": [
+                        "expression",
+                        "result",
+                        "source",
+                        "profile",
+                    ],
+                    "effective_result_output_keys": [
+                        "expression",
+                        "result",
+                        "request_id",
+                        "source",
+                        "profile",
+                    ],
+                    "output": {
+                        "expression": "8/4",
+                        "result": 2,
+                        "request_id": "req-calc-1",
+                        "source": "calculator_suite",
+                        "profile": "calculator_only",
+                        "client_secret": "secret-token",
+                    },
+                }
+            },
+        }
+
+        try:
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []  # type: ignore[assignment]
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                {
+                    "id": "task-file-backed-calc-export",
+                    "session_id": "session-file-backed-calc-export",
+                    "prompt": "calculate 8/4",
+                    "status": "completed",
+                    "created_at": "2026-07-03T11:00:00",
+                    "updated_at": "2026-07-03T11:01:00",
+                    "trace_json": json.dumps([step]),
+                },
+                "user-file-backed-calc-export",
+            )
+        finally:
+            task_routes_module.get_task_messages = original_get_task_messages  # type: ignore[assignment]
+
+        self.assertEqual(payload.task.id, "task-file-backed-calc-export")
+        self.assertEqual(payload.trace.step_count, 1)
+        export_step = payload.trace.steps[0]
+        self.assertIn("Calculated 8/4 = 2 (request id req-calc-1).", export_step.content)
+        self.assertIsNotNone(export_step.meta)
+        assert export_step.meta is not None
+        self.assertIsInstance(export_step.meta.tool, dict)
+        tool_meta = export_step.meta.tool
+        assert tool_meta is not None
+        self.assertEqual(
+            tool_meta["result_summary"],
+            "Calculated 8/4 = 2 (request id req-calc-1).",
+        )
+        self.assertEqual(
+            tool_meta["output"],
+            {
+                "expression": "8/4",
+                "result": 2,
+                "request_id": "req-calc-1",
+                "source": "calculator_suite",
+                "profile": "calculator_only",
+            },
+        )
+        serialized = json.dumps(export_step.model_dump(exclude_none=True))
+        self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("token=hidden", serialized)
 
     def test_build_task_export_payload_accepts_model_dump_export_summary(
         self,

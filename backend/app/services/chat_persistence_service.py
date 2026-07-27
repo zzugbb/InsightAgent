@@ -1796,6 +1796,18 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
                 sanitized_tool_meta["result_summary"] = (
                     _sanitize_trace_tool_result_summary_text(raw_result_summary)
                 )
+        else:
+            inferred_result_summary = _infer_trace_tool_result_summary(
+                sanitized_tool_meta
+            )
+            if inferred_result_summary:
+                sanitized_tool_meta["result_summary"] = (
+                    _sanitize_trace_tool_result_summary_text(inferred_result_summary)
+                    if _trace_tool_meta_implies_provider_or_hosted_tool(
+                        sanitized_tool_meta
+                    )
+                    else inferred_result_summary
+                )
         payload["tool"] = sanitized_tool_meta
     rag_meta = payload.get("rag")
     if isinstance(rag_meta, dict):
