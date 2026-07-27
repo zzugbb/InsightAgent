@@ -2365,6 +2365,9 @@ def _coerce_export_trace_steps(value: object) -> list[TraceStep]:
             continue
         row = _coerce_export_payload_block_to_dict(item)
         if row:
+            normalized_row = _normalize_trace_json_compatible_value(row)
+            if isinstance(normalized_row, dict):
+                row = normalized_row
             steps.append(_sanitize_trace_step_for_export(TraceStep.model_validate(row)))
     return steps
 
@@ -2373,7 +2376,9 @@ def _sanitize_export_rag_chunk_rows(value: object) -> list[dict[str, object]]:
     chunks = _coerce_export_payload_block_list_to_dicts(value)
     sanitized_chunks: list[dict[str, object]] = []
     for chunk in chunks:
-        sanitized_chunk = dict(chunk)
+        sanitized_chunk = _normalize_trace_json_compatible_value(dict(chunk))
+        if not isinstance(sanitized_chunk, dict):
+            continue
         content = _coerce_trace_string_like_value(sanitized_chunk.get("content"))
         if (
             isinstance(content, str)
@@ -2406,7 +2411,10 @@ def _sanitize_export_message_rows(value: object) -> list[object]:
         if row is None:
             sanitized_messages.append(item)
             continue
-        sanitized_row = dict(row)
+        sanitized_row = _normalize_trace_json_compatible_value(dict(row))
+        if not isinstance(sanitized_row, dict):
+            sanitized_messages.append(item)
+            continue
         if "content" in sanitized_row:
             sanitized_row["content"] = _sanitize_export_message_content(
                 sanitized_row.get("content", "")
@@ -2972,7 +2980,9 @@ def _sanitize_session_export_trace_preview_rows(raw_preview: object) -> list[dic
     rows = _coerce_export_payload_block_list_to_dicts(raw_preview)
     sanitized_rows: list[dict[str, object]] = []
     for row in rows:
-        sanitized_row = dict(row)
+        sanitized_row = _normalize_trace_json_compatible_value(dict(row))
+        if not isinstance(sanitized_row, dict):
+            continue
         title = sanitized_row.get("title")
         excerpt = sanitized_row.get("content_excerpt")
         sanitized_title = _sanitize_session_export_trace_preview_title(title)
