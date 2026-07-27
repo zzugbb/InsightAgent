@@ -2127,11 +2127,9 @@ def get_task_trace_export_summary_from_task(task: dict) -> dict[str, object]:
     trace_steps = get_task_trace_steps_from_task(task)
     rag_summary = get_trace_rag_export_summary(trace_steps)
     export_steps = [_sanitize_trace_step_for_export(step) for step in trace_steps]
-    rag_knowledge_base_ids = [
-        str(item)
-        for item in rag_summary.get("rag_knowledge_base_ids", [])
-        if isinstance(item, str)
-    ]
+    rag_knowledge_base_ids = _coerce_export_string_list(
+        rag_summary.get("rag_knowledge_base_ids", [])
+    )
     rag_chunks = _coerce_export_payload_block_list_to_dicts(
         rag_summary.get("rag_chunks")
     )
@@ -2262,11 +2260,9 @@ def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
             "steps": trace_steps,
             "step_count": int(trace_summary.get("step_count", 0) or 0),
             "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
-            "rag_knowledge_base_ids": [
-                str(item)
-                for item in trace_summary.get("rag_knowledge_base_ids", [])
-                if isinstance(item, str)
-            ],
+            "rag_knowledge_base_ids": _coerce_export_string_list(
+                trace_summary.get("rag_knowledge_base_ids", [])
+            ),
             "rag_chunks": _coerce_export_payload_block_list_to_dicts(
                 trace_summary.get("rag_chunks")
             ),
@@ -2305,8 +2301,9 @@ def _coerce_export_payload_block_to_dict(value: object) -> dict[str, object]:
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         dumped = model_dump()
-        if isinstance(dumped, dict):
-            return dumped
+        normalized_dumped = _normalize_trace_json_compatible_value(dumped)
+        if isinstance(normalized_dumped, dict):
+            return normalized_dumped
     return {}
 
 
@@ -2323,14 +2320,31 @@ def _coerce_export_payload_block_list_to_dicts(value: object) -> list[dict[str, 
     return rows
 
 
+def _coerce_export_string_list(value: object) -> list[str]:
+    if isinstance(value, UserList):
+        value = value.data
+    if not isinstance(value, (list, tuple)):
+        return []
+    strings: list[str] = []
+    for item in value:
+        item = _coerce_trace_string_like_value(item)
+        if isinstance(item, str):
+            strings.append(item)
+    return strings
+
+
 def _coerce_payload_mapping_or_original(value: object) -> object:
     if isinstance(value, dict):
         return dict(value)
+    normalized_value = _normalize_trace_json_compatible_value(value)
+    if isinstance(normalized_value, dict):
+        return normalized_value
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         dumped = model_dump()
-        if isinstance(dumped, dict):
-            return dict(dumped)
+        normalized_dumped = _normalize_trace_json_compatible_value(dumped)
+        if isinstance(normalized_dumped, dict):
+            return normalized_dumped
     return value
 
 
@@ -2340,6 +2354,8 @@ def _coerce_payload_mapping_or_none(value: object) -> dict[str, object] | None:
 
 
 def _coerce_export_trace_steps(value: object) -> list[TraceStep]:
+    if isinstance(value, UserList):
+        value = value.data
     if not isinstance(value, (list, tuple)):
         return []
     steps: list[TraceStep] = []
@@ -2358,7 +2374,7 @@ def _sanitize_export_rag_chunk_rows(value: object) -> list[dict[str, object]]:
     sanitized_chunks: list[dict[str, object]] = []
     for chunk in chunks:
         sanitized_chunk = dict(chunk)
-        content = sanitized_chunk.get("content")
+        content = _coerce_trace_string_like_value(sanitized_chunk.get("content"))
         if (
             isinstance(content, str)
             and _trace_http_json_export_content_needs_sanitization(content)
@@ -2366,6 +2382,8 @@ def _sanitize_export_rag_chunk_rows(value: object) -> list[dict[str, object]]:
             sanitized_chunk["content"] = _redact_trace_http_json_export_content_fallback(
                 content
             )
+        elif isinstance(content, str):
+            sanitized_chunk["content"] = content
         sanitized_chunks.append(sanitized_chunk)
     return sanitized_chunks
 
@@ -2378,6 +2396,8 @@ def _sanitize_export_message_content(value: object) -> str:
 
 
 def _sanitize_export_message_rows(value: object) -> list[object]:
+    if isinstance(value, UserList):
+        value = value.data
     if not isinstance(value, (list, tuple)):
         return []
     sanitized_messages: list[object] = []
@@ -2413,11 +2433,9 @@ def get_task_export_response_summary(
             ),
             "step_count": int(trace_summary.get("step_count", len(trace_steps)) or 0),
             "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
-            "rag_knowledge_base_ids": [
-                str(item)
-                for item in trace_summary.get("rag_knowledge_base_ids", [])
-                if isinstance(item, str)
-            ],
+            "rag_knowledge_base_ids": _coerce_export_string_list(
+                trace_summary.get("rag_knowledge_base_ids", [])
+            ),
             "rag_chunks": _sanitize_export_rag_chunk_rows(
                 trace_summary.get("rag_chunks")
             ),
