@@ -1273,6 +1273,141 @@ def _parse_tool_registry_json_object_setting(raw_value: object) -> dict[str, obj
     return dict(parsed_value)
 
 
+def _order_tool_registry_provider_source_specs(
+    source_specs: Mapping[object, object],
+) -> list[tuple[object, object]]:
+    source_items_by_name: dict[str, tuple[object, object]] = {}
+    for source_name, spec in source_specs.items():
+        normalized_source_name = get_tool_registry_provider_source_name_from_settings(
+            settings=SimpleNamespace(
+                tool_registry_provider_source=source_name,
+            )
+        )
+        source_items_by_name[normalized_source_name] = (source_name, spec)
+
+    ordered: list[tuple[object, object]] = []
+    visited: set[str] = set()
+    visiting: set[str] = set()
+
+    def visit(normalized_source_name: str) -> None:
+        if normalized_source_name in visited:
+            return
+        if normalized_source_name in visiting:
+            return
+        item = source_items_by_name.get(normalized_source_name)
+        if item is None:
+            return
+        visiting.add(normalized_source_name)
+        _source_name, spec = item
+        spec = _coerce_tool_registry_spec_payload(spec)
+        if isinstance(spec, Mapping):
+            provider_reference = _normalize_named_tool_registry_component_name(
+                spec.get("provider")
+            )
+            if (
+                provider_reference is not None
+                and provider_reference in source_items_by_name
+            ):
+                visit(provider_reference)
+        visiting.discard(normalized_source_name)
+        visited.add(normalized_source_name)
+        ordered.append(item)
+
+    for source_name in source_items_by_name:
+        visit(source_name)
+    return ordered
+
+
+def _order_tool_registry_provider_specs(
+    provider_specs: Mapping[object, object],
+) -> list[tuple[object, object]]:
+    provider_items_by_name: dict[str, tuple[object, object]] = {}
+    for provider_name, spec in provider_specs.items():
+        normalized_provider_name = _normalize_named_tool_registry_component_name(
+            provider_name
+        )
+        if normalized_provider_name is None:
+            continue
+        provider_items_by_name[normalized_provider_name] = (provider_name, spec)
+
+    ordered: list[tuple[object, object]] = []
+    visited: set[str] = set()
+    visiting: set[str] = set()
+
+    def visit(normalized_provider_name: str) -> None:
+        if normalized_provider_name in visited:
+            return
+        if normalized_provider_name in visiting:
+            return
+        item = provider_items_by_name.get(normalized_provider_name)
+        if item is None:
+            return
+        visiting.add(normalized_provider_name)
+        _provider_name, spec = item
+        spec = _coerce_tool_registry_spec_payload(spec)
+        if isinstance(spec, Mapping):
+            provider_reference = _normalize_named_tool_registry_component_name(
+                spec.get("provider")
+            )
+            if (
+                provider_reference is not None
+                and provider_reference in provider_items_by_name
+            ):
+                visit(provider_reference)
+        visiting.discard(normalized_provider_name)
+        visited.add(normalized_provider_name)
+        ordered.append(item)
+
+    for provider_name in provider_items_by_name:
+        visit(provider_name)
+    return ordered
+
+
+def _order_tool_registry_loader_specs(
+    loader_specs: Mapping[object, object],
+) -> list[tuple[object, object]]:
+    loader_items_by_name: dict[str, tuple[object, object]] = {}
+    for loader_name, spec in loader_specs.items():
+        normalized_loader_name = _normalize_named_tool_registry_component_name(
+            loader_name
+        )
+        if normalized_loader_name is None:
+            continue
+        loader_items_by_name[normalized_loader_name] = (loader_name, spec)
+
+    ordered: list[tuple[object, object]] = []
+    visited: set[str] = set()
+    visiting: set[str] = set()
+
+    def visit(normalized_loader_name: str) -> None:
+        if normalized_loader_name in visited:
+            return
+        if normalized_loader_name in visiting:
+            return
+        item = loader_items_by_name.get(normalized_loader_name)
+        if item is None:
+            return
+        visiting.add(normalized_loader_name)
+        _loader_name, spec = item
+        spec = _coerce_tool_registry_spec_payload(spec)
+        if isinstance(spec, Mapping):
+            loader_reference = _normalize_named_tool_registry_component_name(
+                spec.get("loader")
+            )
+            if (
+                loader_reference is not None
+                and loader_reference in loader_items_by_name
+            ):
+                visit(loader_reference)
+        visiting.discard(normalized_loader_name)
+        visited.add(normalized_loader_name)
+        ordered.append(item)
+
+    for loader_name in loader_items_by_name:
+        visit(loader_name)
+    return ordered
+
+
 def _normalize_result_preview_keys(raw_value: object) -> tuple[str, ...]:
     if not isinstance(raw_value, Sequence) or isinstance(
         raw_value,
@@ -6888,7 +7023,7 @@ def build_tool_registry_loaders_from_settings_artifacts(
 
     loaders: dict[str, ToolRegistryLoader] = {}
     loader_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
-    for loader_name, spec in loader_specs.items():
+    for loader_name, spec in _order_tool_registry_loader_specs(loader_specs):
         spec = _coerce_tool_registry_spec_payload(spec)
         if not isinstance(loader_name, str) or not isinstance(spec, Mapping):
             continue
@@ -7503,7 +7638,7 @@ def build_tool_registry_providers_from_settings_artifacts(
     provider_factory_diagnostics = provider_factory_artifacts["provider_factory_diagnostics"]
     providers: dict[str, ToolRegistryProvider] = {}
     provider_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
-    for provider_name, spec in provider_specs.items():
+    for provider_name, spec in _order_tool_registry_provider_specs(provider_specs):
         spec = _coerce_tool_registry_spec_payload(spec)
         if not isinstance(provider_name, str) or not isinstance(spec, Mapping):
             continue
@@ -7665,7 +7800,7 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
     )
     sources: dict[str, ToolRegistryProvider] = {}
     source_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
-    for source_name, spec in source_specs.items():
+    for source_name, spec in _order_tool_registry_provider_source_specs(source_specs):
         spec = _coerce_tool_registry_spec_payload(spec)
         if not isinstance(source_name, str) or not isinstance(spec, Mapping):
             continue

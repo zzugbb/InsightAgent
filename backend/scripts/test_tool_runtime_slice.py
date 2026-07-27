@@ -31534,6 +31534,43 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(planning_registry["calc_eval"].label, "Planning Calculator")
 
+    def test_build_tool_registry_loaders_from_settings_accepts_forward_named_loader_reference(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "outer_loader": {
+                        "loader": "inner_loader",
+                        "disabled_tool_names": ["mock_plan"],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    },
+                    "inner_loader": {
+                        "loader": "default",
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    },
+                }
+            )
+        )
+
+        loaders = build_tool_registry_loaders_from_settings(settings=settings)
+        outer_registry = loaders["outer_loader"]()
+
+        self.assertEqual(tuple(sorted(loaders)), ("inner_loader", "outer_loader"))
+        self.assertEqual(tuple(sorted(outer_registry)), ("calc_eval", "calc_eval_fast"))
+        self.assertEqual(outer_registry["calc_eval"].label, "Planning Calculator")
+
     def test_build_tool_registry_loaders_from_settings_supports_loader_factory_shape(self) -> None:
         settings = SimpleNamespace(
             tool_registry_loaders_json=json.dumps(
@@ -33180,6 +33217,50 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             (str(missing_file.resolve()),),
         )
 
+    def test_build_tool_registry_from_file_artifacts_reports_registry_source_forward_source_chain_missing_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "configs"
+            root_dir.mkdir()
+            root_file = root_dir / "root-manifest.json"
+            missing_file = root_dir / "missing-inner-source-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["outer_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "outer_suite": {
+                            "provider": "inner_suite",
+                        },
+                        "inner_suite": {
+                            "registry_file": "missing-inner-source-registry.json",
+                        },
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(artifacts["registry"], {})
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_sources"],
+            ("outer_suite",),
+        )
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
     def test_build_tool_registry_from_file_artifacts_resolves_registry_source_relative_source_chain_file(
         self,
     ) -> None:
@@ -33230,6 +33311,122 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn("provider_search", artifacts["registry"])
         self.assertEqual(artifacts["diagnostics"]["missing_registry_sources"], ())
         self.assertEqual(artifacts["diagnostics"]["missing_registry_files"], ())
+
+    def test_build_tool_registry_from_file_artifacts_resolves_registry_source_forward_source_chain_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "configs"
+            root_dir.mkdir()
+            root_file = root_dir / "root-manifest.json"
+            child_file = root_dir / "inner-source-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["outer_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            child_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "runtime_semantic_kind": "provider_search",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "method": "POST",
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                        "q": "$query",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "knowledge_base_id": "$.kb",
+                                    },
+                                },
+                                "result_preview_keys": ["documents_total"],
+                                "result_output_keys": [
+                                    "documents_total",
+                                    "knowledge_base_id",
+                                ],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "outer_suite": {
+                            "provider": "inner_suite",
+                            "profile": "planning_only",
+                        },
+                        "inner_suite": {
+                            "registry_file": "inner-source-registry.json",
+                            "profile": "retrieval_only",
+                        },
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+            registry = artifacts["registry"]
+            provider = StaticToolRegistryProvider(registry=registry)
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return b'{"data":{"total":11,"kb":"inner-kb"}}'
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "forward child source"},
+                    prompt="search forward child source",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(artifacts["diagnostics"]["missing_registry_sources"], ())
+        self.assertIn("provider_search", registry)
+        self.assertEqual(output["documents_total"], 11)
+        self.assertEqual(output["knowledge_base_id"], "inner-kb")
+        self.assertEqual(len(urlopen_calls), 1)
+        request = urlopen_calls[0]
+        parsed_query = parse_qs(urlparse(request.full_url).query)
+        self.assertEqual(parsed_query["source"], ["inner_suite"])
+        self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+        self.assertEqual(parsed_query["q"], ["forward child source"])
 
     def test_build_tool_registry_from_file_artifacts_skips_registry_source_self_cycle(
         self,
@@ -46383,6 +46580,48 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(
             providers["planning_provider"].load_tool_registry()["calc_eval"].label,
+            "Planning Calculator",
+        )
+
+    def test_build_tool_registry_providers_from_settings_accepts_forward_named_provider_reference(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_providers_json=json.dumps(
+                {
+                    "outer_provider": {
+                        "provider": "inner_provider",
+                        "disabled_tool_names": ["mock_plan"],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    },
+                    "inner_provider": {
+                        "loader": "default",
+                        "profile": "planning_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "label": "Planning Calculator",
+                            }
+                        },
+                    },
+                }
+            )
+        )
+
+        providers = build_tool_registry_providers_from_settings(settings=settings)
+
+        self.assertEqual(tuple(sorted(providers)), ("inner_provider", "outer_provider"))
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=providers["outer_provider"]),
+            ("calc_eval", "calc_eval_fast"),
+        )
+        self.assertEqual(
+            providers["outer_provider"].load_tool_registry()["calc_eval"].label,
             "Planning Calculator",
         )
 
