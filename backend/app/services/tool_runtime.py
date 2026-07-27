@@ -6263,39 +6263,165 @@ def _clone_tool_registry_settings_without_visited_registry_file_components(
     )
 
 
-def _get_provider_source_names_referencing_skipped_registry_file_components(
+def _expand_skipped_registry_file_component_names(
     *,
     settings: object | None,
     skipped_component_names: Mapping[str, tuple[str, ...]],
-) -> tuple[str, ...]:
+) -> dict[str, tuple[str, ...]]:
+    expanded_names: dict[str, set[str]] = {
+        kind: set(names)
+        for kind, names in skipped_component_names.items()
+    }
+
+    def add_component_name(kind: str, name: object) -> bool:
+        if kind == "provider_source":
+            normalized_name = get_tool_registry_provider_source_name_from_settings(
+                settings=SimpleNamespace(tool_registry_provider_source=name)
+            )
+        else:
+            normalized_name = _normalize_named_tool_registry_component_name(name)
+        if not normalized_name:
+            return False
+        names = expanded_names.setdefault(kind, set())
+        if normalized_name in names:
+            return False
+        names.add(normalized_name)
+        return True
+
+    def references_skipped_component(
+        *,
+        spec: Mapping[str, object],
+        reference_key: str,
+        skipped_kind: str,
+    ) -> bool:
+        normalized_reference = _normalize_named_tool_registry_component_name(
+            spec.get(reference_key)
+        )
+        return bool(
+            normalized_reference
+            and normalized_reference in expanded_names.get(skipped_kind, set())
+        )
+
+    loader_specs = _parse_tool_registry_json_object_setting(
+        getattr(settings, "tool_registry_loaders_json", None)
+    ) or {}
+    loader_factory_specs = _parse_tool_registry_json_object_setting(
+        getattr(settings, "tool_registry_loader_factories_json", None)
+    ) or {}
+    provider_specs = _parse_tool_registry_json_object_setting(
+        getattr(settings, "tool_registry_providers_json", None)
+    ) or {}
+    provider_factory_specs = _parse_tool_registry_json_object_setting(
+        getattr(settings, "tool_registry_provider_factories_json", None)
+    ) or {}
     source_specs = get_tool_registry_provider_source_specs_from_settings(
         settings=settings,
     )
-    if not source_specs:
-        return ()
-    reference_keys = (
-        ("provider", "provider"),
-        ("provider_factory", "provider_factory"),
-        ("loader", "loader"),
-        ("loader_factory", "loader_factory"),
-    )
-    skipped_source_names: list[str] = []
-    for source_name, spec in source_specs.items():
-        if not isinstance(spec, Mapping):
-            continue
-        for spec_key, component_kind in reference_keys:
-            skipped_names = skipped_component_names.get(component_kind, ())
-            if not skipped_names:
+
+    changed = True
+    while changed:
+        changed = False
+        for factory_name, spec in loader_factory_specs.items():
+            spec = _coerce_tool_registry_spec_payload(spec)
+            if not isinstance(spec, Mapping):
                 continue
-            normalized_reference = _normalize_named_tool_registry_component_name(
-                spec.get(spec_key)
-            )
-            if normalized_reference is None or normalized_reference not in skipped_names:
+            if references_skipped_component(
+                spec=spec,
+                reference_key="factory",
+                skipped_kind="loader_factory",
+            ):
+                changed = add_component_name("loader_factory", factory_name) or changed
+        for factory_name, spec in provider_factory_specs.items():
+            spec = _coerce_tool_registry_spec_payload(spec)
+            if not isinstance(spec, Mapping):
                 continue
-            if source_name not in skipped_source_names:
-                skipped_source_names.append(source_name)
-            break
-    return tuple(skipped_source_names)
+            if references_skipped_component(
+                spec=spec,
+                reference_key="factory",
+                skipped_kind="provider_factory",
+            ):
+                changed = add_component_name("provider_factory", factory_name) or changed
+        for loader_name, spec in loader_specs.items():
+            spec = _coerce_tool_registry_spec_payload(spec)
+            if not isinstance(spec, Mapping):
+                continue
+            if references_skipped_component(
+                spec=spec,
+                reference_key="loader",
+                skipped_kind="loader",
+            ) or references_skipped_component(
+                spec=spec,
+                reference_key="loader_factory",
+                skipped_kind="loader_factory",
+            ):
+                changed = add_component_name("loader", loader_name) or changed
+        for provider_name, spec in provider_specs.items():
+            spec = _coerce_tool_registry_spec_payload(spec)
+            if not isinstance(spec, Mapping):
+                continue
+            if (
+                references_skipped_component(
+                    spec=spec,
+                    reference_key="provider",
+                    skipped_kind="provider",
+                )
+                or references_skipped_component(
+                    spec=spec,
+                    reference_key="provider",
+                    skipped_kind="provider_source",
+                )
+                or references_skipped_component(
+                    spec=spec,
+                    reference_key="provider_factory",
+                    skipped_kind="provider_factory",
+                )
+                or references_skipped_component(
+                    spec=spec,
+                    reference_key="loader",
+                    skipped_kind="loader",
+                )
+                or references_skipped_component(
+                    spec=spec,
+                    reference_key="loader_factory",
+                    skipped_kind="loader_factory",
+                )
+            ):
+                changed = add_component_name("provider", provider_name) or changed
+        for source_name, spec in source_specs.items():
+            if not isinstance(spec, Mapping):
+                continue
+            if (
+                references_skipped_component(
+                    spec=spec,
+                    reference_key="provider",
+                    skipped_kind="provider",
+                )
+                or references_skipped_component(
+                    spec=spec,
+                    reference_key="provider",
+                    skipped_kind="provider_source",
+                )
+                or references_skipped_component(
+                    spec=spec,
+                    reference_key="provider_factory",
+                    skipped_kind="provider_factory",
+                )
+                or references_skipped_component(
+                    spec=spec,
+                    reference_key="loader",
+                    skipped_kind="loader",
+                )
+                or references_skipped_component(
+                    spec=spec,
+                    reference_key="loader_factory",
+                    skipped_kind="loader_factory",
+                )
+            ):
+                changed = add_component_name("provider_source", source_name) or changed
+    return {
+        kind: tuple(sorted(names))
+        for kind, names in expanded_names.items()
+    }
 
 
 def _build_tool_registry_from_file_registry(
@@ -6380,14 +6506,12 @@ def _build_tool_registry_from_file_registry(
                 visited_files=_visited_files,
             )
         )
+        skipped_registry_component_names = _expand_skipped_registry_file_component_names(
+            settings=source_settings,
+            skipped_component_names=skipped_registry_component_names,
+        )
         skipped_provider_sources = set(
             skipped_registry_component_names.get("provider_source", ())
-        )
-        skipped_provider_sources.update(
-            _get_provider_source_names_referencing_skipped_registry_file_components(
-                settings=source_settings,
-                skipped_component_names=skipped_registry_component_names,
-            )
         )
         source_artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
             settings=registry_source_settings,

@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1553/1553)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1557/1557)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -430,7 +430,8 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 351. Plain registry file 的 file-backed source 运行路径也已补齐：`registry_file` 直接写工具映射、而不是 manifest `extra_tools` 包装时，也会把当前 provider source 传入 extra tool 构建和 invalid execution diagnostics；递归 `registry_files/dirs` 同样复用 source settings。
 352. File manifest `registry_sources` 的命名 provider/source 组合也已补齐：manifest 展开 source 时会过滤已访问 registry file 对应的 loader/provider/factory 防止自递归，同时允许 child source 继续解析 settings-backed named provider；child source 背后的 file-backed `http_json` 工具会使用 child source 的 `$tool_registry_provider_source`。
 353. File manifest `registry_sources` 的 child source diagnostics 也已补齐：root manifest artifacts 会把 child source 的 missing/skipped/invalid execution diagnostics 并回自身 diagnostics，避免组合 registry 内容可用但 settings/preflight 诊断漏掉 child source 缺文件。
-354. File manifest `registry_sources` 的 source 自递归治理也已补齐：direct source 自引用，以及 source 通过命名 provider/loader/factory 间接指回当前 registry file 时，都会过滤同文件组件并把对应 source 记入 `skipped_registry_sources`，不再递归爆栈或误报 `missing_registry_sources`。完整 backend slice 当前为 `1553/1553`。
+354. File manifest `registry_sources` 的 source 自递归治理也已补齐：direct source 自引用，以及 source 通过命名 provider/loader/factory 间接指回当前 registry file 时，都会过滤同文件组件并把对应 source 记入 `skipped_registry_sources`，不再递归爆栈或误报 `missing_registry_sources`。
+355. File-backed source 自递归治理已扩展到传递引用链：`source -> provider -> loader`、`source -> provider -> loader_factory`、`source -> provider_factory` 与 `source -> source` 指回当前 registry file 时，都会先扩展被过滤组件集合，再把 manifest 引用的 source 归入 skipped diagnostics；完整 backend slice 当前为 `1557/1557`。
 
 ## 当前主线判断
 
