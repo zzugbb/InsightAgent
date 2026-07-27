@@ -29656,6 +29656,170 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
 
+    def test_build_tool_registry_loader_from_file_supports_registry_sources_backed_by_named_provider(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["planning_suite"],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "planning_provider": {
+                            "loader": "default",
+                            "profile": "planning_only",
+                            "overrides": {
+                                "calc_eval": {
+                                    "enabled": True,
+                                    "label": "Planning Calculator",
+                                }
+                            },
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "planning_suite": {
+                            "provider": "planning_provider",
+                        }
+                    }
+                ),
+            )
+
+            loader = build_tool_registry_loader_from_file(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+            self.assertIsNotNone(loader)
+            registry = loader()
+
+        self.assertEqual(
+            tuple(sorted(registry)),
+            ("calc_eval", "calc_eval_fast", "task_plan"),
+        )
+        self.assertEqual(registry["calc_eval"].label, "Planning Calculator")
+
+    def test_build_tool_registry_loader_from_file_registry_sources_named_provider_file_uses_child_source_context(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            child_file = Path(tmpdir) / "child-source-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["search_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            child_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "runtime_semantic_kind": "provider_search",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "q": "$query",
+                                    },
+                                    "result_fields": {
+                                        "documents_total": "$.meta.total",
+                                    },
+                                },
+                                "result_preview_keys": ["documents_total"],
+                                "result_output_keys": ["documents_total"],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_source="global_selected",
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "search_provider": {
+                            "registry_file": str(child_file),
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "search_suite": {
+                            "provider": "search_provider",
+                        }
+                    }
+                ),
+            )
+
+            loader = build_tool_registry_loader_from_file(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+            self.assertIsNotNone(loader)
+            registry = loader()
+            provider = StaticToolRegistryProvider(registry=registry)
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return b'{"meta":{"total":14}}'
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "child source cash flow"},
+                    prompt="search child source cash flow",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 14)
+        self.assertEqual(len(urlopen_calls), 1)
+        request = urlopen_calls[0]
+        self.assertEqual(
+            request.full_url,
+            "https://provider.example/search?source=search_suite&q=child+source+cash+flow",
+        )
+
     def test_build_tool_registry_providers_from_settings_accepts_registry_file_with_registry_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root_file = Path(tmpdir) / "root-manifest.json"

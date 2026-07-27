@@ -6160,6 +6160,72 @@ def sanitize_tool_registry_diagnostics_artifact_payload(payload: object) -> obje
     return payload
 
 
+def _filter_tool_registry_json_object_setting_for_visited_registry_files(
+    *,
+    raw_value: object,
+    visited_files: set[str],
+) -> tuple[object, bool]:
+    specs = _parse_tool_registry_json_object_setting(raw_value)
+    if specs is None:
+        return raw_value, False
+
+    filtered_specs: dict[str, object] = {}
+    changed = False
+    for component_name, spec in specs.items():
+        spec = _coerce_tool_registry_spec_payload(spec)
+        if not isinstance(component_name, str) or not isinstance(spec, Mapping):
+            continue
+        spec = dict(spec)
+        registry_file = spec.get("registry_file")
+        if isinstance(registry_file, str) and registry_file.strip():
+            resolved_path = _resolve_tool_registry_file_path(
+                registry_file=registry_file
+            )
+            if resolved_path is not None and str(resolved_path) in visited_files:
+                changed = True
+                continue
+        filtered_specs[component_name] = spec
+    if not changed:
+        return raw_value, False
+    try:
+        return json.dumps(filtered_specs, ensure_ascii=False), True
+    except TypeError:
+        return raw_value, False
+
+
+def _clone_tool_registry_settings_without_visited_registry_file_components(
+    *,
+    settings: object | None,
+    visited_files: set[str],
+) -> object | None:
+    if not visited_files:
+        return settings
+
+    updates: dict[str, object] = {}
+    for attr_name in (
+        "tool_registry_loaders_json",
+        "tool_registry_loader_factories_json",
+        "tool_registry_providers_json",
+        "tool_registry_provider_factories_json",
+    ):
+        raw_value = getattr(settings, attr_name, None)
+        filtered_value, changed = (
+            _filter_tool_registry_json_object_setting_for_visited_registry_files(
+                raw_value=raw_value,
+                visited_files=visited_files,
+            )
+        )
+        if not changed:
+            continue
+        updates[attr_name] = filtered_value
+    if not updates:
+        return settings
+    return _clone_tool_execution_settings(
+        settings=settings or SimpleNamespace(),
+        **updates,
+    )
+
+
 def _build_tool_registry_from_file_registry(
     *,
     registry_file: str,
@@ -6233,9 +6299,14 @@ def _build_tool_registry_from_file_registry(
     raw_registry_sources = payload.get("registry_sources")
     if _is_non_text_sequence(raw_registry_sources):
         composed_base_registry = {}
+        registry_source_settings = (
+            _clone_tool_registry_settings_without_visited_registry_file_components(
+                settings=source_settings,
+                visited_files=_visited_files,
+            )
+        )
         named_sources = build_tool_registry_provider_sources_from_settings(
-            settings=source_settings,
-            named_providers={},
+            settings=registry_source_settings,
         )
         for child_registry_source in raw_registry_sources:
             child_registry_source = _coerce_tool_execution_string_like_value(
