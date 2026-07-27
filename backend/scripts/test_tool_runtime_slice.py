@@ -10786,6 +10786,80 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", excerpt)
         self.assertNotIn("secret-token", excerpt)
 
+    def test_get_session_export_response_summary_preserves_file_backed_real_calc_trace_preview(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_session_export_payload_summary
+        )
+
+        try:
+            chat_persistence_module.get_session_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "usage_summary": {"tasks_total": 1},
+                    "tasks": [
+                        {
+                            "id": "task-file-backed-calc-preview",
+                            "prompt": "calculate from file-backed provider",
+                            "status": "completed",
+                            "status_normalized": "completed",
+                            "status_label": "Completed",
+                            "status_rank": 10,
+                            "created_at": "2026-07-02T10:00:00",
+                            "updated_at": "2026-07-02T10:01:00",
+                            "usage": None,
+                            "trace_step_count": 1,
+                            "rag_hit_count": 0,
+                            "trace_preview": [
+                                {
+                                    "id": "preview-file-backed-provider-math",
+                                    "seq": 3,
+                                    "type": "action",
+                                    "title": (
+                                        "Provider Calculator "
+                                        "[provider_math · local_calculator]"
+                                    ),
+                                    "content_excerpt": (
+                                        "Calculated 8/4 = 2 "
+                                        "(request id req-calc-1). "
+                                        "Preview: {\"expression\":\"8/4\","
+                                        "\"result\":2,\"source\":\"calculator_suite\","
+                                        "\"profile\":\"calculator_only\"}"
+                                    ),
+                                }
+                            ],
+                            "governance": None,
+                        }
+                    ],
+                    "stats": {
+                        "task_count": 1,
+                        "message_count": 0,
+                        "trace_step_count": 1,
+                        "rag_hit_count": 0,
+                    },
+                    "governance": None,
+                    "messages": [],
+                }
+            )
+            payload = chat_persistence_module.get_session_export_response_summary(  # type: ignore[attr-defined]
+                usage_summary={"tasks_total": 1},
+                task_rows=[],
+                message_rows=[],
+            )
+        finally:
+            chat_persistence_module.get_session_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        preview = payload["tasks"][0]["trace_preview"][0]
+        self.assertEqual(
+            preview["title"],
+            "Provider Calculator [provider_math · local_calculator]",
+        )
+        excerpt = preview["content_excerpt"]
+        self.assertIn("Calculated 8/4 = 2 (request id req-calc-1).", excerpt)
+        self.assertIn('"source":"calculator_suite"', excerpt)
+        self.assertIn('"profile":"calculator_only"', excerpt)
+        self.assertNotIn("[redacted]", excerpt)
+
     def test_session_export_summary_coercion_redacts_provider_trace_preview_excerpt(
         self,
     ) -> None:
@@ -12829,6 +12903,80 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn('Preview: {"result":7}', excerpt)
         self.assertIn('Output: {"result":7,"request_id":"req-calc-1"}', excerpt)
         self.assertNotIn("Tool done: Hosted Math", excerpt)
+
+    def test_get_task_trace_preview_summary_uses_file_backed_real_calc_summary(
+        self,
+    ) -> None:
+        original_export_helper = (
+            chat_persistence_module.get_task_trace_export_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda _task: {
+                    "steps": [
+                        {
+                            "id": "step-file-backed-provider-math",
+                            "type": "action",
+                            "content": "Tool done: Provider Calculator",
+                            "seq": 28,
+                            "meta": {
+                                "tool": {
+                                    "name": "provider_math",
+                                    "label": "Provider Calculator",
+                                    "kind": "provider_calc",
+                                    "semantic_kind": "provider_math",
+                                    "semantic_family": "local_calculator",
+                                    "execution_kind": "http_json",
+                                    "status": "done",
+                                    "effective_result_output_keys": [
+                                        "expression",
+                                        "result",
+                                        "request_id",
+                                        "source",
+                                        "profile",
+                                    ],
+                                    "output_preview": {
+                                        "expression": "8/4",
+                                        "result": 2,
+                                        "source": "calculator_suite",
+                                        "profile": "calculator_only",
+                                    },
+                                    "output": {
+                                        "expression": "8/4",
+                                        "result": 2,
+                                        "request_id": "req-calc-1",
+                                        "source": "calculator_suite",
+                                        "profile": "calculator_only",
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "step_count": 1,
+                    "rag_hit_count": 0,
+                    "rag_knowledge_base_ids": [],
+                    "rag_chunks": [],
+                }
+            )
+            payload = chat_persistence_module.get_task_trace_preview_summary_from_task(  # type: ignore[attr-defined]
+                {"trace_json": "guarded-trace-json"},
+                preview_limit=1,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        preview = payload["trace_preview"][0]
+        self.assertEqual(
+            preview["title"],
+            "Provider Calculator [provider_math · local_calculator]",
+        )
+        excerpt = preview["content_excerpt"]
+        self.assertIn("Calculated 8/4 = 2 (request id req-calc-1).", excerpt)
+        self.assertIn(
+            'Output: {"expression":"8/4","result":2,"request_id":"req-calc-1"',
+            excerpt,
+        )
+        self.assertNotIn("Tool done: Provider Calculator", excerpt)
 
     def test_get_task_trace_preview_summary_infers_calc_summary_from_json_string_safe_output_without_preview(
         self,

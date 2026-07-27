@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1593/1593)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1595/1595)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -440,13 +440,14 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 361. Named loader / loader_factory 背后的 file-backed preflight summary 也已补齐回归：tool details 的 HTTP JSON `execution_summary.url_path` 会使用 source effective profile 渲染，避免 runtime 请求正确但设置面仍显示 default profile。
 362. File-backed source/profile 的真实请求契约继续加固：direct source plan item、named provider、named loader、`source -> named provider -> named loader`、loader_factory、provider_factory 六条 real search 路径都会把 selected source/profile 写进 POST headers、query_params、json_body，并继续保持 result preview/output/summary 与 RAG follow-up；named loader / loader_factory 的 preflight summary 也会同时呈现 header/query/body count、response_path 与 result_field_names。
 363. File-backed real calc 的近 e2e 链路也已补齐回归：calculator source 的 provider planner 会接受 file-backed `provider_math` 并保留 expression input；plan item service execution 会验证 POST headers/query/body、tool_end preview/output、`Calculated 8/4 = 2` result_summary 与最终 observation；settings preflight summary 会呈现 calc source/profile 下的 header/query/body count、response_path 与 result_field_names。
-364. File-backed real calc 的 diagnostics/settings 面也已补齐回归：registry_file 中的 HTTP JSON header typo 会进入 selected source diagnostics、summary/tool details、trace step 与 audit event，并对 `headers.Authorization` 做 `[redacted]` 脱敏；settings validate preview 会把 file-backed `provider_math` 的 `execution_kind=http_json`、source/profile 渲染后的 execution_summary 与 preview/output keys 暴露给前端。完整 backend slice 当前为 `1593/1593`。
+364. File-backed real calc 的 diagnostics/settings 面也已补齐回归：registry_file 中的 HTTP JSON header typo 会进入 selected source diagnostics、summary/tool details、trace step 与 audit event，并对 `headers.Authorization` 做 `[redacted]` 脱敏；settings validate preview 会把 file-backed `provider_math` 的 `execution_kind=http_json`、source/profile 渲染后的 execution_summary 与 preview/output keys 暴露给前端。
+365. File-backed real calc 的回放/导出外部契约也已补齐回归：task trace preview 会把 file-backed `provider_math` action step 显示为 `Provider Calculator [provider_math · local_calculator]`，并复用 `Calculated 8/4 = 2` result summary 与安全 output 投影；session export response 会保留同类 trace_preview 的非敏感 source/profile，不会过度脱敏。完整 backend slice 当前为 `1595/1595`。
 
 ## 当前主线判断
 
 - 代码与文档当前主线是一致的：重点已经不是继续维护 archived runtime spec，而是把默认工具去 mock 化、真实工具执行本体与 registry/provider/source 治理继续产品化。
 - 全仓库审计后，final answer / Tool observations / observation fallback / export fallback 子线已基本收口；后续不再优先扩大兼容面，除非审计扫出明确红测。
-- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的大部分入口治理；direct source、named provider/loader 与 provider/loader factory 背后的 file-backed real search 已有更接近 e2e 的 POST/header/body/query 回归，file-backed real calc 也已覆盖 provider planner、plan item execution、result summary、preflight diagnostics 与 settings validate preview，剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的鉴权/profile 组合与端到端运行路径。
+- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的大部分入口治理；direct source、named provider/loader 与 provider/loader factory 背后的 file-backed real search 已有更接近 e2e 的 POST/header/body/query 回归，file-backed real calc 也已覆盖 provider planner、plan item execution、result summary、trace preview/session export response、preflight diagnostics 与 settings validate preview，剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的鉴权/profile 组合与端到端运行路径。
 
 ## 下一步候选
 
