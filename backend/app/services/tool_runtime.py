@@ -6164,12 +6164,13 @@ def _filter_tool_registry_json_object_setting_for_visited_registry_files(
     *,
     raw_value: object,
     visited_files: set[str],
-) -> tuple[object, bool]:
+) -> tuple[object, bool, tuple[str, ...]]:
     specs = _parse_tool_registry_json_object_setting(raw_value)
     if specs is None:
-        return raw_value, False
+        return raw_value, False, ()
 
     filtered_specs: dict[str, object] = {}
+    skipped_component_names: list[str] = []
     changed = False
     for component_name, spec in specs.items():
         spec = _coerce_tool_registry_spec_payload(spec)
@@ -6183,47 +6184,118 @@ def _filter_tool_registry_json_object_setting_for_visited_registry_files(
             )
             if resolved_path is not None and str(resolved_path) in visited_files:
                 changed = True
+                skipped_component_names.append(component_name)
                 continue
         filtered_specs[component_name] = spec
     if not changed:
-        return raw_value, False
+        return raw_value, False, ()
     try:
-        return json.dumps(filtered_specs, ensure_ascii=False), True
+        return (
+            json.dumps(filtered_specs, ensure_ascii=False),
+            True,
+            tuple(skipped_component_names),
+        )
     except TypeError:
-        return raw_value, False
+        return raw_value, False, ()
 
 
 def _clone_tool_registry_settings_without_visited_registry_file_components(
     *,
     settings: object | None,
     visited_files: set[str],
-) -> object | None:
+) -> tuple[object | None, dict[str, tuple[str, ...]]]:
     if not visited_files:
-        return settings
+        return settings, {}
 
     updates: dict[str, object] = {}
-    for attr_name in (
-        "tool_registry_loaders_json",
-        "tool_registry_loader_factories_json",
-        "tool_registry_providers_json",
-        "tool_registry_provider_factories_json",
-    ):
+    skipped_components_by_kind: dict[str, list[str]] = {}
+    component_setting_attrs = (
+        ("tool_registry_loaders_json", "loader"),
+        ("tool_registry_loader_factories_json", "loader_factory"),
+        ("tool_registry_providers_json", "provider"),
+        ("tool_registry_provider_factories_json", "provider_factory"),
+        ("tool_registry_provider_sources_json", "provider_source"),
+    )
+    for attr_name, component_kind in component_setting_attrs:
         raw_value = getattr(settings, attr_name, None)
-        filtered_value, changed = (
+        filtered_value, changed, raw_skipped_component_names = (
             _filter_tool_registry_json_object_setting_for_visited_registry_files(
                 raw_value=raw_value,
                 visited_files=visited_files,
             )
         )
+        if raw_skipped_component_names:
+            normalized_names: list[str] = []
+            for skipped_component_name in raw_skipped_component_names:
+                if component_kind == "provider_source":
+                    normalized_name = get_tool_registry_provider_source_name_from_settings(
+                        settings=SimpleNamespace(
+                            tool_registry_provider_source=skipped_component_name,
+                        )
+                    )
+                else:
+                    normalized_name = _normalize_named_tool_registry_component_name(
+                        skipped_component_name
+                    )
+                if normalized_name and normalized_name not in normalized_names:
+                    normalized_names.append(normalized_name)
+            if normalized_names:
+                skipped_components_by_kind.setdefault(component_kind, []).extend(
+                    normalized_names
+                )
         if not changed:
             continue
         updates[attr_name] = filtered_value
     if not updates:
-        return settings
-    return _clone_tool_execution_settings(
-        settings=settings or SimpleNamespace(),
-        **updates,
+        return settings, {
+            kind: tuple(names)
+            for kind, names in skipped_components_by_kind.items()
+        }
+    return (
+        _clone_tool_execution_settings(
+            settings=settings or SimpleNamespace(),
+            **updates,
+        ),
+        {
+            kind: tuple(names)
+            for kind, names in skipped_components_by_kind.items()
+        },
     )
+
+
+def _get_provider_source_names_referencing_skipped_registry_file_components(
+    *,
+    settings: object | None,
+    skipped_component_names: Mapping[str, tuple[str, ...]],
+) -> tuple[str, ...]:
+    source_specs = get_tool_registry_provider_source_specs_from_settings(
+        settings=settings,
+    )
+    if not source_specs:
+        return ()
+    reference_keys = (
+        ("provider", "provider"),
+        ("provider_factory", "provider_factory"),
+        ("loader", "loader"),
+        ("loader_factory", "loader_factory"),
+    )
+    skipped_source_names: list[str] = []
+    for source_name, spec in source_specs.items():
+        if not isinstance(spec, Mapping):
+            continue
+        for spec_key, component_kind in reference_keys:
+            skipped_names = skipped_component_names.get(component_kind, ())
+            if not skipped_names:
+                continue
+            normalized_reference = _normalize_named_tool_registry_component_name(
+                spec.get(spec_key)
+            )
+            if normalized_reference is None or normalized_reference not in skipped_names:
+                continue
+            if source_name not in skipped_source_names:
+                skipped_source_names.append(source_name)
+            break
+    return tuple(skipped_source_names)
 
 
 def _build_tool_registry_from_file_registry(
@@ -6299,10 +6371,22 @@ def _build_tool_registry_from_file_registry(
     raw_registry_sources = payload.get("registry_sources")
     if _is_non_text_sequence(raw_registry_sources):
         composed_base_registry = {}
-        registry_source_settings = (
+        (
+            registry_source_settings,
+            skipped_registry_component_names,
+        ) = (
             _clone_tool_registry_settings_without_visited_registry_file_components(
                 settings=source_settings,
                 visited_files=_visited_files,
+            )
+        )
+        skipped_provider_sources = set(
+            skipped_registry_component_names.get("provider_source", ())
+        )
+        skipped_provider_sources.update(
+            _get_provider_source_names_referencing_skipped_registry_file_components(
+                settings=source_settings,
+                skipped_component_names=skipped_registry_component_names,
             )
         )
         source_artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
@@ -6324,6 +6408,9 @@ def _build_tool_registry_from_file_registry(
                     tool_registry_provider_source=child_registry_source,
                 )
             )
+            if normalized_source_name in skipped_provider_sources:
+                _diagnostics["skipped_registry_sources"].append(normalized_source_name)
+                continue
             if normalized_source_name in _visited_sources:
                 _diagnostics["skipped_registry_sources"].append(normalized_source_name)
                 continue

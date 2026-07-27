@@ -29870,6 +29870,83 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             (str(missing_file.resolve()),),
         )
 
+    def test_build_tool_registry_from_file_artifacts_skips_registry_source_self_cycle(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["self_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "self_suite": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(artifacts["registry"], {})
+        self.assertEqual(
+            artifacts["diagnostics"]["skipped_registry_sources"],
+            ("self_suite",),
+        )
+        self.assertEqual(artifacts["diagnostics"]["missing_registry_sources"], ())
+
+    def test_build_tool_registry_from_file_artifacts_skips_registry_source_named_provider_self_cycle(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["self_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "self_provider": {
+                            "registry_file": str(root_file),
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "self_suite": {
+                            "provider": "self_provider",
+                        }
+                    }
+                ),
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(artifacts["registry"], {})
+        self.assertEqual(
+            artifacts["diagnostics"]["skipped_registry_sources"],
+            ("self_suite",),
+        )
+        self.assertEqual(artifacts["diagnostics"]["missing_registry_sources"], ())
+
     def test_build_tool_registry_providers_from_settings_accepts_registry_file_with_registry_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root_file = Path(tmpdir) / "root-manifest.json"
