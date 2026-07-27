@@ -6305,9 +6305,11 @@ def _build_tool_registry_from_file_registry(
                 visited_files=_visited_files,
             )
         )
-        named_sources = build_tool_registry_provider_sources_from_settings(
+        source_artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
             settings=registry_source_settings,
         )
+        named_sources = source_artifacts["sources"]
+        source_diagnostics = source_artifacts["source_diagnostics"]
         for child_registry_source in raw_registry_sources:
             child_registry_source = _coerce_tool_execution_string_like_value(
                 child_registry_source
@@ -6326,6 +6328,17 @@ def _build_tool_registry_from_file_registry(
                 _diagnostics["skipped_registry_sources"].append(normalized_source_name)
                 continue
             source_provider = named_sources.get(normalized_source_name)
+            source_diagnostic_values = source_diagnostics.get(normalized_source_name, {})
+            if isinstance(source_diagnostic_values, dict):
+                for diagnostic_key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
+                    diagnostic_values = source_diagnostic_values.get(diagnostic_key, ())
+                    if not isinstance(diagnostic_values, (list, tuple)):
+                        continue
+                    _diagnostics[diagnostic_key].extend(
+                        str(value)
+                        for value in diagnostic_values
+                        if str(value).strip()
+                    )
             if source_provider is None:
                 _diagnostics["missing_registry_sources"].append(normalized_source_name)
                 continue

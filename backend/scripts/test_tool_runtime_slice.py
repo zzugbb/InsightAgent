@@ -29820,6 +29820,56 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "https://provider.example/search?source=search_suite&q=child+source+cash+flow",
         )
 
+    def test_build_tool_registry_from_file_artifacts_merges_registry_source_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            child_file = Path(tmpdir) / "child-source-registry.json"
+            missing_file = Path(tmpdir) / "missing-child-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["search_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            child_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "search_suite": {
+                            "registry_file": str(child_file),
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(tuple(sorted(artifacts["registry"])), ("provider_search",))
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
     def test_build_tool_registry_providers_from_settings_accepts_registry_file_with_registry_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root_file = Path(tmpdir) / "root-manifest.json"
