@@ -676,6 +676,191 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_execute_tool_plan_item_file_backed_provider_source_preserves_real_calc_projection(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "calc-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_math": {
+                                "template": "calc_eval",
+                                "label": "Provider Calculator",
+                                "kind": "provider_calc",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "method": "POST",
+                                    "url": "https://provider.example/calc",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
+                                        "expression": "$expression",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "expression": "$.expression",
+                                        "result": "$.value",
+                                        "request_id": "$.request_id",
+                                        "source": "$.source",
+                                        "profile": "$.profile",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_math",
+                                "result_preview_keys": [
+                                    "expression",
+                                    "result",
+                                    "source",
+                                    "profile",
+                                ],
+                                "result_output_keys": [
+                                    "expression",
+                                    "result",
+                                    "request_id",
+                                    "source",
+                                    "profile",
+                                ],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="calculator_suite",
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "calculator_suite": {
+                                "registry_file": str(registry_file),
+                                "profile": "calculator_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+            iteration_ctx = build_tool_iteration_context(
+                step_id="step-1",
+                seq=3,
+                name="provider_math",
+                tool_input={"expression": "8/4"},
+                model="mock-gpt",
+                label="tool_1",
+                token_count=5,
+                display_name="Provider Calculator",
+            )
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return (
+                        b'{"data":{"expression":"8/4","value":2,'
+                        b'"request_id":"req-calc-1","source":"calculator_suite",'
+                        b'"profile":"calculator_only"}}'
+                    )
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                items = list(
+                    execute_tool_plan_item_service_execution(
+                        task_id="task-1",
+                        trace_steps=[
+                            {"id": "existing-1", "seq": 2, "content": "Existing"}
+                        ],
+                        iteration_ctx=iteration_ctx,
+                        initial_action_step=iteration_ctx["action_step"],
+                        tool_name="provider_math",
+                        tool_input={"expression": "8/4"},
+                        prompt="calculate 8 divided by 4",
+                        user_id="user-1",
+                        model="mock-gpt",
+                        estimate_token_count=lambda text: len(text.strip()) or 0,
+                        make_step_id=lambda: "rag-unused",
+                        raise_if_should_abort=lambda: None,
+                        registry_provider=registry_provider,
+                    )
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(len(urlopen_calls), 1)
+        request = urlopen_calls[0]
+        parsed_query = parse_qs(urlparse(request.full_url).query)
+        self.assertEqual(parsed_query["source"], ["calculator_suite"])
+        self.assertEqual(parsed_query["profile"], ["calculator_only"])
+        self.assertEqual(request.headers["Authorization"], "Bearer calculator_only")
+        self.assertEqual(request.headers["X-provider-source"], "calculator_suite")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {
+                "expression": "8/4",
+                "source": "calculator_suite",
+                "profile": "calculator_only",
+            },
+        )
+        self.assertEqual(tool_end_event["semantic_kind"], "provider_math")
+        self.assertEqual(tool_end_event["semantic_family"], "local_calculator")
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "expression": "8/4",
+                "result": 2,
+                "source": "calculator_suite",
+                "profile": "calculator_only",
+            },
+        )
+        self.assertEqual(
+            tool_end_event["result_summary"],
+            "Calculated 8/4 = 2 (request id req-calc-1).",
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
+            "Provider Calculator: Calculated 8/4 = 2 (request id req-calc-1).",
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "expression": "8/4",
+                "result": 2,
+                "request_id": "req-calc-1",
+                "source": "calculator_suite",
+                "profile": "calculator_only",
+            },
+        )
+
     def test_file_backed_provider_source_preflight_summary_uses_source_profile_context(
         self,
     ) -> None:
@@ -798,6 +983,88 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             provider_math_detail["execution_summary"]["url_path"],
             "/calculator_only/calc",
+        )
+
+    def test_file_backed_provider_source_preflight_summary_uses_calc_source_profile_context(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "calc-summary-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_math": {
+                                "template": "calc_eval",
+                                "label": "Provider Calculator",
+                                "kind": "provider_calc",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "method": "POST",
+                                    "url": "https://provider.example/${tool_registry_profile}/calc",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
+                                        "expression": "$expression",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "expression": "$.expression",
+                                        "result": "$.value",
+                                        "request_id": "$.request_id",
+                                    },
+                                },
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="calculator_suite",
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "calculator_suite": {
+                                "registry_file": str(registry_file),
+                                "profile": "calculator_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+
+        provider_math_detail = next(
+            detail
+            for detail in build_configured_tool_registry_provider_preflight_tool_details(
+                provider=registry_provider
+            )
+            if detail["name"] == "provider_math"
+        )
+
+        self.assertEqual(
+            provider_math_detail["execution_summary"],
+            {
+                "method": "POST",
+                "url_origin": "https://provider.example",
+                "url_path": "/calculator_only/calc",
+                "header_count": 2,
+                "query_param_count": 2,
+                "json_body_field_count": 3,
+                "response_path": "$.data",
+                "result_field_names": ["expression", "result", "request_id"],
+            },
         )
 
     def test_file_backed_provider_source_profile_disabled_tools_match_selected_registry(
@@ -3164,6 +3431,98 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(artifacts.provider_usage.prompt_tokens, 10)
         self.assertEqual(artifacts.provider_usage.completion_tokens, 3)
         self.assertEqual(artifacts.provider_usage.total_tokens, 13)
+
+    def test_build_tool_plan_provider_uses_file_backed_calc_source_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "planner-calc-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_math": {
+                                "template": "calc_eval",
+                                "label": "Provider Calculator",
+                                "kind": "provider_calc",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "method": "POST",
+                                    "url": "https://provider.example/calc",
+                                    "json_body": {
+                                        "expression": "$expression",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "result": "$.value",
+                                    },
+                                },
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="calculator_suite",
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "calculator_suite": {
+                                "registry_file": str(registry_file),
+                                "profile": "calculator_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+
+        class FakeProvider:
+            provider = "openai"
+
+            def __init__(self) -> None:
+                self.last_prompt = ""
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                self.last_prompt = prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "name": "provider_math",
+                                    "input": {"expression": "8/4"},
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        provider = FakeProvider()
+        artifacts = build_tool_plan_artifacts(
+            "请计算 8/4",
+            provider=provider,
+            registry_provider=registry_provider,
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertIn("provider_math", artifacts.allowed_tool_names)
+        self.assertIn("Provider Calculator", artifacts.allowed_tool_labels)
+        self.assertIn("Allowed tool names:", provider.last_prompt)
+        self.assertIn("provider_math", provider.last_prompt)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["provider_math"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[0]["input"],
+            {"expression": "8/4"},
+        )
 
     def test_build_tool_plan_rule_based_selection_keeps_canonical_override_calculator_semantics(
         self,
