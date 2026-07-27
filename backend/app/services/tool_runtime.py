@@ -7699,6 +7699,14 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                     source_provider_diagnostics[normalized_provider_reference],
                 )
             elif (
+                normalized_provider_reference is not None
+                and normalized_provider_reference in source_diagnostics
+            ):
+                diagnostics = _merge_tool_registry_file_diagnostics(
+                    diagnostics,
+                    source_diagnostics[normalized_provider_reference],
+                )
+            elif (
                 normalized_provider_factory_reference is not None
                 and normalized_provider_factory_reference
                 in source_provider_factory_diagnostics
