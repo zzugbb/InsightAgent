@@ -514,7 +514,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                                 "execution": {
                                     "kind": "http_json",
                                     "url": "https://provider.example/search",
+                                    "method": "POST",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
                                     "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
                                         "query": "$query",
                                         "source": "$tool_registry_provider_source",
                                         "profile": "$tool_registry_profile",
@@ -625,9 +635,21 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         final_item = items[-1]
 
         self.assertEqual(len(urlopen_calls), 1)
-        parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
+        request = urlopen_calls[0]
+        parsed_query = parse_qs(urlparse(request.full_url).query)
+        self.assertEqual(parsed_query["query"], ["revenue trend"])
         self.assertEqual(parsed_query["source"], ["search_suite"])
         self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+        self.assertEqual(request.headers["Authorization"], "Bearer retrieval_only")
+        self.assertEqual(request.headers["X-provider-source"], "search_suite")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {
+                "query": "revenue trend",
+                "source": "search_suite",
+                "profile": "retrieval_only",
+            },
+        )
         self.assertEqual(tool_end_event["semantic_kind"], "provider_search")
         self.assertEqual(tool_end_event["semantic_family"], "knowledge_retrieval")
         self.assertEqual(
@@ -834,7 +856,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                                 "execution": {
                                     "kind": "http_json",
                                     "url": "https://provider.example/search",
+                                    "method": "POST",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
                                     "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
                                         "query": "$query",
                                         "source": "$tool_registry_provider_source",
                                         "profile": "$tool_registry_profile",
@@ -911,9 +943,21 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(output["documents_total"], 4)
         self.assertEqual(output["knowledge_base_id"], "provider-kb")
         self.assertEqual(len(urlopen_calls), 1)
-        parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
+        request = urlopen_calls[0]
+        parsed_query = parse_qs(urlparse(request.full_url).query)
+        self.assertEqual(parsed_query["query"], ["margin risk"])
         self.assertEqual(parsed_query["source"], ["search_suite"])
         self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+        self.assertEqual(request.headers["Authorization"], "Bearer retrieval_only")
+        self.assertEqual(request.headers["X-provider-source"], "search_suite")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {
+                "query": "margin risk",
+                "source": "search_suite",
+                "profile": "retrieval_only",
+            },
+        )
 
     def test_named_loader_file_backed_source_uses_selected_source_profile_in_http_json_request(
         self,
@@ -931,7 +975,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                                 "execution": {
                                     "kind": "http_json",
                                     "url": "https://provider.example/search",
+                                    "method": "POST",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
                                     "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
                                         "query": "$query",
                                         "source": "$tool_registry_provider_source",
                                         "profile": "$tool_registry_profile",
@@ -1011,6 +1065,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
         self.assertEqual(parsed_query["source"], ["search_suite"])
         self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+        request = urlopen_calls[0]
+        self.assertEqual(request.headers["Authorization"], "Bearer retrieval_only")
+        self.assertEqual(request.headers["X-provider-source"], "search_suite")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {
+                "query": "loader risk",
+                "source": "search_suite",
+                "profile": "retrieval_only",
+            },
+        )
 
     def test_named_provider_loader_file_backed_source_uses_selected_source_profile_in_http_json_request(
         self,
@@ -1028,7 +1093,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                                 "execution": {
                                     "kind": "http_json",
                                     "url": "https://provider.example/search",
+                                    "method": "POST",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
                                     "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
                                         "query": "$query",
                                         "source": "$tool_registry_provider_source",
                                         "profile": "$tool_registry_profile",
@@ -1115,6 +1190,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
         self.assertEqual(parsed_query["source"], ["search_suite"])
         self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+        request = urlopen_calls[0]
+        self.assertEqual(request.headers["Authorization"], "Bearer retrieval_only")
+        self.assertEqual(request.headers["X-provider-source"], "search_suite")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {
+                "query": "loader chain",
+                "source": "search_suite",
+                "profile": "retrieval_only",
+            },
+        )
 
     def test_loader_factory_file_backed_source_uses_selected_source_profile_in_http_json_request(
         self,
@@ -1132,7 +1218,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                                 "execution": {
                                     "kind": "http_json",
                                     "url": "https://provider.example/search",
+                                    "method": "POST",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
                                     "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
                                         "query": "$query",
                                         "source": "$tool_registry_provider_source",
                                         "profile": "$tool_registry_profile",
@@ -1212,6 +1308,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
         self.assertEqual(parsed_query["source"], ["search_suite"])
         self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+        request = urlopen_calls[0]
+        self.assertEqual(request.headers["Authorization"], "Bearer retrieval_only")
+        self.assertEqual(request.headers["X-provider-source"], "search_suite")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {
+                "query": "factory risk",
+                "source": "search_suite",
+                "profile": "retrieval_only",
+            },
+        )
 
     def test_provider_factory_file_backed_source_uses_selected_source_profile_in_http_json_request(
         self,
@@ -1229,7 +1336,17 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                                 "execution": {
                                     "kind": "http_json",
                                     "url": "https://provider.example/search",
+                                    "method": "POST",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
                                     "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
                                         "query": "$query",
                                         "source": "$tool_registry_provider_source",
                                         "profile": "$tool_registry_profile",
@@ -1309,6 +1426,195 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
         self.assertEqual(parsed_query["source"], ["search_suite"])
         self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+        request = urlopen_calls[0]
+        self.assertEqual(request.headers["Authorization"], "Bearer retrieval_only")
+        self.assertEqual(request.headers["X-provider-source"], "search_suite")
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {
+                "query": "provider factory",
+                "source": "search_suite",
+                "profile": "retrieval_only",
+            },
+        )
+
+    def test_named_loader_file_backed_source_preflight_summary_uses_selected_source_profile(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "loader-summary-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/${tool_registry_profile}/search",
+                                    "method": "POST",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "request_id": "$.request_id",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="search_suite",
+                    tool_registry_loaders_json=json.dumps(
+                        {
+                            "search_loader": {
+                                "registry_file": str(registry_file),
+                            }
+                        }
+                    ),
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "search_suite": {
+                                "loader": "search_loader",
+                                "profile": "retrieval_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+
+        provider_search_detail = next(
+            detail
+            for detail in build_configured_tool_registry_provider_preflight_tool_details(
+                provider=registry_provider
+            )
+            if detail["name"] == "provider_search"
+        )
+
+        self.assertEqual(
+            provider_search_detail["execution_summary"],
+            {
+                "method": "POST",
+                "url_origin": "https://provider.example",
+                "url_path": "/retrieval_only/search",
+                "header_count": 2,
+                "query_param_count": 2,
+                "json_body_field_count": 3,
+                "response_path": "$.data",
+                "result_field_names": ["documents_total", "request_id"],
+            },
+        )
+
+    def test_loader_factory_file_backed_source_preflight_summary_uses_selected_source_profile(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "loader-factory-summary-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/${tool_registry_profile}/search",
+                                    "method": "POST",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "request_id": "$.request_id",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="search_suite",
+                    tool_registry_loader_factories_json=json.dumps(
+                        {
+                            "search_loader_factory": {
+                                "registry_file": str(registry_file),
+                            }
+                        }
+                    ),
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "search_suite": {
+                                "loader_factory": "search_loader_factory",
+                                "profile": "retrieval_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+
+        provider_search_detail = next(
+            detail
+            for detail in build_configured_tool_registry_provider_preflight_tool_details(
+                provider=registry_provider
+            )
+            if detail["name"] == "provider_search"
+        )
+
+        self.assertEqual(
+            provider_search_detail["execution_summary"],
+            {
+                "method": "POST",
+                "url_origin": "https://provider.example",
+                "url_path": "/retrieval_only/search",
+                "header_count": 2,
+                "query_param_count": 2,
+                "json_body_field_count": 3,
+                "response_path": "$.data",
+                "result_field_names": ["documents_total", "request_id"],
+            },
+        )
 
     def _make_sensitive_http_json_action_step(
         self,

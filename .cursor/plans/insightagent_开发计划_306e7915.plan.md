@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1586/1586)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1588/1588)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -436,13 +436,15 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 357. File-backed registry artifacts 的失败诊断保留也已补齐：命名 loader/provider/factory 因缺失 registry file 无法构建时，只要已经收集到 missing/skipped/invalid diagnostics，就会保留在对应 artifact diagnostics map，并继续并回 `registry_sources` root diagnostics。
 358. File-backed provider source 的 named source 诊断链也已补齐：source 通过 `provider` 字段引用另一个 source 时，会按 named provider 优先、named source 其次的解析顺序继承 inner source diagnostics；`source -> source` 成功加载和缺失 registry file 都已覆盖。
 359. Provider/source file-backed 配置中的 effective profile 运行路径也已补齐：inline source extra_tools、source registry_file manifest、manifest 显式 profile override，以及 `source -> named provider -> registry_file` 都会把当前 source/profile 写入 HTTP JSON 请求模板和 preflight execution summary；real calc/search 的 header/query/body、response_path/result_fields、preview/output/summary 与 disabled tools 组合已覆盖。
-360. Settings-backed named loader 的 file-backed source/profile 运行路径也已补齐：`source -> named loader -> registry_file` 与 `source -> named provider -> named loader -> registry_file` 会复用 source-scoped loader settings，provider/loader factory file-backed 链路也已进入回归；完整 backend slice 当前为 `1586/1586`。
+360. Settings-backed named loader 的 file-backed source/profile 运行路径也已补齐：`source -> named loader -> registry_file` 与 `source -> named provider -> named loader -> registry_file` 会复用 source-scoped loader settings，provider/loader factory file-backed 链路也已进入回归。
+361. Named loader / loader_factory 背后的 file-backed preflight summary 也已补齐回归：tool details 的 HTTP JSON `execution_summary.url_path` 会使用 source effective profile 渲染，避免 runtime 请求正确但设置面仍显示 default profile；完整 backend slice 当前为 `1588/1588`。
+362. File-backed source/profile 的真实请求契约继续加固：direct source plan item、named provider、named loader、`source -> named provider -> named loader`、loader_factory、provider_factory 六条 real search 路径都会把 selected source/profile 写进 POST headers、query_params、json_body，并继续保持 result preview/output/summary 与 RAG follow-up；named loader / loader_factory 的 preflight summary 也会同时呈现 header/query/body count、response_path 与 result_field_names。完整 backend slice 当前为 `1588/1588`。
 
 ## 当前主线判断
 
 - 代码与文档当前主线是一致的：重点已经不是继续维护 archived runtime spec，而是把默认工具去 mock 化、真实工具执行本体与 registry/provider/source 治理继续产品化。
 - 全仓库审计后，final answer / Tool observations / observation fallback / export fallback 子线已基本收口；后续不再优先扩大兼容面，除非审计扫出明确红测。
-- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的大部分入口治理；剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的鉴权/profile 组合与端到端运行路径。
+- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的大部分入口治理；direct source、named provider/loader 与 provider/loader factory 背后的 file-backed real search 已有更接近 e2e 的 POST/header/body/query 回归，剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的鉴权/profile 组合与端到端运行路径。
 
 ## 下一步候选
 
