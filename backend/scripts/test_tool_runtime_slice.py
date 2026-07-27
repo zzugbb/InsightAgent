@@ -17834,6 +17834,56 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("top-secret", serialized)
         self.assertNotIn("secret-token", serialized)
 
+    def test_get_trace_step_markdown_meta_treats_wrapped_execution_kind_as_http_json(
+        self,
+    ) -> None:
+        step = task_routes_module.TraceStep(  # type: ignore[attr-defined]
+            id="step-http-json-wrapped-kind-redacted",
+            seq=13,
+            type="action",
+            content="Tool done: Acme Lookup",
+            meta={
+                "tool": {
+                    "name": "acme_lookup",
+                    "label": "Acme Lookup",
+                    "status": "done",
+                    "execution_kind": UserString("http_json"),
+                    "effective_result_preview_keys": UserList([UserString("status")]),
+                    "effective_result_output_keys": UserList([UserString("status")]),
+                    "input": {
+                        "query": "demo",
+                        "access_token": "secret-token",
+                    },
+                    "output_preview": {
+                        "status": "ready",
+                        "access_token": "secret-token",
+                    },
+                    "output": {
+                        "status": "ready",
+                        "access_token": "secret-token",
+                    },
+                }
+            },
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(  # type: ignore[attr-defined]
+            step,
+        )
+
+        self.assertIsNotNone(markdown_meta)
+        assert markdown_meta is not None
+        self.assertEqual(
+            markdown_meta["tool"]["input"],  # type: ignore[index]
+            {
+                "query": "demo",
+                "access_token": "[redacted]",
+            },
+        )
+        self.assertEqual(markdown_meta["tool"]["output_preview"], {"status": "ready"})  # type: ignore[index]
+        self.assertEqual(markdown_meta["tool"]["output"], {"status": "ready"})  # type: ignore[index]
+        serialized = json.dumps(markdown_meta, ensure_ascii=False)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_trace_step_display_content_redacts_provider_content_without_execution_kind(
         self,
     ) -> None:
@@ -51865,6 +51915,82 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertNotIn("Tool done: Hosted Math", content)
         self.assertNotIn('\\"result\\"', content)
+
+    def test_get_trace_step_display_content_infers_planner_summary_from_wrapped_output(
+        self,
+    ) -> None:
+        step = SimpleNamespace(
+            id="step-hosted-planner-wrapped-output",
+            seq=5,
+            type="action",
+            content="Tool done: Hosted Planner",
+            meta=SimpleNamespace(
+                tool={
+                    "name": "hosted_planner_gateway",
+                    "label": "Hosted Planner",
+                    "semantic_kind": UserString("hosted_planner_gateway"),
+                    "semantic_family": UserString("task_planner"),
+                    "status": "done",
+                    "effective_result_output_keys": UserList(
+                        [UserString("plan"), UserString("steps")]
+                    ),
+                    "output": {
+                        "plan": UserString("gather -> calculate"),
+                        "steps": UserList(
+                            [UserString("gather"), UserString("calculate")]
+                        ),
+                    },
+                }
+            ),
+        )
+
+        content = chat_persistence_module.get_trace_step_display_content(step)
+
+        self.assertEqual(
+            content,
+            'Planned steps - gather -> calculate.\nOutput: {"plan":"gather -> calculate","steps":["gather","calculate"]}',
+        )
+        self.assertNotIn("Tool done: Hosted Planner", content)
+
+    def test_get_trace_step_markdown_meta_backfills_planner_summary_from_wrapped_output(
+        self,
+    ) -> None:
+        class WrappedMeta:
+            def model_dump(self, *, exclude_none: bool = True) -> dict[str, object]:
+                del exclude_none
+                return {
+                    "tool": {
+                        "name": "hosted_planner_gateway",
+                        "label": "Hosted Planner",
+                        "semantic_kind": UserString("hosted_planner_gateway"),
+                        "semantic_family": UserString("task_planner"),
+                        "status": "done",
+                        "effective_result_output_keys": UserList(
+                            [UserString("plan"), UserString("steps")]
+                        ),
+                        "output": {
+                            "steps": UserList(
+                                [UserString("gather"), UserString("calculate")]
+                            ),
+                        },
+                    }
+                }
+
+        step = SimpleNamespace(
+            id="step-hosted-planner-wrapped-meta",
+            seq=5,
+            type="action",
+            content="Tool done: Hosted Planner",
+            meta=WrappedMeta(),
+        )
+
+        markdown_meta = chat_persistence_module.get_trace_step_markdown_meta(step)
+
+        self.assertIsNotNone(markdown_meta)
+        self.assertEqual(
+            markdown_meta["tool"]["result_summary"],  # type: ignore[index]
+            "Planned steps - gather -> calculate.",
+        )
 
     def test_get_trace_step_display_content_infers_retrieval_result_summary_from_safe_output_without_explicit_result_summary(
         self,

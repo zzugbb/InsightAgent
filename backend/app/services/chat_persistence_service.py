@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections import UserDict, UserList, UserString
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
@@ -1048,7 +1050,34 @@ def _normalize_trace_preview_excerpt(text: str, limit: int = 160) -> str:
     return f"{normalized[:limit]}..."
 
 
+def _coerce_trace_string_like_value(value: object) -> object:
+    if isinstance(value, UserString):
+        return str(value)
+    return value
+
+
+def _normalize_trace_json_compatible_value(value: object) -> object:
+    value = _coerce_trace_string_like_value(value)
+    if isinstance(value, UserDict):
+        value = value.data
+    if isinstance(value, Mapping):
+        return {
+            str(_coerce_trace_string_like_value(key)): _normalize_trace_json_compatible_value(
+                item
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, UserList):
+        value = value.data
+    if isinstance(value, tuple):
+        value = list(value)
+    if isinstance(value, list):
+        return [_normalize_trace_json_compatible_value(item) for item in value]
+    return value
+
+
 def _stringify_trace_tool_output_preview(value: object) -> str:
+    value = _normalize_trace_json_compatible_value(value)
     if value is None:
         return ""
     if isinstance(value, str):
@@ -1064,6 +1093,9 @@ def _stringify_trace_tool_output_preview(value: object) -> str:
 
 
 def _parse_trace_tool_json_mapping_string(value: str) -> dict[str, object] | None:
+    value = _coerce_trace_string_like_value(value)
+    if not isinstance(value, str):
+        return None
     normalized = value.strip()
     if not normalized:
         return None
@@ -1085,6 +1117,7 @@ def _parse_trace_tool_json_mapping_string(value: str) -> dict[str, object] | Non
 
 
 def _coerce_trace_tool_output_preview_mapping(value: object) -> dict[str, object] | None:
+    value = _normalize_trace_json_compatible_value(value)
     if isinstance(value, dict):
         return value
     if not isinstance(value, str):
@@ -1093,6 +1126,7 @@ def _coerce_trace_tool_output_preview_mapping(value: object) -> dict[str, object
 
 
 def _coerce_trace_tool_output_mapping(value: object) -> dict[str, object] | None:
+    value = _normalize_trace_json_compatible_value(value)
     if isinstance(value, dict):
         return value
     if not isinstance(value, str):
@@ -1101,7 +1135,7 @@ def _coerce_trace_tool_output_mapping(value: object) -> dict[str, object] | None
 
 
 def _trace_tool_meta_uses_http_json_execution(tool_meta: dict[str, object]) -> bool:
-    raw_execution_kind = tool_meta.get("execution_kind")
+    raw_execution_kind = _coerce_trace_string_like_value(tool_meta.get("execution_kind"))
     if (
         isinstance(raw_execution_kind, str)
         and raw_execution_kind.strip().lower() == "http_json"
@@ -1133,6 +1167,7 @@ def _trace_tool_meta_implies_provider_or_hosted_tool(
 
 
 def _trace_label_implies_http_json_execution(value: object) -> bool:
+    value = _coerce_trace_string_like_value(value)
     if not isinstance(value, str):
         return False
     normalized = " ".join(value.strip().lower().replace("_", " ").split())
@@ -1177,13 +1212,19 @@ def _normalize_trace_tool_output_request_id(
 
 
 def _normalize_trace_tool_output_key_list(raw_value: object) -> list[str]:
+    if isinstance(raw_value, UserList):
+        raw_value = raw_value.data
     if not isinstance(raw_value, (list, tuple)):
         return []
-    return [
-        key.strip()
-        for key in raw_value
-        if isinstance(key, str) and key.strip()
-    ]
+    normalized_keys: list[str] = []
+    for raw_key in raw_value:
+        raw_key = _coerce_trace_string_like_value(raw_key)
+        if not isinstance(raw_key, str):
+            continue
+        key = raw_key.strip()
+        if key:
+            normalized_keys.append(key)
+    return normalized_keys
 
 
 def _resolve_trace_safe_tool_output(tool_meta: dict[str, object]) -> object | None:
@@ -1279,6 +1320,7 @@ def _resolve_trace_tool_result_summary_input(
 
 
 def _normalize_trace_tool_semantic_kind(raw_value: object) -> str | None:
+    raw_value = _coerce_trace_string_like_value(raw_value)
     if not isinstance(raw_value, str):
         return None
     normalized = raw_value.strip().lower()
@@ -1308,6 +1350,7 @@ def _normalize_trace_tool_semantic_kind(raw_value: object) -> str | None:
 
 
 def _normalize_trace_tool_label(raw_value: object) -> str:
+    raw_value = _coerce_trace_string_like_value(raw_value)
     if not isinstance(raw_value, str):
         return ""
     normalized = raw_value.strip()
@@ -1358,10 +1401,13 @@ def _trace_tool_label_implies_planner_summary(raw_value: object) -> bool:
 
 
 def _normalize_trace_tool_result_plan_steps(raw_steps: object) -> list[str]:
+    if isinstance(raw_steps, UserList):
+        raw_steps = raw_steps.data
     if not isinstance(raw_steps, (list, tuple)):
         return []
     normalized_steps: list[str] = []
     for raw_step in raw_steps:
+        raw_step = _coerce_trace_string_like_value(raw_step)
         if not isinstance(raw_step, str):
             continue
         step = raw_step.strip()
@@ -1404,16 +1450,16 @@ def _infer_trace_tool_result_summary(tool_meta: dict[str, object]) -> str:
         or _trace_tool_label_implies_real_retrieval_summary(tool_meta.get("name"))
     )
 
-    plan = output.get("plan")
+    plan = _coerce_trace_string_like_value(output.get("plan"))
     if isinstance(plan, str) and plan.strip():
         return f"Planned steps - {plan.strip()}."
     steps = _normalize_trace_tool_result_plan_steps(output.get("steps"))
     if steps:
         return f"Planned steps - {' -> '.join(steps)}."
 
-    expression = output.get("expression")
+    expression = _coerce_trace_string_like_value(output.get("expression"))
     result = output.get("result")
-    request_id = output.get("request_id")
+    request_id = _coerce_trace_string_like_value(output.get("request_id"))
     if isinstance(expression, str) and expression.strip() and result is not None:
         if isinstance(request_id, str) and request_id.strip():
             return (
@@ -1673,6 +1719,9 @@ def get_trace_step_display_content(step: TraceStep) -> str:
             line for line in tool_registry_lines if line not in base_lines
         ]
         return "\n".join([*base_lines, *diagnostics_lines])
+    normalized_tool_meta = _normalize_trace_json_compatible_value(tool_meta)
+    if isinstance(normalized_tool_meta, dict):
+        tool_meta = normalized_tool_meta
     if (
         _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta)
         and _trace_http_json_export_content_needs_sanitization(content)
@@ -1681,7 +1730,7 @@ def get_trace_step_display_content(step: TraceStep) -> str:
             tool_meta,
             fallback_content=content,
         )
-    result_summary = tool_meta.get("result_summary")
+    result_summary = _coerce_trace_string_like_value(tool_meta.get("result_summary"))
     normalized_result_summary = (
         result_summary.strip()
         if isinstance(result_summary, str) and result_summary.strip()
@@ -1746,7 +1795,12 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
         return None
     tool_meta = payload.get("tool")
     if isinstance(tool_meta, dict):
-        sanitized_tool_meta = dict(tool_meta)
+        normalized_tool_meta = _normalize_trace_json_compatible_value(tool_meta)
+        sanitized_tool_meta = (
+            dict(normalized_tool_meta)
+            if isinstance(normalized_tool_meta, dict)
+            else dict(tool_meta)
+        )
         raw_label_value = sanitized_tool_meta.get("label")
         if isinstance(raw_label_value, str) and raw_label_value.strip():
             sanitized_tool_meta["label"] = _sanitize_trace_http_json_display_label(
@@ -1790,12 +1844,16 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
                 )
         elif safe_output_value is not None:
             sanitized_tool_meta["output"] = safe_output_value
-        raw_result_summary = sanitized_tool_meta.get("result_summary")
+        raw_result_summary = _coerce_trace_string_like_value(
+            sanitized_tool_meta.get("result_summary")
+        )
         if isinstance(raw_result_summary, str) and raw_result_summary.strip():
             if _trace_tool_meta_implies_provider_or_hosted_tool(sanitized_tool_meta):
                 sanitized_tool_meta["result_summary"] = (
                     _sanitize_trace_tool_result_summary_text(raw_result_summary)
                 )
+            else:
+                sanitized_tool_meta["result_summary"] = raw_result_summary
         else:
             inferred_result_summary = _infer_trace_tool_result_summary(
                 sanitized_tool_meta
