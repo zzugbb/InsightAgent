@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1547/1547)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1548/1548)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -426,7 +426,8 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 347. Provider/source/file-backed registry wrapper 也已补齐：`tool_registry_*_json` settings 字段若来自 `UserString`，loader/provider/source/factory artifacts 会按 JSON object 解析；file manifest 与 loader adapter 中的 `UserDict/UserList/UserString` 会先归一，再处理 profile、disabled tools、registry_files/dirs/sources、extra_tools 与 overrides，避免真实 source/profile 组合在治理入口被跳过。
 348. Provider adapter 的 file-backed source 运行路径也已补齐：当 adapter 通过 `registry_file` 构建真实 `http_json` 工具时，会把当前 provider source 作为模板上下文传给 file-backed base registry；多 source 预构建或非全局 selected source 组合运行时，`$tool_registry_provider_source` 不会再串成全局 selected 值。
 349. Provider/loader factory 的 file-backed source 运行路径也已补齐：`provider_factory` / `loader_factory` 若由 `registry_file` 支撑，会在 factory 被 source adapter 调用时按 source settings 动态重建 provider/loader，不再把 factory 定义阶段的全局 selected source 固化进真实 `http_json` 请求模板。
-350. 命名 provider/loader 的 file-backed source 运行路径也已补齐：source 通过 `provider` / `loader` 引用 settings-backed 命名项时，会用当前 source settings 重建 named provider/loader 与 diagnostics，避免命名引用背后的 `$tool_registry_provider_source` 继续串成全局 selected source。完整 backend slice 当前为 `1547/1547`。
+350. 命名 provider/loader 的 file-backed source 运行路径也已补齐：source 通过 `provider` / `loader` 引用 settings-backed 命名项时，会用当前 source settings 重建 named provider/loader 与 diagnostics，避免命名引用背后的 `$tool_registry_provider_source` 继续串成全局 selected source。
+351. Plain registry file 的 file-backed source 运行路径也已补齐：`registry_file` 直接写工具映射、而不是 manifest `extra_tools` 包装时，也会把当前 provider source 传入 extra tool 构建和 invalid execution diagnostics；递归 `registry_files/dirs` 同样复用 source settings。完整 backend slice 当前为 `1548/1548`。
 
 ## 当前主线判断
 

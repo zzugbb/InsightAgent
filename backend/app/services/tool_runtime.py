@@ -6187,6 +6187,14 @@ def _build_tool_registry_from_file_registry(
     if not isinstance(payload, Mapping):
         return {}
     payload = dict(payload)
+    source_settings = (
+        _clone_tool_execution_settings(
+            settings=settings or SimpleNamespace(),
+            tool_registry_provider_source=provider_source_name,
+        )
+        if provider_source_name
+        else settings
+    )
 
     manifest_keys = {
         "registry_sources",
@@ -6201,12 +6209,13 @@ def _build_tool_registry_from_file_registry(
         _diagnostics["invalid_tool_executions"].extend(
             _collect_invalid_tool_execution_messages_from_extra_tool_specs(
                 extra_tool_specs=payload,
-                settings=settings,
+                settings=source_settings,
             )
         )
         return build_tool_registry_extra_tools_from_specs(
             extra_tool_specs=payload,
-            settings=settings,
+            settings=source_settings,
+            provider_source_name=provider_source_name,
         )
 
     profile_name = get_tool_registry_profile_name_from_settings(
@@ -6225,7 +6234,7 @@ def _build_tool_registry_from_file_registry(
     if _is_non_text_sequence(raw_registry_sources):
         composed_base_registry = {}
         named_sources = build_tool_registry_provider_sources_from_settings(
-            settings=settings,
+            settings=source_settings,
             named_providers={},
         )
         for child_registry_source in raw_registry_sources:
@@ -6279,7 +6288,7 @@ def _build_tool_registry_from_file_registry(
                 continue
             child_registry = _build_tool_registry_from_file_registry(
                 registry_file=str(resolved_child_file),
-                settings=settings,
+                settings=source_settings,
                 provider_source_name=provider_source_name,
                 _visited_files=_visited_files,
                 _visited_dirs=_visited_dirs,
@@ -6321,7 +6330,7 @@ def _build_tool_registry_from_file_registry(
                     continue
                 child_registry = _build_tool_registry_from_file_registry(
                     registry_file=str(child_file),
-                    settings=settings,
+                    settings=source_settings,
                     provider_source_name=provider_source_name,
                     _visited_files=_visited_files,
                     _visited_dirs=_visited_dirs,
@@ -6342,12 +6351,12 @@ def _build_tool_registry_from_file_registry(
     _diagnostics["invalid_tool_executions"].extend(
         _collect_invalid_tool_execution_messages_from_extra_tool_specs(
             extra_tool_specs=extra_tool_specs,
-            settings=settings,
+            settings=source_settings,
         )
     )
     extra_tools = build_tool_registry_extra_tools_from_specs(
         extra_tool_specs=extra_tool_specs,
-        settings=settings,
+        settings=source_settings,
         provider_source_name=provider_source_name,
     )
 
@@ -6363,21 +6372,14 @@ def _build_tool_registry_from_file_registry(
         _collect_invalid_tool_execution_messages_from_override_specs(
             override_specs=payload.get("overrides"),
             base_registry=base_registry,
-            settings=settings,
+            settings=source_settings,
         )
     )
     source_overrides, disabled_tool_names = _build_registry_overrides_from_specs(
         override_specs=payload.get("overrides"),
         base_registry=base_registry,
         disabled_tool_names=disabled_tool_names,
-        settings=_clone_tool_execution_settings(
-            settings=settings or SimpleNamespace(),
-            **(
-                {"tool_registry_provider_source": provider_source_name}
-                if provider_source_name
-                else {}
-            ),
-        ),
+        settings=source_settings,
     )
     return build_tool_registry(
         base_registry=base_registry,
