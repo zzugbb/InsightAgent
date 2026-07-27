@@ -6045,6 +6045,18 @@ def _empty_tool_registry_file_diagnostics() -> dict[str, tuple[str, ...]]:
     return {key: () for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS}
 
 
+def _has_tool_registry_file_diagnostics(
+    diagnostics: Mapping[str, tuple[str, ...]] | None,
+) -> bool:
+    if not isinstance(diagnostics, Mapping):
+        return False
+    for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
+        values = diagnostics.get(key, ())
+        if isinstance(values, (list, tuple)) and values:
+            return True
+    return False
+
+
 def _merge_tool_registry_file_diagnostics(
     *diagnostics: dict[str, tuple[str, ...]] | None,
 ) -> dict[str, tuple[str, ...]]:
@@ -6875,6 +6887,8 @@ def build_tool_registry_loaders_from_settings_artifacts(
             named_loaders=loaders,
         )
         if loader is None:
+            if _has_tool_registry_file_diagnostics(diagnostics):
+                loader_diagnostics[normalized_loader_name] = diagnostics
             continue
         loaders[normalized_loader_name] = loader
         loader_diagnostics[normalized_loader_name] = diagnostics
@@ -6945,6 +6959,8 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
                 settings=settings,
             )
             if loader is None:
+                if _has_tool_registry_file_diagnostics(diagnostics):
+                    factory_diagnostics[normalized_factory_name] = diagnostics
                 continue
             factories[normalized_factory_name] = (
                 lambda settings=None, registry_file=registry_file: (
@@ -6967,6 +6983,8 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
             named_loader_factories=factories,
         )
         if resolved is None:
+            if _has_tool_registry_file_diagnostics(diagnostics):
+                factory_diagnostics[normalized_factory_name] = diagnostics
             continue
         target_normalized = _normalize_named_tool_registry_component_name(target_name)
         if target_normalized in _TOOL_REGISTRY_PROFILE_CONFIGS:
@@ -7053,6 +7071,8 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
                 settings=settings,
             )
             if provider is None:
+                if _has_tool_registry_file_diagnostics(diagnostics):
+                    factory_diagnostics[normalized_factory_name] = diagnostics
                 continue
             factories[normalized_factory_name] = (
                 lambda settings=None, registry_file=registry_file: (
@@ -7075,6 +7095,8 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
             named_provider_factories=factories,
         )
         if resolved is None:
+            if _has_tool_registry_file_diagnostics(diagnostics):
+                factory_diagnostics[normalized_factory_name] = diagnostics
             continue
         target_normalized = _normalize_named_tool_registry_component_name(target_name)
         if target_normalized in _TOOL_REGISTRY_PROFILE_CONFIGS:
@@ -7502,6 +7524,8 @@ def build_tool_registry_providers_from_settings_artifacts(
             named_providers=providers,
         )
         if provider is None:
+            if _has_tool_registry_file_diagnostics(diagnostics):
+                provider_diagnostics[normalized_provider_name] = diagnostics
             continue
         providers[normalized_provider_name] = provider
         provider_diagnostics[normalized_provider_name] = diagnostics

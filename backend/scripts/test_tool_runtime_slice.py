@@ -29973,6 +29973,239 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(artifacts["diagnostics"]["missing_registry_sources"], ())
         self.assertEqual(artifacts["diagnostics"]["missing_registry_files"], ())
 
+    def test_build_tool_registry_from_file_artifacts_reports_registry_source_relative_missing_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "configs"
+            root_dir.mkdir()
+            root_file = root_dir / "root-manifest.json"
+            missing_file = root_dir / "missing-source-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["missing_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "missing_suite": {
+                            "registry_file": "missing-source-registry.json",
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(artifacts["registry"], {})
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_sources"],
+            ("missing_suite",),
+        )
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
+    def test_build_tool_registry_from_file_artifacts_reports_registry_source_relative_named_provider_missing_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "configs"
+            root_dir.mkdir()
+            root_file = root_dir / "root-manifest.json"
+            missing_file = root_dir / "missing-provider-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["missing_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "missing_provider": {
+                            "registry_file": "missing-provider-registry.json",
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "missing_suite": {
+                            "provider": "missing_provider",
+                        }
+                    }
+                ),
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(artifacts["registry"], {})
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_sources"],
+            ("missing_suite",),
+        )
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
+    def test_build_tool_registry_from_file_artifacts_reports_registry_source_relative_loader_missing_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "configs"
+            root_dir.mkdir()
+            root_file = root_dir / "root-manifest.json"
+            missing_file = root_dir / "missing-loader-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["missing_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loaders_json=json.dumps(
+                    {
+                        "missing_loader": {
+                            "registry_file": "missing-loader-registry.json",
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "missing_suite": {
+                            "loader": "missing_loader",
+                        }
+                    }
+                ),
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(artifacts["registry"], {})
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_sources"],
+            ("missing_suite",),
+        )
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
+    def test_build_tool_registry_from_file_artifacts_reports_registry_source_relative_loader_factory_missing_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "configs"
+            root_dir.mkdir()
+            root_file = root_dir / "root-manifest.json"
+            missing_file = root_dir / "missing-loader-factory-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["missing_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "missing_loader_factory": {
+                            "registry_file": "missing-loader-factory-registry.json",
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "missing_suite": {
+                            "loader_factory": "missing_loader_factory",
+                        }
+                    }
+                ),
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(artifacts["registry"], {})
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_sources"],
+            ("missing_suite",),
+        )
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
+    def test_build_tool_registry_from_file_artifacts_reports_registry_source_relative_provider_factory_missing_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir) / "configs"
+            root_dir.mkdir()
+            root_file = root_dir / "root-manifest.json"
+            missing_file = root_dir / "missing-provider-factory-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["missing_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_factories_json=json.dumps(
+                    {
+                        "missing_provider_factory": {
+                            "registry_file": "missing-provider-factory-registry.json",
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "missing_suite": {
+                            "provider_factory": "missing_provider_factory",
+                        }
+                    }
+                ),
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(artifacts["registry"], {})
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_sources"],
+            ("missing_suite",),
+        )
+        self.assertEqual(
+            artifacts["diagnostics"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
     def test_build_tool_registry_from_file_artifacts_skips_registry_source_self_cycle(
         self,
     ) -> None:
@@ -30731,6 +30964,31 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval_fast",),
         )
 
+    def test_build_tool_registry_loaders_from_settings_artifacts_keeps_missing_file_diagnostics_when_loader_unbuilt(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing_file = Path(tmpdir) / "missing-loader-registry.json"
+            settings = SimpleNamespace(
+                tool_registry_loaders_json=json.dumps(
+                    {
+                        "file_loader": {
+                            "registry_file": str(missing_file),
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_loaders_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(artifacts["loaders"], {})
+        self.assertEqual(
+            artifacts["loader_diagnostics"]["file_loader"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
     def test_build_tool_registry_loader_factories_from_settings_artifacts_tracks_registry_file_diagnostics(
         self,
     ) -> None:
@@ -30766,6 +31024,31 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             )
 
         self.assertEqual(tuple(sorted(artifacts["loader_factories"])), ("file_factory",))
+        self.assertEqual(
+            artifacts["loader_factory_diagnostics"]["file_factory"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
+    def test_build_tool_registry_loader_factories_from_settings_artifacts_keeps_missing_file_diagnostics_when_factory_unbuilt(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing_file = Path(tmpdir) / "missing-loader-factory-registry.json"
+            settings = SimpleNamespace(
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(missing_file),
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_loader_factories_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(artifacts["loader_factories"], {})
         self.assertEqual(
             artifacts["loader_factory_diagnostics"]["file_factory"]["missing_registry_files"],
             (str(missing_file.resolve()),),
@@ -30809,6 +31092,31 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             artifacts["provider_factory_diagnostics"]["file_factory"]["missing_registry_dirs"],
             (str(missing_dir.resolve()),),
+        )
+
+    def test_build_tool_registry_provider_factories_from_settings_artifacts_keeps_missing_file_diagnostics_when_factory_unbuilt(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing_file = Path(tmpdir) / "missing-provider-factory-registry.json"
+            settings = SimpleNamespace(
+                tool_registry_provider_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(missing_file),
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_provider_factories_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(artifacts["provider_factories"], {})
+        self.assertEqual(
+            artifacts["provider_factory_diagnostics"]["file_factory"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
         )
 
     def test_build_tool_registry_providers_from_settings_artifacts_tracks_loader_factory_diagnostics(
@@ -30860,6 +31168,31 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             tuple(sorted(artifacts["providers"]["file_provider"].load_tool_registry())),
             ("calc_eval_fast",),
+        )
+
+    def test_build_tool_registry_providers_from_settings_artifacts_keeps_missing_file_diagnostics_when_provider_unbuilt(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing_file = Path(tmpdir) / "missing-provider-registry.json"
+            settings = SimpleNamespace(
+                tool_registry_providers_json=json.dumps(
+                    {
+                        "file_provider": {
+                            "registry_file": str(missing_file),
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_providers_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(artifacts["providers"], {})
+        self.assertEqual(
+            artifacts["provider_diagnostics"]["file_provider"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
         )
 
     def test_build_tool_registry_provider_sources_from_settings_artifacts_tracks_named_provider_diagnostics(self) -> None:
