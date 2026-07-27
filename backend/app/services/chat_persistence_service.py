@@ -2320,6 +2320,53 @@ def _coerce_export_payload_block_list_to_dicts(value: object) -> list[dict[str, 
     return rows
 
 
+def _normalize_export_payload_row_values(
+    row: dict[str, object],
+) -> dict[str, object]:
+    normalized_row = _normalize_trace_json_compatible_value(dict(row))
+    return normalized_row if isinstance(normalized_row, dict) else dict(row)
+
+
+def _normalize_export_payload_block_list_to_dicts(
+    value: object,
+) -> list[dict[str, object]]:
+    return [
+        _normalize_export_payload_row_values(row)
+        for row in _coerce_export_payload_block_list_to_dicts(value)
+    ]
+
+
+def _sanitize_task_rows_trace_summary_rows(value: object) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for row in _normalize_export_payload_block_list_to_dicts(value):
+        if "trace_preview" in row:
+            row["trace_preview"] = _sanitize_session_export_trace_preview_rows(
+                row.get("trace_preview")
+            )
+        rows.append(row)
+    return rows
+
+
+def _sanitize_session_export_payload_task_rows(
+    value: object,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for row in _normalize_export_payload_block_list_to_dicts(value):
+        task_summary = _coerce_export_payload_block_to_dict(row.get("task"))
+        if task_summary:
+            row["task"] = _normalize_export_payload_row_values(task_summary)
+        trace_summary = _coerce_export_payload_block_to_dict(row.get("trace"))
+        if trace_summary:
+            trace_summary = _normalize_export_payload_row_values(trace_summary)
+            if "preview" in trace_summary:
+                trace_summary["preview"] = _sanitize_session_export_trace_preview_rows(
+                    trace_summary.get("preview")
+                )
+            row["trace"] = trace_summary
+        rows.append(row)
+    return rows
+
+
 def _coerce_export_string_list(value: object) -> list[str]:
     if isinstance(value, UserList):
         value = value.data
@@ -2821,7 +2868,7 @@ def get_task_rows_trace_preview_summary(
                 "task_id": str(task_row.get("id", "")),
                 "trace_step_count": trace_step_count,
                 "rag_hit_count": rag_hit_count,
-                "trace_preview": _coerce_export_payload_block_list_to_dicts(
+                "trace_preview": _sanitize_session_export_trace_preview_rows(
                     preview_summary.get("trace_preview")
                 ),
             }
@@ -2847,7 +2894,7 @@ def get_task_rows_export_summary(
         preview_limit=preview_limit,
     )
     return {
-        "tasks": _coerce_export_payload_block_list_to_dicts(trace_summary.get("tasks")),
+        "tasks": _sanitize_task_rows_trace_summary_rows(trace_summary.get("tasks")),
         "trace_step_count": int(trace_summary.get("trace_step_count", 0) or 0),
         "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
         "governance": get_task_rows_governance_summary(task_rows),
@@ -2890,7 +2937,7 @@ def get_task_rows_session_export_summary(
                     ),
                     "step_count": int(trace_summary.get("trace_step_count", 0) or 0),
                     "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
-                    "preview": _coerce_export_payload_block_list_to_dicts(
+                    "preview": _sanitize_session_export_trace_preview_rows(
                         trace_summary.get("trace_preview")
                     ),
                 },
@@ -2921,7 +2968,9 @@ def get_session_export_payload_summary(
         task_rows,
         preview_limit=preview_limit,
     )
-    task_summaries = _coerce_export_payload_block_list_to_dicts(export_summary.get("tasks"))
+    task_summaries = _sanitize_session_export_payload_task_rows(
+        export_summary.get("tasks")
+    )
     stats_summary = _coerce_export_payload_block_to_dict(export_summary.get("stats"))
     export_message_rows = _coerce_export_payload_block_list_to_dicts(message_rows)
     message_summaries = [

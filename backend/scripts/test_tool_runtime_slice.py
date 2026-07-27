@@ -9349,6 +9349,48 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_get_task_rows_trace_preview_summary_redacts_plain_wrapped_preview_rows(
+        self,
+    ) -> None:
+        original_preview_helper = (
+            chat_persistence_module.get_task_trace_preview_summary_from_task
+        )
+        try:
+            chat_persistence_module.get_task_trace_preview_summary_from_task = (  # type: ignore[attr-defined]
+                lambda task, preview_limit=3: {
+                    "trace_step_count": 1,
+                    "rag_hit_count": 0,
+                    "trace_preview": [
+                        {
+                            "id": UserString(f"preview-{task.get('id')}"),
+                            "seq": 1,
+                            "type": UserString("action"),
+                            "title": UserString(
+                                "Provider Search [provider_search via http_json]"
+                            ),
+                            "content_excerpt": UserString(
+                                "Tool done: Provider Search "
+                                "query_params.access_token Bearer secret-token"
+                            ),
+                        }
+                    ],
+                }
+            )
+            payload = chat_persistence_module.get_task_rows_trace_preview_summary(  # type: ignore[attr-defined]
+                [{"id": "task-preview-plain-wrapped"}],
+                preview_limit=3,
+            )
+        finally:
+            chat_persistence_module.get_task_trace_preview_summary_from_task = original_preview_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload, ensure_ascii=False)
+        preview = payload["tasks"][0]["trace_preview"][0]
+        self.assertEqual(preview["id"], "preview-task-preview-plain-wrapped")
+        self.assertIn("[redacted]", preview["content_excerpt"])
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_task_rows_export_summary_reuses_shared_batch_helpers(
         self,
     ) -> None:
@@ -9481,6 +9523,63 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_get_task_rows_export_summary_normalizes_plain_wrapped_task_rows(
+        self,
+    ) -> None:
+        original_trace_preview_helper = (
+            chat_persistence_module.get_task_rows_trace_preview_summary
+        )
+        original_governance_helper = (
+            chat_persistence_module.get_task_rows_governance_summary
+        )
+
+        task_rows = [{"id": "task-export-plain-wrapped"}]
+        try:
+            chat_persistence_module.get_task_rows_trace_preview_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "tasks": [
+                        {
+                            "task_id": UserString("task-export-plain-wrapped"),
+                            "trace_step_count": 1,
+                            "rag_hit_count": 0,
+                            "trace_preview": [
+                                {
+                                    "id": UserString("preview-export-plain-wrapped"),
+                                    "seq": 1,
+                                    "type": UserString("action"),
+                                    "title": UserString(
+                                        "Provider Search [provider_search via http_json]"
+                                    ),
+                                    "content_excerpt": UserString(
+                                        "Tool done: Provider Search "
+                                        "query_params.access_token Bearer secret-token"
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                    "trace_step_count": 1,
+                    "rag_hit_count": 0,
+                }
+            )
+            chat_persistence_module.get_task_rows_governance_summary = (  # type: ignore[attr-defined]
+                lambda _rows: {"profiles": ["shared_summary_profile"]}
+            )
+            payload = chat_persistence_module.get_task_rows_export_summary(  # type: ignore[attr-defined]
+                task_rows,
+                preview_limit=5,
+            )
+        finally:
+            chat_persistence_module.get_task_rows_trace_preview_summary = original_trace_preview_helper  # type: ignore[attr-defined]
+            chat_persistence_module.get_task_rows_governance_summary = original_governance_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertEqual(payload["tasks"][0]["task_id"], "task-export-plain-wrapped")
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
 
     def test_get_task_rows_session_export_summary_reuses_shared_helpers(
         self,
@@ -9722,6 +9821,66 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_get_task_rows_session_export_summary_normalizes_plain_wrapped_trace_preview(
+        self,
+    ) -> None:
+        original_export_helper = chat_persistence_module.get_task_rows_export_summary
+
+        task_rows = [
+            {
+                "id": "task-session-export-plain-wrapped",
+                "prompt": "task plain wrapped",
+                "status": "completed",
+                "created_at": "2026-07-02T11:00:00",
+                "updated_at": "2026-07-02T11:01:00",
+                "usage_json": None,
+                "governance": None,
+            }
+        ]
+        try:
+            chat_persistence_module.get_task_rows_export_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "tasks": [
+                        {
+                            "task_id": UserString("task-session-export-plain-wrapped"),
+                            "trace_step_count": 1,
+                            "rag_hit_count": 0,
+                            "trace_preview": [
+                                {
+                                    "id": UserString("preview-session-plain-wrapped"),
+                                    "seq": 2,
+                                    "type": UserString("action"),
+                                    "title": UserString(
+                                        "Provider Search [provider_search via http_json]"
+                                    ),
+                                    "content_excerpt": UserString(
+                                        "Tool done: Provider Search "
+                                        "query_params.access_token Bearer secret-token"
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                    "trace_step_count": 1,
+                    "rag_hit_count": 0,
+                    "governance": None,
+                }
+            )
+            payload = chat_persistence_module.get_task_rows_session_export_summary(  # type: ignore[attr-defined]
+                task_rows,
+                preview_limit=5,
+            )
+        finally:
+            chat_persistence_module.get_task_rows_export_summary = original_export_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload, ensure_ascii=False)
+        preview = payload["tasks"][0]["trace"]["preview"][0]
+        self.assertEqual(preview["id"], "preview-session-plain-wrapped")
+        self.assertIn("[redacted]", preview["content_excerpt"])
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
 
     def test_get_task_rows_session_export_summary_accepts_model_dump_task_rows(
         self,
@@ -9965,6 +10124,77 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(payload["stats"]["trace_step_count"], 8)
         self.assertEqual(payload["stats"]["rag_hit_count"], 3)
 
+    def test_get_session_export_payload_summary_normalizes_plain_wrapped_task_rows(
+        self,
+    ) -> None:
+        original_session_export_helper = (
+            chat_persistence_module.get_task_rows_session_export_summary
+        )
+
+        try:
+            chat_persistence_module.get_task_rows_session_export_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "tasks": [
+                        {
+                            "task": {
+                                "id": UserString("task-session-payload-plain-wrapped"),
+                                "prompt": UserString("task one"),
+                                "status": UserString("completed"),
+                                "status_normalized": UserString("normalized::completed"),
+                                "status_label": UserString("label::completed"),
+                                "status_rank": 3,
+                                "created_at": UserString("2026-07-02T11:10:00"),
+                                "updated_at": UserString("2026-07-02T11:11:00"),
+                            },
+                            "usage": None,
+                            "trace": {
+                                "governance": None,
+                                "step_count": 1,
+                                "rag_hit_count": 0,
+                                "preview": [
+                                    {
+                                        "id": UserString("preview-payload-plain"),
+                                        "seq": 2,
+                                        "type": UserString("action"),
+                                        "title": UserString(
+                                            "Provider Search [provider_search via http_json]"
+                                        ),
+                                        "content_excerpt": UserString(
+                                            "Tool done: Provider Search "
+                                            "query_params.access_token Bearer secret-token"
+                                        ),
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                    "stats": {
+                        "task_count": 1,
+                        "trace_step_count": 1,
+                        "rag_hit_count": 0,
+                    },
+                    "governance": None,
+                }
+            )
+            payload = chat_persistence_module.get_session_export_payload_summary(  # type: ignore[attr-defined]
+                usage_summary={"tasks_total": 1},
+                task_rows=[],
+                message_rows=[],
+                preview_limit=7,
+            )
+        finally:
+            chat_persistence_module.get_task_rows_session_export_summary = original_session_export_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertEqual(
+            payload["tasks"][0]["task"]["id"],
+            "task-session-payload-plain-wrapped",
+        )
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_get_session_export_payload_summary_coerces_model_message_rows(
         self,
     ) -> None:
@@ -10023,6 +10253,55 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
         self.assertEqual(payload["stats"]["message_count"], 1)
+
+    def test_get_session_export_payload_summary_redacts_plain_wrapped_message_rows(
+        self,
+    ) -> None:
+        original_session_export_helper = (
+            chat_persistence_module.get_task_rows_session_export_summary
+        )
+
+        try:
+            chat_persistence_module.get_task_rows_session_export_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "tasks": [],
+                    "stats": {
+                        "task_count": 0,
+                        "trace_step_count": 0,
+                        "rag_hit_count": 0,
+                    },
+                    "governance": None,
+                }
+            )
+            payload = chat_persistence_module.get_session_export_payload_summary(  # type: ignore[attr-defined]
+                usage_summary={"tasks_total": 0},
+                task_rows=[],
+                message_rows=[
+                    {
+                        "id": UserString("message-payload-plain"),
+                        "task_id": UserString("task-payload-plain"),
+                        "role": UserString("assistant"),
+                        "content": UserString(
+                            "Provider Search [provider_search via http_json] "
+                            "failed response_path=$.data.access_token "
+                            "Bearer secret-token"
+                        ),
+                        "created_at": UserString("2026-07-02T11:12:00"),
+                    }
+                ],
+                preview_limit=7,
+            )
+        finally:
+            chat_persistence_module.get_task_rows_session_export_summary = original_session_export_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload["messages"], ensure_ascii=False)
+        self.assertEqual(payload["messages"][0]["id"], "message-payload-plain")
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
 
     def test_get_session_export_response_summary_plain_clones_governance_dicts(
         self,
@@ -35794,6 +36073,63 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("response_path=$.data.access_token", serialized)
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("client_secret", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
+    def test_get_task_export_payload_summary_redacts_plain_wrapped_message_rows(
+        self,
+    ) -> None:
+        original_export_helper = chat_persistence_module.get_task_export_summary_from_task
+
+        try:
+            chat_persistence_module.get_task_export_summary_from_task = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "task": {
+                        "id": "task-export-payload-plain-message",
+                        "session_id": "session-export-payload-plain-message",
+                        "prompt": "payload summary prompt",
+                        "status": "completed",
+                        "status_normalized": "normalized::completed",
+                        "status_label": "label::completed",
+                        "status_rank": 31,
+                        "created_at": "2026-07-21T09:20:00",
+                        "updated_at": "2026-07-21T09:21:00",
+                    },
+                    "usage": None,
+                    "trace": {
+                        "governance": None,
+                        "steps": [],
+                        "step_count": 0,
+                        "rag_hit_count": 0,
+                        "rag_knowledge_base_ids": [],
+                        "rag_chunks": [],
+                    },
+                }
+            )
+            payload = chat_persistence_module.get_task_export_payload_summary(  # type: ignore[attr-defined]
+                {"id": "task-export-payload-plain-message"},
+                [
+                    {
+                        "id": UserString("message-task-payload-plain"),
+                        "role": UserString("assistant"),
+                        "content": UserString(
+                            "Provider Search [provider_search via http_json] "
+                            "failed response_path=$.data.access_token "
+                            "Bearer secret-token"
+                        ),
+                        "created_at": UserString("2026-07-21T09:22:00"),
+                    }
+                ],
+            )
+        finally:
+            chat_persistence_module.get_task_export_summary_from_task = original_export_helper  # type: ignore[attr-defined]
+
+        serialized = json.dumps(payload["messages"], ensure_ascii=False)
+        self.assertEqual(payload["messages"][0]["id"], "message-task-payload-plain")
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("response_path=$.data.[redacted]", serialized)
+        self.assertNotIn("response_path=$.data.access_token", serialized)
+        self.assertNotIn("access_token", serialized)
         self.assertNotIn("Bearer", serialized)
         self.assertNotIn("secret-token", serialized)
 
