@@ -915,6 +915,401 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(parsed_query["source"], ["search_suite"])
         self.assertEqual(parsed_query["profile"], ["retrieval_only"])
 
+    def test_named_loader_file_backed_source_uses_selected_source_profile_in_http_json_request(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "loader-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "knowledge_base_id": "$.kb",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="search_suite",
+                    tool_registry_loaders_json=json.dumps(
+                        {
+                            "search_loader": {
+                                "registry_file": str(registry_file),
+                            }
+                        }
+                    ),
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "search_suite": {
+                                "loader": "search_loader",
+                                "profile": "retrieval_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return b'{"data":{"total":5,"kb":"loader-kb"}}'
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "loader risk"},
+                    prompt="search",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 5)
+        self.assertEqual(output["knowledge_base_id"], "loader-kb")
+        self.assertEqual(len(urlopen_calls), 1)
+        parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
+        self.assertEqual(parsed_query["source"], ["search_suite"])
+        self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+
+    def test_named_provider_loader_file_backed_source_uses_selected_source_profile_in_http_json_request(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "provider-loader-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "knowledge_base_id": "$.kb",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="search_suite",
+                    tool_registry_loaders_json=json.dumps(
+                        {
+                            "search_loader": {
+                                "registry_file": str(registry_file),
+                            }
+                        }
+                    ),
+                    tool_registry_providers_json=json.dumps(
+                        {
+                            "search_provider": {
+                                "loader": "search_loader",
+                            }
+                        }
+                    ),
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "search_suite": {
+                                "provider": "search_provider",
+                                "profile": "retrieval_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return b'{"data":{"total":6,"kb":"provider-loader-kb"}}'
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "loader chain"},
+                    prompt="search",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 6)
+        self.assertEqual(output["knowledge_base_id"], "provider-loader-kb")
+        self.assertEqual(len(urlopen_calls), 1)
+        parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
+        self.assertEqual(parsed_query["source"], ["search_suite"])
+        self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+
+    def test_loader_factory_file_backed_source_uses_selected_source_profile_in_http_json_request(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "loader-factory-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "knowledge_base_id": "$.kb",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="search_suite",
+                    tool_registry_loader_factories_json=json.dumps(
+                        {
+                            "search_loader_factory": {
+                                "registry_file": str(registry_file),
+                            }
+                        }
+                    ),
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "search_suite": {
+                                "loader_factory": "search_loader_factory",
+                                "profile": "retrieval_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return b'{"data":{"total":7,"kb":"loader-factory-kb"}}'
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "factory risk"},
+                    prompt="search",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 7)
+        self.assertEqual(output["knowledge_base_id"], "loader-factory-kb")
+        self.assertEqual(len(urlopen_calls), 1)
+        parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
+        self.assertEqual(parsed_query["source"], ["search_suite"])
+        self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+
+    def test_provider_factory_file_backed_source_uses_selected_source_profile_in_http_json_request(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "provider-factory-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "knowledge_base_id": "$.kb",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="search_suite",
+                    tool_registry_provider_factories_json=json.dumps(
+                        {
+                            "search_provider_factory": {
+                                "registry_file": str(registry_file),
+                            }
+                        }
+                    ),
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "search_suite": {
+                                "provider_factory": "search_provider_factory",
+                                "profile": "retrieval_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return b'{"data":{"total":8,"kb":"provider-factory-kb"}}'
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "provider factory"},
+                    prompt="search",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 8)
+        self.assertEqual(output["knowledge_base_id"], "provider-factory-kb")
+        self.assertEqual(len(urlopen_calls), 1)
+        parsed_query = parse_qs(urlparse(urlopen_calls[0].full_url).query)
+        self.assertEqual(parsed_query["source"], ["search_suite"])
+        self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+
     def _make_sensitive_http_json_action_step(
         self,
         *,

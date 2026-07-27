@@ -6858,6 +6858,17 @@ def build_tool_registry_loaders_from_settings_artifacts(
 ) -> dict[str, object]:
     if settings is None:
         settings = get_settings()
+    loader_source_name = get_tool_registry_provider_source_name_from_settings(
+        settings=settings
+    )
+    loader_profile_name = get_tool_registry_profile_name_from_settings(
+        settings=settings
+    )
+    loader_settings = _clone_tool_registry_provider_source_scoped_settings(
+        settings=settings,
+        provider_source_name=loader_source_name,
+        profile_name=loader_profile_name,
+    )
     raw_loaders = getattr(settings, "tool_registry_loaders_json", None)
     loader_specs = _parse_tool_registry_json_object_setting(raw_loaders)
     if loader_specs is None:
@@ -6889,7 +6900,8 @@ def build_tool_registry_loaders_from_settings_artifacts(
                 diagnostics,
                 build_tool_registry_loader_from_file_artifacts(
                     registry_file=registry_file,
-                    settings=settings,
+                    settings=loader_settings,
+                    provider_source_name=loader_source_name,
                 )["diagnostics"],
             )
         elif (
@@ -6905,13 +6917,13 @@ def build_tool_registry_loaders_from_settings_artifacts(
             _build_invalid_tool_execution_diagnostics(
                 messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
                     extra_tool_specs=spec.get("extra_tools"),
-                    settings=settings,
+                    settings=loader_settings,
                 )
             ),
         )
         loader = build_tool_registry_loader_adapter(
             spec=spec,
-            settings=settings,
+            settings=loader_settings,
             named_loaders=loaders,
         )
         if loader is None:
@@ -7205,6 +7217,9 @@ def build_tool_registry_loader_adapter(
         base_loader = build_tool_registry_loader_from_file(
             registry_file=registry_file,
             settings=settings,
+            provider_source_name=get_tool_registry_provider_source_name_from_settings(
+                settings=settings
+            ),
         )
         if base_loader is None:
             return None

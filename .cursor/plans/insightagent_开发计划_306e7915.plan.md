@@ -12,7 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1582/1582)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1586/1586)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
@@ -435,7 +435,8 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 356. File manifest `registry_sources` 的 settings-backed 相对路径解析也已补齐：manifest 引用 source/provider/loader/factory 时，这些 settings JSON 里的相对 `registry_file` 会按当前 manifest 所在目录解析，既能加载旁边的 child registry，也能把相对路径自引用稳定归入 `skipped_registry_sources`。
 357. File-backed registry artifacts 的失败诊断保留也已补齐：命名 loader/provider/factory 因缺失 registry file 无法构建时，只要已经收集到 missing/skipped/invalid diagnostics，就会保留在对应 artifact diagnostics map，并继续并回 `registry_sources` root diagnostics。
 358. File-backed provider source 的 named source 诊断链也已补齐：source 通过 `provider` 字段引用另一个 source 时，会按 named provider 优先、named source 其次的解析顺序继承 inner source diagnostics；`source -> source` 成功加载和缺失 registry file 都已覆盖。
-359. Provider/source file-backed 配置中的 effective profile 运行路径也已补齐：inline source extra_tools、source registry_file manifest、manifest 显式 profile override，以及 `source -> named provider -> registry_file` 都会把当前 source/profile 写入 HTTP JSON 请求模板和 preflight execution summary；real calc/search 的 header/query/body、response_path/result_fields、preview/output/summary 与 disabled tools 组合已覆盖，完整 backend slice 当前为 `1582/1582`。
+359. Provider/source file-backed 配置中的 effective profile 运行路径也已补齐：inline source extra_tools、source registry_file manifest、manifest 显式 profile override，以及 `source -> named provider -> registry_file` 都会把当前 source/profile 写入 HTTP JSON 请求模板和 preflight execution summary；real calc/search 的 header/query/body、response_path/result_fields、preview/output/summary 与 disabled tools 组合已覆盖。
+360. Settings-backed named loader 的 file-backed source/profile 运行路径也已补齐：`source -> named loader -> registry_file` 与 `source -> named provider -> named loader -> registry_file` 会复用 source-scoped loader settings，provider/loader factory file-backed 链路也已进入回归；完整 backend slice 当前为 `1586/1586`。
 
 ## 当前主线判断
 
