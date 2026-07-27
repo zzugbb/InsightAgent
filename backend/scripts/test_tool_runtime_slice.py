@@ -7540,6 +7540,59 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertNotIn("Bearer", serialized)
         self.assertNotIn("secret-token", serialized)
 
+    def test_get_task_response_summary_from_task_redacts_plain_wrapped_trace_json(
+        self,
+    ) -> None:
+        trace_json = UserString(
+            "bad trace payload Provider Search [provider_search via http_json] "
+            "response_path=$.data.access_token Bearer secret-token"
+        )
+
+        payload = chat_persistence_module.get_task_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": UserString("task-response-wrapped-trace-json-safe"),
+                "session_id": UserString("session-response-wrapped-trace-json-safe"),
+                "prompt": UserString("response wrapped trace json safe"),
+                "status": UserString("failed"),
+                "trace_json": trace_json,
+                "usage_json": None,
+                "created_at": UserString("2026-07-23T10:00:00"),
+                "updated_at": UserString("2026-07-23T10:01:00"),
+            }
+        )
+
+        serialized_payload = json.dumps(payload, ensure_ascii=False)
+        serialized_trace = str(payload["trace_json"])
+
+        self.assertIsInstance(payload["trace_json"], str)
+        self.assertIn("[redacted]", serialized_trace)
+        self.assertNotIn("UserString", serialized_payload)
+        self.assertNotIn("response_path=$.data.access_token", serialized_trace)
+        self.assertNotIn("access_token", serialized_trace)
+        self.assertNotIn("Bearer", serialized_trace)
+        self.assertNotIn("secret-token", serialized_trace)
+
+    def test_get_task_response_summary_from_task_normalizes_plain_wrapped_usage_json(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_task_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": UserString("task-response-wrapped-usage-json-safe"),
+                "session_id": UserString("session-response-wrapped-usage-json-safe"),
+                "prompt": UserString("response wrapped usage json safe"),
+                "status": UserString("completed"),
+                "trace_json": None,
+                "usage_json": UserString('{"total_tokens": 12}'),
+                "created_at": UserString("2026-07-23T10:02:00"),
+                "updated_at": UserString("2026-07-23T10:03:00"),
+            }
+        )
+
+        serialized_payload = json.dumps(payload, ensure_ascii=False)
+
+        self.assertEqual(payload["usage_json"], '{"total_tokens": 12}')
+        self.assertNotIn("UserString", serialized_payload)
+
     def test_get_task_response_summary_from_task_redacts_http_json_trace_json_label_only_url(
         self,
     ) -> None:

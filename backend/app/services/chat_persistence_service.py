@@ -2184,6 +2184,7 @@ def get_task_trace_delta_response_summary_from_task(
 
 
 def _sanitize_task_response_trace_json(trace_json: object) -> object:
+    trace_json = _coerce_trace_string_like_value(trace_json)
     if not isinstance(trace_json, str) or not trace_json.strip():
         return trace_json
     trace_steps = _load_parsed_trace_steps_from_trace_json(trace_json)
@@ -2200,6 +2201,7 @@ def _sanitize_task_response_trace_json(trace_json: object) -> object:
 
 def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
     task = _coerce_export_payload_block_to_dict(task)
+    usage_json = _coerce_trace_string_like_value(task.get("usage_json"))
     return {
         "id": str(task.get("id", "")),
         "session_id": str(task.get("session_id", "")),
@@ -2207,7 +2209,7 @@ def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
         **_get_task_status_summary_from_task(task),
         "governance": _normalize_task_governance_payload(task.get("governance")),
         "trace_json": _sanitize_task_response_trace_json(task.get("trace_json")),
-        "usage_json": task.get("usage_json"),
+        "usage_json": usage_json,
         "created_at": str(task.get("created_at", "")),
         "updated_at": str(task.get("updated_at", "")),
     }
