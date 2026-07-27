@@ -7236,6 +7236,8 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
     provider_artifacts: dict[str, object] | None = None
     loader_factory_artifacts: dict[str, object] | None = None
     provider_factory_artifacts: dict[str, object] | None = None
+    settings_backed_named_loaders = named_loaders is None
+    settings_backed_named_providers = named_providers is None
     if named_loaders is None:
         loader_artifacts = build_tool_registry_loaders_from_settings_artifacts(
             settings=settings
@@ -7275,6 +7277,47 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                 tool_registry_provider_source=source_name,
             )
         )
+        source_settings = _clone_tool_execution_settings(
+            settings=settings,
+            tool_registry_provider_source=normalized_source_name,
+        )
+        source_named_loaders = named_loaders
+        source_loader_diagnostics = loader_diagnostics
+        if settings_backed_named_loaders:
+            source_loader_artifacts = build_tool_registry_loaders_from_settings_artifacts(
+                settings=source_settings
+            )
+            source_named_loaders = source_loader_artifacts["loaders"]
+            source_loader_diagnostics = source_loader_artifacts["loader_diagnostics"]
+        source_loader_factory_artifacts = (
+            build_tool_registry_loader_factories_from_settings_artifacts(
+                settings=source_settings
+            )
+        )
+        source_loader_factory_diagnostics = source_loader_factory_artifacts[
+            "loader_factory_diagnostics"
+        ]
+        source_named_providers = named_providers
+        source_provider_diagnostics = provider_diagnostics
+        if settings_backed_named_providers:
+            source_provider_artifacts = build_tool_registry_providers_from_settings_artifacts(
+                settings=source_settings
+            )
+            source_named_providers = source_provider_artifacts["providers"]
+            source_provider_diagnostics = source_provider_artifacts[
+                "provider_diagnostics"
+            ]
+        source_provider_factory_artifacts = (
+            build_tool_registry_provider_factories_from_settings_artifacts(
+                settings=source_settings
+            )
+        )
+        source_provider_factory_diagnostics = source_provider_factory_artifacts[
+            "provider_factory_diagnostics"
+        ]
+        source_settings_execution_diagnostics = (
+            build_tool_registry_settings_execution_diagnostics(settings=source_settings)
+        )
         adapter_keys = {
             "provider_factory",
             "provider",
@@ -7310,58 +7353,63 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                     diagnostics,
                     build_tool_registry_provider_from_file_artifacts(
                         registry_file=registry_file,
-                        settings=settings,
+                        settings=source_settings,
                         provider_source_name=normalized_source_name,
                     )["diagnostics"],
                 )
             elif (
                 normalized_provider_reference is not None
-                and normalized_provider_reference in provider_diagnostics
+                and normalized_provider_reference in source_provider_diagnostics
             ):
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
-                    provider_diagnostics[normalized_provider_reference],
+                    source_provider_diagnostics[normalized_provider_reference],
                 )
             elif (
                 normalized_provider_factory_reference is not None
-                and normalized_provider_factory_reference in provider_factory_diagnostics
+                and normalized_provider_factory_reference
+                in source_provider_factory_diagnostics
             ):
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
-                    provider_factory_diagnostics[normalized_provider_factory_reference],
+                    source_provider_factory_diagnostics[
+                        normalized_provider_factory_reference
+                    ],
                 )
             elif (
                 normalized_loader_factory_reference is not None
-                and normalized_loader_factory_reference in loader_factory_diagnostics
+                and normalized_loader_factory_reference in source_loader_factory_diagnostics
             ):
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
-                    loader_factory_diagnostics[normalized_loader_factory_reference],
+                    source_loader_factory_diagnostics[
+                        normalized_loader_factory_reference
+                    ],
                 )
             elif (
                 normalized_loader_reference is not None
-                and normalized_loader_reference in loader_diagnostics
+                and normalized_loader_reference in source_loader_diagnostics
             ):
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
-                    loader_diagnostics[normalized_loader_reference],
+                    source_loader_diagnostics[normalized_loader_reference],
                 )
             diagnostics = _merge_tool_registry_file_diagnostics(
                 diagnostics,
                 _build_invalid_tool_execution_diagnostics(
                     messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
                         extra_tool_specs=spec.get("extra_tools"),
-                        settings=settings,
+                        settings=source_settings,
                     )
                 ),
-                settings_execution_diagnostics,
+                source_settings_execution_diagnostics,
             )
             provider = build_tool_registry_provider_adapter(
                 spec=spec,
-                settings=settings,
+                settings=source_settings,
                 provider_source_name=normalized_source_name,
-                named_loaders=named_loaders,
-                named_providers=named_providers,
+                named_loaders=source_named_loaders,
+                named_providers=source_named_providers,
                 named_sources=sources,
             )
             if provider is None:
@@ -7373,7 +7421,7 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
 
         extra_tools = build_tool_registry_extra_tools_from_specs(
             extra_tool_specs=spec,
-            settings=settings,
+            settings=source_settings,
             provider_source_name=normalized_source_name,
         )
         if not extra_tools:
@@ -7384,10 +7432,10 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
             _build_invalid_tool_execution_diagnostics(
                 messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
                     extra_tool_specs=spec,
-                    settings=settings,
+                    settings=source_settings,
                 )
             ),
-            settings_execution_diagnostics,
+            source_settings_execution_diagnostics,
         )
     return {
         "sources": sources,
