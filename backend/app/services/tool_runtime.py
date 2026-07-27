@@ -6164,6 +6164,7 @@ def _filter_tool_registry_json_object_setting_for_visited_registry_files(
     *,
     raw_value: object,
     visited_files: set[str],
+    base_dir: Path | None = None,
 ) -> tuple[object, bool, tuple[str, ...]]:
     specs = _parse_tool_registry_json_object_setting(raw_value)
     if specs is None:
@@ -6180,12 +6181,20 @@ def _filter_tool_registry_json_object_setting_for_visited_registry_files(
         registry_file = spec.get("registry_file")
         if isinstance(registry_file, str) and registry_file.strip():
             resolved_path = _resolve_tool_registry_file_path(
-                registry_file=registry_file
+                registry_file=registry_file,
+                base_dir=base_dir,
             )
             if resolved_path is not None and str(resolved_path) in visited_files:
                 changed = True
                 skipped_component_names.append(component_name)
                 continue
+            if (
+                resolved_path is not None
+                and base_dir is not None
+                and not Path(registry_file.strip()).expanduser().is_absolute()
+            ):
+                spec["registry_file"] = str(resolved_path)
+                changed = True
         filtered_specs[component_name] = spec
     if not changed:
         return raw_value, False, ()
@@ -6203,8 +6212,9 @@ def _clone_tool_registry_settings_without_visited_registry_file_components(
     *,
     settings: object | None,
     visited_files: set[str],
+    base_dir: Path | None = None,
 ) -> tuple[object | None, dict[str, tuple[str, ...]]]:
-    if not visited_files:
+    if not visited_files and base_dir is None:
         return settings, {}
 
     updates: dict[str, object] = {}
@@ -6222,6 +6232,7 @@ def _clone_tool_registry_settings_without_visited_registry_file_components(
             _filter_tool_registry_json_object_setting_for_visited_registry_files(
                 raw_value=raw_value,
                 visited_files=visited_files,
+                base_dir=base_dir,
             )
         )
         if raw_skipped_component_names:
@@ -6504,6 +6515,7 @@ def _build_tool_registry_from_file_registry(
             _clone_tool_registry_settings_without_visited_registry_file_components(
                 settings=source_settings,
                 visited_files=_visited_files,
+                base_dir=resolved_path.parent,
             )
         )
         skipped_registry_component_names = _expand_skipped_registry_file_component_names(
