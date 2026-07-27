@@ -5124,6 +5124,112 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_apply_tool_registry_preview_to_validate_response_includes_file_backed_real_calc_tool_details(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "validate-calc-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_math": {
+                                "template": "calc_eval",
+                                "label": "Provider Calculator",
+                                "kind": "provider_calc",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "method": "POST",
+                                    "url": "https://provider.example/${tool_registry_profile}/calc",
+                                    "headers": {
+                                        "Authorization": "Bearer ${tool_registry_profile}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
+                                    "query_params": {
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "json_body": {
+                                        "expression": "$expression",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "expression": "$.expression",
+                                        "result": "$.value",
+                                        "request_id": "$.request_id",
+                                    },
+                                },
+                                "result_preview_keys": ["expression", "result"],
+                                "result_output_keys": [
+                                    "expression",
+                                    "result",
+                                    "request_id",
+                                ],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            response = _apply_tool_registry_preview_to_validate_response(
+                result=SettingsValidateResponse(
+                    ok=True,
+                    mode="remote",
+                    provider="openai",
+                    model="gpt-4.1-mini",
+                    message="ok",
+                ),
+                effective_settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="calculator_suite",
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "calculator_suite": {
+                                "registry_file": str(registry_file),
+                                "profile": "calculator_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                ),
+            )
+
+        calculator_detail = next(
+            detail
+            for detail in response.available_tool_registry_provider_source_details
+            if detail.name == "calculator_suite"
+        )
+        provider_math = next(
+            tool for tool in calculator_detail.tool_details if tool.name == "provider_math"
+        )
+        self.assertEqual(calculator_detail.base_profile, "calculator_only")
+        self.assertEqual(provider_math.execution_kind, "http_json")
+        self.assertEqual(provider_math.semantic_kind, "local_calculator")
+        self.assertEqual(
+            provider_math.execution_summary,
+            {
+                "method": "POST",
+                "url_origin": "https://provider.example",
+                "url_path": "/calculator_only/calc",
+                "header_count": 2,
+                "query_param_count": 2,
+                "json_body_field_count": 3,
+                "response_path": "$.data",
+                "result_field_names": ["expression", "result", "request_id"],
+            },
+        )
+        self.assertEqual(
+            tuple(provider_math.effective_result_preview_keys),
+            ("expression", "result"),
+        )
+        self.assertEqual(
+            tuple(provider_math.effective_result_output_keys),
+            ("expression", "result", "request_id"),
+        )
+
     def test_apply_tool_registry_preview_to_validate_response_falls_back_result_output_keys_to_preview_keys_for_runtime_override_real_tools(
         self,
     ) -> None:
@@ -43072,6 +43178,123 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ),
         )
         self.assertEqual(len(trace_steps), 1)
+        self.assertEqual(persisted, [True])
+        self.assertEqual(len(audit_calls), 1)
+
+    def test_execute_configured_tool_registry_provider_preflight_model_surfaces_file_backed_real_calc_diagnostics(
+        self,
+    ) -> None:
+        trace_steps: list[dict[str, object]] = []
+        persisted: list[bool] = []
+        audit_calls: list[dict[str, object]] = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "calc-diagnostics-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_math": {
+                                "template": "calc_eval",
+                                "label": "Provider Calculator",
+                                "kind": "provider_calc",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "method": "POST",
+                                    "url": "https://provider.example/calc",
+                                    "headers": {
+                                        "Authorization": "Bearer ${settings_api_keey}",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
+                                    "json_body": {
+                                        "expression": "$expression",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "result": "$.value",
+                                    },
+                                },
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="calculator_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "calculator_suite": {
+                            "registry_file": str(registry_file),
+                            "profile": "calculator_only",
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=None,
+            )
+
+            result = execute_configured_tool_registry_provider_preflight_model(
+                settings=settings,
+                task_id="task-1",
+                step_id="step-registry",
+                seq=2,
+                model="mock-gpt",
+                trace_steps=trace_steps,
+                persist_trace_fn=lambda **kwargs: persisted.append(bool(kwargs["force"])),
+                record_audit_event_fn=lambda **kwargs: audit_calls.append(kwargs),
+            )
+
+        expected_diagnostic = (
+            "provider_math: http_json execution references unsupported runtime "
+            "template variable settings_api_keey in [redacted]"
+        )
+        expected_tool_diagnostic = (
+            "http_json execution references unsupported runtime template variable "
+            "settings_api_keey in [redacted]"
+        )
+        self.assertEqual(result.provider_source_name, "calculator_suite")
+        self.assertTrue(result.summary.has_diagnostics)
+        self.assertEqual(result.summary.diagnostics_total, 1)
+        self.assertEqual(
+            result.summary.diagnostics_summary["entries"],
+            (
+                {
+                    "kind": "invalid",
+                    "target": "tool_executions",
+                    "count": 1,
+                    "values": (expected_diagnostic,),
+                },
+            ),
+        )
+        provider_math_detail = next(
+            detail for detail in result.summary.tool_details if detail["name"] == "provider_math"
+        )
+        self.assertEqual(
+            provider_math_detail["execution_diagnostics"],
+            (expected_tool_diagnostic,),
+        )
+        self.assertEqual(
+            result.runtime_artifacts.selected_source_diagnostics["invalid_tool_executions"],
+            (expected_diagnostic,),
+        )
+        self.assertEqual(
+            trace_steps[0]["meta"]["tool_registry"]["total"],
+            1,
+        )
+        self.assertEqual(
+            trace_steps[0]["meta"]["tool_registry"]["entries"],
+            (
+                {
+                    "kind": "invalid",
+                    "target": "tool_executions",
+                    "count": 1,
+                    "values": (expected_diagnostic,),
+                },
+            ),
+        )
         self.assertEqual(persisted, [True])
         self.assertEqual(len(audit_calls), 1)
 
