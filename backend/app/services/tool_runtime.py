@@ -1224,6 +1224,25 @@ def build_tool_registry_extra_tools_from_specs(
     return build_tool_registry_extra_tools_from_settings(settings=extra_tools_settings)
 
 
+def _clone_tool_registry_provider_source_scoped_settings(
+    *,
+    settings: object | None,
+    provider_source_name: str | None,
+    profile_name: str | None = None,
+) -> object:
+    overrides: dict[str, object] = {}
+    if provider_source_name:
+        overrides["tool_registry_provider_source"] = provider_source_name
+    if profile_name:
+        overrides["tool_registry_profile"] = profile_name
+    if not overrides:
+        return settings or SimpleNamespace()
+    return _clone_tool_execution_settings(
+        settings=settings or SimpleNamespace(),
+        **overrides,
+    )
+
+
 def _coerce_tool_registry_spec_payload(raw_value: object) -> object:
     try:
         return _coerce_http_json_json_compatible_body(raw_value)
@@ -6474,13 +6493,9 @@ def _build_tool_registry_from_file_registry(
     if not isinstance(payload, Mapping):
         return {}
     payload = dict(payload)
-    source_settings = (
-        _clone_tool_execution_settings(
-            settings=settings or SimpleNamespace(),
-            tool_registry_provider_source=provider_source_name,
-        )
-        if provider_source_name
-        else settings
+    source_settings = _clone_tool_registry_provider_source_scoped_settings(
+        settings=settings,
+        provider_source_name=provider_source_name,
     )
 
     manifest_keys = {
@@ -6507,8 +6522,21 @@ def _build_tool_registry_from_file_registry(
 
     profile_name = get_tool_registry_profile_name_from_settings(
         settings=SimpleNamespace(
-            tool_registry_profile=payload.get("profile", "default"),
+            tool_registry_profile=payload.get(
+                "profile",
+                (
+                    getattr(source_settings, "tool_registry_profile", None)
+                    if provider_source_name
+                    else None
+                )
+                or "default",
+            ),
         )
+    )
+    source_settings = _clone_tool_registry_provider_source_scoped_settings(
+        settings=source_settings,
+        provider_source_name=provider_source_name,
+        profile_name=profile_name,
     )
     profile_config = build_tool_registry_profile_settings_config(profile_name=profile_name)
     disabled_tool_names = set(normalize_tool_registry_names(profile_config.disabled_tool_names))
@@ -7419,6 +7447,17 @@ def build_tool_registry_providers_from_settings_artifacts(
 ) -> dict[str, object]:
     if settings is None:
         settings = get_settings()
+    provider_source_name = get_tool_registry_provider_source_name_from_settings(
+        settings=settings
+    )
+    provider_profile_name = get_tool_registry_profile_name_from_settings(
+        settings=settings
+    )
+    provider_settings = _clone_tool_registry_provider_source_scoped_settings(
+        settings=settings,
+        provider_source_name=provider_source_name,
+        profile_name=provider_profile_name,
+    )
     raw_providers = getattr(settings, "tool_registry_providers_json", None)
     provider_specs = _parse_tool_registry_json_object_setting(raw_providers)
     if provider_specs is None:
@@ -7473,7 +7512,8 @@ def build_tool_registry_providers_from_settings_artifacts(
                 diagnostics,
                 build_tool_registry_provider_from_file_artifacts(
                     registry_file=registry_file,
-                    settings=settings,
+                    settings=provider_settings,
+                    provider_source_name=provider_source_name,
                 )["diagnostics"],
             )
         elif (
@@ -7513,13 +7553,14 @@ def build_tool_registry_providers_from_settings_artifacts(
             _build_invalid_tool_execution_diagnostics(
                 messages=_collect_invalid_tool_execution_messages_from_extra_tool_specs(
                     extra_tool_specs=spec.get("extra_tools"),
-                    settings=settings,
+                    settings=provider_settings,
                 )
             ),
         )
         provider = build_tool_registry_provider_adapter(
             spec=spec,
-            settings=settings,
+            settings=provider_settings,
+            provider_source_name=provider_source_name,
             named_loaders=named_loaders,
             named_providers=providers,
         )
@@ -7610,9 +7651,32 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                 tool_registry_provider_source=source_name,
             )
         )
+        adapter_keys = {
+            "provider_factory",
+            "provider",
+            "loader_factory",
+            "loader",
+            "registry_file",
+            "profile",
+            "disabled_tool_names",
+            "overrides",
+            "extra_tools",
+        }
+        source_profile_name = None
+        if any(key in spec for key in adapter_keys):
+            source_profile_name = get_tool_registry_profile_name_from_settings(
+                settings=SimpleNamespace(
+                    tool_registry_profile=spec.get("profile", "default"),
+                )
+            )
         source_settings = _clone_tool_execution_settings(
             settings=settings,
             tool_registry_provider_source=normalized_source_name,
+            **(
+                {"tool_registry_profile": source_profile_name}
+                if source_profile_name
+                else {}
+            ),
         )
         source_named_loaders = named_loaders
         source_loader_diagnostics = loader_diagnostics
@@ -7651,17 +7715,6 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
         source_settings_execution_diagnostics = (
             build_tool_registry_settings_execution_diagnostics(settings=source_settings)
         )
-        adapter_keys = {
-            "provider_factory",
-            "provider",
-            "loader_factory",
-            "loader",
-            "registry_file",
-            "profile",
-            "disabled_tool_names",
-            "overrides",
-            "extra_tools",
-        }
         if any(key in spec for key in adapter_keys):
             diagnostics = _empty_tool_registry_file_diagnostics()
             registry_file = spec.get("registry_file")
