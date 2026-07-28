@@ -265,11 +265,11 @@ def main() -> None:
     prompt_tokens = usage_payload.get("prompt_tokens")
     completion_tokens = usage_payload.get("completion_tokens")
     _assert(
-        isinstance(prompt_tokens, int | float) and float(prompt_tokens) >= 0,
+        isinstance(prompt_tokens, (int, float)) and float(prompt_tokens) >= 0,
         f"done usage prompt_tokens invalid: {usage_payload}",
     )
     _assert(
-        isinstance(completion_tokens, int | float) and float(completion_tokens) >= 0,
+        isinstance(completion_tokens, (int, float)) and float(completion_tokens) >= 0,
         f"done usage completion_tokens invalid: {usage_payload}",
     )
     prompt_source = usage_payload.get("prompt_tokens_source")

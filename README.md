@@ -132,7 +132,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
   - mock final answer 的 `Tool observations:` 汇总现在也会回收 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` 里的 JSON 字符串，并浅继承父级 semantic / request 上下文；因此半迁移 observation 只剩嵌套 preview 时，也会继续产出 real calc / real retrieval 摘要，不再退回 `output_preview=...` 或泄漏旁路字段。
   - runtime helper、governance/export、registry diagnostics 与 planner payload 归一化已收口对旁路结构化载荷的兼容；当前 provider planner 与真实 remote provider 已共享一套 response text / usage 提取语义，支持 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 `input_tokens/output_tokens` usage alias、脏 usage 值容错与流式 delta 文本字段变体。
 - 当前最近一次已记录校验基线：
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1653/1653`）
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1654/1654`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）
@@ -142,7 +142,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 通过（完整 Chromium e2e，`47/47`）
   - `git diff --check` 通过
-- 本轮收尾验证：新增 provider source 纯 `provider` 循环红测先失败（循环被吞成空 diagnostics），registry file `registry_sources` 指向该循环时也先失败（outer source 未标 skipped）；修复后 `-k source_provider_cycle` 通过（`2/2`），`-k provider_source` 通过（`64/64`），`-k tool_registry` 通过（`453/453`），`-k forward` 通过（`17/17`），`-k http_json` 通过（`505/505`），完整 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1653/1653`）；`cd backend && .venv/bin/python -c "from app.main import app; print(getattr(app, 'title', 'ok'))"` 通过（输出 `InsightAgent Backend`），`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`），`cd frontend && npm run build` 通过；根目录启动脚本依赖 Docker 拉起 postgres/chroma，但普通与提升权限 `docker compose ps` 均显示 Docker socket 不存在，完整栈 e2e 本轮仍不计为通过。
+- 本轮收尾验证：真实 Chromium 主路径 e2e 在同一受控命令生命周期内启动 backend 后通过（`workbench main path covers trace, rag and task/session export`，`1/1`）；随后 backend 主路径 e2e 先复现红点：`scripts/ci_run_backend_e2e.sh --phase main` 的 baseline 已通过，但 `backend/scripts/e2e_main_path.py` 在系统 `python3` 下执行 usage token 校验时因 `isinstance(x, int | float)` 失败。新增红测 `-k avoid_pep604_isinstance` 先失败（命中 268/272），修复为 tuple 类型判断后通过；`-k backend_e2e_scripts` 通过（`2/2`），完整 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1654/1654`），`bash scripts/test_ci_run_backend_e2e.sh` 通过，`cd frontend && node --test ...` 通过（`68/68`），`cd frontend && npm run build` 通过。backend 主路径 e2e 修复后重跑需要提升权限保持 backend 连接本地 PostgreSQL/Chroma，但审批通道两次断连/拒绝，故本轮不把 backend full e2e rerun 记为通过。
 
 ## 全仓库审计结论
 

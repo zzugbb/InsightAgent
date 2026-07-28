@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import ast
 import gzip
 import io
 import json
@@ -5958,6 +5959,35 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                         f"{script_path.name} should import cleanly when executed from repo root.\n"
                         f"stdout:\n{result.stdout}\n"
                         f"stderr:\n{result.stderr}"
+                    ),
+                )
+
+    def test_backend_e2e_scripts_avoid_pep604_isinstance_for_system_python(self) -> None:
+        repo_root = ROOT.parent
+        scripts = (
+            repo_root / "backend" / "scripts" / "e2e_main_path.py",
+        )
+
+        for script_path in scripts:
+            tree = ast.parse(script_path.read_text(encoding="utf-8"))
+            bad_lines = [
+                node.lineno
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "isinstance"
+                and len(node.args) >= 2
+                and isinstance(node.args[1], ast.BinOp)
+                and isinstance(node.args[1].op, ast.BitOr)
+            ]
+            with self.subTest(script=script_path.name):
+                self.assertEqual(
+                    bad_lines,
+                    [],
+                    msg=(
+                        f"{script_path.name} must run under the system python3 used by "
+                        f"scripts/ci_run_backend_e2e.sh; avoid PEP 604 unions inside "
+                        f"isinstance(...): {bad_lines}"
                     ),
                 )
 

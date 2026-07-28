@@ -12,13 +12,13 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1653/1653)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1654/1654)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
   frontend_chromium_e2e: cd frontend && npx playwright test --project=chromium --reporter=line --workers=1 (47/47)
   diff_check: git diff --check
-latest_validation_note: 本轮补齐 provider source 纯 provider 循环与 registry file registry_sources 外层传播；红测先复现 source artifacts 循环 diagnostics 为空、registry file 外层未标 skipped，修复后 source-provider 循环边进入 skipped_registry_sources，registry file 遇到已知 skipped source 不再误报 missing；验证 source_provider_cycle 2/2、provider_source 64/64、tool_registry 453/453、forward 17/17、http_json 505/505、完整 backend slice 1653/1653、backend ASGI import 输出 InsightAgent Backend、frontend node 68/68、frontend build 通过；根目录启动脚本依赖 Docker 拉起 postgres/chroma，但普通与提升权限 docker compose ps 均显示 Docker socket 不存在，完整栈 e2e 本轮不计为通过。
+latest_validation_note: 本轮推进真实 e2e 收尾；Docker postgres/chroma 已可用，Chromium 主路径 e2e 在同一受控命令生命周期内启动 backend 后通过 1/1；backend 主路径 e2e 先复现系统 python3 兼容红点，baseline 通过后 e2e_main_path.py 在 usage token 校验因 isinstance(x, int | float) 失败，新增 avoid_pep604_isinstance 红测先命中 268/272，修复为 tuple 类型判断后通过；验证 backend_e2e_scripts 2/2、完整 backend slice 1654/1654、ci_run_backend_e2e 编排测试通过、frontend node 68/68、frontend build 通过；backend 主路径 e2e 修复后重跑需要提升权限保持 backend 连接本地 PostgreSQL/Chroma，但审批通道两次断连/拒绝，本轮不把 backend full e2e rerun 记为通过。
 todos:
   - id: real-tool-execution
     status: in_progress
@@ -465,6 +465,7 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 385. Provider/source 里的 factory profile reset 运行路径也已补齐：selected source 通过 provider_factory、loader_factory 或 provider factory alias 显式声明 `profile=default` 时，provider adapter 会返回合成后的 effective registry，不再把内层 `retrieval_only` profile 的 disabled tools 继续带到运行时/tool details。完整 backend slice 当前为 `1653/1653`。
 386. Provider source 别名前向引用也已补齐：outer source 通过 `provider` 指向后声明 inner source 时，排序、resolver、skipped diagnostics 扩展与 source diagnostics 继承都会复用共享 provider-source normalizer；自定义 source alias 不再导致 selected source 静默退回 default provider 或丢失 inner file diagnostics。
 387. Provider source 纯 `provider` 循环 diagnostics 也已补齐：source artifacts 会把循环边记入 `skipped_registry_sources`，registry file `registry_sources` 外层遇到已知 skipped source 时也会继续标 skipped 而不是误报 missing；settings/preflight/registry-file diagnostics 在 source cycle 下保持一致。
+388. Backend 主路径 e2e 脚本的系统 `python3` 兼容也已补齐：`scripts/ci_run_backend_e2e.sh --phase main` 会用系统 `python3` 执行 `backend/scripts/e2e_main_path.py`，usage token 校验不再使用 `isinstance(x, int | float)` 这类对旧解释器不兼容的写法；新增 AST 红测守住 backend e2e 脚本内的 PEP 604 `isinstance` 误用，避免真实 e2e 在 trace/usage 校验前被脚本自身中断。完整 backend slice 当前为 `1654/1654`。
 
 ## 当前主线判断
 
