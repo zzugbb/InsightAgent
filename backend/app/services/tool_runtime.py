@@ -7680,16 +7680,16 @@ def build_tool_registry_provider_adapter(
             ),
         ),
     )
+    adapter_overrides = build_tool_registry(
+        base_registry=extra_tools or {},
+        overrides=source_overrides or None,
+    )
     return build_tool_registry_provider(
         provider=base_provider,
         loader=base_loader,
         overrides=build_tool_registry(
             base_registry=profile_config.overrides,
-            overrides=build_tool_registry(
-                base_registry=source_overrides,
-                overrides=extra_tools or None,
-            )
-            or None,
+            overrides=adapter_overrides or None,
         ),
         disabled_tool_names=tuple(sorted(disabled_tool_names)),
     )

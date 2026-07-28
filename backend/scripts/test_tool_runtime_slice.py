@@ -584,6 +584,136 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(request.get_header("X-source"), "search_suite")
         self.assertEqual(request.get_header("X-profile"), "retrieval_only")
 
+    def test_inline_provider_source_shorthand_overrides_keep_real_http_json_request_mapping(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="search_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "search_suite": {
+                            "profile": "retrieval_only",
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Base Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/base-search",
+                                    "method": "GET",
+                                    "headers": {
+                                        "X-Mode": "base",
+                                    },
+                                    "query_params": {
+                                        "q": "$query",
+                                        "mode": "base",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "knowledge_base_id": "$.kb",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            },
+                            "overrides": {
+                                "provider_search": {
+                                    "label": "Source Override Search",
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/override-search",
+                                        "method": "GET",
+                                        "headers": {
+                                            "X-Mode": "override",
+                                            "X-Profile": "$tool_registry_profile",
+                                        },
+                                        "query_params": {
+                                            "q": "$query",
+                                            "mode": "override",
+                                            "source": "$tool_registry_provider_source",
+                                            "profile": "$tool_registry_profile",
+                                        },
+                                        "response_path": "$.payload",
+                                        "result_fields": {
+                                            "documents_total": "$.count",
+                                            "knowledge_base_id": "$.kb",
+                                        },
+                                    },
+                                    "result_preview_keys": [
+                                        "documents_total",
+                                        "knowledge_base_id",
+                                    ],
+                                    "result_output_keys": [
+                                        "documents_total",
+                                        "knowledge_base_id",
+                                    ],
+                                    "runtime_semantic_kind": "provider_search",
+                                }
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=None,
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return b'{"payload":{"count":12,"kb":"override-kb"}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or FakeHttpResponse()
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "override mapping"},
+                prompt="search",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            output,
+            {
+                "documents_total": 12,
+                "knowledge_base_id": "override-kb",
+                "tool_kind": "provider_search",
+            },
+        )
+        self.assertEqual(len(urlopen_calls), 1)
+        request = urlopen_calls[0]
+        self.assertEqual(
+            request.full_url,
+            (
+                "https://provider.example/override-search?"
+                "q=override+mapping&mode=override&source=search_suite"
+                "&profile=retrieval_only"
+            ),
+        )
+        self.assertEqual(request.headers["X-mode"], "override")
+        self.assertEqual(request.headers["X-profile"], "retrieval_only")
+
     def test_execute_tool_plan_item_file_backed_provider_source_preserves_real_search_projection(
         self,
     ) -> None:
