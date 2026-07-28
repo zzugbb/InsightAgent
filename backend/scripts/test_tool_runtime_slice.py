@@ -34888,6 +34888,44 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
         self.assertEqual(artifacts["diagnostics"]["missing_registry_sources"], ())
 
+    def test_build_tool_registry_from_file_artifacts_skips_registry_source_provider_cycle(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_sources": ["outer_suite"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "outer_suite": {
+                            "provider": "inner_suite",
+                        },
+                        "inner_suite": {
+                            "provider": "outer_suite",
+                        },
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_from_file_artifacts(
+                registry_file=str(root_file),
+                settings=settings,
+            )
+
+        self.assertEqual(artifacts["registry"], {})
+        self.assertEqual(
+            artifacts["diagnostics"]["skipped_registry_sources"],
+            ("inner_suite", "outer_suite"),
+        )
+        self.assertEqual(artifacts["diagnostics"]["missing_registry_sources"], ())
+
     def test_build_tool_registry_providers_from_settings_accepts_registry_file_with_registry_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root_file = Path(tmpdir) / "root-manifest.json"
@@ -48638,6 +48676,44 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "calc_eval_fast"
             ].label,
             "Outer Calculator",
+        )
+
+    def test_build_tool_registry_provider_sources_from_settings_reports_source_provider_cycle_as_skipped(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "outer_suite": {
+                        "provider": "inner_suite",
+                    },
+                    "inner_suite": {
+                        "provider": "outer_suite",
+                    },
+                }
+            )
+        )
+
+        artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
+            settings=settings
+        )
+
+        self.assertEqual(artifacts["sources"], {})
+        self.assertEqual(
+            artifacts["source_diagnostics"]["outer_suite"]["skipped_registry_sources"],
+            ("inner_suite",),
+        )
+        self.assertEqual(
+            artifacts["source_diagnostics"]["inner_suite"]["skipped_registry_sources"],
+            ("outer_suite",),
+        )
+        self.assertEqual(
+            artifacts["source_diagnostics"]["outer_suite"]["missing_registry_sources"],
+            (),
+        )
+        self.assertEqual(
+            artifacts["source_diagnostics"]["inner_suite"]["missing_registry_sources"],
+            (),
         )
 
     def test_get_configured_tool_registry_provider_artifacts_reuses_shared_provider_source_name_helper_for_forward_source_diagnostics(

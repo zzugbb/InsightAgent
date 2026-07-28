@@ -1379,6 +1379,51 @@ def _order_tool_registry_provider_source_specs(
     return ordered
 
 
+def _find_tool_registry_provider_source_reference_cycle_edges(
+    source_specs: Mapping[object, object],
+) -> dict[str, str]:
+    source_references: dict[str, str] = {}
+    source_names: set[str] = set()
+    for source_name, spec in source_specs.items():
+        normalized_source_name = get_tool_registry_provider_source_name_from_settings(
+            settings=SimpleNamespace(
+                tool_registry_provider_source=source_name,
+            )
+        )
+        source_names.add(normalized_source_name)
+        spec = _coerce_tool_registry_spec_payload(spec)
+        if not isinstance(spec, Mapping):
+            continue
+        provider_reference = get_tool_registry_provider_source_name_from_settings(
+            settings=SimpleNamespace(
+                tool_registry_provider_source=spec.get("provider"),
+            )
+        )
+        source_references[normalized_source_name] = provider_reference
+
+    source_references = {
+        source_name: reference_name
+        for source_name, reference_name in source_references.items()
+        if reference_name in source_names
+    }
+    cycle_edges: dict[str, str] = {}
+    for source_name in source_references:
+        path: list[str] = []
+        path_indexes: dict[str, int] = {}
+        current_name = source_name
+        while current_name in source_references:
+            if current_name in path_indexes:
+                for cycle_name in path[path_indexes[current_name] :]:
+                    cycle_edges[cycle_name] = source_references[cycle_name]
+                break
+            if current_name in cycle_edges:
+                break
+            path_indexes[current_name] = len(path)
+            path.append(current_name)
+            current_name = source_references[current_name]
+    return cycle_edges
+
+
 def _order_tool_registry_provider_specs(
     provider_specs: Mapping[object, object],
 ) -> list[tuple[object, object]]:
@@ -6849,17 +6894,25 @@ def _build_tool_registry_from_file_registry(
                 continue
             source_provider = named_sources.get(normalized_source_name)
             source_diagnostic_values = source_diagnostics.get(normalized_source_name, {})
+            source_has_skipped_diagnostics = False
             if isinstance(source_diagnostic_values, dict):
                 for diagnostic_key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
                     diagnostic_values = source_diagnostic_values.get(diagnostic_key, ())
                     if not isinstance(diagnostic_values, (list, tuple)):
                         continue
+                    if diagnostic_key.startswith("skipped_") and diagnostic_values:
+                        source_has_skipped_diagnostics = True
                     _diagnostics[diagnostic_key].extend(
                         str(value)
                         for value in diagnostic_values
                         if str(value).strip()
                     )
             if source_provider is None:
+                if source_has_skipped_diagnostics:
+                    _diagnostics["skipped_registry_sources"].append(
+                        normalized_source_name
+                    )
+                    continue
                 _diagnostics["missing_registry_sources"].append(normalized_source_name)
                 continue
             _visited_sources.add(normalized_source_name)
@@ -8205,6 +8258,9 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
     settings_execution_diagnostics = build_tool_registry_settings_execution_diagnostics(
         settings=settings
     )
+    provider_source_reference_cycle_edges = (
+        _find_tool_registry_provider_source_reference_cycle_edges(source_specs)
+    )
     sources: dict[str, ToolRegistryProvider] = {}
     source_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
     for source_name, spec in _order_tool_registry_provider_source_specs(source_specs):
@@ -8300,6 +8356,9 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
             normalized_loader_reference = _normalize_named_tool_registry_component_name(
                 loader_reference
             )
+            cycle_reference = provider_source_reference_cycle_edges.get(
+                normalized_source_name
+            )
             if isinstance(registry_file, str) and registry_file.strip():
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
@@ -8316,6 +8375,17 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
                     source_provider_diagnostics[normalized_provider_reference],
+                )
+            elif (
+                cycle_reference is not None
+                and normalized_provider_reference not in source_named_providers
+            ):
+                diagnostics = _merge_tool_registry_file_diagnostics(
+                    diagnostics,
+                    {
+                        **_empty_tool_registry_file_diagnostics(),
+                        "skipped_registry_sources": (cycle_reference,),
+                    },
                 )
             elif (
                 normalized_provider_source_reference is not None
@@ -8364,6 +8434,12 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                 ),
                 source_settings_execution_diagnostics,
             )
+            if (
+                cycle_reference is not None
+                and normalized_provider_reference not in source_named_providers
+            ):
+                source_diagnostics[normalized_source_name] = diagnostics
+                continue
             provider = build_tool_registry_provider_adapter(
                 spec=spec,
                 settings=source_settings,

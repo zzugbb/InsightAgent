@@ -12,13 +12,13 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1651/1651)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1653/1653)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
   frontend_chromium_e2e: cd frontend && npx playwright test --project=chromium --reporter=line --workers=1 (47/47)
   diff_check: git diff --check
-latest_validation_note: 本轮补齐 provider source 别名前向引用收尾点；红测先复现 outer source 通过共享 provider-source helper 指向后声明 inner source 时未构建，修复后 provider-source 排序、resolver、skipped diagnostics 扩展与 source diagnostics 继承均复用共享 helper；验证 -k provider_source_name_helper_for_forward_source 2/2、provider_source 63/63、forward 17/17、tool_registry 451/451、http_json 505/505、完整 backend slice 1651/1651、backend ASGI import 输出 InsightAgent Backend、frontend node 68/68、frontend build 通过；Chromium main-path e2e 普通沙箱仍被 listen EPERM 127.0.0.1:3001 阻塞，提升权限后因后端 127.0.0.1:8000 未运行 ECONNREFUSED，docker compose ps 显示 Docker socket 不可用，本轮不计为 e2e 通过。
+latest_validation_note: 本轮补齐 provider source 纯 provider 循环与 registry file registry_sources 外层传播；红测先复现 source artifacts 循环 diagnostics 为空、registry file 外层未标 skipped，修复后 source-provider 循环边进入 skipped_registry_sources，registry file 遇到已知 skipped source 不再误报 missing；验证 source_provider_cycle 2/2、provider_source 64/64、tool_registry 453/453、forward 17/17、http_json 505/505、完整 backend slice 1653/1653、backend ASGI import 输出 InsightAgent Backend、frontend node 68/68、frontend build 通过；根目录启动脚本依赖 Docker 拉起 postgres/chroma，但普通与提升权限 docker compose ps 均显示 Docker socket 不存在，完整栈 e2e 本轮不计为通过。
 todos:
   - id: real-tool-execution
     status: in_progress
@@ -462,8 +462,9 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 382. Settings-backed named loader/provider 与 source adapter 自身的 override diagnostics 外围契约也已补齐：adapter `overrides` 中的 invalid HTTP JSON execution 会进入 loader/provider/source artifacts，并能继续并回 selected source diagnostics；真实工具注册、settings diagnostics 与 preflight 详情不再分叉。
 383. Settings-backed loader/provider factory 的 factory alias 外层治理也已补齐：outer factory 指向 inner file-backed factory 时，outer 自身的 profile/disabled/extra_tools/overrides 会继续套用到 inner registry；真实 HTTP JSON 请求 URL/header/query、response_path/result_fields 与 alias factory invalid execution diagnostics 不再因 alias 层丢失。
 384. Factory alias 指向 profile factory 后重新启用 disabled tool 的 diagnostics 也已补齐：outer factory 指向 `retrieval_only` 一类 profile factory、再通过 override `enabled=true` 恢复 `calc_eval` 时，factory artifacts 会以 default registry 为基准校验该 override 的 HTTP JSON execution，避免 settings/preflight 漏掉 re-enabled tool 的坏鉴权/header 配置。
-385. Provider/source 里的 factory profile reset 运行路径也已补齐：selected source 通过 provider_factory、loader_factory 或 provider factory alias 显式声明 `profile=default` 时，provider adapter 会返回合成后的 effective registry，不再把内层 `retrieval_only` profile 的 disabled tools 继续带到运行时/tool details。完整 backend slice 当前为 `1651/1651`。
+385. Provider/source 里的 factory profile reset 运行路径也已补齐：selected source 通过 provider_factory、loader_factory 或 provider factory alias 显式声明 `profile=default` 时，provider adapter 会返回合成后的 effective registry，不再把内层 `retrieval_only` profile 的 disabled tools 继续带到运行时/tool details。完整 backend slice 当前为 `1653/1653`。
 386. Provider source 别名前向引用也已补齐：outer source 通过 `provider` 指向后声明 inner source 时，排序、resolver、skipped diagnostics 扩展与 source diagnostics 继承都会复用共享 provider-source normalizer；自定义 source alias 不再导致 selected source 静默退回 default provider 或丢失 inner file diagnostics。
+387. Provider source 纯 `provider` 循环 diagnostics 也已补齐：source artifacts 会把循环边记入 `skipped_registry_sources`，registry file `registry_sources` 外层遇到已知 skipped source 时也会继续标 skipped 而不是误报 missing；settings/preflight/registry-file diagnostics 在 source cycle 下保持一致。
 
 ## 当前主线判断
 
