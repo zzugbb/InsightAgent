@@ -15912,8 +15912,6 @@ def normalize_tool_output_for_registration(
     registration: ToolRegistration,
 ) -> dict[str, object]:
     normalized_output = dict(output)
-    if _normalize_tool_execution_kind(registration.execution_kind) == "http_json":
-        normalized_output = _normalize_http_json_safe_output_shape(normalized_output)
     normalized_name = normalize_tool_registry_name(registration.name)
     default_registration = _REGISTERED_TOOLS.get(normalized_name)
     explicit_runtime_tool_kind = _normalize_runtime_semantic_kind(
@@ -15923,6 +15921,20 @@ def normalize_tool_output_for_registration(
     desired_tool_kind_text = (
         str(desired_tool_kind).strip() if desired_tool_kind is not None else ""
     )
+    if _normalize_tool_execution_kind(registration.execution_kind) == "http_json":
+        normalized_output = _normalize_http_json_safe_output_shape(normalized_output)
+        if (
+            desired_tool_kind_text
+            and "documents_total" not in normalized_output
+            and _http_json_output_implies_retrieval_count(
+                {"tool_kind": desired_tool_kind_text}
+            )
+        ):
+            for alias_name in ("data", "records"):
+                alias_value = normalized_output.get(alias_name)
+                if isinstance(alias_value, (list, tuple)):
+                    normalized_output["documents_total"] = len(alias_value)
+                    break
     if not desired_tool_kind_text:
         return normalized_output
     if (
