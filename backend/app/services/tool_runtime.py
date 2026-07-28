@@ -7241,14 +7241,12 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
                 if _has_tool_registry_file_diagnostics(diagnostics):
                     factory_diagnostics[normalized_factory_name] = diagnostics
                 continue
+            factory_spec = dict(spec)
             factories[normalized_factory_name] = (
-                lambda settings=None, registry_file=registry_file: (
-                    build_tool_registry_loader_from_file(
-                        registry_file=registry_file,
+                lambda settings=None, factory_spec=factory_spec: (
+                    build_tool_registry_loader_adapter(
+                        spec=factory_spec,
                         settings=settings,
-                        provider_source_name=get_tool_registry_provider_source_name_from_settings(
-                            settings=settings
-                        ),
                     )
                     or (lambda: {})
                 )
@@ -7353,10 +7351,11 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
                 if _has_tool_registry_file_diagnostics(diagnostics):
                     factory_diagnostics[normalized_factory_name] = diagnostics
                 continue
+            factory_spec = dict(spec)
             factories[normalized_factory_name] = (
-                lambda settings=None, registry_file=registry_file: (
-                    build_tool_registry_provider_from_file(
-                        registry_file=registry_file,
+                lambda settings=None, factory_spec=factory_spec: (
+                    build_tool_registry_provider_adapter(
+                        spec=factory_spec,
                         settings=settings,
                         provider_source_name=get_tool_registry_provider_source_name_from_settings(
                             settings=settings

@@ -2019,6 +2019,158 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_loader_factory_file_backed_source_applies_factory_overrides_to_http_json_request(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "loader-factory-override-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/base-search",
+                                    "method": "GET",
+                                    "headers": {
+                                        "X-Mode": "base",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
+                                    "query_params": {
+                                        "q": "$query",
+                                        "mode": "base",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "knowledge_base_id": "$.kb",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="search_suite",
+                    tool_registry_loader_factories_json=json.dumps(
+                        {
+                            "search_factory": {
+                                "registry_file": str(registry_file),
+                                "overrides": {
+                                    "provider_search": {
+                                        "label": "Factory Override Search",
+                                        "execution": {
+                                            "kind": "http_json",
+                                            "url": "https://provider.example/factory-search",
+                                            "method": "GET",
+                                            "headers": {
+                                                "X-Mode": "factory",
+                                                "X-Provider-Source": "$tool_registry_provider_source",
+                                                "X-Profile": "$tool_registry_profile",
+                                            },
+                                            "query_params": {
+                                                "q": "$query",
+                                                "mode": "factory",
+                                                "source": "$tool_registry_provider_source",
+                                                "profile": "$tool_registry_profile",
+                                            },
+                                            "response_path": "$.payload",
+                                            "result_fields": {
+                                                "documents_total": "$.count",
+                                                "knowledge_base_id": "$.kb",
+                                            },
+                                        },
+                                        "result_preview_keys": [
+                                            "documents_total",
+                                            "knowledge_base_id",
+                                        ],
+                                        "result_output_keys": [
+                                            "documents_total",
+                                            "knowledge_base_id",
+                                        ],
+                                        "runtime_semantic_kind": "provider_search",
+                                    }
+                                },
+                            }
+                        }
+                    ),
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "search_suite": {
+                                "loader_factory": "search_factory",
+                                "profile": "retrieval_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return b'{"payload":{"count":13,"kb":"factory-kb"}}'
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "factory override"},
+                    prompt="search",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            output,
+            {
+                "documents_total": 13,
+                "knowledge_base_id": "factory-kb",
+                "tool_kind": "provider_search",
+            },
+        )
+        self.assertEqual(len(urlopen_calls), 1)
+        request = urlopen_calls[0]
+        self.assertEqual(
+            request.full_url,
+            (
+                "https://provider.example/factory-search?"
+                "q=factory+override&mode=factory&source=search_suite"
+                "&profile=retrieval_only"
+            ),
+        )
+        self.assertEqual(request.headers["X-mode"], "factory")
+        self.assertEqual(request.headers["X-provider-source"], "search_suite")
+        self.assertEqual(request.headers["X-profile"], "retrieval_only")
+
     def test_provider_factory_file_backed_source_uses_selected_source_profile_in_http_json_request(
         self,
     ) -> None:
@@ -2136,6 +2288,158 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "profile": "retrieval_only",
             },
         )
+
+    def test_provider_factory_file_backed_source_applies_factory_overrides_to_http_json_request(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "provider-factory-override-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/base-provider-search",
+                                    "method": "GET",
+                                    "headers": {
+                                        "X-Mode": "base",
+                                        "X-Provider-Source": "$tool_registry_provider_source",
+                                    },
+                                    "query_params": {
+                                        "q": "$query",
+                                        "mode": "base",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "knowledge_base_id": "$.kb",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_provider = get_configured_tool_registry_provider(
+                settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="search_suite",
+                    tool_registry_provider_factories_json=json.dumps(
+                        {
+                            "search_factory": {
+                                "registry_file": str(registry_file),
+                                "overrides": {
+                                    "provider_search": {
+                                        "label": "Provider Factory Override Search",
+                                        "execution": {
+                                            "kind": "http_json",
+                                            "url": "https://provider.example/provider-factory-search",
+                                            "method": "GET",
+                                            "headers": {
+                                                "X-Mode": "provider-factory",
+                                                "X-Provider-Source": "$tool_registry_provider_source",
+                                                "X-Profile": "$tool_registry_profile",
+                                            },
+                                            "query_params": {
+                                                "q": "$query",
+                                                "mode": "provider-factory",
+                                                "source": "$tool_registry_provider_source",
+                                                "profile": "$tool_registry_profile",
+                                            },
+                                            "response_path": "$.payload",
+                                            "result_fields": {
+                                                "documents_total": "$.count",
+                                                "knowledge_base_id": "$.kb",
+                                            },
+                                        },
+                                        "result_preview_keys": [
+                                            "documents_total",
+                                            "knowledge_base_id",
+                                        ],
+                                        "result_output_keys": [
+                                            "documents_total",
+                                            "knowledge_base_id",
+                                        ],
+                                        "runtime_semantic_kind": "provider_search",
+                                    }
+                                },
+                            }
+                        }
+                    ),
+                    tool_registry_provider_sources_json=json.dumps(
+                        {
+                            "search_suite": {
+                                "provider_factory": "search_factory",
+                                "profile": "retrieval_only",
+                            }
+                        }
+                    ),
+                    tool_registry_overrides_json=None,
+                    tool_registry_extra_tools_json=None,
+                )
+            )
+            urlopen_calls: list[object] = []
+
+            class FakeHttpResponse:
+                def read(self) -> bytes:
+                    return b'{"payload":{"count":14,"kb":"provider-factory-kb"}}'
+
+                def __enter__(self) -> "FakeHttpResponse":
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+            original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+            try:
+                tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                    urlopen_calls.append(request)
+                    or FakeHttpResponse()
+                )
+
+                output = run_tool(
+                    name="provider_search",
+                    tool_input={"query": "provider factory override"},
+                    prompt="search",
+                    user_id="user-1",
+                    attempt=0,
+                    registry_provider=registry_provider,
+                )
+            finally:
+                if original_urlopen is None:
+                    delattr(tool_runtime_module, "urlopen")
+                else:
+                    tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            output,
+            {
+                "documents_total": 14,
+                "knowledge_base_id": "provider-factory-kb",
+                "tool_kind": "provider_search",
+            },
+        )
+        self.assertEqual(len(urlopen_calls), 1)
+        request = urlopen_calls[0]
+        self.assertEqual(
+            request.full_url,
+            (
+                "https://provider.example/provider-factory-search?"
+                "q=provider+factory+override&mode=provider-factory"
+                "&source=search_suite&profile=retrieval_only"
+            ),
+        )
+        self.assertEqual(request.headers["X-mode"], "provider-factory")
+        self.assertEqual(request.headers["X-provider-source"], "search_suite")
+        self.assertEqual(request.headers["X-profile"], "retrieval_only")
 
     def test_named_loader_file_backed_source_preflight_summary_uses_selected_source_profile(
         self,
