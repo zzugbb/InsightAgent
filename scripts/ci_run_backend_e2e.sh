@@ -79,13 +79,21 @@ run_cmd() {
   fi
 }
 
+shell_quote() {
+  printf "%q" "$1"
+}
+
+quoted_backend_e2e_python="$(shell_quote "${backend_e2e_python}")"
+quoted_base_url="$(shell_quote "${base_url}")"
+quoted_log_dir="$(shell_quote "${log_dir}")"
+
 cd "${repo_root}"
 
 if [ "${phase}" = "main" ]; then
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_baseline.py --base-url ${base_url} | tee ${log_dir}/e2e-baseline-${log_suffix}.log"
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_main_path.py --base-url ${base_url} | tee ${log_dir}/e2e-main-path-${log_suffix}.log"
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_export_consistency.py --base-url ${base_url} | tee ${log_dir}/e2e-export-consistency-${log_suffix}.log"
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --skip-timeout | tee ${log_dir}/e2e-cancel-${log_suffix}.log"
+  run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_baseline.py --base-url ${quoted_base_url} | tee ${quoted_log_dir}/e2e-baseline-${log_suffix}.log"
+  run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_main_path.py --base-url ${quoted_base_url} | tee ${quoted_log_dir}/e2e-main-path-${log_suffix}.log"
+  run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_export_consistency.py --base-url ${quoted_base_url} | tee ${quoted_log_dir}/e2e-export-consistency-${log_suffix}.log"
+  run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${quoted_base_url} --skip-timeout | tee ${quoted_log_dir}/e2e-cancel-${log_suffix}.log"
 else
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --cancel-prompt-words 180000 --timeout-prompt-words 250000 | tee ${log_dir}/e2e-timeout-${log_suffix}.log"
+  run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${quoted_base_url} --cancel-prompt-words 180000 --timeout-prompt-words 250000 | tee ${quoted_log_dir}/e2e-timeout-${log_suffix}.log"
 fi

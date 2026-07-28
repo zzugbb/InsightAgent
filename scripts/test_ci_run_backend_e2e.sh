@@ -55,6 +55,12 @@ run_tests() {
   expect_pass bash -c "cd '${TMP_DIR}' && bash '${SCRIPT_PATH}' --phase main --base-url http://127.0.0.1:8000 --log-dir relative-e2e-logs --dry-run" > "${TMP_DIR}/main-relative-log-dir.out"
   assert_contains "tee ${TMP_DIR}/relative-e2e-logs/e2e-main-path-8000.log" "${TMP_DIR}/main-relative-log-dir.out"
 
+  space_log_dir="${TMP_DIR}/e2e logs"
+  quoted_space_log_dir="$(printf "%q" "${space_log_dir}")"
+  expect_pass bash "${SCRIPT_PATH}" --phase main --base-url "http://127.0.0.1:9001/api?token=a b&mode=test" --log-dir "${space_log_dir}" --dry-run > "${TMP_DIR}/quoted.out"
+  assert_contains "--base-url http://127.0.0.1:9001/api\\?token=a\\ b\\&mode=test" "${TMP_DIR}/quoted.out"
+  assert_contains "tee ${quoted_space_log_dir}/e2e-main-path-9001.log" "${TMP_DIR}/quoted.out"
+
   echo "ci_run_backend_e2e tests passed"
 }
 
