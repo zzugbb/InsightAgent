@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 phase=""
 api_base_url=""
 frontend_base_url=""
@@ -44,6 +45,10 @@ fi
 if [ "${phase}" != "smoke" ] && [ "${phase}" != "full" ] && [ "${phase}" != "rerun-last-failed" ]; then
   echo "invalid --phase: ${phase} (expected smoke|full|rerun-last-failed)" >&2
   exit 2
+fi
+
+if [ "${frontend_dir#/}" = "${frontend_dir}" ]; then
+  frontend_dir="${repo_root}/${frontend_dir}"
 fi
 
 if [ ! -d "${frontend_dir}" ] && [ "${dry_run}" != "1" ]; then

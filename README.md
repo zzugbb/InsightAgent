@@ -142,7 +142,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 通过（完整 Chromium e2e，`47/47`）
   - `git diff --check` 通过
-- 本轮收尾验证：backend e2e tooling 继续收口。新增红测先复现从非仓库根目录传相对 `--log-dir` 时，dry-run 仍把 `tee` 目标留成相对路径；修复后 log dir 会在切回 repo root 前归一成调用目录下的绝对路径。新增红测还复现 `--base-url http://127.0.0.1:9000` 仍写 `e2e-main-path-8000.log`；修复后 backend e2e 日志后缀会从 base URL 派生。验证 `bash scripts/test_ci_run_backend_e2e.sh`、`bash scripts/test_ci_e2e_tooling.sh`、完整 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1654/1654`）、前端 node 测试通过（`68/68`）、`cd frontend && npm run build` 通过。Docker 依赖服务已确认运行，但“启动 backend + 跑 backend e2e”的提权长命令审批通道断连/拒绝，故本轮仍不把 backend full e2e rerun 记为通过。
+- 本轮收尾验证：backend/full-stack e2e 阻塞已解除，Docker postgres/chroma 已通过提权确认运行；同一受控命令生命周期内启动 backend 后，`bash scripts/ci_run_backend_e2e.sh --phase main --base-url http://127.0.0.1:8000` 通过，覆盖 baseline、main path、export consistency 与 cancel-timeout skip-timeout；完整 Chromium 前端 e2e 也在同一 backend 生命周期内通过（`47/47`）。本轮继续补齐 frontend e2e runner 的 cwd 漂移边界：红测先复现从非仓库根目录调用 `ci_run_frontend_e2e.sh --dry-run` 仍输出 `cd frontend`，修复后相对 `--frontend-dir` 会解析到 repo root。验证 `bash scripts/test_ci_run_frontend_e2e.sh`、`bash scripts/test_ci_run_backend_e2e.sh`、`bash scripts/test_ci_e2e_tooling.sh`、完整 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1654/1654`）、前端 node 测试通过（`68/68`）、`cd frontend && npm run build` 通过。
 
 ## 全仓库审计结论
 
