@@ -139,7 +139,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
   - 后端 mock final-answer observation parser 现在也会恢复 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串；因此前端最终回答在旧 observation 只剩嵌套 preview 时，也会继续显示 real calc / real retrieval 摘要，而不是 `output_preview=...` 或旁路字段。
 - 当前最近一次已记录校验基线：
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1653/1653`）
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1654/1654`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）
@@ -149,7 +149,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 通过（完整 Chromium e2e，`47/47`）
   - `git diff --check` 通过
-- 本轮收尾验证：真实 Chromium 主路径 e2e 在同一受控命令生命周期内启动 backend 后通过（`workbench main path covers trace, rag and task/session export`，`1/1`）；随后 backend 主路径 e2e 先复现红点：`scripts/ci_run_backend_e2e.sh --phase main` 的 baseline 已通过，但 `backend/scripts/e2e_main_path.py` 在系统 `python3` 下执行 usage token 校验时因 `isinstance(x, int | float)` 失败。新增红测 `-k avoid_pep604_isinstance` 先失败（命中 268/272），修复为 tuple 类型判断后通过；`-k backend_e2e_scripts` 通过（`2/2`），完整 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1654/1654`），`bash scripts/test_ci_run_backend_e2e.sh` 通过，`cd frontend && node --test ...` 通过（`68/68`），`cd frontend && npm run build` 通过。backend 主路径 e2e 修复后重跑需要提升权限保持 backend 连接本地 PostgreSQL/Chroma，但审批通道两次断连/拒绝，故本轮不把 backend full e2e rerun 记为通过。
+- 本轮收尾验证：backend e2e tooling 已改为优先使用 `backend/.venv/bin/python`，避免主路径脚本漂移到系统 `python3`；红测先复现 dry-run 仍输出 `python3 backend/scripts/e2e_main_path.py`，修复后 `bash scripts/test_ci_run_backend_e2e.sh` 与聚合 `bash scripts/test_ci_e2e_tooling.sh` 通过，且从非仓库根目录调用 dry-run 也能回到 repo root 生成 venv-backed 命令。完整 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1654/1654`），前端 node 测试通过（`68/68`），`cd frontend && npm run build` 通过。Docker socket 普通访问仍被沙箱拒绝，提权审批通道断连/拒绝，故本轮仍不把 backend full e2e rerun 记为通过。
 
 ## 全仓库审计结论
 

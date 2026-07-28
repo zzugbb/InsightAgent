@@ -2,10 +2,12 @@
 
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 phase=""
 base_url=""
 log_dir="/tmp"
 dry_run="0"
+backend_e2e_python="${BACKEND_E2E_PYTHON:-}"
 
 usage() {
   cat <<'USAGE'
@@ -46,6 +48,14 @@ fi
 
 mkdir -p "${log_dir}"
 
+if [ -z "${backend_e2e_python}" ]; then
+  if [ -x "${repo_root}/backend/.venv/bin/python" ]; then
+    backend_e2e_python="backend/.venv/bin/python"
+  else
+    backend_e2e_python="python3"
+  fi
+fi
+
 run_cmd() {
   local cmd="$1"
   if [ "${dry_run}" = "1" ]; then
@@ -55,11 +65,13 @@ run_cmd() {
   fi
 }
 
+cd "${repo_root}"
+
 if [ "${phase}" = "main" ]; then
-  run_cmd "python3 backend/scripts/e2e_baseline.py --base-url ${base_url} | tee ${log_dir}/e2e-baseline-8000.log"
-  run_cmd "python3 backend/scripts/e2e_main_path.py --base-url ${base_url} | tee ${log_dir}/e2e-main-path-8000.log"
-  run_cmd "python3 backend/scripts/e2e_export_consistency.py --base-url ${base_url} | tee ${log_dir}/e2e-export-consistency-8000.log"
-  run_cmd "python3 backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --skip-timeout | tee ${log_dir}/e2e-cancel-8000.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_baseline.py --base-url ${base_url} | tee ${log_dir}/e2e-baseline-8000.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_main_path.py --base-url ${base_url} | tee ${log_dir}/e2e-main-path-8000.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_export_consistency.py --base-url ${base_url} | tee ${log_dir}/e2e-export-consistency-8000.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --skip-timeout | tee ${log_dir}/e2e-cancel-8000.log"
 else
-  run_cmd "python3 backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --cancel-prompt-words 180000 --timeout-prompt-words 250000 | tee ${log_dir}/e2e-timeout-8010.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --cancel-prompt-words 180000 --timeout-prompt-words 250000 | tee ${log_dir}/e2e-timeout-8010.log"
 fi
