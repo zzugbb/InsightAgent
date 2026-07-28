@@ -403,6 +403,26 @@ _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS = (
     "missing_registry_dirs",
     "invalid_tool_executions",
 )
+_TOOL_REGISTRY_LOADER_ADAPTER_KEYS = {
+    "loader_factory",
+    "loader",
+    "registry_file",
+    "profile",
+    "disabled_tool_names",
+    "overrides",
+    "extra_tools",
+}
+_TOOL_REGISTRY_PROVIDER_ADAPTER_KEYS = {
+    "provider_factory",
+    "provider",
+    "loader_factory",
+    "loader",
+    "registry_file",
+    "profile",
+    "disabled_tool_names",
+    "overrides",
+    "extra_tools",
+}
 _HTTP_JSON_ALLOWED_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 _TOOL_TIMEOUT_MAX_MS = 2_147_483_647
 _HTTP_JSON_ERROR_BODY_PREVIEW_MAX_LENGTH = 240
@@ -1271,6 +1291,32 @@ def _parse_tool_registry_json_object_setting(raw_value: object) -> dict[str, obj
     if not isinstance(parsed_value, Mapping):
         return None
     return dict(parsed_value)
+
+
+def _merge_inline_tool_registry_extra_tool_specs(
+    spec: dict[str, object],
+    *,
+    adapter_keys: set[str],
+) -> dict[str, object]:
+    if not any(key in spec for key in adapter_keys):
+        return spec
+    inline_extra_tool_specs = {
+        key: value for key, value in spec.items() if key not in adapter_keys
+    }
+    if not inline_extra_tool_specs:
+        return spec
+    merged_spec = dict(spec)
+    configured_extra_tools = _coerce_tool_registry_spec_payload(
+        merged_spec.get("extra_tools")
+    )
+    if isinstance(configured_extra_tools, Mapping):
+        merged_spec["extra_tools"] = {
+            **inline_extra_tool_specs,
+            **dict(configured_extra_tools),
+        }
+    else:
+        merged_spec["extra_tools"] = inline_extra_tool_specs
+    return merged_spec
 
 
 def _order_tool_registry_provider_source_specs(
@@ -7078,6 +7124,10 @@ def build_tool_registry_loaders_from_settings_artifacts(
         )
         if normalized_loader_name is None:
             continue
+        spec = _merge_inline_tool_registry_extra_tool_specs(
+            spec,
+            adapter_keys=_TOOL_REGISTRY_LOADER_ADAPTER_KEYS,
+        )
         diagnostics = _empty_tool_registry_file_diagnostics()
         registry_file = spec.get("registry_file")
         loader_reference = spec.get("loader")
@@ -7361,6 +7411,10 @@ def build_tool_registry_loader_adapter(
     if not isinstance(spec, Mapping):
         return None
     spec = dict(spec)
+    spec = _merge_inline_tool_registry_extra_tool_specs(
+        spec,
+        adapter_keys=_TOOL_REGISTRY_LOADER_ADAPTER_KEYS,
+    )
     loader_factory_name = spec.get("loader_factory")
     loader_name = spec.get("loader")
     registry_file = spec.get("registry_file")
@@ -7474,6 +7528,10 @@ def build_tool_registry_provider_adapter(
     spec = _coerce_tool_registry_spec_payload(spec)
     if not isinstance(spec, dict):
         return None
+    spec = _merge_inline_tool_registry_extra_tool_specs(
+        spec,
+        adapter_keys=_TOOL_REGISTRY_PROVIDER_ADAPTER_KEYS,
+    )
     provider_factory_name = spec.get("provider_factory")
     provider_name = spec.get("provider")
     loader_factory_name = spec.get("loader_factory")
@@ -7693,6 +7751,10 @@ def build_tool_registry_providers_from_settings_artifacts(
         )
         if normalized_provider_name is None:
             continue
+        spec = _merge_inline_tool_registry_extra_tool_specs(
+            spec,
+            adapter_keys=_TOOL_REGISTRY_PROVIDER_ADAPTER_KEYS,
+        )
         diagnostics = _empty_tool_registry_file_diagnostics()
         registry_file = spec.get("registry_file")
         provider_factory_reference = spec.get("provider_factory")
@@ -7855,38 +7917,17 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                 tool_registry_provider_source=source_name,
             )
         )
-        adapter_keys = {
-            "provider_factory",
-            "provider",
-            "loader_factory",
-            "loader",
-            "registry_file",
-            "profile",
-            "disabled_tool_names",
-            "overrides",
-            "extra_tools",
-        }
         source_profile_name = None
-        if any(key in spec for key in adapter_keys):
+        if any(key in spec for key in _TOOL_REGISTRY_PROVIDER_ADAPTER_KEYS):
             source_profile_name = get_tool_registry_profile_name_from_settings(
                 settings=SimpleNamespace(
                     tool_registry_profile=spec.get("profile", "default"),
                 )
             )
-            inline_extra_tool_specs = {
-                key: value for key, value in spec.items() if key not in adapter_keys
-            }
-            if inline_extra_tool_specs:
-                configured_extra_tools = _coerce_tool_registry_spec_payload(
-                    spec.get("extra_tools")
-                )
-                if isinstance(configured_extra_tools, Mapping):
-                    spec["extra_tools"] = {
-                        **inline_extra_tool_specs,
-                        **dict(configured_extra_tools),
-                    }
-                else:
-                    spec["extra_tools"] = inline_extra_tool_specs
+            spec = _merge_inline_tool_registry_extra_tool_specs(
+                spec,
+                adapter_keys=_TOOL_REGISTRY_PROVIDER_ADAPTER_KEYS,
+            )
         source_settings = _clone_tool_execution_settings(
             settings=settings,
             tool_registry_provider_source=normalized_source_name,
@@ -7933,7 +7974,7 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
         source_settings_execution_diagnostics = (
             build_tool_registry_settings_execution_diagnostics(settings=source_settings)
         )
-        if any(key in spec for key in adapter_keys):
+        if any(key in spec for key in _TOOL_REGISTRY_PROVIDER_ADAPTER_KEYS):
             diagnostics = _empty_tool_registry_file_diagnostics()
             registry_file = spec.get("registry_file")
             provider_factory_reference = spec.get("provider_factory")
