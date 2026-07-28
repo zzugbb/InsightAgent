@@ -35063,6 +35063,60 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             (str(missing_file.resolve()),),
         )
 
+    def test_build_tool_registry_loader_factories_from_settings_artifacts_tracks_factory_override_execution_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "loader-factory-override-diagnostics.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(registry_file),
+                            "overrides": {
+                                "provider_search": {
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/search",
+                                        "headers": {
+                                            "Authorization": "Bearer ${settings_api_keey}",
+                                        },
+                                    },
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_loader_factories_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(tuple(sorted(artifacts["loader_factories"])), ("file_factory",))
+        self.assertIn(
+            (
+                "provider_search: http_json execution references unsupported runtime "
+                "template variable settings_api_keey in [redacted]"
+            ),
+            artifacts["loader_factory_diagnostics"]["file_factory"][
+                "invalid_tool_executions"
+            ],
+        )
+
     def test_build_tool_registry_loader_factories_from_settings_artifacts_keeps_missing_file_diagnostics_when_factory_unbuilt(
         self,
     ) -> None:
@@ -35126,6 +35180,60 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             artifacts["provider_factory_diagnostics"]["file_factory"]["missing_registry_dirs"],
             (str(missing_dir.resolve()),),
+        )
+
+    def test_build_tool_registry_provider_factories_from_settings_artifacts_tracks_factory_override_execution_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "provider-factory-override-diagnostics.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(registry_file),
+                            "overrides": {
+                                "provider_search": {
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/search",
+                                        "headers": {
+                                            "Authorization": "Bearer ${settings_api_keey}",
+                                        },
+                                    },
+                                }
+                            },
+                        }
+                    }
+                )
+            )
+
+            artifacts = build_tool_registry_provider_factories_from_settings_artifacts(
+                settings=settings
+            )
+
+        self.assertEqual(tuple(sorted(artifacts["provider_factories"])), ("file_factory",))
+        self.assertIn(
+            (
+                "provider_search: http_json execution references unsupported runtime "
+                "template variable settings_api_keey in [redacted]"
+            ),
+            artifacts["provider_factory_diagnostics"]["file_factory"][
+                "invalid_tool_executions"
+            ],
         )
 
     def test_build_tool_registry_provider_factories_from_settings_artifacts_keeps_missing_file_diagnostics_when_factory_unbuilt(
@@ -35551,6 +35659,68 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             tuple(sorted(artifacts["provider"].load_tool_registry())),
             ("calc_eval_fast",),
+        )
+
+    def test_get_configured_tool_registry_provider_artifacts_exposes_selected_source_factory_override_execution_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "factory-override-diagnostics.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_source="file_source",
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "file_factory": {
+                            "registry_file": str(registry_file),
+                            "overrides": {
+                                "provider_search": {
+                                    "execution": {
+                                        "kind": "http_json",
+                                        "url": "https://provider.example/search",
+                                        "headers": {
+                                            "Authorization": "Bearer ${settings_api_keey}",
+                                        },
+                                    },
+                                }
+                            },
+                        }
+                    }
+                ),
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "file_source": {
+                            "loader_factory": "file_factory",
+                        }
+                    }
+                ),
+            )
+
+            artifacts = get_configured_tool_registry_provider_artifacts(settings=settings)
+
+        self.assertEqual(artifacts["provider_source_name"], "file_source")
+        self.assertIn(
+            (
+                "provider_search: http_json execution references unsupported runtime "
+                "template variable settings_api_keey in [redacted]"
+            ),
+            artifacts["selected_source_diagnostics"]["invalid_tool_executions"],
+        )
+        self.assertIn(
+            "provider_search",
+            artifacts["provider"].load_tool_registry(),
         )
 
     def test_build_tool_registry_diagnostics_summary_keeps_shape(self) -> None:

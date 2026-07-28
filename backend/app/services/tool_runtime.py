@@ -7241,6 +7241,16 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
                 if _has_tool_registry_file_diagnostics(diagnostics):
                     factory_diagnostics[normalized_factory_name] = diagnostics
                 continue
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                _build_invalid_tool_execution_diagnostics(
+                    messages=_collect_invalid_tool_execution_messages_from_override_specs(
+                        override_specs=spec.get("overrides"),
+                        base_registry=dict(loader()),
+                        settings=settings,
+                    )
+                ),
+            )
             factory_spec = dict(spec)
             factories[normalized_factory_name] = (
                 lambda settings=None, factory_spec=factory_spec: (
@@ -7351,6 +7361,16 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
                 if _has_tool_registry_file_diagnostics(diagnostics):
                     factory_diagnostics[normalized_factory_name] = diagnostics
                 continue
+            diagnostics = _merge_tool_registry_file_diagnostics(
+                diagnostics,
+                _build_invalid_tool_execution_diagnostics(
+                    messages=_collect_invalid_tool_execution_messages_from_override_specs(
+                        override_specs=spec.get("overrides"),
+                        base_registry=dict(provider.load_tool_registry()),
+                        settings=settings,
+                    )
+                ),
+            )
             factory_spec = dict(spec)
             factories[normalized_factory_name] = (
                 lambda settings=None, factory_spec=factory_spec: (
