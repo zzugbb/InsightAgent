@@ -3309,6 +3309,51 @@ def _normalize_nonnegative_int_count_value(value: object) -> int | None:
     return None
 
 
+def _http_json_output_implies_retrieval_count(output: dict[str, object]) -> bool:
+    semantic_hints = (
+        output.get("tool_kind"),
+        output.get("semantic_kind"),
+        output.get("semantic_family"),
+        output.get("kind"),
+    )
+    for hint in semantic_hints:
+        if not isinstance(hint, str):
+            continue
+        normalized_hint = hint.strip().lower()
+        if any(
+            token in normalized_hint
+            for token in ("retrieval", "search", "knowledge", "document")
+        ):
+            return True
+    return any(
+        key in output
+        for key in (
+            "knowledge_base_id",
+            "documents",
+            "items",
+            "hits",
+            "results",
+            "matches",
+        )
+    )
+
+
+def _http_json_output_implies_calculator_result(output: dict[str, object]) -> bool:
+    semantic_hints = (
+        output.get("tool_kind"),
+        output.get("semantic_kind"),
+        output.get("semantic_family"),
+        output.get("kind"),
+    )
+    for hint in semantic_hints:
+        if not isinstance(hint, str):
+            continue
+        normalized_hint = hint.strip().lower()
+        if any(token in normalized_hint for token in ("calc", "calculator", "math")):
+            return True
+    return "expression" in output
+
+
 def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, object]:
     normalized_output = dict(output)
     if "request_id" in normalized_output:
@@ -3319,6 +3364,14 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
             normalized_output.pop("request_id", None)
         else:
             normalized_output["request_id"] = safe_request_id
+    if (
+        "result" not in normalized_output
+        and _http_json_output_implies_calculator_result(normalized_output)
+    ):
+        for alias_name in ("value", "answer", "result_value", "computed_value"):
+            if alias_name in normalized_output:
+                normalized_output["result"] = normalized_output[alias_name]
+                break
     documents_total = _normalize_nonnegative_int_count_value(
         normalized_output.get("documents_total")
     )
@@ -3330,6 +3383,25 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
             if isinstance(alias_value, (list, tuple)):
                 normalized_output["documents_total"] = len(alias_value)
                 break
+        if (
+            "documents_total" not in normalized_output
+            and _http_json_output_implies_retrieval_count(normalized_output)
+        ):
+            for alias_name in (
+                "documents_count",
+                "document_count",
+                "total_count",
+                "total_results",
+                "totalResults",
+                "total",
+                "count",
+            ):
+                alias_count = _normalize_nonnegative_int_count_value(
+                    normalized_output.get(alias_name)
+                )
+                if alias_count is not None:
+                    normalized_output["documents_total"] = alias_count
+                    break
     hit_count = _normalize_nonnegative_int_count_value(
         normalized_output.get("hit_count")
     )
@@ -3341,6 +3413,21 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
             if isinstance(alias_value, (list, tuple)):
                 normalized_output["hit_count"] = len(alias_value)
                 break
+        if "hit_count" not in normalized_output:
+            for alias_name in (
+                "hits_count",
+                "hit_total",
+                "results_count",
+                "result_count",
+                "matches_count",
+                "match_count",
+            ):
+                alias_count = _normalize_nonnegative_int_count_value(
+                    normalized_output.get(alias_name)
+                )
+                if alias_count is not None:
+                    normalized_output["hit_count"] = alias_count
+                    break
     return normalized_output
 
 
@@ -15623,11 +15710,9 @@ def _augment_http_json_local_calculator_output_keys(
     semantic_family: str | None,
 ) -> tuple[str, ...]:
     normalized_execution_kind = _normalize_tool_execution_kind(registration.execution_kind)
-    normalized_semantic_kind = _normalize_tool_semantic_kind(semantic_kind)
     normalized_semantic_family = _normalize_tool_semantic_kind(semantic_family)
     if (
         normalized_execution_kind != "http_json"
-        or normalized_semantic_kind != "local_calculator"
         or normalized_semantic_family != "local_calculator"
         or "request_id" in output_keys
     ):

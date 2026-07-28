@@ -85900,6 +85900,162 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_execute_tool_plan_item_service_execution_infers_documents_total_from_provider_total_count(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "total_count": "2",
+                    "knowledge_base_id": "provider-kb",
+                    "request_id": "req-total-count-1",
+                },
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "revenue trend"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "revenue trend"},
+                prompt="search revenue trend",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "documents_total": 2,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 2,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-total-count-1",
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
+            "Provider Search: Retrieved 2 documents from provider-kb (request id req-total-count-1).",
+        )
+
+    def test_execute_tool_plan_item_service_execution_infers_calc_result_from_provider_value(
+        self,
+    ) -> None:
+        registry = {
+            "provider_math": ToolRegistration(
+                name="provider_math",
+                kind="provider_calc",
+                label="Provider Calculator",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_calc",
+                    "expression": "3+4",
+                    "value": "7",
+                    "request_id": "req-value-1",
+                },
+                runtime_semantic_kind="provider_math",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_math",
+            tool_input={"expression": "3+4"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Calculator",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_math",
+                tool_input={"expression": "3+4"},
+                prompt="calculate 3+4",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "expression": "3+4",
+                "result": "7",
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "expression": "3+4",
+                "result": "7",
+                "request_id": "req-value-1",
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
+            "Provider Calculator: Calculated 3+4 = 7 (request id req-value-1).",
+        )
+
     def test_execute_tool_plan_item_service_execution_infers_label_only_real_search_tool_semantics(
         self,
     ) -> None:
