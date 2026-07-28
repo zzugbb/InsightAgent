@@ -1118,6 +1118,11 @@ def resolve_named_tool_registry_provider_reference(
         return named_providers[normalized]
     if named_sources and normalized in named_sources:
         return named_sources[normalized]
+    normalized_source = get_tool_registry_provider_source_name_from_settings(
+        settings=SimpleNamespace(tool_registry_provider_source=name)
+    )
+    if named_sources and normalized_source in named_sources:
+        return named_sources[normalized_source]
     return None
 
 def resolve_named_tool_registry_loader_factory(
@@ -1355,8 +1360,10 @@ def _order_tool_registry_provider_source_specs(
         _source_name, spec = item
         spec = _coerce_tool_registry_spec_payload(spec)
         if isinstance(spec, Mapping):
-            provider_reference = _normalize_named_tool_registry_component_name(
-                spec.get("provider")
+            provider_reference = get_tool_registry_provider_source_name_from_settings(
+                settings=SimpleNamespace(
+                    tool_registry_provider_source=spec.get("provider"),
+                )
             )
             if (
                 provider_reference is not None
@@ -6579,9 +6586,16 @@ def _expand_skipped_registry_file_component_names(
         reference_key: str,
         skipped_kind: str,
     ) -> bool:
-        normalized_reference = _normalize_named_tool_registry_component_name(
-            spec.get(reference_key)
-        )
+        if skipped_kind == "provider_source":
+            normalized_reference = get_tool_registry_provider_source_name_from_settings(
+                settings=SimpleNamespace(
+                    tool_registry_provider_source=spec.get(reference_key),
+                )
+            )
+        else:
+            normalized_reference = _normalize_named_tool_registry_component_name(
+                spec.get(reference_key)
+            )
         return bool(
             normalized_reference
             and normalized_reference in expanded_names.get(skipped_kind, set())
@@ -8273,6 +8287,13 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
             normalized_provider_reference = _normalize_named_tool_registry_component_name(
                 provider_reference
             )
+            normalized_provider_source_reference = (
+                get_tool_registry_provider_source_name_from_settings(
+                    settings=SimpleNamespace(
+                        tool_registry_provider_source=provider_reference,
+                    )
+                )
+            )
             normalized_loader_factory_reference = _normalize_named_tool_registry_component_name(
                 loader_factory_reference
             )
@@ -8297,12 +8318,12 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                     source_provider_diagnostics[normalized_provider_reference],
                 )
             elif (
-                normalized_provider_reference is not None
-                and normalized_provider_reference in source_diagnostics
+                normalized_provider_source_reference is not None
+                and normalized_provider_source_reference in source_diagnostics
             ):
                 diagnostics = _merge_tool_registry_file_diagnostics(
                     diagnostics,
-                    source_diagnostics[normalized_provider_reference],
+                    source_diagnostics[normalized_provider_source_reference],
                 )
             elif (
                 normalized_provider_factory_reference is not None

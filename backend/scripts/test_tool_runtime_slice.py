@@ -48572,6 +48572,154 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval_fast",),
         )
 
+    def test_build_tool_registry_provider_sources_from_settings_reuses_shared_provider_source_name_helper_for_forward_source_reference(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    " Outer_Suite ": {
+                        "provider": " Inner_Suite ",
+                        "overrides": {
+                            "calc_eval_fast": {
+                                "label": "Outer Calculator",
+                            }
+                        },
+                    },
+                    " Inner_Suite ": {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Inner Calculator",
+                        }
+                    },
+                }
+            )
+        )
+        original_get_tool_registry_provider_source_name_from_settings = (
+            tool_runtime_module.get_tool_registry_provider_source_name_from_settings
+        )
+        captured: list[object] = []
+        try:
+            def fake_get_tool_registry_provider_source_name_from_settings(
+                *,
+                settings=None,
+            ):
+                raw_source = getattr(settings, "tool_registry_provider_source", None)
+                captured.append(raw_source)
+                if raw_source == " Outer_Suite ":
+                    return "outer_suite_shadow"
+                if raw_source == " Inner_Suite ":
+                    return "inner_suite_shadow"
+                return original_get_tool_registry_provider_source_name_from_settings(
+                    settings=settings
+                )
+
+            tool_runtime_module.get_tool_registry_provider_source_name_from_settings = (
+                fake_get_tool_registry_provider_source_name_from_settings
+            )
+            sources = build_tool_registry_provider_sources_from_settings(settings=settings)
+        finally:
+            tool_runtime_module.get_tool_registry_provider_source_name_from_settings = (
+                original_get_tool_registry_provider_source_name_from_settings
+            )
+
+        self.assertIn(" Outer_Suite ", captured)
+        self.assertIn(" Inner_Suite ", captured)
+        self.assertEqual(
+            tuple(sorted(sources)),
+            ("inner_suite_shadow", "outer_suite_shadow"),
+        )
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=sources["outer_suite_shadow"]),
+            ("calc_eval_fast",),
+        )
+        self.assertEqual(
+            sources["outer_suite_shadow"].load_tool_registry()[
+                "calc_eval_fast"
+            ].label,
+            "Outer Calculator",
+        )
+
+    def test_get_configured_tool_registry_provider_artifacts_reuses_shared_provider_source_name_helper_for_forward_source_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inner_file = Path(tmpdir) / "inner-source-registry.json"
+            missing_file = Path(tmpdir) / "missing-child.json"
+            inner_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Inner Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_source=" Outer_Suite ",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        " Outer_Suite ": {
+                            "provider": " Inner_Suite ",
+                            "overrides": {
+                                "calc_eval_fast": {
+                                    "label": "Outer Calculator",
+                                }
+                            },
+                        },
+                        " Inner_Suite ": {
+                            "registry_file": str(inner_file),
+                        },
+                    }
+                ),
+            )
+            original_get_tool_registry_provider_source_name_from_settings = (
+                tool_runtime_module.get_tool_registry_provider_source_name_from_settings
+            )
+            try:
+                def fake_get_tool_registry_provider_source_name_from_settings(
+                    *,
+                    settings=None,
+                ):
+                    raw_source = getattr(settings, "tool_registry_provider_source", None)
+                    if raw_source == " Outer_Suite ":
+                        return "outer_suite_shadow"
+                    if raw_source == " Inner_Suite ":
+                        return "inner_suite_shadow"
+                    return original_get_tool_registry_provider_source_name_from_settings(
+                        settings=settings
+                    )
+
+                tool_runtime_module.get_tool_registry_provider_source_name_from_settings = (
+                    fake_get_tool_registry_provider_source_name_from_settings
+                )
+                artifacts = get_configured_tool_registry_provider_artifacts(
+                    settings=settings
+                )
+            finally:
+                tool_runtime_module.get_tool_registry_provider_source_name_from_settings = (
+                    original_get_tool_registry_provider_source_name_from_settings
+                )
+
+        self.assertEqual(artifacts["provider_source_name"], "outer_suite_shadow")
+        self.assertEqual(
+            tuple(sorted(artifacts["provider"].load_tool_registry())),
+            ("calc_eval_fast",),
+        )
+        self.assertEqual(
+            artifacts["provider"].load_tool_registry()["calc_eval_fast"].label,
+            "Outer Calculator",
+        )
+        self.assertEqual(
+            artifacts["selected_source_diagnostics"]["missing_registry_files"],
+            (str(missing_file.resolve()),),
+        )
+
     def test_build_tool_registry_providers_from_settings_ignores_unknown_loader_name(self) -> None:
         settings = SimpleNamespace(
             tool_registry_providers_json=json.dumps(
