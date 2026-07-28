@@ -90,6 +90,31 @@ main() {
   assert_contains "gate_result: PASS" "/tmp/frontend-e2e-artifact-guard-summary.md"
   assert_contains '"gate_result": "PASS"' "/tmp/frontend-e2e-artifact-guard-summary.json"
 
+  other_cwd_summary_file="${TMP_DIR}/other-cwd-summary.md"
+  expect_pass env \
+    GITHUB_EVENT_NAME=pull_request \
+    GITHUB_REF=refs/pull/12/merge \
+    GITHUB_SHA=beadfeed \
+    bash -c "cd '${TMP_DIR}' && bash '${SCRIPT}' \
+      --scope frontend \
+      --repo-root '${TMP_DIR}/repo' \
+      --base-sha cafe123 \
+      --head-sha beadfeed \
+      --dispatch-override auto \
+      --fallback-level warn \
+      --pr-level fail-on-empty \
+      --included-count 2 \
+      --missing-count 0 \
+      --min-included-count 2 \
+      --stage-dir '${TMP_DIR}/other-cwd-stage' \
+      --manifest '${TMP_DIR}/other-cwd-manifest.txt' \
+      --summary-file '${other_cwd_summary_file}'" \
+      > "${TMP_DIR}/other-cwd-stdout.txt"
+
+  assert_contains "artifact_strict_level=fail-on-empty" "${TMP_DIR}/other-cwd-stdout.txt"
+  assert_contains "changed_files_path=${TMP_DIR}/repo/.github/frontend-e2e-changed-files.txt" "${TMP_DIR}/other-cwd-stdout.txt"
+  assert_contains "### frontend-e2e artifact strict policy" "${other_cwd_summary_file}"
+
   echo "ci_run_artifact_stage_guard tests passed"
 }
 

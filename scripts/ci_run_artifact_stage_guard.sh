@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+script_repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scope=""
 repo_root="."
 base_sha=""
@@ -93,11 +94,11 @@ scope_config_file="$(mktemp)"
 scope_env_file="$(mktemp)"
 trap 'rm -f "${scope_config_file}" "${scope_env_file}"' EXIT
 
-bash scripts/ci_resolve_artifact_stage_scope_config.sh \
+bash "${script_repo_root}/scripts/ci_resolve_artifact_stage_scope_config.sh" \
   --scope "${scope}" \
   --repo-root "${repo_root}" > "${scope_config_file}"
 
-bash scripts/ci_load_artifact_stage_scope_config.sh \
+bash "${script_repo_root}/scripts/ci_load_artifact_stage_scope_config.sh" \
   --config-file "${scope_config_file}" \
   --output-file "${scope_env_file}"
 
@@ -105,7 +106,7 @@ bash scripts/ci_load_artifact_stage_scope_config.sh \
 source "${scope_env_file}"
 
 collect_changed_files_cmd=(
-  bash scripts/ci_collect_changed_files.sh
+  bash "${script_repo_root}/scripts/ci_collect_changed_files.sh"
   --repo-root "${repo_root}"
   --event-name "${event_name}"
   --base-sha "${base_sha}"
@@ -118,7 +119,7 @@ done
 "${collect_changed_files_cmd[@]}" >/dev/null
 
 artifact_level_out="$(
-  bash scripts/ci_resolve_artifact_stage_path_level.sh \
+  bash "${script_repo_root}/scripts/ci_resolve_artifact_stage_path_level.sh" \
     --scope "${scope}" \
     --changed-files "${ARTIFACT_CHANGED_FILES_PATH}" \
     --event-name "${event_name}" \
@@ -145,7 +146,7 @@ if [ -z "${guard_json_out}" ]; then
   guard_json_out="${ARTIFACT_GUARD_JSON_OUT}"
 fi
 
-bash scripts/ci_assert_artifact_stage_health.sh \
+bash "${script_repo_root}/scripts/ci_assert_artifact_stage_health.sh" \
   --scope "${scope}" \
   --included-count "${included_count}" \
   --missing-count "${missing_count}" \
