@@ -85373,6 +85373,12 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         )
 
         final_item = items[-1]
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 2,
+            },
+        )
         rag_followup = final_item["result"]["loop_execution_result"]["success_effects"][
             "rag_followup"
         ]
@@ -85472,6 +85478,156 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             rag_followup["step"]["meta"]["rag"],
             {
                 "chunks": ["alpha item snippet", "beta item content"],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+
+    def test_execute_tool_plan_item_service_execution_builds_rag_followup_from_data_camel_case_text_fields(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "data": [
+                        {"documentText": "alpha document text"},
+                        {"payload": {"pageContent": "beta page content"}},
+                    ],
+                    "knowledge_base_id": "provider-kb",
+                },
+                result_preview_keys=("documents_total",),
+                result_output_keys=("documents_total",),
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "incident timeline"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "incident timeline"},
+                prompt="search incident timeline",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-1",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        final_item = items[-1]
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 2,
+            },
+        )
+        rag_followup = final_item["result"]["loop_execution_result"]["success_effects"][
+            "rag_followup"
+        ]
+        self.assertIsNotNone(rag_followup)
+        assert rag_followup is not None
+        self.assertEqual(
+            rag_followup["step"]["meta"]["rag"],
+            {
+                "chunks": ["alpha document text", "beta page content"],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+
+    def test_execute_tool_plan_item_service_execution_builds_rag_followup_from_records_text_aliases(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "records": [
+                        {"chunkText": "alpha chunk text"},
+                        {"passage": "beta passage"},
+                    ],
+                    "knowledge_base_id": "provider-kb",
+                },
+                result_preview_keys=("documents_total",),
+                result_output_keys=("documents_total",),
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "capacity plan"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "capacity plan"},
+                prompt="search capacity plan",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-1",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        final_item = items[-1]
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 2,
+            },
+        )
+        rag_followup = final_item["result"]["loop_execution_result"]["success_effects"][
+            "rag_followup"
+        ]
+        self.assertIsNotNone(rag_followup)
+        assert rag_followup is not None
+        self.assertEqual(
+            rag_followup["step"]["meta"]["rag"],
+            {
+                "chunks": ["alpha chunk text", "beta passage"],
                 "knowledge_base_id": "provider-kb",
             },
         )

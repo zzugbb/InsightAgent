@@ -3409,7 +3409,10 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
     if documents_total is not None:
         normalized_output["documents_total"] = documents_total
     else:
-        for alias_name in ("documents", "items"):
+        list_alias_names = ("documents", "items")
+        if _http_json_output_implies_retrieval_count(normalized_output):
+            list_alias_names = (*list_alias_names, "data", "records")
+        for alias_name in list_alias_names:
             alias_value = normalized_output.get(alias_name)
             if isinstance(alias_value, (list, tuple)):
                 normalized_output["documents_total"] = len(alias_value)
@@ -13530,8 +13533,12 @@ _TOOL_RAG_DOCUMENT_TEXT_FIELDS = (
     "description",
     "body",
     "chunk",
+    "chunkText",
+    "passage",
     "page_content",
+    "pageContent",
     "document_text",
+    "documentText",
 )
 _TOOL_RAG_DOCUMENT_CONTAINER_FIELDS = (
     "metadata",
@@ -13543,7 +13550,15 @@ _TOOL_RAG_DOCUMENT_CONTAINER_FIELDS = (
     "record",
     "item",
 )
-_TOOL_RAG_DOCUMENT_LIST_FIELDS = ("documents", "items", "results", "hits", "matches")
+_TOOL_RAG_DOCUMENT_LIST_FIELDS = (
+    "documents",
+    "items",
+    "results",
+    "hits",
+    "matches",
+    "data",
+    "records",
+)
 
 
 def _redact_tool_rag_chunk_text(raw_value: str) -> str:
