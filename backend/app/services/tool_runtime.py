@@ -15935,6 +15935,23 @@ def normalize_tool_output_for_registration(
                 if isinstance(alias_value, (list, tuple)):
                     normalized_output["documents_total"] = len(alias_value)
                     break
+        if (
+            desired_tool_kind_text
+            and "result" not in normalized_output
+            and _http_json_output_implies_calculator_result(
+                {"tool_kind": desired_tool_kind_text}
+            )
+        ):
+            for alias_name in (
+                "answer",
+                "result_value",
+                "resultValue",
+                "computed_value",
+                "computedValue",
+            ):
+                if alias_name in normalized_output:
+                    normalized_output["result"] = normalized_output[alias_name]
+                    break
     if not desired_tool_kind_text:
         return normalized_output
     if (
