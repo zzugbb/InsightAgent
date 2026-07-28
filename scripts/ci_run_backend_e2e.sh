@@ -47,6 +47,9 @@ if [ "${phase}" != "main" ] && [ "${phase}" != "timeout" ]; then
 fi
 
 mkdir -p "${log_dir}"
+if [ "${log_dir#/}" = "${log_dir}" ]; then
+  log_dir="$(cd "${log_dir}" && pwd)"
+fi
 
 if [ -z "${backend_e2e_python}" ]; then
   if [ -x "${repo_root}/backend/.venv/bin/python" ]; then
@@ -54,6 +57,17 @@ if [ -z "${backend_e2e_python}" ]; then
   else
     backend_e2e_python="python3"
   fi
+fi
+
+base_url_without_scheme="${base_url#*://}"
+base_url_authority="${base_url_without_scheme%%/*}"
+if [[ "${base_url_authority}" == *:* ]]; then
+  log_suffix="${base_url_authority##*:}"
+else
+  log_suffix="${base_url_authority//[^A-Za-z0-9_.-]/_}"
+fi
+if [ -z "${log_suffix}" ]; then
+  log_suffix="backend"
 fi
 
 run_cmd() {
@@ -68,10 +82,10 @@ run_cmd() {
 cd "${repo_root}"
 
 if [ "${phase}" = "main" ]; then
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_baseline.py --base-url ${base_url} | tee ${log_dir}/e2e-baseline-8000.log"
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_main_path.py --base-url ${base_url} | tee ${log_dir}/e2e-main-path-8000.log"
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_export_consistency.py --base-url ${base_url} | tee ${log_dir}/e2e-export-consistency-8000.log"
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --skip-timeout | tee ${log_dir}/e2e-cancel-8000.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_baseline.py --base-url ${base_url} | tee ${log_dir}/e2e-baseline-${log_suffix}.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_main_path.py --base-url ${base_url} | tee ${log_dir}/e2e-main-path-${log_suffix}.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_export_consistency.py --base-url ${base_url} | tee ${log_dir}/e2e-export-consistency-${log_suffix}.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --skip-timeout | tee ${log_dir}/e2e-cancel-${log_suffix}.log"
 else
-  run_cmd "${backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --cancel-prompt-words 180000 --timeout-prompt-words 250000 | tee ${log_dir}/e2e-timeout-8010.log"
+  run_cmd "${backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${base_url} --cancel-prompt-words 180000 --timeout-prompt-words 250000 | tee ${log_dir}/e2e-timeout-${log_suffix}.log"
 fi

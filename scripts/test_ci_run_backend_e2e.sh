@@ -46,8 +46,14 @@ run_tests() {
   expect_pass bash "${SCRIPT_PATH}" --phase timeout --base-url http://127.0.0.1:8010 --log-dir "${TMP_DIR}" --dry-run > "${TMP_DIR}/timeout.out"
   assert_contains "--cancel-prompt-words 180000 --timeout-prompt-words 250000" "${TMP_DIR}/timeout.out"
 
+  expect_pass bash "${SCRIPT_PATH}" --phase main --base-url http://127.0.0.1:9000 --log-dir "${TMP_DIR}" --dry-run > "${TMP_DIR}/main-9000.out"
+  assert_contains "tee ${TMP_DIR}/e2e-main-path-9000.log" "${TMP_DIR}/main-9000.out"
+
   expect_pass bash -c "cd '${TMP_DIR}' && bash '${SCRIPT_PATH}' --phase main --base-url http://127.0.0.1:8000 --log-dir '${TMP_DIR}' --dry-run" > "${TMP_DIR}/main-from-other-cwd.out"
   assert_contains "backend/.venv/bin/python backend/scripts/e2e_main_path.py --base-url http://127.0.0.1:8000" "${TMP_DIR}/main-from-other-cwd.out"
+
+  expect_pass bash -c "cd '${TMP_DIR}' && bash '${SCRIPT_PATH}' --phase main --base-url http://127.0.0.1:8000 --log-dir relative-e2e-logs --dry-run" > "${TMP_DIR}/main-relative-log-dir.out"
+  assert_contains "tee ${TMP_DIR}/relative-e2e-logs/e2e-main-path-8000.log" "${TMP_DIR}/main-relative-log-dir.out"
 
   echo "ci_run_backend_e2e tests passed"
 }

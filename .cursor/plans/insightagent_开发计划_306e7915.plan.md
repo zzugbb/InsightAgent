@@ -18,7 +18,7 @@ validation_baseline:
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
   frontend_chromium_e2e: cd frontend && npx playwright test --project=chromium --reporter=line --workers=1 (47/47)
   diff_check: git diff --check
-latest_validation_note: 本轮继续推进 e2e tooling 收尾；ci_run_backend_e2e 默认解释器改为优先 backend/.venv/bin/python，并保留 BACKEND_E2E_PYTHON 覆盖，避免主路径脚本漂移到系统 python3；红测先复现 dry-run 仍输出 python3 backend/scripts/e2e_main_path.py，修复后 test_ci_run_backend_e2e 与 test_ci_e2e_tooling 聚合通过，非仓库根目录调用 dry-run 也会回到 repo root 生成 venv-backed 命令；完整 backend slice 1654/1654、frontend node 68/68、frontend build 通过。Docker socket 普通访问仍被沙箱拒绝，提权审批通道断连/拒绝，本轮不把 backend full e2e rerun 记为通过。
+latest_validation_note: 本轮继续推进 e2e tooling 收尾；ci_run_backend_e2e 的相对 log-dir 会在切回 repo root 前归一成调用目录下的绝对路径，避免非仓库 cwd 调用时日志漂移；backend e2e 日志后缀也改为从 base-url 派生，避免 9000 等临时端口仍写成 8000 日志。红测先复现相对 log-dir 与 9000 base-url 两个 dry-run 问题，修复后 test_ci_run_backend_e2e 与 test_ci_e2e_tooling 聚合通过，完整 backend slice 1654/1654、frontend node 68/68、frontend build 通过。Docker postgres/chroma 已通过提权 ps 确认可用，但启动 backend + 跑 backend e2e 的提权长命令审批通道断连/拒绝，本轮不把 backend full e2e rerun 记为通过。
 todos:
   - id: real-tool-execution
     status: in_progress
@@ -465,7 +465,7 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 385. Provider/source 里的 factory profile reset 运行路径也已补齐：selected source 通过 provider_factory、loader_factory 或 provider factory alias 显式声明 `profile=default` 时，provider adapter 会返回合成后的 effective registry，不再把内层 `retrieval_only` profile 的 disabled tools 继续带到运行时/tool details。完整 backend slice 当前为 `1654/1654`。
 386. Provider source 别名前向引用也已补齐：outer source 通过 `provider` 指向后声明 inner source 时，排序、resolver、skipped diagnostics 扩展与 source diagnostics 继承都会复用共享 provider-source normalizer；自定义 source alias 不再导致 selected source 静默退回 default provider 或丢失 inner file diagnostics。
 387. Provider source 纯 `provider` 循环 diagnostics 也已补齐：source artifacts 会把循环边记入 `skipped_registry_sources`，registry file `registry_sources` 外层遇到已知 skipped source 时也会继续标 skipped 而不是误报 missing；settings/preflight/registry-file diagnostics 在 source cycle 下保持一致。
-388. Backend 主路径 e2e 脚本的系统 `python3` 兼容也已补齐：usage token 校验不再使用 `isinstance(x, int | float)` 这类对旧解释器不兼容的写法；新增 AST 红测守住 backend e2e 脚本内的 PEP 604 `isinstance` 误用，避免真实 e2e 在 trace/usage 校验前被脚本自身中断。`scripts/ci_run_backend_e2e.sh` 也已默认优先使用 `backend/.venv/bin/python`，并在从非仓库根目录调用时回到 repo root 后再运行 backend e2e 脚本，减少本地/CI 解释器漂移。完整 backend slice 当前为 `1654/1654`。
+388. Backend 主路径 e2e 脚本的系统 `python3` 兼容也已补齐：usage token 校验不再使用 `isinstance(x, int | float)` 这类对旧解释器不兼容的写法；新增 AST 红测守住 backend e2e 脚本内的 PEP 604 `isinstance` 误用，避免真实 e2e 在 trace/usage 校验前被脚本自身中断。`scripts/ci_run_backend_e2e.sh` 也已默认优先使用 `backend/.venv/bin/python`，从非仓库根目录调用时回到 repo root 后再运行 backend e2e 脚本，并把相对 `--log-dir` 解析到调用目录、把日志后缀绑定到 `--base-url` 端口，减少本地/CI 解释器、cwd 与端口漂移。完整 backend slice 当前为 `1654/1654`。
 
 ## 当前主线判断
 

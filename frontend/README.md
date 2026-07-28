@@ -149,7 +149,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 通过（完整 Chromium e2e，`47/47`）
   - `git diff --check` 通过
-- 本轮收尾验证：backend e2e tooling 已改为优先使用 `backend/.venv/bin/python`，避免主路径脚本漂移到系统 `python3`；红测先复现 dry-run 仍输出 `python3 backend/scripts/e2e_main_path.py`，修复后 `bash scripts/test_ci_run_backend_e2e.sh` 与聚合 `bash scripts/test_ci_e2e_tooling.sh` 通过，且从非仓库根目录调用 dry-run 也能回到 repo root 生成 venv-backed 命令。完整 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1654/1654`），前端 node 测试通过（`68/68`），`cd frontend && npm run build` 通过。Docker socket 普通访问仍被沙箱拒绝，提权审批通道断连/拒绝，故本轮仍不把 backend full e2e rerun 记为通过。
+- 本轮收尾验证：backend e2e tooling 继续收口。新增红测先复现从非仓库根目录传相对 `--log-dir` 时，dry-run 仍把 `tee` 目标留成相对路径；修复后 log dir 会在切回 repo root 前归一成调用目录下的绝对路径。新增红测还复现 `--base-url http://127.0.0.1:9000` 仍写 `e2e-main-path-8000.log`；修复后 backend e2e 日志后缀会从 base URL 派生。验证 `bash scripts/test_ci_run_backend_e2e.sh`、`bash scripts/test_ci_e2e_tooling.sh`、完整 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1654/1654`）、前端 node 测试通过（`68/68`）、`cd frontend && npm run build` 通过。Docker 依赖服务已确认运行，但“启动 backend + 跑 backend e2e”的提权长命令审批通道断连/拒绝，故本轮仍不把 backend full e2e rerun 记为通过。
 
 ## 全仓库审计结论
 
