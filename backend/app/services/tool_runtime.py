@@ -423,6 +423,14 @@ _TOOL_REGISTRY_PROVIDER_ADAPTER_KEYS = {
     "overrides",
     "extra_tools",
 }
+_TOOL_REGISTRY_FACTORY_ADAPTER_KEYS = {
+    "factory",
+    "registry_file",
+    "profile",
+    "disabled_tool_names",
+    "overrides",
+    "extra_tools",
+}
 _HTTP_JSON_ALLOWED_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 _TOOL_TIMEOUT_MAX_MS = 2_147_483_647
 _HTTP_JSON_ERROR_BODY_PREVIEW_MAX_LENGTH = 240
@@ -7087,6 +7095,165 @@ def build_tool_registry_provider_from_file(
     return artifacts["provider"]
 
 
+def _build_tool_registry_loader_factory_adapter(
+    *,
+    factory: ToolRegistryLoaderFactory,
+    spec: dict[str, object],
+) -> ToolRegistryLoaderFactory:
+    factory_spec = dict(spec)
+
+    def loader_factory(settings: object | None = None) -> ToolRegistryLoader:
+        base_loader = factory(settings)
+        profile_name_hint = getattr(factory, "_tool_registry_profile_name", None)
+        known_base_registry = (
+            get_default_tool_registry()
+            if profile_name_hint
+            else dict(base_loader())
+        )
+        implicit_profile_name = (
+            get_tool_registry_profile_name_from_settings(
+                settings=SimpleNamespace(
+                    tool_registry_profile=profile_name_hint,
+                )
+            )
+            if profile_name_hint
+            else "default"
+        )
+        profile_name = get_tool_registry_profile_name_from_settings(
+            settings=SimpleNamespace(
+                tool_registry_profile=factory_spec.get("profile", implicit_profile_name),
+            )
+        )
+        profile_config = build_tool_registry_profile_settings_config(
+            profile_name=profile_name
+        )
+        disabled_tool_names = set(
+            normalize_tool_registry_names(profile_config.disabled_tool_names)
+        )
+        raw_disabled_tool_names = factory_spec.get("disabled_tool_names")
+        if _is_non_text_sequence(raw_disabled_tool_names):
+            disabled_tool_names.update(normalize_tool_registry_names(raw_disabled_tool_names))
+
+        extra_tools = build_tool_registry_extra_tools_from_specs(
+            extra_tool_specs=factory_spec.get("extra_tools"),
+            settings=settings,
+        )
+        base_registry = build_tool_registry(
+            base_registry=known_base_registry,
+            overrides=extra_tools or None,
+        )
+        source_overrides, disabled_tool_names = _build_registry_overrides_from_specs(
+            override_specs=factory_spec.get("overrides"),
+            base_registry=base_registry,
+            disabled_tool_names=disabled_tool_names,
+            settings=settings,
+        )
+        registry = build_tool_registry(
+            base_registry=base_registry,
+            overrides=build_tool_registry(
+                base_registry=profile_config.overrides,
+                overrides=source_overrides or None,
+            )
+            or None,
+            disabled_tool_names=tuple(sorted(disabled_tool_names)),
+        )
+        return lambda: dict(registry)
+
+    if (
+        "profile" not in factory_spec
+        and getattr(factory, "_tool_registry_profile_name", None)
+    ):
+        return _annotate_loader_factory_profile(
+            loader_factory,
+            profile_name=str(getattr(factory, "_tool_registry_profile_name")),
+        )
+    return loader_factory
+
+
+def _build_tool_registry_provider_factory_adapter(
+    *,
+    factory: ToolRegistryProviderFactory,
+    spec: dict[str, object],
+) -> ToolRegistryProviderFactory:
+    factory_spec = dict(spec)
+
+    def provider_factory(settings: object | None = None) -> ToolRegistryProvider:
+        base_provider = factory(settings)
+        profile_name_hint = getattr(factory, "_tool_registry_profile_name", None)
+        known_base_registry = (
+            get_default_tool_registry()
+            if profile_name_hint
+            else dict(base_provider.load_tool_registry())
+        )
+        implicit_profile_name = (
+            get_tool_registry_profile_name_from_settings(
+                settings=SimpleNamespace(
+                    tool_registry_profile=profile_name_hint,
+                )
+            )
+            if profile_name_hint
+            else "default"
+        )
+        profile_name = get_tool_registry_profile_name_from_settings(
+            settings=SimpleNamespace(
+                tool_registry_profile=factory_spec.get("profile", implicit_profile_name),
+            )
+        )
+        profile_config = build_tool_registry_profile_settings_config(
+            profile_name=profile_name
+        )
+        disabled_tool_names = set(
+            normalize_tool_registry_names(profile_config.disabled_tool_names)
+        )
+        raw_disabled_tool_names = factory_spec.get("disabled_tool_names")
+        if _is_non_text_sequence(raw_disabled_tool_names):
+            disabled_tool_names.update(normalize_tool_registry_names(raw_disabled_tool_names))
+
+        provider_source_name = get_tool_registry_provider_source_name_from_settings(
+            settings=settings
+        )
+        extra_tools = build_tool_registry_extra_tools_from_specs(
+            extra_tool_specs=factory_spec.get("extra_tools"),
+            settings=settings,
+            provider_source_name=provider_source_name,
+        )
+        base_registry = build_tool_registry(
+            base_registry=known_base_registry,
+            overrides=extra_tools or None,
+        )
+        source_overrides, disabled_tool_names = _build_registry_overrides_from_specs(
+            override_specs=factory_spec.get("overrides"),
+            base_registry=base_registry,
+            disabled_tool_names=disabled_tool_names,
+            settings=_clone_tool_execution_settings(
+                settings=settings or SimpleNamespace(),
+                tool_registry_provider_source=provider_source_name,
+            ),
+        )
+        adapter_overrides = build_tool_registry(
+            base_registry=extra_tools or {},
+            overrides=source_overrides or None,
+        )
+        return build_tool_registry_provider(
+            provider=base_provider,
+            overrides=build_tool_registry(
+                base_registry=profile_config.overrides,
+                overrides=adapter_overrides or None,
+            ),
+            disabled_tool_names=tuple(sorted(disabled_tool_names)),
+        )
+
+    if (
+        "profile" not in factory_spec
+        and getattr(factory, "_tool_registry_profile_name", None)
+    ):
+        return _annotate_provider_factory_profile(
+            provider_factory,
+            profile_name=str(getattr(factory, "_tool_registry_profile_name")),
+        )
+    return provider_factory
+
+
 def build_tool_registry_loaders_from_settings_artifacts(
     *,
     settings: object | None = None,
@@ -7213,6 +7380,10 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
         )
         if normalized_factory_name is None:
             continue
+        spec = _merge_inline_tool_registry_extra_tool_specs(
+            spec,
+            adapter_keys=_TOOL_REGISTRY_FACTORY_ADAPTER_KEYS,
+        )
         diagnostics = _empty_tool_registry_file_diagnostics()
         registry_file = spec.get("registry_file")
         target_name = spec.get("factory")
@@ -7289,7 +7460,29 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
                 resolved,
                 profile_name=target_normalized,
             )
-        factories[normalized_factory_name] = resolved
+        base_loader = resolved(settings)
+        extra_tools = build_tool_registry_extra_tools_from_specs(
+            extra_tool_specs=spec.get("extra_tools"),
+            settings=settings,
+        )
+        base_registry = build_tool_registry(
+            base_registry=dict(base_loader()),
+            overrides=extra_tools or None,
+        )
+        diagnostics = _merge_tool_registry_file_diagnostics(
+            diagnostics,
+            _build_invalid_tool_execution_diagnostics(
+                messages=_collect_invalid_tool_execution_messages_from_override_specs(
+                    override_specs=spec.get("overrides"),
+                    base_registry=base_registry,
+                    settings=settings,
+                )
+            ),
+        )
+        factories[normalized_factory_name] = _build_tool_registry_loader_factory_adapter(
+            factory=resolved,
+            spec=spec,
+        )
         factory_diagnostics[normalized_factory_name] = diagnostics
     return {
         "loader_factories": factories,
@@ -7333,6 +7526,10 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
         )
         if normalized_factory_name is None:
             continue
+        spec = _merge_inline_tool_registry_extra_tool_specs(
+            spec,
+            adapter_keys=_TOOL_REGISTRY_FACTORY_ADAPTER_KEYS,
+        )
         diagnostics = _empty_tool_registry_file_diagnostics()
         registry_file = spec.get("registry_file")
         target_name = spec.get("factory")
@@ -7412,7 +7609,36 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
                 resolved,
                 profile_name=target_normalized,
             )
-        factories[normalized_factory_name] = resolved
+        base_provider = resolved(settings)
+        provider_source_name = get_tool_registry_provider_source_name_from_settings(
+            settings=settings
+        )
+        extra_tools = build_tool_registry_extra_tools_from_specs(
+            extra_tool_specs=spec.get("extra_tools"),
+            settings=settings,
+            provider_source_name=provider_source_name,
+        )
+        base_registry = build_tool_registry(
+            base_registry=dict(base_provider.load_tool_registry()),
+            overrides=extra_tools or None,
+        )
+        diagnostics = _merge_tool_registry_file_diagnostics(
+            diagnostics,
+            _build_invalid_tool_execution_diagnostics(
+                messages=_collect_invalid_tool_execution_messages_from_override_specs(
+                    override_specs=spec.get("overrides"),
+                    base_registry=base_registry,
+                    settings=_clone_tool_execution_settings(
+                        settings=settings or SimpleNamespace(),
+                        tool_registry_provider_source=provider_source_name,
+                    ),
+                )
+            ),
+        )
+        factories[normalized_factory_name] = _build_tool_registry_provider_factory_adapter(
+            factory=resolved,
+            spec=spec,
+        )
         factory_diagnostics[normalized_factory_name] = diagnostics
     return {
         "provider_factories": factories,
