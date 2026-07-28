@@ -3354,6 +3354,26 @@ def _http_json_output_implies_calculator_result(output: dict[str, object]) -> bo
     return "expression" in output
 
 
+def _get_safe_http_json_request_id_alias(output: dict[str, object]) -> str | None:
+    for alias_name in (
+        "requestId",
+        "requestID",
+        "request-id",
+        "trace_id",
+        "traceId",
+        "correlation_id",
+        "correlationId",
+        "x_request_id",
+        "x-request-id",
+    ):
+        safe_request_id = _get_safe_http_json_request_id_display_value(
+            output.get(alias_name)
+        )
+        if safe_request_id is not None:
+            return safe_request_id
+    return None
+
+
 def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, object]:
     normalized_output = dict(output)
     if "request_id" in normalized_output:
@@ -3363,6 +3383,10 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
         if safe_request_id is None:
             normalized_output.pop("request_id", None)
         else:
+            normalized_output["request_id"] = safe_request_id
+    else:
+        safe_request_id = _get_safe_http_json_request_id_alias(normalized_output)
+        if safe_request_id is not None:
             normalized_output["request_id"] = safe_request_id
     if (
         "result" not in normalized_output
