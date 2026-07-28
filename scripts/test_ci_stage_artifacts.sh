@@ -39,7 +39,8 @@ assert_contains() {
 
 setup_tmp() {
   TMP_DIR="$(mktemp -d)"
-  trap 'rm -rf "${TMP_DIR}"' EXIT
+  root_artifact_marker_dir="${ROOT_DIR}/frontend/test-results/codex-stage-artifact-test"
+  trap 'rm -rf "${TMP_DIR}" "${root_artifact_marker_dir}"' EXIT
 }
 
 run_tests() {
@@ -72,6 +73,19 @@ LIST
   assert_contains "included_count=2" "${TMP_DIR}/stage.out"
   assert_contains "missing_count=1" "${TMP_DIR}/stage.out"
   assert_contains "- ${source_root}/missing.txt" "${out_dir}/_manifest.txt"
+
+  mkdir -p "${root_artifact_marker_dir}"
+  echo "root-artifact" > "${root_artifact_marker_dir}/error-context.md"
+  cat > "${TMP_DIR}/repo-relative-artifacts.txt" <<LIST
+frontend/test-results/codex-stage-artifact-test
+LIST
+
+  expect_pass bash -c "cd '${TMP_DIR}' && bash '${STAGE_SCRIPT}' --list-file '${TMP_DIR}/repo-relative-artifacts.txt' --output-dir repo-relative-stage" > "${TMP_DIR}/repo-relative-stage.out"
+
+  assert_file "${TMP_DIR}/repo-relative-stage/frontend/test-results/codex-stage-artifact-test/error-context.md"
+  assert_contains "included_count=1" "${TMP_DIR}/repo-relative-stage.out"
+  assert_contains "missing_count=0" "${TMP_DIR}/repo-relative-stage.out"
+  assert_contains "- frontend/test-results/codex-stage-artifact-test" "${TMP_DIR}/repo-relative-stage/_manifest.txt"
 
   echo "ci_stage_artifacts tests passed"
 }

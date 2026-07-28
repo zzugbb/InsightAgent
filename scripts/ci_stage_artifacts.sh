@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 list_file=""
 output_dir=""
 
@@ -51,11 +52,11 @@ missing_items=""
 
 stage_one() {
   local src="$1"
-  local rel="${src}"
+  local rel="${2:-$1}"
   local dest=""
 
-  if [[ "${src}" = /* ]]; then
-    rel="${src#/}"
+  if [[ "${rel}" = /* ]]; then
+    rel="${rel#/}"
   fi
   dest="${output_dir}/${rel}"
   mkdir -p "$(dirname "${dest}")"
@@ -72,8 +73,14 @@ while IFS= read -r line || [ -n "${line}" ]; do
     continue
   fi
 
-  if [ -e "${path}" ]; then
-    stage_one "${path}"
+  source_path="${path}"
+  relative_path="${path}"
+  if [ "${path#/}" = "${path}" ] && [ ! -e "${source_path}" ] && [ -e "${repo_root}/${path}" ]; then
+    source_path="${repo_root}/${path}"
+  fi
+
+  if [ -e "${source_path}" ]; then
+    stage_one "${source_path}" "${relative_path}"
     included_count=$((included_count + 1))
     included_items="${included_items}\n- ${path}"
   else
