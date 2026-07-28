@@ -91,10 +91,8 @@ json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-parsed=()
-while IFS= read -r line; do
-  parsed+=("$line")
-done < <(python3 - "${json_path}" "${scope}" <<'PY'
+parsed_output=""
+if ! parsed_output="$(python3 - "${json_path}" "${scope}" <<'PY'
 import json, sys
 path = sys.argv[1]
 scope = sys.argv[2]
@@ -118,7 +116,15 @@ print(p0)
 print(p1)
 print(status)
 PY
-)
+)"; then
+  echo "[diag-guard][${label}] invalid diagnostics json: ${json_path}" >&2
+  exit 2
+fi
+
+parsed=()
+while IFS= read -r line; do
+  parsed+=("$line")
+done <<< "${parsed_output}"
 
 warning_total="${parsed[0]:-0}"
 warning_p0="${parsed[1]:-0}"

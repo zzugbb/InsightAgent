@@ -57,6 +57,25 @@ JSON
   assert_contains "${out_json}" '"warning_total": 3'
   assert_contains "${out_json}" '"guard_failures": 1'
 
+  cat > "${TMP_DIR}/malformed-backend-diag.json" <<'JSON'
+{"status":
+JSON
+
+  local malformed_md="${TMP_DIR}/malformed-overview.md"
+  local malformed_json="${TMP_DIR}/malformed-overview.json"
+  bash "${OVERVIEW_SCRIPT}" \
+    --frontend-diagnostics-json "${TMP_DIR}/frontend-diag.json" \
+    --backend-diagnostics-json "${TMP_DIR}/malformed-backend-diag.json" \
+    --markdown-out "${malformed_md}" \
+    --json-out "${malformed_json}" \
+    --label "malformed-json"
+
+  assert_contains "${malformed_md}" "## export diagnostics overview (malformed-json)"
+  assert_contains "${malformed_md}" "### backend diagnostics"
+  assert_contains "${malformed_md}" "- unavailable"
+  assert_contains "${malformed_json}" '"label": "malformed-json"'
+  assert_contains "${malformed_json}" '"available": false'
+
   echo "ci_export_diagnostics_overview tests passed"
 }
 

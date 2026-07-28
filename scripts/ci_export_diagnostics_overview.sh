@@ -65,8 +65,11 @@ def load_json(path):
         return None, False
     if not os.path.isfile(path):
         return None, False
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f), True
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f), True
+    except (OSError, json.JSONDecodeError, TypeError):
+        return None, False
 
 
 def summarize_frontend_diag(data):
