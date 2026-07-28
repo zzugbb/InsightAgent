@@ -34998,6 +34998,46 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval_fast",),
         )
 
+    def test_build_tool_registry_loaders_from_settings_artifacts_tracks_loader_override_execution_diagnostics(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loaders_json=json.dumps(
+                {
+                    "search_loader": {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                            }
+                        },
+                        "overrides": {
+                            "provider_search": {
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "headers": {
+                                        "Authorization": "Bearer ${settings_api_keey}",
+                                    },
+                                },
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        artifacts = build_tool_registry_loaders_from_settings_artifacts(settings=settings)
+
+        self.assertEqual(tuple(sorted(artifacts["loaders"])), ("search_loader",))
+        self.assertIn(
+            (
+                "provider_search: http_json execution references unsupported runtime "
+                "template variable settings_api_keey in [redacted]"
+            ),
+            artifacts["loader_diagnostics"]["search_loader"]["invalid_tool_executions"],
+        )
+
     def test_build_tool_registry_loaders_from_settings_artifacts_keeps_missing_file_diagnostics_when_loader_unbuilt(
         self,
     ) -> None:
@@ -35335,6 +35375,48 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             artifacts["provider_diagnostics"]["file_provider"]["missing_registry_files"],
             (str(missing_file.resolve()),),
+        )
+
+    def test_build_tool_registry_providers_from_settings_artifacts_tracks_provider_override_execution_diagnostics(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_providers_json=json.dumps(
+                {
+                    "search_provider": {
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                            }
+                        },
+                        "overrides": {
+                            "provider_search": {
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "headers": {
+                                        "Authorization": "Bearer ${settings_api_keey}",
+                                    },
+                                },
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        artifacts = build_tool_registry_providers_from_settings_artifacts(settings=settings)
+
+        self.assertEqual(tuple(sorted(artifacts["providers"])), ("search_provider",))
+        self.assertIn(
+            (
+                "provider_search: http_json execution references unsupported runtime "
+                "template variable settings_api_keey in [redacted]"
+            ),
+            artifacts["provider_diagnostics"]["search_provider"][
+                "invalid_tool_executions"
+            ],
         )
 
     def test_build_tool_registry_provider_sources_from_settings_artifacts_tracks_named_provider_diagnostics(self) -> None:
@@ -35709,6 +35791,52 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             )
 
             artifacts = get_configured_tool_registry_provider_artifacts(settings=settings)
+
+        self.assertEqual(artifacts["provider_source_name"], "file_source")
+        self.assertIn(
+            (
+                "provider_search: http_json execution references unsupported runtime "
+                "template variable settings_api_keey in [redacted]"
+            ),
+            artifacts["selected_source_diagnostics"]["invalid_tool_executions"],
+        )
+        self.assertIn(
+            "provider_search",
+            artifacts["provider"].load_tool_registry(),
+        )
+
+    def test_get_configured_tool_registry_provider_artifacts_exposes_selected_source_override_execution_diagnostics(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_source="file_source",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "file_source": {
+                        "provider": "default",
+                        "extra_tools": {
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                            }
+                        },
+                        "overrides": {
+                            "provider_search": {
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "headers": {
+                                        "Authorization": "Bearer ${settings_api_keey}",
+                                    },
+                                },
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+
+        artifacts = get_configured_tool_registry_provider_artifacts(settings=settings)
 
         self.assertEqual(artifacts["provider_source_name"], "file_source")
         self.assertIn(
