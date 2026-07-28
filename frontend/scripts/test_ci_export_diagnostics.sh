@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DIAG_SCRIPT="${SCRIPT_DIR}/ci_export_diagnostics.sh"
 TMP_ROOT=""
 
@@ -55,7 +56,8 @@ CTX
 
 main() {
   TMP_ROOT="$(mktemp -d)"
-  trap 'rm -rf "${TMP_ROOT:-}"' EXIT
+  root_results_marker_dir="${ROOT_DIR}/frontend/test-results/codex-export-diagnostics-cwd-test"
+  trap 'rm -rf "${TMP_ROOT:-}" "${root_results_marker_dir}"' EXIT
 
   # scenario 1: all hints present, expect zero alerts
   local ok_dir="${TMP_ROOT}/ok-results"
@@ -87,6 +89,17 @@ main() {
   assert_contains "${bad_json}" "\"total\": 2"
   assert_contains "${bad_json}" "\"p0\": 1"
   assert_contains "${bad_json}" "\"p1\": 1"
+
+  mkdir -p "${root_results_marker_dir}/workbench-main-path-export"
+  cat > "${root_results_marker_dir}/workbench-main-path-export/error-context.md" <<'CTX'
+waitForEvent("download")
+content-type: application/json
+GET /api/tasks/default/export/json
+CTX
+
+  local default_out="${TMP_ROOT}/default.out"
+  bash -c "cd '${TMP_ROOT}' && bash '${DIAG_SCRIPT}'" > "${default_out}"
+  assert_contains "${default_out}" "- context_files_detected: 1"
 
   echo "ci_export_diagnostics fixture tests passed"
 }

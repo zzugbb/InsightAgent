@@ -2,8 +2,17 @@
 
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 results_dir="${1:-frontend/test-results}"
+results_dir_is_default="0"
+if [ "$#" -eq 0 ] || { [ "$#" -eq 1 ] && [ -z "${1:-}" ]; }; then
+  results_dir_is_default="1"
+fi
 json_out="${2:-}"
+
+if [ "${results_dir_is_default}" = "1" ] && [ "${results_dir#/}" = "${results_dir}" ]; then
+  results_dir="${repo_root}/${results_dir}"
+fi
 
 echo "# frontend-e2e export diagnostics"
 echo
