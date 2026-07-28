@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scope=""
 diagnostics_json=""
 guard_markdown_out=""
@@ -95,7 +96,7 @@ fi
 
 mkdir -p "$(dirname "${guard_markdown_out}")" "$(dirname "${guard_json_out}")" "$(dirname "${overview_markdown_out}")" "$(dirname "${overview_json_out}")"
 
-resolved="$(bash scripts/ci_resolve_diag_strict_level.sh \
+resolved="$(bash "${repo_root}/scripts/ci_resolve_diag_strict_level.sh" \
   --event-name "${event_name}" \
   --ref "${ref_name}" \
   --default-level "${default_level}" \
@@ -112,7 +113,7 @@ fi
 
 set +e
 if [ "${quiet}" = "1" ]; then
-  bash scripts/ci_diag_guard.sh \
+  bash "${repo_root}/scripts/ci_diag_guard.sh" \
     --json "${diagnostics_json}" \
     --scope "${scope}" \
     --strict-level "${strict_level}" \
@@ -121,7 +122,7 @@ if [ "${quiet}" = "1" ]; then
     --summary-file "${guard_markdown_out}" \
     --json-summary-file "${guard_json_out}"
 else
-  bash scripts/ci_diag_guard.sh \
+  bash "${repo_root}/scripts/ci_diag_guard.sh" \
     --json "${diagnostics_json}" \
     --scope "${scope}" \
     --strict-level "${strict_level}" \
@@ -134,7 +135,7 @@ set -e
 
 case "${scope}" in
   frontend)
-    bash scripts/ci_export_diagnostics_overview.sh \
+    bash "${repo_root}/scripts/ci_export_diagnostics_overview.sh" \
       --frontend-diagnostics-json "${diagnostics_json}" \
       --frontend-guard-json "${guard_json_out}" \
       --markdown-out "${overview_markdown_out}" \
@@ -142,7 +143,7 @@ case "${scope}" in
       --label "${overview_label}"
     ;;
   backend)
-    bash scripts/ci_export_diagnostics_overview.sh \
+    bash "${repo_root}/scripts/ci_export_diagnostics_overview.sh" \
       --backend-diagnostics-json "${diagnostics_json}" \
       --backend-guard-json "${guard_json_out}" \
       --markdown-out "${overview_markdown_out}" \

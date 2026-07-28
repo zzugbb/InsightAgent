@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scope=""
 event_name="${GITHUB_EVENT_NAME:-}"
 ref_name="${GITHUB_REF:-}"
@@ -139,7 +140,7 @@ case "${scope}" in
 esac
 
 cmd=(
-  bash scripts/ci_finalize_e2e_scope.sh
+  bash "${repo_root}/scripts/ci_finalize_e2e_scope.sh"
   --scope "${scope}"
   --event-name "${event_name}"
   --ref "${ref_name}"

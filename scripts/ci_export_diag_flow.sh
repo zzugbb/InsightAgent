@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scope=""
 source_path=""
 diagnostics_markdown_out=""
@@ -95,11 +96,11 @@ mkdir -p "$(dirname "${diagnostics_markdown_out}")" "$(dirname "${diagnostics_js
 
 case "${scope}" in
   frontend)
-    bash frontend/scripts/ci_export_diagnostics.sh "${source_path}" "${diagnostics_json_out}" | tee "${diagnostics_markdown_out}"
+    bash "${repo_root}/frontend/scripts/ci_export_diagnostics.sh" "${source_path}" "${diagnostics_json_out}" | tee "${diagnostics_markdown_out}"
     diagnostics_section_title="frontend-e2e export diagnostics"
     ;;
   backend)
-    bash backend/scripts/ci_export_consistency_summary.sh "${source_path}" "${diagnostics_json_out}" | tee "${diagnostics_markdown_out}"
+    bash "${repo_root}/backend/scripts/ci_export_consistency_summary.sh" "${source_path}" "${diagnostics_json_out}" | tee "${diagnostics_markdown_out}"
     diagnostics_section_title="backend-e2e export consistency"
     ;;
 esac
@@ -137,4 +138,4 @@ if [ "${quiet}" = "1" ]; then
   pipeline_args+=(--quiet)
 fi
 
-bash scripts/ci_export_diag_pipeline.sh "${pipeline_args[@]}"
+bash "${repo_root}/scripts/ci_export_diag_pipeline.sh" "${pipeline_args[@]}"

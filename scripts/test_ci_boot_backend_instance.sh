@@ -59,6 +59,11 @@ run_tests() {
   assert_contains "--attempts 5 --interval-sec 2" "${TMP_DIR}/dry-run-2.out"
   assert_contains "backend 127.0.0.1:8010 failed to become healthy" "${TMP_DIR}/dry-run-2.out"
 
+  expect_pass bash -c "cd '${TMP_DIR}' && bash '${SCRIPT_PATH}' --port 8020 --log-file backend.log --pid-file backend.pid --dry-run" > "${TMP_DIR}/dry-run-from-other-cwd.out"
+  assert_contains "bash ${ROOT_DIR}/scripts/ci_start_bg_process.sh --log-file ${TMP_DIR}/backend.log --pid-file ${TMP_DIR}/backend.pid" "${TMP_DIR}/dry-run-from-other-cwd.out"
+  assert_contains "--app-dir ${ROOT_DIR}/backend --host 127.0.0.1 --port 8020" "${TMP_DIR}/dry-run-from-other-cwd.out"
+  assert_contains "bash ${ROOT_DIR}/scripts/ci_wait_http_status.sh --url http://127.0.0.1:8020/health" "${TMP_DIR}/dry-run-from-other-cwd.out"
+
   echo "ci_boot_backend_instance tests passed"
 }
 

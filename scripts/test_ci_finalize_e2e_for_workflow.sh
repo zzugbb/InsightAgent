@@ -48,7 +48,7 @@ run_tests() {
       --summary-file "${TMP_DIR}/backend-summary.md" \
       --dry-run > "${TMP_DIR}/backend.out"
 
-  assert_contains "[dry-run] bash scripts/ci_export_diag_flow.sh --scope backend" "${TMP_DIR}/backend.out"
+  assert_contains "[dry-run] bash ${ROOT_DIR}/scripts/ci_export_diag_flow.sh --scope backend" "${TMP_DIR}/backend.out"
   assert_contains "--default-level p0 --main-push-level any" "${TMP_DIR}/backend.out"
   assert_contains "[dry-run] artifact_name=backend-e2e-artifacts" "${TMP_DIR}/backend.out"
 
@@ -79,7 +79,7 @@ run_tests() {
       --summary-file "${TMP_DIR}/frontend-summary.md" \
       --dry-run > "${TMP_DIR}/frontend.out"
 
-  assert_contains "[dry-run] bash scripts/ci_export_diag_flow.sh --scope frontend" "${TMP_DIR}/frontend.out"
+  assert_contains "[dry-run] bash ${ROOT_DIR}/scripts/ci_export_diag_flow.sh --scope frontend" "${TMP_DIR}/frontend.out"
   assert_contains "--default-level p0 --main-push-level any" "${TMP_DIR}/frontend.out"
   assert_contains "[dry-run] artifact_name=playwright-report-123456-7" "${TMP_DIR}/frontend.out"
 

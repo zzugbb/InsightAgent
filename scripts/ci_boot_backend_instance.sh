@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+caller_pwd="$(pwd)"
 host="127.0.0.1"
 port=""
 health_path="/health"
@@ -64,17 +66,27 @@ if [ -z "${failure_message}" ]; then
   failure_message="backend ${host}:${port} failed to become healthy"
 fi
 
+if [ "${log_file#/}" = "${log_file}" ]; then
+  log_file="${caller_pwd}/${log_file}"
+fi
+if [ -n "${pid_file}" ] && [ "${pid_file#/}" = "${pid_file}" ]; then
+  pid_file="${caller_pwd}/${pid_file}"
+fi
+if [ "${app_dir#/}" = "${app_dir}" ]; then
+  app_dir="${repo_root}/${app_dir}"
+fi
+
 health_url="http://${host}:${port}${health_path}"
 health_output="/tmp/health-${port}.json"
 
-start_cmd=(bash scripts/ci_start_bg_process.sh --log-file "${log_file}")
+start_cmd=(bash "${repo_root}/scripts/ci_start_bg_process.sh" --log-file "${log_file}")
 if [ -n "${pid_file}" ]; then
   start_cmd+=(--pid-file "${pid_file}")
 fi
 start_cmd+=(-- uvicorn "${app_target}" --app-dir "${app_dir}" --host "${host}" --port "${port}")
 
 wait_cmd=(
-  bash scripts/ci_wait_http_status.sh
+  bash "${repo_root}/scripts/ci_wait_http_status.sh"
   --url "${health_url}"
   --output-file "${health_output}"
   --attempts "${attempts}"

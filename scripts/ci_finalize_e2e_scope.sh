@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scope=""
 dispatch_override="auto"
 event_name=""
@@ -113,12 +114,12 @@ case "${scope}" in
     : "${overview_json_out:=/tmp/backend-e2e-export-overview.json}"
     : "${label:=backend-e2e-export}"
     : "${overview_label:=backend-e2e}"
-    : "${artifacts_list_file:=scripts/ci_artifacts_backend.txt}"
+    : "${artifacts_list_file:=${repo_root}/scripts/ci_artifacts_backend.txt}"
     : "${artifacts_stage_dir:=/tmp/backend-e2e-artifacts-stage}"
     : "${artifact_name:=backend-e2e-artifacts}"
     ;;
   frontend)
-    : "${source_path:=frontend/test-results}"
+    : "${source_path:=${repo_root}/frontend/test-results}"
     : "${diagnostics_markdown_out:=/tmp/frontend-e2e-export-summary.md}"
     : "${diagnostics_json_out:=/tmp/frontend-e2e-export-summary.json}"
     : "${guard_markdown_out:=/tmp/frontend-e2e-export-guard-summary.md}"
@@ -127,7 +128,7 @@ case "${scope}" in
     : "${overview_json_out:=/tmp/frontend-e2e-export-overview.json}"
     : "${label:=frontend-e2e-export}"
     : "${overview_label:=frontend-e2e}"
-    : "${artifacts_list_file:=scripts/ci_artifacts_frontend.txt}"
+    : "${artifacts_list_file:=${repo_root}/scripts/ci_artifacts_frontend.txt}"
     : "${artifacts_stage_dir:=/tmp/frontend-e2e-artifacts-stage}"
     : "${artifact_name:=playwright-report}"
     ;;
@@ -138,7 +139,7 @@ case "${scope}" in
 esac
 
 flow_cmd=(
-  bash scripts/ci_export_diag_flow.sh
+  bash "${repo_root}/scripts/ci_export_diag_flow.sh"
   --scope "${scope}"
   --source-path "${source_path}"
   --diagnostics-markdown-out "${diagnostics_markdown_out}"
@@ -161,7 +162,7 @@ if [ "${quiet}" = "1" ]; then
 fi
 
 stage_cmd=(
-  bash scripts/ci_stage_artifacts.sh
+  bash "${repo_root}/scripts/ci_stage_artifacts.sh"
   --list-file "${artifacts_list_file}"
   --output-dir "${artifacts_stage_dir}"
 )

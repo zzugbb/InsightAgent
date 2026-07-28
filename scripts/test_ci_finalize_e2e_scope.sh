@@ -154,11 +154,15 @@ LIST
     --main-push-level any \
     --summary-file "${TMP_DIR}/dry-summary.md" \
     --dry-run > "${TMP_DIR}/dry.out"
-  assert_contains "[dry-run] bash scripts/ci_export_diag_flow.sh --scope frontend" "${TMP_DIR}/dry.out"
-  assert_contains "[dry-run] bash scripts/ci_stage_artifacts.sh --list-file scripts/ci_artifacts_frontend.txt" "${TMP_DIR}/dry.out"
+  assert_contains "[dry-run] bash ${ROOT_DIR}/scripts/ci_export_diag_flow.sh --scope frontend" "${TMP_DIR}/dry.out"
+  assert_contains "[dry-run] bash ${ROOT_DIR}/scripts/ci_stage_artifacts.sh --list-file ${ROOT_DIR}/scripts/ci_artifacts_frontend.txt" "${TMP_DIR}/dry.out"
   assert_contains "[dry-run] artifact_name=playwright-report" "${TMP_DIR}/dry.out"
   assert_contains "[dry-run] artifacts_stage_dir=/tmp/frontend-e2e-artifacts-stage" "${TMP_DIR}/dry.out"
   assert_contains "[dry-run] min_included_count=1" "${TMP_DIR}/dry.out"
+
+  expect_pass bash -c "cd '${TMP_DIR}' && bash '${SCRIPT_PATH}' --scope frontend --event-name push --ref refs/heads/main --default-level p0 --main-push-level any --summary-file dry-summary.md --dry-run" > "${TMP_DIR}/dry-from-other-cwd.out"
+  assert_contains "[dry-run] bash ${ROOT_DIR}/scripts/ci_export_diag_flow.sh --scope frontend" "${TMP_DIR}/dry-from-other-cwd.out"
+  assert_contains "[dry-run] bash ${ROOT_DIR}/scripts/ci_stage_artifacts.sh --list-file ${ROOT_DIR}/scripts/ci_artifacts_frontend.txt" "${TMP_DIR}/dry-from-other-cwd.out"
 
   echo "ci_finalize_e2e_scope tests passed"
 }
