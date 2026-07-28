@@ -32,7 +32,8 @@ assert_contains() {
 
 run_tests() {
   TMP_DIR="$(mktemp -d)"
-  trap 'rm -rf "${TMP_DIR}"' EXIT
+  root_results_marker_dir="${ROOT_DIR}/frontend/test-results/codex-cwd-index-test"
+  trap 'rm -rf "${TMP_DIR}" "${root_results_marker_dir}"' EXIT
 
   local results_dir="${TMP_DIR}/results"
   local output_file="${TMP_DIR}/index.md"
@@ -61,6 +62,12 @@ run_tests() {
     --results-dir "${TMP_DIR}/missing-results" \
     --output-file "${TMP_DIR}/missing-index.md" > /dev/null
   assert_contains "No ${TMP_DIR}/missing-results directory found." "${TMP_DIR}/missing-index.md"
+
+  mkdir -p "${root_results_marker_dir}"
+  echo "root-context" > "${root_results_marker_dir}/error-context.md"
+  expect_pass bash -c "cd '${TMP_DIR}' && bash '${SCRIPT_PATH}' --output-file default-index.md" > "${TMP_DIR}/default-stdout.txt"
+  assert_contains "output_file=default-index.md" "${TMP_DIR}/default-stdout.txt"
+  assert_contains "${ROOT_DIR}/frontend/test-results/codex-cwd-index-test/error-context.md" "${TMP_DIR}/default-index.md"
 
   echo "ci_build_frontend_failure_index tests passed"
 }
