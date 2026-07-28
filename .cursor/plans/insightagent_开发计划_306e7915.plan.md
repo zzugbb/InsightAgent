@@ -18,7 +18,7 @@ validation_baseline:
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
   frontend_chromium_e2e: cd frontend && npx playwright test --project=chromium --reporter=line --workers=1 (47/47)
   diff_check: git diff --check
-latest_validation_note: 本轮解除 backend/full-stack e2e 阻塞并继续收口 e2e tooling；Docker postgres/chroma 已通过提权 ps 确认可用，同一受控命令生命周期内启动 backend 后 ci_run_backend_e2e phase main 通过，覆盖 baseline、main path、export consistency 与 cancel-timeout skip-timeout；完整 Chromium 前端 e2e 同样在同一 backend 生命周期内通过 47/47。frontend e2e runner 的 cwd 漂移也已补齐，红测先复现非仓库 cwd dry-run 仍输出 cd frontend，修复后相对 frontend_dir 会解析到 repo root。同步验证 test_ci_run_frontend_e2e、test_ci_run_backend_e2e、test_ci_e2e_tooling、完整 backend slice 1654/1654、frontend node 68/68、frontend build 通过。
+latest_validation_note: 本轮解除 backend/full-stack e2e 阻塞并继续收口 e2e tooling；Docker postgres/chroma 已通过提权 ps 确认可用，同一受控命令生命周期内启动 backend 后 ci_run_backend_e2e phase main 通过，覆盖 baseline、main path、export consistency 与 cancel-timeout skip-timeout；完整 Chromium 前端 e2e 同样在同一 backend 生命周期内通过 47/47。frontend e2e runner 的 cwd 与 shell-quote 漂移也已补齐，红测先复现非仓库 cwd dry-run 仍输出 cd frontend、带空格 frontend dir / URL 被裸展开，修复后相对 frontend_dir 会解析到 repo root，frontend dir 与 Playwright base URL 会先 shell-quote。同步验证 test_ci_run_frontend_e2e、test_ci_run_backend_e2e、test_ci_e2e_tooling、完整 backend slice 1654/1654、frontend node 68/68、frontend build 通过。
 todos:
   - id: real-tool-execution
     status: in_progress
@@ -467,7 +467,7 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 387. Provider source 纯 `provider` 循环 diagnostics 也已补齐：source artifacts 会把循环边记入 `skipped_registry_sources`，registry file `registry_sources` 外层遇到已知 skipped source 时也会继续标 skipped 而不是误报 missing；settings/preflight/registry-file diagnostics 在 source cycle 下保持一致。
 388. Backend 主路径 e2e 脚本的系统 `python3` 兼容也已补齐：usage token 校验不再使用 `isinstance(x, int | float)` 这类对旧解释器不兼容的写法；新增 AST 红测守住 backend e2e 脚本内的 PEP 604 `isinstance` 误用，避免真实 e2e 在 trace/usage 校验前被脚本自身中断。`scripts/ci_run_backend_e2e.sh` 也已默认优先使用 `backend/.venv/bin/python`，从非仓库根目录调用时回到 repo root 后再运行 backend e2e 脚本，并把相对 `--log-dir` 解析到调用目录、把日志后缀绑定到 `--base-url` 端口，减少本地/CI 解释器、cwd 与端口漂移。完整 backend slice 当前为 `1654/1654`。
 389. 真实 backend/full-stack e2e 阻塞已解除：Docker postgres/chroma 在本地可用时，同一受控命令生命周期内启动 backend 可以跑穿 `ci_run_backend_e2e --phase main`，覆盖 auth、settings、task stream/trace/delta、RAG ingest/query、shared RAG 权限、task/session JSON/Markdown export、usage summaries、export consistency 与 cancel；完整 Chromium 前端 e2e 也通过 `47/47`，说明 workbench 主链、usage/settings governance、edge cases 与 remote error UI 在当前真实依赖下保持贯通。
-390. Frontend e2e runner 的 cwd 漂移也已补齐：`scripts/ci_run_frontend_e2e.sh` 从非仓库根目录调用时，会把相对 `--frontend-dir` 解析到 repo root，再执行 Playwright phases；本地/CI 不再因为调用目录不同而找错 `frontend` 目录。
+390. Frontend e2e runner 的 cwd 与 shell-quote 漂移也已补齐：`scripts/ci_run_frontend_e2e.sh` 从非仓库根目录调用时，会把相对 `--frontend-dir` 解析到 repo root；带空格的 frontend dir、`PLAYWRIGHT_API_BASE_URL` 与 `PLAYWRIGHT_BASE_URL` 会先 shell-quote 再拼 dry-run/exec 命令，本地/CI 不再因为调用目录、路径字符或 URL 字符导致 Playwright 命令被 shell 拆坏。
 
 ## 当前主线判断
 

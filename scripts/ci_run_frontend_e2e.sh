@@ -56,12 +56,20 @@ if [ ! -d "${frontend_dir}" ] && [ "${dry_run}" != "1" ]; then
   exit 2
 fi
 
+shell_quote() {
+  printf "%q" "$1"
+}
+
+quoted_frontend_dir="$(shell_quote "${frontend_dir}")"
+quoted_api_base_url="$(shell_quote "${api_base_url}")"
+quoted_frontend_base_url="$(shell_quote "${frontend_base_url}")"
+
 if [ "${phase}" = "smoke" ]; then
-  cmd="cd ${frontend_dir} && PLAYWRIGHT_API_BASE_URL=${api_base_url} PLAYWRIGHT_BASE_URL=${frontend_base_url} npm run test:e2e:smoke:matrix"
+  cmd="cd ${quoted_frontend_dir} && PLAYWRIGHT_API_BASE_URL=${quoted_api_base_url} PLAYWRIGHT_BASE_URL=${quoted_frontend_base_url} npm run test:e2e:smoke:matrix"
 elif [ "${phase}" = "full" ]; then
-  cmd="cd ${frontend_dir} && PLAYWRIGHT_API_BASE_URL=${api_base_url} PLAYWRIGHT_BASE_URL=${frontend_base_url} npm run test:e2e"
+  cmd="cd ${quoted_frontend_dir} && PLAYWRIGHT_API_BASE_URL=${quoted_api_base_url} PLAYWRIGHT_BASE_URL=${quoted_frontend_base_url} npm run test:e2e"
 else
-  cmd="cd ${frontend_dir} && PLAYWRIGHT_API_BASE_URL=${api_base_url} PLAYWRIGHT_BASE_URL=${frontend_base_url} npm run test:e2e -- --last-failed --output=test-results/last-failed"
+  cmd="cd ${quoted_frontend_dir} && PLAYWRIGHT_API_BASE_URL=${quoted_api_base_url} PLAYWRIGHT_BASE_URL=${quoted_frontend_base_url} npm run test:e2e -- --last-failed --output=test-results/last-failed"
 fi
 
 if [ "${dry_run}" = "1" ]; then

@@ -46,6 +46,13 @@ run_tests() {
   expect_pass bash -c "cd '${TMP_DIR}' && bash '${SCRIPT_PATH}' --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001 --dry-run" > "${TMP_DIR}/full-from-other-cwd.out"
   assert_contains "cd ${ROOT_DIR}/frontend" "${TMP_DIR}/full-from-other-cwd.out"
 
+  space_frontend_dir="${TMP_DIR}/frontend with spaces"
+  quoted_space_frontend_dir="$(printf "%q" "${space_frontend_dir}")"
+  expect_pass bash "${SCRIPT_PATH}" --phase full --frontend-dir "${space_frontend_dir}" --api-base-url "http://127.0.0.1:8000/api?token=a b&mode=test" --frontend-base-url "http://127.0.0.1:3001/app path" --dry-run > "${TMP_DIR}/quoted.out"
+  assert_contains "cd ${quoted_space_frontend_dir}" "${TMP_DIR}/quoted.out"
+  assert_contains "PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000/api\\?token=a\\ b\\&mode=test" "${TMP_DIR}/quoted.out"
+  assert_contains "PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001/app\\ path" "${TMP_DIR}/quoted.out"
+
   expect_pass bash "${SCRIPT_PATH}" --phase rerun-last-failed --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001 --dry-run > "${TMP_DIR}/rerun.out"
   assert_contains "--last-failed --output=test-results/last-failed" "${TMP_DIR}/rerun.out"
 
