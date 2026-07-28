@@ -18,6 +18,7 @@ validation_baseline:
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
   frontend_chromium_e2e: cd frontend && npx playwright test --project=chromium --reporter=line --workers=1 (47/47)
   diff_check: git diff --check
+latest_validation_note: 本轮补跑 backend slice 1649/1649、backend ASGI app import 输出 InsightAgent Backend、frontend node 68/68、frontend build 通过；Chromium main-path e2e 已尝试，普通沙箱先被 listen EPERM 127.0.0.1:3001 阻塞，提升权限后前端 webServer 启动但后端 127.0.0.1:8000 未运行导致 ECONNREFUSED；docker compose ps 显示本机 Docker socket 不可用，无法拉起 compose 依赖，本轮不计为 e2e 通过。
 todos:
   - id: real-tool-execution
     status: in_progress

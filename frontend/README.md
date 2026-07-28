@@ -149,6 +149,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 通过（完整 Chromium e2e，`47/47`）
   - `git diff --check` 通过
+- 本轮补跑验证：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1649/1649`），`cd backend && .venv/bin/python -c "from app.main import app; print(getattr(app, 'title', 'ok'))"` 通过（输出 `InsightAgent Backend`），`cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`），`cd frontend && npm run build` 通过；`cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --project=chromium --reporter=line --workers=1` 已尝试，普通沙箱先被 `listen EPERM 127.0.0.1:3001` 阻塞，提升权限后前端 webServer 启动，但因后端 `127.0.0.1:8000` 未运行而 `ECONNREFUSED`，且 `docker compose ps` 显示本机 Docker socket 不可用，无法拉起 compose 依赖；本轮不把该 e2e 记为通过。
 
 ## 全仓库审计结论
 
