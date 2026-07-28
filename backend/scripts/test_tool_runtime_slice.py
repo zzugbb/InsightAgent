@@ -31787,6 +31787,82 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("task_plan",),
         )
 
+    def test_build_tool_registry_loader_factories_from_settings_accepts_forward_named_factory_reference(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_loader_factories_json=json.dumps(
+                    {
+                        "outer_factory": {
+                            "factory": "inner_factory",
+                        },
+                        "inner_factory": {
+                            "registry_file": str(registry_file),
+                        },
+                    }
+                )
+            )
+
+            factories = build_tool_registry_loader_factories_from_settings(
+                settings=settings
+            )
+            file_registry = factories["outer_factory"](settings)()
+
+        self.assertEqual(tuple(sorted(factories)), ("inner_factory", "outer_factory"))
+        self.assertEqual(tuple(sorted(file_registry)), ("calc_eval_fast",))
+        self.assertEqual(file_registry["calc_eval_fast"].label, "Fast Calculator")
+
+    def test_build_tool_registry_provider_factories_from_settings_accepts_forward_named_factory_reference(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry_file = Path(tmpdir) / "tool-registry.json"
+            registry_file.write_text(
+                json.dumps(
+                    {
+                        "calc_eval_fast": {
+                            "template": "calc_eval",
+                            "label": "Fast Calculator",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_factories_json=json.dumps(
+                    {
+                        "outer_factory": {
+                            "factory": "inner_factory",
+                        },
+                        "inner_factory": {
+                            "registry_file": str(registry_file),
+                        },
+                    }
+                )
+            )
+
+            factories = build_tool_registry_provider_factories_from_settings(
+                settings=settings
+            )
+            file_registry = factories["outer_factory"](settings).load_tool_registry()
+
+        self.assertEqual(tuple(sorted(factories)), ("inner_factory", "outer_factory"))
+        self.assertEqual(tuple(sorted(file_registry)), ("calc_eval_fast",))
+        self.assertEqual(file_registry["calc_eval_fast"].label, "Fast Calculator")
+
     def test_build_tool_registry_loader_factories_from_settings_supports_registry_file_factory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             registry_file = Path(tmpdir) / "tool-registry.json"

@@ -1408,6 +1408,51 @@ def _order_tool_registry_loader_specs(
     return ordered
 
 
+def _order_tool_registry_factory_specs(
+    factory_specs: Mapping[object, object],
+) -> list[tuple[object, object]]:
+    factory_items_by_name: dict[str, tuple[object, object]] = {}
+    for factory_name, spec in factory_specs.items():
+        normalized_factory_name = _normalize_named_tool_registry_component_name(
+            factory_name
+        )
+        if normalized_factory_name is None:
+            continue
+        factory_items_by_name[normalized_factory_name] = (factory_name, spec)
+
+    ordered: list[tuple[object, object]] = []
+    visited: set[str] = set()
+    visiting: set[str] = set()
+
+    def visit(normalized_factory_name: str) -> None:
+        if normalized_factory_name in visited:
+            return
+        if normalized_factory_name in visiting:
+            return
+        item = factory_items_by_name.get(normalized_factory_name)
+        if item is None:
+            return
+        visiting.add(normalized_factory_name)
+        _factory_name, spec = item
+        spec = _coerce_tool_registry_spec_payload(spec)
+        if isinstance(spec, Mapping):
+            factory_reference = _normalize_named_tool_registry_component_name(
+                spec.get("factory")
+            )
+            if (
+                factory_reference is not None
+                and factory_reference in factory_items_by_name
+            ):
+                visit(factory_reference)
+        visiting.discard(normalized_factory_name)
+        visited.add(normalized_factory_name)
+        ordered.append(item)
+
+    for factory_name in factory_items_by_name:
+        visit(factory_name)
+    return ordered
+
+
 def _normalize_result_preview_keys(raw_value: object) -> tuple[str, ...]:
     if not isinstance(raw_value, Sequence) or isinstance(
         raw_value,
@@ -7098,7 +7143,7 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
 
     factories: dict[str, ToolRegistryLoaderFactory] = {}
     factory_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
-    for factory_name, spec in factory_specs.items():
+    for factory_name, spec in _order_tool_registry_factory_specs(factory_specs):
         spec = _coerce_tool_registry_spec_payload(spec)
         if not isinstance(factory_name, str) or not isinstance(spec, Mapping):
             continue
@@ -7210,7 +7255,7 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
 
     factories: dict[str, ToolRegistryProviderFactory] = {}
     factory_diagnostics: dict[str, dict[str, tuple[str, ...]]] = {}
-    for factory_name, spec in factory_specs.items():
+    for factory_name, spec in _order_tool_registry_factory_specs(factory_specs):
         spec = _coerce_tool_registry_spec_payload(spec)
         if not isinstance(factory_name, str) or not isinstance(spec, Mapping):
             continue
