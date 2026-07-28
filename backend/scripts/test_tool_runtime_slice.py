@@ -498,6 +498,92 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(request.get_header("X-source"), "search_suite")
         self.assertEqual(request.get_header("X-profile"), "retrieval_only")
 
+    def test_run_tool_inline_provider_source_shorthand_with_profile_uses_source_profile_in_http_json_request(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="search_suite",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "search_suite": {
+                            "profile": "retrieval_only",
+                            "provider_search": {
+                                "template": "task_retrieve",
+                                "label": "Provider Search",
+                                "kind": "provider_retrieval",
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/search",
+                                    "headers": {
+                                        "X-Source": "$tool_registry_provider_source",
+                                        "X-Profile": "$tool_registry_profile",
+                                    },
+                                    "query_params": {
+                                        "query": "$query",
+                                        "source": "$tool_registry_provider_source",
+                                        "profile": "$tool_registry_profile",
+                                    },
+                                    "response_path": "$.data",
+                                    "result_fields": {
+                                        "documents_total": "$.total",
+                                        "knowledge_base_id": "$.kb",
+                                    },
+                                },
+                                "runtime_semantic_kind": "provider_search",
+                            },
+                        }
+                    }
+                ),
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=None,
+            )
+        )
+        urlopen_calls: list[object] = []
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return b'{"data":{"total":9,"kb":"shorthand-kb"}}'
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: (  # type: ignore[attr-defined]
+                urlopen_calls.append(request)
+                or FakeHttpResponse()
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "profile shorthand"},
+                prompt="search",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 9)
+        self.assertEqual(output["knowledge_base_id"], "shorthand-kb")
+        self.assertEqual(len(urlopen_calls), 1)
+        request = urlopen_calls[0]
+        parsed_query = parse_qs(urlparse(request.full_url).query)
+        self.assertEqual(parsed_query["query"], ["profile shorthand"])
+        self.assertEqual(parsed_query["source"], ["search_suite"])
+        self.assertEqual(parsed_query["profile"], ["retrieval_only"])
+        self.assertEqual(request.get_header("X-source"), "search_suite")
+        self.assertEqual(request.get_header("X-profile"), "retrieval_only")
+
     def test_execute_tool_plan_item_file_backed_provider_source_preserves_real_search_projection(
         self,
     ) -> None:

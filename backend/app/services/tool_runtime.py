@@ -7873,6 +7873,20 @@ def build_tool_registry_provider_sources_from_settings_artifacts(
                     tool_registry_profile=spec.get("profile", "default"),
                 )
             )
+            inline_extra_tool_specs = {
+                key: value for key, value in spec.items() if key not in adapter_keys
+            }
+            if inline_extra_tool_specs:
+                configured_extra_tools = _coerce_tool_registry_spec_payload(
+                    spec.get("extra_tools")
+                )
+                if isinstance(configured_extra_tools, Mapping):
+                    spec["extra_tools"] = {
+                        **inline_extra_tool_specs,
+                        **dict(configured_extra_tools),
+                    }
+                else:
+                    spec["extra_tools"] = inline_extra_tool_specs
         source_settings = _clone_tool_execution_settings(
             settings=settings,
             tool_registry_provider_source=normalized_source_name,
