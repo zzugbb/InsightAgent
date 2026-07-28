@@ -3419,8 +3419,12 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
             and _http_json_output_implies_retrieval_count(normalized_output)
         ):
             for alias_name in (
+                "documents_total_count",
                 "documents_count",
+                "documentsCount",
+                "documentsTotal",
                 "document_count",
+                "documentCount",
                 "total_count",
                 "totalCount",
                 "total_results",
@@ -3448,11 +3452,18 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
         if "hit_count" not in normalized_output:
             for alias_name in (
                 "hits_count",
+                "hitsCount",
+                "hitCount",
                 "hit_total",
+                "hitTotal",
                 "results_count",
+                "resultsCount",
                 "result_count",
+                "resultCount",
                 "matches_count",
+                "matchesCount",
                 "match_count",
+                "matchCount",
             ):
                 alias_count = _normalize_nonnegative_int_count_value(
                     normalized_output.get(alias_name)
