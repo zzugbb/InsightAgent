@@ -3392,7 +3392,14 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
         "result" not in normalized_output
         and _http_json_output_implies_calculator_result(normalized_output)
     ):
-        for alias_name in ("value", "answer", "result_value", "computed_value"):
+        for alias_name in (
+            "value",
+            "answer",
+            "result_value",
+            "resultValue",
+            "computed_value",
+            "computedValue",
+        ):
             if alias_name in normalized_output:
                 normalized_output["result"] = normalized_output[alias_name]
                 break
@@ -3415,6 +3422,7 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
                 "documents_count",
                 "document_count",
                 "total_count",
+                "totalCount",
                 "total_results",
                 "totalResults",
                 "total",
