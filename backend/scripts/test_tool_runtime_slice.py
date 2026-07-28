@@ -35527,6 +35527,46 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ],
         )
 
+    def test_build_tool_registry_loader_factories_from_settings_artifacts_tracks_alias_profile_factory_reenabled_override_execution_diagnostics(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_loader_factories_json=json.dumps(
+                {
+                    "outer_factory": {
+                        "factory": "retrieval_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/calc",
+                                    "headers": {
+                                        "Authorization": "Bearer ${settings_api_keey}",
+                                    },
+                                },
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        artifacts = build_tool_registry_loader_factories_from_settings_artifacts(
+            settings=settings
+        )
+
+        self.assertEqual(tuple(sorted(artifacts["loader_factories"])), ("outer_factory",))
+        self.assertIn(
+            (
+                "calc_eval: http_json execution references unsupported runtime "
+                "template variable settings_api_keey in [redacted]"
+            ),
+            artifacts["loader_factory_diagnostics"]["outer_factory"][
+                "invalid_tool_executions"
+            ],
+        )
+
     def test_build_tool_registry_loader_factories_from_settings_artifacts_keeps_missing_file_diagnostics_when_factory_unbuilt(
         self,
     ) -> None:
@@ -35699,6 +35739,46 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertIn(
             (
                 "provider_search: http_json execution references unsupported runtime "
+                "template variable settings_api_keey in [redacted]"
+            ),
+            artifacts["provider_factory_diagnostics"]["outer_factory"][
+                "invalid_tool_executions"
+            ],
+        )
+
+    def test_build_tool_registry_provider_factories_from_settings_artifacts_tracks_alias_profile_factory_reenabled_override_execution_diagnostics(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_factories_json=json.dumps(
+                {
+                    "outer_factory": {
+                        "factory": "retrieval_only",
+                        "overrides": {
+                            "calc_eval": {
+                                "enabled": True,
+                                "execution": {
+                                    "kind": "http_json",
+                                    "url": "https://provider.example/calc",
+                                    "headers": {
+                                        "Authorization": "Bearer ${settings_api_keey}",
+                                    },
+                                },
+                            }
+                        },
+                    }
+                }
+            )
+        )
+
+        artifacts = build_tool_registry_provider_factories_from_settings_artifacts(
+            settings=settings
+        )
+
+        self.assertEqual(tuple(sorted(artifacts["provider_factories"])), ("outer_factory",))
+        self.assertIn(
+            (
+                "calc_eval: http_json execution references unsupported runtime "
                 "template variable settings_api_keey in [redacted]"
             ),
             artifacts["provider_factory_diagnostics"]["outer_factory"][
@@ -48851,6 +48931,63 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             ("calc_eval", "calc_eval_fast", "task_plan"),
         )
 
+    def test_get_configured_tool_registry_provider_uses_provider_factory_alias_profile_override(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_source="planning_suite",
+            tool_registry_provider_factories_json=json.dumps(
+                {
+                    "outer_factory": {
+                        "factory": "retrieval_only",
+                        "profile": "default",
+                    }
+                }
+            ),
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "provider_factory": "outer_factory",
+                    }
+                }
+            ),
+            tool_registry_profile="default",
+            tool_registry_overrides_json=None,
+            tool_registry_extra_tools_json=None,
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "task_plan", "task_retrieve"),
+        )
+
+    def test_get_configured_tool_registry_provider_uses_provider_factory_profile_override(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_source="planning_suite",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "provider_factory": "retrieval_only",
+                        "profile": "default",
+                    }
+                }
+            ),
+            tool_registry_profile="default",
+            tool_registry_overrides_json=None,
+            tool_registry_extra_tools_json=None,
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "task_plan", "task_retrieve"),
+        )
+
     def test_get_configured_tool_registry_provider_uses_selected_source_backed_by_loader_factory(self) -> None:
         settings = SimpleNamespace(
             tool_registry_provider_source="planning_suite",
@@ -48899,6 +49036,32 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             get_registered_tool_names(registry_provider=provider),
             ("calc_eval", "calc_eval_fast", "task_plan"),
         )
+
+    def test_get_configured_tool_registry_provider_uses_loader_factory_profile_override(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_provider_source="planning_suite",
+            tool_registry_provider_sources_json=json.dumps(
+                {
+                    "planning_suite": {
+                        "loader_factory": "retrieval_only",
+                        "profile": "default",
+                    }
+                }
+            ),
+            tool_registry_profile="default",
+            tool_registry_overrides_json=None,
+            tool_registry_extra_tools_json=None,
+        )
+
+        provider = get_configured_tool_registry_provider(settings=settings)
+
+        self.assertEqual(
+            get_registered_tool_names(registry_provider=provider),
+            ("calc_eval", "task_plan", "task_retrieve"),
+        )
+
     def test_get_configured_tool_registry_provider_includes_extra_tools(self) -> None:
         settings = SimpleNamespace(
             tool_registry_profile="default",

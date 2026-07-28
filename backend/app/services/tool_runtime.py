@@ -7234,14 +7234,15 @@ def _build_tool_registry_provider_factory_adapter(
             base_registry=extra_tools or {},
             overrides=source_overrides or None,
         )
-        return build_tool_registry_provider(
-            provider=base_provider,
+        registry = build_tool_registry(
+            base_registry=base_registry,
             overrides=build_tool_registry(
                 base_registry=profile_config.overrides,
                 overrides=adapter_overrides or None,
             ),
             disabled_tool_names=tuple(sorted(disabled_tool_names)),
         )
+        return StaticToolRegistryProvider(registry=registry)
 
     if (
         "profile" not in factory_spec
@@ -7461,12 +7462,17 @@ def build_tool_registry_loader_factories_from_settings_artifacts(
                 profile_name=target_normalized,
             )
         base_loader = resolved(settings)
+        profile_name_hint = getattr(resolved, "_tool_registry_profile_name", None)
         extra_tools = build_tool_registry_extra_tools_from_specs(
             extra_tool_specs=spec.get("extra_tools"),
             settings=settings,
         )
         base_registry = build_tool_registry(
-            base_registry=dict(base_loader()),
+            base_registry=(
+                get_default_tool_registry()
+                if profile_name_hint
+                else dict(base_loader())
+            ),
             overrides=extra_tools or None,
         )
         diagnostics = _merge_tool_registry_file_diagnostics(
@@ -7610,6 +7616,7 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
                 profile_name=target_normalized,
             )
         base_provider = resolved(settings)
+        profile_name_hint = getattr(resolved, "_tool_registry_profile_name", None)
         provider_source_name = get_tool_registry_provider_source_name_from_settings(
             settings=settings
         )
@@ -7619,7 +7626,11 @@ def build_tool_registry_provider_factories_from_settings_artifacts(
             provider_source_name=provider_source_name,
         )
         base_registry = build_tool_registry(
-            base_registry=dict(base_provider.load_tool_registry()),
+            base_registry=(
+                get_default_tool_registry()
+                if profile_name_hint
+                else dict(base_provider.load_tool_registry())
+            ),
             overrides=extra_tools or None,
         )
         diagnostics = _merge_tool_registry_file_diagnostics(
@@ -7939,6 +7950,16 @@ def build_tool_registry_provider_adapter(
         base_registry=extra_tools or {},
         overrides=source_overrides or None,
     )
+    if known_base_registry is not None:
+        registry = build_tool_registry(
+            base_registry=base_registry,
+            overrides=build_tool_registry(
+                base_registry=profile_config.overrides,
+                overrides=adapter_overrides or None,
+            ),
+            disabled_tool_names=tuple(sorted(disabled_tool_names)),
+        )
+        return StaticToolRegistryProvider(registry=registry)
     return build_tool_registry_provider(
         provider=base_provider,
         loader=base_loader,
