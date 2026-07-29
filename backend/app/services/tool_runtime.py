@@ -13589,6 +13589,9 @@ _TOOL_RAG_DOCUMENT_CONTAINER_FIELDS = (
     "data",
     "record",
     "item",
+    "attributes",
+    "source",
+    "fields",
 )
 _TOOL_RAG_DOCUMENT_LIST_FIELDS = (
     "documents",
@@ -14817,7 +14820,19 @@ def _extract_provider_tool_plan_items_from_payload(
     tools = _coerce_tool_registry_spec_payload(tools)
     if _is_non_text_sequence(tools):
         return list(tools)
-    raw_name = payload.get("name", payload.get("tool"))
+    tool_calls = _coerce_tool_registry_spec_payload(payload.get("tool_calls"))
+    if _is_non_text_sequence(tool_calls):
+        return list(tool_calls)
+    raw_name = payload.get(
+        "name",
+        payload.get(
+            "tool",
+            payload.get(
+                "tool_name",
+                payload.get("function_name", payload.get("function")),
+            ),
+        ),
+    )
     raw_name = _coerce_tool_execution_string_like_value(raw_name)
     if isinstance(raw_name, str) and raw_name.strip():
         return [payload]
@@ -14853,7 +14868,19 @@ def _extract_provider_response_content(response: object) -> object:
     normalized_response = _coerce_tool_registry_spec_payload(response)
     if isinstance(normalized_response, Mapping):
         response = normalized_response
-        if any(key in response for key in ("tools", "plan", "name", "tool")):
+        if any(
+            key in response
+            for key in (
+                "tools",
+                "plan",
+                "name",
+                "tool",
+                "tool_calls",
+                "tool_name",
+                "function_name",
+                "function",
+            )
+        ):
             return response
         if "content" in response:
             content = response.get("content")
@@ -14887,6 +14914,18 @@ def _extract_provider_response_content(response: object) -> object:
     return content
 
 
+def _coerce_provider_tool_plan_input_mapping(raw_value: object) -> object:
+    raw_value = _coerce_tool_registry_spec_payload(raw_value)
+    if not isinstance(raw_value, str):
+        return raw_value
+    try:
+        parsed_value = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return raw_value
+    parsed_value = _coerce_tool_registry_spec_payload(parsed_value)
+    return parsed_value if isinstance(parsed_value, Mapping) else raw_value
+
+
 def _normalize_provider_tool_plan_item(
     raw_item: object,
     *,
@@ -14903,7 +14942,22 @@ def _normalize_provider_tool_plan_item(
         return tool_name, {}
     if not isinstance(raw_item, Mapping):
         return None
-    raw_name = raw_item.get("name", raw_item.get("tool", ""))
+    raw_function = _coerce_tool_registry_spec_payload(raw_item.get("function"))
+    if isinstance(raw_function, Mapping):
+        merged_item = dict(raw_item)
+        for key, value in raw_function.items():
+            merged_item.setdefault(str(key), value)
+        raw_item = merged_item
+    raw_name = raw_item.get(
+        "name",
+        raw_item.get(
+            "tool",
+            raw_item.get(
+                "tool_name",
+                raw_item.get("function_name", raw_item.get("function", "")),
+            ),
+        ),
+    )
     tool_name = _resolve_provider_tool_name(
         raw_name,
         registry_provider=registry_provider,
@@ -14912,14 +14966,31 @@ def _normalize_provider_tool_plan_item(
         return None
     tool_input = _coerce_tool_registry_spec_payload(raw_item.get("input"))
     if not isinstance(tool_input, Mapping):
-        tool_input = _coerce_tool_registry_spec_payload(raw_item.get("arguments"))
+        tool_input = _coerce_provider_tool_plan_input_mapping(
+            raw_item.get("arguments")
+        )
     if not isinstance(tool_input, Mapping):
         tool_input = _coerce_tool_registry_spec_payload(raw_item.get("args"))
+    if not isinstance(tool_input, Mapping):
+        tool_input = _coerce_provider_tool_plan_input_mapping(
+            raw_item.get("parameters")
+        )
     if not isinstance(tool_input, Mapping):
         tool_input = {
             key: value
             for key, value in raw_item.items()
-            if key not in {"name", "tool", "input", "arguments", "args"}
+            if key
+            not in {
+                "name",
+                "tool",
+                "tool_name",
+                "function_name",
+                "function",
+                "input",
+                "arguments",
+                "args",
+                "parameters",
+            }
         }
     tool_input = _coerce_tool_registry_spec_payload(tool_input)
     if not isinstance(tool_input, Mapping):

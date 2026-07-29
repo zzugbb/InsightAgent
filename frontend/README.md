@@ -139,7 +139,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
   - 后端 mock final-answer observation parser 现在也会恢复 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串；因此前端最终回答在旧 observation 只剩嵌套 preview 时，也会继续显示 real calc / real retrieval 摘要，而不是 `output_preview=...` 或旁路字段。
 - 当前最近一次已记录校验基线：
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1681/1681`）
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1685/1685`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）
@@ -149,7 +149,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 通过（完整 Chromium e2e，`47/47`）
   - `git diff --check` 通过
-- 本轮收尾验证：先新增 `-k camel_text_aliases` 红测并确认失败，再补齐真实 HTTP JSON provider search 的 runtime registration 运行路径：当上游以 `results`/`hits`/`matches` 返回列表且显式只投影 `documents_total` 时，service execution 会在 retrieval 语义下补齐 `documents_total`，同时 RAG follow-up 可从 `snippetText`/`contentText`/`textContent` 等正文别名抽取 chunks；通用 trace/export 回放保持旧 `matches` output shape，不扩大外部契约。同步验证 `-k camel_text_aliases`、`-k rag_followup`、`-k http_json`、`-k provider_source`、`-k tool_registry`、完整 backend slice（`1681/1681`）与 `bash scripts/test_ci_e2e_tooling.sh` 均通过。本轮未跑 frontend node、frontend build 或完整 browser e2e。
+- 本轮收尾验证：先用临时 HEAD+测试补丁确认 `-k tool_name_and_parameters_aliases`、`-k tool_calls_function_arguments` 与 `-k attribute_containers` 红测失败，再补齐 provider planner 常见真实输出形态：`tool_name`/`function_name`/`function` 可作为工具名别名，`parameters` 可作为输入别名，OpenAI-style `tool_calls[].function.name/arguments` envelope 也会解析为 plan item，且仅在 planner `arguments`/`parameters` 位置把 JSON object 字符串转成输入 dict；同时 RAG follow-up 会从真实搜索常见的 `attributes` / `source` / `fields` 容器继续抽取 `snippetText` / `contentText` / `textContent` chunks。同步验证 `-k tool_name_and_parameters_aliases`、`-k tool_calls_function_arguments`、`-k attribute_containers`、`-k build_tool_plan_provider`、`-k provider_tool_plan`、`-k rag_followup`、`-k provider_source`、`-k http_json`、完整 backend slice（`1685/1685`）与 `bash scripts/test_ci_e2e_tooling.sh` 均通过。本轮未跑 frontend node、frontend build、backend full-stack e2e 或完整 browser e2e。
 
 ## 全仓库审计结论
 

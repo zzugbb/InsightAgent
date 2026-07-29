@@ -3680,6 +3680,82 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             {"expression": "6/2"},
         )
 
+    def test_build_tool_plan_provider_accepts_tool_name_and_parameters_aliases(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tools": [
+                                {
+                                    "tool_name": "calc_eval",
+                                    "parameters": {"expression": "10/2"},
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "10/2"},
+        )
+
+    def test_build_tool_plan_provider_accepts_tool_calls_function_arguments(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "calc_eval",
+                                "arguments": json.dumps(
+                                    {"expression": "14/2"},
+                                    ensure_ascii=False,
+                                ),
+                            }
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "14/2"},
+        )
+
     def test_build_tool_plan_provider_accepts_flattened_task_retrieve_fields(self) -> None:
         class FakeProvider:
             provider = "openai"
@@ -58586,6 +58662,43 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_rag_followup_extracts_chunks_from_http_json_attribute_containers_for_real_tool(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "matches": [
+                    {"attributes": {"snippetText": "alpha attribute snippet"}},
+                    {"source": {"contentText": "beta source content"}},
+                    {"fields": {"textContent": "gamma fields text"}},
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"]["meta"]["rag"],
+            {
+                "chunks": [
+                    "alpha attribute snippet",
+                    "beta source content",
+                    "gamma fields text",
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+
     def test_build_tool_rag_followup_redacts_http_json_chunk_field_paths(
         self,
     ) -> None:
@@ -86924,6 +87037,86 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                     "alpha snippet text",
                     "beta content text",
                     "gamma text content",
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+
+    def test_execute_tool_plan_item_service_execution_builds_rag_followup_from_attribute_containers(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "results": [
+                        {"attributes": {"snippetText": "alpha attribute snippet"}},
+                        {"source": {"contentText": "beta source content"}},
+                        {"fields": {"textContent": "gamma fields text"}},
+                    ],
+                    "knowledge_base_id": "provider-kb",
+                },
+                result_preview_keys=("documents_total",),
+                result_output_keys=("documents_total",),
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "incident evidence"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "incident evidence"},
+                prompt="search incident evidence",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-1",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        final_item = items[-1]
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 3,
+            },
+        )
+        rag_followup = final_item["result"]["loop_execution_result"]["success_effects"][
+            "rag_followup"
+        ]
+        self.assertIsNotNone(rag_followup)
+        assert rag_followup is not None
+        self.assertEqual(
+            rag_followup["step"]["meta"]["rag"],
+            {
+                "chunks": [
+                    "alpha attribute snippet",
+                    "beta source content",
+                    "gamma fields text",
                 ],
                 "knowledge_base_id": "provider-kb",
             },
