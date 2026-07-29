@@ -142,7 +142,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 本轮未执行（上一记录为完整 Chromium e2e `47/47`）
   - `git diff --check` 通过
-- 本轮收尾验证：接上当前真实工作区后，继续收口 HTTP JSON provider search 的 `result_fields` 显式投影；当配置 `result_fields.chunks` 指向真实 provider 的对象列表时，runtime 会把 `snippetText` / 嵌套 `contentText` / 字符串项归一成安全字符串 chunks，并投影到 preview/output/result-summary，title-only 条目不会透出；已有 `response_path` 列表计数与 chunks 投影旧链路保持稳定，未声明 `chunks` 的旧输出契约不扩大。同步验证 `-k projects_chunks_from_result_fields_list`、`-k projects_chunks`、`-k build_tool_result_summary`、`-k response_path_list`、`-k build_tool_rag_followup`、`-k http_json`、`-k tool_registry`、`-k provider_source` 与完整 backend slice（`1698/1698`）均通过；本轮 git stage 提权请求被审批链路拒绝/断流，未继续执行 full-stack e2e / Chromium e2e。
+- 本轮收尾验证：继续收口 HTTP JSON provider search 的 GraphQL-style connection 输出；当 `result_fields.documents` 显式投到 `{totalCount, edges:[{node:...}]}` 这类真实 provider 容器时，runtime 会补齐 `documents_total`，从 `edges/node` 抽取安全 chunks，并贯通 preview/output/result-summary；普通 `documents` 元数据对象不会抢在后续 `items` 真实列表前计数，已有 `response_path` 列表与 `result_fields.chunks` 旧链路保持稳定。同步验证 `-k projects_graphql_connection_documents`、`-k documents_total_from_items_when_documents_is_metadata`、`-k projects_chunks`、`-k build_tool_result_summary`、`-k response_path_list`、`-k build_tool_rag_followup`、`-k http_json`、`-k tool_registry`、`-k provider_source` 与完整 backend slice（`1699/1699`）均通过；本轮尚未重跑 full-stack e2e / Chromium e2e。
 
 ## 全仓库审计结论
 
