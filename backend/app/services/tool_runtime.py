@@ -16191,6 +16191,13 @@ def normalize_tool_output_for_registration(
     )
     if _normalize_tool_execution_kind(registration.execution_kind) == "http_json":
         normalized_output = _normalize_http_json_safe_output_shape(normalized_output)
+        if "chunks" not in normalized_output and (
+            "chunks" in _normalize_result_preview_keys(registration.result_preview_keys)
+            or "chunks" in _normalize_result_output_keys(registration.result_output_keys)
+        ):
+            extracted_chunks = _extract_tool_rag_chunks_from_output(normalized_output)
+            if extracted_chunks:
+                normalized_output["chunks"] = extracted_chunks
         if (
             desired_tool_kind_text
             and "documents_total" not in normalized_output
