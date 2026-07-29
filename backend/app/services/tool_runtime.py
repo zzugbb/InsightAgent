@@ -13555,12 +13555,23 @@ def _build_tool_rag_followup_content(
 
 _TOOL_RAG_DOCUMENT_TEXT_FIELDS = (
     "snippet",
+    "snippet_text",
+    "snippetText",
     "content",
+    "content_text",
+    "contentText",
     "text",
+    "text_content",
+    "textContent",
     "excerpt",
     "summary",
     "description",
     "body",
+    "body_text",
+    "bodyText",
+    "plain_text",
+    "plainText",
+    "markdown",
     "chunk",
     "chunkText",
     "passage",
@@ -15963,7 +15974,7 @@ def normalize_tool_output_for_registration(
                 {"tool_kind": desired_tool_kind_text}
             )
         ):
-            for alias_name in ("data", "records"):
+            for alias_name in ("results", "hits", "matches", "data", "records"):
                 alias_value = normalized_output.get(alias_name)
                 if isinstance(alias_value, (list, tuple)):
                     normalized_output["documents_total"] = len(alias_value)
