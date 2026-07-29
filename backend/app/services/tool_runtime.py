@@ -3371,21 +3371,80 @@ _HTTP_JSON_RETRIEVAL_LIST_CONTAINER_FIELDS = (
     "records",
     "value",
 )
+_HTTP_JSON_RETRIEVAL_NESTED_CONTAINER_FIELDS = (
+    "data",
+    "payload",
+    "result",
+    "response",
+    "Get",
+    "get",
+)
+
+
+def _flatten_http_json_retrieval_sequence(
+    raw_value: Sequence[object],
+) -> Sequence[object]:
+    flattened_items: list[object] = []
+    saw_nested_sequence = False
+    for raw_item in raw_value:
+        if isinstance(raw_item, (str, bytes, bytearray, memoryview)):
+            flattened_items.append(raw_item)
+            continue
+        if isinstance(raw_item, (list, tuple)):
+            saw_nested_sequence = True
+            flattened_items.extend(raw_item)
+            continue
+        flattened_items.append(raw_item)
+    if not saw_nested_sequence:
+        return raw_value
+    return tuple(flattened_items)
 
 
 def _extract_http_json_retrieval_list_from_container(
     raw_value: object,
+    *,
+    depth: int = 0,
+    visited: set[int] | None = None,
 ) -> Sequence[object] | None:
+    if depth > 4:
+        return None
     if isinstance(raw_value, (str, bytes, bytearray, memoryview)):
         return None
     if isinstance(raw_value, (list, tuple)):
-        return raw_value
+        return _flatten_http_json_retrieval_sequence(raw_value)
     if not isinstance(raw_value, Mapping):
         return None
+    if visited is None:
+        visited = set()
+    value_id = id(raw_value)
+    if value_id in visited:
+        return None
+    visited.add(value_id)
     for field_name in _HTTP_JSON_RETRIEVAL_LIST_CONTAINER_FIELDS:
         nested_value = raw_value.get(field_name)
         if isinstance(nested_value, (list, tuple)):
-            return nested_value
+            return _flatten_http_json_retrieval_sequence(nested_value)
+    for field_name in _HTTP_JSON_RETRIEVAL_NESTED_CONTAINER_FIELDS:
+        nested_value = raw_value.get(field_name)
+        if not isinstance(nested_value, Mapping):
+            continue
+        nested_list = _extract_http_json_retrieval_list_from_container(
+            nested_value,
+            depth=depth + 1,
+            visited=visited,
+        )
+        if nested_list is not None:
+            return nested_list
+    if len(raw_value) == 1:
+        nested_value = next(iter(raw_value.values()))
+        if isinstance(nested_value, (list, tuple)):
+            return _flatten_http_json_retrieval_sequence(nested_value)
+        if isinstance(nested_value, Mapping):
+            return _extract_http_json_retrieval_list_from_container(
+                nested_value,
+                depth=depth + 1,
+                visited=visited,
+            )
     return None
 
 
@@ -3490,11 +3549,17 @@ def _get_safe_http_json_request_id_alias(output: dict[str, object]) -> str | Non
         )
         if safe_request_id is not None:
             return safe_request_id
-    for container_name in ("search_metadata", "searchMetadata"):
+    for container_name in (
+        "search_metadata",
+        "searchMetadata",
+        "metadata",
+        "meta",
+        "extensions",
+    ):
         nested_container = output.get(container_name)
         if not isinstance(nested_container, Mapping):
             continue
-        for alias_name in ("request_id", "requestId", "id"):
+        for alias_name in ("request_id", "requestId", "requestID", "id", "traceId"):
             safe_request_id = _get_safe_http_json_request_id_display_value(
                 nested_container.get(alias_name)
             )
@@ -3544,7 +3609,9 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
         for alias_name in list_alias_names:
             alias_value = normalized_output.get(alias_name)
             if isinstance(alias_value, (list, tuple)):
-                normalized_output["documents_total"] = len(alias_value)
+                normalized_output["documents_total"] = len(
+                    _flatten_http_json_retrieval_sequence(alias_value)
+                )
                 break
             connection_count = _extract_http_json_retrieval_count_from_container(
                 alias_value
@@ -3575,7 +3642,9 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
         for alias_name in hit_list_alias_names:
             alias_value = normalized_output.get(alias_name)
             if isinstance(alias_value, (list, tuple)):
-                normalized_output["hit_count"] = len(alias_value)
+                normalized_output["hit_count"] = len(
+                    _flatten_http_json_retrieval_sequence(alias_value)
+                )
                 break
             nested_list = _extract_http_json_retrieval_list_from_container(alias_value)
             if nested_list is not None:
@@ -16364,7 +16433,9 @@ def normalize_tool_output_for_registration(
                     break
                 alias_value = normalized_output.get(alias_name)
                 if isinstance(alias_value, (list, tuple)):
-                    normalized_output["documents_total"] = len(alias_value)
+                    normalized_output["documents_total"] = len(
+                        _flatten_http_json_retrieval_sequence(alias_value)
+                    )
                     break
                 connection_count = _extract_http_json_retrieval_count_from_container(
                     alias_value
@@ -16398,7 +16469,9 @@ def normalize_tool_output_for_registration(
             for alias_name in hit_list_alias_names:
                 alias_value = normalized_output.get(alias_name)
                 if isinstance(alias_value, (list, tuple)):
-                    normalized_output["hit_count"] = len(alias_value)
+                    normalized_output["hit_count"] = len(
+                        _flatten_http_json_retrieval_sequence(alias_value)
+                    )
                     break
                 nested_list = _extract_http_json_retrieval_list_from_container(
                     alias_value

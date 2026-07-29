@@ -139,7 +139,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
   - 后端 mock final-answer observation parser 现在也会恢复 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串；因此前端最终回答在旧 observation 只剩嵌套 preview 时，也会继续显示 real calc / real retrieval 摘要，而不是 `output_preview=...` 或旁路字段。
 - 当前最近一次已记录校验基线：
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1698/1698`）
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1707/1707`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）
@@ -149,12 +149,12 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium` 本轮在真实 backend/frontend 生命周期内执行：首轮并发 `45/47`，两个导出 UI/download 相关失败用例随后用 Chromium 单 worker 精确复跑 `2/2` 通过。
   - `git diff --check` 通过
-- 本轮收尾验证：继续收口 HTTP JSON provider search 的向量/RAG SDK 输出；Qdrant-style `result.points[]`、Milvus/Zilliz-style `data[].entity` 与 LlamaIndex-style `source_nodes[]` 现在都会在 registration 语义下补齐 `documents_total` 与安全 `chunks`，继续贯通 preview/output/result-summary。同步验证新增红测 `-k qdrant_points_documents`、`-k milvus_entity_documents`、`-k source_nodes_documents`，上一轮 Azure/OData、organic、ES、GraphQL、metadata fallback 回归，`-k build_tool_result_summary`、`-k response_path_list`、`-k build_tool_rag_followup`、`-k http_json`、`-k tool_registry`、`-k provider_source` 与完整 backend slice（`1705/1705`）均通过；同一受控生命周期内后端 main phase e2e 通过，未重跑完整 Chromium e2e。
+- 本轮收尾验证：继续收口 HTTP JSON provider search 的真实向量/GraphQL 输出；Chroma-style `documents: [[...]]` 会扁平补齐 `documents_total` 与安全 `chunks`，Weaviate-style `data.Get.<Class>[]` 会受限递归抽取 documents/chunks，并从 `extensions.requestId` 归一安全 request id。同步验证新增红测 `-k chroma_document_matrix`、`-k weaviate_graphql_get_documents`，上一轮 Qdrant/Milvus/LlamaIndex、GraphQL connection、metadata fallback 回归，`-k build_tool_result_summary`、`-k response_path_list`、`-k build_tool_rag_followup`、`-k http_json`、`-k tool_registry`、`-k provider_source` 与完整 backend slice（`1707/1707`）均通过；同一受控生命周期内后端 main phase e2e 通过，完整 Chromium e2e 首轮 `46/47`，唯一 404 toast 用例单 worker 精确复跑 `1/1` 通过。
 
 ## 全仓库审计结论
 
-- 前端当前文档与代码主线一致：workbench / live store / model settings 已承接 `execution_summary`、`execution_diagnostics`、JSON-string safe output、name-only semantic fallback 与 task/session export 回放语义。
-- 最近收尾的 display / observation / export fallback 子线已转为回归守护；后续不再优先扩大本地 display fallback，而是跟随后端 `real-tool-execution` 主线验证真实上游工具在 UI 中的配置诊断、运行态 trace、搜索、semantic stats 与导出回放。
+- 前端当前文档与代码主线一致：workbench / live store / model settings 已承接 `execution_summary`、`execution_diagnostics`、JSON-string safe output、name-only semantic fallback 与 task/session export 回放语义；`real-tool-execution` 当前验收基线已通过完整 Chromium 复验。
+- 最近收尾的 display / observation / export fallback 子线已转为回归守护；后续不再优先扩大本地 display fallback，而是按已完成的 `real-tool-execution` 验收基线维护真实上游工具在 UI 中的配置诊断、运行态 trace、搜索、semantic stats 与导出回放。
 - 下一阶段前端重点是让 provider/source real tools 的设置治理面、运行 trace 与导出回放保持同一语义，而不是发散出新的前端专用解释层。
 
 ## 当前已有内容

@@ -32002,6 +32002,256 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Retrieved 3 documents.",
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_projects_chroma_document_matrix(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/chroma/query",
+                            "method": "POST",
+                            "json_body": {
+                                "query_texts": ["$query"],
+                                "n_results": 3,
+                            },
+                        },
+                        "result_preview_keys": ["documents_total", "chunks"],
+                        "result_output_keys": [
+                            "documents_total",
+                            "chunks",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "ids": [["doc-1", "doc-2", "doc-3"]],
+                    "documents": [
+                        [
+                            "alpha chroma document",
+                            "beta chroma document",
+                            "gamma chroma document",
+                        ]
+                    ],
+                    "metadatas": [[{"source": "kb"}, {"source": "kb"}, {}]],
+                    "distances": [[0.12, 0.2, 0.33]],
+                    "traceId": "req-chroma-matrix-1",
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident chroma"},
+                prompt="search incident chroma",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        expected_chunks = [
+            "alpha chroma document",
+            "beta chroma document",
+            "gamma chroma document",
+        ]
+        self.assertEqual(output["documents_total"], 3)
+        self.assertEqual(output["chunks"], expected_chunks)
+        self.assertEqual(output["request_id"], "req-chroma-matrix-1")
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 3,
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 3,
+                "chunks": expected_chunks,
+                "request_id": "req-chroma-matrix-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 3 documents (request id req-chroma-matrix-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_projects_weaviate_graphql_get_documents(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/v1/graphql",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "{ Get { IncidentDoc { text } } }",
+                                "variables": {
+                                    "query": "$query",
+                                },
+                            },
+                        },
+                        "result_preview_keys": ["documents_total", "chunks"],
+                        "result_output_keys": [
+                            "documents_total",
+                            "chunks",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "Get": {
+                            "IncidentDoc": [
+                                {"text": "alpha weaviate doc"},
+                                {
+                                    "metadata": {
+                                        "summary": "beta weaviate summary",
+                                    },
+                                },
+                                {"title": "ignored title only"},
+                            ]
+                        }
+                    },
+                    "extensions": {
+                        "requestId": "req-weaviate-graphql-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident graphql"},
+                prompt="search incident graphql",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        expected_chunks = [
+            "alpha weaviate doc",
+            "beta weaviate summary",
+        ]
+        self.assertEqual(output["documents_total"], 3)
+        self.assertEqual(output["chunks"], expected_chunks)
+        self.assertEqual(output["request_id"], "req-weaviate-graphql-1")
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 3,
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 3,
+                "chunks": expected_chunks,
+                "request_id": "req-weaviate-graphql-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 3 documents (request id req-weaviate-graphql-1).",
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_infers_http_json_hit_count_result_field_from_registration_semantics(
         self,
     ) -> None:

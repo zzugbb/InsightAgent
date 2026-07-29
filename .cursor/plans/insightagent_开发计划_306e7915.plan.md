@@ -1,9 +1,9 @@
 ---
 name: InsightAgent 开发计划
-overview: W1-W4 已完成并收口；当前活跃主线是默认工具去 mock 化、真实工具接入，以及 tool registry / profile / provider source 治理产品化。tool-runtime-productionization 已归档，不再作为活跃 spec 维护；当前以代码、三份 README 和本计划文件为准。
+overview: W1-W4 已完成并收口；real-tool-execution 当前验收基线已完成收尾，后续新增 provider 协议按增量红测治理。tool-runtime-productionization 已归档，不再作为活跃 spec 维护；当前以代码、三份 README 和本计划文件为准。
 current_focus:
-  - 下一阶段主线切到 real-tool-execution：把已能规划/注册的 real search、real calc 等 extra tool 稳定接到真实上游协议
-  - 优先推进请求模板、鉴权/header/query/body、response path/result_fields、preview/output/result-summary、trace/observation/export 诊断闭环
+  - real-tool-execution 当前验收基线已完成：已能规划/注册的 real search、real calc 等 extra tool 已稳定接到真实上游协议与 e2e 回归
+  - 后续新增具体 provider 协议继续按先红测再实现，守住请求模板、鉴权/header/query/body、response path/result_fields、preview/output/result-summary、trace/observation/export 诊断闭环
   - registry / profile / provider source / diagnostics / selected source 继续作为真实工具执行主线的治理底座
   - 保持外部 SSE / trace / export / e2e 契约稳定，优先做内部 runtime/helper/display 收口
 constraints:
@@ -12,17 +12,17 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1698/1698)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1707/1707)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
   frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
-  frontend_chromium_e2e: 本轮未执行（上一记录为 cd frontend && npx playwright test --project=chromium --reporter=line --workers=1 47/47）
+  frontend_chromium_e2e: 本轮在真实 backend/frontend 生命周期内执行完整 Chromium；首轮 46/47，唯一 404 toast 用例单 worker 精确复跑 1/1 通过
   diff_check: git diff --check
-latest_validation_note: 本轮继续收口 HTTP JSON provider search 的向量/RAG SDK 输出；Qdrant-style result.points[]、Milvus/Zilliz-style data[].entity 与 LlamaIndex-style source_nodes[] 现在都会在 registration 语义下补齐 documents_total 与安全 chunks，继续贯通 preview/output/result-summary。同步验证新增红测 qdrant_points_documents、milvus_entity_documents、source_nodes_documents，上一轮 Azure/OData、organic、ES、GraphQL、metadata fallback 回归，build_tool_result_summary、response_path_list、build_tool_rag_followup、http_json、tool_registry、provider_source 与完整 backend slice 1705/1705 均通过；同一受控生命周期内后端 main phase e2e 通过，未重跑完整 Chromium e2e。
+latest_validation_note: 本轮继续收口 HTTP JSON provider search 的真实向量/GraphQL 输出；Chroma-style documents: [[...]] 会扁平补齐 documents_total 与安全 chunks，Weaviate-style data.Get.<Class>[] 会受限递归抽取 documents/chunks，并从 extensions.requestId 归一安全 request id。同步验证新增红测 chroma_document_matrix、weaviate_graphql_get_documents，上一轮 Qdrant/Milvus/LlamaIndex、GraphQL connection、metadata fallback 回归，build_tool_result_summary、response_path_list、build_tool_rag_followup、http_json、tool_registry、provider_source 与完整 backend slice 1707/1707 均通过；同一受控生命周期内后端 main phase e2e 通过，完整 Chromium e2e 首轮 46/47，唯一 404 toast 用例单 worker 精确复跑 1/1 通过。real-tool-execution 当前验收基线完成收尾。
 todos:
   - id: real-tool-execution
-    status: in_progress
-    content: 当前最高优先级；把 provider/source 文件配置里的 real search / real calc 等 extra tool 从“可展示、可规划”推进到“可稳定接真实上游协议”
+    status: completed
+    content: 当前验收基线已完成收尾；provider/source 文件配置里的 real search / real calc 等 extra tool 已从“可展示、可规划”推进到“可稳定接真实上游协议与 e2e 回归”
   - id: registry-governance
     status: in_progress
     content: 作为第二优先级，继续收口 tool registry / profile / provider source / selected source / diagnostics_summary / loader_factory 的统一治理语义
@@ -502,18 +502,19 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 422. Elastic/OpenSearch-style hits search 输出也已补齐：当真实 provider 通过 `result_fields.documents` 把 `{total:{value}, hits:[...]}` 这类搜索容器保留为 `documents` 时，HTTP JSON retrieval registration 会优先从 `total.value` 补齐 `documents_total`，并从 hit `_source` / `fields` 容器抽取安全 chunks，继续进入 preview/output/result-summary；完整 backend slice 当前为 `1700/1700`。
 423. Azure/OData 与 organic search 输出也已补齐：当真实 provider 通过 `result_fields.documents` 保留 `{@odata.count, value:[...]}` 容器，或根响应直接返回 `organic_results[] + search_information.total_results + search_metadata.id` 时，HTTP JSON retrieval registration 会补齐 `documents_total`、安全 chunks 与 request id；无 registration 的旧 `matches` trace/export fallback 不额外扩展 `documents_total`，完整 backend slice 当前为 `1702/1702`，后端 main phase e2e 已通过，Chromium full e2e 首轮并发 `45/47` 且失败用例单 worker 复跑 `2/2` 通过。
 424. 向量/RAG SDK search 输出也已补齐：Qdrant-style `result.points[]`、Milvus/Zilliz-style `data[].entity` 与 LlamaIndex-style `source_nodes[]` 会在 HTTP JSON retrieval registration 语义下补齐 `documents_total` 与安全 chunks，并进入 preview/output/result-summary；完整 backend slice 当前为 `1705/1705`，后端 main phase e2e 已通过。
+425. Chroma/Weaviate-style search 输出也已补齐：Chroma-style `documents: [[...]]` 会扁平补齐 `documents_total` 与安全 chunks，Weaviate-style `data.Get.<Class>[]` 会受限递归抽取 documents/chunks，并从 `extensions.requestId` 归一安全 request id；完整 backend slice 当前为 `1707/1707`，后端 main phase e2e 已通过，Chromium full e2e 首轮 `46/47` 且唯一 404 toast 用例单 worker 精确复跑 `1/1` 通过。
 
 ## 当前主线判断
 
 - 代码与文档当前主线是一致的：重点已经不是继续维护 archived runtime spec，而是把默认工具去 mock 化、真实工具执行本体与 registry/provider/source 治理继续产品化。
 - 全仓库审计后，final answer / Tool observations / observation fallback / export fallback 子线已基本收口；后续不再优先扩大兼容面，除非审计扫出明确红测。
-- `real-tool-execution` 当前已经完成 HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的大部分入口治理；direct source、带 profile 的 inline shorthand source/provider/loader、source inline real tool 同名 override 优先级、registry-file backed factory adapter override 与 diagnostics 并回、factory alias 外层 override/profile/diagnostics 套用、factory alias 指向 profile factory 后 re-enabled tool diagnostics、provider/source factory profile reset 运行路径、named loader/provider/source adapter override diagnostics、named provider/loader 与 provider/loader factory 背后的 file-backed real search 已有更接近 e2e 的 POST/header/body/query 回归，file-backed real calc 也已覆盖 provider planner planned execution kinds、函数调用式/provider Responses planner 输出、plan item execution、response_path 直达列表时的 search 计数投影与 chunks preview/output 投影、result_fields chunks 对象列表归一化与 chunks-only result-summary、GraphQL-style connection documents 计数/chunks 归一化、Elastic/OpenSearch hits documents 计数/chunks 归一化、Azure/OData 与 organic search documents 计数/chunks/request id 归一化、Qdrant/Milvus/LlamaIndex 风格向量/RAG documents 计数/chunks 归一化、trace preview/session export response、trace detail/delta/task export JSON 回放、preflight diagnostics、settings validate preview、chat persistence wrapper 回放归一化、RAG chunk wrapper 回放、task/session export response-ready/plain-wrapper 回放（含 `trace.steps` 容器）、batch/payload export summary 早期归一化、usage dashboard outward rows 归一化、task response summary `trace_json/usage_json` plain-wrapper 出口、file manifest `registry_sources` 的 source->source forward reference 依赖排序、settings-backed named provider 的 provider->provider forward reference 依赖排序、named loader 的 loader->loader forward reference 依赖排序，以及 settings-backed loader/provider factory 的 factory->factory forward reference 依赖排序，剩余重点是继续用红测收口真实上游协议边界中尚未覆盖的鉴权/profile 组合与端到端运行路径。
+- `real-tool-execution` 当前验收基线已经完成收尾：HTTP JSON 请求模板、响应映射、错误诊断、trace/export/SSE/audit/settings diagnostics、registry/source spec、planner/provider wrapper，以及 provider/source/settings/file-backed wrapper 的主要入口治理都已贯通；direct source、带 profile 的 inline shorthand source/provider/loader、source inline real tool 同名 override 优先级、registry-file backed factory adapter override 与 diagnostics 并回、factory alias 外层 override/profile/diagnostics 套用、factory alias 指向 profile factory 后 re-enabled tool diagnostics、provider/source factory profile reset 运行路径、named loader/provider/source adapter override diagnostics、named provider/loader 与 provider/loader factory 背后的 file-backed real search 已有更接近 e2e 的 POST/header/body/query 回归，file-backed real calc 也已覆盖 provider planner planned execution kinds、函数调用式/provider Responses planner 输出、plan item execution、response_path 直达列表时的 search 计数投影与 chunks preview/output 投影、result_fields chunks 对象列表归一化与 chunks-only result-summary、GraphQL-style connection documents 计数/chunks 归一化、Elastic/OpenSearch hits documents 计数/chunks 归一化、Azure/OData 与 organic search documents 计数/chunks/request id 归一化、Qdrant/Milvus/LlamaIndex/Chroma/Weaviate 风格向量与 GraphQL documents 计数/chunks/request id 归一化、trace preview/session export response、trace detail/delta/task export JSON 回放、preflight diagnostics、settings validate preview、chat persistence wrapper 回放归一化、RAG chunk wrapper 回放、task/session export response-ready/plain-wrapper 回放（含 `trace.steps` 容器）、batch/payload export summary 早期归一化、usage dashboard outward rows 归一化、task response summary `trace_json/usage_json` plain-wrapper 出口、file manifest `registry_sources` 的 source->source forward reference 依赖排序、settings-backed named provider 的 provider->provider forward reference 依赖排序、named loader 的 loader->loader forward reference 依赖排序，以及 settings-backed loader/provider factory 的 factory->factory forward reference 依赖排序均已进入回归；后续新增具体上游协议按增量红测治理，不再作为当前主线阻塞项。
 
 ## 下一步候选
 
-1. 继续推进 `real-tool-execution` 收尾：选择 provider/source file-backed 配置中的 real search / real calc，补 failing test，验证鉴权/header/query/body、response path/result_fields、provider planner 输出与 result preview/output/summary 在真实 source/profile 组合下贯通，重点放在更接近 e2e 的 runtime path。
-2. 随真实工具执行一起继续治理 `registry-governance`：确保 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 使用同一套安全摘要与错误语义。
-3. 完成真实工具执行主线的下一小段后，再进入 `queue-and-concurrency-lite`：单机任务排队、并发治理、运行可靠性。
+1. 进入 `queue-and-concurrency-lite`：单机任务排队、并发治理、运行可靠性。
+2. 继续把 `registry-governance` 作为维护线治理：selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 继续使用同一套安全摘要与错误语义。
+3. 后续新增具体 provider/source 协议时，继续按 real-tool-execution 的已完成验收基线补小红测并做局部归一化，不再扩大外部 SSE / trace / export / e2e 契约。
 4. `rag-governance-hardening` 排在其后：知识库版本化、来源治理与更细粒度 shared 规则。
 
 ## 维护约定
