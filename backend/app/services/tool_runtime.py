@@ -15948,6 +15948,27 @@ def normalize_tool_output_for_registration(
                 if isinstance(alias_value, (list, tuple)):
                     normalized_output["documents_total"] = len(alias_value)
                     break
+            if "documents_total" not in normalized_output:
+                for alias_name in (
+                    "documents_total_count",
+                    "documents_count",
+                    "documentsCount",
+                    "documentsTotal",
+                    "document_count",
+                    "documentCount",
+                    "total_count",
+                    "totalCount",
+                    "total_results",
+                    "totalResults",
+                    "total",
+                    "count",
+                ):
+                    alias_count = _normalize_nonnegative_int_count_value(
+                        normalized_output.get(alias_name)
+                    )
+                    if alias_count is not None:
+                        normalized_output["documents_total"] = alias_count
+                        break
         if (
             desired_tool_kind_text
             and "hit_count" not in normalized_output
