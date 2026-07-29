@@ -3314,6 +3314,9 @@ def _normalize_nonnegative_int_count_value(value: object) -> int | None:
 
 
 _HTTP_JSON_RETRIEVAL_COUNT_ALIAS_FIELDS = (
+    "@odata.count",
+    "odata_count",
+    "odataCount",
     "documents_total_count",
     "documents_count",
     "documentsCount",
@@ -3343,6 +3346,14 @@ _HTTP_JSON_RETRIEVAL_COUNT_ALIAS_FIELDS = (
     "total",
     "count",
 )
+_HTTP_JSON_RETRIEVAL_COUNT_CONTAINER_FIELDS = (
+    "search_information",
+    "searchInformation",
+    "metadata",
+    "meta",
+    "pageInfo",
+    "page_info",
+)
 _HTTP_JSON_RETRIEVAL_LIST_CONTAINER_FIELDS = (
     "edges",
     "nodes",
@@ -3351,6 +3362,8 @@ _HTTP_JSON_RETRIEVAL_LIST_CONTAINER_FIELDS = (
     "results",
     "hits",
     "matches",
+    "organic_results",
+    "organicResults",
     "data",
     "records",
     "value",
@@ -3379,6 +3392,15 @@ def _extract_http_json_retrieval_count_from_container(raw_value: object) -> int 
     nested_list = _extract_http_json_retrieval_list_from_container(raw_value)
     if nested_list is None:
         return None
+    alias_count = _extract_http_json_retrieval_count_alias_from_mapping(raw_value)
+    if alias_count is not None:
+        return alias_count
+    return len(nested_list)
+
+
+def _extract_http_json_retrieval_count_alias_from_mapping(
+    raw_value: Mapping,
+) -> int | None:
     for alias_name in _HTTP_JSON_RETRIEVAL_COUNT_ALIAS_FIELDS:
         alias_value = raw_value.get(alias_name)
         alias_count = _normalize_nonnegative_int_count_value(alias_value)
@@ -3391,7 +3413,16 @@ def _extract_http_json_retrieval_count_from_container(raw_value: object) -> int 
                     break
         if alias_count is not None:
             return alias_count
-    return len(nested_list)
+    for container_name in _HTTP_JSON_RETRIEVAL_COUNT_CONTAINER_FIELDS:
+        nested_container = raw_value.get(container_name)
+        if not isinstance(nested_container, Mapping):
+            continue
+        alias_count = _extract_http_json_retrieval_count_alias_from_mapping(
+            nested_container
+        )
+        if alias_count is not None:
+            return alias_count
+    return None
 
 
 def _http_json_output_implies_retrieval_count(output: dict[str, object]) -> bool:
@@ -3456,6 +3487,16 @@ def _get_safe_http_json_request_id_alias(output: dict[str, object]) -> str | Non
         )
         if safe_request_id is not None:
             return safe_request_id
+    for container_name in ("search_metadata", "searchMetadata"):
+        nested_container = output.get(container_name)
+        if not isinstance(nested_container, Mapping):
+            continue
+        for alias_name in ("request_id", "requestId", "id"):
+            safe_request_id = _get_safe_http_json_request_id_display_value(
+                nested_container.get(alias_name)
+            )
+            if safe_request_id is not None:
+                return safe_request_id
     return None
 
 
@@ -13665,6 +13706,11 @@ _TOOL_RAG_DOCUMENT_CONTAINER_FIELDS = (
     "attributes",
     "source",
     "fields",
+    "rich_snippet",
+    "richSnippet",
+    "top",
+    "detected_extensions",
+    "detectedExtensions",
 )
 _TOOL_RAG_DOCUMENT_LIST_FIELDS = (
     "documents",
@@ -13672,6 +13718,8 @@ _TOOL_RAG_DOCUMENT_LIST_FIELDS = (
     "results",
     "hits",
     "matches",
+    "organic_results",
+    "organicResults",
     "data",
     "records",
     "value",
@@ -16283,18 +16331,27 @@ def normalize_tool_output_for_registration(
                 {"tool_kind": desired_tool_kind_text}
             )
         ):
+            root_count = _extract_http_json_retrieval_count_from_container(
+                normalized_output
+            )
+            if root_count is not None:
+                normalized_output["documents_total"] = root_count
             list_alias_names = (
                 "documents",
                 "items",
                 "results",
                 "hits",
                 "matches",
+                "organic_results",
+                "organicResults",
                 "data",
                 "records",
             )
             if is_http_json_scalar_fallback_output:
                 list_alias_names = (*list_alias_names, "value")
             for alias_name in list_alias_names:
+                if "documents_total" in normalized_output:
+                    break
                 alias_value = normalized_output.get(alias_name)
                 if isinstance(alias_value, (list, tuple)):
                     normalized_output["documents_total"] = len(alias_value)

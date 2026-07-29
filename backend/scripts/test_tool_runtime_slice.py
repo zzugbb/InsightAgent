@@ -31372,6 +31372,260 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Retrieved 12 documents (request id req-elastic-hits-1).",
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_projects_azure_odata_documents(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/index/docs/search",
+                            "method": "POST",
+                            "json_body": {
+                                "search": "$query",
+                            },
+                            "result_fields": {
+                                "documents": "$",
+                                "request_id": "$.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total", "chunks"],
+                        "result_output_keys": [
+                            "documents_total",
+                            "chunks",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "@odata.count": "27",
+                    "value": [
+                        {
+                            "content": "alpha azure content",
+                            "@search.score": 8.5,
+                        },
+                        {
+                            "document": {
+                                "snippetText": "beta azure snippet",
+                            },
+                        },
+                        {"title": "ignored title only"},
+                    ],
+                    "request_id": "req-azure-odata-1",
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident odata"},
+                prompt="search incident odata",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        expected_chunks = [
+            "alpha azure content",
+            "beta azure snippet",
+        ]
+        self.assertEqual(output["documents_total"], 27)
+        self.assertEqual(output["chunks"], expected_chunks)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 27,
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 27,
+                "chunks": expected_chunks,
+                "request_id": "req-azure-odata-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 27 documents (request id req-azure-odata-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_projects_organic_results_documents(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "GET",
+                            "query_params": {
+                                "q": "$query",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total", "chunks"],
+                        "result_output_keys": [
+                            "documents_total",
+                            "chunks",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "search_metadata": {
+                        "id": "req-organic-results-1",
+                    },
+                    "search_information": {
+                        "total_results": "99",
+                    },
+                    "organic_results": [
+                        {"snippet": "alpha organic snippet"},
+                        {
+                            "rich_snippet": {
+                                "top": {
+                                    "detected_extensions": {
+                                        "description": "beta rich organic content",
+                                    },
+                                },
+                            },
+                        },
+                        {"title": "ignored title only"},
+                    ],
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident organic"},
+                prompt="search incident organic",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        expected_chunks = [
+            "alpha organic snippet",
+            "beta rich organic content",
+        ]
+        self.assertEqual(output["documents_total"], 99)
+        self.assertEqual(output["chunks"], expected_chunks)
+        self.assertEqual(output["request_id"], "req-organic-results-1")
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 99,
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 99,
+                "chunks": expected_chunks,
+                "request_id": "req-organic-results-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 99 documents (request id req-organic-results-1).",
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_infers_http_json_hit_count_result_field_from_registration_semantics(
         self,
     ) -> None:
