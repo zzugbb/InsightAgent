@@ -139,7 +139,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - extra/real tool 的注册语义、safe output 与计划项输入会优先沿 configured registry 继承；后端 provider planner 与真实 remote provider 现在也共用一套 response text / usage 提取语义，能稳定消费 response envelope、content-part 文本响应、raw `choices/output` 载荷、`output_text` / `content.text`、`dict/list/tuple` 与 typed SDK-style object，以及 usage alias、脏 usage 值与流式 delta 文本字段变体；task/session export route builder 也会在 plain dict summary 内继续浅归一化内层 `messages`、task `trace_preview`、task trace `rag_chunks/steps` 的 `model_dump()` 对象，因此前端发起 JSON/Markdown 导出或回放半迁移历史 payload 时，不会因为最后一层 response model 只接受 dict 而中断。
   - 后端 mock final-answer observation parser 现在也会恢复 payload 内层 `safe_output` / `output` / `output_preview` / `result_preview` JSON 字符串；因此前端最终回答在旧 observation 只剩嵌套 preview 时，也会继续显示 real calc / real retrieval 摘要，而不是 `output_preview=...` 或旁路字段。
 - 当前最近一次已记录校验基线：
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1691/1691`）
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 通过（`1695/1695`）
   - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts` 通过（`68/68`）
   - `cd frontend && npm run build` 通过
   - `cd frontend && npx playwright test e2e/usage-dashboard.spec.ts -g "task detail replay preserves retrieval_only registry trace metadata" --reporter=line` 通过（Chromium/Firefox/WebKit，`3/3`）
@@ -147,9 +147,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - `cd frontend && npx playwright test e2e/workbench-edge-cases.spec.ts -g "cancel allows immediate resend with identical prompt without dedupe loss|mock cancel does not show retry affordance and send recovers quickly|trace delta sync retries, pauses in background, and resumes when foreground returns" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`9/9`）
   - `cd frontend && npx playwright test e2e/workbench-remote-errors.spec.ts -g "remote cancel enters cooldown and recovers send" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
-  - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 通过（完整 Chromium e2e，`47/47`）
+  - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 本轮未执行（提权审批链路拒绝/断流；上一记录为完整 Chromium e2e `47/47`）
   - `git diff --check` 通过
-- 本轮收尾验证：先新增 `-k direct_responses_output_tool_call_list` 红测并确认 provider 直接返回 `response.output` list（含 typed SDK-style list）时会丢掉 `content[].tool_call`，再补齐 direct output list 的递归 planner extraction；既有根级 Responses API `output[].content[].tool_call`、`output[].content[].text` JSON plan、Chat Completions `choices[].message.tool_calls/function_call/content` 路径保持稳定。同步验证 `-k direct_responses_output_tool_call_list`、`-k build_tool_plan_provider`、`-k provider_source`、`-k tool_registry`、`-k http_json`、完整 backend slice（`1691/1691`）、`bash scripts/test_ci_e2e_tooling.sh`、frontend node（`68/68`）、frontend build、backend full-stack e2e 与完整 Chromium browser e2e（`47/47`）均通过；普通沙箱启动 backend 仍会被 `127.0.0.1:5432 Operation not permitted` 阻塞，提权后通过。
+- 本轮收尾验证：接上当前真实工作区后，收口 HTTP JSON provider search 在 `response_path` 直接定位到列表时的计数投影；`documents_total` 与 `hit_count` 会在 `_HttpJsonScalarFallbackOutput.value` 为 list 且 registration 明确为 retrieval/search 时按列表长度补齐，preview/output/result-summary 继续贯通，未声明对应 key 的旧输出契约不扩大。同步验证 `-k response_path_list`、`-k http_json`、`-k tool_registry`、`-k provider_source`、完整 backend slice（`1695/1695`）、`bash scripts/test_ci_e2e_tooling.sh`、frontend node（`68/68`）、frontend build 与 backend full-stack e2e 均通过；普通沙箱访问本地 backend/Playwright 仍会被 `Operation not permitted` / `EPERM` 阻塞，backend e2e 提权后通过，完整 Chromium browser e2e 本轮因提权审批链路拒绝/断流未执行。
 
 ## 全仓库审计结论
 

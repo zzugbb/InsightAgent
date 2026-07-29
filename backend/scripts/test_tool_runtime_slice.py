@@ -30468,6 +30468,94 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Retrieved 2 documents.",
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_infers_documents_total_from_response_path_list(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "response_path": "$.data",
+                        },
+                        "result_preview_keys": ["documents_total"],
+                        "result_output_keys": ["documents_total"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "data": [
+                            {"documentText": "alpha document text"},
+                            {"documentText": "beta document text"},
+                            {"documentText": "gamma document text"},
+                        ],
+                    }
+                ).encode("utf-8")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident timeline"},
+                prompt="search incident timeline",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["documents_total"], 3)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 3,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 3 documents.",
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_infers_http_json_records_count_from_registration_semantics(
         self,
     ) -> None:
@@ -30644,6 +30732,95 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 registration=registration,
             ),
             "Retrieved 2 hits.",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_infers_hit_count_from_response_path_list(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "response_path": "$.data",
+                        },
+                        "result_preview_keys": ["hit_count"],
+                        "result_output_keys": ["hit_count"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "data": [
+                            {"snippetText": "alpha snippet"},
+                            {"snippetText": "beta snippet"},
+                            {"snippetText": "gamma snippet"},
+                            {"snippetText": "delta snippet"},
+                        ],
+                    }
+                ).encode("utf-8")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse()  # type: ignore[attr-defined]
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "capacity plan"},
+                prompt="search capacity plan",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["hit_count"], 4)
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 4,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 4 hits.",
         )
 
     def test_build_tool_registry_extra_tools_from_settings_infers_http_json_total_count_result_field_from_registration_semantics(
@@ -58921,6 +59098,47 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                         "knowledge_base_id": "provider-kb",
                     },
                 )
+
+    def test_build_tool_rag_followup_extracts_chunks_from_http_json_scalar_value_list_for_real_tool(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-1",
+            step_id="rag-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "value": [
+                    {"snippetText": "alpha response-path snippet"},
+                    {"source": {"contentText": "beta response-path content"}},
+                    "gamma response-path string",
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(
+            followup["step"]["content"],
+            "Provider Search returned snippets.",
+        )
+        self.assertEqual(
+            followup["step"]["meta"]["rag"],
+            {
+                "chunks": [
+                    "alpha response-path snippet",
+                    "beta response-path content",
+                    "gamma response-path string",
+                ],
+                "knowledge_base_id": "provider-kb",
+            },
+        )
 
     def test_build_tool_rag_followup_extracts_chunks_from_http_json_summary_fields_for_real_tool(
         self,

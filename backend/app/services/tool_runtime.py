@@ -13601,6 +13601,7 @@ _TOOL_RAG_DOCUMENT_LIST_FIELDS = (
     "matches",
     "data",
     "records",
+    "value",
 )
 
 
@@ -16197,7 +16198,10 @@ def normalize_tool_output_for_registration(
                 {"tool_kind": desired_tool_kind_text}
             )
         ):
-            for alias_name in ("results", "hits", "matches", "data", "records"):
+            list_alias_names = ("results", "hits", "matches", "data", "records")
+            if is_http_json_scalar_fallback_output:
+                list_alias_names = (*list_alias_names, "value")
+            for alias_name in list_alias_names:
                 alias_value = normalized_output.get(alias_name)
                 if isinstance(alias_value, (list, tuple)):
                     normalized_output["documents_total"] = len(alias_value)
@@ -16252,6 +16256,8 @@ def normalize_tool_output_for_registration(
                 or "hit_count" in registration.result_output_keys
             ):
                 hit_list_alias_names = ("documents", "items", *hit_list_alias_names)
+            if is_http_json_scalar_fallback_output:
+                hit_list_alias_names = (*hit_list_alias_names, "value")
             for alias_name in hit_list_alias_names:
                 alias_value = normalized_output.get(alias_name)
                 if isinstance(alias_value, (list, tuple)):
