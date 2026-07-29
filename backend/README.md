@@ -140,7 +140,7 @@
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium --reporter=line --workers=1` 本轮未执行（上一记录为完整 Chromium e2e `47/47`）
   - `git diff --check` 通过
-- 本轮收尾验证：继续收口 HTTP JSON provider search 的 GraphQL-style connection 输出；当 `result_fields.documents` 显式投到 `{totalCount, edges:[{node:...}]}` 这类真实 provider 容器时，runtime 会补齐 `documents_total`，从 `edges/node` 抽取安全 chunks，并贯通 preview/output/result-summary；普通 `documents` 元数据对象不会抢在后续 `items` 真实列表前计数，已有 `response_path` 列表与 `result_fields.chunks` 旧链路保持稳定。同步验证 `-k projects_graphql_connection_documents`、`-k documents_total_from_items_when_documents_is_metadata`、`-k projects_chunks`、`-k build_tool_result_summary`、`-k response_path_list`、`-k build_tool_rag_followup`、`-k http_json`、`-k tool_registry`、`-k provider_source` 与完整 backend slice（`1699/1699`）均通过；本轮尚未重跑 full-stack e2e / Chromium e2e。
+- 本轮收尾验证：继续收口 HTTP JSON provider search 的 Elastic/OpenSearch-style hits 输出；当 `result_fields.documents` 投到 `{total:{value}, hits:[...]}` 这类真实搜索容器时，runtime 会优先使用 `total.value` 补齐 `documents_total`，并从 hit `_source` / `fields` 中抽取安全 chunks，继续贯通 preview/output/result-summary。同步验证新增红测 `-k elasticsearch_hits_documents`、上一轮 GraphQL/metadata/chunks 回归、`-k build_tool_result_summary`、`-k response_path_list`、`-k build_tool_rag_followup`、`-k http_json`、`-k tool_registry`、`-k provider_source` 与完整 backend slice（`1700/1700`）均通过；本轮尚未重跑 full-stack e2e / Chromium e2e。
 
 ## 全仓库审计结论
 

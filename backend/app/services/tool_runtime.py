@@ -3380,7 +3380,15 @@ def _extract_http_json_retrieval_count_from_container(raw_value: object) -> int 
     if nested_list is None:
         return None
     for alias_name in _HTTP_JSON_RETRIEVAL_COUNT_ALIAS_FIELDS:
-        alias_count = _normalize_nonnegative_int_count_value(raw_value.get(alias_name))
+        alias_value = raw_value.get(alias_name)
+        alias_count = _normalize_nonnegative_int_count_value(alias_value)
+        if alias_count is None and isinstance(alias_value, Mapping):
+            for nested_alias_name in ("value", "count", "total", "totalCount"):
+                alias_count = _normalize_nonnegative_int_count_value(
+                    alias_value.get(nested_alias_name)
+                )
+                if alias_count is not None:
+                    break
         if alias_count is not None:
             return alias_count
     return len(nested_list)
@@ -13648,6 +13656,7 @@ _TOOL_RAG_DOCUMENT_CONTAINER_FIELDS = (
     "metadata",
     "document",
     "payload",
+    "_source",
     "chunk",
     "node",
     "data",
