@@ -15976,7 +15976,13 @@ def normalize_tool_output_for_registration(
                 {"tool_kind": desired_tool_kind_text}
             )
         ):
-            for alias_name in ("data", "records"):
+            hit_list_alias_names = ("data", "records")
+            if (
+                "hit_count" in registration.result_preview_keys
+                or "hit_count" in registration.result_output_keys
+            ):
+                hit_list_alias_names = ("documents", "items", *hit_list_alias_names)
+            for alias_name in hit_list_alias_names:
                 alias_value = normalized_output.get(alias_name)
                 if isinstance(alias_value, (list, tuple)):
                     normalized_output["hit_count"] = len(alias_value)
