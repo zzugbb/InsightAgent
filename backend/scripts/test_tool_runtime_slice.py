@@ -30094,6 +30094,95 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Retrieved 2 documents.",
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_hit_count_from_data_registration_semantics(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                        },
+                        "result_preview_keys": ["hit_count"],
+                        "result_output_keys": ["hit_count"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": [
+                        {"documentText": "alpha document text"},
+                        {"documentText": "beta document text"},
+                    ],
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "capacity plan"},
+                prompt="search capacity plan",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["hit_count"], 2)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "hit_count": 2,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 2 hits.",
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_infers_http_json_answer_from_registration_semantics(
         self,
     ) -> None:
@@ -30260,6 +30349,91 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 registration=registration,
             ),
             "Calculated result = 42.",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_value_from_scoped_object_registration_semantics(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_math": {
+                        "template": "calc_eval",
+                        "label": "Provider Calculator",
+                        "kind": "provider_calc",
+                        "runtime_semantic_kind": "provider_math",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/calc",
+                            "method": "POST",
+                            "json_body": {
+                                "expression": "$expression",
+                            },
+                            "response_path": "$.data",
+                        },
+                        "result_preview_keys": ["result"],
+                        "result_output_keys": ["result"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {"data": {"value": 9}}
+            )
+
+            output = run_tool(
+                name="provider_math",
+                tool_input={"expression": "4+5"},
+                prompt="calculate 4+5",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_math"]
+        self.assertEqual(output["result"], 9)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_math",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "result": 9,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_math",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Calculated result = 9.",
         )
 
     def test_build_tool_registry_extra_tools_from_settings_normalizes_http_json_documents_total_string(

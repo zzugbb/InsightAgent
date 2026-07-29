@@ -34,6 +34,10 @@ class MockToolExecutionError(RuntimeError):
         self.fatal = fatal
 
 
+class _HttpJsonScalarFallbackOutput(dict[str, object]):
+    pass
+
+
 @dataclass(frozen=True)
 class ToolInvocation:
     name: str
@@ -3447,7 +3451,10 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
     if hit_count is not None:
         normalized_output["hit_count"] = hit_count
     else:
-        for alias_name in ("hits", "results", "matches"):
+        hit_list_alias_names = ("hits", "results", "matches")
+        if _http_json_output_implies_retrieval_count(normalized_output):
+            hit_list_alias_names = (*hit_list_alias_names, "data", "records")
+        for alias_name in hit_list_alias_names:
             alias_value = normalized_output.get(alias_name)
             if isinstance(alias_value, (list, tuple)):
                 normalized_output["hit_count"] = len(alias_value)
@@ -5629,9 +5636,11 @@ def _build_http_json_tool_runner(
             output = dict(scoped_payload)
             _attach_http_json_response_request_id(output, response_request_id)
             return _normalize_http_json_safe_output_shape(output)
-        output = {
-            "value": _redact_http_json_sensitive_payload_value(scoped_payload),
-        }
+        output = _HttpJsonScalarFallbackOutput(
+            {
+                "value": _redact_http_json_sensitive_payload_value(scoped_payload),
+            }
+        )
         _attach_http_json_response_request_id(output, response_request_id)
         return output
 
@@ -15911,6 +15920,10 @@ def normalize_tool_output_for_registration(
     output: dict[str, object],
     registration: ToolRegistration,
 ) -> dict[str, object]:
+    is_http_json_scalar_fallback_output = isinstance(
+        output,
+        _HttpJsonScalarFallbackOutput,
+    )
     normalized_output = dict(output)
     normalized_name = normalize_tool_registry_name(registration.name)
     default_registration = _REGISTERED_TOOLS.get(normalized_name)
@@ -15937,18 +15950,33 @@ def normalize_tool_output_for_registration(
                     break
         if (
             desired_tool_kind_text
+            and "hit_count" not in normalized_output
+            and _http_json_output_implies_retrieval_count(
+                {"tool_kind": desired_tool_kind_text}
+            )
+        ):
+            for alias_name in ("data", "records"):
+                alias_value = normalized_output.get(alias_name)
+                if isinstance(alias_value, (list, tuple)):
+                    normalized_output["hit_count"] = len(alias_value)
+                    break
+        if (
+            desired_tool_kind_text
             and "result" not in normalized_output
             and _http_json_output_implies_calculator_result(
                 {"tool_kind": desired_tool_kind_text}
             )
         ):
-            for alias_name in (
+            calc_result_aliases = (
                 "answer",
                 "result_value",
                 "resultValue",
                 "computed_value",
                 "computedValue",
-            ):
+            )
+            if not is_http_json_scalar_fallback_output:
+                calc_result_aliases = ("value", *calc_result_aliases)
+            for alias_name in calc_result_aliases:
                 if alias_name in normalized_output:
                     normalized_output["result"] = normalized_output[alias_name]
                     break
