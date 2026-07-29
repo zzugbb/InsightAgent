@@ -31002,6 +31002,114 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Retrieved 3 documents.",
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_projects_chunks_from_result_fields_list(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "chunks": "$.data.items",
+                            },
+                        },
+                        "result_preview_keys": ["chunks"],
+                        "result_output_keys": ["chunks"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "data": {
+                        "items": [
+                            {"snippetText": "alpha snippet"},
+                            {"attributes": {"contentText": "beta content"}},
+                            "gamma string",
+                            {"title": "ignored title only"},
+                        ],
+                    }
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident timeline"},
+                prompt="search incident timeline",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        expected_chunks = ["alpha snippet", "beta content", "gamma string"]
+        self.assertEqual(output["chunks"], expected_chunks)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 3 snippets.",
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_infers_http_json_hit_count_result_field_from_registration_semantics(
         self,
     ) -> None:

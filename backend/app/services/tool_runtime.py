@@ -11368,6 +11368,16 @@ def build_tool_result_summary(
             )
         return f"Retrieved {documents_total} {document_label}{source_suffix}."
 
+    chunks = _extract_tool_rag_chunks_from_output(outward_output)
+    if chunks and semantic_family == "knowledge_retrieval":
+        snippet_label = "snippet" if len(chunks) == 1 else "snippets"
+        if isinstance(request_id, str) and request_id.strip():
+            return (
+                f"Retrieved {len(chunks)} {snippet_label} "
+                f"(request id {request_id.strip()})."
+            )
+        return f"Retrieved {len(chunks)} {snippet_label}."
+
     generic_payload_summary = _summarize_generic_tool_result_payload(outward_output)
     if generic_payload_summary:
         return f"{resolved_display_name} output - {generic_payload_summary}."
@@ -13676,11 +13686,9 @@ def _extract_tool_rag_chunks_from_document_list(raw_documents: object) -> list[s
 def _extract_tool_rag_chunks_from_output(output: dict[str, object]) -> list[str]:
     raw_chunks = output.get("chunks")
     if isinstance(raw_chunks, (list, tuple)):
-        return [
-            _redact_tool_rag_chunk_text(chunk.strip())
-            for chunk in raw_chunks
-            if isinstance(chunk, str) and chunk.strip()
-        ]
+        extracted_chunks = _extract_tool_rag_chunks_from_document_list(raw_chunks)
+        if extracted_chunks:
+            return extracted_chunks
 
     for list_field_name in _TOOL_RAG_DOCUMENT_LIST_FIELDS:
         extracted_chunks = _extract_tool_rag_chunks_from_document_list(
@@ -16191,10 +16199,11 @@ def normalize_tool_output_for_registration(
     )
     if _normalize_tool_execution_kind(registration.execution_kind) == "http_json":
         normalized_output = _normalize_http_json_safe_output_shape(normalized_output)
-        if "chunks" not in normalized_output and (
+        chunks_requested = (
             "chunks" in _normalize_result_preview_keys(registration.result_preview_keys)
             or "chunks" in _normalize_result_output_keys(registration.result_output_keys)
-        ):
+        )
+        if chunks_requested:
             extracted_chunks = _extract_tool_rag_chunks_from_output(normalized_output)
             if extracted_chunks:
                 normalized_output["chunks"] = extracted_chunks
