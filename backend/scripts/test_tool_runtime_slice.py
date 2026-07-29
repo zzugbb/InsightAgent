@@ -4505,6 +4505,47 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             },
         )
 
+    def test_build_tool_plan_provider_accepts_responses_api_tool_call_content(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "output": [
+                        {
+                            "content": [
+                                {
+                                    "type": "tool_call",
+                                    "name": "calc_eval",
+                                    "arguments": json.dumps(
+                                        {"expression": "36/6"},
+                                        ensure_ascii=False,
+                                    ),
+                                }
+                            ]
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "36/6"},
+        )
+
     def test_build_tool_plan_provider_accepts_typed_chat_completions_response_object(
         self,
     ) -> None:
@@ -4602,6 +4643,47 @@ class ToolRuntimeSliceTests(unittest.TestCase):
                 "top_k": 2,
                 "knowledge_base_id": "kb-typed-output",
             },
+        )
+
+    def test_build_tool_plan_provider_accepts_typed_responses_tool_call_content(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    output=[
+                        SimpleNamespace(
+                            content=[
+                                SimpleNamespace(
+                                    type="tool_call",
+                                    name="calc_eval",
+                                    arguments=json.dumps(
+                                        {"expression": "48/8"},
+                                        ensure_ascii=False,
+                                    ),
+                                )
+                            ]
+                        )
+                    ]
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "48/8"},
         )
 
     def test_build_tool_plan_provider_accepts_typed_usage_object(

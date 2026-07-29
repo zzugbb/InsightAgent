@@ -14808,10 +14808,58 @@ def _build_provider_tool_plan_prompt(
     )
 
 
+_PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
+    "tools",
+    "plan",
+    "output",
+    "content",
+    "choices",
+    "message",
+    "delta",
+    "tool_calls",
+    "function_call",
+    "function",
+    "name",
+    "tool",
+    "tool_name",
+    "function_name",
+    "input",
+    "arguments",
+    "args",
+    "parameters",
+    "type",
+    "text",
+    "output_text",
+)
+
+
+def _coerce_provider_tool_plan_payload(raw_value: object) -> object:
+    raw_value = _coerce_tool_registry_spec_payload(raw_value)
+    if isinstance(raw_value, Mapping):
+        return {
+            key: _coerce_provider_tool_plan_payload(value)
+            for key, value in raw_value.items()
+        }
+    if _is_non_text_sequence(raw_value):
+        return [_coerce_provider_tool_plan_payload(value) for value in raw_value]
+    if isinstance(raw_value, (str, bytes, bytearray, memoryview)):
+        return raw_value
+    attrs: dict[str, object] = {}
+    for attr_name in _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS:
+        try:
+            attr_value = getattr(raw_value, attr_name)
+        except Exception:  # noqa: BLE001
+            continue
+        if attr_value is None:
+            continue
+        attrs[attr_name] = _coerce_provider_tool_plan_payload(attr_value)
+    return attrs or raw_value
+
+
 def _extract_provider_tool_plan_items_from_payload(
     payload: object,
 ) -> list[object] | None:
-    payload = _coerce_tool_registry_spec_payload(payload)
+    payload = _coerce_provider_tool_plan_payload(payload)
     if _is_non_text_sequence(payload):
         return list(payload)
     if not isinstance(payload, Mapping):
@@ -14826,13 +14874,50 @@ def _extract_provider_tool_plan_items_from_payload(
     function_call = _coerce_tool_registry_spec_payload(payload.get("function_call"))
     if isinstance(function_call, Mapping):
         return [function_call]
+    output_items = _coerce_tool_registry_spec_payload(payload.get("output"))
+    if _is_non_text_sequence(output_items):
+        extracted_output_items: list[object] = []
+        for raw_output_item in output_items:
+            output_item = _coerce_provider_tool_plan_payload(raw_output_item)
+            output_item_items = _extract_provider_tool_plan_items_from_payload(
+                output_item
+            )
+            if output_item_items is not None:
+                extracted_output_items.extend(output_item_items)
+                continue
+            if not isinstance(output_item, Mapping):
+                continue
+            content_items = _coerce_tool_registry_spec_payload(
+                output_item.get("content")
+            )
+            if not _is_non_text_sequence(content_items):
+                continue
+            for raw_content_item in content_items:
+                content_item = _coerce_provider_tool_plan_payload(raw_content_item)
+                content_item_items = _extract_provider_tool_plan_items_from_payload(
+                    content_item
+                )
+                if content_item_items is not None:
+                    extracted_output_items.extend(content_item_items)
+                    continue
+                if not isinstance(content_item, Mapping):
+                    continue
+                for text_key in ("text", "output_text"):
+                    text_items = _extract_provider_tool_plan_items(
+                        content_item.get(text_key)
+                    )
+                    if text_items is not None:
+                        extracted_output_items.extend(text_items)
+                        break
+        if extracted_output_items:
+            return extracted_output_items
     choices = _coerce_tool_registry_spec_payload(payload.get("choices"))
     if _is_non_text_sequence(choices):
         for raw_choice in choices:
-            choice = _coerce_tool_registry_spec_payload(raw_choice)
+            choice = _coerce_provider_tool_plan_payload(raw_choice)
             if not isinstance(choice, Mapping):
                 continue
-            message = _coerce_tool_registry_spec_payload(
+            message = _coerce_provider_tool_plan_payload(
                 choice.get("message", choice.get("delta"))
             )
             choice_items = _extract_provider_tool_plan_items_from_payload(message)
@@ -14861,7 +14946,7 @@ def _extract_provider_tool_plan_items_from_payload(
 
 
 def _extract_provider_tool_plan_items(provider_content: object) -> list[object] | None:
-    provider_content = _coerce_tool_registry_spec_payload(provider_content)
+    provider_content = _coerce_provider_tool_plan_payload(provider_content)
     direct_items = _extract_provider_tool_plan_items_from_payload(provider_content)
     if direct_items is not None:
         return direct_items
@@ -14886,7 +14971,7 @@ def _extract_provider_tool_plan_items(provider_content: object) -> list[object] 
 
 
 def _extract_provider_response_content(response: object) -> object:
-    normalized_response = _coerce_tool_registry_spec_payload(response)
+    normalized_response = _coerce_provider_tool_plan_payload(response)
     if isinstance(normalized_response, Mapping):
         response = normalized_response
         if any(
@@ -14938,7 +15023,7 @@ def _extract_provider_response_content(response: object) -> object:
 
 
 def _coerce_provider_tool_plan_input_mapping(raw_value: object) -> object:
-    raw_value = _coerce_tool_registry_spec_payload(raw_value)
+    raw_value = _coerce_provider_tool_plan_payload(raw_value)
     if not isinstance(raw_value, str):
         return raw_value
     try:
@@ -14954,7 +15039,7 @@ def _normalize_provider_tool_plan_item(
     *,
     registry_provider: ToolRegistryProvider | None = None,
 ) -> tuple[str, dict[str, object]] | None:
-    raw_item = _coerce_tool_registry_spec_payload(raw_item)
+    raw_item = _coerce_provider_tool_plan_payload(raw_item)
     if isinstance(raw_item, str):
         tool_name = _resolve_provider_tool_name(
             raw_item,
@@ -14965,7 +15050,7 @@ def _normalize_provider_tool_plan_item(
         return tool_name, {}
     if not isinstance(raw_item, Mapping):
         return None
-    raw_function = _coerce_tool_registry_spec_payload(raw_item.get("function"))
+    raw_function = _coerce_provider_tool_plan_payload(raw_item.get("function"))
     if isinstance(raw_function, Mapping):
         merged_item = dict(raw_item)
         for key, value in raw_function.items():
@@ -14987,13 +15072,13 @@ def _normalize_provider_tool_plan_item(
     )
     if not tool_name:
         return None
-    tool_input = _coerce_tool_registry_spec_payload(raw_item.get("input"))
+    tool_input = _coerce_provider_tool_plan_payload(raw_item.get("input"))
     if not isinstance(tool_input, Mapping):
         tool_input = _coerce_provider_tool_plan_input_mapping(
             raw_item.get("arguments")
         )
     if not isinstance(tool_input, Mapping):
-        tool_input = _coerce_tool_registry_spec_payload(raw_item.get("args"))
+        tool_input = _coerce_provider_tool_plan_payload(raw_item.get("args"))
     if not isinstance(tool_input, Mapping):
         tool_input = _coerce_provider_tool_plan_input_mapping(
             raw_item.get("parameters")
@@ -15015,7 +15100,7 @@ def _normalize_provider_tool_plan_item(
                 "parameters",
             }
         }
-    tool_input = _coerce_tool_registry_spec_payload(tool_input)
+    tool_input = _coerce_provider_tool_plan_payload(tool_input)
     if not isinstance(tool_input, Mapping):
         tool_input = {}
     return tool_name, dict(tool_input)
