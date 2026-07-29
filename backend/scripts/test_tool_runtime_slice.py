@@ -30904,6 +30904,100 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Retrieved 2 documents (request id req-doc-total-decimal-string-1).",
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_infers_http_json_total_records_result_field_as_documents_total(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "totalRecords": "$.meta.totalRecords",
+                                "request_id": "$.meta.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total"],
+                        "result_output_keys": ["documents_total", "request_id"],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "meta": {
+                        "totalRecords": "6",
+                        "request_id": "req-total-records-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "record count"},
+                prompt="search record count",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["documents_total"], 6)
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 6,
+                "request_id": "req-total-records-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 6 documents (request id req-total-records-1).",
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_normalizes_http_json_hit_count_whole_float(
         self,
     ) -> None:
@@ -87517,6 +87611,84 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
             "Provider Search: Retrieved 4 documents from provider-kb (request id req-documents-total-1).",
+        )
+
+    def test_execute_tool_plan_item_service_execution_infers_documents_total_from_provider_records_total_alias(
+        self,
+    ) -> None:
+        registry = {
+            "provider_search": ToolRegistration(
+                name="provider_search",
+                kind="provider_retrieval",
+                label="Provider Search",
+                retryable_by_default=False,
+                default_timeout_ms=21_000,
+                requires_user_context=True,
+                supports_result_preview=True,
+                execution_kind="http_json",
+                runner=lambda *, tool_input, prompt, user_id: {
+                    "tool_kind": "provider_retrieval",
+                    "recordsTotal": "8",
+                    "knowledge_base_id": "provider-kb",
+                    "request_id": "req-records-total-1",
+                },
+                runtime_semantic_kind="provider_search",
+            )
+        }
+        iteration_ctx = build_tool_iteration_context(
+            step_id="step-1",
+            seq=3,
+            name="provider_search",
+            tool_input={"query": "records"},
+            model="mock-gpt",
+            label="tool_1",
+            token_count=5,
+            display_name="Provider Search",
+        )
+
+        items = list(
+            execute_tool_plan_item_service_execution(
+                task_id="task-1",
+                trace_steps=[{"id": "existing-1", "seq": 2, "content": "Existing"}],
+                iteration_ctx=iteration_ctx,
+                initial_action_step=iteration_ctx["action_step"],
+                tool_name="provider_search",
+                tool_input={"query": "records"},
+                prompt="search records",
+                user_id="user-1",
+                model="mock-gpt",
+                estimate_token_count=lambda text: len(text.strip()) or 0,
+                make_step_id=lambda: "rag-unused",
+                raise_if_should_abort=lambda: None,
+                registry=registry,
+            )
+        )
+
+        tool_end_event = next(
+            item["data"]
+            for item in items
+            if item.get("kind") == "event" and item.get("event") == "tool_end"
+        )
+        final_item = items[-1]
+
+        self.assertEqual(
+            tool_end_event["output_preview"],
+            {
+                "documents_total": 8,
+                "knowledge_base_id": "provider-kb",
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["output"],
+            {
+                "documents_total": 8,
+                "knowledge_base_id": "provider-kb",
+                "request_id": "req-records-total-1",
+            },
+        )
+        self.assertEqual(
+            final_item["result"]["loop_execution_result"]["success_effects"]["observation"],
+            "Provider Search: Retrieved 8 documents from provider-kb (request id req-records-total-1).",
         )
 
     def test_execute_tool_plan_item_service_execution_infers_hit_count_from_provider_hit_count_camel_case(
