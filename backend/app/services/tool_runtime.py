@@ -14861,7 +14861,17 @@ def _extract_provider_tool_plan_items_from_payload(
 ) -> list[object] | None:
     payload = _coerce_provider_tool_plan_payload(payload)
     if _is_non_text_sequence(payload):
-        return list(payload)
+        extracted_items: list[object] = []
+        expanded_nested_item = False
+        for raw_item in payload:
+            item = _coerce_provider_tool_plan_payload(raw_item)
+            nested_items = _extract_provider_tool_plan_items_from_payload(item)
+            if nested_items is not None:
+                extracted_items.extend(nested_items)
+                expanded_nested_item = True
+                continue
+            extracted_items.append(raw_item)
+        return extracted_items if expanded_nested_item else list(payload)
     if not isinstance(payload, Mapping):
         return None
     tools = payload.get("tools", payload.get("plan"))
@@ -14911,6 +14921,32 @@ def _extract_provider_tool_plan_items_from_payload(
                         break
         if extracted_output_items:
             return extracted_output_items
+    content = _coerce_tool_registry_spec_payload(payload.get("content"))
+    if _is_non_text_sequence(content):
+        extracted_content_items: list[object] = []
+        for raw_content_item in content:
+            content_item = _coerce_provider_tool_plan_payload(raw_content_item)
+            content_item_items = _extract_provider_tool_plan_items_from_payload(
+                content_item
+            )
+            if content_item_items is not None:
+                extracted_content_items.extend(content_item_items)
+                continue
+            if not isinstance(content_item, Mapping):
+                continue
+            for text_key in ("text", "output_text"):
+                text_items = _extract_provider_tool_plan_items(
+                    content_item.get(text_key)
+                )
+                if text_items is not None:
+                    extracted_content_items.extend(text_items)
+                    break
+        if extracted_content_items:
+            return extracted_content_items
+    elif content is not None:
+        content_items = _extract_provider_tool_plan_items(content)
+        if content_items is not None:
+            return content_items
     choices = _coerce_tool_registry_spec_payload(payload.get("choices"))
     if _is_non_text_sequence(choices):
         for raw_choice in choices:
