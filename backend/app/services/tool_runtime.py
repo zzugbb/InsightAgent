@@ -14809,6 +14809,9 @@ def _build_provider_tool_plan_prompt(
 
 
 _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
+    "response",
+    "data",
+    "result",
     "tools",
     "plan",
     "output",
@@ -14978,6 +14981,11 @@ def _extract_provider_tool_plan_items_from_payload(
     raw_name = _coerce_tool_execution_string_like_value(raw_name)
     if isinstance(raw_name, str) and raw_name.strip():
         return [payload]
+    for wrapper_key in ("response", "data", "result"):
+        wrapped_payload = _coerce_tool_registry_spec_payload(payload.get(wrapper_key))
+        wrapped_items = _extract_provider_tool_plan_items_from_payload(wrapped_payload)
+        if wrapped_items is not None:
+            return wrapped_items
     return None
 
 

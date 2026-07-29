@@ -4585,6 +4585,54 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             {"expression": "54/9"},
         )
 
+    def test_build_tool_plan_provider_accepts_wrapped_responses_tool_call_payload(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def __init__(self, wrapper_key: str) -> None:
+                self.wrapper_key = wrapper_key
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    self.wrapper_key: {
+                        "output": [
+                            {
+                                "content": [
+                                    {
+                                        "type": "tool_call",
+                                        "name": "calc_eval",
+                                        "arguments": json.dumps(
+                                            {"expression": "72/9"},
+                                            ensure_ascii=False,
+                                        ),
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+
+        for wrapper_key in ("response", "data", "result"):
+            with self.subTest(wrapper_key=wrapper_key):
+                artifacts = build_tool_plan_artifacts(
+                    "普通问答，不包含显式计算标记",
+                    provider=FakeProvider(wrapper_key),
+                )
+
+                self.assertTrue(artifacts.planning_provider_attempted)
+                self.assertTrue(artifacts.planning_provider_used)
+                self.assertEqual(
+                    [item["name"] for item in artifacts.tool_plan],
+                    ["task_plan", "calc_eval"],
+                )
+                self.assertEqual(
+                    artifacts.tool_plan[1]["input"],
+                    {"expression": "72/9"},
+                )
+
     def test_build_tool_plan_provider_accepts_typed_chat_completions_response_object(
         self,
     ) -> None:
@@ -4762,6 +4810,49 @@ class ToolRuntimeSliceTests(unittest.TestCase):
         self.assertEqual(
             artifacts.tool_plan[1]["input"],
             {"expression": "63/9"},
+        )
+
+    def test_build_tool_plan_provider_accepts_typed_wrapped_responses_tool_call_payload(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> SimpleNamespace:
+                del prompt
+                return SimpleNamespace(
+                    response=SimpleNamespace(
+                        output=[
+                            SimpleNamespace(
+                                content=[
+                                    SimpleNamespace(
+                                        type="tool_call",
+                                        name="calc_eval",
+                                        arguments=json.dumps(
+                                            {"expression": "81/9"},
+                                            ensure_ascii=False,
+                                        ),
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                )
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "81/9"},
         )
 
     def test_build_tool_plan_provider_accepts_typed_usage_object(
