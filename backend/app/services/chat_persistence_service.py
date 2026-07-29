@@ -1178,9 +1178,29 @@ def _normalize_trace_http_json_tool_output(
     tool_meta: dict[str, object],
     output: dict[str, object],
 ) -> dict[str, object]:
-    if _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta):
-        return _normalize_http_json_safe_output_shape(output)
-    return output
+    if not (
+        _trace_tool_meta_implies_provider_or_hosted_tool(tool_meta)
+        or _trace_tool_meta_uses_http_json_execution(tool_meta)
+    ):
+        return output
+    output_with_hints = dict(output)
+    injected_hint_keys: list[str] = []
+    for hint_key in (
+        "tool_kind",
+        "semantic_kind",
+        "semantic_family",
+        "kind",
+    ):
+        if hint_key in output_with_hints:
+            continue
+        hint_value = tool_meta.get(hint_key)
+        if isinstance(hint_value, str) and hint_value.strip():
+            output_with_hints[hint_key] = hint_value
+            injected_hint_keys.append(hint_key)
+    normalized_output = _normalize_http_json_safe_output_shape(output_with_hints)
+    for hint_key in injected_hint_keys:
+        normalized_output.pop(hint_key, None)
+    return normalized_output
 
 
 def _normalize_trace_http_json_tool_input(
