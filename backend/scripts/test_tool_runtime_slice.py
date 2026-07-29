@@ -31626,6 +31626,382 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             "Retrieved 99 documents (request id req-organic-results-1).",
         )
 
+    def test_build_tool_registry_extra_tools_from_settings_projects_qdrant_points_documents(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/collections/demo/points/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                            "result_fields": {
+                                "documents": "$.result",
+                                "request_id": "$.status.request_id",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total", "chunks"],
+                        "result_output_keys": [
+                            "documents_total",
+                            "chunks",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "result": {
+                        "count": "6",
+                        "points": [
+                            {
+                                "payload": {
+                                    "text": "alpha qdrant payload",
+                                },
+                            },
+                            {
+                                "payload": {
+                                    "metadata": {
+                                        "summary": "beta qdrant summary",
+                                    },
+                                },
+                            },
+                            {"id": "point-title-only"},
+                        ],
+                    },
+                    "status": {
+                        "request_id": "req-qdrant-points-1",
+                    },
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident points"},
+                prompt="search incident points",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        expected_chunks = [
+            "alpha qdrant payload",
+            "beta qdrant summary",
+        ]
+        self.assertEqual(output["documents_total"], 6)
+        self.assertEqual(output["chunks"], expected_chunks)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 6,
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 6,
+                "chunks": expected_chunks,
+                "request_id": "req-qdrant-points-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 6 documents (request id req-qdrant-points-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_projects_milvus_entity_documents(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/vectors/search",
+                            "method": "GET",
+                            "query_params": {
+                                "q": "$query",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total", "chunks"],
+                        "result_output_keys": [
+                            "documents_total",
+                            "chunks",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "count": "5",
+                    "requestId": "req-milvus-entity-1",
+                    "data": [
+                        {
+                            "entity": {
+                                "text": "alpha milvus entity",
+                            },
+                        },
+                        {
+                            "entity": {
+                                "metadata": {
+                                    "content": "beta milvus content",
+                                },
+                            },
+                        },
+                        {"id": "entity-title-only"},
+                    ],
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident entity"},
+                prompt="search incident entity",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        expected_chunks = [
+            "alpha milvus entity",
+            "beta milvus content",
+        ]
+        self.assertEqual(output["documents_total"], 5)
+        self.assertEqual(output["chunks"], expected_chunks)
+        self.assertEqual(output["request_id"], "req-milvus-entity-1")
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 5,
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 5,
+                "chunks": expected_chunks,
+                "request_id": "req-milvus-entity-1",
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 5 documents (request id req-milvus-entity-1).",
+        )
+
+    def test_build_tool_registry_extra_tools_from_settings_projects_source_nodes_documents(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/rag/query",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total", "chunks"],
+                        "result_output_keys": [
+                            "documents_total",
+                            "chunks",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "source_nodes": [
+                        {"node": {"text": "alpha source node"}},
+                        {
+                            "node": {
+                                "metadata": {
+                                    "summary": "beta source node summary",
+                                },
+                            },
+                        },
+                        {"node": {"title": "ignored title only"}},
+                    ]
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident source nodes"},
+                prompt="search incident source nodes",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        expected_chunks = [
+            "alpha source node",
+            "beta source node summary",
+        ]
+        self.assertEqual(output["documents_total"], 3)
+        self.assertEqual(output["chunks"], expected_chunks)
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 3,
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 3,
+                "chunks": expected_chunks,
+            },
+        )
+        self.assertEqual(
+            build_tool_result_summary(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            "Retrieved 3 documents.",
+        )
+
     def test_build_tool_registry_extra_tools_from_settings_infers_http_json_hit_count_result_field_from_registration_semantics(
         self,
     ) -> None:
