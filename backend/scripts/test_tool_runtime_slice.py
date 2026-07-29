@@ -3756,6 +3756,90 @@ class ToolRuntimeSliceTests(unittest.TestCase):
             {"expression": "14/2"},
         )
 
+    def test_build_tool_plan_provider_accepts_chat_completion_tool_calls(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "tool_calls": [
+                                    {
+                                        "function": {
+                                            "name": "calc_eval",
+                                            "arguments": json.dumps(
+                                                {"expression": "18/3"},
+                                                ensure_ascii=False,
+                                            ),
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "18/3"},
+        )
+
+    def test_build_tool_plan_provider_accepts_chat_completion_function_call(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "openai"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "function_call": {
+                                    "name": "calc_eval",
+                                    "arguments": json.dumps(
+                                        {"expression": "21/3"},
+                                        ensure_ascii=False,
+                                    ),
+                                }
+                            }
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "21/3"},
+        )
+
     def test_build_tool_plan_provider_accepts_flattened_task_retrieve_fields(self) -> None:
         class FakeProvider:
             provider = "openai"

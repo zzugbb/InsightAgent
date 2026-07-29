@@ -14823,6 +14823,27 @@ def _extract_provider_tool_plan_items_from_payload(
     tool_calls = _coerce_tool_registry_spec_payload(payload.get("tool_calls"))
     if _is_non_text_sequence(tool_calls):
         return list(tool_calls)
+    function_call = _coerce_tool_registry_spec_payload(payload.get("function_call"))
+    if isinstance(function_call, Mapping):
+        return [function_call]
+    choices = _coerce_tool_registry_spec_payload(payload.get("choices"))
+    if _is_non_text_sequence(choices):
+        for raw_choice in choices:
+            choice = _coerce_tool_registry_spec_payload(raw_choice)
+            if not isinstance(choice, Mapping):
+                continue
+            message = _coerce_tool_registry_spec_payload(
+                choice.get("message", choice.get("delta"))
+            )
+            choice_items = _extract_provider_tool_plan_items_from_payload(message)
+            if choice_items is not None:
+                return choice_items
+            if isinstance(message, Mapping):
+                content_items = _extract_provider_tool_plan_items(
+                    message.get("content")
+                )
+                if content_items is not None:
+                    return content_items
     raw_name = payload.get(
         "name",
         payload.get(
@@ -14876,6 +14897,8 @@ def _extract_provider_response_content(response: object) -> object:
                 "name",
                 "tool",
                 "tool_calls",
+                "function_call",
+                "choices",
                 "tool_name",
                 "function_name",
                 "function",
