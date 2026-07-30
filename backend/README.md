@@ -20,6 +20,7 @@
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - 完整 Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47` 通过；本轮曾暴露 `TASK_QUEUE_MAX_CONCURRENT=4` 导致 4-worker e2e 排队超时，已将默认上限调为 `32`，低并发排队语义仍由 slice 覆盖
 - `git diff --check`：通过
+- 后续运行 backend slice、启动 backend、跑 backend e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 venv 与提权边界，避免重复触发本机端口 / `.git/index.lock` 权限错误。
 
 ## 下一步后端计划
 

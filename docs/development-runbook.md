@@ -1,0 +1,114 @@
+# Development Runbook
+
+本文件记录当前 Codex 沙箱下 InsightAgent 的高频运行、e2e 与提交路径。目标是后续开发直接走正确命令和权限，不再用失败来探测环境。
+
+## 快速规则
+
+- 后端 Python 统一用 `backend/.venv/bin/python`，不要临时找系统 Python 或重装依赖。
+- 前端 Node 依赖已在 `frontend/node_modules`，常规检查在 `frontend/` 下用 `npm` 脚本。
+- 单元/slice/lint 通常不需要提权。
+- 访问本机 Docker、监听本机端口、访问本机 e2e 服务、写 `.git/index` 通常需要提权。
+- `data/insightagent.plan.back.md` 永远不要修改。
+- `.cursor/plans/insightagent_开发计划_306e7915.plan.md` 虽在 `.gitignore` 范围内，但当前是 tracked 文件，文档同步和提交必须包含它。
+
+## 不需要提权的常用命令
+
+从仓库根目录运行：
+
+```bash
+backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py
+backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue
+backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task
+python3 -m py_compile backend/app/config.py backend/app/services/chat_execution_service.py backend/app/services/task_queue_service.py
+git diff --check
+git diff --cached --check
+git diff -- data/insightagent.plan.back.md
+```
+
+前端检查：
+
+```bash
+cd frontend
+npm run lint
+node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts
+```
+
+## 需要提权的本机服务
+
+普通沙箱下，backend 访问 `127.0.0.1:5432` PostgreSQL / Chroma 或 frontend 监听 `127.0.0.1:3001` 会经常遇到 `Operation not permitted` / `EPERM`。后续需要启动项目或跑 e2e 时，直接按流程申请提权启动：
+
+后端，工作目录 `backend/`：
+
+```bash
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+前端，工作目录 `frontend/`：
+
+```bash
+npm run dev -- --hostname 127.0.0.1 --port 3001
+```
+
+健康检查也需要提权访问本机端口：
+
+```bash
+curl -sS http://127.0.0.1:8000/health
+curl -I http://127.0.0.1:3001
+```
+
+如果提权审批因为审核通道连接中断被拒，不要绕路用等价命令规避；重新发起同一必要命令的明确审批。
+
+## e2e 路径
+
+Docker 依赖通常已启动，可先普通查看：
+
+```bash
+docker compose ps
+```
+
+backend/frontend 服务启动后，e2e 需要访问本机端口，直接申请提权运行：
+
+```bash
+bash scripts/ci_run_backend_e2e.sh --phase main --base-url http://127.0.0.1:8000 --log-dir /tmp
+bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001
+```
+
+单条 Chromium 复验在 `frontend/` 下运行，也需要提权：
+
+```bash
+PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 npm run test:e2e -- e2e/workbench-remote-errors.spec.ts:527
+```
+
+跑完后停止本轮启动的 backend/frontend 会话，并确认端口无残留：
+
+```bash
+lsof -nP -iTCP:8000 -sTCP:LISTEN
+lsof -nP -iTCP:3001 -sTCP:LISTEN
+```
+
+## 提交路径
+
+当前环境普通 `git add` / `git commit` 经常失败：
+
+```text
+fatal: Unable to create '.git/index.lock': Operation not permitted
+```
+
+后续提交可以在确认 diff 后直接申请提权 stage/commit。因为 `.cursor/` 被 ignore，实时计划文件需要强制 add：
+
+```bash
+git add README.md backend/README.md frontend/README.md <changed-files>
+git add -f .cursor/plans/insightagent_开发计划_306e7915.plan.md
+git diff --cached --check
+git diff --cached -- data/insightagent.plan.back.md
+git commit -m "<message>"
+```
+
+提交后最终核对：
+
+```bash
+git status --short
+git log -1 --oneline
+git diff -- data/insightagent.plan.back.md
+git status --short --ignored .cursor/plans/insightagent_开发计划_306e7915.plan.md
+```

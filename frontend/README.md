@@ -19,6 +19,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 完整 Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47` 通过；本轮修复 retryable stream error 被 `Task stream closed` 覆盖的竞态，remote 429 单条与 full 并发均通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - `git diff --check`：通过
+- 后续启动 frontend、访问本机 e2e 服务、跑 Chromium e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 Node/npm 路径与提权边界，避免重复触发端口 / `.git/index.lock` 权限错误。
 
 ## 下一步前端计划
 
