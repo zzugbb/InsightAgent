@@ -178,6 +178,41 @@ async function openTaskDetailFromTaskCenter(page: Page): Promise<Page> {
   return page;
 }
 
+async function openTaskCenterDrawer(page: Page): Promise<void> {
+  const openTaskCenter = page.getByTestId("chat-open-task-center");
+  await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
+  await openTaskCenter.click();
+  await expect(page.getByTestId("task-center-shell")).toBeVisible({
+    timeout: 20_000,
+  });
+}
+
+async function selectTaskCenterScope(
+  page: Page,
+  scope: "session" | "global",
+): Promise<void> {
+  await page.getByTestId("task-center-scope-filter").click();
+  const optionPattern =
+    scope === "global" ? /All tasks|Global|全部任务|全局/ : /Session|Current session|当前会话|会话/;
+  await page
+    .locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")
+    .locator(".ant-select-item-option")
+    .filter({ hasText: optionPattern })
+    .first()
+    .click();
+}
+
+async function filterTaskCenterByPrompt(
+  page: Page,
+  keyword: string,
+): Promise<void> {
+  const input = page.getByTestId("task-center-keyword-filter");
+  await input.fill(keyword);
+  await expect(
+    page.locator(".task-center-table-row").filter({ hasText: keyword }),
+  ).toBeVisible({ timeout: 20_000 });
+}
+
 function matchesExportRequestUrl(actualUrl: string, expectedUrl: string): boolean {
   const actual = new URL(actualUrl);
   const expected = new URL(expectedUrl);
@@ -784,6 +819,98 @@ test("streaming state stays scoped when switching sessions and resumes on return
   const recoveredCancel = await waitForContextCancelButton(page);
   await recoveredCancel.click();
   await expect(composerSend).toBeEnabled({ timeout: 10_000 });
+});
+
+test("task center separates active session tasks from global concurrent tasks", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const auth = await registerViaApi(request);
+  const sessionATitle = `pw-multitask-a-${Date.now()}`;
+  const sessionBTitle = `pw-multitask-b-${Date.now()}`;
+  const sessionAId = await createSessionWithTitle(
+    request,
+    auth.access_token,
+    sessionATitle,
+  );
+  const sessionBId = await createSessionWithTitle(
+    request,
+    auth.access_token,
+    sessionBTitle,
+  );
+  const promptSuffix = String(Date.now()).slice(-6);
+  const promptAKey = `tc-a-${promptSuffix}`;
+  const promptBKey = `tc-b-${promptSuffix}`;
+  const promptA = `[mock-slow-ms=80] ${promptAKey} ${"alpha ".repeat(340)}`;
+  const promptB = `[mock-slow-ms=80] ${promptBKey} ${"beta ".repeat(340)}`;
+
+  const taskA = await createTaskInSession({
+    request,
+    token: auth.access_token,
+    sessionId: sessionAId,
+    prompt: promptA,
+  });
+  const streamA = openTaskStreamInBackground({
+    token: auth.access_token,
+    taskId: taskA.task_id,
+  });
+  await waitForTaskStatus({
+    request,
+    token: auth.access_token,
+    taskId: taskA.task_id,
+    expected: /queued|pending|running/,
+  });
+
+  const taskB = await createTaskInSession({
+    request,
+    token: auth.access_token,
+    sessionId: sessionBId,
+    prompt: promptB,
+  });
+  const streamB = openTaskStreamInBackground({
+    token: auth.access_token,
+    taskId: taskB.task_id,
+  });
+  await waitForTaskStatus({
+    request,
+    token: auth.access_token,
+    taskId: taskB.task_id,
+    expected: /queued|pending|running/,
+  });
+
+  await seedBrowserAuth(page, auth);
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await selectSessionByTitle(page, sessionBTitle);
+  await openTaskCenterDrawer(page);
+
+  await filterTaskCenterByPrompt(page, promptBKey);
+  await expect(page.locator(".task-center-table-row").filter({ hasText: promptAKey }))
+    .toHaveCount(0);
+
+  await selectTaskCenterScope(page, "global");
+  await filterTaskCenterByPrompt(page, promptAKey);
+  await expect(page.locator(".task-center-table-row").filter({ hasText: promptBKey }))
+    .toHaveCount(0);
+
+  const cancelA = await request.post(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskA.task_id)}/cancel`,
+    {
+      headers: { Authorization: `Bearer ${auth.access_token}` },
+    },
+  );
+  expect(cancelA.ok()).toBeTruthy();
+  const cancelB = await request.post(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskB.task_id)}/cancel`,
+    {
+      headers: { Authorization: `Bearer ${auth.access_token}` },
+    },
+  );
+  expect(cancelB.ok()).toBeTruthy();
+  const [resultA, resultB] = await Promise.all([streamA, streamB]);
+  expect(resultA.ok).toBeTruthy();
+  expect(resultB.ok).toBeTruthy();
 });
 
 test("mock cancel does not show retry affordance and send recovers quickly", async ({

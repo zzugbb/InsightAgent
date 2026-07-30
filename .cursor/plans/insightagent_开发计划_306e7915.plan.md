@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution 当前验收基线已完成收尾；下一核心主线切到 queue-and-concurrency-lite。tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前核心主线：queue-and-concurrency-lite；已完成 queued 状态标准化、label/rank、create 默认 queued、进程内执行槽位、queued SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover/cancel Chromium 专项、running cancel 终态专项与低并发 backend/frontend queue phase，下一步补多任务 / 跨 session 前端专项 e2e
+  - 当前核心主线：queue-and-concurrency-lite；已完成 queued 状态标准化、label/rank、create 默认 queued、进程内执行槽位、queued SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离专项与低并发 backend/frontend queue phase，下一步补刷新恢复 / 跨 session 深水位专项并择机完整 Chromium 复验
   - pre-flight cleanup 已完成文档瘦身、test_tool_runtime_slice 主题拆分与 tool_runtime.py planner/execution/HTTP JSON/registry facade 拆分；当前 facade 约 3.0k 行，继续开发时保持原测试入口命令不变
   - registry-governance 作为维护线，继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 语义
   - rag-governance-hardening 作为后续候选，补知识库版本化、来源治理与更细粒度 shared 规则
@@ -19,10 +19,11 @@ validation_baseline:
   backend_e2e_queue: TASK_QUEUE_MAX_CONCURRENT=1 backend 上 queue phase passed (queued cancel + safe wait_position + followup completion)
   frontend_queue_phase: low-concurrency backend/frontend scripts/ci_run_frontend_e2e.sh --phase queue passed; default full skips this low-concurrency-only test
   frontend_running_cancel_chromium: default backend/frontend targeted Chromium passed (running task cancel reaches server terminal state and clears live UI)
+  frontend_multitask_task_center_chromium: default backend/frontend targeted Chromium passed (task center separates active session tasks from global concurrent tasks)
   frontend_chromium_e2e: full Chromium rerun 47/47 against real backend/frontend lifecycle
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: queue-and-concurrency-lite 继续推进前端专项 e2e：新增 running cancel 终态 Chromium 用例，验证 UI cancel 后服务端状态进入 cancelled、Inspector phase 清理且 composer 可立即重发；修复 queued recover 专项在默认 full Chromium 下误跑的问题，改为 PLAYWRIGHT_QUEUE_LOW_CONCURRENCY=1 gate 并新增 scripts/ci_run_frontend_e2e.sh --phase queue。完整 backend slice 1719/1719、frontend node tests 71/71、frontend lint、CI tooling all、default queued skip、running cancel targeted 与低并发 frontend queue phase 均通过。上一基线中的 backend e2e main phase、backend queue phase 与完整 Chromium 47/47 保持为最近完整常规 e2e 基线；本轮未重跑完整 Chromium。
+latest_validation_note: queue-and-concurrency-lite 继续推进前端专项 e2e：新增 Task Center session/global 多任务隔离 Chromium 用例，验证两个会话的并发/近并发任务在当前会话 scope 不串台、切到 global 后可检索另一会话任务；完整 backend slice 1719/1719、frontend node tests 71/71、frontend lint 与 targeted Chromium 均通过。上一基线中的 backend e2e main phase、backend queue phase、frontend queue phase、CI tooling all 与完整 Chromium 47/47 保持为最近完整常规 e2e 基线；本轮未重跑完整 Chromium。
 todos:
   - id: docs-slimming
     status: completed
@@ -35,7 +36,7 @@ todos:
     content: app/services/tool_runtime.py planner、execution、HTTP JSON、registry facade 拆分已完成，planner/provider planner 抽到 app/services/tool_runtime_planning.py，runtime context/result/attempt/trace/rag/plan-item execution 抽到 app/services/tool_runtime_execution.py，HTTP JSON/diagnostics 抽到 app/services/tool_runtime_http_json.py，registry/file-backed/provider-source 治理抽到 app/services/tool_runtime_registry.py；下一轮不再继续拆分。
   - id: queue-and-concurrency-lite
     status: in_progress
-    content: 当前核心主线；已补 queued 状态标准化、label/rank、stream gate、create 默认 queued、进程内执行槽位、queued wait SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover 初始 phase、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项与 running cancel 终态专项，下一步补多任务 / 跨 session 前端专项 e2e。
+    content: 当前核心主线；已补 queued 状态标准化、label/rank、stream gate、create 默认 queued、进程内执行槽位、queued wait SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover 初始 phase、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项与 Task Center session/global 多任务隔离专项，下一步补刷新恢复 / 跨 session 深水位专项并择机完整 Chromium 复验。
   - id: development-runbook
     status: completed
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。
@@ -55,7 +56,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- 当前核心主线是 `queue-and-concurrency-lite`。进入主线前的文档瘦身、测试文件拆分与 `tool_runtime.py` facade 拆分已完成；当前已完成队列可观测、取消/恢复细化、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项与 running cancel 终态专项，`queued` 已进入后端状态标准化、label/rank、create 默认状态、进程内执行槽位、SSE 等待 state、queued cancel 等待项移除与前端排队位置展示。
+- 当前核心主线是 `queue-and-concurrency-lite`。进入主线前的文档瘦身、测试文件拆分与 `tool_runtime.py` facade 拆分已完成；当前已完成队列可观测、取消/恢复细化、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项与 Task Center session/global 多任务隔离专项，`queued` 已进入后端状态标准化、label/rank、create 默认状态、进程内执行槽位、SSE 等待 state、queued cancel 等待项移除与前端排队位置展示。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程直接提权，避免每轮重复触发权限失败。
 
 ## 已完成能力摘要
@@ -75,6 +76,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `71/71`。
 - Frontend queue phase：低并发 backend/frontend 下 selected session 恢复 queued 任务、Inspector 排队位置与 queued cancel 通过；默认 full Chromium 下该专项显式 skip。
 - Frontend running cancel Chromium：默认 backend/frontend 下 UI cancel 后服务端 terminal、Inspector phase 与 composer 恢复通过。
+- Frontend multi-task Chromium：默认 backend/frontend 下 Task Center 当前会话与全局多任务隔离通过。
 - Frontend Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47`；remote 429 单条复跑也通过。
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过。
 - Diff hygiene：`git diff --check` 通过。
@@ -89,8 +91,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 2. 单机队列：进程内执行槽位、默认 `TASK_QUEUE_MAX_CONCURRENT=32` 与安全等待诊断已完成，低并发排队语义由 slice 覆盖，后续扩到按用户/按 session。
 3. 取消语义：queued 任务可取消且会移出等待队列，已有低并发 backend queue e2e 与前端 queued cancel Chromium 专项；running cancel 已补前端终态专项，继续保持现有 cancel/timeout 外部契约。
 4. 恢复语义：刷新或 reconnect 时区分 queued、running、terminal，前端 queued recover 初始 phase 与 selected session 恢复专项已通过，不改变外部 SSE / trace / export shape。
-5. 前端体验：active task 识别已扩到 `queued/pending/running`，live phase 已能显示当前任务排队位置，并在 terminal/local cancel 时清理 queue snapshot；下一步补多任务与跨 session 专项体验。
-6. e2e：backend queue phase、frontend queue phase、前端 queued recover/cancel 与 running cancel Chromium 已覆盖取消/恢复基线；下一步覆盖前端多任务并发、刷新恢复、跨 session 切换，并择机复跑完整 Chromium。
+5. 前端体验：active task 识别已扩到 `queued/pending/running`，live phase 已能显示当前任务排队位置，并在 terminal/local cancel 时清理 queue snapshot；Task Center 当前会话/全局多任务隔离已补专项，下一步补刷新恢复与跨 session 深水位体验。
+6. e2e：backend queue phase、frontend queue phase、前端 queued recover/cancel、running cancel 与 Task Center 多任务 Chromium 已覆盖取消/恢复/隔离基线；下一步覆盖刷新恢复、跨 session 切换深水位，并择机复跑完整 Chromium。
 
 ## Pre-flight Cleanup
 
