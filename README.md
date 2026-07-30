@@ -8,13 +8,13 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `tool-runtime-productionization` 已归档，不再作为活跃 spec 维护；当前以代码、三份 README 与 `.cursor/plans/insightagent_开发计划_306e7915.plan.md` 为准。
 - `real-tool-execution` 当前验收基线已完成收尾：provider/source/settings/file-backed 组合里的 real search / real calc 已稳定打通请求模板、鉴权/header/query/body、response_path/result_fields、preview/output/result-summary、trace/observation/export 与 e2e 回归。
 - `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口缩为兼容入口，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题搬到 `backend/scripts/tool_runtime_slice/` mixin 包；二次细分后最大主题模块约 4.7k 行。
-- `backend/app/services/tool_runtime.py` 已开始保守 facade 拆分：planner 相关实现已抽到 `backend/app/services/tool_runtime_planning.py`，`from app.services.tool_runtime import ...` 外部导出保持不变。
+- `backend/app/services/tool_runtime.py` 已完成一轮保守 facade 拆分：planner、execution/result/trace/rag、HTTP JSON/diagnostics 已分别抽到 `backend/app/services/tool_runtime_planning.py`、`backend/app/services/tool_runtime_execution.py`、`backend/app/services/tool_runtime_http_json.py`，`from app.services.tool_runtime import ...` 外部导出保持不变；当前 facade 约 7.2k 行。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - 下一核心开发主线切到 `queue-and-concurrency-lite`：在现有 cancel/timeout/running-task-recovery 基础上推进单机任务排队、并发治理与运行可靠性。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1708/1708` 通过；本轮拆分 targeted slice：`planning`、`tool_plan`、`facade` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1710/1710` 通过；本轮拆分 targeted slice：`facade`、`runtime`、`result_summary`、`rag_followup`、`http_json`、`registry`、`tool_plan` 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - 完整 Chromium e2e：真实 backend/frontend 生命周期内首跑 `47/47` 通过
@@ -27,7 +27,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 2. `pre-flight cleanup`：文档流水账压缩与 `test_tool_runtime_slice.py` 主题拆分已完成，原测试入口命令保持不变。
 3. `registry-governance`：作为维护线继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
 4. `rag-governance-hardening`：后续补知识库版本化、来源治理与更细粒度 shared 规则。
-5. `tool_runtime.py` 拆分：planner facade 第一刀已完成；后续优先继续抽 HTTP JSON、registry、result/display、execution loop 模块，不和第一轮队列开发混在一起。
+5. `tool_runtime.py` 拆分：planner、execution、HTTP JSON facade 三刀已完成；后续只保留 registry 作为候选，不和第一轮队列开发混在一起。
 
 ## 关键能力边界
 

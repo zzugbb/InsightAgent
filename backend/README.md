@@ -9,12 +9,12 @@
 - `http_json` 真实执行器当前覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算响应别名、GraphQL/Elastic/OData/向量/RAG SDK 风格输出、safe chunks、request_id、preview/output/result-summary、observation、trace/export/SSE/audit/settings diagnostics。
 - provider/source/settings/file-backed registry 治理已覆盖 direct source、named provider/loader、provider/loader factory、factory alias、profile reset、forward reference 与 diagnostics 并回。
 - `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口继续保留，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题拆到 `backend/scripts/tool_runtime_slice/`；二次细分后最大主题模块约 4.7k 行。
-- `app/services/tool_runtime.py` 已开始保守 facade 拆分：planner 相关实现抽到 `app/services/tool_runtime_planning.py`，外部 import facade 保持稳定。
+- `app/services/tool_runtime.py` 已完成一轮保守 facade 拆分：planner、execution/result/trace/rag、HTTP JSON/diagnostics 已分别抽到 `app/services/tool_runtime_planning.py`、`app/services/tool_runtime_execution.py`、`app/services/tool_runtime_http_json.py`，外部 import facade 保持稳定；当前 facade 约 7.2k 行。
 - 默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1708/1708` 通过；本轮拆分 targeted slice：`planning`、`tool_plan`、`facade` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1710/1710` 通过；本轮拆分 targeted slice：`facade`、`runtime`、`result_summary`、`rag_followup`、`http_json`、`registry`、`tool_plan` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - 完整 Chromium e2e：真实 backend/frontend 生命周期内首跑 `47/47` 通过
@@ -24,7 +24,7 @@
 
 1. `queue-and-concurrency-lite`：补 queued/running/terminal 状态模型、单机队列、并发上限、queued cancel、running cancel/recover 与 stream reconnect 语义。
 2. `pre-flight cleanup`：文档瘦身与 `backend/scripts/test_tool_runtime_slice.py` 主题拆分已完成，保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口不变。
-3. `tool_runtime.py` 分阶段抽模块：`tool_runtime_planning.py` 已完成 facade 第一刀；后续候选抽 `tool_runtime_http_json.py`、`tool_runtime_registry.py`、`tool_runtime_results.py`、`tool_runtime_sanitization.py`，保留现有 import facade。
+3. `tool_runtime.py` 分阶段抽模块：`tool_runtime_planning.py`、`tool_runtime_execution.py`、`tool_runtime_http_json.py` 已完成 facade 拆分；后续仅把 `tool_runtime_registry.py` 作为候选，保留现有 import facade。
 4. `registry-governance` 与 `rag-governance-hardening` 作为后续维护线，不和第一轮队列状态机混在同一改动里。
 
 ## 当前已有内容
@@ -37,6 +37,8 @@
 - `app/services/chat_execution_service.py`：任务流编排与 SSE 主链
 - `app/services/tool_runtime.py`：tool registry / provider / source、tool runtime helper、preflight、diagnostics、result preview/output/summary 语义
 - `app/services/tool_runtime_planning.py`：tool planner / provider planner / planner payload normalization，作为 `tool_runtime.py` 的 facade 拆分模块
+- `app/services/tool_runtime_execution.py`：tool runtime context、result preview/output/summary、attempt loop、trace event、rag follow-up 与 plan-item service execution，作为 `tool_runtime.py` 的 facade 拆分模块
+- `app/services/tool_runtime_http_json.py`：HTTP JSON request/template/response/mapping、execution diagnostics 与敏感信息脱敏，作为 `tool_runtime.py` 的 facade 拆分模块
 - `scripts/tool_runtime_slice/`：`test_tool_runtime_slice.py` 的主题 mixin 包，承接 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等 slice 测试；当前最大主题模块约 4.7k 行
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
 - `app/services/chroma_rag_service.py`：RAG ingest/query/status、knowledge base list/clear/delete 与 shared/private 语义
