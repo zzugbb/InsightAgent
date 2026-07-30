@@ -246,21 +246,41 @@ from app.services.tool_runtime import (  # type: ignore[import-not-found]
 )
 
 from tool_runtime_slice.http_json_mapping import HttpJsonMappingMixin
+from tool_runtime_slice.http_json_status_redirect import HttpJsonStatusRedirectMixin
 from tool_runtime_slice.http_json_error_handling import HttpJsonErrorHandlingMixin
 from tool_runtime_slice.http_json_request_validation import HttpJsonRequestValidationMixin
+from tool_runtime_slice.http_json_mapping_diagnostics import HttpJsonMappingDiagnosticsMixin
+from tool_runtime_slice.http_json_request_wrappers import HttpJsonRequestWrappersMixin
+from tool_runtime_slice.http_json_response_body import HttpJsonResponseBodyMixin
+from tool_runtime_slice.http_json_response_protocol import HttpJsonResponseProtocolMixin
+from tool_runtime_slice.http_json_template_validation import HttpJsonTemplateValidationMixin
 from tool_runtime_slice.model_dump_routes import ModelDumpRoutesMixin
 from tool_runtime_slice.planning_provider import PlanningProviderMixin
 from tool_runtime_slice.provider_source_http_json import ProviderSourceHttpJsonMixin
 from tool_runtime_slice.provider_streaming import ProviderStreamingMixin
 from tool_runtime_slice.registry_file_diagnostics import RegistryFileDiagnosticsMixin
+from tool_runtime_slice.registry_execution_diagnostics import RegistryExecutionDiagnosticsMixin
+from tool_runtime_slice.registry_source_file_diagnostics import RegistrySourceFileDiagnosticsMixin
 from tool_runtime_slice.registry_runtime_governance import RegistryRuntimeGovernanceMixin
+from tool_runtime_slice.registry_http_json_projection import RegistryHttpJsonProjectionMixin
+from tool_runtime_slice.registry_provider_settings import RegistryProviderSettingsMixin
 from tool_runtime_slice.registry_runtime_models import RegistryRuntimeModelsMixin
+from tool_runtime_slice.registry_runtime_service_models import RegistryRuntimeServiceModelsMixin
 from tool_runtime_slice.runtime_http_json_execution import RuntimeHttpJsonExecutionMixin
+from tool_runtime_slice.runtime_attempt_lifecycle import RuntimeAttemptLifecycleMixin
+from tool_runtime_slice.runtime_observation_display import RuntimeObservationDisplayMixin
 from tool_runtime_slice.runtime_rag_execution import RuntimeRagExecutionMixin
 from tool_runtime_slice.runtime_result_rag import RuntimeResultRagMixin
+from tool_runtime_slice.runtime_result_semantics import RuntimeResultSemanticsMixin
+from tool_runtime_slice.runtime_service_execution_semantics import RuntimeServiceExecutionSemanticsMixin
 from tool_runtime_slice.settings_registry import SettingsRegistryMixin
 from tool_runtime_slice.task_routes_usage_governance import TaskRoutesUsageGovernanceMixin
+from tool_runtime_slice.task_trace_response_summaries import TaskTraceResponseSummariesMixin
+from tool_runtime_slice.task_usage_dashboard import TaskUsageDashboardMixin
 from tool_runtime_slice.task_session_export_markdown import TaskSessionExportMarkdownMixin
+from tool_runtime_slice.session_export_markdown import SessionExportMarkdownMixin
+from tool_runtime_slice.task_export_response_summary import TaskExportResponseSummaryMixin
+from tool_runtime_slice.task_session_export_payload import TaskSessionExportPayloadMixin
 from tool_runtime_slice.task_trace_export_governance import TaskTraceExportGovernanceMixin
 
 
@@ -269,19 +289,39 @@ class ToolRuntimeSliceTests(
     PlanningProviderMixin,
     SettingsRegistryMixin,
     HttpJsonMappingMixin,
+    HttpJsonStatusRedirectMixin,
     HttpJsonErrorHandlingMixin,
     HttpJsonRequestValidationMixin,
+    HttpJsonRequestWrappersMixin,
+    HttpJsonTemplateValidationMixin,
+    HttpJsonMappingDiagnosticsMixin,
     ModelDumpRoutesMixin,
     TaskTraceExportGovernanceMixin,
     TaskRoutesUsageGovernanceMixin,
+    TaskTraceResponseSummariesMixin,
+    TaskUsageDashboardMixin,
     TaskSessionExportMarkdownMixin,
+    TaskSessionExportPayloadMixin,
+    SessionExportMarkdownMixin,
+    TaskExportResponseSummaryMixin,
     ProviderStreamingMixin,
     RegistryRuntimeGovernanceMixin,
+    RegistryHttpJsonProjectionMixin,
+    RegistryProviderSettingsMixin,
     RegistryFileDiagnosticsMixin,
+    RegistrySourceFileDiagnosticsMixin,
+    RegistryExecutionDiagnosticsMixin,
     RegistryRuntimeModelsMixin,
+    RegistryRuntimeServiceModelsMixin,
     RuntimeResultRagMixin,
+    RuntimeResultSemanticsMixin,
+    RuntimeAttemptLifecycleMixin,
+    RuntimeObservationDisplayMixin,
     RuntimeRagExecutionMixin,
     RuntimeHttpJsonExecutionMixin,
+    HttpJsonResponseProtocolMixin,
+    HttpJsonResponseBodyMixin,
+    RuntimeServiceExecutionSemanticsMixin,
     unittest.TestCase,
 ):
     def _make_sensitive_http_json_action_step(
