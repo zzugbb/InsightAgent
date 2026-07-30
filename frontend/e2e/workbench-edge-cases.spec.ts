@@ -361,6 +361,44 @@ async function createRunningTaskInSession(args: {
   return created;
 }
 
+async function createTaskInSession(args: {
+  request: Parameters<typeof registerViaApi>[0];
+  token: string;
+  sessionId: string;
+  prompt: string;
+}): Promise<{ task_id: string; session_id: string }> {
+  const response = await args.request.post(`${API_BASE_URL}/api/tasks`, {
+    headers: {
+      Authorization: `Bearer ${args.token}`,
+    },
+    data: {
+      user_input: args.prompt,
+      session_id: args.sessionId,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as { task_id: string; session_id: string };
+}
+
+function openTaskStreamInBackground(args: {
+  token: string;
+  taskId: string;
+}): Promise<{ ok: boolean; text: string }> {
+  return fetch(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(args.taskId)}/stream`,
+    {
+      headers: {
+        Authorization: `Bearer ${args.token}`,
+        Accept: "text/event-stream",
+      },
+      signal: AbortSignal.timeout(180_000),
+    },
+  ).then(async (response) => ({
+    ok: response.ok,
+    text: await response.text(),
+  }));
+}
+
 test("rag query empty state is visible @smoke", async ({ page, request }) => {
   const auth = await registerViaApi(request);
   await seedBrowserAuth(page, auth);
@@ -806,6 +844,95 @@ test("running task recovery notice covers info to success states", async ({
       timeout: 35_000,
     });
   }
+});
+
+test("queued task recovery shows queue position and can be cancelled", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const auth = await registerViaApi(request);
+  const activeSessionTitle = `pw-queue-active-${Date.now()}`;
+  const queuedSessionTitle = `pw-queued-recovery-${Date.now()}`;
+  const activeSessionId = await createSessionWithTitle(
+    request,
+    auth.access_token,
+    activeSessionTitle,
+  );
+  const queuedSessionId = await createSessionWithTitle(
+    request,
+    auth.access_token,
+    queuedSessionTitle,
+  );
+  const activeTask = await createTaskInSession({
+    request,
+    token: auth.access_token,
+    sessionId: activeSessionId,
+    prompt: `[mock-slow-ms=25] queued-recovery-active ${"stream ".repeat(520)}`,
+  });
+  const activeStream = openTaskStreamInBackground({
+    token: auth.access_token,
+    taskId: activeTask.task_id,
+  });
+  await waitForTaskStatus({
+    request,
+    token: auth.access_token,
+    taskId: activeTask.task_id,
+    expected: /running/,
+  });
+
+  const queuedTask = await createTaskInSession({
+    request,
+    token: auth.access_token,
+    sessionId: queuedSessionId,
+    prompt: "queued recovery target",
+  });
+  const queuedStream = openTaskStreamInBackground({
+    token: auth.access_token,
+    taskId: queuedTask.task_id,
+  });
+  await waitForTaskStatus({
+    request,
+    token: auth.access_token,
+    taskId: queuedTask.task_id,
+    expected: /queued/,
+  });
+
+  await seedBrowserAuth(page, auth);
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await selectSessionByTitle(page, queuedSessionTitle);
+  await openInspectorContextTab(page);
+
+  await expect(page.getByTestId("inspector-current-phase")).toContainText(
+    /Queued #1|排队中 #1/,
+    { timeout: 20_000 },
+  );
+
+  const cancelButton = await waitForContextCancelButton(page);
+  await cancelButton.click();
+  await waitForTaskStatus({
+    request,
+    token: auth.access_token,
+    taskId: queuedTask.task_id,
+    expected: /cancelled|canceled/,
+  });
+  const queuedResult = await queuedStream;
+  expect(queuedResult.ok).toBeTruthy();
+  expect(queuedResult.text).toContain("event: cancelled");
+  expect(queuedResult.text).not.toContain("event: done");
+
+  const activeCancelResponse = await request.post(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(activeTask.task_id)}/cancel`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(activeCancelResponse.ok()).toBeTruthy();
+  const activeResult = await activeStream;
+  expect(activeResult.ok).toBeTruthy();
 });
 
 test("running task recovery notice shows error when reconnect stream fails", async ({

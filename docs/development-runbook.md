@@ -80,6 +80,15 @@ TASK_QUEUE_MAX_CONCURRENT=1 TASK_QUEUE_POLL_INTERVAL_SEC=0.1 backend/.venv/bin/p
 bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp
 ```
 
+低并发前端队列专项需要同时启动 backend 与 frontend，并让 frontend 指向 `8011`：
+
+```bash
+TASK_QUEUE_MAX_CONCURRENT=1 TASK_QUEUE_POLL_INTERVAL_SEC=0.1 backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8011
+cd frontend
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8011 npm run dev -- --hostname 127.0.0.1 --port 3001
+PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8011 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "queued task recovery shows queue position"
+```
+
 单条 Chromium 复验在 `frontend/` 下运行，也需要提权：
 
 ```bash

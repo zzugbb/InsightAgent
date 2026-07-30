@@ -495,7 +495,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       <div className="inspector-kpi-grid" id="ctx-overview">
         <div className="inspector-kpi-item">
           <span>{t.inspector.currentPhase}</span>
-          <strong>{phaseLabel}</strong>
+          <strong data-testid="inspector-current-phase">{phaseLabel}</strong>
         </div>
         <div className="inspector-kpi-item">
           <span>{t.inspector.currentTask}</span>
