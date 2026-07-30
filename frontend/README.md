@@ -149,7 +149,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test --project=chromium` 本轮在真实 backend/frontend 生命周期内执行：首轮并发 `45/47`，两个导出 UI/download 相关失败用例随后用 Chromium 单 worker 精确复跑 `2/2` 通过。
   - `git diff --check` 通过
-- 本轮收尾验证：继续收口 HTTP JSON provider search 的真实向量/GraphQL 输出；Chroma-style `documents: [[...]]` 会扁平补齐 `documents_total` 与安全 `chunks`，Weaviate-style `data.Get.<Class>[]` 会受限递归抽取 documents/chunks，并从 `extensions.requestId` 归一安全 request id。同步验证新增红测 `-k chroma_document_matrix`、`-k weaviate_graphql_get_documents`，上一轮 Qdrant/Milvus/LlamaIndex、GraphQL connection、metadata fallback 回归，`-k build_tool_result_summary`、`-k response_path_list`、`-k build_tool_rag_followup`、`-k http_json`、`-k tool_registry`、`-k provider_source` 与完整 backend slice（`1707/1707`）均通过；同一受控生命周期内后端 main phase e2e 通过，完整 Chromium e2e 首轮 `46/47`，唯一 404 toast 用例单 worker 精确复跑 `1/1` 通过。
+- 本轮收尾核对：CI e2e tooling 的 backend runner dry-run 断言已兼容 `BACKEND_E2E_PYTHON` 覆盖与无 `backend/.venv` 时的 `python3` fallback；`BACKEND_E2E_PYTHON=python3 bash scripts/test_ci_run_backend_e2e.sh` 先复现失败后通过。`bash scripts/test_ci_run_backend_e2e.sh`、`bash scripts/test_ci_e2e_tooling.sh backend`、`bash scripts/test_ci_e2e_tooling.sh frontend` 均通过；上一轮真实工具执行基线仍为完整 backend slice（`1707/1707`）、后端 main phase e2e 通过、完整 Chromium e2e 首轮 `46/47` 且唯一 404 toast 用例单 worker 精确复跑 `1/1` 通过。
 
 ## 全仓库审计结论
 
