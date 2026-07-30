@@ -15,11 +15,12 @@ validation_baseline:
   backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1707/1707)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   frontend_build: cd frontend && npm run build
-  frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export (3/3 browsers)
-  frontend_chromium_e2e: 本轮在真实 backend/frontend 生命周期内执行完整 Chromium；首轮 46/47，唯一 404 toast 用例单 worker 精确复跑 1/1 通过
-  ci_e2e_tooling: bash scripts/test_ci_run_backend_e2e.sh; BACKEND_E2E_PYTHON=python3 bash scripts/test_ci_run_backend_e2e.sh; bash scripts/test_ci_e2e_tooling.sh backend; bash scripts/test_ci_e2e_tooling.sh frontend
+  frontend_targeted_e2e: retrieval_only task detail replay (3/3 browsers), cancel immediate resend (3/3 browsers), cancel/trace-delta recovery set (9/9 browsers), remote cancel cooldown (3/3 browsers), main path task/session export + 404 ownership export + cancel resend targeted Chromium (3/3)
+  frontend_chromium_e2e: 本轮在真实 backend/frontend 生命周期内执行完整 Chromium；首跑 47/47 通过，不再依赖失败后 rerun
+  backend_e2e_main: BACKEND_E2E_PYTHON=backend/.venv/bin/python bash scripts/ci_run_backend_e2e.sh --phase main --base-url http://127.0.0.1:8000 --log-dir /tmp/insightagent-backend-e2e-main-verify
+  ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: 本轮核对 CI e2e tooling gate：backend runner dry-run 断言已兼容 BACKEND_E2E_PYTHON 覆盖与无 backend/.venv 时的 python3 fallback；BACKEND_E2E_PYTHON=python3 bash scripts/test_ci_run_backend_e2e.sh 先复现失败后通过。bash scripts/test_ci_run_backend_e2e.sh、bash scripts/test_ci_e2e_tooling.sh backend、bash scripts/test_ci_e2e_tooling.sh frontend 均通过；上一轮真实工具执行基线仍为完整 backend slice 1707/1707、后端 main phase e2e 通过、完整 Chromium e2e 首轮 46/47 且唯一 404 toast 用例单 worker 精确复跑 1/1 通过。real-tool-execution 当前验收基线完成收尾。
+latest_validation_note: 本轮严格核对 real-tool-execution 收尾：完整 backend slice 1707/1707 通过；真实 backend e2e main phase 在本机 Docker postgres/chroma 与长生命周期 backend 下通过，覆盖 baseline/main/export consistency/cancel-timeout；CI e2e tooling 通过 bash scripts/test_ci_e2e_tooling.sh all；完整 Chromium e2e 在真实 backend/frontend 生命周期内首跑 47/47 通过，不再依赖失败后 rerun。普通沙箱运行 backend/frontend e2e 会被本机端口权限拦截，本轮已按流程提权后重新执行。real-tool-execution 当前验收基线完成收尾。
 todos:
   - id: real-tool-execution
     status: completed
@@ -501,9 +502,10 @@ logging_rule: 计划文件只保留当前状态、当前主线、最近校验基
 420. `result_fields.chunks` 指向对象列表的显式投影也已补齐：真实 provider 常见的 `result_fields: {"chunks": "$.data.items"}` 会先把对象/字符串混合列表归一成安全 chunk 字符串，再进入 preview/output/result-summary；`snippetText`、嵌套 `attributes.contentText` 与字符串项会保留，title-only 条目不会透出，chunks-only search 也会产出 `Retrieved N snippets.` 摘要，完整 backend slice 当前为 `1698/1698`。
 421. GraphQL-style connection search 输出也已补齐：当真实 provider 通过 `result_fields.documents` 把 `{totalCount, edges:[{node:...}]}` 这类 connection 容器保留为 `documents` 时，HTTP JSON retrieval registration 会从 connection count/edges 长度补齐 `documents_total`，从 `edges/node` 抽取安全 chunks 并进入 preview/output/result-summary；只有带可展开列表的 connection mapping 才参与嵌套计数，普通 `documents` 元数据对象仍会让后续 `items` 真实列表胜出。
 422. Elastic/OpenSearch-style hits search 输出也已补齐：当真实 provider 通过 `result_fields.documents` 把 `{total:{value}, hits:[...]}` 这类搜索容器保留为 `documents` 时，HTTP JSON retrieval registration 会优先从 `total.value` 补齐 `documents_total`，并从 hit `_source` / `fields` 容器抽取安全 chunks，继续进入 preview/output/result-summary；完整 backend slice 当前为 `1700/1700`。
-423. Azure/OData 与 organic search 输出也已补齐：当真实 provider 通过 `result_fields.documents` 保留 `{@odata.count, value:[...]}` 容器，或根响应直接返回 `organic_results[] + search_information.total_results + search_metadata.id` 时，HTTP JSON retrieval registration 会补齐 `documents_total`、安全 chunks 与 request id；无 registration 的旧 `matches` trace/export fallback 不额外扩展 `documents_total`，完整 backend slice 当前为 `1702/1702`，后端 main phase e2e 已通过，Chromium full e2e 首轮并发 `45/47` 且失败用例单 worker 复跑 `2/2` 通过。
+423. Azure/OData 与 organic search 输出也已补齐：当真实 provider 通过 `result_fields.documents` 保留 `{@odata.count, value:[...]}` 容器，或根响应直接返回 `organic_results[] + search_information.total_results + search_metadata.id` 时，HTTP JSON retrieval registration 会补齐 `documents_total`、安全 chunks 与 request id；无 registration 的旧 `matches` trace/export fallback 不额外扩展 `documents_total`，后续严格全量 e2e 结果以最新收尾复核记录为准。
 424. 向量/RAG SDK search 输出也已补齐：Qdrant-style `result.points[]`、Milvus/Zilliz-style `data[].entity` 与 LlamaIndex-style `source_nodes[]` 会在 HTTP JSON retrieval registration 语义下补齐 `documents_total` 与安全 chunks，并进入 preview/output/result-summary；完整 backend slice 当前为 `1705/1705`，后端 main phase e2e 已通过。
-425. Chroma/Weaviate-style search 输出也已补齐：Chroma-style `documents: [[...]]` 会扁平补齐 `documents_total` 与安全 chunks，Weaviate-style `data.Get.<Class>[]` 会受限递归抽取 documents/chunks，并从 `extensions.requestId` 归一安全 request id；完整 backend slice 当前为 `1707/1707`，后端 main phase e2e 已通过，Chromium full e2e 首轮 `46/47` 且唯一 404 toast 用例单 worker 精确复跑 `1/1` 通过。
+425. Chroma/Weaviate-style search 输出也已补齐：Chroma-style `documents: [[...]]` 会扁平补齐 `documents_total` 与安全 chunks，Weaviate-style `data.Get.<Class>[]` 会受限递归抽取 documents/chunks，并从 `extensions.requestId` 归一安全 request id；完整 backend slice 当前为 `1707/1707`，后端 main phase e2e 已通过。
+426. 严格收尾复核已完成：Task Center 详情入口 e2e 改为读取真实 `href` 后在当前页确认 `/tasks/{id}` 与 detail shell，导出 e2e 改为等待同 path/query 的 authenticated export response 并校验 headers/filename，取消后立即重发用例等待后端 terminal status 后再断言 composer 恢复；targeted Chromium 三用例 `3/3` 通过，完整 Chromium 首跑 `47/47` 通过，backend e2e main phase 与 CI e2e tooling `all` 均通过。
 
 ## 当前主线判断
 

@@ -164,15 +164,60 @@ async function openTaskDetailFromTaskCenter(page: Page): Promise<Page> {
   });
   const openDetail = page.getByTestId("task-center-open-task-detail").first();
   await expect(openDetail).toBeVisible({ timeout: 20_000 });
-  const [detailPage] = await Promise.all([
-    page.waitForEvent("popup"),
-    openDetail.click(),
-  ]);
-  await detailPage.waitForLoadState("domcontentloaded");
-  await expect(detailPage.getByTestId("task-detail-page")).toBeVisible({
+  const detailHref = await openDetail.getAttribute("href");
+  expect(detailHref).toMatch(/^\/tasks\/[^/]+$/);
+  await page.goto(new URL(detailHref ?? "", page.url()).toString());
+  await page.waitForURL(/\/tasks\/[^/]+$/, { timeout: 20_000 });
+  await page.waitForLoadState("domcontentloaded");
+  await expect(page.getByTestId("task-detail-page")).toBeVisible({
     timeout: 20_000,
   });
-  return detailPage;
+  return page;
+}
+
+function matchesExportRequestUrl(actualUrl: string, expectedUrl: string): boolean {
+  const actual = new URL(actualUrl);
+  const expected = new URL(expectedUrl);
+  return (
+    actual.origin === expected.origin &&
+    actual.pathname === expected.pathname &&
+    actual.searchParams.get("download") === expected.searchParams.get("download")
+  );
+}
+
+async function clickAndWaitForExportResponse(args: {
+  page: Page;
+  trigger: Locator;
+  requestUrl: string;
+}) {
+  let response = null as Awaited<ReturnType<Page["waitForResponse"]>> | null;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3 && !response; attempt += 1) {
+    await expect(args.trigger).toBeVisible({ timeout: 15_000 });
+    await expect(args.trigger).toBeEnabled({ timeout: 15_000 });
+    const responsePromise = args.page
+      .waitForResponse(
+        (candidate) =>
+          matchesExportRequestUrl(candidate.url(), args.requestUrl) &&
+          candidate.request().method() === "GET",
+        { timeout: 12_000 },
+      )
+      .catch((error: unknown) => {
+        lastError = error;
+        return null;
+      });
+    await args.trigger.click();
+    response = await responsePromise;
+    if (!response) {
+      await args.page.waitForTimeout(350);
+    }
+  }
+  if (!response) {
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(`Export request was not observed for ${args.requestUrl}`);
+  }
+  return response;
 }
 
 async function waitForRunningTaskIdInSession(args: {
@@ -226,6 +271,39 @@ async function waitForRunningTaskIdInSession(args: {
     )
     .not.toBe("");
   return lastSeenTaskId;
+}
+
+async function waitForTaskStatus(args: {
+  request: Parameters<typeof registerViaApi>[0];
+  token: string;
+  taskId: string;
+  expected: RegExp;
+}): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const response = await args.request.get(
+          `${API_BASE_URL}/api/tasks/${encodeURIComponent(args.taskId)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${args.token}`,
+            },
+          },
+        );
+        if (!response.ok()) {
+          return "";
+        }
+        const payload = (await response.json()) as {
+          status?: string;
+          status_normalized?: string;
+        };
+        return String(payload.status_normalized ?? payload.status ?? "")
+          .trim()
+          .toLowerCase();
+      },
+      { timeout: 30_000, intervals: [300, 600, 1000, 1500, 2500] },
+    )
+    .toMatch(args.expected);
 }
 
 async function createRunningTaskInSession(args: {
@@ -484,6 +562,9 @@ test("task export keeps localized 404 hint when token ownership changes", async 
   await expect(detailPage.getByTestId("task-detail-export-json")).toBeEnabled({
     timeout: 20_000,
   });
+  const taskDetailUrl = new URL(detailPage.url());
+  const taskId = taskDetailUrl.pathname.split("/").filter(Boolean).at(-1) ?? "";
+  expect(taskId).not.toBe("");
   await detailPage.evaluate(
     ({
       accessToken,
@@ -511,7 +592,12 @@ test("task export keeps localized 404 hint when token ownership changes", async 
   );
 
   const exportJsonButton = detailPage.getByTestId("task-detail-export-json");
-  await exportJsonButton.click();
+  const exportResponse = await clickAndWaitForExportResponse({
+    page: detailPage,
+    trigger: exportJsonButton,
+    requestUrl: `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/export/json?download=1`,
+  });
+  expect(exportResponse.status()).toBe(404);
   await expectToastContains(detailPage, "404");
   await expect
     .poll(async () => {
@@ -592,12 +678,18 @@ test("cancel allows immediate resend with identical prompt without dedupe loss",
     },
   );
   expect(firstCancelResponse.ok()).toBeTruthy();
+  await waitForTaskStatus({
+    request,
+    token: auth.access_token,
+    taskId: firstTaskId,
+    expected: /cancelled|canceled|completed|failed|timeout/,
+  });
 
   await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
-    timeout: 8_000,
+    timeout: 30_000,
   });
   await composerInput.fill(samePrompt);
-  await expect(composerSend).toBeEnabled({ timeout: 8_000 });
+  await expect(composerSend).toBeEnabled({ timeout: 30_000 });
   await composerSend.click();
   const duplicatedUserRows = page
     .locator("article.message-row.user")

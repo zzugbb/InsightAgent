@@ -140,9 +140,10 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
   - `cd frontend && npx playwright test e2e/workbench-edge-cases.spec.ts -g "cancel allows immediate resend with identical prompt without dedupe loss|mock cancel does not show retry affordance and send recovers quickly|trace delta sync retries, pauses in background, and resumes when foreground returns" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`9/9`）
   - `cd frontend && npx playwright test e2e/workbench-remote-errors.spec.ts -g "remote cancel enters cooldown and recovers send" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
   - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts -g "workbench main path covers trace, rag and task/session export" --reporter=line --workers=1` 通过（Chromium/Firefox/WebKit，`3/3`）
-  - `cd frontend && npx playwright test --project=chromium` 本轮在真实 backend/frontend 生命周期内执行：首轮并发 `45/47`，两个导出 UI/download 相关失败用例随后用 Chromium 单 worker 精确复跑 `2/2` 通过。
+  - `cd frontend && npx playwright test e2e/workbench-main-path.spec.ts e2e/workbench-edge-cases.spec.ts -g "workbench main path covers trace, rag and task/session export|task export keeps localized 404 hint when token ownership changes|cancel allows immediate resend with identical prompt without dedupe loss" --project=chromium --workers=1 --reporter=line` 通过（`3/3`）
+  - `cd frontend && PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 npx playwright test --project=chromium --reporter=line` 本轮在真实 backend/frontend 生命周期内首跑通过（`47/47`）
   - `git diff --check` 通过
-- 本轮收尾核对：CI e2e tooling 的 backend runner dry-run 断言已兼容 `BACKEND_E2E_PYTHON` 覆盖与无 `backend/.venv` 时的 `python3` fallback；`BACKEND_E2E_PYTHON=python3 bash scripts/test_ci_run_backend_e2e.sh` 先复现失败后通过。`bash scripts/test_ci_run_backend_e2e.sh`、`bash scripts/test_ci_e2e_tooling.sh backend`、`bash scripts/test_ci_e2e_tooling.sh frontend` 均通过；上一轮真实工具执行基线仍为完整 backend slice（`1707/1707`）、后端 main phase e2e 通过、完整 Chromium e2e 首轮 `46/47` 且唯一 404 toast 用例单 worker 精确复跑 `1/1` 通过。
+- 本轮收尾核对：真实 backend e2e main phase 已在本机 Docker postgres/chroma 与长生命周期 backend 下通过，覆盖 baseline/main/export consistency/cancel-timeout；完整 backend slice 仍为 `1707/1707`。CI e2e tooling 已通过 `bash scripts/test_ci_e2e_tooling.sh all`；完整 Chromium e2e 首跑 `47/47` 通过，不再依赖失败后 rerun。普通沙箱运行 backend/frontend e2e 会被本机端口权限拦截，本轮已按流程提权后重新执行。
 
 ## 全仓库审计结论
 

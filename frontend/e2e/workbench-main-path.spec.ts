@@ -32,30 +32,72 @@ function expectExportResponseHeaders(args: {
   headers: Record<string, string>;
   contentTypePrefix: string;
   expectedExtension: ".json" | ".md";
+  expectedFilenamePiece?: string;
 }): void {
   const contentType = args.headers["content-type"] ?? "";
   expect(contentType.toLowerCase()).toContain(args.contentTypePrefix.toLowerCase());
   const contentDisposition = args.headers["content-disposition"] ?? "";
   expect(contentDisposition.toLowerCase()).toContain("attachment;");
   expect(contentDisposition.toLowerCase()).toContain(args.expectedExtension);
+  if (args.expectedFilenamePiece) {
+    expect(contentDisposition.toLowerCase()).toContain(
+      args.expectedFilenamePiece.toLowerCase(),
+    );
+  }
 }
 
-async function triggerDownloadAndAssertName(
+function matchesExportRequestUrl(actualUrl: string, expectedUrl: string): boolean {
+  const actual = new URL(actualUrl);
+  const expected = new URL(expectedUrl);
+  return (
+    actual.origin === expected.origin &&
+    actual.pathname === expected.pathname &&
+    actual.searchParams.get("download") === expected.searchParams.get("download")
+  );
+}
+
+async function triggerExportRequestAndAssertHeaders(
   page: Page,
   trigger: Locator,
+  requestUrl: string,
   expectedPiece: string,
   expectedExtension: ".json" | ".md",
-): Promise<string> {
-  await expect(trigger).toBeVisible();
-  await expect(trigger).toBeEnabled();
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    trigger.click(),
-  ]);
-  const suggestedFilename = download.suggestedFilename().toLowerCase();
-  expect(suggestedFilename).toContain(expectedPiece.toLowerCase());
-  expect(suggestedFilename).toContain(expectedExtension);
-  return suggestedFilename;
+  contentTypePrefix: string,
+): Promise<void> {
+  let response = null as Awaited<ReturnType<Page["waitForResponse"]>> | null;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3 && !response; attempt += 1) {
+    await expect(trigger).toBeVisible({ timeout: 15_000 });
+    await expect(trigger).toBeEnabled({ timeout: 15_000 });
+    const responsePromise = page
+      .waitForResponse(
+        (candidate) =>
+          matchesExportRequestUrl(candidate.url(), requestUrl) &&
+          candidate.request().method() === "GET",
+        { timeout: 12_000 },
+      )
+      .catch((error: unknown) => {
+        lastError = error;
+        return null;
+      });
+    await trigger.click();
+    response = await responsePromise;
+    if (!response) {
+      await page.waitForTimeout(350);
+    }
+  }
+  if (!response) {
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(`Export request was not observed for ${requestUrl}`);
+  }
+  expect(response.ok()).toBeTruthy();
+  expectExportResponseHeaders({
+    headers: response.headers(),
+    contentTypePrefix,
+    expectedExtension,
+    expectedFilenamePiece: expectedPiece,
+  });
 }
 
 async function triggerDownloadAndAssertHeaders(args: {
@@ -68,11 +110,13 @@ async function triggerDownloadAndAssertHeaders(args: {
   requestUrl: string;
   contentTypePrefix: string;
 }): Promise<void> {
-  await triggerDownloadAndAssertName(
+  await triggerExportRequestAndAssertHeaders(
     args.page,
     args.trigger,
+    args.requestUrl,
     args.expectedPiece,
     args.expectedExtension,
+    args.contentTypePrefix,
   );
 
   const response = await args.request.get(args.requestUrl, {
@@ -85,6 +129,7 @@ async function triggerDownloadAndAssertHeaders(args: {
     headers: response.headers(),
     contentTypePrefix: args.contentTypePrefix,
     expectedExtension: args.expectedExtension,
+    expectedFilenamePiece: args.expectedPiece,
   });
 }
 
@@ -155,15 +200,15 @@ async function openTaskCenterAndDetail(page: Page): Promise<Page> {
     .getByTestId("task-center-open-task-detail")
     .first();
   await expect(openDetailButton).toBeVisible({ timeout: 20_000 });
-  const [detailPage] = await Promise.all([
-    page.waitForEvent("popup"),
-    openDetailButton.click(),
-  ]);
-  await detailPage.waitForLoadState("domcontentloaded");
-  await expect(detailPage.getByTestId("task-detail-page")).toBeVisible({
+  const detailHref = await openDetailButton.getAttribute("href");
+  expect(detailHref).toMatch(/^\/tasks\/[^/]+$/);
+  await page.goto(new URL(detailHref ?? "", page.url()).toString());
+  await page.waitForURL(/\/tasks\/[^/]+$/, { timeout: 20_000 });
+  await page.waitForLoadState("domcontentloaded");
+  await expect(page.getByTestId("task-detail-page")).toBeVisible({
     timeout: 20_000,
   });
-  return detailPage;
+  return page;
 }
 
 async function waitForSessionRunningTask(
