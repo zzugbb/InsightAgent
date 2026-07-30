@@ -7,7 +7,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - W1-W4 与阶段 5 基础产品化已完成：会话/任务/消息持久化、SSE、Trace 回放与增量同步、Memory、RAG、鉴权、PostgreSQL、任务取消/超时、running task 恢复、usage dashboard、审计与任务/会话导出已具备可演示闭环。
 - `tool-runtime-productionization` 已归档，不再作为活跃 spec 维护；当前以代码、三份 README 与 `.cursor/plans/insightagent_开发计划_306e7915.plan.md` 为准。
 - `real-tool-execution` 当前验收基线已完成收尾：provider/source/settings/file-backed 组合里的 real search / real calc 已稳定打通请求模板、鉴权/header/query/body、response_path/result_fields、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- `backend/scripts/test_tool_runtime_slice.py` 第一阶段拆分已完成：provider/source、planner、settings/registry、http_json mapping、route/model_dump 主题已搬到 `backend/scripts/tool_runtime_slice/` mixin 包，原入口命令保持不变。
+- `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口缩为兼容入口，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题搬到 `backend/scripts/tool_runtime_slice/` mixin 包。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - 下一核心开发主线切到 `queue-and-concurrency-lite`：在现有 cancel/timeout/running-task-recovery 基础上推进单机任务排队、并发治理与运行可靠性。
 
@@ -23,7 +23,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前开发计划
 
 1. `queue-and-concurrency-lite`：下一核心主线，补单机任务队列、并发上限、queued/running/cancel/recover 状态机与 e2e。
-2. `pre-flight cleanup`：文档流水账压缩与测试拆分第一阶段已完成；下一步继续拆剩余 trace/export/sanitization 大块，保持原测试入口命令不变。
+2. `pre-flight cleanup`：文档流水账压缩与 `test_tool_runtime_slice.py` 拆分已完成，原测试入口命令保持不变。
 3. `registry-governance`：作为维护线继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
 4. `rag-governance-hardening`：后续补知识库版本化、来源治理与更细粒度 shared 规则。
 5. `tool_runtime.py` 拆分：作为后续分阶段候选，先抽旁路模块，不和第一轮队列开发混在一起。

@@ -9,7 +9,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 前端 W1-W4 与阶段 5 基础产品化已完成：Auth Gate、Workbench、Trace 双视图、Memory/RAG 调试、usage dashboard、任务/会话导出、任务详情页、running task 恢复、审计与知识库治理已具备可演示闭环。
 - `real-tool-execution` 当前验收基线已完成收尾：workbench / live store / model settings 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 前端继续保持与后端 SSE / trace / export 契约稳定对齐，不为真实工具执行新增独立本地语义分支。
-- 下一主线启动前的仓库 pre-flight 已推进：后端 runtime slice 第一阶段拆分完成，原测试入口保持不变；前端本轮无行为改动。
+- 下一主线启动前的仓库 pre-flight 已推进：后端 runtime slice 测试拆分完成，原测试入口保持不变；前端本轮无行为改动。
 - 下一核心开发主线跟随后端切到 `queue-and-concurrency-lite`：补 queued/running/cancel/recover 的工作台状态、Task Center 展示、composer 恢复与 e2e。
 
 ## 当前验证基线

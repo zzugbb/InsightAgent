@@ -2,8 +2,8 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution 当前验收基线已完成收尾；下一核心主线切到 queue-and-concurrency-lite。tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 进入 queue-and-concurrency-lite 前，继续完成测试文件拆分 pre-flight cleanup
   - 下一核心主线：单机任务排队、并发治理、queued/running/cancel/recover 状态机与 e2e
+  - pre-flight cleanup 已完成文档瘦身与 test_tool_runtime_slice 主题拆分，继续开发时保持原测试入口命令不变
   - registry-governance 作为维护线，继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 语义
   - rag-governance-hardening 作为后续候选，补知识库版本化、来源治理与更细粒度 shared 规则
 constraints:
@@ -18,14 +18,14 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium first pass 47/47 against real backend/frontend lifecycle
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: test_tool_runtime_slice 第一阶段拆分后，provider_source / build_tool_plan / http_json_response_path / model_dump targeted tests 与完整 backend slice 1707/1707 均通过；本轮尚未重跑 full-stack e2e / Chromium e2e。
+latest_validation_note: test_tool_runtime_slice 完整拆分后，http_json / governance / registry / rag_followup targeted tests 与完整 backend slice 1707/1707 均通过；本轮尚未重跑 full-stack e2e / Chromium e2e。
 todos:
   - id: docs-slimming
     status: completed
     content: 四份活跃文档压缩为当前状态、验证基线、下一主线、维护前置项和稳定契约，不再保留流水账。
   - id: test-runtime-slice-split
-    status: in_progress
-    content: 第一阶段已拆出 backend/scripts/tool_runtime_slice/ 下 provider/source、planner、settings/registry、http_json mapping、route/model_dump mixin；继续拆剩余 trace/export/sanitization 大块，保持原入口命令不变。
+    status: completed
+    content: backend/scripts/test_tool_runtime_slice.py 已缩为兼容入口，测试主体拆到 backend/scripts/tool_runtime_slice/ 主题 mixin；最大模块约 9.7k 行，原入口命令保持不变。
   - id: queue-and-concurrency-lite
     status: pending
     content: 下一核心主线；补 queued/running/terminal 状态模型、单机队列、并发上限、queued cancel、running cancel/recover、stream reconnect 与 e2e。
@@ -45,7 +45,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- 下一核心主线是 `queue-and-concurrency-lite`。进入主线前先完成文档瘦身与测试文件拆分，避免继续在超长文档和超大测试文件上叠加开发；测试拆分第一阶段已落地，原入口命令保持不变。
+- 下一核心主线是 `queue-and-concurrency-lite`。进入主线前的文档瘦身与测试文件拆分已完成；`backend/scripts/test_tool_runtime_slice.py` 保留为兼容入口，原入口命令保持不变。
 
 ## 已完成能力摘要
 
@@ -81,21 +81,24 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 ## Pre-flight Cleanup
 
 - 文档瘦身：四份活跃文档只保留当前状态、当前验证基线、下一主线、稳定契约与少量高信号能力摘要。
-- 测试拆分优先：`backend/scripts/test_tool_runtime_slice.py` 当前体量仍偏大，但第一阶段已拆出 `backend/scripts/tool_runtime_slice/` mixin 包并保持原入口命令不变。
-- 第一阶段已拆模块：
+- 测试拆分：`backend/scripts/test_tool_runtime_slice.py` 已缩为兼容入口，测试主体拆到 `backend/scripts/tool_runtime_slice/` mixin 包并保持原入口命令不变。
+- 已拆模块摘要：
   - `backend/scripts/tool_runtime_slice/provider_source_http_json.py`
   - `backend/scripts/tool_runtime_slice/planning_provider.py`
   - `backend/scripts/tool_runtime_slice/settings_registry.py`
   - `backend/scripts/tool_runtime_slice/http_json_mapping.py`
   - `backend/scripts/tool_runtime_slice/model_dump_routes.py`
-- 建议测试拆分方向：
-  - `backend/tests/tool_runtime_slice/test_provider_source_http_json.py`
-  - `backend/tests/tool_runtime_slice/test_planner_provider.py`
-  - `backend/tests/tool_runtime_slice/test_http_json_mapping.py`
-  - `backend/tests/tool_runtime_slice/test_registry_settings_diagnostics.py`
-  - `backend/tests/tool_runtime_slice/test_trace_export_response.py`
-  - `backend/tests/tool_runtime_slice/test_sanitization.py`
-  - `backend/tests/tool_runtime_slice/helpers.py`
+  - `backend/scripts/tool_runtime_slice/task_trace_export_governance.py`
+  - `backend/scripts/tool_runtime_slice/task_routes_usage_governance.py`
+  - `backend/scripts/tool_runtime_slice/task_session_export_markdown.py`
+  - `backend/scripts/tool_runtime_slice/registry_runtime_governance.py`
+  - `backend/scripts/tool_runtime_slice/registry_file_diagnostics.py`
+  - `backend/scripts/tool_runtime_slice/registry_runtime_models.py`
+  - `backend/scripts/tool_runtime_slice/runtime_result_rag.py`
+  - `backend/scripts/tool_runtime_slice/runtime_rag_execution.py`
+  - `backend/scripts/tool_runtime_slice/runtime_http_json_execution.py`
+  - `backend/scripts/tool_runtime_slice/http_json_error_handling.py`
+  - `backend/scripts/tool_runtime_slice/http_json_request_validation.py`
 - `tool_runtime.py` 拆分放在测试拆分之后分阶段推进，优先抽旁路模块并保留现有 import facade，不和队列首轮开发混在一起。
 
 ## 后续维护线
