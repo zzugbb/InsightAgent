@@ -6,6 +6,8 @@ import {
   mergeToolEndToolMeta,
   mergeToolStartToolMeta,
   normalizeSseQueuePayload,
+  resolveStreamRecoveryInitialPhase,
+  resolveSseQueueForPhase,
 } from "./chat-stream-store-utils.ts";
 
 test("normalizeSseQueuePayload keeps safe counts and wait position only", () => {
@@ -25,6 +27,30 @@ test("normalizeSseQueuePayload keeps safe counts and wait position only", () => 
       waitPosition: 2,
     },
   );
+});
+
+test("resolveStreamRecoveryInitialPhase preserves queued recovery state", () => {
+  assert.equal(resolveStreamRecoveryInitialPhase("queued"), "queued");
+  assert.equal(resolveStreamRecoveryInitialPhase("pending"), "pending");
+  assert.equal(resolveStreamRecoveryInitialPhase("running"), "running");
+  assert.equal(resolveStreamRecoveryInitialPhase("completed"), "done");
+  assert.equal(resolveStreamRecoveryInitialPhase("failed"), "error");
+  assert.equal(resolveStreamRecoveryInitialPhase("unknown"), null);
+});
+
+test("resolveSseQueueForPhase clears queue snapshot outside queued phase", () => {
+  const queue = {
+    activeCount: 1,
+    maxConcurrent: 1,
+    waitingCount: 1,
+    waitPosition: 1,
+  };
+
+  assert.deepEqual(resolveSseQueueForPhase("queued", queue), queue);
+  assert.equal(resolveSseQueueForPhase("cancelled", queue), null);
+  assert.equal(resolveSseQueueForPhase("timeout", queue), null);
+  assert.equal(resolveSseQueueForPhase("done", queue), null);
+  assert.equal(resolveSseQueueForPhase("running", queue), null);
 });
 
 test("buildLiveToolEndPayload keeps result summary from raw tool_end event payload", () => {

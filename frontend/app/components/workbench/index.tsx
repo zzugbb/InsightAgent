@@ -1099,6 +1099,9 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     void resumeTaskStream({
       apiBaseUrl: API_BASE_URL,
       taskId: runningTaskId,
+      initialStatus:
+        activeSessionRunningTask.status_normalized ??
+        activeSessionRunningTask.status,
       onSessionResolved: setActiveSessionId,
       sessionId: activeSessionId,
       onStreamConnected: () => {

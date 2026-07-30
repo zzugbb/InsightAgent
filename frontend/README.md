@@ -10,11 +10,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `real-tool-execution` 当前验收基线已完成收尾：workbench / live store / model settings 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 前端继续保持与后端 SSE / trace / export 契约稳定对齐，不为真实工具执行新增独立本地语义分支。
 - 下一主线启动前的仓库 pre-flight 已完成：后端 runtime slice 测试二次细分完成，`tool_runtime.py` 已抽出 planner/execution/HTTP JSON/registry facade 模块，原测试入口保持不变。
-- 下一核心开发主线跟随后端切到 `queue-and-concurrency-lite`：后端已接入 create 默认 queued、进程内执行槽位与 queued SSE state；前端已把活跃任务识别扩展为 `queued/pending/running`，并能从安全 queue snapshot 显示当前任务排队位置，覆盖工作台恢复、Task Center、Inspector、任务详情页与 Chromium e2e helper。
+- 下一核心开发主线跟随后端切到 `queue-and-concurrency-lite`：后端已接入 create 默认 queued、进程内执行槽位、queued SSE state 与 queued cancel 等待项移除；前端已把活跃任务识别扩展为 `queued/pending/running`，能从安全 queue snapshot 显示当前任务排队位置，并在取消/timeout/完成与 queued 恢复时清理或保留正确 phase，覆盖工作台恢复、Task Center、Inspector、任务详情页与 Chromium e2e helper。
 
 ## 当前验证基线
 
-- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`69/69` 通过
+- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`71/71` 通过
 - targeted Chromium：主路径导出、404 ownership 导出、取消后立即重发 `3/3` 通过
 - 完整 Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47` 通过；本轮修复 retryable stream error 被 `Task stream closed` 覆盖的竞态，remote 429 单条与 full 并发均通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
@@ -23,7 +23,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 下一步前端计划
 
-1. `queue-and-concurrency-lite`：下一步补 queued cancel、running/queued 刷新恢复与多任务并发专项回归。
+1. `queue-and-concurrency-lite`：下一步补 queued cancel / running cancel / queued recover / 多任务并发专项 e2e。
 2. Workbench composer：继续细化 queued/running/cancel 后按钮 loading、重复 prompt resend、跨会话切换与刷新恢复。
 3. 任务详情页：继续保持 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. e2e：下一步补多任务并发、取消 queued、取消 running、刷新恢复与 session 切换专项回归。

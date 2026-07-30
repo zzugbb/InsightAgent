@@ -50,6 +50,10 @@ class TaskQueueState:
                 if active_task_id != task_id
             ]
 
+    def forget_waiting(self, task_id: str) -> None:
+        with self._lock:
+            self._forget_waiting(task_id)
+
     def snapshot(
         self,
         *,
@@ -122,6 +126,10 @@ def get_task_queue_snapshot(
 
 def release_task_execution_slot(task_id: str) -> None:
     _TASK_QUEUE_STATE.release(task_id)
+
+
+def forget_waiting_task(task_id: str) -> None:
+    _TASK_QUEUE_STATE.forget_waiting(task_id)
 
 
 def reset_task_queue_state_for_tests() -> None:

@@ -108,6 +108,39 @@ export function normalizeSseQueuePayload(
   };
 }
 
+export function resolveSseQueueForPhase(
+  phase: string | null | undefined,
+  queue: SseQueuePayload | null,
+): SseQueuePayload | null {
+  return phase === "queued" ? queue : null;
+}
+
+export function resolveStreamRecoveryInitialPhase(rawStatus: unknown): string | null {
+  if (typeof rawStatus !== "string") {
+    return null;
+  }
+  const status = rawStatus.trim().toLowerCase();
+  if (!status) {
+    return null;
+  }
+  if (status === "queued" || status === "pending" || status === "running") {
+    return status;
+  }
+  if (status === "completed" || status === "done") {
+    return "done";
+  }
+  if (status === "failed") {
+    return "error";
+  }
+  if (status === "cancelled" || status === "canceled") {
+    return "cancelled";
+  }
+  if (status === "timed_out" || status === "timeout") {
+    return "timeout";
+  }
+  return null;
+}
+
 function parseJsonObjectPayload(value: string): Record<string, unknown> | null {
   try {
     let parsed = JSON.parse(value.trim()) as unknown;

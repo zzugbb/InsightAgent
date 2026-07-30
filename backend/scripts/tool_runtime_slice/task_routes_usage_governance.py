@@ -200,6 +200,7 @@ class TaskRoutesUsageGovernanceMixin:
         task_queue_module = __import__(
             "app.services.task_queue_service",
             fromlist=[
+                "forget_waiting_task",
                 "get_task_queue_snapshot",
                 "reset_task_queue_state_for_tests",
                 "try_acquire_task_execution_slot",
@@ -295,6 +296,117 @@ class TaskRoutesUsageGovernanceMixin:
             self.assertNotIn("waiting_task_ids", snapshot)
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
+
+    def test_task_queue_service_forgets_cancelled_waiting_task(self) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "forget_waiting_task",
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-active",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(active_slot)
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-wait-cancelled",
+                    max_concurrent=1,
+                )
+            )
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-wait-next",
+                    max_concurrent=1,
+                )
+            )
+
+            task_queue_module.forget_waiting_task("task-wait-cancelled")
+
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=1,
+                    task_id="task-wait-next",
+                ),
+                {
+                    "active_count": 1,
+                    "max_concurrent": 1,
+                    "waiting_count": 1,
+                    "wait_position": 1,
+                },
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
+    def test_cancel_queued_task_forgets_waiting_queue_entry(self) -> None:
+        original_get_task = task_routes_module.get_task
+        original_update_task_status = task_routes_module.update_task_status
+        original_forget_waiting_task = getattr(
+            task_routes_module,
+            "forget_waiting_task",
+            None,
+        )
+        original_safe_record_audit_event = task_routes_module.safe_record_audit_event
+        original_cancel_summary_helper = (
+            task_routes_module.chat_persistence_service.get_task_cancel_response_summary_from_task
+        )
+        forgotten: list[str] = []
+        task_reads = [
+            {
+                "id": "task-cancel-queued",
+                "session_id": "session-cancel-queued",
+                "status": "queued",
+            },
+            {
+                "id": "task-cancel-queued",
+                "session_id": "session-cancel-queued",
+                "status": "cancelled",
+            },
+        ]
+        try:
+            task_routes_module.get_task = (
+                lambda _task_id, _user_id: dict(task_reads.pop(0))
+            )
+            task_routes_module.update_task_status = lambda **_kwargs: None
+            task_routes_module.forget_waiting_task = forgotten.append  # type: ignore[attr-defined]
+            task_routes_module.safe_record_audit_event = lambda **_kwargs: None
+            task_routes_module.chat_persistence_service.get_task_cancel_response_summary_from_task = (
+                lambda task, previous_status, already_terminal: {
+                    "task_id": task["id"],
+                    "previous_status": previous_status,
+                    "status": task["status"],
+                    "status_normalized": "cancelled",
+                    "status_label": "Cancelled",
+                    "status_rank": 40,
+                    "already_terminal": already_terminal,
+                }
+            )
+
+            payload = task_routes_module.cancel_task(
+                "task-cancel-queued",
+                current_user={"id": "user-cancel-queued"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            task_routes_module.update_task_status = original_update_task_status
+            if original_forget_waiting_task is None:
+                if hasattr(task_routes_module, "forget_waiting_task"):
+                    delattr(task_routes_module, "forget_waiting_task")
+            else:
+                task_routes_module.forget_waiting_task = original_forget_waiting_task  # type: ignore[attr-defined]
+            task_routes_module.safe_record_audit_event = original_safe_record_audit_event
+            task_routes_module.chat_persistence_service.get_task_cancel_response_summary_from_task = (
+                original_cancel_summary_helper
+            )
+
+        self.assertEqual(forgotten, ["task-cancel-queued"])
+        self.assertEqual(payload.status, "cancelled")
 
     def test_get_tasks_forwards_query_to_list_and_count(self) -> None:
         original_get_session = task_routes_module.get_session

@@ -33,6 +33,7 @@ from app.services.chat_persistence_service import (
     update_task_status,
     list_tasks,
 )
+from app.services.task_queue_service import forget_waiting_task
 from app.services.task_status_service import normalize_task_status
 
 
@@ -1011,6 +1012,8 @@ def cancel_task(
 
     if not already_terminal:
         update_task_status(task_id=task_id, status="cancelled", user_id=user_id)
+        if normalized_prev in {"queued", "pending"}:
+            forget_waiting_task(task_id)
         refreshed_raw = get_task(task_id, user_id)
         task = (
             _coerce_payload_mapping(refreshed_raw)

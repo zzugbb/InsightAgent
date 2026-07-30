@@ -8,6 +8,8 @@ import {
   mergeToolEndToolMeta,
   mergeToolStartToolMeta,
   normalizeSseQueuePayload,
+  resolveStreamRecoveryInitialPhase,
+  resolveSseQueueForPhase,
   type SseQueuePayload,
 } from "./chat-stream-store-utils";
 import type { TraceStepPayload } from "../types/trace";
@@ -108,6 +110,7 @@ export type ResumeTaskStreamOptions = {
   apiBaseUrl: string;
   taskId: string;
   afterSeq?: number;
+  initialStatus?: string | null;
   sessionId?: string | null;
   onSessionResolved?: (sessionId: string) => void;
   onStreamConnected?: () => void;
@@ -471,6 +474,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     set({
       isStreaming: false,
       ssePhase: nextPhase,
+      sseQueue: resolveSseQueueForPhase(nextPhase, null),
       sseMessage: nextMessage,
     });
     return true;
@@ -495,6 +499,10 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
     set({
       isStreaming: false,
       ssePhase: reason === "timeout" ? "timeout" : "cancelled",
+      sseQueue: resolveSseQueueForPhase(
+        reason === "timeout" ? "timeout" : "cancelled",
+        null,
+      ),
       sseMessage:
         reason === "timeout" ? sm.streamTimeout : sm.streamCancelled,
     });
@@ -535,10 +543,10 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (normalizedPhase) {
         set({
           ssePhase: normalizedPhase,
-          sseQueue:
-            normalizedPhase === "queued"
-              ? normalizeSseQueuePayload(p.queue)
-              : null,
+          sseQueue: resolveSseQueueForPhase(
+            normalizedPhase,
+            normalizeSseQueuePayload(p.queue),
+          ),
         });
       }
       return;
@@ -839,6 +847,8 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       0,
       Math.floor(Number.isFinite(rawAfterSeq) ? rawAfterSeq : 0),
     );
+    const initialPhase =
+      resolveStreamRecoveryInitialPhase(options.initialStatus) ?? "running";
     const runId = ++activeStreamRunId;
     let streamController: AbortController | null = null;
 
@@ -847,7 +857,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       sseMessage: sm.loadingTraceDeltaAfter(afterSeq),
       sseTokens: "",
       sseTraceSteps: [],
-      ssePhase: "running",
+      ssePhase: initialPhase,
       sseQueue: null,
       sseTaskId: taskId,
       sseSessionId: options.sessionId?.trim() || null,
