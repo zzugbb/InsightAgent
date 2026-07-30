@@ -12,6 +12,9 @@ import {
   seedBrowserAuth,
 } from "./helpers/workbench";
 
+const QUEUE_LOW_CONCURRENCY_E2E =
+  process.env.PLAYWRIGHT_QUEUE_LOW_CONCURRENCY === "1";
+
 async function openInspectorContextTab(page: Page): Promise<void> {
   const contextTab = page
     .locator(".inspector-ant-tabs .ant-tabs-nav [role='tab']")
@@ -816,6 +819,55 @@ test("mock cancel does not show retry affordance and send recovers quickly", asy
   await expect(page.locator(".trace-card").first()).toBeVisible({ timeout: 20_000 });
 });
 
+test("running task cancel reaches server terminal state and clears live UI", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  const prompt = `[mock-slow-ms=85] running-cancel-terminal ${"stream ".repeat(360)}`;
+  await composerInput.fill(prompt);
+  await composerSend.click();
+
+  const taskId = await waitForRunningTaskIdInSession({
+    request,
+    token: auth.access_token,
+  });
+  await openInspectorContextTab(page);
+  await expect(page.getByTestId("inspector-current-phase")).toContainText(
+    /Running|运行中/,
+    { timeout: 20_000 },
+  );
+
+  const cancelButton = await waitForContextCancelButton(page);
+  await cancelButton.click();
+
+  await waitForTaskStatus({
+    request,
+    token: auth.access_token,
+    taskId,
+    expected: /cancelled|canceled/,
+  });
+  await expect(page.getByTestId("inspector-current-phase")).toContainText(
+    /Cancelled|已取消/,
+    { timeout: 10_000 },
+  );
+  await expect(page.locator('[data-testid="inspector-task-cancel"]:visible')).toHaveCount(
+    0,
+  );
+  await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
+    timeout: 10_000,
+  });
+  await composerInput.fill("post-running-cancel resend");
+  await expect(composerSend).toBeEnabled({ timeout: 10_000 });
+});
+
 test("running task recovery notice covers info to success states", async ({
   page,
   request,
@@ -850,6 +902,10 @@ test("queued task recovery shows queue position and can be cancelled", async ({
   page,
   request,
 }) => {
+  test.skip(
+    !QUEUE_LOW_CONCURRENCY_E2E,
+    "requires backend TASK_QUEUE_MAX_CONCURRENT=1",
+  );
   test.setTimeout(120_000);
   const auth = await registerViaApi(request);
   const activeSessionTitle = `pw-queue-active-${Date.now()}`;

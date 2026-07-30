@@ -43,6 +43,10 @@ run_tests() {
   expect_pass bash "${SCRIPT_PATH}" --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001 --dry-run > "${TMP_DIR}/full.out"
   assert_contains "npm run test:e2e" "${TMP_DIR}/full.out"
 
+  expect_pass bash "${SCRIPT_PATH}" --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001 --dry-run > "${TMP_DIR}/queue.out"
+  assert_contains "PLAYWRIGHT_QUEUE_LOW_CONCURRENCY=1" "${TMP_DIR}/queue.out"
+  assert_contains "queued task recovery shows queue position" "${TMP_DIR}/queue.out"
+
   expect_pass bash -c "cd '${TMP_DIR}' && bash '${SCRIPT_PATH}' --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001 --dry-run" > "${TMP_DIR}/full-from-other-cwd.out"
   assert_contains "cd ${ROOT_DIR}/frontend" "${TMP_DIR}/full-from-other-cwd.out"
 
