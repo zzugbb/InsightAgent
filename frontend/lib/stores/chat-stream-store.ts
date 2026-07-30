@@ -7,6 +7,8 @@ import {
   buildLiveToolEndPayload,
   mergeToolEndToolMeta,
   mergeToolStartToolMeta,
+  normalizeSseQueuePayload,
+  type SseQueuePayload,
 } from "./chat-stream-store-utils";
 import type { TraceStepPayload } from "../types/trace";
 
@@ -122,12 +124,15 @@ export type SseTaskUsage = {
   usage: Record<string, unknown>;
 };
 
+export type SseQueueState = SseQueuePayload;
+
 export type ChatStreamStore = {
   isStreaming: boolean;
   sseMessage: string;
   sseTokens: string;
   sseTraceSteps: TraceStepPayload[];
   ssePhase: string | null;
+  sseQueue: SseQueueState | null;
   sseTaskId: string | null;
   sseSessionId: string | null;
   /** 最近一次 `done` 事件携带的用量，按 taskId 对齐，避免切换任务后串台 */
@@ -237,6 +242,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
   sseTokens: "",
   sseTraceSteps: [],
   ssePhase: null,
+  sseQueue: null,
   sseTaskId: null,
   sseSessionId: null,
   sseTaskUsage: null,
@@ -248,6 +254,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       sseTokens: "",
       sseTraceSteps: [],
       ssePhase: null,
+      sseQueue: null,
       sseTaskId: null,
       sseSessionId: null,
       sseTaskUsage: null,
@@ -285,6 +292,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       sseTokens: "",
       sseTraceSteps: [],
       ssePhase: "replay",
+      sseQueue: null,
       traceCursor: 0,
       sseTaskUsage: null,
     });
@@ -525,7 +533,13 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       const p = payload as Record<string, unknown>;
       const normalizedPhase = normalizeSsePhase(p.phase);
       if (normalizedPhase) {
-        set({ ssePhase: normalizedPhase });
+        set({
+          ssePhase: normalizedPhase,
+          sseQueue:
+            normalizedPhase === "queued"
+              ? normalizeSseQueuePayload(p.queue)
+              : null,
+        });
       }
       return;
     }
@@ -708,6 +722,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       }
       set({
         ssePhase: "done",
+        sseQueue: null,
         sseMessage: sm.streamCompleted,
         sseSessionId: nextSessionId ?? get().sseSessionId,
         sseTaskUsage: nextUsage,
@@ -718,6 +733,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       const sm = get().streamMessages;
       set({
         ssePhase: "cancelled",
+        sseQueue: null,
         sseMessage: sm.streamCancelled,
       });
       return;
@@ -726,6 +742,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       const sm = get().streamMessages;
       set({
         ssePhase: "timeout",
+        sseQueue: null,
         sseMessage: sm.streamTimeout,
       });
       return;
@@ -741,6 +758,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (normalizedCode === "task_cancelled") {
         set({
           ssePhase: "cancelled",
+          sseQueue: null,
           sseMessage: sm.streamCancelled,
         });
         return;
@@ -748,6 +766,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       if (normalizedCode === "task_timeout") {
         set({
           ssePhase: "timeout",
+          sseQueue: null,
           sseMessage: sm.streamTimeout,
         });
         return;
@@ -780,6 +799,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         typeof p.retryCount === "number" ? p.retryCount : null;
       set((state) => ({
         ssePhase: "error",
+        sseQueue: null,
         sseMessage: sm.streamErrorMessage(msg, fatal, retryCount),
         sseSessionId: payloadSessionId ?? state.sseSessionId,
       }));
@@ -828,6 +848,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       sseTokens: "",
       sseTraceSteps: [],
       ssePhase: "running",
+      sseQueue: null,
       sseTaskId: taskId,
       sseSessionId: options.sessionId?.trim() || null,
       sseTaskUsage: null,
@@ -921,6 +942,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       sseTokens: "",
       sseTraceSteps: [],
       ssePhase: null,
+      sseQueue: null,
       sseTaskId: null,
       sseSessionId: options.sessionId?.trim() || null,
       sseTaskUsage: null,
@@ -951,6 +973,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         sseTaskId: createdTask.task_id,
         sseSessionId: createdTask.session_id ?? options.sessionId ?? null,
         ssePhase: normalizeSsePhase(createdTask.status) ?? createdTask.status,
+        sseQueue: null,
       });
       if (createdTask.session_id) {
         onSessionResolved?.(createdTask.session_id);

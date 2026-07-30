@@ -10,12 +10,12 @@
 - provider/source/settings/file-backed registry 治理已覆盖 direct source、named provider/loader、provider/loader factory、factory alias、profile reset、forward reference 与 diagnostics 并回。
 - `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口继续保留，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题拆到 `backend/scripts/tool_runtime_slice/`；二次细分后最大主题模块约 4.7k 行。
 - `app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `app/services/tool_runtime_planning.py`、`app/services/tool_runtime_execution.py`、`app/services/tool_runtime_http_json.py`、`app/services/tool_runtime_registry.py`，外部 import facade 保持稳定；当前 facade 约 3.0k 行。
-- `queue-and-concurrency-lite` 已进入后端第二刀：`queued` 已进入任务状态标准化、label/rank、stream gate 与 create 默认状态；`app/services/task_queue_service.py` 提供单进程执行槽位，SSE 执行入口拿到槽位后才切 `running`，默认 `TASK_QUEUE_MAX_CONCURRENT=32`。
+- `queue-and-concurrency-lite` 已进入队列可观测阶段：`queued` 已进入任务状态标准化、label/rank、stream gate 与 create 默认状态；`app/services/task_queue_service.py` 提供单进程执行槽位与安全等待快照，SSE 执行入口拿到槽位后才切 `running`，等待期间只暴露计数与当前任务 `wait_position`，默认 `TASK_QUEUE_MAX_CONCURRENT=32`。
 - 默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1716/1716` 通过；本轮 queue slice：`-k queue`、`-k queued`、`-k task` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1717/1717` 通过；本轮 queue slice：`-k queue`、`-k queued`、`-k task` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - 完整 Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47` 通过；本轮曾暴露 `TASK_QUEUE_MAX_CONCURRENT=4` 导致 4-worker e2e 排队超时，已将默认上限调为 `32`，低并发排队语义仍由 slice 覆盖
@@ -24,7 +24,7 @@
 
 ## 下一步后端计划
 
-1. `queue-and-concurrency-lite`：下一步补 queued cancel 专项 e2e、队列位置/等待诊断、running/queued 跨刷新恢复细化；后续再扩到按用户/按 session 的并发策略。
+1. `queue-and-concurrency-lite`：下一步补 queued cancel 专项 e2e、running/queued 跨刷新恢复细化、多任务并发回归；后续再扩到按用户/按 session 的并发策略。
 2. `pre-flight cleanup`：文档瘦身与 `backend/scripts/test_tool_runtime_slice.py` 主题拆分已完成，保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口不变。
 3. `tool_runtime.py` 分阶段抽模块：`tool_runtime_planning.py`、`tool_runtime_execution.py`、`tool_runtime_http_json.py`、`tool_runtime_registry.py` 已完成 facade 拆分，保留现有 import facade；下一轮不再继续拆分。
 4. `registry-governance` 与 `rag-governance-hardening` 作为后续维护线，不和第一轮队列状态机混在同一改动里。

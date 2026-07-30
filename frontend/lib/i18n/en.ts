@@ -63,6 +63,8 @@ export const en: Messages = {
     phaseCancelled: "Cancelled",
     phaseTimeout: "Timed out",
     phaseReplay: "Replaying",
+    phaseQueued: "Queued",
+    phaseQueuedPosition: (position: number) => `Queued #${position}`,
     phaseRunning: "Running",
     phaseIdle: "Idle",
     sessionFallback: () => "New session",

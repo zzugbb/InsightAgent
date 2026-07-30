@@ -10,11 +10,11 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口缩为兼容入口，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题搬到 `backend/scripts/tool_runtime_slice/` mixin 包；二次细分后最大主题模块约 4.7k 行。
 - `backend/app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `backend/app/services/tool_runtime_planning.py`、`backend/app/services/tool_runtime_execution.py`、`backend/app/services/tool_runtime_http_json.py`、`backend/app/services/tool_runtime_registry.py`，`from app.services.tool_runtime import ...` 外部导出保持不变；当前 facade 约 3.0k 行。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
-- `queue-and-concurrency-lite` 已进入后端第二刀：任务创建默认进入 `queued`，SSE 执行入口在拿到进程内执行槽位后才切 `running`；默认单进程并发上限为 `TASK_QUEUE_MAX_CONCURRENT=32`，等待期间发送 `phase=queued` state，pending/running/cancel/timeout 旧契约保持稳定。
+- `queue-and-concurrency-lite` 已进入队列可观测阶段：任务创建默认进入 `queued`，SSE 执行入口在拿到进程内执行槽位后才切 `running`；默认单进程并发上限为 `TASK_QUEUE_MAX_CONCURRENT=32`，等待期间发送安全 queue snapshot（计数与当前任务 `wait_position`，不暴露内部 task ids），前端 live phase 可显示排队位置，pending/running/cancel/timeout 旧契约保持稳定。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1716/1716` 通过；本轮 queue slice：`-k queue`、`-k queued`、`-k task` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1717/1717` 通过；本轮 queue slice：`-k queue`、`-k queued`、`-k task` 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - 完整 Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47` 通过；本轮曾暴露 `TASK_QUEUE_MAX_CONCURRENT=4` 导致 4-worker e2e 排队超时、以及 retryable error 被 `streamClosed` 覆盖的问题，已分别通过默认上限 `32` 与前端 error phase 收口修复
@@ -24,7 +24,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 ## 当前开发计划
 
-1. `queue-and-concurrency-lite`：下一步补 queued cancel 专项 e2e、队列位置/等待诊断前端展示、running/queued 跨刷新恢复细化；后续再扩到按用户/按 session 的并发策略。
+1. `queue-and-concurrency-lite`：下一步补 queued cancel 专项 e2e、running/queued 跨刷新恢复细化、多任务并发回归；后续再扩到按用户/按 session 的并发策略。
 2. `pre-flight cleanup`：文档流水账压缩与 `test_tool_runtime_slice.py` 主题拆分已完成，原测试入口命令保持不变。
 3. `registry-governance`：作为维护线继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
 4. `rag-governance-hardening`：后续补知识库版本化、来源治理与更细粒度 shared 规则。

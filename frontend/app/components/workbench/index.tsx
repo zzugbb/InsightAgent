@@ -191,6 +191,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     (s: ChatStreamStore) => s.sseTraceSteps,
   );
   const ssePhase = useChatStreamStore((s: ChatStreamStore) => s.ssePhase);
+  const sseQueue = useChatStreamStore((s: ChatStreamStore) => s.sseQueue);
   const sseTaskId = useChatStreamStore((s: ChatStreamStore) => s.sseTaskId);
   const sseSessionId = useChatStreamStore(
     (s: ChatStreamStore) => s.sseSessionId,
@@ -683,6 +684,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const scopedSseTokens = streamSessionMatchesActive ? sseTokens : "";
   const scopedSseTraceSteps = streamSessionMatchesActive ? sseTraceSteps : [];
   const scopedSsePhase = streamSessionMatchesActive ? ssePhase : null;
+  const scopedSseQueue = streamSessionMatchesActive ? sseQueue : null;
   const scopedSseTaskId = streamSessionMatchesActive ? sseTaskId : null;
   const scopedSseTaskUsage = streamSessionMatchesActive ? sseTaskUsage : null;
   const scopedSseMessage = streamSessionMatchesActive
@@ -1387,7 +1389,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     timeout: t.workbench.phaseTimeout,
     replay: t.workbench.phaseReplay,
     streaming: t.workbench.phaseRunning,
-    queued: t.workbench.phaseRunning,
+    queued:
+      scopedSseQueue?.waitPosition && scopedSseQueue.waitPosition > 0
+        ? t.workbench.phaseQueuedPosition(scopedSseQueue.waitPosition)
+        : t.workbench.phaseQueued,
     running: t.workbench.phaseRunning,
     pending: t.workbench.phaseRunning,
     thinking: t.workbench.phaseRunning,

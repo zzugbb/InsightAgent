@@ -5,7 +5,27 @@ import {
   buildLiveToolEndPayload,
   mergeToolEndToolMeta,
   mergeToolStartToolMeta,
+  normalizeSseQueuePayload,
 } from "./chat-stream-store-utils.ts";
+
+test("normalizeSseQueuePayload keeps safe counts and wait position only", () => {
+  assert.deepEqual(
+    normalizeSseQueuePayload({
+      active_count: 1,
+      max_concurrent: 2,
+      waiting_count: 3,
+      wait_position: 2,
+      active_task_ids: ["task-active"],
+      waiting_task_ids: ["task-wait-1", "task-wait-2"],
+    }),
+    {
+      activeCount: 1,
+      maxConcurrent: 2,
+      waitingCount: 3,
+      waitPosition: 2,
+    },
+  );
+});
 
 test("buildLiveToolEndPayload keeps result summary from raw tool_end event payload", () => {
   const payload = buildLiveToolEndPayload({

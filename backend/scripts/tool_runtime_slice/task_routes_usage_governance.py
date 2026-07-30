@@ -135,11 +135,13 @@ class TaskRoutesUsageGovernanceMixin:
                 lambda **_kwargs: None
             )
             chat_execution_module.get_task_queue_snapshot = (  # type: ignore[attr-defined]
-                lambda **_kwargs: {
+                lambda **kwargs: {
                     "active_count": 1,
                     "max_concurrent": 1,
                     "waiting_count": 1,
-                    "active_task_ids": ["task-active"],
+                    "wait_position": 1
+                    if kwargs.get("task_id") == "task-queued-wait"
+                    else None,
                 }
             )
             chat_execution_module.sleep = lambda _seconds: None  # type: ignore[attr-defined]
@@ -190,6 +192,8 @@ class TaskRoutesUsageGovernanceMixin:
         self.assertIn("event: state", event)
         self.assertIn('"phase": "queued"', event)
         self.assertIn('"active_count": 1', event)
+        self.assertIn('"wait_position": 1', event)
+        self.assertNotIn("active_task_ids", event)
         self.assertNotIn("running", status_updates)
 
     def test_task_queue_service_enforces_single_execution_slot(self) -> None:
@@ -219,7 +223,7 @@ class TaskRoutesUsageGovernanceMixin:
                     "active_count": 1,
                     "max_concurrent": 1,
                     "waiting_count": 1,
-                    "active_task_ids": ["task-slot-1"],
+                    "wait_position": None,
                 },
             )
 
@@ -230,11 +234,65 @@ class TaskRoutesUsageGovernanceMixin:
             )
             self.assertIsNotNone(third_slot)
             self.assertEqual(
-                task_queue_module.get_task_queue_snapshot(max_concurrent=1)[
-                    "active_task_ids"
-                ],
-                ["task-slot-2"],
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=1,
+                    task_id="task-slot-2",
+                ),
+                {
+                    "active_count": 1,
+                    "max_concurrent": 1,
+                    "waiting_count": 0,
+                    "wait_position": 0,
+                },
             )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
+    def test_task_queue_snapshot_exposes_wait_position_without_task_ids(self) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-active",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(active_slot)
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-wait-1",
+                    max_concurrent=1,
+                )
+            )
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-wait-2",
+                    max_concurrent=1,
+                )
+            )
+
+            snapshot = task_queue_module.get_task_queue_snapshot(
+                max_concurrent=1,
+                task_id="task-wait-2",
+            )
+
+            self.assertEqual(
+                snapshot,
+                {
+                    "active_count": 1,
+                    "max_concurrent": 1,
+                    "waiting_count": 2,
+                    "wait_position": 2,
+                },
+            )
+            self.assertNotIn("active_task_ids", snapshot)
+            self.assertNotIn("waiting_task_ids", snapshot)
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
 

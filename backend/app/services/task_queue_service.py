@@ -50,16 +50,28 @@ class TaskQueueState:
                 if active_task_id != task_id
             ]
 
-    def snapshot(self, *, max_concurrent: int) -> dict[str, object]:
+    def snapshot(
+        self,
+        *,
+        max_concurrent: int,
+        task_id: str | None = None,
+    ) -> dict[str, object]:
         max_concurrent = _normalize_max_concurrent(max_concurrent)
         with self._lock:
             active_task_ids = list(self._active_task_ids)
             waiting_task_ids = list(self._waiting_task_ids)
+        wait_position: int | None
+        if task_id in active_task_ids:
+            wait_position = 0
+        elif task_id in waiting_task_ids:
+            wait_position = waiting_task_ids.index(task_id) + 1
+        else:
+            wait_position = None
         return {
             "active_count": len(active_task_ids),
             "max_concurrent": max_concurrent,
             "waiting_count": len(waiting_task_ids),
-            "active_task_ids": active_task_ids,
+            "wait_position": wait_position,
         }
 
     def reset(self) -> None:
@@ -97,8 +109,15 @@ def try_acquire_task_execution_slot(
     )
 
 
-def get_task_queue_snapshot(*, max_concurrent: int) -> dict[str, object]:
-    return _TASK_QUEUE_STATE.snapshot(max_concurrent=max_concurrent)
+def get_task_queue_snapshot(
+    *,
+    max_concurrent: int,
+    task_id: str | None = None,
+) -> dict[str, object]:
+    return _TASK_QUEUE_STATE.snapshot(
+        max_concurrent=max_concurrent,
+        task_id=task_id,
+    )
 
 
 def release_task_execution_slot(task_id: str) -> None:

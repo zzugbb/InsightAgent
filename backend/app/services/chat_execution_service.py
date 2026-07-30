@@ -424,7 +424,8 @@ def stream_task_execution(
                     "task_id": task_id,
                     "phase": "queued",
                     "queue": get_task_queue_snapshot(
-                        max_concurrent=TASK_QUEUE_MAX_CONCURRENT
+                        max_concurrent=TASK_QUEUE_MAX_CONCURRENT,
+                        task_id=task_id,
                     ),
                 },
             )

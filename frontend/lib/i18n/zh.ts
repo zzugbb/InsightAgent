@@ -63,6 +63,8 @@ export const zh: Messages = {
     phaseCancelled: "已取消",
     phaseTimeout: "已超时",
     phaseReplay: "回放中",
+    phaseQueued: "排队中",
+    phaseQueuedPosition: (position: number) => `排队中 #${position}`,
     phaseRunning: "运行中",
     phaseIdle: "待命",
     sessionFallback: () => "新会话",

@@ -62,6 +62,8 @@ export type Messages = {
     phaseCancelled: string;
     phaseTimeout: string;
     phaseReplay: string;
+    phaseQueued: string;
+    phaseQueuedPosition: (position: number) => string;
     phaseRunning: string;
     phaseIdle: string;
     sessionFallback: (shortId: string) => string;

@@ -33,6 +33,13 @@ type ToolIdentity = {
   label: string;
 };
 
+export type SseQueuePayload = {
+  activeCount: number;
+  maxConcurrent: number;
+  waitingCount: number;
+  waitPosition: number | null;
+};
+
 type ToolMetaLike = {
   name?: unknown;
   label?: unknown;
@@ -51,6 +58,55 @@ type ToolMetaLike = {
   effective_result_output_keys?: unknown;
   execution_diagnostics?: unknown;
 };
+
+function normalizeNonNegativeInteger(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  const next = Math.trunc(value);
+  if (next < 0) {
+    return null;
+  }
+  return next;
+}
+
+function pickNumberField(
+  payload: Record<string, unknown>,
+  snakeKey: string,
+  camelKey: string,
+): number | null {
+  return normalizeNonNegativeInteger(payload[snakeKey] ?? payload[camelKey]);
+}
+
+export function normalizeSseQueuePayload(
+  value: unknown,
+): SseQueuePayload | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const payload = value as Record<string, unknown>;
+  const activeCount = pickNumberField(payload, "active_count", "activeCount");
+  const maxConcurrent = pickNumberField(
+    payload,
+    "max_concurrent",
+    "maxConcurrent",
+  );
+  const waitingCount = pickNumberField(payload, "waiting_count", "waitingCount");
+  const waitPosition = pickNumberField(
+    payload,
+    "wait_position",
+    "waitPosition",
+  );
+  if (activeCount === null || maxConcurrent === null || waitingCount === null) {
+    return null;
+  }
+  return {
+    activeCount,
+    maxConcurrent,
+    waitingCount,
+    waitPosition,
+  };
+}
 
 function parseJsonObjectPayload(value: string): Record<string, unknown> | null {
   try {
