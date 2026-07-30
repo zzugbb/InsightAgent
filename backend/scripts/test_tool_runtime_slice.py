@@ -269,6 +269,7 @@ from tool_runtime_slice.registry_runtime_service_models import RegistryRuntimeSe
 from tool_runtime_slice.runtime_http_json_execution import RuntimeHttpJsonExecutionMixin
 from tool_runtime_slice.runtime_attempt_lifecycle import RuntimeAttemptLifecycleMixin
 from tool_runtime_slice.runtime_observation_display import RuntimeObservationDisplayMixin
+from tool_runtime_slice.runtime_facade_split import RuntimeFacadeSplitMixin
 from tool_runtime_slice.runtime_rag_execution import RuntimeRagExecutionMixin
 from tool_runtime_slice.runtime_result_rag import RuntimeResultRagMixin
 from tool_runtime_slice.runtime_result_semantics import RuntimeResultSemanticsMixin
@@ -313,6 +314,7 @@ class ToolRuntimeSliceTests(
     RegistryExecutionDiagnosticsMixin,
     RegistryRuntimeModelsMixin,
     RegistryRuntimeServiceModelsMixin,
+    RuntimeFacadeSplitMixin,
     RuntimeResultRagMixin,
     RuntimeResultSemanticsMixin,
     RuntimeAttemptLifecycleMixin,
