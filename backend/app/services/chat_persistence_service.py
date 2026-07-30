@@ -2540,7 +2540,7 @@ def get_task_trace_delta_snapshot_from_task(
     delta_steps = all_delta_steps[:bounded_limit]
     next_cursor = after_seq if not delta_steps else int(delta_steps[-1].seq or 0)
     status = str(task.get("status", ""))
-    still_running = status in ("pending", "running")
+    still_running = status in ("queued", "pending", "running")
     has_more = len(all_delta_steps) > len(delta_steps) or still_running
     return delta_steps, next_cursor, has_more, latest_seq, latest_step_id
 

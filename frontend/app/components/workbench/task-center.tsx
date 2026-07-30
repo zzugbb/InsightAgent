@@ -48,7 +48,11 @@ function resolveTaskStatusTone(
   status: string,
 ): "running" | "completed" | "failed" | "other" {
   const normalized = status.trim().toLowerCase();
-  if (normalized === "running" || normalized === "pending") {
+  if (
+    normalized === "queued" ||
+    normalized === "running" ||
+    normalized === "pending"
+  ) {
     return "running";
   }
   if (
@@ -122,7 +126,7 @@ export function TaskCenter({
       }
       const status = task.status.trim().toLowerCase();
       if (taskStatusFilter === "running") {
-        return status === "running" || status === "pending";
+        return status === "queued" || status === "running" || status === "pending";
       }
       if (taskStatusFilter === "completed") {
         return status === "completed" || status === "done" || status === "success";

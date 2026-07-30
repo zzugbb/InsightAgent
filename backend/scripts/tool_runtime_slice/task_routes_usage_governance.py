@@ -61,6 +61,183 @@ class TaskRoutesUsageGovernanceMixin:
             },
         )
 
+    def test_create_task_entry_creates_queued_task(self) -> None:
+        original_ensure_session = task_routes_module.ensure_session
+        original_create_task = task_routes_module.create_task
+        original_create_message = task_routes_module.create_message
+        original_safe_record_audit_event = task_routes_module.safe_record_audit_event
+        original_get_summary = (
+            task_routes_module.chat_persistence_service.get_task_create_response_summary
+        )
+        captured: dict[str, object] = {}
+        try:
+            task_routes_module.ensure_session = (
+                lambda *, prompt, user_id, session_id=None: "session-queue-create"
+            )
+
+            def fake_create_task(**kwargs):
+                captured.update(kwargs)
+                return "task-queue-create"
+
+            task_routes_module.create_task = fake_create_task
+            task_routes_module.create_message = lambda **_kwargs: "message-queue-create"
+            task_routes_module.safe_record_audit_event = lambda **_kwargs: None
+            task_routes_module.chat_persistence_service.get_task_create_response_summary = (
+                lambda **kwargs: {
+                    "task_id": kwargs["task_id"],
+                    "session_id": kwargs["session_id"],
+                    "status": kwargs["status"],
+                    "status_normalized": "queued",
+                    "status_label": "Queued",
+                    "status_rank": 5,
+                }
+            )
+
+            payload = task_routes_module.create_task_entry(
+                task_routes_module.TaskCreateRequest(
+                    user_input="queued create prompt",
+                    session_id=None,
+                ),
+                current_user={"id": "user-queue-create"},
+            )
+        finally:
+            task_routes_module.ensure_session = original_ensure_session
+            task_routes_module.create_task = original_create_task
+            task_routes_module.create_message = original_create_message
+            task_routes_module.safe_record_audit_event = original_safe_record_audit_event
+            task_routes_module.chat_persistence_service.get_task_create_response_summary = (
+                original_get_summary
+            )
+
+        self.assertEqual(captured["status"], "queued")
+        self.assertEqual(payload.status, "queued")
+        self.assertEqual(payload.status_normalized, "queued")
+        self.assertEqual(payload.status_label, "Queued")
+
+    def test_stream_task_execution_waits_in_queued_state_when_slot_is_busy(self) -> None:
+        original_try_acquire = getattr(
+            chat_execution_module,
+            "try_acquire_task_execution_slot",
+            None,
+        )
+        original_snapshot = getattr(
+            chat_execution_module,
+            "get_task_queue_snapshot",
+            None,
+        )
+        original_sleep = getattr(chat_execution_module, "sleep", None)
+        original_get_settings = chat_execution_module.get_settings
+        original_get_task = chat_execution_module.get_task
+        original_update_task_status = chat_execution_module.update_task_status
+        status_updates: list[str] = []
+        try:
+            chat_execution_module.try_acquire_task_execution_slot = (  # type: ignore[attr-defined]
+                lambda **_kwargs: None
+            )
+            chat_execution_module.get_task_queue_snapshot = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "active_count": 1,
+                    "max_concurrent": 1,
+                    "waiting_count": 1,
+                    "active_task_ids": ["task-active"],
+                }
+            )
+            chat_execution_module.sleep = lambda _seconds: None  # type: ignore[attr-defined]
+            chat_execution_module.get_settings = lambda: SimpleNamespace(
+                trace_persist_min_interval_sec=0,
+                task_timeout_sec=30,
+                task_queue_max_concurrent=1,
+                task_queue_poll_interval_sec=0.01,
+            )
+            chat_execution_module.get_task = (
+                lambda task_id, user_id: {
+                    "id": task_id,
+                    "user_id": user_id,
+                    "status": "queued",
+                }
+            )
+            chat_execution_module.update_task_status = (
+                lambda *, task_id, status, user_id: status_updates.append(status)
+            )
+
+            event = next(
+                chat_execution_module.stream_task_execution(
+                    task_id="task-queued-wait",
+                    session_id="session-queued-wait",
+                    user_id="user-queued-wait",
+                    prompt="wait for slot",
+                    persist_user_message=False,
+                )
+            )
+        finally:
+            if original_try_acquire is None:
+                delattr(chat_execution_module, "try_acquire_task_execution_slot")
+            else:
+                chat_execution_module.try_acquire_task_execution_slot = original_try_acquire  # type: ignore[attr-defined]
+            if original_snapshot is None:
+                delattr(chat_execution_module, "get_task_queue_snapshot")
+            else:
+                chat_execution_module.get_task_queue_snapshot = original_snapshot  # type: ignore[attr-defined]
+            if original_sleep is None:
+                if hasattr(chat_execution_module, "sleep"):
+                    delattr(chat_execution_module, "sleep")
+            else:
+                chat_execution_module.sleep = original_sleep  # type: ignore[attr-defined]
+            chat_execution_module.get_settings = original_get_settings
+            chat_execution_module.get_task = original_get_task
+            chat_execution_module.update_task_status = original_update_task_status
+
+        self.assertIn("event: state", event)
+        self.assertIn('"phase": "queued"', event)
+        self.assertIn('"active_count": 1', event)
+        self.assertNotIn("running", status_updates)
+
+    def test_task_queue_service_enforces_single_execution_slot(self) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            first_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-slot-1",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(first_slot)
+            second_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-slot-2",
+                max_concurrent=1,
+            )
+            self.assertIsNone(second_slot)
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(max_concurrent=1),
+                {
+                    "active_count": 1,
+                    "max_concurrent": 1,
+                    "waiting_count": 1,
+                    "active_task_ids": ["task-slot-1"],
+                },
+            )
+
+            first_slot.release()
+            third_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-slot-2",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(third_slot)
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(max_concurrent=1)[
+                    "active_task_ids"
+                ],
+                ["task-slot-2"],
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
     def test_get_tasks_forwards_query_to_list_and_count(self) -> None:
         original_get_session = task_routes_module.get_session
         original_list_tasks = task_routes_module.list_tasks

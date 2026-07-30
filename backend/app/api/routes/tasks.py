@@ -791,7 +791,7 @@ def create_task_entry(
         session_id=resolved_session_id,
         prompt=payload.user_input,
         user_id=user_id,
-        status="pending",
+        status="queued",
     )
     create_message(
         session_id=resolved_session_id,
@@ -812,7 +812,7 @@ def create_task_entry(
     response_summary = chat_persistence_service.get_task_create_response_summary(
         task_id=task_id,
         session_id=resolved_session_id,
-        status="pending",
+        status="queued",
     )
     response_summary = _coerce_payload_mapping(response_summary)
     return TaskCreateResponse(**response_summary)

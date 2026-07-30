@@ -106,6 +106,20 @@ class Settings(BaseSettings):
         alias="TASK_TIMEOUT_SEC",
         description="单任务流式执行超时阈值（秒）",
     )
+    task_queue_max_concurrent: int = Field(
+        default=32,
+        ge=1,
+        le=32,
+        alias="TASK_QUEUE_MAX_CONCURRENT",
+        description="单 backend 进程内允许同时流式执行的任务数；超出后任务保持 queued 等待执行槽位",
+    )
+    task_queue_poll_interval_sec: float = Field(
+        default=0.25,
+        gt=0.0,
+        le=5.0,
+        alias="TASK_QUEUE_POLL_INTERVAL_SEC",
+        description="queued 任务等待执行槽位时的 SSE 状态刷新/重试间隔（秒）",
+    )
     rag_default_knowledge_base_id: str = Field(
         default="default",
         alias="RAG_DEFAULT_KNOWLEDGE_BASE_ID",

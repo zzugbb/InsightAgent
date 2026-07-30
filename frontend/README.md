@@ -9,23 +9,23 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 前端 W1-W4 与阶段 5 基础产品化已完成：Auth Gate、Workbench、Trace 双视图、Memory/RAG 调试、usage dashboard、任务/会话导出、任务详情页、running task 恢复、审计与知识库治理已具备可演示闭环。
 - `real-tool-execution` 当前验收基线已完成收尾：workbench / live store / model settings 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 前端继续保持与后端 SSE / trace / export 契约稳定对齐，不为真实工具执行新增独立本地语义分支。
-- 下一主线启动前的仓库 pre-flight 已完成：后端 runtime slice 测试二次细分完成，`tool_runtime.py` 已抽出 planner/execution/HTTP JSON/registry facade 模块，原测试入口保持不变；前端本轮无行为改动。
-- 下一核心开发主线跟随后端切到 `queue-and-concurrency-lite`：后端已先接入 `queued` 状态标准化与 stream gate；前端下一步补 queued/running/cancel/recover 的工作台状态、Task Center 展示、composer 恢复与 e2e。
+- 下一主线启动前的仓库 pre-flight 已完成：后端 runtime slice 测试二次细分完成，`tool_runtime.py` 已抽出 planner/execution/HTTP JSON/registry facade 模块，原测试入口保持不变。
+- 下一核心开发主线跟随后端切到 `queue-and-concurrency-lite`：后端已接入 create 默认 queued、进程内执行槽位与 queued SSE state；前端已把活跃任务识别扩展为 `queued/pending/running`，覆盖工作台恢复、Task Center、Inspector、任务详情页与 Chromium e2e helper。
 
 ## 当前验证基线
 
 - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`68/68` 通过
 - targeted Chromium：主路径导出、404 ownership 导出、取消后立即重发 `3/3` 通过
-- 完整 Chromium e2e：真实 backend/frontend 生命周期内复跑 `47/47` 通过；一次全量 run 出现 `ECONNRESET` 后失败单条通过，最终完整复跑通过
+- 完整 Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47` 通过；本轮修复 retryable stream error 被 `Task stream closed` 覆盖的竞态，remote 429 单条与 full 并发均通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - `git diff --check`：通过
 
 ## 下一步前端计划
 
-1. `queue-and-concurrency-lite`：Task Center 展示 queued/running/terminal、队列位置、取消入口与恢复提示。
-2. Workbench composer：覆盖 queued/running/cancel 后按钮 loading、重复 prompt resend、跨会话切换与刷新恢复。
-3. 任务详情页：回放 queued/running/terminal 状态，保持导出与 trace 契约稳定。
-4. e2e：补多任务并发、取消 queued、取消 running、刷新恢复与 session 切换回归。
+1. `queue-and-concurrency-lite`：Task Center 下一步展示队列位置/等待诊断与更明确的 queued 文案。
+2. Workbench composer：继续细化 queued/running/cancel 后按钮 loading、重复 prompt resend、跨会话切换与刷新恢复。
+3. 任务详情页：继续保持 queued/running/terminal 回放、导出与 trace 契约稳定。
+4. e2e：下一步补多任务并发、取消 queued、取消 running、刷新恢复与 session 切换专项回归。
 
 ## 当前已有内容
 
@@ -34,7 +34,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Workbench：聊天主视图、任务中心抽屉、任务详情页 `/tasks/[taskId]`
 - Inspector：Trace 时间线 / 流程图双视图、Context 概览、同步诊断、当前任务
 - 流式链路：SSE 状态、token 追加、trace 实时更新、`trace/delta` 自动静默轮询与结束补拉
-- running task 恢复：刷新页面或切回会话时自动接管 `pending/running` 任务流
+- running task 恢复：刷新页面或切回会话时自动接管 `queued/pending/running` 任务流
 - 导出：任务与会话 JSON / Markdown 导出
 - 模型设置：`mock / remote` 模式切换、校验、保存、错误码友好提示、provider/source diagnostics 说明
 - RAG / Memory 调试：设置中的运行调试子页

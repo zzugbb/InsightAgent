@@ -261,7 +261,11 @@ async function waitForRunningTaskIdInSession(args: {
             .trim()
             .toLowerCase();
           lastSeenTaskId = id;
-          if (normalized === "pending" || normalized === "running") {
+          if (
+            normalized === "queued" ||
+            normalized === "pending" ||
+            normalized === "running"
+          ) {
             return id;
           }
         }
@@ -352,7 +356,7 @@ async function createRunningTaskInSession(args: {
         .trim()
         .toLowerCase();
     }, { timeout: 15_000, intervals: [300, 700, 1200] })
-    .toMatch(/pending|running/);
+    .toMatch(/queued|pending|running/);
 
   return created;
 }

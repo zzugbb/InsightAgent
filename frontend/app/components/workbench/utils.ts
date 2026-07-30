@@ -90,7 +90,12 @@ export function resolveTaskStreamTerminalReason(args: {
       ? args.task.status_normalized
       : args.task?.status) ?? "";
   const status = rawStatus.trim().toLowerCase();
-  if (!status || status === "pending" || status === "running") {
+  if (
+    !status ||
+    status === "queued" ||
+    status === "pending" ||
+    status === "running"
+  ) {
     return null;
   }
   if (status === "cancelled" || status === "canceled") {
@@ -398,7 +403,7 @@ export function getTaskLabel(
 
 function normalizeTaskStatus(status: string): "running" | "completed" | "failed" | "other" {
   const s = status.trim().toLowerCase();
-  if (s === "running" || s === "pending") {
+  if (s === "queued" || s === "running" || s === "pending") {
     return "running";
   }
   if (s === "completed" || s === "done" || s === "success") {

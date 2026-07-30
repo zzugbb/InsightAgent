@@ -226,7 +226,11 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
 
   const isTaskCancelable = (status: string): boolean => {
     const normalized = status.trim().toLowerCase();
-    return normalized === "pending" || normalized === "running";
+    return (
+      normalized === "queued" ||
+      normalized === "pending" ||
+      normalized === "running"
+    );
   };
 
   const inspectorUsage = useMemo(

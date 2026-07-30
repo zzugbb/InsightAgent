@@ -67,9 +67,10 @@ const TRACE_DELTA_RECOVER_HINT_MS = 12_000;
 const TRACE_DELTA_FAST_DRAIN_MS = 180;
 const ACTIVE_TASK_STATUS_POLL_MS = 600;
 const OPEN_MODEL_SETTINGS_EVENT = "insightagent:open-model-settings";
-const RUNNING_TASK_STATUSES = new Set(["pending", "running"]);
+const RUNNING_TASK_STATUSES = new Set(["queued", "pending", "running"]);
 const CANCEL_SEND_COOLDOWN_MS = 2200;
 const RUNNING_STREAM_PHASES = new Set([
+  "queued",
   "pending",
   "running",
   "thinking",
@@ -1386,6 +1387,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     timeout: t.workbench.phaseTimeout,
     replay: t.workbench.phaseReplay,
     streaming: t.workbench.phaseRunning,
+    queued: t.workbench.phaseRunning,
     running: t.workbench.phaseRunning,
     pending: t.workbench.phaseRunning,
     thinking: t.workbench.phaseRunning,

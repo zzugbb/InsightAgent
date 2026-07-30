@@ -239,7 +239,11 @@ async function waitForSessionRunningTask(
           const normalized = (task.status_normalized ?? task.status ?? "")
             .trim()
             .toLowerCase();
-          return normalized === "pending" || normalized === "running";
+          return (
+            normalized === "queued" ||
+            normalized === "pending" ||
+            normalized === "running"
+          );
         });
         runningTaskId = runningTask?.id ?? "";
         return runningTaskId;

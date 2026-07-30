@@ -15,6 +15,7 @@ export type { TraceStepPayload } from "../types/trace";
 const DEFAULT_STREAM_MESSAGES: Messages["stream"] = en.stream;
 
 const KNOWN_SSE_PHASES = new Set([
+  "queued",
   "pending",
   "running",
   "thinking",
@@ -778,7 +779,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       const retryCount =
         typeof p.retryCount === "number" ? p.retryCount : null;
       set((state) => ({
-        ssePhase: fatal ? "error" : state.ssePhase,
+        ssePhase: "error",
         sseMessage: sm.streamErrorMessage(msg, fatal, retryCount),
         sseSessionId: payloadSessionId ?? state.sseSessionId,
       }));
@@ -853,6 +854,7 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
           set((state) => ({
             ssePhase:
               state.ssePhase === "running" ||
+              state.ssePhase === "queued" ||
               state.ssePhase === "pending" ||
               state.ssePhase === "streaming"
                 ? "done"

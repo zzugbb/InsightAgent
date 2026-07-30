@@ -44,14 +44,22 @@ function isRunningLike(status: string | null | undefined): boolean {
   const normalized = String(status ?? "")
     .trim()
     .toLowerCase();
-  return normalized === "running" || normalized === "pending";
+  return (
+    normalized === "queued" ||
+    normalized === "running" ||
+    normalized === "pending"
+  );
 }
 
 function resolveTaskStatusTone(
   status: string,
 ): "running" | "completed" | "failed" | "other" {
   const normalized = status.trim().toLowerCase();
-  if (normalized === "running" || normalized === "pending") {
+  if (
+    normalized === "queued" ||
+    normalized === "running" ||
+    normalized === "pending"
+  ) {
     return "running";
   }
   if (

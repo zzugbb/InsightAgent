@@ -2,7 +2,7 @@ import json
 import re
 from collections.abc import Iterator
 from datetime import datetime
-from time import monotonic
+from time import monotonic, sleep
 from uuid import uuid4
 
 from app.config import get_settings
@@ -18,6 +18,11 @@ from app.services.chat_persistence_service import (
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.settings_service import get_stored_settings
+from app.services.task_queue_service import (
+    get_task_queue_snapshot,
+    release_task_execution_slot,
+    try_acquire_task_execution_slot,
+)
 from app.services.tool_runtime import (
     build_tool_plan_summary,
     build_tool_plan_artifacts,
@@ -260,16 +265,26 @@ def stream_task_execution(
     STREAM_TRACE_PERSIST_EVERY = 8
     STREAM_HEARTBEAT_INTERVAL_SEC = 2.0
     TASK_STATUS_PROBE_MIN_INTERVAL_SEC = 0.25
+    runtime_config = get_settings()
     TRACE_PERSIST_MIN_INTERVAL_SEC = max(
-        0.0, float(get_settings().trace_persist_min_interval_sec)
+        0.0, float(runtime_config.trace_persist_min_interval_sec)
     )
-    TASK_TIMEOUT_SEC = max(1.0, float(get_settings().task_timeout_sec))
+    TASK_TIMEOUT_SEC = max(1.0, float(runtime_config.task_timeout_sec))
+    TASK_QUEUE_MAX_CONCURRENT = max(
+        1,
+        int(getattr(runtime_config, "task_queue_max_concurrent", 1) or 1),
+    )
+    TASK_QUEUE_POLL_INTERVAL_SEC = max(
+        0.01,
+        float(getattr(runtime_config, "task_queue_poll_interval_sec", 0.25) or 0.25),
+    )
     trace_steps: list[dict[str, object]] = []
     seq_cursor = 0
     last_trace_persist_ts = 0.0
     last_status_probe_ts = 0.0
     cached_task_status = "pending"
     stream_started_ts = monotonic()
+    task_slot = None
 
     def record_audit_event(
         *,
@@ -383,10 +398,41 @@ def stream_task_execution(
             content=prompt,
         )
 
-    update_task_status(task_id=task_id, status="running", user_id=user_id)
-    probe_task_status(force=True)
+    def release_task_slot() -> None:
+        nonlocal task_slot
+        if task_slot is None:
+            release_task_execution_slot(task_id)
+            return
+        task_slot.release()
+        task_slot = None
 
     try:
+        while task_slot is None:
+            raise_if_should_abort(force_status_probe=True)
+            task_slot = try_acquire_task_execution_slot(
+                task_id=task_id,
+                max_concurrent=TASK_QUEUE_MAX_CONCURRENT,
+            )
+            if task_slot is not None:
+                break
+            if cached_task_status not in {"queued", "queueing", "enqueued"}:
+                update_task_status(task_id=task_id, status="queued", user_id=user_id)
+                probe_task_status(force=True)
+            yield sse_event(
+                "state",
+                {
+                    "task_id": task_id,
+                    "phase": "queued",
+                    "queue": get_task_queue_snapshot(
+                        max_concurrent=TASK_QUEUE_MAX_CONCURRENT
+                    ),
+                },
+            )
+            sleep(TASK_QUEUE_POLL_INTERVAL_SEC)
+
+        update_task_status(task_id=task_id, status="running", user_id=user_id)
+        probe_task_status(force=True)
+
         runtime_settings = get_stored_settings(user_id)
         provider = get_llm_provider(user_id)
         provider_name, provider_model = _resolve_provider_identity(
@@ -552,7 +598,8 @@ def stream_task_execution(
             assert service_action_result is not None
             seq_cursor = int(service_action_result["seq_cursor"])
             if bool(service_action_result["should_return"]):
-                    return
+                release_task_slot()
+                return
 
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
         raise_if_should_abort()
@@ -693,6 +740,7 @@ def stream_task_execution(
             assistant_excerpt=final_content,
         )
 
+        release_task_slot()
         yield sse_event(
             "done",
             {
@@ -705,6 +753,7 @@ def stream_task_execution(
         )
 
     except TaskExecutionAbortError as exc:
+        release_task_slot()
         complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
@@ -746,6 +795,7 @@ def stream_task_execution(
             ),
         )
     except ProviderSelectionError as exc:
+        release_task_slot()
         complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
@@ -769,6 +819,7 @@ def stream_task_execution(
             ),
         )
     except ProviderCallError as exc:
+        release_task_slot()
         complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
@@ -798,6 +849,7 @@ def stream_task_execution(
             ),
         )
     except Exception as exc:
+        release_task_slot()
         complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
@@ -820,3 +872,6 @@ def stream_task_execution(
                 retry_count=0,
             ),
         )
+    except BaseException:
+        release_task_slot()
+        raise
