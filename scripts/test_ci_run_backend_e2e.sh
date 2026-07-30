@@ -54,6 +54,9 @@ run_tests() {
   expect_pass bash "${SCRIPT_PATH}" --phase timeout --base-url http://127.0.0.1:8010 --log-dir "${TMP_DIR}" --dry-run > "${TMP_DIR}/timeout.out"
   assert_contains "--cancel-prompt-words 180000 --timeout-prompt-words 250000" "${TMP_DIR}/timeout.out"
 
+  expect_pass bash "${SCRIPT_PATH}" --phase queue --base-url http://127.0.0.1:8011 --log-dir "${TMP_DIR}" --dry-run > "${TMP_DIR}/queue.out"
+  assert_contains "${expected_backend_e2e_python} backend/scripts/e2e_queue_concurrency.py --base-url http://127.0.0.1:8011" "${TMP_DIR}/queue.out"
+
   expect_pass bash "${SCRIPT_PATH}" --phase main --base-url http://127.0.0.1:9000 --log-dir "${TMP_DIR}" --dry-run > "${TMP_DIR}/main-9000.out"
   assert_contains "tee ${TMP_DIR}/e2e-main-path-9000.log" "${TMP_DIR}/main-9000.out"
 

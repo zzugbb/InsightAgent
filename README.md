@@ -10,13 +10,14 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口缩为兼容入口，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题搬到 `backend/scripts/tool_runtime_slice/` mixin 包；二次细分后最大主题模块约 4.7k 行。
 - `backend/app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `backend/app/services/tool_runtime_planning.py`、`backend/app/services/tool_runtime_execution.py`、`backend/app/services/tool_runtime_http_json.py`、`backend/app/services/tool_runtime_registry.py`，`from app.services.tool_runtime import ...` 外部导出保持不变；当前 facade 约 3.0k 行。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
-- `queue-and-concurrency-lite` 已进入队列取消/恢复细化阶段：任务创建默认进入 `queued`，SSE 执行入口在拿到进程内执行槽位后才切 `running`；默认单进程并发上限为 `TASK_QUEUE_MAX_CONCURRENT=32`，等待期间发送安全 queue snapshot（计数与当前任务 `wait_position`，不暴露内部 task ids），queued cancel 会移出等待队列，前端 live phase 可显示排队位置并在取消/恢复时保持正确 phase，pending/running/cancel/timeout 旧契约保持稳定。
+- `queue-and-concurrency-lite` 已进入队列取消/恢复专项 e2e 阶段：任务创建默认进入 `queued`，SSE 执行入口在拿到进程内执行槽位后才切 `running`；默认单进程并发上限为 `TASK_QUEUE_MAX_CONCURRENT=32`，等待期间发送安全 queue snapshot（计数与当前任务 `wait_position`，不暴露内部 task ids），queued cancel 会移出等待队列，前端 live phase 可显示排队位置并在取消/恢复时保持正确 phase；低并发 backend 下的 queued cancel + followup completion 已有专项 e2e 覆盖。
 
 ## 当前验证基线
 
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1719/1719` 通过；本轮 queue/cancel slice：`-k queue`、`-k cancel`、`-k task` 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
+- backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 通过
 - 完整 Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47` 通过；本轮曾暴露 `TASK_QUEUE_MAX_CONCURRENT=4` 导致 4-worker e2e 排队超时、以及 retryable error 被 `streamClosed` 覆盖的问题，已分别通过默认上限 `32` 与前端 error phase 收口修复
 - `git diff --check`：通过
 - 普通沙箱访问本机 Docker/端口会被权限拦截时，按流程提权后重跑，不拿旧结果冒充新结果。
@@ -24,7 +25,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 ## 当前开发计划
 
-1. `queue-and-concurrency-lite`：下一步补 queued cancel / running cancel / queued recover / 多任务并发专项 e2e；后续再扩到按用户/按 session 的并发策略。
+1. `queue-and-concurrency-lite`：下一步补 running cancel / queued recover / 多任务并发前端专项 e2e，并择机复跑完整 Chromium；后续再扩到按用户/按 session 的并发策略。
 2. `pre-flight cleanup`：文档流水账压缩与 `test_tool_runtime_slice.py` 主题拆分已完成，原测试入口命令保持不变。
 3. `registry-governance`：作为维护线继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
 4. `rag-governance-hardening`：后续补知识库版本化、来源治理与更细粒度 shared 规则。

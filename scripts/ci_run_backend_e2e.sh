@@ -12,7 +12,7 @@ backend_e2e_python="${BACKEND_E2E_PYTHON:-}"
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/ci_run_backend_e2e.sh --phase <main|timeout> --base-url <url> [options]
+  scripts/ci_run_backend_e2e.sh --phase <main|timeout|queue> --base-url <url> [options]
 
 Options:
   --log-dir <path>    Default: /tmp
@@ -41,8 +41,8 @@ if [ -z "${phase}" ] || [ -z "${base_url}" ]; then
   exit 2
 fi
 
-if [ "${phase}" != "main" ] && [ "${phase}" != "timeout" ]; then
-  echo "invalid --phase: ${phase} (expected main|timeout)" >&2
+if [ "${phase}" != "main" ] && [ "${phase}" != "timeout" ] && [ "${phase}" != "queue" ]; then
+  echo "invalid --phase: ${phase} (expected main|timeout|queue)" >&2
   exit 2
 fi
 
@@ -94,6 +94,8 @@ if [ "${phase}" = "main" ]; then
   run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_main_path.py --base-url ${quoted_base_url} | tee ${quoted_log_dir}/e2e-main-path-${log_suffix}.log"
   run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_export_consistency.py --base-url ${quoted_base_url} | tee ${quoted_log_dir}/e2e-export-consistency-${log_suffix}.log"
   run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${quoted_base_url} --skip-timeout | tee ${quoted_log_dir}/e2e-cancel-${log_suffix}.log"
-else
+elif [ "${phase}" = "timeout" ]; then
   run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_task_cancel_timeout.py --base-url ${quoted_base_url} --cancel-prompt-words 180000 --timeout-prompt-words 250000 | tee ${quoted_log_dir}/e2e-timeout-${log_suffix}.log"
+else
+  run_cmd "${quoted_backend_e2e_python} backend/scripts/e2e_queue_concurrency.py --base-url ${quoted_base_url} | tee ${quoted_log_dir}/e2e-queue-${log_suffix}.log"
 fi

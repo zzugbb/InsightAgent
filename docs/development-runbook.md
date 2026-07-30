@@ -73,6 +73,13 @@ bash scripts/ci_run_backend_e2e.sh --phase main --base-url http://127.0.0.1:8000
 bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001
 ```
 
+低并发队列专项 e2e 需要单独启动一个 backend，避免影响默认 full Chromium 并发基线：
+
+```bash
+TASK_QUEUE_MAX_CONCURRENT=1 TASK_QUEUE_POLL_INTERVAL_SEC=0.1 backend/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8011
+bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp
+```
+
 单条 Chromium 复验在 `frontend/` 下运行，也需要提权：
 
 ```bash
