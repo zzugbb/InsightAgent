@@ -10,13 +10,13 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `real-tool-execution` 当前验收基线已完成收尾：workbench / live store / model settings 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 前端继续保持与后端 SSE / trace / export 契约稳定对齐，不为真实工具执行新增独立本地语义分支。
 - 下一主线启动前的仓库 pre-flight 已完成：后端 runtime slice 测试二次细分完成，`tool_runtime.py` 已抽出 planner/execution/HTTP JSON/registry facade 模块，原测试入口保持不变；前端本轮无行为改动。
-- 下一核心开发主线跟随后端切到 `queue-and-concurrency-lite`：补 queued/running/cancel/recover 的工作台状态、Task Center 展示、composer 恢复与 e2e。
+- 下一核心开发主线跟随后端切到 `queue-and-concurrency-lite`：后端已先接入 `queued` 状态标准化与 stream gate；前端下一步补 queued/running/cancel/recover 的工作台状态、Task Center 展示、composer 恢复与 e2e。
 
 ## 当前验证基线
 
 - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`68/68` 通过
 - targeted Chromium：主路径导出、404 ownership 导出、取消后立即重发 `3/3` 通过
-- 完整 Chromium e2e：真实 backend/frontend 生命周期内首跑 `47/47` 通过
+- 完整 Chromium e2e：真实 backend/frontend 生命周期内复跑 `47/47` 通过；一次全量 run 出现 `ECONNRESET` 后失败单条通过，最终完整复跑通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - `git diff --check`：通过
 

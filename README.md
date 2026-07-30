@@ -10,20 +10,20 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口缩为兼容入口，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题搬到 `backend/scripts/tool_runtime_slice/` mixin 包；二次细分后最大主题模块约 4.7k 行。
 - `backend/app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `backend/app/services/tool_runtime_planning.py`、`backend/app/services/tool_runtime_execution.py`、`backend/app/services/tool_runtime_http_json.py`、`backend/app/services/tool_runtime_registry.py`，`from app.services.tool_runtime import ...` 外部导出保持不变；当前 facade 约 3.0k 行。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
-- 下一核心开发主线切到 `queue-and-concurrency-lite`：在现有 cancel/timeout/running-task-recovery 基础上推进单机任务排队、并发治理与运行可靠性。
+- `queue-and-concurrency-lite` 已启动第一刀：后端任务状态模型已接入 `queued` 标准化、label/rank 与 queued stream gate，继续保持 pending/running/cancel/timeout 旧契约稳定；真实单机队列 worker 与并发上限仍是下一步。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1711/1711` 通过；本轮拆分 targeted slice：`facade`、`registry`、`provider_source`、`settings`、`preflight`、`http_json`、`runtime` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1713/1713` 通过；本轮 queue slice：`-k queued`、`-k task` 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
-- 完整 Chromium e2e：真实 backend/frontend 生命周期内首跑 `47/47` 通过
+- 完整 Chromium e2e：真实 backend/frontend 生命周期内复跑 `47/47` 通过；期间一次全量 run 出现 `ECONNRESET`，失败单条随即通过，最终完整复跑通过
 - `git diff --check`：通过
 - 普通沙箱访问本机 Docker/端口会被权限拦截时，按流程提权后重跑，不拿旧结果冒充新结果。
 
 ## 当前开发计划
 
-1. `queue-and-concurrency-lite`：下一核心主线，补单机任务队列、并发上限、queued/running/cancel/recover 状态机与 e2e。
+1. `queue-and-concurrency-lite`：下一步补真实单机任务队列、并发上限、queued cancel、running cancel/recover 与队列 e2e。
 2. `pre-flight cleanup`：文档流水账压缩与 `test_tool_runtime_slice.py` 主题拆分已完成，原测试入口命令保持不变。
 3. `registry-governance`：作为维护线继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
 4. `rag-governance-hardening`：后续补知识库版本化、来源治理与更细粒度 shared 规则。

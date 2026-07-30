@@ -10,19 +10,20 @@
 - provider/source/settings/file-backed registry 治理已覆盖 direct source、named provider/loader、provider/loader factory、factory alias、profile reset、forward reference 与 diagnostics 并回。
 - `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口继续保留，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题拆到 `backend/scripts/tool_runtime_slice/`；二次细分后最大主题模块约 4.7k 行。
 - `app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `app/services/tool_runtime_planning.py`、`app/services/tool_runtime_execution.py`、`app/services/tool_runtime_http_json.py`、`app/services/tool_runtime_registry.py`，外部 import facade 保持稳定；当前 facade 约 3.0k 行。
+- `queue-and-concurrency-lite` 已启动第一刀：`queued` 已进入任务状态标准化、label/rank 与 stream gate；真实单机队列 worker、并发上限和队列恢复仍是下一步。
 - 默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1711/1711` 通过；本轮拆分 targeted slice：`facade`、`registry`、`provider_source`、`settings`、`preflight`、`http_json`、`runtime` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1713/1713` 通过；本轮 queue slice：`-k queued`、`-k task` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
-- 完整 Chromium e2e：真实 backend/frontend 生命周期内首跑 `47/47` 通过
+- 完整 Chromium e2e：真实 backend/frontend 生命周期内复跑 `47/47` 通过；一次全量 run 出现 `ECONNRESET` 后失败单条通过，最终完整复跑通过
 - `git diff --check`：通过
 
 ## 下一步后端计划
 
-1. `queue-and-concurrency-lite`：补 queued/running/terminal 状态模型、单机队列、并发上限、queued cancel、running cancel/recover 与 stream reconnect 语义。
+1. `queue-and-concurrency-lite`：下一步补真实单机队列、并发上限、queued cancel、running cancel/recover、stream reconnect 与队列 e2e。
 2. `pre-flight cleanup`：文档瘦身与 `backend/scripts/test_tool_runtime_slice.py` 主题拆分已完成，保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口不变。
 3. `tool_runtime.py` 分阶段抽模块：`tool_runtime_planning.py`、`tool_runtime_execution.py`、`tool_runtime_http_json.py`、`tool_runtime_registry.py` 已完成 facade 拆分，保留现有 import facade；下一轮不再继续拆分。
 4. `registry-governance` 与 `rag-governance-hardening` 作为后续维护线，不和第一轮队列状态机混在同一改动里。

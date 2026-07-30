@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution 当前验收基线已完成收尾；下一核心主线切到 queue-and-concurrency-lite。tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 下一核心主线：单机任务排队、并发治理、queued/running/cancel/recover 状态机与 e2e
+  - 当前核心主线：queue-and-concurrency-lite；已完成 queued 状态标准化、label/rank 与 stream gate 第一刀，下一步补真实单机队列、并发上限、queued cancel/recover 与 e2e
   - pre-flight cleanup 已完成文档瘦身、test_tool_runtime_slice 主题拆分与 tool_runtime.py planner/execution/HTTP JSON/registry facade 拆分；当前 facade 约 3.0k 行，继续开发时保持原测试入口命令不变
   - registry-governance 作为维护线，继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 语义
   - rag-governance-hardening 作为后续候选，补知识库版本化、来源治理与更细粒度 shared 规则
@@ -12,13 +12,13 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1711/1711)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1713/1713)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (68/68)
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
-  frontend_chromium_e2e: full Chromium first pass 47/47 against real backend/frontend lifecycle
+  frontend_chromium_e2e: full Chromium rerun 47/47 against real backend/frontend lifecycle
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: tool_runtime.py registry facade 拆分完成后，facade / registry / provider_source / settings / preflight / http_json / runtime targeted tests 与完整 backend slice 1711/1711 均通过；本轮尚未重跑 full-stack e2e / Chromium e2e。
+latest_validation_note: queue-and-concurrency-lite 第一刀完成 queued status normalization、label/rank 与 stream gate；-k queued、-k task、完整 backend slice 1713/1713、backend e2e main phase 与完整 Chromium 47/47 均通过。一次 Chromium 全量 run 曾在 task export download 出现 ECONNRESET，失败单条随即通过，最终完整复跑通过。
 todos:
   - id: docs-slimming
     status: completed
@@ -30,8 +30,8 @@ todos:
     status: completed
     content: app/services/tool_runtime.py planner、execution、HTTP JSON、registry facade 拆分已完成，planner/provider planner 抽到 app/services/tool_runtime_planning.py，runtime context/result/attempt/trace/rag/plan-item execution 抽到 app/services/tool_runtime_execution.py，HTTP JSON/diagnostics 抽到 app/services/tool_runtime_http_json.py，registry/file-backed/provider-source 治理抽到 app/services/tool_runtime_registry.py；下一轮不再继续拆分。
   - id: queue-and-concurrency-lite
-    status: pending
-    content: 下一核心主线；补 queued/running/terminal 状态模型、单机队列、并发上限、queued cancel、running cancel/recover、stream reconnect 与 e2e。
+    status: in_progress
+    content: 当前核心主线；已补 queued 状态标准化、label/rank 与 stream gate，下一步补真实单机队列、并发上限、queued cancel、running cancel/recover、stream reconnect 与 e2e。
   - id: registry-governance
     status: in_progress
     content: 维护线；保持 registry / profile / provider source / selected source / diagnostics_summary / loader_factory 的统一治理语义。
@@ -48,7 +48,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- 下一核心主线是 `queue-and-concurrency-lite`。进入主线前的文档瘦身、测试文件拆分与 `tool_runtime.py` facade 拆分已完成；`backend/scripts/test_tool_runtime_slice.py` 保留为兼容入口，`tool_runtime.py` 已抽出 planner、execution、HTTP JSON 与 registry 模块。
+- 当前核心主线是 `queue-and-concurrency-lite`。进入主线前的文档瘦身、测试文件拆分与 `tool_runtime.py` facade 拆分已完成；本轮已启动第一刀，`queued` 已进入后端状态标准化、label/rank 与 stream gate。
 
 ## 已完成能力摘要
 
@@ -61,10 +61,10 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1711/1711`；本轮 targeted：`facade`、`registry`、`provider_source`、`settings`、`preflight`、`http_json`、`runtime`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1713/1713`；本轮 targeted：`-k queued`、`-k task`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `68/68`。
-- Frontend Chromium e2e：真实 backend/frontend 生命周期内首跑 `47/47`。
+- Frontend Chromium e2e：真实 backend/frontend 生命周期内复跑 `47/47`；一次全量 run 出现 `ECONNRESET` 后失败单条通过，最终完整复跑通过。
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过。
 - Diff hygiene：`git diff --check` 通过。
 
@@ -74,8 +74,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 首轮建议契约：
 
-1. 后端状态模型：`queued / running / completed / failed / cancelled / timeout`。
-2. 单机队列：全局队列 + 最小并发上限，后续再扩到按用户/按 session。
+1. 后端状态模型：`queued / running / completed / failed / cancelled / timeout`；`queued` 标准化、label/rank 与 stream gate 已完成。
+2. 单机队列：下一步补全局队列 + 最小并发上限，后续再扩到按用户/按 session。
 3. 取消语义：queued 任务可取消；running 任务沿用现有 cancel/timeout 契约。
 4. 恢复语义：刷新或 reconnect 时区分 queued、running、terminal，不改变外部 SSE / trace / export shape。
 5. 前端体验：Task Center 展示等待中/运行中/终态，composer 在 queued/running/cancel 后稳定恢复。

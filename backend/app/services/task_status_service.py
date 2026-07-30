@@ -1,6 +1,7 @@
 from typing import Literal
 
 TaskStatusNormalized = Literal[
+    "queued",
     "pending",
     "running",
     "completed",
@@ -13,6 +14,8 @@ TaskStatusNormalized = Literal[
 
 def normalize_task_status(status: str) -> TaskStatusNormalized:
     s = status.strip().lower()
+    if s in ("queued", "queueing", "enqueued"):
+        return "queued"
     if s == "pending":
         return "pending"
     if s == "running":
@@ -30,6 +33,8 @@ def normalize_task_status(status: str) -> TaskStatusNormalized:
 
 def task_status_label(status: str) -> str:
     normalized = normalize_task_status(status)
+    if normalized == "queued":
+        return "Queued"
     if normalized == "pending":
         return "Pending"
     if normalized == "running":
@@ -48,9 +53,11 @@ def task_status_label(status: str) -> str:
 def task_status_rank(status: str) -> int:
     """
     统一状态顺序（用于前端可选排序或分组）：
-    pending < running < cancelled < timed_out < failed < completed < other
+    queued < pending < running < cancelled < timed_out < failed < completed < other
     """
     normalized = normalize_task_status(status)
+    if normalized == "queued":
+        return 5
     if normalized == "pending":
         return 10
     if normalized == "running":

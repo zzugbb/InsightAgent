@@ -4,6 +4,63 @@ from .context import *
 
 
 class TaskRoutesUsageGovernanceMixin:
+    def test_task_status_service_normalizes_queued_status(self) -> None:
+        task_status_module = __import__(
+            "app.services.task_status_service",
+            fromlist=["normalize_task_status", "task_status_label", "task_status_rank"],
+        )
+
+        self.assertEqual(task_status_module.normalize_task_status("queued"), "queued")
+        self.assertEqual(task_status_module.task_status_label("queued"), "Queued")
+        self.assertLess(
+            task_status_module.task_status_rank("queued"),
+            task_status_module.task_status_rank("running"),
+        )
+
+    def test_stream_task_accepts_queued_tasks_as_executable(self) -> None:
+        original_get_task = task_routes_module.get_task
+        original_stream_task_execution = task_routes_module.stream_task_execution
+        captured: dict[str, object] = {}
+        try:
+            task_routes_module.get_task = lambda task_id, user_id: {
+                "id": task_id,
+                "user_id": user_id,
+                "session_id": "session-queued",
+                "prompt": "queued prompt",
+                "status": "queued",
+                "trace_json": None,
+                "usage_json": None,
+                "created_at": "2026-07-30T10:00:00",
+                "updated_at": "2026-07-30T10:00:00",
+            }
+
+            def fake_stream_task_execution(**kwargs):
+                captured.update(kwargs)
+                return iter(())
+
+            task_routes_module.stream_task_execution = fake_stream_task_execution
+
+            response = task_routes_module.stream_task_detail(
+                "task-queued",
+                request=SimpleNamespace(headers={}),
+                current_user={"id": "user-queued"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            task_routes_module.stream_task_execution = original_stream_task_execution
+
+        self.assertEqual(response.media_type, "text/event-stream")
+        self.assertEqual(
+            captured,
+            {
+                "task_id": "task-queued",
+                "session_id": "session-queued",
+                "user_id": "user-queued",
+                "prompt": "queued prompt",
+                "persist_user_message": False,
+            },
+        )
+
     def test_get_tasks_forwards_query_to_list_and_count(self) -> None:
         original_get_session = task_routes_module.get_session
         original_list_tasks = task_routes_module.list_tasks
