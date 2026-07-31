@@ -572,6 +572,102 @@ class TaskRoutesUsageGovernanceMixin:
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
 
+    def test_backend_queue_e2e_asserts_safe_queue_state_payload(self) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queued_state_payload"],
+        )
+
+        queue_e2e_module.assert_safe_queued_state_payload(
+            [
+                {
+                    "phase": "queued",
+                    "task_id": "task-e2e-queued",
+                    "queue": {
+                        "active_count": 1,
+                        "max_concurrent": 1,
+                        "waiting_count": 1,
+                        "wait_position": 1,
+                    },
+                }
+            ],
+            task_id="task-e2e-queued",
+            expected_wait_position=1,
+        )
+
+    def test_backend_queue_e2e_rejects_queue_state_that_leaks_task_ids(self) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queued_state_payload"],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "leaked active_task_ids"):
+            queue_e2e_module.assert_safe_queued_state_payload(
+                [
+                    {
+                        "phase": "queued",
+                        "task_id": "task-e2e-queued",
+                        "queue": {
+                            "active_count": 1,
+                            "max_concurrent": 1,
+                            "waiting_count": 1,
+                            "wait_position": 1,
+                            "active_task_ids": ["task-active"],
+                        },
+                    }
+                ],
+                task_id="task-e2e-queued",
+                expected_wait_position=1,
+            )
+
+    def test_backend_queue_e2e_rejects_missing_queued_state_payload(self) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queued_state_payload"],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "missing queued state payload"):
+            queue_e2e_module.assert_safe_queued_state_payload(
+                [
+                    {
+                        "phase": "running",
+                        "task_id": "task-e2e-queued",
+                        "queue": {
+                            "active_count": 1,
+                            "max_concurrent": 1,
+                            "waiting_count": 0,
+                            "wait_position": 0,
+                        },
+                    }
+                ],
+                task_id="task-e2e-queued",
+                expected_wait_position=1,
+            )
+
+    def test_backend_queue_e2e_rejects_unexpected_wait_position(self) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queued_state_payload"],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "wait_position should be 1"):
+            queue_e2e_module.assert_safe_queued_state_payload(
+                [
+                    {
+                        "phase": "queued",
+                        "task_id": "task-e2e-queued",
+                        "queue": {
+                            "active_count": 1,
+                            "max_concurrent": 1,
+                            "waiting_count": 1,
+                            "wait_position": 2,
+                        },
+                    }
+                ],
+                task_id="task-e2e-queued",
+                expected_wait_position=1,
+            )
+
     def test_cancel_queued_task_forgets_waiting_queue_entry(self) -> None:
         original_get_task = task_routes_module.get_task
         original_update_task_status = task_routes_module.update_task_status

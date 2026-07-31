@@ -290,6 +290,38 @@ def _extract_sse_state_payloads(raw: str) -> list[dict[str, Any]]:
     return states
 
 
+def assert_safe_queued_state_payload(
+    queued_states: list[dict[str, Any]],
+    *,
+    task_id: str,
+    expected_wait_position: int,
+) -> dict[str, Any]:
+    queued_state_payloads = [
+        state
+        for state in queued_states
+        if state.get("phase") == "queued" and state.get("task_id") == task_id
+    ]
+    _assert(queued_state_payloads, "queued stream missing queued state payload")
+    queue_payload = queued_state_payloads[0].get("queue")
+    _assert(isinstance(queue_payload, dict), "queued state missing queue snapshot")
+    _assert(
+        queue_payload.get("wait_position") == expected_wait_position,
+        (
+            f"queued wait_position should be {expected_wait_position}: "
+            f"{queue_payload}"
+        ),
+    )
+    _assert(
+        "active_task_ids" not in queue_payload,
+        "queue snapshot leaked active_task_ids",
+    )
+    _assert(
+        "waiting_task_ids" not in queue_payload,
+        "queue snapshot leaked waiting_task_ids",
+    )
+    return queue_payload
+
+
 def _start_stream_worker(
     *,
     base_url: str,
@@ -408,17 +440,11 @@ def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) 
     queued_events = _extract_sse_event_names(queued_stream.text)
     queued_errors = _extract_sse_error_codes(queued_stream.text)
     queued_states = _extract_sse_state_payloads(queued_stream.text)
-    queued_state_payloads = [
-        state
-        for state in queued_states
-        if state.get("phase") == "queued" and state.get("task_id") == queued_task_id
-    ]
-    _assert(queued_state_payloads, "queued stream missing queued state payload")
-    queue_payload = queued_state_payloads[0].get("queue")
-    _assert(isinstance(queue_payload, dict), "queued state missing queue snapshot")
-    _assert(queue_payload.get("wait_position") == 1, f"queued wait_position should be 1: {queue_payload}")
-    _assert("active_task_ids" not in queue_payload, "queue snapshot leaked active_task_ids")
-    _assert("waiting_task_ids" not in queue_payload, "queue snapshot leaked waiting_task_ids")
+    assert_safe_queued_state_payload(
+        queued_states,
+        task_id=queued_task_id,
+        expected_wait_position=1,
+    )
     _assert("cancelled" in queued_events, "queued stream missing cancelled event")
     _assert("task_cancelled" in queued_errors, f"queued stream missing task_cancelled code: {queued_errors}")
     _assert("done" not in queued_events, "queued cancel stream should not emit done")
