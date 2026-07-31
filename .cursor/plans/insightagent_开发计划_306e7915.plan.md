@@ -1,8 +1,9 @@
 ---
 name: InsightAgent 开发计划
-overview: real-tool-execution 当前验收基线已完成收尾；下一核心主线切到 queue-and-concurrency-lite。tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
+overview: real-tool-execution 与 queue-and-concurrency-lite 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前核心主线：queue-and-concurrency-lite；已完成 queued 状态标准化、label/rank、create 默认 queued、进程内执行槽位、queued SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复、低并发 backend/frontend queue phase 与完整 Chromium 复验，下一步做主线收尾判定
+  - queue-and-concurrency-lite 首轮主线已完成：queued 状态标准化、label/rank、create 默认 queued、进程内执行槽位、queued SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复、低并发 backend/frontend queue phase 与完整 Chromium 均已 fresh 复验
+  - 下一核心主线待定；推荐在按用户/按 session 并发策略、registry-governance、rag-governance-hardening 中择一进入，不把 queue 首轮作为阻塞项
   - pre-flight cleanup 已完成文档瘦身、test_tool_runtime_slice 主题拆分与 tool_runtime.py planner/execution/HTTP JSON/registry facade 拆分；当前 facade 约 3.0k 行，继续开发时保持原测试入口命令不变
   - registry-governance 作为维护线，继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 语义
   - rag-governance-hardening 作为后续候选，补知识库版本化、来源治理与更细粒度 shared 规则
@@ -24,7 +25,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium rerun 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: queue-and-concurrency-lite 继续推进前端刷新恢复/跨 session 深水位专项：新增 reload 后后台会话 stream 不误恢复的 Chromium 用例，验证停留在会话 B 时不会恢复会话 A 的 running stream、切回 A 后才恢复并可取消；targeted Chromium 通过，完整 Chromium full 复跑 50 passed / 1 skipped，完整 backend slice 1719/1719、frontend node tests 71/71 与 frontend lint 均通过。
+latest_validation_note: queue-and-concurrency-lite 收尾核对完成：本轮 fresh 复跑 CI tooling all、backend main phase、backend queue phase、frontend queue phase、full Chromium 50 passed / 1 skipped、backend slice 1719/1719、frontend node tests 71/71 与 frontend lint，均通过；8000/3001/8011 端口无残留监听。
 todos:
   - id: docs-slimming
     status: completed
@@ -36,8 +37,8 @@ todos:
     status: completed
     content: app/services/tool_runtime.py planner、execution、HTTP JSON、registry facade 拆分已完成，planner/provider planner 抽到 app/services/tool_runtime_planning.py，runtime context/result/attempt/trace/rag/plan-item execution 抽到 app/services/tool_runtime_execution.py，HTTP JSON/diagnostics 抽到 app/services/tool_runtime_http_json.py，registry/file-backed/provider-source 治理抽到 app/services/tool_runtime_registry.py；下一轮不再继续拆分。
   - id: queue-and-concurrency-lite
-    status: in_progress
-    content: 当前核心主线；已补 queued 状态标准化、label/rank、stream gate、create 默认 queued、进程内执行槽位、queued wait SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover 初始 phase、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 复验；下一步做主线收尾判定，若无新问题再进入按用户/按 session 并发策略或下一核心主线。
+    status: completed
+    content: 首轮主线完成；已补 queued 状态标准化、label/rank、stream gate、create 默认 queued、进程内执行槽位、queued wait SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover 初始 phase、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 复验；后续按用户/按 session 并发策略可作为新主线增量推进。
   - id: development-runbook
     status: completed
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。
@@ -57,7 +58,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- 当前核心主线是 `queue-and-concurrency-lite`。进入主线前的文档瘦身、测试文件拆分与 `tool_runtime.py` facade 拆分已完成；当前已完成队列可观测、取消/恢复细化、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 复验，`queued` 已进入后端状态标准化、label/rank、create 默认状态、进程内执行槽位、SSE 等待 state、queued cancel 等待项移除与前端排队位置展示。
+- `queue-and-concurrency-lite` 首轮主线已完成。进入主线前的文档瘦身、测试文件拆分与 `tool_runtime.py` facade 拆分已完成；队列可观测、取消/恢复细化、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 复验均已收口，`queued` 已进入后端状态标准化、label/rank、create 默认状态、进程内执行槽位、SSE 等待 state、queued cancel 等待项移除与前端排队位置展示。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程直接提权，避免每轮重复触发权限失败。
 
 ## 已完成能力摘要
@@ -83,7 +84,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过。
 - Diff hygiene：`git diff --check` 通过。
 
-## 下一核心主线：queue-and-concurrency-lite
+## 最近完成主线：queue-and-concurrency-lite
 
 目标：把任务执行从“单次请求跑通”推进到“多任务、多会话、取消/恢复都可靠”。
 
@@ -94,7 +95,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 3. 取消语义：queued 任务可取消且会移出等待队列，已有低并发 backend queue e2e 与前端 queued cancel Chromium 专项；running cancel 已补前端终态专项，继续保持现有 cancel/timeout 外部契约。
 4. 恢复语义：刷新或 reconnect 时区分 queued、running、terminal，前端 queued recover 初始 phase、selected session 恢复与后台会话 stream 不误恢复专项已通过，不改变外部 SSE / trace / export shape。
 5. 前端体验：active task 识别已扩到 `queued/pending/running`，live phase 已能显示当前任务排队位置，并在 terminal/local cancel 时清理 queue snapshot；Task Center 当前会话/全局多任务隔离与刷新后跨 session 深水位体验已补专项。
-6. e2e：backend queue phase、frontend queue phase、前端 queued recover/cancel、running cancel、Task Center 多任务、刷新恢复隔离与完整 Chromium 已覆盖取消/恢复/隔离基线；下一步做主线收尾判定。
+6. e2e：backend queue phase、frontend queue phase、前端 queued recover/cancel、running cancel、Task Center 多任务、刷新恢复隔离与完整 Chromium 已覆盖取消/恢复/隔离基线；本轮 fresh 收尾复验通过。
 
 ## Pre-flight Cleanup
 
