@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution 与 queue-and-concurrency-lite 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前核心主线：concurrency-fairness-policy；已完成可选按用户/按 session 并发执行槽位上限，默认 0 关闭，开启后同用户/同会话上限不会阻塞其他用户/会话；settings 已暴露只读 task_queue_diagnostics，前端运行设置已展示队列 fairness 摘要，backend queue e2e 脚本已加入诊断断言，外部 SSE / trace / export shape 保持不变
+  - 当前核心主线：concurrency-fairness-policy；已完成可选按用户/按 session 并发执行槽位上限，默认 0 关闭，开启后同用户/同会话上限不会阻塞其他用户/会话；等待队列已保持 oldest eligible FIFO，槽位释放后新任务不会抢在已可执行的旧等待任务前面；settings 已暴露只读 task_queue_diagnostics，前端运行设置已展示队列 fairness 摘要，backend queue e2e 脚本已加入诊断断言，外部 SSE / trace / export shape 保持不变
   - queue-and-concurrency-lite 首轮主线已完成：queued 状态标准化、label/rank、create 默认 queued、进程内执行槽位、queued SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复、低并发 backend/frontend queue phase 与完整 Chromium 均已 fresh 复验
   - pre-flight cleanup 已完成文档瘦身、test_tool_runtime_slice 主题拆分与 tool_runtime.py planner/execution/HTTP JSON/registry facade 拆分；当前 facade 约 3.0k 行，继续开发时保持原测试入口命令不变
   - registry-governance 作为维护线，继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 语义
@@ -14,7 +14,7 @@ constraints:
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1723/1723)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1724/1724)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (73/73)
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
   backend_e2e_queue: TASK_QUEUE_MAX_CONCURRENT=1 backend 上 queue phase passed (queued cancel + safe wait_position + followup completion)
@@ -25,7 +25,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium rerun 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: concurrency-fairness-policy 本轮增量：先补 settings task_queue_diagnostics 红测与前端 formatter 红测，再实现只读 settings 诊断、前端运行设置摘要与 backend queue e2e-like 诊断断言；settings targeted 191/191、task_queue targeted 7/7、完整 backend slice 1723/1723、前端 node tests 73/73、frontend lint 与 py_compile 均通过。
+latest_validation_note: concurrency-fairness-policy 本轮增量：先补 waiting FIFO 红测，确认槽位释放后新任务会插队，再实现 oldest eligible FIFO 防插队且保留 per-user/per-session 阻塞不影响其他 scope；waiting_fifo 1/1、task_queue targeted 8/8、完整 backend slice 1724/1724 与 py_compile 均通过。
 todos:
   - id: docs-slimming
     status: completed
@@ -41,7 +41,7 @@ todos:
     content: 首轮主线完成；已补 queued 状态标准化、label/rank、stream gate、create 默认 queued、进程内执行槽位、queued wait SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover 初始 phase、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 复验；后续按用户/按 session 并发策略可作为新主线增量推进。
   - id: concurrency-fairness-policy
     status: in_progress
-    content: 当前核心主线；已完成可选 TASK_QUEUE_MAX_CONCURRENT_PER_USER / TASK_QUEUE_MAX_CONCURRENT_PER_SESSION 执行槽位上限、settings task_queue_diagnostics、前端运行设置可观测入口与 backend queue e2e-like 诊断断言，默认关闭并保持 SSE / trace / export 外形稳定；下一步按风险补真实低并发 e2e 复验或更细公平策略。
+    content: 当前核心主线；已完成可选 TASK_QUEUE_MAX_CONCURRENT_PER_USER / TASK_QUEUE_MAX_CONCURRENT_PER_SESSION 执行槽位上限、oldest eligible FIFO 防插队、settings task_queue_diagnostics、前端运行设置可观测入口与 backend queue e2e-like 诊断断言，默认关闭并保持 SSE / trace / export 外形稳定；下一步按风险补真实低并发 e2e 复验或更细公平策略。
   - id: development-runbook
     status: completed
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。
@@ -75,7 +75,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1723/1723`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1724/1724`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel / safe wait_position / followup completion 已通过；脚本现额外校验 settings `task_queue_diagnostics`。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `73/73`。

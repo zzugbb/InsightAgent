@@ -448,6 +448,65 @@ class TaskRoutesUsageGovernanceMixin:
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
 
+    def test_task_queue_service_preserves_waiting_fifo_when_slot_is_released(self) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-fifo-active",
+                user_id="user-active",
+                session_id="session-active",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(active_slot)
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-fifo-old",
+                    user_id="user-old",
+                    session_id="session-old",
+                    max_concurrent=1,
+                )
+            )
+
+            active_slot.release()
+
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-fifo-new",
+                    user_id="user-new",
+                    session_id="session-new",
+                    max_concurrent=1,
+                )
+            )
+            old_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-fifo-old",
+                user_id="user-old",
+                session_id="session-old",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(old_slot)
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=1,
+                    task_id="task-fifo-new",
+                ),
+                {
+                    "active_count": 1,
+                    "max_concurrent": 1,
+                    "waiting_count": 1,
+                    "wait_position": 1,
+                },
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
     def test_cancel_queued_task_forgets_waiting_queue_entry(self) -> None:
         original_get_task = task_routes_module.get_task
         original_update_task_status = task_routes_module.update_task_status
