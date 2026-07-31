@@ -11,11 +11,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 前端继续保持与后端 SSE / trace / export 契约稳定对齐，不为真实工具执行新增独立本地语义分支。
 - 下一主线启动前的仓库 pre-flight 已完成：后端 runtime slice 测试二次细分完成，`tool_runtime.py` 已抽出 planner/execution/HTTP JSON/registry facade 模块，原测试入口保持不变。
 - `queue-and-concurrency-lite` 首轮主线已完成：后端已接入 create 默认 queued、进程内执行槽位、queued SSE state、queued cancel 等待项移除与低并发 queue 专项 e2e；前端已把活跃任务识别扩展为 `queued/pending/running`，能从安全 queue snapshot 显示当前任务排队位置，并在取消/timeout/完成与 queued 恢复时清理或保留正确 phase，当前已覆盖工作台恢复、Task Center、Inspector、任务详情页、Chromium e2e helper、queued recover/cancel、running cancel 终态、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium。
-- `concurrency-fairness-policy` 已启动：后端先补可选按用户/按 session 并发执行槽位上限，默认关闭且不改变现有 SSE/trace/export；前端下一步只在需要时增加设置诊断和可观测提示。
+- `concurrency-fairness-policy` 已启动：后端先补可选按用户/按 session 并发执行槽位上限，默认关闭且不改变现有 SSE/trace/export；前端运行设置已展示只读 `task_queue_diagnostics` 摘要，可查看全局/用户/session 上限、fairness 开关与 poll interval。
 
 ## 当前验证基线
 
-- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`71/71` 通过
+- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`73/73` 通过
 - targeted Chromium：主路径导出、404 ownership 导出、取消后立即重发 `3/3` 通过
 - backend queue e2e phase：低并发 backend 下 queued cancel / safe wait_position / followup completion 通过
 - frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 通过；默认 full 环境下该低并发专项显式 skip
@@ -29,7 +29,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 下一步前端计划
 
-1. `concurrency-fairness-policy`：当前主线；后端已完成可选按用户/按 session 并发执行槽位上限，前端下一步补 settings diagnostics / 可观测入口。
+1. `concurrency-fairness-policy`：当前主线；后端已完成可选按用户/按 session 并发执行槽位上限，前端已补 settings `task_queue_diagnostics` 可观测入口，下一步按风险配合真实低并发 e2e 复验或更细公平策略。
 2. Workbench composer：继续细化 queued/running/cancel 后按钮 loading、重复 prompt resend、跨会话切换与刷新恢复。
 3. 任务详情页：继续保持 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. e2e：保持 full Chromium、低并发 queue phase 与 targeted 边界专项作为进入下一主线前的回归门。
@@ -43,7 +43,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 流式链路：SSE 状态、token 追加、trace 实时更新、`trace/delta` 自动静默轮询与结束补拉
 - running task 恢复：刷新页面或切回会话时自动接管 `queued/pending/running` 任务流
 - 导出：任务与会话 JSON / Markdown 导出
-- 模型设置：`mock / remote` 模式切换、校验、保存、错误码友好提示、provider/source diagnostics 说明
+- 模型设置：`mock / remote` 模式切换、校验、保存、错误码友好提示、provider/source diagnostics 与 task queue diagnostics 说明
 - RAG / Memory 调试：设置中的运行调试子页
 - 知识库治理：列表、来源采样、shared 权限显隐、清空/删除
 - 审计日志：筛选、分页、详情、导出
@@ -73,7 +73,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `lib/stores/chat-stream-store.ts`：SSE 事件分发与 trace 状态
 - `lib/stores/chat-stream-store-utils.ts`：tool_end / tool meta 合并、preview/output/result-summary 归一化
 - `app/components/workbench/utils.ts`：trace display、tool result preview、follow-up 展示与搜索辅助
-- `app/components/workbench/model-settings-modal-utils.ts`：settings 预览、provider/source/tool registry diagnostics 说明
+- `app/components/workbench/model-settings-modal-utils.ts`：settings 预览、provider/source/tool registry diagnostics 与 task queue diagnostics 说明
 - `lib/api-client.ts`：REST 请求封装、Bearer 注入、refresh token 自动续期
 - `lib/types/trace.ts`：前端 TraceStep 类型
 

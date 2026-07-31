@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  formatTaskQueueDiagnosticsSummary,
   formatToolRegistryProviderSourceDiagnosticsSummary,
   formatToolRegistryProviderToolDetailsSummary,
   resolveModelSettingsSelectionDetails,
@@ -139,6 +140,40 @@ test("formatToolRegistryProviderSourceDiagnosticsSummary humanizes missing entri
   assert.equal(
     result,
     "missing registry files: missing-a.json, missing-b.json",
+  );
+});
+
+test("formatTaskQueueDiagnosticsSummary shows enabled fairness limits", () => {
+  const result = formatTaskQueueDiagnosticsSummary({
+    max_concurrent: 8,
+    max_concurrent_per_user: 2,
+    max_concurrent_per_session: 1,
+    poll_interval_sec: 0.15,
+    per_user_limit_enabled: true,
+    per_session_limit_enabled: true,
+    fairness_limits_enabled: true,
+  });
+
+  assert.equal(
+    result,
+    "global 8 · per user 2 · per session 1 · poll 0.15s",
+  );
+});
+
+test("formatTaskQueueDiagnosticsSummary marks default fairness limits disabled", () => {
+  const result = formatTaskQueueDiagnosticsSummary({
+    max_concurrent: 32,
+    max_concurrent_per_user: 0,
+    max_concurrent_per_session: 0,
+    poll_interval_sec: 0.25,
+    per_user_limit_enabled: false,
+    per_session_limit_enabled: false,
+    fairness_limits_enabled: false,
+  });
+
+  assert.equal(
+    result,
+    "global 32 · fairness disabled · poll 0.25s",
   );
 });
 

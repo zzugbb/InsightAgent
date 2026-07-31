@@ -24,7 +24,10 @@ import type {
   SettingsSummary,
   SettingsValidateResponse,
 } from "./types";
-import { resolveModelSettingsSelectionDetails } from "./model-settings-modal-utils";
+import {
+  formatTaskQueueDiagnosticsSummary,
+  resolveModelSettingsSelectionDetails,
+} from "./model-settings-modal-utils";
 import { API_BASE_URL } from "./utils";
 
 const DEFAULT_FORM: SettingsFormState = {
@@ -263,6 +266,9 @@ export function ModelSettingsModal({
     previewSource?.enabled_tool_labels && previewSource.enabled_tool_labels.length > 0
       ? previewSource.enabled_tool_labels.join(", ")
       : "—";
+  const taskQueueDiagnosticsSummary = formatTaskQueueDiagnosticsSummary(
+    data?.task_queue_diagnostics,
+  );
   const {
     selectedProfileTools,
     selectedProfileToolDetailsSummary,
@@ -492,6 +498,11 @@ export function ModelSettingsModal({
           </Descriptions.Item>
           <Descriptions.Item label={t.settings.metaEnabledTools}>
             {summaryEnabledTools}
+          </Descriptions.Item>
+          <Descriptions.Item label={t.settings.metaTaskQueue}>
+            <span data-testid="model-settings-task-queue-diagnostics">
+              {taskQueueDiagnosticsSummary}
+            </span>
           </Descriptions.Item>
           {isRemoteMode ? (
             <>

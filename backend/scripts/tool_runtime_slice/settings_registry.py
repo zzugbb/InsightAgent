@@ -146,6 +146,82 @@ class SettingsRegistryMixin:
         )
         self.assertEqual(summary.database_locator, "postgresql://demo")
 
+    def test_build_settings_summary_response_exposes_task_queue_fairness_diagnostics(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=None,
+                task_queue_max_concurrent=8,
+                task_queue_max_concurrent_per_user=2,
+                task_queue_max_concurrent_per_session=1,
+                task_queue_poll_interval_sec=0.15,
+            ),
+            database_locator="postgresql://demo",
+        )
+
+        self.assertEqual(
+            summary.task_queue_diagnostics,
+            {
+                "max_concurrent": 8,
+                "max_concurrent_per_user": 2,
+                "max_concurrent_per_session": 1,
+                "poll_interval_sec": 0.15,
+                "per_user_limit_enabled": True,
+                "per_session_limit_enabled": True,
+                "fairness_limits_enabled": True,
+            },
+        )
+
+    def test_build_settings_summary_response_marks_default_task_queue_fairness_limits_disabled(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=None,
+                task_queue_max_concurrent=32,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.25,
+            ),
+            database_locator="postgresql://demo",
+        )
+
+        self.assertEqual(
+            summary.task_queue_diagnostics,
+            {
+                "max_concurrent": 32,
+                "max_concurrent_per_user": 0,
+                "max_concurrent_per_session": 0,
+                "poll_interval_sec": 0.25,
+                "per_user_limit_enabled": False,
+                "per_session_limit_enabled": False,
+                "fairness_limits_enabled": False,
+            },
+        )
+
     def test_build_settings_summary_response_includes_productized_tool_details_for_real_provider_source_tools(
         self,
     ) -> None:

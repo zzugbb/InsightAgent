@@ -55,6 +55,16 @@ export type ToolRegistryProviderToolDetail = {
   effective_result_output_keys: string[];
 };
 
+export type TaskQueueDiagnostics = {
+  max_concurrent: number;
+  max_concurrent_per_user: number;
+  max_concurrent_per_session: number;
+  poll_interval_sec: number;
+  per_user_limit_enabled: boolean;
+  per_session_limit_enabled: boolean;
+  fairness_limits_enabled: boolean;
+};
+
 export type SettingsSummary = {
   mode: string;
   provider: string;
@@ -70,6 +80,7 @@ export type SettingsSummary = {
   available_tool_registry_profile_details: ToolRegistryProfileOptionDetail[];
   available_tool_registry_provider_sources: string[];
   available_tool_registry_provider_source_details: ToolRegistryProviderSourceOptionDetail[];
+  task_queue_diagnostics: TaskQueueDiagnostics;
   database_locator: string;
 };
 

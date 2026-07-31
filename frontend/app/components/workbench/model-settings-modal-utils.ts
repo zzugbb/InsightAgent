@@ -1,5 +1,6 @@
 import type {
   SettingsSummary,
+  TaskQueueDiagnostics,
   ToolRegistryDiagnosticsSummary,
   SettingsValidateResponse,
   ToolRegistryProviderSourceOptionDetail,
@@ -188,6 +189,46 @@ export function formatToolRegistryProviderSourceDiagnosticsSummary(
       return `${label}: ${values.join(", ")}`;
     })
     .join(" | ");
+}
+
+function formatFiniteNumber(value: number, fallback: number): string {
+  const normalized = Number.isFinite(value) ? value : fallback;
+  return `${Math.round(normalized * 1000) / 1000}`;
+}
+
+export function formatTaskQueueDiagnosticsSummary(
+  diagnostics: TaskQueueDiagnostics | undefined,
+): string {
+  if (!diagnostics) {
+    return "—";
+  }
+  const maxConcurrent = Math.max(1, Math.trunc(diagnostics.max_concurrent || 1));
+  const pollIntervalSec = Math.max(
+    0,
+    diagnostics.poll_interval_sec || 0,
+  );
+  const parts = [`global ${maxConcurrent}`];
+  if (diagnostics.per_user_limit_enabled) {
+    parts.push(
+      `per user ${Math.max(
+        1,
+        Math.trunc(diagnostics.max_concurrent_per_user || 1),
+      )}`,
+    );
+  }
+  if (diagnostics.per_session_limit_enabled) {
+    parts.push(
+      `per session ${Math.max(
+        1,
+        Math.trunc(diagnostics.max_concurrent_per_session || 1),
+      )}`,
+    );
+  }
+  if (!diagnostics.fairness_limits_enabled) {
+    parts.push("fairness disabled");
+  }
+  parts.push(`poll ${formatFiniteNumber(pollIntervalSec, 0)}s`);
+  return parts.join(" · ");
 }
 
 function findSelectedSourceDetail(

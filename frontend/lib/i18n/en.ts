@@ -842,6 +842,7 @@ export const en: Messages = {
     metaToolRegistrySource: "Tool registry source",
     metaToolRegistrySourceDiagnostics: "Source diagnostics",
     metaEnabledTools: "Enabled tools",
+    metaTaskQueue: "Task queue",
     profileSummaryLabel: "Selected profile enables",
     sourceSummaryLabel: "Selected source defaults",
     sourceSummaryProfileLabel: "Base profile",

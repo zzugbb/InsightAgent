@@ -730,6 +730,7 @@ export type Messages = {
     metaToolRegistrySource: string;
     metaToolRegistrySourceDiagnostics: string;
     metaEnabledTools: string;
+    metaTaskQueue: string;
     profileSummaryLabel: string;
     sourceSummaryLabel: string;
     sourceSummaryProfileLabel: string;

@@ -136,6 +136,7 @@ class SettingsSummaryResponse(BaseModel):
     available_tool_registry_profile_details: list[ToolRegistryProfileOptionResponse]
     available_tool_registry_provider_sources: list[str]
     available_tool_registry_provider_source_details: list[ToolRegistryProviderSourceOptionResponse]
+    task_queue_diagnostics: dict[str, object]
     database_locator: str
 
 
@@ -468,6 +469,40 @@ def _merge_runtime_settings_for_summary(
     return SimpleNamespace(**merged_values)
 
 
+def _build_task_queue_diagnostics(*, runtime_settings: object) -> dict[str, object]:
+    max_concurrent = max(
+        1,
+        int(getattr(runtime_settings, "task_queue_max_concurrent", 1) or 1),
+    )
+    max_concurrent_per_user = max(
+        0,
+        int(getattr(runtime_settings, "task_queue_max_concurrent_per_user", 0) or 0),
+    )
+    max_concurrent_per_session = max(
+        0,
+        int(
+            getattr(runtime_settings, "task_queue_max_concurrent_per_session", 0)
+            or 0
+        ),
+    )
+    poll_interval_sec = float(
+        getattr(runtime_settings, "task_queue_poll_interval_sec", 0.25) or 0.25
+    )
+    per_user_limit_enabled = max_concurrent_per_user > 0
+    per_session_limit_enabled = max_concurrent_per_session > 0
+    return {
+        "max_concurrent": max_concurrent,
+        "max_concurrent_per_user": max_concurrent_per_user,
+        "max_concurrent_per_session": max_concurrent_per_session,
+        "poll_interval_sec": poll_interval_sec,
+        "per_user_limit_enabled": per_user_limit_enabled,
+        "per_session_limit_enabled": per_session_limit_enabled,
+        "fairness_limits_enabled": (
+            per_user_limit_enabled or per_session_limit_enabled
+        ),
+    }
+
+
 def _resolve_effective_tool_registry_selection(
     *,
     payload: SettingsUpdateRequest,
@@ -566,6 +601,9 @@ def _build_settings_summary_response(
         ),
         available_tool_registry_provider_source_details=list(
             option_bundle["available_tool_registry_provider_source_details"]
+        ),
+        task_queue_diagnostics=_build_task_queue_diagnostics(
+            runtime_settings=effective_settings
         ),
         database_locator=database_locator or get_database_locator(),
     )

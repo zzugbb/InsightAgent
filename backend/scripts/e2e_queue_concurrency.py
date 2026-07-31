@@ -145,6 +145,50 @@ def _save_mock_settings(base_url: str, token: str) -> None:
     _assert(save.status == 200, f"settings save (mock) failed: {save.status} {save.text}")
 
 
+def _assert_queue_settings_diagnostics(base_url: str, token: str) -> None:
+    settings = _request(
+        method="GET",
+        url=f"{base_url}/api/settings",
+        token=token,
+    )
+    _assert(
+        settings.status == 200 and isinstance(settings.json_body, dict),
+        f"settings summary failed: {settings.status} {settings.text}",
+    )
+    diagnostics = settings.json_body.get("task_queue_diagnostics")
+    _assert(
+        isinstance(diagnostics, dict),
+        f"settings summary missing task_queue_diagnostics: {settings.text[:300]}",
+    )
+    _assert(
+        diagnostics.get("max_concurrent") == 1,
+        (
+            "queue phase requires settings diagnostics max_concurrent=1; "
+            f"got {diagnostics}"
+        ),
+    )
+    per_user_limit = int(diagnostics.get("max_concurrent_per_user") or 0)
+    per_session_limit = int(diagnostics.get("max_concurrent_per_session") or 0)
+    _assert(
+        bool(diagnostics.get("per_user_limit_enabled")) == (per_user_limit > 0),
+        f"per-user fairness flag does not match limit: {diagnostics}",
+    )
+    _assert(
+        bool(diagnostics.get("per_session_limit_enabled")) == (per_session_limit > 0),
+        f"per-session fairness flag does not match limit: {diagnostics}",
+    )
+    _assert(
+        bool(diagnostics.get("fairness_limits_enabled"))
+        == (per_user_limit > 0 or per_session_limit > 0),
+        f"fairness aggregate flag does not match limits: {diagnostics}",
+    )
+    poll_interval_sec = float(diagnostics.get("poll_interval_sec") or 0)
+    _assert(
+        0 < poll_interval_sec <= 5,
+        f"queue poll interval diagnostic should be positive: {diagnostics}",
+    )
+
+
 def _long_prompt(prefix: str, words: int) -> str:
     safe_words = max(1, int(words))
     return f"{prefix} " + ("stream " * safe_words).strip()
@@ -296,7 +340,7 @@ def _join_stream(
 
 
 def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) -> None:
-    print("[3/4] queue 场景：低并发下 queued 任务可取消并释放等待位")
+    print("[4/5] queue 场景：低并发下 queued 任务可取消并释放等待位")
     stream_timeout = float(args.stream_timeout)
     active_task_id = _create_task(
         base_url,
@@ -421,19 +465,23 @@ def main() -> None:
     suffix = secrets.token_hex(4)
     email = f"e2e_queue_{suffix}@example.com"
 
-    print("[1/4] 登录")
+    print("[1/5] 登录")
     register = _register(base_url, email, password)
     _assert("access_token" in register, "register missing access_token")
     token = str(register["access_token"])
     print("  - OK: register + access token")
 
-    print("[2/4] 模型配置切换到 mock")
+    print("[2/5] 模型配置切换到 mock")
     _save_mock_settings(base_url, token)
     print("  - OK: validate + save mock mode")
 
+    print("[3/5] settings 诊断暴露低并发队列配置")
+    _assert_queue_settings_diagnostics(base_url, token)
+    print("  - OK: task_queue_diagnostics matches queue phase")
+
     _run_queue_cancel_case(args, base_url, token)
 
-    print("[4/4] 最终状态检查")
+    print("[5/5] 最终状态检查")
     me = _request(
         method="GET",
         url=f"{base_url}/api/auth/me",
@@ -446,6 +494,7 @@ def main() -> None:
     print("E2E queue-concurrency passed:")
     print("- auth register")
     print("- settings validate/save (mock)")
+    print("- settings task_queue_diagnostics")
     print("- queued SSE wait_position + safe snapshot")
     print("- queued cancel + terminal status")
     print("- followup task completion after cancel cleanup")

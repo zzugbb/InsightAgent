@@ -824,6 +824,7 @@ export const zh: Messages = {
     metaToolRegistrySource: "Tool registry source",
     metaToolRegistrySourceDiagnostics: "Source 诊断",
     metaEnabledTools: "已启用工具",
+    metaTaskQueue: "任务队列",
     profileSummaryLabel: "当前 profile 启用",
     sourceSummaryLabel: "当前 source 默认边界",
     sourceSummaryProfileLabel: "基础 profile",
