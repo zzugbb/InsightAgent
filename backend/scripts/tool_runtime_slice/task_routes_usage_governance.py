@@ -249,6 +249,110 @@ class TaskRoutesUsageGovernanceMixin:
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
 
+    def test_task_queue_service_enforces_per_user_limit_without_blocking_other_users(self) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            first_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-user-a-1",
+                user_id="user-a",
+                session_id="session-a-1",
+                max_concurrent=4,
+                max_concurrent_per_user=1,
+            )
+            self.assertIsNotNone(first_slot)
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-user-a-2",
+                    user_id="user-a",
+                    session_id="session-a-2",
+                    max_concurrent=4,
+                    max_concurrent_per_user=1,
+                )
+            )
+            other_user_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-user-b-1",
+                user_id="user-b",
+                session_id="session-b-1",
+                max_concurrent=4,
+                max_concurrent_per_user=1,
+            )
+            self.assertIsNotNone(other_user_slot)
+
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=4,
+                    task_id="task-user-a-2",
+                ),
+                {
+                    "active_count": 2,
+                    "max_concurrent": 4,
+                    "waiting_count": 1,
+                    "wait_position": 1,
+                },
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
+    def test_task_queue_service_enforces_per_session_limit_without_blocking_other_sessions(self) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            first_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-session-a-1",
+                user_id="user-a",
+                session_id="session-a",
+                max_concurrent=4,
+                max_concurrent_per_session=1,
+            )
+            self.assertIsNotNone(first_slot)
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-session-a-2",
+                    user_id="user-a",
+                    session_id="session-a",
+                    max_concurrent=4,
+                    max_concurrent_per_session=1,
+                )
+            )
+            other_session_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-session-b-1",
+                user_id="user-a",
+                session_id="session-b",
+                max_concurrent=4,
+                max_concurrent_per_session=1,
+            )
+            self.assertIsNotNone(other_session_slot)
+
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=4,
+                    task_id="task-session-a-2",
+                ),
+                {
+                    "active_count": 2,
+                    "max_concurrent": 4,
+                    "waiting_count": 1,
+                    "wait_position": 1,
+                },
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
     def test_task_queue_snapshot_exposes_wait_position_without_task_ids(self) -> None:
         task_queue_module = __import__(
             "app.services.task_queue_service",

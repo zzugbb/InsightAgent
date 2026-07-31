@@ -113,6 +113,20 @@ class Settings(BaseSettings):
         alias="TASK_QUEUE_MAX_CONCURRENT",
         description="单 backend 进程内允许同时流式执行的任务数；超出后任务保持 queued 等待执行槽位",
     )
+    task_queue_max_concurrent_per_user: int = Field(
+        default=0,
+        ge=0,
+        le=32,
+        alias="TASK_QUEUE_MAX_CONCURRENT_PER_USER",
+        description="单 backend 进程内每个用户允许同时流式执行的任务数；0 表示不启用用户级上限",
+    )
+    task_queue_max_concurrent_per_session: int = Field(
+        default=0,
+        ge=0,
+        le=32,
+        alias="TASK_QUEUE_MAX_CONCURRENT_PER_SESSION",
+        description="单 backend 进程内每个会话允许同时流式执行的任务数；0 表示不启用会话级上限",
+    )
     task_queue_poll_interval_sec: float = Field(
         default=0.25,
         gt=0.0,

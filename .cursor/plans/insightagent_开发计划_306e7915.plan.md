@@ -2,8 +2,8 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution 与 queue-and-concurrency-lite 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
+  - 当前核心主线：concurrency-fairness-policy；已完成可选按用户/按 session 并发执行槽位上限，默认 0 关闭，开启后同用户/同会话上限不会阻塞其他用户/会话，外部 SSE / trace / export shape 保持不变
   - queue-and-concurrency-lite 首轮主线已完成：queued 状态标准化、label/rank、create 默认 queued、进程内执行槽位、queued SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复、低并发 backend/frontend queue phase 与完整 Chromium 均已 fresh 复验
-  - 下一核心主线待定；推荐在按用户/按 session 并发策略、registry-governance、rag-governance-hardening 中择一进入，不把 queue 首轮作为阻塞项
   - pre-flight cleanup 已完成文档瘦身、test_tool_runtime_slice 主题拆分与 tool_runtime.py planner/execution/HTTP JSON/registry facade 拆分；当前 facade 约 3.0k 行，继续开发时保持原测试入口命令不变
   - registry-governance 作为维护线，继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 语义
   - rag-governance-hardening 作为后续候选，补知识库版本化、来源治理与更细粒度 shared 规则
@@ -14,7 +14,7 @@ constraints:
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1719/1719)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1721/1721)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (71/71)
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
   backend_e2e_queue: TASK_QUEUE_MAX_CONCURRENT=1 backend 上 queue phase passed (queued cancel + safe wait_position + followup completion)
@@ -25,7 +25,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium rerun 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: queue-and-concurrency-lite 收尾核对完成：本轮 fresh 复跑 CI tooling all、backend main phase、backend queue phase、frontend queue phase、full Chromium 50 passed / 1 skipped、backend slice 1719/1719、frontend node tests 71/71 与 frontend lint，均通过；8000/3001/8011 端口无残留监听。
+latest_validation_note: concurrency-fairness-policy 启动：新增按用户/按 session 并发执行槽位上限，默认 0 关闭；红测先失败于 try_acquire_task_execution_slot 不支持 user_id/session_id，修复后 per-user/per-session、task_queue targeted、py_compile 与完整 backend slice 1721/1721 均通过。
 todos:
   - id: docs-slimming
     status: completed
@@ -39,6 +39,9 @@ todos:
   - id: queue-and-concurrency-lite
     status: completed
     content: 首轮主线完成；已补 queued 状态标准化、label/rank、stream gate、create 默认 queued、进程内执行槽位、queued wait SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover 初始 phase、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 复验；后续按用户/按 session 并发策略可作为新主线增量推进。
+  - id: concurrency-fairness-policy
+    status: in_progress
+    content: 当前核心主线；已完成可选 TASK_QUEUE_MAX_CONCURRENT_PER_USER / TASK_QUEUE_MAX_CONCURRENT_PER_SESSION 执行槽位上限，默认关闭并保持 SSE / trace / export 外形稳定；下一步补 settings diagnostics / e2e-like 验证与前端可观测入口。
   - id: development-runbook
     status: completed
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。
@@ -72,7 +75,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1719/1719`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1721/1721`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel / safe wait_position / followup completion 已通过。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `71/71`。

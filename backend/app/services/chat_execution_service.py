@@ -274,6 +274,16 @@ def stream_task_execution(
         1,
         int(getattr(runtime_config, "task_queue_max_concurrent", 1) or 1),
     )
+    TASK_QUEUE_MAX_CONCURRENT_PER_USER = max(
+        0,
+        int(getattr(runtime_config, "task_queue_max_concurrent_per_user", 0) or 0),
+    )
+    TASK_QUEUE_MAX_CONCURRENT_PER_SESSION = max(
+        0,
+        int(
+            getattr(runtime_config, "task_queue_max_concurrent_per_session", 0) or 0
+        ),
+    )
     TASK_QUEUE_POLL_INTERVAL_SEC = max(
         0.01,
         float(getattr(runtime_config, "task_queue_poll_interval_sec", 0.25) or 0.25),
@@ -412,6 +422,10 @@ def stream_task_execution(
             task_slot = try_acquire_task_execution_slot(
                 task_id=task_id,
                 max_concurrent=TASK_QUEUE_MAX_CONCURRENT,
+                user_id=user_id,
+                session_id=session_id,
+                max_concurrent_per_user=TASK_QUEUE_MAX_CONCURRENT_PER_USER,
+                max_concurrent_per_session=TASK_QUEUE_MAX_CONCURRENT_PER_SESSION,
             )
             if task_slot is not None:
                 break

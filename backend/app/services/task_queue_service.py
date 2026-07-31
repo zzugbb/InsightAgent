@@ -23,21 +23,53 @@ class TaskExecutionSlot:
         self.release()
 
 
+@dataclass(frozen=True)
+class TaskQueueScope:
+    user_id: str | None = None
+    session_id: str | None = None
+
+
 class TaskQueueState:
     def __init__(self) -> None:
         self._lock = Lock()
         self._active_task_ids: list[str] = []
         self._waiting_task_ids: list[str] = []
+        self._task_scopes: dict[str, TaskQueueScope] = {}
 
-    def try_acquire(self, *, task_id: str, max_concurrent: int) -> TaskExecutionSlot | None:
+    def try_acquire(
+        self,
+        *,
+        task_id: str,
+        max_concurrent: int,
+        user_id: str | None = None,
+        session_id: str | None = None,
+        max_concurrent_per_user: int | None = None,
+        max_concurrent_per_session: int | None = None,
+    ) -> TaskExecutionSlot | None:
         max_concurrent = _normalize_max_concurrent(max_concurrent)
+        max_concurrent_per_user = _normalize_optional_limit(max_concurrent_per_user)
+        max_concurrent_per_session = _normalize_optional_limit(
+            max_concurrent_per_session
+        )
+        scope = TaskQueueScope(
+            user_id=_normalize_scope_value(user_id),
+            session_id=_normalize_scope_value(session_id),
+        )
         with self._lock:
             if task_id in self._active_task_ids:
                 return TaskExecutionSlot(task_id=task_id, _state=self)
-            if len(self._active_task_ids) >= max_concurrent:
-                self._remember_waiting(task_id)
+            if (
+                len(self._active_task_ids) >= max_concurrent
+                or self._scope_limit_reached(
+                    scope=scope,
+                    max_concurrent_per_user=max_concurrent_per_user,
+                    max_concurrent_per_session=max_concurrent_per_session,
+                )
+            ):
+                self._remember_waiting(task_id, scope)
                 return None
             self._forget_waiting(task_id)
+            self._task_scopes[task_id] = scope
             self._active_task_ids.append(task_id)
             return TaskExecutionSlot(task_id=task_id, _state=self)
 
@@ -49,6 +81,7 @@ class TaskQueueState:
                 for active_task_id in self._active_task_ids
                 if active_task_id != task_id
             ]
+            self._task_scopes.pop(task_id, None)
 
     def forget_waiting(self, task_id: str) -> None:
         with self._lock:
@@ -82,8 +115,10 @@ class TaskQueueState:
         with self._lock:
             self._active_task_ids.clear()
             self._waiting_task_ids.clear()
+            self._task_scopes.clear()
 
-    def _remember_waiting(self, task_id: str) -> None:
+    def _remember_waiting(self, task_id: str, scope: TaskQueueScope) -> None:
+        self._task_scopes[task_id] = scope
         if task_id not in self._waiting_task_ids:
             self._waiting_task_ids.append(task_id)
 
@@ -93,10 +128,66 @@ class TaskQueueState:
             for waiting_task_id in self._waiting_task_ids
             if waiting_task_id != task_id
         ]
+        if task_id not in self._active_task_ids:
+            self._task_scopes.pop(task_id, None)
+
+    def _scope_limit_reached(
+        self,
+        *,
+        scope: TaskQueueScope,
+        max_concurrent_per_user: int | None,
+        max_concurrent_per_session: int | None,
+    ) -> bool:
+        if (
+            max_concurrent_per_user is not None
+            and scope.user_id
+            and self._active_count_for_scope(user_id=scope.user_id)
+            >= max_concurrent_per_user
+        ):
+            return True
+        if (
+            max_concurrent_per_session is not None
+            and scope.session_id
+            and self._active_count_for_scope(session_id=scope.session_id)
+            >= max_concurrent_per_session
+        ):
+            return True
+        return False
+
+    def _active_count_for_scope(
+        self,
+        *,
+        user_id: str | None = None,
+        session_id: str | None = None,
+    ) -> int:
+        count = 0
+        for task_id in self._active_task_ids:
+            scope = self._task_scopes.get(task_id)
+            if scope is None:
+                continue
+            if user_id is not None and scope.user_id == user_id:
+                count += 1
+            elif session_id is not None and scope.session_id == session_id:
+                count += 1
+        return count
 
 
 def _normalize_max_concurrent(max_concurrent: int) -> int:
     return max(1, int(max_concurrent or 1))
+
+
+def _normalize_optional_limit(limit: int | None) -> int | None:
+    if limit is None:
+        return None
+    normalized = int(limit or 0)
+    if normalized <= 0:
+        return None
+    return normalized
+
+
+def _normalize_scope_value(value: str | None) -> str | None:
+    normalized = str(value or "").strip()
+    return normalized or None
 
 
 _TASK_QUEUE_STATE = TaskQueueState()
@@ -106,10 +197,18 @@ def try_acquire_task_execution_slot(
     *,
     task_id: str,
     max_concurrent: int,
+    user_id: str | None = None,
+    session_id: str | None = None,
+    max_concurrent_per_user: int | None = None,
+    max_concurrent_per_session: int | None = None,
 ) -> TaskExecutionSlot | None:
     return _TASK_QUEUE_STATE.try_acquire(
         task_id=task_id,
         max_concurrent=max_concurrent,
+        user_id=user_id,
+        session_id=session_id,
+        max_concurrent_per_user=max_concurrent_per_user,
+        max_concurrent_per_session=max_concurrent_per_session,
     )
 
 
