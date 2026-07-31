@@ -65,11 +65,12 @@ class TaskQueueState:
                     max_concurrent_per_user=max_concurrent_per_user,
                     max_concurrent_per_session=max_concurrent_per_session,
                 )
-                or self._has_older_eligible_waiting_task(
+                or self._older_eligible_waiting_count(
                     task_id=task_id,
                     max_concurrent_per_user=max_concurrent_per_user,
                     max_concurrent_per_session=max_concurrent_per_session,
                 )
+                >= (max_concurrent - len(self._active_task_ids))
             ):
                 self._remember_waiting(task_id, scope)
                 return None
@@ -176,24 +177,25 @@ class TaskQueueState:
                 count += 1
         return count
 
-    def _has_older_eligible_waiting_task(
+    def _older_eligible_waiting_count(
         self,
         *,
         task_id: str,
         max_concurrent_per_user: int | None,
         max_concurrent_per_session: int | None,
-    ) -> bool:
+    ) -> int:
+        count = 0
         for waiting_task_id in self._waiting_task_ids:
             if waiting_task_id == task_id:
-                return False
+                return count
             waiting_scope = self._task_scopes.get(waiting_task_id, TaskQueueScope())
             if not self._scope_limit_reached(
                 scope=waiting_scope,
                 max_concurrent_per_user=max_concurrent_per_user,
                 max_concurrent_per_session=max_concurrent_per_session,
             ):
-                return True
-        return False
+                count += 1
+        return count
 
 
 def _normalize_max_concurrent(max_concurrent: int) -> int:

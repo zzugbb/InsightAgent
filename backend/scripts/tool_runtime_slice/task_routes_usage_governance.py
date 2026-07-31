@@ -507,6 +507,71 @@ class TaskRoutesUsageGovernanceMixin:
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
 
+    def test_task_queue_service_allows_new_task_when_capacity_can_fit_older_waiters(self) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-fifo-capacity-active",
+                user_id="user-active",
+                session_id="session-active",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(active_slot)
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-fifo-capacity-old",
+                    user_id="user-old",
+                    session_id="session-old",
+                    max_concurrent=1,
+                )
+            )
+
+            new_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-fifo-capacity-new",
+                user_id="user-new",
+                session_id="session-new",
+                max_concurrent=3,
+            )
+            self.assertIsNotNone(new_slot)
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=3,
+                    task_id="task-fifo-capacity-old",
+                ),
+                {
+                    "active_count": 2,
+                    "max_concurrent": 3,
+                    "waiting_count": 1,
+                    "wait_position": 1,
+                },
+            )
+            old_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-fifo-capacity-old",
+                user_id="user-old",
+                session_id="session-old",
+                max_concurrent=3,
+            )
+            self.assertIsNotNone(old_slot)
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(max_concurrent=3),
+                {
+                    "active_count": 3,
+                    "max_concurrent": 3,
+                    "waiting_count": 0,
+                    "wait_position": None,
+                },
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
     def test_cancel_queued_task_forgets_waiting_queue_entry(self) -> None:
         original_get_task = task_routes_module.get_task
         original_update_task_status = task_routes_module.update_task_status
