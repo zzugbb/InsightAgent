@@ -10,25 +10,26 @@
 - provider/source/settings/file-backed registry 治理已覆盖 direct source、named provider/loader、provider/loader factory、factory alias、profile reset、forward reference 与 diagnostics 并回。
 - `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口继续保留，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题拆到 `backend/scripts/tool_runtime_slice/`；二次细分后最大主题模块约 4.7k 行。
 - `app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `app/services/tool_runtime_planning.py`、`app/services/tool_runtime_execution.py`、`app/services/tool_runtime_http_json.py`、`app/services/tool_runtime_registry.py`，外部 import facade 保持稳定；当前 facade 约 3.0k 行。
-- `queue-and-concurrency-lite` 已进入刷新恢复/完整复验阶段：`queued` 已进入任务状态标准化、label/rank、stream gate 与 create 默认状态；`app/services/task_queue_service.py` 提供单进程执行槽位、安全等待快照与等待项移除入口，SSE 执行入口拿到槽位后才切 `running`，等待期间只暴露计数与当前任务 `wait_position`，queued cancel 会移出等待队列，默认 `TASK_QUEUE_MAX_CONCURRENT=32`，低并发 backend queue e2e、前端 Chromium queued recover/cancel、running cancel 终态与 Task Center session/global 多任务隔离专项均已覆盖。
+- `queue-and-concurrency-lite` 首轮已进入收尾核对：`queued` 已进入任务状态标准化、label/rank、stream gate 与 create 默认状态；`app/services/task_queue_service.py` 提供单进程执行槽位、安全等待快照与等待项移除入口，SSE 执行入口拿到槽位后才切 `running`，等待期间只暴露计数与当前任务 `wait_position`，queued cancel 会移出等待队列，默认 `TASK_QUEUE_MAX_CONCURRENT=32`，低并发 backend queue e2e、前端 Chromium queued recover/cancel、running cancel 终态、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 均已覆盖。
 - 默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1719/1719` 通过；本轮 queue/cancel slice：`-k queue`、`-k cancel`、`-k task` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1719/1719` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 通过
 - frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 通过；默认 full 环境下该低并发专项显式 skip，避免污染完整 Chromium
 - frontend running cancel Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "running task cancel reaches"` 通过
 - frontend multi-task Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "task center separates active session"` 通过
+- frontend reload isolation Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "reload keeps background session stream"` 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
-- 完整 Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47` 通过；曾暴露 `TASK_QUEUE_MAX_CONCURRENT=4` 导致 4-worker e2e 排队超时，已将默认上限调为 `32`；低并发排队语义现由 slice 与 backend queue e2e phase 双重覆盖
+- 完整 Chromium e2e：真实 backend/frontend 服务下 `bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001` 通过，`50 passed / 1 skipped`；低并发排队语义现由 slice 与 backend queue e2e phase 双重覆盖
 - `git diff --check`：通过
 - 后续运行 backend slice、启动 backend、跑 backend e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 venv 与提权边界，避免重复触发本机端口 / `.git/index.lock` 权限错误。
 
 ## 下一步后端计划
 
-1. `queue-and-concurrency-lite`：下一步补刷新恢复/跨 session 深水位专项，并择机复跑完整 Chromium；后续再扩到按用户/按 session 的并发策略。
+1. `queue-and-concurrency-lite`：首轮刷新恢复、跨 session 深水位与完整 Chromium 已补齐；下一步做主线收尾判定，若无新问题再进入按用户/按 session 并发策略或下一核心主线。
 2. `pre-flight cleanup`：文档瘦身与 `backend/scripts/test_tool_runtime_slice.py` 主题拆分已完成，保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口不变。
 3. `tool_runtime.py` 分阶段抽模块：`tool_runtime_planning.py`、`tool_runtime_execution.py`、`tool_runtime_http_json.py`、`tool_runtime_registry.py` 已完成 facade 拆分，保留现有 import facade；下一轮不再继续拆分。
 4. `registry-governance` 与 `rag-governance-hardening` 作为后续维护线，不和第一轮队列状态机混在同一改动里。

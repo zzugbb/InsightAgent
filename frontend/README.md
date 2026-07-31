@@ -10,7 +10,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `real-tool-execution` 当前验收基线已完成收尾：workbench / live store / model settings 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 前端继续保持与后端 SSE / trace / export 契约稳定对齐，不为真实工具执行新增独立本地语义分支。
 - 下一主线启动前的仓库 pre-flight 已完成：后端 runtime slice 测试二次细分完成，`tool_runtime.py` 已抽出 planner/execution/HTTP JSON/registry facade 模块，原测试入口保持不变。
-- 下一核心开发主线跟随后端切到 `queue-and-concurrency-lite`：后端已接入 create 默认 queued、进程内执行槽位、queued SSE state、queued cancel 等待项移除与低并发 queue 专项 e2e；前端已把活跃任务识别扩展为 `queued/pending/running`，能从安全 queue snapshot 显示当前任务排队位置，并在取消/timeout/完成与 queued 恢复时清理或保留正确 phase，当前已覆盖工作台恢复、Task Center、Inspector、任务详情页、Chromium e2e helper、queued recover/cancel、running cancel 终态与 Task Center session/global 多任务隔离专项。
+- 下一核心开发主线跟随后端切到 `queue-and-concurrency-lite`：后端已接入 create 默认 queued、进程内执行槽位、queued SSE state、queued cancel 等待项移除与低并发 queue 专项 e2e；前端已把活跃任务识别扩展为 `queued/pending/running`，能从安全 queue snapshot 显示当前任务排队位置，并在取消/timeout/完成与 queued 恢复时清理或保留正确 phase，当前已覆盖工作台恢复、Task Center、Inspector、任务详情页、Chromium e2e helper、queued recover/cancel、running cancel 终态、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium。
 
 ## 当前验证基线
 
@@ -20,17 +20,18 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 通过；默认 full 环境下该低并发专项显式 skip
 - frontend running cancel Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "running task cancel reaches"` 通过
 - frontend multi-task Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "task center separates active session"` 通过
-- 完整 Chromium e2e：真实 backend/frontend 生命周期内最终 full 复跑 `47/47` 通过；本轮修复 retryable stream error 被 `Task stream closed` 覆盖的竞态，remote 429 单条与 full 并发均通过
+- frontend reload isolation Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "reload keeps background session stream"` 通过
+- 完整 Chromium e2e：真实 backend/frontend 服务下 `bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - `git diff --check`：通过
 - 后续启动 frontend、访问本机 e2e 服务、跑 Chromium e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 Node/npm 路径与提权边界，避免重复触发端口 / `.git/index.lock` 权限错误。
 
 ## 下一步前端计划
 
-1. `queue-and-concurrency-lite`：下一步补刷新恢复/跨 session 深水位专项，并择机复跑完整 Chromium。
+1. `queue-and-concurrency-lite`：首轮刷新恢复、跨 session 深水位与完整 Chromium 已补齐；下一步做主线收尾判定，若无新问题再进入按用户/按 session 并发策略或下一核心主线。
 2. Workbench composer：继续细化 queued/running/cancel 后按钮 loading、重复 prompt resend、跨会话切换与刷新恢复。
 3. 任务详情页：继续保持 queued/running/terminal 回放、导出与 trace 契约稳定。
-4. e2e：下一步补刷新恢复、session 切换深水位与完整 Chromium 回归。
+4. e2e：保持 full Chromium、低并发 queue phase 与 targeted 边界专项作为进入下一主线前的回归门。
 
 ## 当前已有内容
 

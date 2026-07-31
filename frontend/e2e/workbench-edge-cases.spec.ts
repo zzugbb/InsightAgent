@@ -821,6 +821,65 @@ test("streaming state stays scoped when switching sessions and resumes on return
   await expect(composerSend).toBeEnabled({ timeout: 10_000 });
 });
 
+test("reload keeps background session stream detached until that session is active", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  const auth = await registerViaApi(request);
+  const sessionATitle = `pw-reload-stream-a-${Date.now()}`;
+  const sessionBTitle = `pw-reload-stream-b-${Date.now()}`;
+  await createSessionWithTitle(request, auth.access_token, sessionATitle);
+  await createSessionWithTitle(request, auth.access_token, sessionBTitle);
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await selectSessionByTitle(page, sessionATitle);
+
+  const composerInput = page.getByTestId("composer-input");
+  const composerSend = page.getByTestId("composer-send");
+  await composerInput.fill(
+    `[mock-slow-ms=110] reload-scoped-stream ${"stream ".repeat(720)}`,
+  );
+  await composerSend.click();
+
+  await expect(page.locator("article.message-row.assistant.live")).toBeVisible({
+    timeout: 20_000,
+  });
+  const runningTaskId = await waitForRunningTaskIdInSession({
+    request,
+    token: auth.access_token,
+  });
+
+  await selectSessionByTitle(page, sessionBTitle);
+  await expect(page.locator("article.message-row.assistant.live")).toHaveCount(0);
+
+  await page.reload();
+  await ensureWorkbenchReady(page, auth);
+  await selectSessionByTitle(page, sessionBTitle);
+  await openInspectorContextTab(page);
+
+  await expect(page.getByTestId("chat-recovery-notice")).toHaveCount(0);
+  await expect(
+    page.locator('[data-testid="inspector-task-cancel"]:visible'),
+  ).toHaveCount(0);
+  await expect(page.locator("article.message-row.assistant.live")).toHaveCount(0);
+  await composerInput.fill("session b stays editable after reload");
+  await expect(composerSend).toBeEnabled({ timeout: 15_000 });
+
+  await selectSessionByTitle(page, sessionATitle);
+  const recoveredCancel = await waitForContextCancelButton(page);
+  await recoveredCancel.click();
+  await waitForTaskStatus({
+    request,
+    token: auth.access_token,
+    taskId: runningTaskId,
+    expected: /cancelled|canceled/,
+  });
+  await expect(composerSend).toBeEnabled({ timeout: 15_000 });
+});
+
 test("task center separates active session tasks from global concurrent tasks", async ({
   page,
   request,
