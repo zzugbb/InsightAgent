@@ -1167,6 +1167,51 @@ class TaskRoutesUsageGovernanceMixin:
                 expected_max_concurrent=2,
             )
 
+    def test_backend_queue_e2e_requires_settings_diagnostics_governance_fields(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+        base_payload = {
+            "max_concurrent": 2,
+            "active_count": 0,
+            "waiting_count": 0,
+            "available_slots": 2,
+            "max_concurrent_per_user": 0,
+            "max_concurrent_per_session": 0,
+            "poll_interval_sec": 0.1,
+            "per_user_limit_enabled": False,
+            "per_session_limit_enabled": False,
+            "fairness_limits_enabled": False,
+            "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+            "capacity_aware_fifo_enabled": True,
+        }
+
+        required_fields = (
+            "max_concurrent_per_user",
+            "max_concurrent_per_session",
+            "poll_interval_sec",
+            "per_user_limit_enabled",
+            "per_session_limit_enabled",
+            "fairness_limits_enabled",
+            "waiting_policy",
+            "capacity_aware_fifo_enabled",
+        )
+        for missing_field in required_fields:
+            with self.subTest(missing_field=missing_field):
+                payload = dict(base_payload)
+                payload.pop(missing_field)
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    f"{missing_field} is required",
+                ):
+                    queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                        payload,
+                        expected_max_concurrent=2,
+                    )
+
     def test_backend_queue_e2e_rejects_inconsistent_has_waiting_tasks_diagnostic(
         self,
     ) -> None:

@@ -191,6 +191,20 @@ def assert_safe_queue_settings_diagnostics(
             count_field in diagnostics,
             f"{count_field} is required: {diagnostics}",
         )
+    for governance_field in (
+        "max_concurrent_per_user",
+        "max_concurrent_per_session",
+        "poll_interval_sec",
+        "per_user_limit_enabled",
+        "per_session_limit_enabled",
+        "fairness_limits_enabled",
+        "waiting_policy",
+        "capacity_aware_fifo_enabled",
+    ):
+        _assert(
+            governance_field in diagnostics,
+            f"{governance_field} is required: {diagnostics}",
+        )
     active_count = int(diagnostics.get("active_count") or 0)
     waiting_count = int(diagnostics.get("waiting_count") or 0)
     available_slots = int(diagnostics.get("available_slots") or 0)
