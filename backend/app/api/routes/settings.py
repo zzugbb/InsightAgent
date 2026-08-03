@@ -10,6 +10,7 @@ from app.api.deps import get_current_user
 from app.config import get_settings
 from app.db import get_database_locator
 from app.services.audit_service import safe_record_audit_event
+from app.services.chat_persistence_service import get_session
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
 from app.services.task_queue_service import get_task_queue_snapshot
 from app.services.tool_runtime import (
@@ -474,6 +475,7 @@ def _build_task_queue_diagnostics(
     *,
     runtime_settings: object,
     current_user_id: str | None = None,
+    current_session_id: str | None = None,
 ) -> dict[str, object]:
     max_concurrent = max(
         1,
@@ -498,6 +500,7 @@ def _build_task_queue_diagnostics(
     queue_snapshot = get_task_queue_snapshot(
         max_concurrent=max_concurrent,
         user_id=current_user_id,
+        session_id=current_session_id,
     )
     active_count = max(0, int(queue_snapshot.get("active_count", 0) or 0))
     waiting_count = max(0, int(queue_snapshot.get("waiting_count", 0) or 0))
@@ -553,6 +556,31 @@ def _build_task_queue_diagnostics(
                 "current_user_limit_reached": (
                     max_concurrent_per_user > 0
                     and current_user_active_count >= max_concurrent_per_user
+                ),
+            }
+        )
+    if current_session_id:
+        current_session_active_count = max(
+            0,
+            int(queue_snapshot.get("active_count_for_session", 0) or 0),
+        )
+        current_session_waiting_count = max(
+            0,
+            int(queue_snapshot.get("waiting_count_for_session", 0) or 0),
+        )
+        diagnostics.update(
+            {
+                "current_session_active_count": current_session_active_count,
+                "current_session_waiting_count": current_session_waiting_count,
+                "current_session_available_slots": min(
+                    available_slots,
+                    max(0, max_concurrent_per_session - current_session_active_count)
+                    if max_concurrent_per_session > 0
+                    else available_slots,
+                ),
+                "current_session_limit_reached": (
+                    max_concurrent_per_session > 0
+                    and current_session_active_count >= max_concurrent_per_session
                 ),
             }
         )
@@ -625,6 +653,7 @@ def _build_settings_summary_response(
     runtime_settings: object | None = None,
     database_locator: str | None = None,
     current_user_id: str | None = None,
+    current_session_id: str | None = None,
 ) -> SettingsSummaryResponse:
     effective_settings = _merge_runtime_settings_for_summary(
         settings=settings,
@@ -662,24 +691,46 @@ def _build_settings_summary_response(
         task_queue_diagnostics=_build_task_queue_diagnostics(
             runtime_settings=effective_settings,
             current_user_id=current_user_id,
+            current_session_id=current_session_id,
         ),
         database_locator=database_locator or get_database_locator(),
     )
 
 
+def _resolve_current_session_id_for_task_queue_diagnostics(
+    *,
+    session_id: str | None,
+    user_id: str,
+) -> str | None:
+    normalized_session_id = session_id.strip() if session_id else ""
+    if not normalized_session_id:
+        return None
+    if get_session(normalized_session_id, user_id) is None:
+        return None
+    return normalized_session_id
+
+
 @router.get("", response_model=SettingsSummaryResponse)
-def get_settings_summary(current_user: dict = Depends(get_current_user)) -> SettingsSummaryResponse:
+def get_settings_summary(
+    session_id: str | None = None,
+    current_user: dict = Depends(get_current_user),
+) -> SettingsSummaryResponse:
     user_id = str(current_user["id"])
     settings = get_stored_settings(user_id)
     return _build_settings_summary_response(
         settings=settings,
         current_user_id=user_id,
+        current_session_id=_resolve_current_session_id_for_task_queue_diagnostics(
+            session_id=session_id,
+            user_id=user_id,
+        ),
     )
 
 
 @router.put("", response_model=SettingsSummaryResponse)
 def update_settings(
     payload: SettingsUpdateRequest,
+    session_id: str | None = None,
     current_user: dict = Depends(get_current_user),
 ) -> SettingsSummaryResponse:
     user_id = str(current_user["id"])
@@ -746,6 +797,10 @@ def update_settings(
     return _build_settings_summary_response(
         settings=settings,
         current_user_id=user_id,
+        current_session_id=_resolve_current_session_id_for_task_queue_diagnostics(
+            session_id=session_id,
+            user_id=user_id,
+        ),
     )
 
 

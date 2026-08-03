@@ -1043,6 +1043,9 @@ class TaskRoutesUsageGovernanceMixin:
                 "current_user_active_count": 1,
                 "current_user_waiting_count": 1,
                 "current_user_available_slots": 0,
+                "current_session_active_count": 1,
+                "current_session_waiting_count": 1,
+                "current_session_available_slots": 0,
                 "has_waiting_tasks": True,
                 "saturated": True,
                 "pressure_state": "saturated",
@@ -1062,6 +1065,9 @@ class TaskRoutesUsageGovernanceMixin:
             expected_current_user_active_count=1,
             expected_current_user_waiting_count=1,
             expected_current_user_available_slots=0,
+            expected_current_session_active_count=1,
+            expected_current_session_waiting_count=1,
+            expected_current_session_available_slots=0,
             expected_pressure_state="saturated",
         )
 
@@ -1429,6 +1435,107 @@ class TaskRoutesUsageGovernanceMixin:
                     "capacity_aware_fifo_enabled": True,
                 },
                 expected_max_concurrent=2,
+            )
+
+    def test_backend_queue_e2e_requires_current_session_count_fields_when_expected(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "current_session_active_count is required",
+        ):
+            queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                {
+                    "max_concurrent": 1,
+                    "active_count": 0,
+                    "waiting_count": 0,
+                    "available_slots": 1,
+                    "max_concurrent_per_user": 0,
+                    "max_concurrent_per_session": 0,
+                    "poll_interval_sec": 0.1,
+                    "per_user_limit_enabled": False,
+                    "per_session_limit_enabled": False,
+                    "fairness_limits_enabled": False,
+                    "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+                    "capacity_aware_fifo_enabled": True,
+                },
+                expected_max_concurrent=1,
+                expected_current_session_active_count=0,
+            )
+
+    def test_backend_queue_e2e_rejects_inconsistent_current_session_limit_reached(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "current_session_limit_reached should match per-session limit-active",
+        ):
+            queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                {
+                    "max_concurrent": 4,
+                    "active_count": 1,
+                    "waiting_count": 0,
+                    "available_slots": 3,
+                    "current_session_active_count": 1,
+                    "current_session_waiting_count": 0,
+                    "current_session_available_slots": 1,
+                    "current_session_limit_reached": True,
+                    "has_waiting_tasks": False,
+                    "saturated": False,
+                    "pressure_state": "active",
+                    "max_concurrent_per_user": 0,
+                    "max_concurrent_per_session": 2,
+                    "poll_interval_sec": 0.1,
+                    "per_user_limit_enabled": False,
+                    "per_session_limit_enabled": True,
+                    "fairness_limits_enabled": True,
+                    "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+                    "capacity_aware_fifo_enabled": True,
+                },
+                expected_max_concurrent=4,
+            )
+
+    def test_backend_queue_e2e_rejects_inconsistent_current_session_available_slots(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "current_session_available_slots should match per-session limit-active",
+        ):
+            queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                {
+                    "max_concurrent": 8,
+                    "active_count": 3,
+                    "waiting_count": 1,
+                    "available_slots": 5,
+                    "current_session_active_count": 1,
+                    "current_session_waiting_count": 1,
+                    "current_session_available_slots": 2,
+                    "max_concurrent_per_user": 0,
+                    "max_concurrent_per_session": 2,
+                    "poll_interval_sec": 0.1,
+                    "per_user_limit_enabled": False,
+                    "per_session_limit_enabled": True,
+                    "fairness_limits_enabled": True,
+                    "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+                    "capacity_aware_fifo_enabled": True,
+                },
+                expected_max_concurrent=8,
             )
 
     def test_cancel_queued_task_forgets_waiting_queue_entry(self) -> None:

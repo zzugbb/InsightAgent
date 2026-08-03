@@ -64,6 +64,10 @@ export type TaskQueueDiagnostics = {
   current_user_waiting_count?: number;
   current_user_available_slots?: number;
   current_user_limit_reached?: boolean;
+  current_session_active_count?: number;
+  current_session_waiting_count?: number;
+  current_session_available_slots?: number;
+  current_session_limit_reached?: boolean;
   has_waiting_tasks?: boolean;
   saturated?: boolean;
   pressure_state?: string;

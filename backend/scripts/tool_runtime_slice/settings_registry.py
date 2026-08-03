@@ -196,6 +196,7 @@ class SettingsRegistryMixin:
                 ),
                 database_locator="postgresql://demo",
                 current_user_id="settings-user",
+                current_session_id="settings-session-a",
             )
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
@@ -211,6 +212,10 @@ class SettingsRegistryMixin:
                 "current_user_waiting_count": 1,
                 "current_user_available_slots": 0,
                 "current_user_limit_reached": True,
+                "current_session_active_count": 1,
+                "current_session_waiting_count": 0,
+                "current_session_available_slots": 2,
+                "current_session_limit_reached": False,
                 "has_waiting_tasks": True,
                 "saturated": False,
                 "pressure_state": "scope_limited",
@@ -275,6 +280,7 @@ class SettingsRegistryMixin:
                 ),
                 database_locator="postgresql://demo",
                 current_user_id="settings-user",
+                current_session_id="settings-session-a",
             )
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
@@ -287,6 +293,165 @@ class SettingsRegistryMixin:
         self.assertFalse(
             summary.task_queue_diagnostics["current_user_limit_reached"],
         )
+        self.assertEqual(
+            summary.task_queue_diagnostics["current_session_available_slots"],
+            0,
+        )
+        self.assertFalse(
+            summary.task_queue_diagnostics["current_session_limit_reached"],
+        )
+
+    def test_build_settings_summary_response_caps_current_session_available_slots_by_session_limit(
+        self,
+    ) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="settings-session-active",
+                max_concurrent=8,
+                user_id="settings-user-a",
+                session_id="settings-session-a",
+                max_concurrent_per_session=1,
+            )
+            self.assertIsNotNone(active_slot)
+            waiting_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="settings-session-waiting",
+                max_concurrent=8,
+                user_id="settings-user-b",
+                session_id="settings-session-a",
+                max_concurrent_per_session=1,
+            )
+            self.assertIsNone(waiting_slot)
+
+            summary = _build_settings_summary_response(
+                settings=StoredSettings(
+                    mode="mock",
+                    provider="mock",
+                    model="mock-gpt",
+                    base_url=None,
+                    api_key=None,
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="default",
+                ),
+                runtime_settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="default",
+                    tool_registry_provider_sources_json=None,
+                    task_queue_max_concurrent=8,
+                    task_queue_max_concurrent_per_user=0,
+                    task_queue_max_concurrent_per_session=1,
+                    task_queue_poll_interval_sec=0.15,
+                ),
+                database_locator="postgresql://demo",
+                current_user_id="settings-user-a",
+                current_session_id="settings-session-a",
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
+        self.assertEqual(
+            summary.task_queue_diagnostics["current_session_active_count"],
+            1,
+        )
+        self.assertEqual(
+            summary.task_queue_diagnostics["current_session_waiting_count"],
+            1,
+        )
+        self.assertEqual(
+            summary.task_queue_diagnostics["current_session_available_slots"],
+            0,
+        )
+        self.assertTrue(
+            summary.task_queue_diagnostics["current_session_limit_reached"],
+        )
+
+    def test_get_settings_summary_passes_owned_session_id_to_queue_diagnostics(
+        self,
+    ) -> None:
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_session = settings_routes_module.get_session
+        original_build_settings_summary_response = (
+            settings_routes_module._build_settings_summary_response
+        )
+        captured_kwargs: dict[str, object] = {}
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.get_session = lambda session_id, user_id: (
+                {"id": session_id, "user_id": user_id}
+                if session_id == "settings-session-owned" and user_id == "user-1"
+                else None
+            )
+            settings_routes_module._build_settings_summary_response = (
+                lambda **kwargs: captured_kwargs.update(kwargs) or kwargs["settings"]
+            )
+
+            settings_routes_module.get_settings_summary(
+                session_id=" settings-session-owned ",
+                current_user={"id": "user-1"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_session = original_get_session
+            settings_routes_module._build_settings_summary_response = (
+                original_build_settings_summary_response
+            )
+
+        self.assertEqual(
+            captured_kwargs["current_session_id"],
+            "settings-session-owned",
+        )
+
+    def test_get_settings_summary_omits_unowned_session_id_from_queue_diagnostics(
+        self,
+    ) -> None:
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_session = settings_routes_module.get_session
+        original_build_settings_summary_response = (
+            settings_routes_module._build_settings_summary_response
+        )
+        captured_kwargs: dict[str, object] = {}
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.get_session = lambda _session_id, _user_id: None
+            settings_routes_module._build_settings_summary_response = (
+                lambda **kwargs: captured_kwargs.update(kwargs) or kwargs["settings"]
+            )
+
+            settings_routes_module.get_settings_summary(
+                session_id="settings-session-other",
+                current_user={"id": "user-1"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_session = original_get_session
+            settings_routes_module._build_settings_summary_response = (
+                original_build_settings_summary_response
+            )
+
+        self.assertIsNone(captured_kwargs["current_session_id"])
 
     def test_build_settings_summary_response_marks_default_task_queue_fairness_limits_disabled(
         self,

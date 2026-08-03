@@ -46,9 +46,11 @@ type ModelSettingsModalProps = {
   open: boolean;
   onClose: () => void;
   triggerRef?: RefObject<HTMLButtonElement | null>;
+  activeSessionId?: string | null;
 };
 
 export function ModelSettingsModal({
+  activeSessionId = null,
   open,
   onClose,
 }: ModelSettingsModalProps) {
@@ -65,10 +67,17 @@ export function ModelSettingsModal({
     | "available_tool_registry_profile_details"
     | "available_tool_registry_provider_source_details"
   > | null>(null);
+  const normalizedActiveSessionId = activeSessionId?.trim() ?? "";
+  const settingsUrl = normalizedActiveSessionId
+    ? `${API_BASE_URL}/api/settings?session_id=${encodeURIComponent(
+        normalizedActiveSessionId,
+      )}`
+    : `${API_BASE_URL}/api/settings`;
+  const settingsQueryKey = ["settings", "model", normalizedActiveSessionId];
 
   const { data, isLoading, error, isError } = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => apiJson<SettingsSummary>(`${API_BASE_URL}/api/settings`),
+    queryKey: settingsQueryKey,
+    queryFn: () => apiJson<SettingsSummary>(settingsUrl),
   });
 
   useEffect(() => {
@@ -97,8 +106,9 @@ export function ModelSettingsModal({
 
   const saveMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      apiPutJson<SettingsSummary>(`${API_BASE_URL}/api/settings`, body),
+      apiPutJson<SettingsSummary>(settingsUrl, body),
     onSuccess: (nextSettings) => {
+      queryClient.setQueryData(settingsQueryKey, nextSettings);
       queryClient.setQueryData(["settings"], nextSettings);
       void queryClient.invalidateQueries({ queryKey: ["settings"] });
       setForm((c) => ({ ...c, api_key: "" }));

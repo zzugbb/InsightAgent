@@ -10,6 +10,7 @@ from queue import Empty, Queue
 from threading import Thread
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
@@ -18,6 +19,12 @@ class HttpResult:
     status: int
     text: str
     json_body: Any | None
+
+
+@dataclass(frozen=True)
+class CreatedTask:
+    task_id: str
+    session_id: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -155,6 +162,9 @@ def assert_safe_queue_settings_diagnostics(
     expected_current_user_active_count: int | None = None,
     expected_current_user_waiting_count: int | None = None,
     expected_current_user_available_slots: int | None = None,
+    expected_current_session_active_count: int | None = None,
+    expected_current_session_waiting_count: int | None = None,
+    expected_current_session_available_slots: int | None = None,
     expected_pressure_state: str | None = None,
 ) -> dict[str, Any]:
     _assert(
@@ -340,6 +350,111 @@ def assert_safe_queue_settings_diagnostics(
                 f"{expected_current_user_available_slots}: {diagnostics}"
             ),
         )
+    if expected_current_session_active_count is not None:
+        _assert(
+            "current_session_active_count" in diagnostics,
+            f"current_session_active_count is required: {diagnostics}",
+        )
+        current_session_active_count = int(
+            diagnostics.get("current_session_active_count") or 0
+        )
+        _assert(
+            current_session_active_count == expected_current_session_active_count,
+            (
+                "current_session_active_count should be "
+                f"{expected_current_session_active_count}: {diagnostics}"
+            ),
+        )
+    if expected_current_session_waiting_count is not None:
+        _assert(
+            "current_session_waiting_count" in diagnostics,
+            f"current_session_waiting_count is required: {diagnostics}",
+        )
+        current_session_waiting_count = int(
+            diagnostics.get("current_session_waiting_count") or 0
+        )
+        _assert(
+            current_session_waiting_count == expected_current_session_waiting_count,
+            (
+                "current_session_waiting_count should be "
+                f"{expected_current_session_waiting_count}: {diagnostics}"
+            ),
+        )
+    if "current_session_available_slots" in diagnostics:
+        current_session_available_slots = int(
+            diagnostics.get("current_session_available_slots") or 0
+        )
+        current_session_active_count = int(
+            diagnostics.get("current_session_active_count") or 0
+        )
+        _assert(
+            current_session_available_slots >= 0,
+            f"current_session_available_slots should be non-negative: {diagnostics}",
+        )
+        _assert(
+            current_session_available_slots <= available_slots,
+            (
+                "current_session_available_slots should not exceed "
+                f"available_slots: {diagnostics}"
+            ),
+        )
+        if per_session_limit > 0:
+            _assert(
+                current_session_available_slots
+                == min(
+                    available_slots,
+                    max(0, per_session_limit - current_session_active_count),
+                ),
+                (
+                    "current_session_available_slots should match per-session "
+                    f"limit-active and global capacity: {diagnostics}"
+                ),
+            )
+        else:
+            _assert(
+                current_session_available_slots == available_slots,
+                (
+                    "current_session_available_slots should match global "
+                    f"capacity when per-session limit is disabled: {diagnostics}"
+                ),
+            )
+    if "current_session_limit_reached" in diagnostics:
+        _assert(
+            "current_session_active_count" in diagnostics,
+            (
+                "current_session_limit_reached requires "
+                f"current_session_active_count: {diagnostics}"
+            ),
+        )
+        current_session_active_count = int(
+            diagnostics.get("current_session_active_count") or 0
+        )
+        _assert(
+            bool(diagnostics.get("current_session_limit_reached"))
+            == (
+                per_session_limit > 0
+                and current_session_active_count >= per_session_limit
+            ),
+            (
+                "current_session_limit_reached should match per-session "
+                f"limit-active: {diagnostics}"
+            ),
+        )
+    if expected_current_session_available_slots is not None:
+        _assert(
+            "current_session_available_slots" in diagnostics,
+            f"current_session_available_slots is required: {diagnostics}",
+        )
+        current_session_available_slots = int(
+            diagnostics.get("current_session_available_slots") or 0
+        )
+        _assert(
+            current_session_available_slots == expected_current_session_available_slots,
+            (
+                "current_session_available_slots should be "
+                f"{expected_current_session_available_slots}: {diagnostics}"
+            ),
+        )
     _assert(
         bool(diagnostics.get("per_user_limit_enabled")) == (per_user_limit > 0),
         f"per-user fairness flag does not match limit: {diagnostics}",
@@ -379,11 +494,18 @@ def _assert_queue_settings_diagnostics(
     expected_current_user_active_count: int | None = None,
     expected_current_user_waiting_count: int | None = None,
     expected_current_user_available_slots: int | None = None,
+    expected_current_session_active_count: int | None = None,
+    expected_current_session_waiting_count: int | None = None,
+    expected_current_session_available_slots: int | None = None,
     expected_pressure_state: str | None = None,
+    session_id: str | None = None,
 ) -> None:
+    settings_url = f"{base_url}/api/settings"
+    if session_id:
+        settings_url = f"{settings_url}?{urlencode({'session_id': session_id})}"
     settings = _request(
         method="GET",
-        url=f"{base_url}/api/settings",
+        url=settings_url,
         token=token,
     )
     _assert(
@@ -400,6 +522,9 @@ def _assert_queue_settings_diagnostics(
         expected_current_user_active_count=expected_current_user_active_count,
         expected_current_user_waiting_count=expected_current_user_waiting_count,
         expected_current_user_available_slots=expected_current_user_available_slots,
+        expected_current_session_active_count=expected_current_session_active_count,
+        expected_current_session_waiting_count=expected_current_session_waiting_count,
+        expected_current_session_available_slots=expected_current_session_available_slots,
         expected_pressure_state=expected_pressure_state,
     )
 
@@ -409,7 +534,7 @@ def _long_prompt(prefix: str, words: int) -> str:
     return f"{prefix} " + ("stream " * safe_words).strip()
 
 
-def _create_task(base_url: str, token: str, user_input: str) -> str:
+def _create_task(base_url: str, token: str, user_input: str) -> CreatedTask:
     create_task = _request(
         method="POST",
         url=f"{base_url}/api/tasks",
@@ -423,7 +548,12 @@ def _create_task(base_url: str, token: str, user_input: str) -> str:
     )
     task_id = str(create_task.json_body.get("task_id", "")).strip()
     _assert(bool(task_id), f"create task missing task_id: {create_task.text[:300]}")
-    return task_id
+    session_id = str(create_task.json_body.get("session_id", "")).strip()
+    _assert(
+        bool(session_id),
+        f"create task missing session_id: {create_task.text[:300]}",
+    )
+    return CreatedTask(task_id=task_id, session_id=session_id)
 
 
 def _get_task_status_normalized(base_url: str, token: str, task_id: str) -> str:
@@ -628,7 +758,7 @@ def _join_stream(
 def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) -> None:
     print("[4/5] queue 场景：低并发下 queued 任务可取消并释放等待位")
     stream_timeout = float(args.stream_timeout)
-    active_task_id = _create_task(
+    active_task = _create_task(
         base_url,
         token,
         _long_prompt(
@@ -636,6 +766,7 @@ def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) 
             int(args.active_prompt_words),
         ),
     )
+    active_task_id = active_task.task_id
     active_thread, active_queue = _start_stream_worker(
         base_url=base_url,
         token=token,
@@ -651,11 +782,12 @@ def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) 
         failure_hint="active task did not enter running before queue test",
     )
 
-    queued_task_id = _create_task(
+    queued_task = _create_task(
         base_url,
         token,
         f"queue-cancel-{secrets.token_hex(3)}",
     )
+    queued_task_id = queued_task.task_id
     queued_thread, queued_queue = _start_stream_worker(
         base_url=base_url,
         token=token,
@@ -682,7 +814,11 @@ def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) 
         expected_current_user_active_count=1,
         expected_current_user_waiting_count=1,
         expected_current_user_available_slots=0,
+        expected_current_session_active_count=1,
+        expected_current_session_waiting_count=0,
+        expected_current_session_available_slots=0,
         expected_pressure_state="saturated",
+        session_id=active_task.session_id,
     )
     time.sleep(max(0.0, float(args.queue_delay_sec)))
 
@@ -730,11 +866,12 @@ def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) 
         label="active cleanup",
     )
 
-    followup_task_id = _create_task(
+    followup_task = _create_task(
         base_url,
         token,
         f"queue-followup-{secrets.token_hex(3)}",
     )
+    followup_task_id = followup_task.task_id
     followup = _request(
         method="GET",
         url=f"{base_url}/api/tasks/{followup_task_id}/stream",

@@ -525,6 +525,7 @@ export function SidebarSettingsMenu({
       {popoverContent ? createPortal(popoverContent, document.body) : null}
 
       <ModelSettingsModal
+        activeSessionId={activeSessionId}
         open={modelOpen}
         onClose={() => setModelOpen(false)}
         triggerRef={triggerRef}

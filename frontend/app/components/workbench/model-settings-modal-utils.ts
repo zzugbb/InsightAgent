@@ -262,6 +262,42 @@ export function formatTaskQueueDiagnosticsSummary(
   if (diagnostics.current_user_limit_reached) {
     parts.push("your limit reached");
   }
+  if (
+    typeof diagnostics.current_session_active_count === "number"
+    && Number.isFinite(diagnostics.current_session_active_count)
+  ) {
+    parts.push(
+      `session active ${Math.max(
+        0,
+        Math.trunc(diagnostics.current_session_active_count),
+      )}`,
+    );
+  }
+  if (
+    typeof diagnostics.current_session_waiting_count === "number"
+    && Number.isFinite(diagnostics.current_session_waiting_count)
+  ) {
+    parts.push(
+      `session waiting ${Math.max(
+        0,
+        Math.trunc(diagnostics.current_session_waiting_count),
+      )}`,
+    );
+  }
+  if (
+    typeof diagnostics.current_session_available_slots === "number"
+    && Number.isFinite(diagnostics.current_session_available_slots)
+  ) {
+    parts.push(
+      `session available ${Math.max(
+        0,
+        Math.trunc(diagnostics.current_session_available_slots),
+      )}`,
+    );
+  }
+  if (diagnostics.current_session_limit_reached) {
+    parts.push("session limit reached");
+  }
   const pressureState =
     typeof diagnostics.pressure_state === "string"
       ? diagnostics.pressure_state.trim().toLowerCase()
