@@ -249,6 +249,58 @@ class TaskRoutesUsageGovernanceMixin:
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
 
+    def test_task_queue_service_duplicate_active_slot_release_does_not_free_original(
+        self,
+    ) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            original_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-active-duplicate",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(original_slot)
+            duplicate_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-active-duplicate",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(duplicate_slot)
+
+            duplicate_slot.release()
+
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=1,
+                    task_id="task-active-duplicate",
+                ),
+                {
+                    "active_count": 1,
+                    "max_concurrent": 1,
+                    "waiting_count": 0,
+                    "wait_position": 0,
+                },
+            )
+
+            original_slot.release()
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(max_concurrent=1),
+                {
+                    "active_count": 0,
+                    "max_concurrent": 1,
+                    "waiting_count": 0,
+                    "wait_position": None,
+                },
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
     def test_task_queue_service_enforces_per_user_limit_without_blocking_other_users(self) -> None:
         task_queue_module = __import__(
             "app.services.task_queue_service",

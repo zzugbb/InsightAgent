@@ -8,12 +8,14 @@ from threading import Lock
 class TaskExecutionSlot:
     task_id: str
     _state: "TaskQueueState"
+    _owns_slot: bool = True
     _released: bool = False
 
     def release(self) -> None:
         if self._released:
             return
-        self._state.release(self.task_id)
+        if self._owns_slot:
+            self._state.release(self.task_id)
         self._released = True
 
     def __enter__(self) -> "TaskExecutionSlot":
@@ -57,7 +59,11 @@ class TaskQueueState:
         )
         with self._lock:
             if task_id in self._active_task_ids:
-                return TaskExecutionSlot(task_id=task_id, _state=self)
+                return TaskExecutionSlot(
+                    task_id=task_id,
+                    _state=self,
+                    _owns_slot=False,
+                )
             if (
                 len(self._active_task_ids) >= max_concurrent
                 or self._scope_limit_reached(
