@@ -11,11 +11,11 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `backend/app/services/tool_runtime_planning.py`、`backend/app/services/tool_runtime_execution.py`、`backend/app/services/tool_runtime_http_json.py`、`backend/app/services/tool_runtime_registry.py`，`from app.services.tool_runtime import ...` 外部导出保持不变；当前 facade 约 3.0k 行。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - `queue-and-concurrency-lite` 首轮主线已完成：任务创建默认进入 `queued`，SSE 执行入口在拿到进程内执行槽位后才切 `running`；默认单进程并发上限为 `TASK_QUEUE_MAX_CONCURRENT=32`，等待期间发送安全 queue snapshot（计数与当前任务 `wait_position`，不暴露内部 task ids），queued cancel 会移出等待队列，前端 live phase 可显示排队位置并在取消/恢复时保持正确 phase；低并发 backend/frontend queue phase、running cancel 终态、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 均已 fresh 复验。
-- `concurrency-fairness-policy` 已启动：队列执行槽位新增可选 `TASK_QUEUE_MAX_CONCURRENT_PER_USER` 与 `TASK_QUEUE_MAX_CONCURRENT_PER_SESSION`，默认 `0` 关闭，开启后可限制单用户/单会话并发且不阻塞其他用户/会话；等待队列现在保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充；`GET /api/settings` 现暴露只读 `task_queue_diagnostics`，前端运行设置可查看全局/用户/session 上限、active/waiting 安全计数、fairness 开关、capacity-aware FIFO 等待策略与 poll interval，backend queue e2e 脚本会校验该诊断字段并复用已被 slice 覆盖的安全 queue snapshot 断言，不改变外部 SSE / trace / export shape。
+- `concurrency-fairness-policy` 已启动：队列执行槽位新增可选 `TASK_QUEUE_MAX_CONCURRENT_PER_USER` 与 `TASK_QUEUE_MAX_CONCURRENT_PER_SESSION`，默认 `0` 关闭，开启后可限制单用户/单会话并发且不阻塞其他用户/会话；等待队列现在保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充；`GET /api/settings` 现暴露只读 `task_queue_diagnostics`，前端运行设置可查看全局/用户/session 上限、active/waiting 安全计数、fairness 开关、capacity-aware FIFO 等待策略与 poll interval，backend queue e2e 脚本会校验 idle 与排队压力下的 settings 安全计数并复用已被 slice 覆盖的安全 queue snapshot 断言，不改变外部 SSE / trace / export shape。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1729/1729` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1731/1731` 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：本轮通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 通过
@@ -30,7 +30,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 ## 当前开发计划
 
-1. `concurrency-fairness-policy`：当前主线；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings `task_queue_diagnostics` 等待策略与运行态安全计数诊断、backend queue e2e-like 诊断断言与安全 queue snapshot helper 覆盖、前端运行设置可观测入口，下一步按风险补真实低并发 e2e 复验或更细公平策略。
+1. `concurrency-fairness-policy`：当前主线；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings `task_queue_diagnostics` 等待策略与运行态安全计数诊断、backend queue e2e-like idle/压力诊断断言与安全 queue snapshot helper 覆盖、前端运行设置可观测入口，下一步按风险补真实低并发 e2e 复验或更细公平策略。
 2. `pre-flight cleanup`：文档流水账压缩与 `test_tool_runtime_slice.py` 主题拆分已完成，原测试入口命令保持不变。
 3. `registry-governance`：作为维护线继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
 4. `rag-governance-hardening`：后续补知识库版本化、来源治理与更细粒度 shared 规则。

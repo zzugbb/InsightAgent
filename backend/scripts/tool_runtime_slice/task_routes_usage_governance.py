@@ -668,6 +668,67 @@ class TaskRoutesUsageGovernanceMixin:
                 expected_wait_position=1,
             )
 
+    def test_backend_queue_e2e_asserts_safe_settings_diagnostics_payload(self) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+
+        queue_e2e_module.assert_safe_queue_settings_diagnostics(
+            {
+                "max_concurrent": 1,
+                "active_count": 1,
+                "waiting_count": 1,
+                "available_slots": 0,
+                "max_concurrent_per_user": 0,
+                "max_concurrent_per_session": 0,
+                "poll_interval_sec": 0.1,
+                "per_user_limit_enabled": False,
+                "per_session_limit_enabled": False,
+                "fairness_limits_enabled": False,
+                "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+                "capacity_aware_fifo_enabled": True,
+            },
+            expected_max_concurrent=1,
+            expected_active_count=1,
+            expected_waiting_count=1,
+            expected_available_slots=0,
+        )
+
+    def test_backend_queue_e2e_rejects_settings_diagnostics_that_leak_task_ids(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "task_queue_diagnostics leaked active_task_ids",
+        ):
+            queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                {
+                    "max_concurrent": 1,
+                    "active_count": 1,
+                    "waiting_count": 1,
+                    "available_slots": 0,
+                    "max_concurrent_per_user": 0,
+                    "max_concurrent_per_session": 0,
+                    "poll_interval_sec": 0.1,
+                    "per_user_limit_enabled": False,
+                    "per_session_limit_enabled": False,
+                    "fairness_limits_enabled": False,
+                    "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+                    "capacity_aware_fifo_enabled": True,
+                    "active_task_ids": ["task-active"],
+                },
+                expected_max_concurrent=1,
+                expected_active_count=1,
+                expected_waiting_count=1,
+                expected_available_slots=0,
+            )
+
     def test_cancel_queued_task_forgets_waiting_queue_entry(self) -> None:
         original_get_task = task_routes_module.get_task
         original_update_task_status = task_routes_module.update_task_status

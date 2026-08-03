@@ -145,28 +145,57 @@ def _save_mock_settings(base_url: str, token: str) -> None:
     _assert(save.status == 200, f"settings save (mock) failed: {save.status} {save.text}")
 
 
-def _assert_queue_settings_diagnostics(base_url: str, token: str) -> None:
-    settings = _request(
-        method="GET",
-        url=f"{base_url}/api/settings",
-        token=token,
-    )
-    _assert(
-        settings.status == 200 and isinstance(settings.json_body, dict),
-        f"settings summary failed: {settings.status} {settings.text}",
-    )
-    diagnostics = settings.json_body.get("task_queue_diagnostics")
+def assert_safe_queue_settings_diagnostics(
+    diagnostics: dict[str, Any],
+    *,
+    expected_max_concurrent: int,
+    expected_active_count: int | None = None,
+    expected_waiting_count: int | None = None,
+    expected_available_slots: int | None = None,
+) -> dict[str, Any]:
     _assert(
         isinstance(diagnostics, dict),
-        f"settings summary missing task_queue_diagnostics: {settings.text[:300]}",
+        f"settings summary missing task_queue_diagnostics: {diagnostics}",
     )
     _assert(
-        diagnostics.get("max_concurrent") == 1,
+        diagnostics.get("max_concurrent") == expected_max_concurrent,
         (
-            "queue phase requires settings diagnostics max_concurrent=1; "
+            "queue phase settings diagnostics max_concurrent mismatch; "
             f"got {diagnostics}"
         ),
     )
+    _assert(
+        "active_task_ids" not in diagnostics,
+        "task_queue_diagnostics leaked active_task_ids",
+    )
+    _assert(
+        "waiting_task_ids" not in diagnostics,
+        "task_queue_diagnostics leaked waiting_task_ids",
+    )
+    active_count = int(diagnostics.get("active_count") or 0)
+    waiting_count = int(diagnostics.get("waiting_count") or 0)
+    available_slots = int(diagnostics.get("available_slots") or 0)
+    _assert(active_count >= 0, f"active_count should be non-negative: {diagnostics}")
+    _assert(waiting_count >= 0, f"waiting_count should be non-negative: {diagnostics}")
+    _assert(
+        available_slots == max(0, expected_max_concurrent - active_count),
+        f"available_slots should match max-active: {diagnostics}",
+    )
+    if expected_active_count is not None:
+        _assert(
+            active_count == expected_active_count,
+            f"active_count should be {expected_active_count}: {diagnostics}",
+        )
+    if expected_waiting_count is not None:
+        _assert(
+            waiting_count == expected_waiting_count,
+            f"waiting_count should be {expected_waiting_count}: {diagnostics}",
+        )
+    if expected_available_slots is not None:
+        _assert(
+            available_slots == expected_available_slots,
+            f"available_slots should be {expected_available_slots}: {diagnostics}",
+        )
     per_user_limit = int(diagnostics.get("max_concurrent_per_user") or 0)
     per_session_limit = int(diagnostics.get("max_concurrent_per_session") or 0)
     _assert(
@@ -186,6 +215,42 @@ def _assert_queue_settings_diagnostics(base_url: str, token: str) -> None:
     _assert(
         0 < poll_interval_sec <= 5,
         f"queue poll interval diagnostic should be positive: {diagnostics}",
+    )
+    _assert(
+        diagnostics.get("waiting_policy") == "capacity_aware_oldest_eligible_fifo",
+        f"queue waiting policy diagnostic mismatch: {diagnostics}",
+    )
+    _assert(
+        bool(diagnostics.get("capacity_aware_fifo_enabled")),
+        f"capacity-aware FIFO diagnostic should be enabled: {diagnostics}",
+    )
+    return diagnostics
+
+
+def _assert_queue_settings_diagnostics(
+    base_url: str,
+    token: str,
+    *,
+    expected_active_count: int | None = None,
+    expected_waiting_count: int | None = None,
+    expected_available_slots: int | None = None,
+) -> None:
+    settings = _request(
+        method="GET",
+        url=f"{base_url}/api/settings",
+        token=token,
+    )
+    _assert(
+        settings.status == 200 and isinstance(settings.json_body, dict),
+        f"settings summary failed: {settings.status} {settings.text}",
+    )
+    diagnostics = settings.json_body.get("task_queue_diagnostics")
+    assert_safe_queue_settings_diagnostics(
+        diagnostics,
+        expected_max_concurrent=1,
+        expected_active_count=expected_active_count,
+        expected_waiting_count=expected_waiting_count,
+        expected_available_slots=expected_available_slots,
     )
 
 
@@ -419,6 +484,13 @@ def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) 
             "TASK_QUEUE_MAX_CONCURRENT=1 for this e2e phase"
         ),
     )
+    _assert_queue_settings_diagnostics(
+        base_url,
+        token,
+        expected_active_count=1,
+        expected_waiting_count=1,
+        expected_available_slots=0,
+    )
     time.sleep(max(0.0, float(args.queue_delay_sec)))
 
     cancel = _request(
@@ -502,7 +574,13 @@ def main() -> None:
     print("  - OK: validate + save mock mode")
 
     print("[3/5] settings 诊断暴露低并发队列配置")
-    _assert_queue_settings_diagnostics(base_url, token)
+    _assert_queue_settings_diagnostics(
+        base_url,
+        token,
+        expected_active_count=0,
+        expected_waiting_count=0,
+        expected_available_slots=1,
+    )
     print("  - OK: task_queue_diagnostics matches queue phase")
 
     _run_queue_cancel_case(args, base_url, token)
