@@ -20,6 +20,12 @@ class SettingsRegistryMixin:
             SettingsSummaryResponse.model_fields["task_queue_diagnostics"].annotation,
             diagnostics_contract,
         )
+        self.assertIs(
+            settings_routes_module._build_task_queue_diagnostics.__annotations__.get(
+                "return"
+            ),
+            diagnostics_contract,
+        )
 
         required_keys = set(
             getattr(diagnostics_contract, "__required_keys__", frozenset())

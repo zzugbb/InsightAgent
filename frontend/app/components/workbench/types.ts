@@ -65,9 +65,9 @@ export type TaskQueueWaitingPolicy = "capacity_aware_oldest_eligible_fifo";
 
 export type TaskQueueDiagnostics = {
   max_concurrent: number;
-  active_count?: number;
-  waiting_count?: number;
-  available_slots?: number;
+  active_count: number;
+  waiting_count: number;
+  available_slots: number;
   current_user_active_count?: number;
   current_user_waiting_count?: number;
   current_user_available_slots?: number;
@@ -76,9 +76,9 @@ export type TaskQueueDiagnostics = {
   current_session_waiting_count?: number;
   current_session_available_slots?: number;
   current_session_limit_reached?: boolean;
-  has_waiting_tasks?: boolean;
-  saturated?: boolean;
-  pressure_state?: TaskQueuePressureState;
+  has_waiting_tasks: boolean;
+  saturated: boolean;
+  pressure_state: TaskQueuePressureState;
   max_concurrent_per_user: number;
   max_concurrent_per_session: number;
   poll_interval_sec: number;

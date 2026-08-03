@@ -124,6 +124,10 @@ class SettingsUpdateRequest(BaseModel):
         return self
 
 
+TaskQueuePressureState = Literal["idle", "active", "saturated", "scope_limited"]
+TaskQueueWaitingPolicy = Literal["capacity_aware_oldest_eligible_fifo"]
+
+
 class TaskQueueDiagnosticsSummary(TypedDict):
     max_concurrent: int
     active_count: int
@@ -131,14 +135,14 @@ class TaskQueueDiagnosticsSummary(TypedDict):
     available_slots: int
     has_waiting_tasks: bool
     saturated: bool
-    pressure_state: Literal["idle", "active", "saturated", "scope_limited"]
+    pressure_state: TaskQueuePressureState
     max_concurrent_per_user: int
     max_concurrent_per_session: int
     poll_interval_sec: float
     per_user_limit_enabled: bool
     per_session_limit_enabled: bool
     fairness_limits_enabled: bool
-    waiting_policy: Literal["capacity_aware_oldest_eligible_fifo"]
+    waiting_policy: TaskQueueWaitingPolicy
     capacity_aware_fifo_enabled: bool
     current_user_active_count: NotRequired[int]
     current_user_waiting_count: NotRequired[int]
@@ -503,7 +507,7 @@ def _build_task_queue_diagnostics(
     runtime_settings: object,
     current_user_id: str | None = None,
     current_session_id: str | None = None,
-) -> dict[str, object]:
+) -> TaskQueueDiagnosticsSummary:
     max_concurrent = max(
         1,
         int(getattr(runtime_settings, "task_queue_max_concurrent", 1) or 1),
@@ -535,14 +539,14 @@ def _build_task_queue_diagnostics(
     has_waiting_tasks = waiting_count > 0
     saturated = available_slots <= 0
     if has_waiting_tasks and available_slots > 0:
-        pressure_state = "scope_limited"
+        pressure_state: TaskQueuePressureState = "scope_limited"
     elif has_waiting_tasks or saturated:
         pressure_state = "saturated"
     elif active_count > 0:
         pressure_state = "active"
     else:
         pressure_state = "idle"
-    diagnostics: dict[str, object] = {
+    diagnostics: TaskQueueDiagnosticsSummary = {
         "max_concurrent": max_concurrent,
         "active_count": active_count,
         "waiting_count": waiting_count,
