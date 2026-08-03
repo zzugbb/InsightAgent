@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import get_args
+
 from .context import *
 
 
@@ -56,6 +58,16 @@ class SettingsRegistryMixin:
         }:
             self.assertIn(field_name, optional_keys)
             self.assertNotIn(field_name, required_keys)
+
+        annotations = getattr(diagnostics_contract, "__annotations__", {})
+        self.assertEqual(
+            set(get_args(annotations["pressure_state"])),
+            {"idle", "active", "saturated", "scope_limited"},
+        )
+        self.assertEqual(
+            set(get_args(annotations["waiting_policy"])),
+            {"capacity_aware_oldest_eligible_fifo"},
+        )
 
     def test_build_settings_summary_response_captures_registry_profile_source_and_enabled_tools(
         self,

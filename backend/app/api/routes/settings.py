@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
@@ -131,14 +131,14 @@ class TaskQueueDiagnosticsSummary(TypedDict):
     available_slots: int
     has_waiting_tasks: bool
     saturated: bool
-    pressure_state: str
+    pressure_state: Literal["idle", "active", "saturated", "scope_limited"]
     max_concurrent_per_user: int
     max_concurrent_per_session: int
     poll_interval_sec: float
     per_user_limit_enabled: bool
     per_session_limit_enabled: bool
     fairness_limits_enabled: bool
-    waiting_policy: str
+    waiting_policy: Literal["capacity_aware_oldest_eligible_fifo"]
     capacity_aware_fifo_enabled: bool
     current_user_active_count: NotRequired[int]
     current_user_waiting_count: NotRequired[int]

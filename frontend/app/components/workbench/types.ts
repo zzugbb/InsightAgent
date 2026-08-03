@@ -55,6 +55,14 @@ export type ToolRegistryProviderToolDetail = {
   effective_result_output_keys: string[];
 };
 
+export type TaskQueuePressureState =
+  | "idle"
+  | "active"
+  | "saturated"
+  | "scope_limited";
+
+export type TaskQueueWaitingPolicy = "capacity_aware_oldest_eligible_fifo";
+
 export type TaskQueueDiagnostics = {
   max_concurrent: number;
   active_count?: number;
@@ -70,14 +78,14 @@ export type TaskQueueDiagnostics = {
   current_session_limit_reached?: boolean;
   has_waiting_tasks?: boolean;
   saturated?: boolean;
-  pressure_state?: string;
+  pressure_state?: TaskQueuePressureState;
   max_concurrent_per_user: number;
   max_concurrent_per_session: number;
   poll_interval_sec: number;
   per_user_limit_enabled: boolean;
   per_session_limit_enabled: boolean;
   fairness_limits_enabled: boolean;
-  waiting_policy: string;
+  waiting_policy: TaskQueueWaitingPolicy;
   capacity_aware_fifo_enabled: boolean;
 };
 
