@@ -519,6 +519,26 @@ def assert_safe_queued_state_payload(
     _assert(queued_state_payloads, "queued stream missing queued state payload")
     queue_payload = queued_state_payloads[0].get("queue")
     _assert(isinstance(queue_payload, dict), "queued state missing queue snapshot")
+    for count_field in ("active_count", "max_concurrent", "waiting_count"):
+        _assert(
+            count_field in queue_payload,
+            f"{count_field} is required: {queue_payload}",
+        )
+    active_count = int(queue_payload.get("active_count") or 0)
+    max_concurrent = int(queue_payload.get("max_concurrent") or 0)
+    waiting_count = int(queue_payload.get("waiting_count") or 0)
+    _assert(
+        active_count >= 0,
+        f"queued active_count should be non-negative: {queue_payload}",
+    )
+    _assert(
+        max_concurrent >= 1,
+        f"queued max_concurrent should be positive: {queue_payload}",
+    )
+    _assert(
+        waiting_count >= 0,
+        f"queued waiting_count should be non-negative: {queue_payload}",
+    )
     _assert(
         queue_payload.get("wait_position") == expected_wait_position,
         (

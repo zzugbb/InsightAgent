@@ -854,6 +854,63 @@ class TaskRoutesUsageGovernanceMixin:
                 expected_wait_position=1,
             )
 
+    def test_backend_queue_e2e_requires_queue_snapshot_count_fields(self) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queued_state_payload"],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "active_count is required"):
+            queue_e2e_module.assert_safe_queued_state_payload(
+                [
+                    {
+                        "phase": "queued",
+                        "task_id": "task-e2e-queued",
+                        "queue": {
+                            "max_concurrent": 1,
+                            "waiting_count": 1,
+                            "wait_position": 1,
+                        },
+                    }
+                ],
+                task_id="task-e2e-queued",
+                expected_wait_position=1,
+            )
+
+        with self.assertRaisesRegex(RuntimeError, "max_concurrent is required"):
+            queue_e2e_module.assert_safe_queued_state_payload(
+                [
+                    {
+                        "phase": "queued",
+                        "task_id": "task-e2e-queued",
+                        "queue": {
+                            "active_count": 1,
+                            "waiting_count": 1,
+                            "wait_position": 1,
+                        },
+                    }
+                ],
+                task_id="task-e2e-queued",
+                expected_wait_position=1,
+            )
+
+        with self.assertRaisesRegex(RuntimeError, "waiting_count is required"):
+            queue_e2e_module.assert_safe_queued_state_payload(
+                [
+                    {
+                        "phase": "queued",
+                        "task_id": "task-e2e-queued",
+                        "queue": {
+                            "active_count": 1,
+                            "max_concurrent": 1,
+                            "wait_position": 1,
+                        },
+                    }
+                ],
+                task_id="task-e2e-queued",
+                expected_wait_position=1,
+            )
+
     def test_backend_queue_e2e_rejects_missing_queued_state_payload(self) -> None:
         queue_e2e_module = __import__(
             "scripts.e2e_queue_concurrency",
