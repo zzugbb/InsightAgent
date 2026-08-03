@@ -2,11 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildModelSettingsUrl,
   formatTaskQueueDiagnosticsSummary,
   formatToolRegistryProviderSourceDiagnosticsSummary,
   formatToolRegistryProviderToolDetailsSummary,
   resolveModelSettingsSelectionDetails,
 } from "./model-settings-modal-utils.ts";
+
+test("buildModelSettingsUrl includes encoded active session when present", () => {
+  assert.equal(
+    buildModelSettingsUrl("http://127.0.0.1:8000", " session/id 1 "),
+    "http://127.0.0.1:8000/api/settings?session_id=session%2Fid%201",
+  );
+});
+
+test("buildModelSettingsUrl omits session query when blank", () => {
+  assert.equal(
+    buildModelSettingsUrl("http://127.0.0.1:8000", "   "),
+    "http://127.0.0.1:8000/api/settings",
+  );
+});
 
 test("resolveModelSettingsSelectionDetails uses preview source detail summaries", () => {
   const result = resolveModelSettingsSelectionDetails({

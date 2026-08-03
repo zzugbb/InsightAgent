@@ -25,6 +25,7 @@ import type {
   SettingsValidateResponse,
 } from "./types";
 import {
+  buildModelSettingsUrl,
   formatTaskQueueDiagnosticsSummary,
   resolveModelSettingsSelectionDetails,
 } from "./model-settings-modal-utils";
@@ -68,11 +69,7 @@ export function ModelSettingsModal({
     | "available_tool_registry_provider_source_details"
   > | null>(null);
   const normalizedActiveSessionId = activeSessionId?.trim() ?? "";
-  const settingsUrl = normalizedActiveSessionId
-    ? `${API_BASE_URL}/api/settings?session_id=${encodeURIComponent(
-        normalizedActiveSessionId,
-      )}`
-    : `${API_BASE_URL}/api/settings`;
+  const settingsUrl = buildModelSettingsUrl(API_BASE_URL, normalizedActiveSessionId);
   const settingsQueryKey = ["settings", "model", normalizedActiveSessionId];
 
   const { data, isLoading, error, isError } = useQuery({

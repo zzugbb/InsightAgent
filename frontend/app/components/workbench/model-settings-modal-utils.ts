@@ -20,6 +20,18 @@ type ModelSettingsPreviewSource = Pick<
     | "available_tool_registry_provider_source_details"
   >;
 
+export function buildModelSettingsUrl(
+  apiBaseUrl: string,
+  activeSessionId: string | null | undefined,
+): string {
+  const normalizedActiveSessionId = activeSessionId?.trim() ?? "";
+  const baseUrl = `${apiBaseUrl}/api/settings`;
+  if (!normalizedActiveSessionId) {
+    return baseUrl;
+  }
+  return `${baseUrl}?session_id=${encodeURIComponent(normalizedActiveSessionId)}`;
+}
+
 function formatToolSemanticDescriptor(
   tool: Pick<
     ToolRegistryProviderToolDetail,

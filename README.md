@@ -18,19 +18,19 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1753/1753` 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：本轮通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
-- backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 最近 fresh 通过，覆盖 queued cancel、safe wait_position、settings 全局/当前用户 active/waiting/available 安全计数与 followup completion；脚本 helper 现额外校验 queued snapshot 结构一致性与 current session diagnostics
-- frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 最近 fresh 通过；默认 full 环境下该低并发专项显式 skip，避免污染完整 Chromium
+- backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 本轮 fresh 通过，覆盖 queued cancel、safe wait_position、settings 全局/当前用户 active/waiting/available 安全计数、current session diagnostics 与 followup completion；脚本 helper 现额外校验 queued snapshot 结构一致性
+- frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 本轮 fresh 通过，`1 passed`；默认 full 环境下该低并发专项显式 skip，避免污染完整 Chromium
 - frontend running cancel Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "running task cancel reaches"` 通过
 - frontend multi-task Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "task center separates active session"` 通过
 - frontend reload isolation Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "reload keeps background session stream"` 通过
-- 完整 Chromium e2e：真实 backend/frontend 服务下 `bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
+- 完整 Chromium e2e：真实 backend/frontend 服务下 `bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001` 本轮 fresh 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - `git diff --check`：通过
 - 普通沙箱访问本机 Docker/端口会被权限拦截时，按流程提权后重跑，不拿旧结果冒充新结果。
 - 测试/e2e/启动/提交的权限与依赖路径已固化到 `docs/development-runbook.md`；后续优先按 runbook 直接使用正确 venv、端口提权和 git 提权流程。
 
 ## 当前开发计划
 
-1. `concurrency-fairness-policy`：当前主线，约 `95%`；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断、queued SSE queue snapshot 基础字段存在性与结构一致性、settings `task_queue_diagnostics` 基础字段存在性、等待策略、全局/当前用户/当前会话 active/waiting/available 安全计数、`has_waiting_tasks`/`saturated` 一致性、`pressure_state` 派生一致性、当前用户/当前会话限额触顶与可用槽位诊断；前端运行设置已带当前 session_id 拉取并展示 session active/waiting/available 与触顶状态，backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper、真实低并发 backend/frontend queue e2e fresh 复验已完成，下一步主要是 fresh e2e/full Chromium 收口。
+1. `concurrency-fairness-policy`：当前主线，约 `98%`；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断、queued SSE queue snapshot 基础字段存在性与结构一致性、settings `task_queue_diagnostics` 基础字段存在性、等待策略、全局/当前用户/当前会话 active/waiting/available 安全计数、`has_waiting_tasks`/`saturated` 一致性、`pressure_state` 派生一致性、当前用户/当前会话限额触顶与可用槽位诊断；前端运行设置已带当前 session_id 拉取并展示 session active/waiting/available 与触顶状态，backend queue e2e、frontend queue phase 与 full Chromium 均已 fresh 复验，下一步主要是最终 diff/文档/提交收口。
 2. `pre-flight cleanup`：文档流水账压缩与 `test_tool_runtime_slice.py` 主题拆分已完成，原测试入口命令保持不变。
 3. `registry-governance`：作为维护线继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
 4. `rag-governance-hardening`：后续补知识库版本化、来源治理与更细粒度 shared 规则。

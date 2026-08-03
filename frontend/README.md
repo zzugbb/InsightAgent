@@ -15,21 +15,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
-- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`73/73` 通过
+- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`75/75` 通过
 - targeted Chromium：主路径导出、404 ownership 导出、取消后立即重发 `3/3` 通过
-- backend queue e2e phase：低并发 backend 下 queued cancel / safe wait_position / settings safe global/current-user active/waiting/available counts / followup completion 最近 fresh 通过；脚本 helper 现额外校验 queued snapshot 结构一致性与 current session diagnostics
-- frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 最近 fresh 通过；默认 full 环境下该低并发专项显式 skip
+- backend queue e2e phase：低并发 backend 下 queued cancel / safe wait_position / settings safe global/current-user/current-session active/waiting/available counts / followup completion 本轮 fresh 通过；脚本 helper 现额外校验 queued snapshot 结构一致性
+- frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 本轮 fresh 通过，`1 passed`；默认 full 环境下该低并发专项显式 skip
 - frontend running cancel Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "running task cancel reaches"` 通过
 - frontend multi-task Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "task center separates active session"` 通过
 - frontend reload isolation Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "reload keeps background session stream"` 通过
-- 完整 Chromium e2e：真实 backend/frontend 服务下 `bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
+- 完整 Chromium e2e：真实 backend/frontend 服务下 `bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001` 本轮 fresh 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
 - `git diff --check`：通过
 - 后续启动 frontend、访问本机 e2e 服务、跑 Chromium e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 Node/npm 路径与提权边界，避免重复触发端口 / `.git/index.lock` 权限错误。
 
 ## 下一步前端计划
 
-1. `concurrency-fairness-policy`：当前主线，约 `95%`；后端已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断与 backend queue e2e 安全快照 helper 覆盖，前端已补 settings `task_queue_diagnostics` 限额、全局/当前用户/当前会话 active/waiting/available、当前用户/当前会话限额触顶、queued SSE queue snapshot 基础字段存在性与结构一致性、settings 基础计数字段存在性、`has_waiting_tasks`/`saturated` 一致性、`pressure_state` 派生一致性、当前用户/当前会话可用槽位与等待策略可观测入口，低并发 backend/frontend queue e2e 已 fresh 复验，下一步主要配合 fresh e2e/full Chromium 收口。
+1. `concurrency-fairness-policy`：当前主线，约 `98%`；后端已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断与 backend queue e2e 安全快照 helper 覆盖，前端已补 settings `task_queue_diagnostics` 限额、全局/当前用户/当前会话 active/waiting/available、当前用户/当前会话限额触顶、queued SSE queue snapshot 基础字段存在性与结构一致性、settings 基础计数字段存在性、`has_waiting_tasks`/`saturated` 一致性、`pressure_state` 派生一致性、当前用户/当前会话可用槽位与等待策略可观测入口，低并发 backend/frontend queue e2e 与 full Chromium 均已 fresh 复验，下一步主要是最终 diff/文档/提交收口。
 2. Workbench composer：继续细化 queued/running/cancel 后按钮 loading、重复 prompt resend、跨会话切换与刷新恢复。
 3. 任务详情页：继续保持 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. e2e：保持 full Chromium、低并发 queue phase 与 targeted 边界专项作为进入下一主线前的回归门。
