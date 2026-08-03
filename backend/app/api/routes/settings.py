@@ -544,6 +544,12 @@ def _build_task_queue_diagnostics(
             {
                 "current_user_active_count": current_user_active_count,
                 "current_user_waiting_count": current_user_waiting_count,
+                "current_user_available_slots": max(
+                    0,
+                    max_concurrent_per_user - current_user_active_count,
+                )
+                if max_concurrent_per_user > 0
+                else available_slots,
                 "current_user_limit_reached": (
                     max_concurrent_per_user > 0
                     and current_user_active_count >= max_concurrent_per_user

@@ -248,6 +248,17 @@ export function formatTaskQueueDiagnosticsSummary(
       )}`,
     );
   }
+  if (
+    typeof diagnostics.current_user_available_slots === "number"
+    && Number.isFinite(diagnostics.current_user_available_slots)
+  ) {
+    parts.push(
+      `your available ${Math.max(
+        0,
+        Math.trunc(diagnostics.current_user_available_slots),
+      )}`,
+    );
+  }
   const pressureState =
     typeof diagnostics.pressure_state === "string"
       ? diagnostics.pressure_state.trim().toLowerCase()

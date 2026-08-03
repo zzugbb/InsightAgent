@@ -209,6 +209,7 @@ class SettingsRegistryMixin:
                 "available_slots": 7,
                 "current_user_active_count": 1,
                 "current_user_waiting_count": 1,
+                "current_user_available_slots": 0,
                 "current_user_limit_reached": True,
                 "has_waiting_tasks": True,
                 "saturated": False,
