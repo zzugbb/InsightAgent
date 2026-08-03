@@ -243,6 +243,10 @@ def assert_safe_queue_settings_diagnostics(
             f"available_slots should be {expected_available_slots}: {diagnostics}",
         )
     pressure_state = str(diagnostics.get("pressure_state") or "").strip().lower()
+    _assert(
+        pressure_state in {"idle", "active", "saturated", "scope_limited"},
+        f"pressure_state diagnostic enum mismatch: {diagnostics}",
+    )
     expected_derived_pressure_state = "idle"
     if waiting_count > 0 and available_slots > 0:
         expected_derived_pressure_state = "scope_limited"
