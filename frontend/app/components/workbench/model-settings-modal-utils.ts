@@ -220,6 +220,15 @@ export function formatTaskQueueDiagnosticsSummary(
   ) {
     parts.push(`waiting ${Math.max(0, Math.trunc(diagnostics.waiting_count))}`);
   }
+  const pressureState =
+    typeof diagnostics.pressure_state === "string"
+      ? diagnostics.pressure_state.trim().toLowerCase()
+      : "";
+  if (pressureState === "scope_limited") {
+    parts.push("scope-limited");
+  } else if (pressureState === "saturated") {
+    parts.push("saturated");
+  }
   if (diagnostics.per_user_limit_enabled) {
     parts.push(
       `per user ${Math.max(

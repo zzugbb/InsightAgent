@@ -680,6 +680,9 @@ class TaskRoutesUsageGovernanceMixin:
                 "active_count": 1,
                 "waiting_count": 1,
                 "available_slots": 0,
+                "has_waiting_tasks": True,
+                "saturated": True,
+                "pressure_state": "saturated",
                 "max_concurrent_per_user": 0,
                 "max_concurrent_per_session": 0,
                 "poll_interval_sec": 0.1,
@@ -693,6 +696,7 @@ class TaskRoutesUsageGovernanceMixin:
             expected_active_count=1,
             expected_waiting_count=1,
             expected_available_slots=0,
+            expected_pressure_state="saturated",
         )
 
     def test_backend_queue_e2e_rejects_settings_diagnostics_that_leak_task_ids(

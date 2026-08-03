@@ -494,11 +494,25 @@ def _build_task_queue_diagnostics(*, runtime_settings: object) -> dict[str, obje
     queue_snapshot = get_task_queue_snapshot(max_concurrent=max_concurrent)
     active_count = max(0, int(queue_snapshot.get("active_count", 0) or 0))
     waiting_count = max(0, int(queue_snapshot.get("waiting_count", 0) or 0))
+    available_slots = max(0, max_concurrent - active_count)
+    has_waiting_tasks = waiting_count > 0
+    saturated = available_slots <= 0
+    if has_waiting_tasks and available_slots > 0:
+        pressure_state = "scope_limited"
+    elif has_waiting_tasks or saturated:
+        pressure_state = "saturated"
+    elif active_count > 0:
+        pressure_state = "active"
+    else:
+        pressure_state = "idle"
     return {
         "max_concurrent": max_concurrent,
         "active_count": active_count,
         "waiting_count": waiting_count,
-        "available_slots": max(0, max_concurrent - active_count),
+        "available_slots": available_slots,
+        "has_waiting_tasks": has_waiting_tasks,
+        "saturated": saturated,
+        "pressure_state": pressure_state,
         "max_concurrent_per_user": max_concurrent_per_user,
         "max_concurrent_per_session": max_concurrent_per_session,
         "poll_interval_sec": poll_interval_sec,

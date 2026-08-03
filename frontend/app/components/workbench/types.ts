@@ -60,6 +60,9 @@ export type TaskQueueDiagnostics = {
   active_count?: number;
   waiting_count?: number;
   available_slots?: number;
+  has_waiting_tasks?: boolean;
+  saturated?: boolean;
+  pressure_state?: string;
   max_concurrent_per_user: number;
   max_concurrent_per_session: number;
   poll_interval_sec: number;

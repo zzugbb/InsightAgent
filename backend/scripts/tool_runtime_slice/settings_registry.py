@@ -161,11 +161,17 @@ class SettingsRegistryMixin:
             active_slot = task_queue_module.try_acquire_task_execution_slot(
                 task_id="settings-active-task",
                 max_concurrent=8,
+                user_id="settings-user",
+                session_id="settings-session-a",
+                max_concurrent_per_user=1,
             )
             self.assertIsNotNone(active_slot)
             waiting_slot = task_queue_module.try_acquire_task_execution_slot(
                 task_id="settings-waiting-task",
-                max_concurrent=1,
+                max_concurrent=8,
+                user_id="settings-user",
+                session_id="settings-session-b",
+                max_concurrent_per_user=1,
             )
             self.assertIsNone(waiting_slot)
 
@@ -184,8 +190,8 @@ class SettingsRegistryMixin:
                     tool_registry_provider_source="default",
                     tool_registry_provider_sources_json=None,
                     task_queue_max_concurrent=8,
-                    task_queue_max_concurrent_per_user=2,
-                    task_queue_max_concurrent_per_session=1,
+                    task_queue_max_concurrent_per_user=1,
+                    task_queue_max_concurrent_per_session=3,
                     task_queue_poll_interval_sec=0.15,
                 ),
                 database_locator="postgresql://demo",
@@ -200,8 +206,11 @@ class SettingsRegistryMixin:
                 "active_count": 1,
                 "waiting_count": 1,
                 "available_slots": 7,
-                "max_concurrent_per_user": 2,
-                "max_concurrent_per_session": 1,
+                "has_waiting_tasks": True,
+                "saturated": False,
+                "pressure_state": "scope_limited",
+                "max_concurrent_per_user": 1,
+                "max_concurrent_per_session": 3,
                 "poll_interval_sec": 0.15,
                 "per_user_limit_enabled": True,
                 "per_session_limit_enabled": True,
@@ -243,6 +252,9 @@ class SettingsRegistryMixin:
                 "active_count": 0,
                 "waiting_count": 0,
                 "available_slots": 32,
+                "has_waiting_tasks": False,
+                "saturated": False,
+                "pressure_state": "idle",
                 "max_concurrent_per_user": 0,
                 "max_concurrent_per_session": 0,
                 "poll_interval_sec": 0.25,

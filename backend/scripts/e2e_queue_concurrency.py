@@ -152,6 +152,7 @@ def assert_safe_queue_settings_diagnostics(
     expected_active_count: int | None = None,
     expected_waiting_count: int | None = None,
     expected_available_slots: int | None = None,
+    expected_pressure_state: str | None = None,
 ) -> dict[str, Any]:
     _assert(
         isinstance(diagnostics, dict),
@@ -196,6 +197,12 @@ def assert_safe_queue_settings_diagnostics(
             available_slots == expected_available_slots,
             f"available_slots should be {expected_available_slots}: {diagnostics}",
         )
+    pressure_state = str(diagnostics.get("pressure_state") or "").strip()
+    if expected_pressure_state is not None:
+        _assert(
+            pressure_state == expected_pressure_state,
+            f"pressure_state should be {expected_pressure_state}: {diagnostics}",
+        )
     per_user_limit = int(diagnostics.get("max_concurrent_per_user") or 0)
     per_session_limit = int(diagnostics.get("max_concurrent_per_session") or 0)
     _assert(
@@ -234,6 +241,7 @@ def _assert_queue_settings_diagnostics(
     expected_active_count: int | None = None,
     expected_waiting_count: int | None = None,
     expected_available_slots: int | None = None,
+    expected_pressure_state: str | None = None,
 ) -> None:
     settings = _request(
         method="GET",
@@ -251,6 +259,7 @@ def _assert_queue_settings_diagnostics(
         expected_active_count=expected_active_count,
         expected_waiting_count=expected_waiting_count,
         expected_available_slots=expected_available_slots,
+        expected_pressure_state=expected_pressure_state,
     )
 
 
@@ -490,6 +499,7 @@ def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) 
         expected_active_count=1,
         expected_waiting_count=1,
         expected_available_slots=0,
+        expected_pressure_state="saturated",
     )
     time.sleep(max(0.0, float(args.queue_delay_sec)))
 
@@ -580,6 +590,7 @@ def main() -> None:
         expected_active_count=0,
         expected_waiting_count=0,
         expected_available_slots=1,
+        expected_pressure_state="idle",
     )
     print("  - OK: task_queue_diagnostics matches queue phase")
 
