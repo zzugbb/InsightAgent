@@ -11,7 +11,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 前端继续保持与后端 SSE / trace / export 契约稳定对齐，不为真实工具执行新增独立本地语义分支。
 - 下一主线启动前的仓库 pre-flight 已完成：后端 runtime slice 测试二次细分完成，`tool_runtime.py` 已抽出 planner/execution/HTTP JSON/registry facade 模块，原测试入口保持不变。
 - `queue-and-concurrency-lite` 首轮主线已完成：后端已接入 create 默认 queued、进程内执行槽位、queued SSE state、queued cancel 等待项移除与低并发 queue 专项 e2e；前端已把活跃任务识别扩展为 `queued/pending/running`，能从安全 queue snapshot 显示当前任务排队位置，并在取消/timeout/完成与 queued 恢复时清理或保留正确 phase，当前已覆盖工作台恢复、Task Center、Inspector、任务详情页、Chromium e2e helper、queued recover/cancel、running cancel 终态、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium。
-- `concurrency-fairness-policy` 已启动：后端已补可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算与 backend queue e2e 安全快照/安全计数 helper 覆盖，默认关闭且不改变现有 SSE/trace/export；前端运行设置已展示只读 `task_queue_diagnostics` 摘要，可查看全局 active/waiting/available 安全计数、当前用户 active/waiting/available 安全计数，其中当前用户 available 是全局空槽与 per-user 剩余额度共同收敛后的有效可用槽位，并在当前用户触顶时显示 `your limit reached`；同时展示 scope-limited/saturated 压力状态、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
+- `concurrency-fairness-policy` 已启动：后端已补可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断与 backend queue e2e 安全快照/安全计数 helper 覆盖，默认关闭且不改变现有 SSE/trace/export；前端运行设置已展示只读 `task_queue_diagnostics` 摘要，可查看全局 active/waiting/available 安全计数、当前用户 active/waiting/available 安全计数，其中当前用户 available 是全局空槽与 per-user 剩余额度共同收敛后的有效可用槽位，并在当前用户触顶时显示 `your limit reached`；同时展示 scope-limited/saturated 压力状态、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
 
 ## 当前验证基线
 
@@ -29,7 +29,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 下一步前端计划
 
-1. `concurrency-fairness-policy`：当前主线；后端已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算与 backend queue e2e 安全快照 helper 覆盖，前端已补 settings `task_queue_diagnostics` 限额、全局/当前用户 active/waiting/available、当前用户限额触顶、压力状态与等待策略可观测入口，当前用户 available 已按全局空槽与 per-user 剩余额度共同收敛，低并发 backend/frontend queue e2e 已 fresh 复验，下一步按风险配合更细公平策略或完整 Chromium fresh 复验。
+1. `concurrency-fairness-policy`：当前主线；后端已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断与 backend queue e2e 安全快照 helper 覆盖，前端已补 settings `task_queue_diagnostics` 限额、全局/当前用户 active/waiting/available、当前用户限额触顶、压力状态与等待策略可观测入口，当前用户 available 已按全局空槽与 per-user 剩余额度共同收敛，低并发 backend/frontend queue e2e 已 fresh 复验，下一步按风险配合更细公平策略或完整 Chromium fresh 复验。
 2. Workbench composer：继续细化 queued/running/cancel 后按钮 loading、重复 prompt resend、跨会话切换与刷新恢复。
 3. 任务详情页：继续保持 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. e2e：保持 full Chromium、低并发 queue phase 与 targeted 边界专项作为进入下一主线前的回归门。

@@ -688,6 +688,124 @@ class TaskRoutesUsageGovernanceMixin:
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
 
+    def test_task_queue_service_blocks_new_same_user_when_older_waiter_reserves_user_quota(
+        self,
+    ) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-user-reserve-active",
+                user_id="user-active",
+                session_id="session-active",
+                max_concurrent=1,
+                max_concurrent_per_user=1,
+            )
+            self.assertIsNotNone(active_slot)
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-user-reserve-old",
+                    user_id="user-old",
+                    session_id="session-old-a",
+                    max_concurrent=1,
+                    max_concurrent_per_user=1,
+                )
+            )
+
+            active_slot.release()
+            same_user_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-user-reserve-new",
+                user_id="user-old",
+                session_id="session-old-b",
+                max_concurrent=2,
+                max_concurrent_per_user=1,
+            )
+
+            self.assertIsNone(same_user_slot)
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=2,
+                    task_id="task-user-reserve-new",
+                    user_id="user-old",
+                ),
+                {
+                    "active_count": 0,
+                    "max_concurrent": 2,
+                    "waiting_count": 2,
+                    "wait_position": 2,
+                    "active_count_for_user": 0,
+                    "waiting_count_for_user": 2,
+                },
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
+    def test_task_queue_service_blocks_new_same_session_when_older_waiter_reserves_session_quota(
+        self,
+    ) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-session-reserve-active",
+                user_id="user-active",
+                session_id="session-active",
+                max_concurrent=1,
+                max_concurrent_per_session=1,
+            )
+            self.assertIsNotNone(active_slot)
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-session-reserve-old",
+                    user_id="user-old-a",
+                    session_id="session-old",
+                    max_concurrent=1,
+                    max_concurrent_per_session=1,
+                )
+            )
+
+            active_slot.release()
+            same_session_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-session-reserve-new",
+                user_id="user-old-b",
+                session_id="session-old",
+                max_concurrent=2,
+                max_concurrent_per_session=1,
+            )
+
+            self.assertIsNone(same_session_slot)
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=2,
+                    task_id="task-session-reserve-new",
+                    session_id="session-old",
+                ),
+                {
+                    "active_count": 0,
+                    "max_concurrent": 2,
+                    "waiting_count": 2,
+                    "wait_position": 2,
+                    "active_count_for_session": 0,
+                    "waiting_count_for_session": 2,
+                },
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
     def test_backend_queue_e2e_asserts_safe_queue_state_payload(self) -> None:
         queue_e2e_module = __import__(
             "scripts.e2e_queue_concurrency",

@@ -64,6 +64,15 @@ class TaskQueueState:
                     _state=self,
                     _owns_slot=False,
                 )
+            (
+                older_eligible_waiting_count,
+                reserved_user_counts,
+                reserved_session_counts,
+            ) = self._older_eligible_waiting_reservation(
+                task_id=task_id,
+                max_concurrent_per_user=max_concurrent_per_user,
+                max_concurrent_per_session=max_concurrent_per_session,
+            )
             if (
                 len(self._active_task_ids) >= max_concurrent
                 or self._scope_limit_reached(
@@ -71,12 +80,15 @@ class TaskQueueState:
                     max_concurrent_per_user=max_concurrent_per_user,
                     max_concurrent_per_session=max_concurrent_per_session,
                 )
-                or self._older_eligible_waiting_count(
-                    task_id=task_id,
+                or older_eligible_waiting_count
+                >= (max_concurrent - len(self._active_task_ids))
+                or self._scope_limit_reached_for_counts(
+                    scope=scope,
+                    user_counts=reserved_user_counts,
+                    session_counts=reserved_session_counts,
                     max_concurrent_per_user=max_concurrent_per_user,
                     max_concurrent_per_session=max_concurrent_per_session,
                 )
-                >= (max_concurrent - len(self._active_task_ids))
             ):
                 self._remember_waiting(task_id, scope)
                 return None
@@ -252,18 +264,18 @@ class TaskQueueState:
             return True
         return False
 
-    def _older_eligible_waiting_count(
+    def _older_eligible_waiting_reservation(
         self,
         *,
         task_id: str,
         max_concurrent_per_user: int | None,
         max_concurrent_per_session: int | None,
-    ) -> int:
+    ) -> tuple[int, dict[str, int], dict[str, int]]:
         count = 0
         user_counts, session_counts = self._active_scope_counts()
         for waiting_task_id in self._waiting_task_ids:
             if waiting_task_id == task_id:
-                return count
+                return count, user_counts, session_counts
             waiting_scope = self._task_scopes.get(waiting_task_id, TaskQueueScope())
             if not self._scope_limit_reached_for_counts(
                 scope=waiting_scope,
@@ -281,7 +293,7 @@ class TaskQueueState:
                     session_counts[waiting_scope.session_id] = (
                         session_counts.get(waiting_scope.session_id, 0) + 1
                     )
-        return count
+        return count, user_counts, session_counts
 
 
 def _normalize_max_concurrent(max_concurrent: int) -> int:
