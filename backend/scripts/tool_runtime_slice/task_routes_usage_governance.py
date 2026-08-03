@@ -680,6 +680,9 @@ class TaskRoutesUsageGovernanceMixin:
                 "active_count": 1,
                 "waiting_count": 1,
                 "available_slots": 0,
+                "current_user_active_count": 1,
+                "current_user_waiting_count": 1,
+                "current_user_available_slots": 0,
                 "has_waiting_tasks": True,
                 "saturated": True,
                 "pressure_state": "saturated",
@@ -696,6 +699,9 @@ class TaskRoutesUsageGovernanceMixin:
             expected_active_count=1,
             expected_waiting_count=1,
             expected_available_slots=0,
+            expected_current_user_active_count=1,
+            expected_current_user_waiting_count=1,
+            expected_current_user_available_slots=0,
             expected_pressure_state="saturated",
         )
 

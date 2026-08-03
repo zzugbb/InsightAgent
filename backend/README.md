@@ -18,7 +18,7 @@
 
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1734/1734` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
-- backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 通过
+- backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 本轮 fresh 通过，覆盖 queued cancel、safe wait_position、settings 全局/当前用户 active/waiting/available 安全计数与 followup completion
 - frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 通过；默认 full 环境下该低并发专项显式 skip，避免污染完整 Chromium
 - frontend running cancel Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "running task cancel reaches"` 通过
 - frontend multi-task Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "task center separates active session"` 通过
@@ -30,7 +30,7 @@
 
 ## 下一步后端计划
 
-1. `concurrency-fairness-policy`：当前主线；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings `task_queue_diagnostics` 等待策略/全局与当前用户 active/waiting/available 安全计数/压力状态诊断，当前用户 available 已按全局空槽与 per-user 剩余额度共同收敛；backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper 覆盖与前端 available slots/当前用户计数/剩余槽位展示已完成，下一步按风险补真实低并发 e2e 复验或更细公平策略。
+1. `concurrency-fairness-policy`：当前主线；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings `task_queue_diagnostics` 等待策略/全局与当前用户 active/waiting/available 安全计数/压力状态诊断，当前用户 available 已按全局空槽与 per-user 剩余额度共同收敛；backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper 覆盖、真实低并发 backend queue e2e fresh 复验与前端 available slots/当前用户计数/剩余槽位展示已完成，下一步按风险补低并发 frontend queue fresh 复验或更细公平策略。
 2. `pre-flight cleanup`：文档瘦身与 `backend/scripts/test_tool_runtime_slice.py` 主题拆分已完成，保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口不变。
 3. `tool_runtime.py` 分阶段抽模块：`tool_runtime_planning.py`、`tool_runtime_execution.py`、`tool_runtime_http_json.py`、`tool_runtime_registry.py` 已完成 facade 拆分，保留现有 import facade；下一轮不再继续拆分。
 4. `registry-governance` 与 `rag-governance-hardening` 作为后续维护线，不和第一轮队列状态机混在同一改动里。

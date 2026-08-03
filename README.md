@@ -18,7 +18,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1734/1734` 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：本轮通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
-- backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 通过
+- backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 本轮 fresh 通过，覆盖 queued cancel、safe wait_position、settings 全局/当前用户 active/waiting/available 安全计数与 followup completion
 - frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 通过；默认 full 环境下该低并发专项显式 skip，避免污染完整 Chromium
 - frontend running cancel Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "running task cancel reaches"` 通过
 - frontend multi-task Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "task center separates active session"` 通过
@@ -30,7 +30,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 ## 当前开发计划
 
-1. `concurrency-fairness-policy`：当前主线；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings `task_queue_diagnostics` 等待策略、全局/当前用户 active/waiting/available 安全计数与压力状态诊断，当前用户 available 已按全局空槽与 per-user 剩余额度共同收敛；backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper 与当前用户可用槽位一致性覆盖、前端运行设置可观测入口已完成，下一步按风险补真实低并发 e2e 复验或更细公平策略。
+1. `concurrency-fairness-policy`：当前主线；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings `task_queue_diagnostics` 等待策略、全局/当前用户 active/waiting/available 安全计数与压力状态诊断，当前用户 available 已按全局空槽与 per-user 剩余额度共同收敛；backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper、真实低并发 backend queue e2e fresh 复验与前端运行设置可观测入口已完成，下一步按风险补低并发 frontend queue fresh 复验或更细公平策略。
 2. `pre-flight cleanup`：文档流水账压缩与 `test_tool_runtime_slice.py` 主题拆分已完成，原测试入口命令保持不变。
 3. `registry-governance`：作为维护线继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
 4. `rag-governance-hardening`：后续补知识库版本化、来源治理与更细粒度 shared 规则。

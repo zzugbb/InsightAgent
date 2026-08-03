@@ -152,6 +152,9 @@ def assert_safe_queue_settings_diagnostics(
     expected_active_count: int | None = None,
     expected_waiting_count: int | None = None,
     expected_available_slots: int | None = None,
+    expected_current_user_active_count: int | None = None,
+    expected_current_user_waiting_count: int | None = None,
+    expected_current_user_available_slots: int | None = None,
     expected_pressure_state: str | None = None,
 ) -> dict[str, Any]:
     _assert(
@@ -205,6 +208,28 @@ def assert_safe_queue_settings_diagnostics(
         )
     per_user_limit = int(diagnostics.get("max_concurrent_per_user") or 0)
     per_session_limit = int(diagnostics.get("max_concurrent_per_session") or 0)
+    if expected_current_user_active_count is not None:
+        current_user_active_count = int(
+            diagnostics.get("current_user_active_count") or 0
+        )
+        _assert(
+            current_user_active_count == expected_current_user_active_count,
+            (
+                "current_user_active_count should be "
+                f"{expected_current_user_active_count}: {diagnostics}"
+            ),
+        )
+    if expected_current_user_waiting_count is not None:
+        current_user_waiting_count = int(
+            diagnostics.get("current_user_waiting_count") or 0
+        )
+        _assert(
+            current_user_waiting_count == expected_current_user_waiting_count,
+            (
+                "current_user_waiting_count should be "
+                f"{expected_current_user_waiting_count}: {diagnostics}"
+            ),
+        )
     if "current_user_available_slots" in diagnostics:
         current_user_available_slots = int(
             diagnostics.get("current_user_available_slots") or 0
@@ -235,6 +260,17 @@ def assert_safe_queue_settings_diagnostics(
                     f"limit-active and global capacity: {diagnostics}"
                 ),
             )
+    if expected_current_user_available_slots is not None:
+        current_user_available_slots = int(
+            diagnostics.get("current_user_available_slots") or 0
+        )
+        _assert(
+            current_user_available_slots == expected_current_user_available_slots,
+            (
+                "current_user_available_slots should be "
+                f"{expected_current_user_available_slots}: {diagnostics}"
+            ),
+        )
     _assert(
         bool(diagnostics.get("per_user_limit_enabled")) == (per_user_limit > 0),
         f"per-user fairness flag does not match limit: {diagnostics}",
@@ -271,6 +307,9 @@ def _assert_queue_settings_diagnostics(
     expected_active_count: int | None = None,
     expected_waiting_count: int | None = None,
     expected_available_slots: int | None = None,
+    expected_current_user_active_count: int | None = None,
+    expected_current_user_waiting_count: int | None = None,
+    expected_current_user_available_slots: int | None = None,
     expected_pressure_state: str | None = None,
 ) -> None:
     settings = _request(
@@ -289,6 +328,9 @@ def _assert_queue_settings_diagnostics(
         expected_active_count=expected_active_count,
         expected_waiting_count=expected_waiting_count,
         expected_available_slots=expected_available_slots,
+        expected_current_user_active_count=expected_current_user_active_count,
+        expected_current_user_waiting_count=expected_current_user_waiting_count,
+        expected_current_user_available_slots=expected_current_user_available_slots,
         expected_pressure_state=expected_pressure_state,
     )
 
@@ -529,6 +571,9 @@ def _run_queue_cancel_case(args: argparse.Namespace, base_url: str, token: str) 
         expected_active_count=1,
         expected_waiting_count=1,
         expected_available_slots=0,
+        expected_current_user_active_count=1,
+        expected_current_user_waiting_count=1,
+        expected_current_user_available_slots=0,
         expected_pressure_state="saturated",
     )
     time.sleep(max(0.0, float(args.queue_delay_sec)))
@@ -620,6 +665,9 @@ def main() -> None:
         expected_active_count=0,
         expected_waiting_count=0,
         expected_available_slots=1,
+        expected_current_user_active_count=0,
+        expected_current_user_waiting_count=0,
+        expected_current_user_available_slots=1,
         expected_pressure_state="idle",
     )
     print("  - OK: task_queue_diagnostics matches queue phase")

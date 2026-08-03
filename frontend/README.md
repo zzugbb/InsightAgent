@@ -17,7 +17,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`73/73` 通过
 - targeted Chromium：主路径导出、404 ownership 导出、取消后立即重发 `3/3` 通过
-- backend queue e2e phase：低并发 backend 下 queued cancel / safe wait_position / settings safe active/waiting counts / followup completion 通过
+- backend queue e2e phase：低并发 backend 下 queued cancel / safe wait_position / settings safe global/current-user active/waiting/available counts / followup completion 本轮 fresh 通过
 - frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 通过；默认 full 环境下该低并发专项显式 skip
 - frontend running cancel Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "running task cancel reaches"` 通过
 - frontend multi-task Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "task center separates active session"` 通过
@@ -29,7 +29,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 下一步前端计划
 
-1. `concurrency-fairness-policy`：当前主线；后端已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队与 backend queue e2e 安全快照 helper 覆盖，前端已补 settings `task_queue_diagnostics` 限额、全局/当前用户 active/waiting/available、压力状态与等待策略可观测入口，当前用户 available 已按全局空槽与 per-user 剩余额度共同收敛，下一步按风险配合真实低并发 e2e 复验或更细公平策略。
+1. `concurrency-fairness-policy`：当前主线；后端已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队与 backend queue e2e 安全快照 helper 覆盖，前端已补 settings `task_queue_diagnostics` 限额、全局/当前用户 active/waiting/available、压力状态与等待策略可观测入口，当前用户 available 已按全局空槽与 per-user 剩余额度共同收敛，低并发 backend queue e2e 已 fresh 复验，下一步按风险配合低并发 frontend queue fresh 复验或更细公平策略。
 2. Workbench composer：继续细化 queued/running/cancel 后按钮 loading、重复 prompt resend、跨会话切换与刷新恢复。
 3. 任务详情页：继续保持 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. e2e：保持 full Chromium、低并发 queue phase 与 targeted 边界专项作为进入下一主线前的回归门。
