@@ -185,6 +185,16 @@ def assert_safe_queue_settings_diagnostics(
         available_slots == max(0, expected_max_concurrent - active_count),
         f"available_slots should match max-active: {diagnostics}",
     )
+    if "has_waiting_tasks" in diagnostics:
+        _assert(
+            bool(diagnostics.get("has_waiting_tasks")) == (waiting_count > 0),
+            f"has_waiting_tasks should match waiting_count: {diagnostics}",
+        )
+    if "saturated" in diagnostics:
+        _assert(
+            bool(diagnostics.get("saturated")) == (available_slots <= 0),
+            f"saturated should match available_slots: {diagnostics}",
+        )
     if expected_active_count is not None:
         _assert(
             active_count == expected_active_count,
