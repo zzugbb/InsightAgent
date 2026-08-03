@@ -14,7 +14,7 @@ constraints:
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1734/1734)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1735/1735)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (73/73)
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
   backend_e2e_queue: TASK_QUEUE_MAX_CONCURRENT=1 backend 上 queue phase fresh passed (queued cancel + safe wait_position + settings global/current-user active/waiting/available counts + followup completion)
@@ -25,7 +25,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium rerun 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: concurrency-fairness-policy 本轮增量：先补前端 model settings 红测，确认 task_queue_diagnostics 已有 current_user_limit_reached 但运行设置摘要尚未直接显示当前用户限额触顶；实现前端摘要展示 your limit reached，不改变后端/SSE/trace/export shape。已通过 model-settings utils 7/7、frontend node tests 73/73、frontend lint，并按 runbook 提权启动 TASK_QUEUE_MAX_CONCURRENT=1 backend 与指向 8011 的 frontend，真实低并发 frontend queue e2e fresh 通过；8011/3001 端口已释放。
+latest_validation_note: concurrency-fairness-policy 本轮增量：先补 backend queue e2e helper 红测，确认 expected_current_user_active_count / waiting_count 为 0 时缺失字段会被当成 0 误通过；实现 helper 在传入当前用户期望值时强制要求 diagnostics payload 存在对应 current_user_* 字段，防止真实 e2e 漏检当前用户安全计数，不改变后端/SSE/trace/export shape。已通过 requires_current_user_count_fields 1/1、backend_queue_e2e helper 9/9、完整 backend slice 1735/1735、frontend node tests 73/73、frontend lint 与 e2e_queue py_compile。
 todos:
   - id: docs-slimming
     status: completed
@@ -75,7 +75,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1734/1734`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1735/1735`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel / safe wait_position / settings safe global/current-user active/waiting/available counts 与 pressure_state / followup completion 本轮 fresh 通过；脚本现额外校验 settings `task_queue_diagnostics`。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `73/73`。

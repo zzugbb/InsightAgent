@@ -209,6 +209,10 @@ def assert_safe_queue_settings_diagnostics(
     per_user_limit = int(diagnostics.get("max_concurrent_per_user") or 0)
     per_session_limit = int(diagnostics.get("max_concurrent_per_session") or 0)
     if expected_current_user_active_count is not None:
+        _assert(
+            "current_user_active_count" in diagnostics,
+            f"current_user_active_count is required: {diagnostics}",
+        )
         current_user_active_count = int(
             diagnostics.get("current_user_active_count") or 0
         )
@@ -220,6 +224,10 @@ def assert_safe_queue_settings_diagnostics(
             ),
         )
     if expected_current_user_waiting_count is not None:
+        _assert(
+            "current_user_waiting_count" in diagnostics,
+            f"current_user_waiting_count is required: {diagnostics}",
+        )
         current_user_waiting_count = int(
             diagnostics.get("current_user_waiting_count") or 0
         )
@@ -259,8 +267,12 @@ def assert_safe_queue_settings_diagnostics(
                     "current_user_available_slots should match per-user "
                     f"limit-active and global capacity: {diagnostics}"
                 ),
-            )
+        )
     if expected_current_user_available_slots is not None:
+        _assert(
+            "current_user_available_slots" in diagnostics,
+            f"current_user_available_slots is required: {diagnostics}",
+        )
         current_user_available_slots = int(
             diagnostics.get("current_user_available_slots") or 0
         )

@@ -16,7 +16,7 @@
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1734/1734` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1735/1735` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 本轮 fresh 通过，覆盖 queued cancel、safe wait_position、settings 全局/当前用户 active/waiting/available 安全计数与 followup completion
 - frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 本轮 fresh 通过；默认 full 环境下该低并发专项显式 skip，避免污染完整 Chromium

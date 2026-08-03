@@ -739,6 +739,37 @@ class TaskRoutesUsageGovernanceMixin:
                 expected_available_slots=0,
             )
 
+    def test_backend_queue_e2e_requires_current_user_count_fields_when_expected(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "current_user_active_count is required",
+        ):
+            queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                {
+                    "max_concurrent": 1,
+                    "active_count": 0,
+                    "waiting_count": 0,
+                    "available_slots": 1,
+                    "max_concurrent_per_user": 0,
+                    "max_concurrent_per_session": 0,
+                    "poll_interval_sec": 0.1,
+                    "per_user_limit_enabled": False,
+                    "per_session_limit_enabled": False,
+                    "fairness_limits_enabled": False,
+                    "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+                    "capacity_aware_fifo_enabled": True,
+                },
+                expected_max_concurrent=1,
+                expected_current_user_active_count=0,
+            )
+
     def test_backend_queue_e2e_rejects_inconsistent_current_user_available_slots(
         self,
     ) -> None:
