@@ -205,6 +205,11 @@ def assert_safe_queue_settings_diagnostics(
             governance_field in diagnostics,
             f"{governance_field} is required: {diagnostics}",
         )
+    for status_field in ("has_waiting_tasks", "saturated", "pressure_state"):
+        _assert(
+            status_field in diagnostics,
+            f"{status_field} is required: {diagnostics}",
+        )
     active_count = int(diagnostics.get("active_count") or 0)
     waiting_count = int(diagnostics.get("waiting_count") or 0)
     available_slots = int(diagnostics.get("available_slots") or 0)
@@ -214,16 +219,14 @@ def assert_safe_queue_settings_diagnostics(
         available_slots == max(0, expected_max_concurrent - active_count),
         f"available_slots should match max-active: {diagnostics}",
     )
-    if "has_waiting_tasks" in diagnostics:
-        _assert(
-            bool(diagnostics.get("has_waiting_tasks")) == (waiting_count > 0),
-            f"has_waiting_tasks should match waiting_count: {diagnostics}",
-        )
-    if "saturated" in diagnostics:
-        _assert(
-            bool(diagnostics.get("saturated")) == (available_slots <= 0),
-            f"saturated should match available_slots: {diagnostics}",
-        )
+    _assert(
+        bool(diagnostics.get("has_waiting_tasks")) == (waiting_count > 0),
+        f"has_waiting_tasks should match waiting_count: {diagnostics}",
+    )
+    _assert(
+        bool(diagnostics.get("saturated")) == (available_slots <= 0),
+        f"saturated should match available_slots: {diagnostics}",
+    )
     if expected_active_count is not None:
         _assert(
             active_count == expected_active_count,
@@ -247,14 +250,13 @@ def assert_safe_queue_settings_diagnostics(
         expected_derived_pressure_state = "saturated"
     elif active_count > 0:
         expected_derived_pressure_state = "active"
-    if pressure_state:
-        _assert(
-            pressure_state == expected_derived_pressure_state,
-            (
-                "pressure_state should match queue pressure "
-                f"{expected_derived_pressure_state}: {diagnostics}"
-            ),
-        )
+    _assert(
+        pressure_state == expected_derived_pressure_state,
+        (
+            "pressure_state should match queue pressure "
+            f"{expected_derived_pressure_state}: {diagnostics}"
+        ),
+    )
     if expected_pressure_state is not None:
         _assert(
             pressure_state == expected_pressure_state,

@@ -1179,6 +1179,9 @@ class TaskRoutesUsageGovernanceMixin:
             "active_count": 0,
             "waiting_count": 0,
             "available_slots": 2,
+            "has_waiting_tasks": False,
+            "saturated": False,
+            "pressure_state": "idle",
             "max_concurrent_per_user": 0,
             "max_concurrent_per_session": 0,
             "poll_interval_sec": 0.1,
@@ -1200,6 +1203,44 @@ class TaskRoutesUsageGovernanceMixin:
             "capacity_aware_fifo_enabled",
         )
         for missing_field in required_fields:
+            with self.subTest(missing_field=missing_field):
+                payload = dict(base_payload)
+                payload.pop(missing_field)
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    f"{missing_field} is required",
+                ):
+                    queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                        payload,
+                        expected_max_concurrent=2,
+                    )
+
+    def test_backend_queue_e2e_requires_settings_diagnostics_status_fields(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+        base_payload = {
+            "max_concurrent": 2,
+            "active_count": 0,
+            "waiting_count": 0,
+            "available_slots": 2,
+            "has_waiting_tasks": False,
+            "saturated": False,
+            "pressure_state": "idle",
+            "max_concurrent_per_user": 0,
+            "max_concurrent_per_session": 0,
+            "poll_interval_sec": 0.1,
+            "per_user_limit_enabled": False,
+            "per_session_limit_enabled": False,
+            "fairness_limits_enabled": False,
+            "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+            "capacity_aware_fifo_enabled": True,
+        }
+
+        for missing_field in ("has_waiting_tasks", "saturated", "pressure_state"):
             with self.subTest(missing_field=missing_field):
                 payload = dict(base_payload)
                 payload.pop(missing_field)
@@ -1329,6 +1370,9 @@ class TaskRoutesUsageGovernanceMixin:
                     "active_count": 0,
                     "waiting_count": 0,
                     "available_slots": 1,
+                    "has_waiting_tasks": False,
+                    "saturated": False,
+                    "pressure_state": "idle",
                     "max_concurrent_per_user": 0,
                     "max_concurrent_per_session": 0,
                     "poll_interval_sec": 0.1,
@@ -1361,6 +1405,9 @@ class TaskRoutesUsageGovernanceMixin:
                     "waiting_count": 0,
                     "available_slots": 1,
                     "current_user_available_slots": 1,
+                    "has_waiting_tasks": False,
+                    "saturated": False,
+                    "pressure_state": "idle",
                     "max_concurrent_per_user": 0,
                     "max_concurrent_per_session": 0,
                     "poll_interval_sec": 0.1,
@@ -1468,6 +1515,9 @@ class TaskRoutesUsageGovernanceMixin:
                     "current_user_active_count": 1,
                     "current_user_waiting_count": 1,
                     "current_user_available_slots": 2,
+                    "has_waiting_tasks": True,
+                    "saturated": False,
+                    "pressure_state": "scope_limited",
                     "max_concurrent_per_user": 2,
                     "max_concurrent_per_session": 0,
                     "poll_interval_sec": 0.1,
@@ -1501,6 +1551,9 @@ class TaskRoutesUsageGovernanceMixin:
                     "current_user_active_count": 1,
                     "current_user_waiting_count": 0,
                     "current_user_available_slots": 2,
+                    "has_waiting_tasks": False,
+                    "saturated": True,
+                    "pressure_state": "saturated",
                     "max_concurrent_per_user": 3,
                     "max_concurrent_per_session": 0,
                     "poll_interval_sec": 0.1,
@@ -1531,6 +1584,9 @@ class TaskRoutesUsageGovernanceMixin:
                     "active_count": 0,
                     "waiting_count": 0,
                     "available_slots": 1,
+                    "has_waiting_tasks": False,
+                    "saturated": False,
+                    "pressure_state": "idle",
                     "max_concurrent_per_user": 0,
                     "max_concurrent_per_session": 0,
                     "poll_interval_sec": 0.1,
@@ -1563,6 +1619,9 @@ class TaskRoutesUsageGovernanceMixin:
                     "waiting_count": 0,
                     "available_slots": 1,
                     "current_session_available_slots": 1,
+                    "has_waiting_tasks": False,
+                    "saturated": False,
+                    "pressure_state": "idle",
                     "max_concurrent_per_user": 0,
                     "max_concurrent_per_session": 0,
                     "poll_interval_sec": 0.1,
@@ -1633,6 +1692,9 @@ class TaskRoutesUsageGovernanceMixin:
                     "current_session_active_count": 1,
                     "current_session_waiting_count": 1,
                     "current_session_available_slots": 2,
+                    "has_waiting_tasks": True,
+                    "saturated": False,
+                    "pressure_state": "scope_limited",
                     "max_concurrent_per_user": 0,
                     "max_concurrent_per_session": 2,
                     "poll_interval_sec": 0.1,
