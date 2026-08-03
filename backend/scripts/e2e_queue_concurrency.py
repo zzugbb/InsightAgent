@@ -216,13 +216,23 @@ def assert_safe_queue_settings_diagnostics(
             current_user_available_slots >= 0,
             f"current_user_available_slots should be non-negative: {diagnostics}",
         )
+        _assert(
+            current_user_available_slots <= available_slots,
+            (
+                "current_user_available_slots should not exceed "
+                f"available_slots: {diagnostics}"
+            ),
+        )
         if per_user_limit > 0:
             _assert(
                 current_user_available_slots
-                == max(0, per_user_limit - current_user_active_count),
+                == min(
+                    available_slots,
+                    max(0, per_user_limit - current_user_active_count),
+                ),
                 (
                     "current_user_available_slots should match per-user "
-                    f"limit-active: {diagnostics}"
+                    f"limit-active and global capacity: {diagnostics}"
                 ),
             )
     _assert(

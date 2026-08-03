@@ -225,6 +225,69 @@ class SettingsRegistryMixin:
             },
         )
 
+    def test_build_settings_summary_response_caps_current_user_available_slots_by_global_capacity(
+        self,
+    ) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            current_user_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="settings-current-user-active",
+                max_concurrent=2,
+                user_id="settings-user",
+                session_id="settings-session-a",
+                max_concurrent_per_user=3,
+            )
+            self.assertIsNotNone(current_user_slot)
+            other_user_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="settings-other-user-active",
+                max_concurrent=2,
+                user_id="settings-other-user",
+                session_id="settings-session-b",
+                max_concurrent_per_user=3,
+            )
+            self.assertIsNotNone(other_user_slot)
+
+            summary = _build_settings_summary_response(
+                settings=StoredSettings(
+                    mode="mock",
+                    provider="mock",
+                    model="mock-gpt",
+                    base_url=None,
+                    api_key=None,
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="default",
+                ),
+                runtime_settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="default",
+                    tool_registry_provider_sources_json=None,
+                    task_queue_max_concurrent=2,
+                    task_queue_max_concurrent_per_user=3,
+                    task_queue_max_concurrent_per_session=0,
+                    task_queue_poll_interval_sec=0.15,
+                ),
+                database_locator="postgresql://demo",
+                current_user_id="settings-user",
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
+        self.assertEqual(summary.task_queue_diagnostics["available_slots"], 0)
+        self.assertEqual(
+            summary.task_queue_diagnostics["current_user_available_slots"],
+            0,
+        )
+        self.assertFalse(
+            summary.task_queue_diagnostics["current_user_limit_reached"],
+        )
+
     def test_build_settings_summary_response_marks_default_task_queue_fairness_limits_disabled(
         self,
     ) -> None:
