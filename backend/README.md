@@ -11,7 +11,7 @@
 - `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口继续保留，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题拆到 `backend/scripts/tool_runtime_slice/`；二次细分后最大主题模块约 4.7k 行。
 - `app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `app/services/tool_runtime_planning.py`、`app/services/tool_runtime_execution.py`、`app/services/tool_runtime_http_json.py`、`app/services/tool_runtime_registry.py`，外部 import facade 保持稳定；当前 facade 约 3.0k 行。
 - `queue-and-concurrency-lite` 首轮主线已完成：`queued` 已进入任务状态标准化、label/rank、stream gate 与 create 默认状态；`app/services/task_queue_service.py` 提供单进程执行槽位、安全等待快照与等待项移除入口，SSE 执行入口拿到槽位后才切 `running`，等待期间只暴露计数与当前任务 `wait_position`，queued cancel 会移出等待队列，默认 `TASK_QUEUE_MAX_CONCURRENT=32`，低并发 backend/frontend queue phase、running cancel 终态、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 均已 fresh 复验。
-- `concurrency-fairness-policy` 已启动：`app/services/task_queue_service.py` 的执行槽位新增可选 `TASK_QUEUE_MAX_CONCURRENT_PER_USER` 与 `TASK_QUEUE_MAX_CONCURRENT_PER_SESSION`，默认 `0` 关闭，开启后可限制单用户/单会话并发且不阻塞其他用户/会话；等待队列现在保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充；`GET /api/settings` 现暴露只读 `task_queue_diagnostics`，包含限额、active/waiting 安全计数、available slots、`pressure_state`、fairness 开关、`waiting_policy` 与 capacity-aware FIFO 标记，backend queue e2e 脚本会校验 idle 与排队压力下的低并发设置诊断并复用已被 slice 覆盖的安全 queue snapshot helper，不改变外部 SSE / trace / export shape。
+- `concurrency-fairness-policy` 已启动：`app/services/task_queue_service.py` 的执行槽位新增可选 `TASK_QUEUE_MAX_CONCURRENT_PER_USER` 与 `TASK_QUEUE_MAX_CONCURRENT_PER_SESSION`，默认 `0` 关闭，开启后可限制单用户/单会话并发且不阻塞其他用户/会话；等待队列现在保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充；`GET /api/settings` 现暴露只读 `task_queue_diagnostics`，包含限额、active/waiting/available 安全计数、`pressure_state`、fairness 开关、`waiting_policy` 与 capacity-aware FIFO 标记，backend queue e2e 脚本会校验 idle 与排队压力下的低并发设置诊断并复用已被 slice 覆盖的安全 queue snapshot helper，不改变外部 SSE / trace / export shape。
 - 默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
@@ -30,7 +30,7 @@
 
 ## 下一步后端计划
 
-1. `concurrency-fairness-policy`：当前主线；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings `task_queue_diagnostics` 等待策略/安全计数/压力状态诊断与 backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper 覆盖，下一步按风险补真实低并发 e2e 复验或更细公平策略。
+1. `concurrency-fairness-policy`：当前主线；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings `task_queue_diagnostics` 等待策略/安全计数/压力状态诊断与 backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper 覆盖，前端已展示 available slots，下一步按风险补真实低并发 e2e 复验或更细公平策略。
 2. `pre-flight cleanup`：文档瘦身与 `backend/scripts/test_tool_runtime_slice.py` 主题拆分已完成，保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口不变。
 3. `tool_runtime.py` 分阶段抽模块：`tool_runtime_planning.py`、`tool_runtime_execution.py`、`tool_runtime_http_json.py`、`tool_runtime_registry.py` 已完成 facade 拆分，保留现有 import facade；下一轮不再继续拆分。
 4. `registry-governance` 与 `rag-governance-hardening` 作为后续维护线，不和第一轮队列状态机混在同一改动里。

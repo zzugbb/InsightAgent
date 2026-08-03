@@ -220,6 +220,12 @@ export function formatTaskQueueDiagnosticsSummary(
   ) {
     parts.push(`waiting ${Math.max(0, Math.trunc(diagnostics.waiting_count))}`);
   }
+  if (
+    typeof diagnostics.available_slots === "number"
+    && Number.isFinite(diagnostics.available_slots)
+  ) {
+    parts.push(`available ${Math.max(0, Math.trunc(diagnostics.available_slots))}`);
+  }
   const pressureState =
     typeof diagnostics.pressure_state === "string"
       ? diagnostics.pressure_state.trim().toLowerCase()
