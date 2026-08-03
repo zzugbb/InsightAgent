@@ -624,6 +624,70 @@ class TaskRoutesUsageGovernanceMixin:
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
 
+    def test_task_queue_service_counts_only_mutually_eligible_older_waiters_for_capacity(
+        self,
+    ) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "get_task_queue_snapshot",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-mutual-active",
+                user_id="user-active",
+                session_id="session-active",
+                max_concurrent=1,
+                max_concurrent_per_user=1,
+            )
+            self.assertIsNotNone(active_slot)
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-mutual-old-a",
+                    user_id="user-old",
+                    session_id="session-old-a",
+                    max_concurrent=1,
+                    max_concurrent_per_user=1,
+                )
+            )
+            self.assertIsNone(
+                task_queue_module.try_acquire_task_execution_slot(
+                    task_id="task-mutual-old-b",
+                    user_id="user-old",
+                    session_id="session-old-b",
+                    max_concurrent=1,
+                    max_concurrent_per_user=1,
+                )
+            )
+
+            new_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-mutual-new",
+                user_id="user-new",
+                session_id="session-new",
+                max_concurrent=3,
+                max_concurrent_per_user=1,
+            )
+
+            self.assertIsNotNone(new_slot)
+            self.assertEqual(
+                task_queue_module.get_task_queue_snapshot(
+                    max_concurrent=3,
+                    task_id="task-mutual-old-a",
+                ),
+                {
+                    "active_count": 2,
+                    "max_concurrent": 3,
+                    "waiting_count": 2,
+                    "wait_position": 1,
+                },
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
     def test_backend_queue_e2e_asserts_safe_queue_state_payload(self) -> None:
         queue_e2e_module = __import__(
             "scripts.e2e_queue_concurrency",

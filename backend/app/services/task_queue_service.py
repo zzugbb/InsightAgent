@@ -213,6 +213,45 @@ class TaskQueueState:
                 count += 1
         return count
 
+    def _active_scope_counts(self) -> tuple[dict[str, int], dict[str, int]]:
+        user_counts: dict[str, int] = {}
+        session_counts: dict[str, int] = {}
+        for task_id in self._active_task_ids:
+            scope = self._task_scopes.get(task_id)
+            if scope is None:
+                continue
+            if scope.user_id:
+                user_counts[scope.user_id] = user_counts.get(scope.user_id, 0) + 1
+            if scope.session_id:
+                session_counts[scope.session_id] = (
+                    session_counts.get(scope.session_id, 0) + 1
+                )
+        return user_counts, session_counts
+
+    def _scope_limit_reached_for_counts(
+        self,
+        *,
+        scope: TaskQueueScope,
+        user_counts: dict[str, int],
+        session_counts: dict[str, int],
+        max_concurrent_per_user: int | None,
+        max_concurrent_per_session: int | None,
+    ) -> bool:
+        if (
+            max_concurrent_per_user is not None
+            and scope.user_id
+            and user_counts.get(scope.user_id, 0) >= max_concurrent_per_user
+        ):
+            return True
+        if (
+            max_concurrent_per_session is not None
+            and scope.session_id
+            and session_counts.get(scope.session_id, 0)
+            >= max_concurrent_per_session
+        ):
+            return True
+        return False
+
     def _older_eligible_waiting_count(
         self,
         *,
@@ -221,16 +260,27 @@ class TaskQueueState:
         max_concurrent_per_session: int | None,
     ) -> int:
         count = 0
+        user_counts, session_counts = self._active_scope_counts()
         for waiting_task_id in self._waiting_task_ids:
             if waiting_task_id == task_id:
                 return count
             waiting_scope = self._task_scopes.get(waiting_task_id, TaskQueueScope())
-            if not self._scope_limit_reached(
+            if not self._scope_limit_reached_for_counts(
                 scope=waiting_scope,
+                user_counts=user_counts,
+                session_counts=session_counts,
                 max_concurrent_per_user=max_concurrent_per_user,
                 max_concurrent_per_session=max_concurrent_per_session,
             ):
                 count += 1
+                if waiting_scope.user_id:
+                    user_counts[waiting_scope.user_id] = (
+                        user_counts.get(waiting_scope.user_id, 0) + 1
+                    )
+                if waiting_scope.session_id:
+                    session_counts[waiting_scope.session_id] = (
+                        session_counts.get(waiting_scope.session_id, 0) + 1
+                    )
         return count
 
 
