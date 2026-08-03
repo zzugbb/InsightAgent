@@ -77,8 +77,8 @@ export type TaskQueueDiagnostics = {
   per_user_limit_enabled: boolean;
   per_session_limit_enabled: boolean;
   fairness_limits_enabled: boolean;
-  waiting_policy?: string;
-  capacity_aware_fifo_enabled?: boolean;
+  waiting_policy: string;
+  capacity_aware_fifo_enabled: boolean;
 };
 
 export type SettingsSummary = {

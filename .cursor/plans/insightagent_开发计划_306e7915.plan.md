@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution 与 queue-and-concurrency-lite 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前核心主线：concurrency-fairness-policy；进度约 99%；已完成可选按用户/按 session 并发执行槽位上限，默认 0 关闭，开启后同用户/同会话上限不会阻塞其他用户/会话；等待队列已保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充，并已补同一 active task 重复 acquire 的非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算与旧等待项预占 scope quota 后的当前任务准入判断；settings 已暴露只读 task_queue_diagnostics，包含全局、当前用户与可选 current session active/waiting/available 安全计数，其中当前用户 available 会按全局空槽与 per-user 剩余额度共同收敛，当前会话 available 会按全局空槽与 per-session 剩余额度共同收敛；同时包含基础计数字段存在性、governance 必填字段、当前用户/当前会话限额触顶、has_waiting_tasks/saturated 一致性、pressure_state 派生一致性、waiting_policy 与 capacity-aware FIFO 标记，前端运行设置已带 activeSessionId 展示队列 fairness/运行态/当前用户与当前会话计数/可用槽位/限额触顶/压力状态/等待策略摘要，settings URL helper 已覆盖 API base 尾斜杠归一化与 encoded session_id，backend queue e2e 脚本已加入 idle/压力诊断断言并复用已被 slice 覆盖的安全 queue snapshot helper、queued SSE queue snapshot 基础字段与结构一致性、has_waiting_tasks/saturated/pressure_state 一致性、当前用户/当前会话可用槽位一致性、available slots 字段依赖与治理字段必填校验；最近一次 backend queue e2e、frontend queue phase 与 full Chromium 已 fresh 复验，外部 SSE / trace / export shape 保持不变
+  - 当前核心主线：concurrency-fairness-policy；进度约 99.5%；已完成可选按用户/按 session 并发执行槽位上限，默认 0 关闭，开启后同用户/同会话上限不会阻塞其他用户/会话；等待队列已保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充，并已补同一 active task 重复 acquire 的非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算与旧等待项预占 scope quota 后的当前任务准入判断；settings 已暴露只读 task_queue_diagnostics，包含全局、当前用户与可选 current session active/waiting/available 安全计数，其中当前用户 available 会按全局空槽与 per-user 剩余额度共同收敛，当前会话 available 会按全局空槽与 per-session 剩余额度共同收敛；同时包含基础计数字段存在性、governance 必填字段、当前用户/当前会话限额触顶、has_waiting_tasks/saturated 一致性、pressure_state 派生一致性、waiting_policy 与 capacity-aware FIFO 标记，前端运行设置已带 activeSessionId 展示队列 fairness/运行态/当前用户与当前会话计数/可用槽位/限额触顶/压力状态/等待策略摘要，前端 TaskQueueDiagnostics 类型已将 waiting_policy 与 capacity_aware_fifo_enabled 收紧为必填，settings URL helper 已覆盖 API base 尾斜杠归一化与 encoded session_id，backend queue e2e 脚本已加入 idle/压力诊断断言并复用已被 slice 覆盖的安全 queue snapshot helper、queued SSE queue snapshot 基础字段与结构一致性、has_waiting_tasks/saturated/pressure_state 一致性、当前用户/当前会话可用槽位一致性、available slots 字段依赖与治理字段必填校验；backend queue e2e、frontend queue phase 与 full Chromium 均已本轮 fresh 复验，外部 SSE / trace / export shape 保持不变
   - queue-and-concurrency-lite 首轮主线已完成：queued 状态标准化、label/rank、create 默认 queued、进程内执行槽位、queued SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复、低并发 backend/frontend queue phase 与完整 Chromium 均已 fresh 复验
   - pre-flight cleanup 已完成文档瘦身、test_tool_runtime_slice 主题拆分与 tool_runtime.py planner/execution/HTTP JSON/registry facade 拆分；当前 facade 约 3.0k 行，继续开发时保持原测试入口命令不变
   - registry-governance 作为维护线，继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 语义
@@ -16,16 +16,17 @@ constraints:
 validation_baseline:
   backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1756/1756)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (76/76)
+  frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
-  backend_e2e_queue: TASK_QUEUE_MAX_CONCURRENT=1 backend 上 queue phase recently fresh passed (queued cancel + safe wait_position + settings global/current-user/current-session active/waiting/available counts + followup completion); helper now also checks queued snapshot structure consistency, scope available slots field dependencies, and required governance diagnostics fields; prior 8011 backend startup was blocked by escalation approval channel disconnect, so real queue e2e was not freshly rerun this round
-  frontend_queue_phase: low-concurrency backend/frontend scripts/ci_run_frontend_e2e.sh --phase queue recently fresh passed (1 passed); default full skips this low-concurrency-only test
+  backend_e2e_queue: TASK_QUEUE_MAX_CONCURRENT=1 backend 上 queue phase fresh passed this round (queued cancel + safe wait_position + settings global/current-user/current-session active/waiting/available counts + followup completion); helper now also checks queued snapshot structure consistency, scope available slots field dependencies, and required governance diagnostics fields
+  frontend_queue_phase: low-concurrency backend/frontend scripts/ci_run_frontend_e2e.sh --phase queue fresh passed this round (1 passed); default full skips this low-concurrency-only test
   frontend_running_cancel_chromium: default backend/frontend targeted Chromium passed (running task cancel reaches server terminal state and clears live UI)
   frontend_multitask_task_center_chromium: default backend/frontend targeted Chromium passed (task center separates active session tasks from global concurrent tasks)
   frontend_reload_isolation_chromium: default backend/frontend targeted Chromium passed (reload keeps background session stream detached until that session is active)
-  frontend_chromium_e2e: full Chromium recently fresh passed, 50 passed / 1 skipped against real backend/frontend services
+  frontend_chromium_e2e: full Chromium fresh passed this round, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: concurrency-fairness-policy 本轮增量：先补红测锁住 backend queue e2e settings diagnostics 的 governance 字段完整性，要求 max_concurrent_per_user/max_concurrent_per_session/poll_interval_sec/per_user_limit_enabled/per_session_limit_enabled/fairness_limits_enabled/waiting_policy/capacity_aware_fifo_enabled 缺失时明确失败；随后在 assert_safe_queue_settings_diagnostics 入口补必填字段断言，不改变外部 SSE / trace / export shape。已通过 governance_fields targeted 1/1、backend queue e2e helper slice 23/23、py_compile、完整 backend slice 1756/1756、完整 frontend node tests 76/76、frontend lint；真实低并发 queue e2e 仍受上一轮提权审批通道连接断开阻塞，未 fresh 重跑，未拿旧结果冒充新结果。
+latest_validation_note: concurrency-fairness-policy 本轮增量：先补前端 type-level 红测，锁住 TaskQueueDiagnostics 中 waiting_policy/capacity_aware_fifo_enabled 必填契约，随后收紧前端类型，保持 settings diagnostics 与 backend e2e helper 的治理字段完整性一致；不改变外部 SSE / trace / export shape。已通过前端 type contract、完整 frontend node tests 76/76、frontend lint、完整 backend slice 1756/1756、backend queue e2e phase fresh、full Chromium fresh 50 passed / 1 skipped、frontend queue phase fresh 1 passed；本轮启动的 8011/8000/3001 服务均已 Ctrl+C 正常退出，最后 lsof 端口残留确认因提权审批通道连接断开未能执行。
 todos:
   - id: docs-slimming
     status: completed
@@ -41,7 +42,7 @@ todos:
     content: 首轮主线完成；已补 queued 状态标准化、label/rank、stream gate、create 默认 queued、进程内执行槽位、queued wait SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover 初始 phase、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 复验；后续按用户/按 session 并发策略可作为新主线增量推进。
   - id: concurrency-fairness-policy
     status: in_progress
-    content: 当前核心主线，约 99%；已完成可选 TASK_QUEUE_MAX_CONCURRENT_PER_USER / TASK_QUEUE_MAX_CONCURRENT_PER_SESSION 执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断、queued SSE queue snapshot 基础字段存在性与结构一致性、settings task_queue_diagnostics 限额/基础字段存在性/governance 必填字段/全局与当前用户/当前会话 active/waiting/available 安全计数/当前用户与当前会话限额触顶/has_waiting_tasks/saturated/pressure_state 派生一致性/等待策略诊断、scope available slots 字段依赖、前端 settings session URL helper 边界；前端运行设置可观测入口、backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper、当前用户/当前会话可用槽位一致性覆盖与最近一次真实低并发 backend/frontend queue e2e、full Chromium fresh 复验完成，默认关闭并保持 SSE / trace / export 外形稳定；下一步主要是最终 e2e fresh 复验、diff/文档/提交收口。
+    content: 当前核心主线，约 99.5%；已完成可选 TASK_QUEUE_MAX_CONCURRENT_PER_USER / TASK_QUEUE_MAX_CONCURRENT_PER_SESSION 执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断、queued SSE queue snapshot 基础字段存在性与结构一致性、settings task_queue_diagnostics 限额/基础字段存在性/governance 必填字段/全局与当前用户/当前会话 active/waiting/available 安全计数/当前用户与当前会话限额触顶/has_waiting_tasks/saturated/pressure_state 派生一致性/等待策略诊断、scope available slots 字段依赖、前端 diagnostics 类型契约、前端 settings session URL helper 边界；前端运行设置可观测入口、backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper、当前用户/当前会话可用槽位一致性覆盖与本轮真实低并发 backend/frontend queue e2e、full Chromium fresh 复验完成，默认关闭并保持 SSE / trace / export 外形稳定；下一步主要是最终 diff/文档/提交收口。
   - id: development-runbook
     status: completed
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。
@@ -77,13 +78,14 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 - Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1756/1756`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
-- Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel / queued SSE safe wait_position、settings safe global/current-user active/waiting/available counts、基础计数字段存在性、governance 必填字段、has_waiting_tasks/saturated/pressure_state/current-user limit 与 available 一致性 / followup completion 最近一次 fresh 通过；脚本现额外校验 queued snapshot 基础计数字段、结构一致性、current session diagnostics、settings `task_queue_diagnostics` 与 scope available slots 字段依赖；真实 queue e2e 本轮未 fresh 重跑，仍受上一轮 8011 低并发 backend 提权审批通道连接断开阻塞。
+- Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel / queued SSE safe wait_position、settings safe global/current-user active/waiting/available counts、基础计数字段存在性、governance 必填字段、has_waiting_tasks/saturated/pressure_state/current-user limit 与 available 一致性 / followup completion 本轮 fresh 通过；脚本现额外校验 queued snapshot 基础计数字段、结构一致性、current session diagnostics、settings `task_queue_diagnostics` 与 scope available slots 字段依赖。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `76/76`。
-- Frontend queue phase：低并发 backend/frontend 下 selected session 恢复 queued 任务、Inspector 排队位置与 queued cancel 最近一次 fresh 通过；默认 full Chromium 下该专项显式 skip。
+- Frontend type contract：TaskQueueDiagnostics governance 字段必填契约通过。
+- Frontend queue phase：低并发 backend/frontend 下 selected session 恢复 queued 任务、Inspector 排队位置与 queued cancel 本轮 fresh 通过；默认 full Chromium 下该专项显式 skip。
 - Frontend running cancel Chromium：默认 backend/frontend 下 UI cancel 后服务端 terminal、Inspector phase 与 composer 恢复通过。
 - Frontend multi-task Chromium：默认 backend/frontend 下 Task Center 当前会话与全局多任务隔离通过。
 - Frontend reload isolation Chromium：默认 backend/frontend 下刷新后后台会话 stream 不误恢复、切回原会话恢复并可取消通过。
-- Frontend Chromium e2e：真实 backend/frontend 服务下 full 最近一次 fresh 复跑 `50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip。
+- Frontend Chromium e2e：真实 backend/frontend 服务下 full 本轮 fresh 复跑 `50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip。
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过。
 - Diff hygiene：`git diff --check` 通过。
 
