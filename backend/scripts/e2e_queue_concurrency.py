@@ -176,6 +176,11 @@ def assert_safe_queue_settings_diagnostics(
         "waiting_task_ids" not in diagnostics,
         "task_queue_diagnostics leaked waiting_task_ids",
     )
+    for count_field in ("active_count", "waiting_count", "available_slots"):
+        _assert(
+            count_field in diagnostics,
+            f"{count_field} is required: {diagnostics}",
+        )
     active_count = int(diagnostics.get("active_count") or 0)
     waiting_count = int(diagnostics.get("waiting_count") or 0)
     available_slots = int(diagnostics.get("available_slots") or 0)
