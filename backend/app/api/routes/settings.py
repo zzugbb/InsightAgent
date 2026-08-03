@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import NotRequired, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
@@ -123,6 +124,32 @@ class SettingsUpdateRequest(BaseModel):
         return self
 
 
+class TaskQueueDiagnosticsSummary(TypedDict):
+    max_concurrent: int
+    active_count: int
+    waiting_count: int
+    available_slots: int
+    has_waiting_tasks: bool
+    saturated: bool
+    pressure_state: str
+    max_concurrent_per_user: int
+    max_concurrent_per_session: int
+    poll_interval_sec: float
+    per_user_limit_enabled: bool
+    per_session_limit_enabled: bool
+    fairness_limits_enabled: bool
+    waiting_policy: str
+    capacity_aware_fifo_enabled: bool
+    current_user_active_count: NotRequired[int]
+    current_user_waiting_count: NotRequired[int]
+    current_user_available_slots: NotRequired[int]
+    current_user_limit_reached: NotRequired[bool]
+    current_session_active_count: NotRequired[int]
+    current_session_waiting_count: NotRequired[int]
+    current_session_available_slots: NotRequired[int]
+    current_session_limit_reached: NotRequired[bool]
+
+
 class SettingsSummaryResponse(BaseModel):
     mode: str
     provider: str
@@ -138,7 +165,7 @@ class SettingsSummaryResponse(BaseModel):
     available_tool_registry_profile_details: list[ToolRegistryProfileOptionResponse]
     available_tool_registry_provider_sources: list[str]
     available_tool_registry_provider_source_details: list[ToolRegistryProviderSourceOptionResponse]
-    task_queue_diagnostics: dict[str, object]
+    task_queue_diagnostics: TaskQueueDiagnosticsSummary
     database_locator: str
 
 

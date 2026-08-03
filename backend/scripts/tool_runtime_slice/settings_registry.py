@@ -4,6 +4,59 @@ from .context import *
 
 
 class SettingsRegistryMixin:
+    def test_settings_summary_response_types_task_queue_diagnostics_contract(
+        self,
+    ) -> None:
+        diagnostics_contract = getattr(
+            settings_routes_module,
+            "TaskQueueDiagnosticsSummary",
+            None,
+        )
+
+        self.assertIsNotNone(diagnostics_contract)
+        self.assertIs(
+            SettingsSummaryResponse.model_fields["task_queue_diagnostics"].annotation,
+            diagnostics_contract,
+        )
+
+        required_keys = set(
+            getattr(diagnostics_contract, "__required_keys__", frozenset())
+        )
+        for field_name in {
+            "max_concurrent",
+            "active_count",
+            "waiting_count",
+            "available_slots",
+            "has_waiting_tasks",
+            "saturated",
+            "pressure_state",
+            "max_concurrent_per_user",
+            "max_concurrent_per_session",
+            "poll_interval_sec",
+            "per_user_limit_enabled",
+            "per_session_limit_enabled",
+            "fairness_limits_enabled",
+            "waiting_policy",
+            "capacity_aware_fifo_enabled",
+        }:
+            self.assertIn(field_name, required_keys)
+
+        optional_keys = set(
+            getattr(diagnostics_contract, "__optional_keys__", frozenset())
+        )
+        for field_name in {
+            "current_user_active_count",
+            "current_user_waiting_count",
+            "current_user_available_slots",
+            "current_user_limit_reached",
+            "current_session_active_count",
+            "current_session_waiting_count",
+            "current_session_available_slots",
+            "current_session_limit_reached",
+        }:
+            self.assertIn(field_name, optional_keys)
+            self.assertNotIn(field_name, required_keys)
+
     def test_build_settings_summary_response_captures_registry_profile_source_and_enabled_tools(
         self,
     ) -> None:

@@ -38,6 +38,7 @@ import app.db as db_module  # type: ignore[import-not-found]
 from app.api.routes.settings import (  # type: ignore[import-not-found]
     _apply_tool_registry_preview_to_validate_response,
     _build_settings_summary_response,
+    SettingsSummaryResponse,
     SettingsValidateResponse,
 )
 from app.providers.base import ProviderUsage  # type: ignore[import-not-found]
