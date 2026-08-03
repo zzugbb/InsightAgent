@@ -98,11 +98,18 @@ class TaskQueueState:
         *,
         max_concurrent: int,
         task_id: str | None = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, object]:
         max_concurrent = _normalize_max_concurrent(max_concurrent)
+        scope = TaskQueueScope(
+            user_id=_normalize_scope_value(user_id),
+            session_id=_normalize_scope_value(session_id),
+        )
         with self._lock:
             active_task_ids = list(self._active_task_ids)
             waiting_task_ids = list(self._waiting_task_ids)
+            task_scopes = dict(self._task_scopes)
         wait_position: int | None
         if task_id in active_task_ids:
             wait_position = 0
@@ -110,12 +117,35 @@ class TaskQueueState:
             wait_position = waiting_task_ids.index(task_id) + 1
         else:
             wait_position = None
-        return {
+        snapshot: dict[str, object] = {
             "active_count": len(active_task_ids),
             "max_concurrent": max_concurrent,
             "waiting_count": len(waiting_task_ids),
             "wait_position": wait_position,
         }
+        if scope.user_id:
+            snapshot["active_count_for_user"] = _count_tasks_for_scope(
+                active_task_ids,
+                task_scopes=task_scopes,
+                user_id=scope.user_id,
+            )
+            snapshot["waiting_count_for_user"] = _count_tasks_for_scope(
+                waiting_task_ids,
+                task_scopes=task_scopes,
+                user_id=scope.user_id,
+            )
+        if scope.session_id:
+            snapshot["active_count_for_session"] = _count_tasks_for_scope(
+                active_task_ids,
+                task_scopes=task_scopes,
+                session_id=scope.session_id,
+            )
+            snapshot["waiting_count_for_session"] = _count_tasks_for_scope(
+                waiting_task_ids,
+                task_scopes=task_scopes,
+                session_id=scope.session_id,
+            )
+        return snapshot
 
     def reset(self) -> None:
         with self._lock:
@@ -216,6 +246,26 @@ def _normalize_scope_value(value: str | None) -> str | None:
     return normalized or None
 
 
+def _count_tasks_for_scope(
+    task_ids: list[str],
+    *,
+    task_scopes: dict[str, TaskQueueScope],
+    user_id: str | None = None,
+    session_id: str | None = None,
+) -> int:
+    count = 0
+    for task_id in task_ids:
+        scope = task_scopes.get(task_id)
+        if scope is None:
+            continue
+        if user_id is not None and scope.user_id == user_id:
+            count += 1
+            continue
+        if session_id is not None and scope.session_id == session_id:
+            count += 1
+    return count
+
+
 _TASK_QUEUE_STATE = TaskQueueState()
 
 
@@ -242,10 +292,14 @@ def get_task_queue_snapshot(
     *,
     max_concurrent: int,
     task_id: str | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
 ) -> dict[str, object]:
     return _TASK_QUEUE_STATE.snapshot(
         max_concurrent=max_concurrent,
         task_id=task_id,
+        user_id=user_id,
+        session_id=session_id,
     )
 
 

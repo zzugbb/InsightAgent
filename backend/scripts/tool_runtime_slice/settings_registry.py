@@ -195,6 +195,7 @@ class SettingsRegistryMixin:
                     task_queue_poll_interval_sec=0.15,
                 ),
                 database_locator="postgresql://demo",
+                current_user_id="settings-user",
             )
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
@@ -206,6 +207,9 @@ class SettingsRegistryMixin:
                 "active_count": 1,
                 "waiting_count": 1,
                 "available_slots": 7,
+                "current_user_active_count": 1,
+                "current_user_waiting_count": 1,
+                "current_user_limit_reached": True,
                 "has_waiting_tasks": True,
                 "saturated": False,
                 "pressure_state": "scope_limited",
@@ -2216,7 +2220,7 @@ class SettingsRegistryMixin:
                 saved_settings.append(settings) or settings
             )
             settings_routes_module._build_settings_summary_response = (
-                lambda *, settings, runtime_settings=None, database_locator=None: settings
+                lambda *, settings, runtime_settings=None, database_locator=None, **_kwargs: settings
             )
             settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
 
@@ -2311,7 +2315,7 @@ class SettingsRegistryMixin:
                 saved_settings.append(settings) or settings
             )
             settings_routes_module._build_settings_summary_response = (
-                lambda *, settings, runtime_settings=None, database_locator=None: settings
+                lambda *, settings, runtime_settings=None, database_locator=None, **_kwargs: settings
             )
             settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
 
@@ -2415,7 +2419,7 @@ class SettingsRegistryMixin:
                 saved_settings.append(settings) or settings
             )
             settings_routes_module._build_settings_summary_response = (
-                lambda *, settings, runtime_settings=None, database_locator=None: settings
+                lambda *, settings, runtime_settings=None, database_locator=None, **_kwargs: settings
             )
             settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
 
@@ -2490,7 +2494,7 @@ class SettingsRegistryMixin:
                 saved_settings.append(settings) or settings
             )
             settings_routes_module._build_settings_summary_response = (
-                lambda *, settings, runtime_settings=None, database_locator=None: settings
+                lambda *, settings, runtime_settings=None, database_locator=None, **_kwargs: settings
             )
             settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
 

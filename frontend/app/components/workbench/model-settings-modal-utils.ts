@@ -226,6 +226,28 @@ export function formatTaskQueueDiagnosticsSummary(
   ) {
     parts.push(`available ${Math.max(0, Math.trunc(diagnostics.available_slots))}`);
   }
+  if (
+    typeof diagnostics.current_user_active_count === "number"
+    && Number.isFinite(diagnostics.current_user_active_count)
+  ) {
+    parts.push(
+      `your active ${Math.max(
+        0,
+        Math.trunc(diagnostics.current_user_active_count),
+      )}`,
+    );
+  }
+  if (
+    typeof diagnostics.current_user_waiting_count === "number"
+    && Number.isFinite(diagnostics.current_user_waiting_count)
+  ) {
+    parts.push(
+      `your waiting ${Math.max(
+        0,
+        Math.trunc(diagnostics.current_user_waiting_count),
+      )}`,
+    );
+  }
   const pressureState =
     typeof diagnostics.pressure_state === "string"
       ? diagnostics.pressure_state.trim().toLowerCase()

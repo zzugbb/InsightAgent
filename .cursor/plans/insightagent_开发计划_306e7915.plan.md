@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution 与 queue-and-concurrency-lite 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前核心主线：concurrency-fairness-policy；已完成可选按用户/按 session 并发执行槽位上限，默认 0 关闭，开启后同用户/同会话上限不会阻塞其他用户/会话；等待队列已保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充；settings 已暴露只读 task_queue_diagnostics，包含 active/waiting 安全计数、available_slots、pressure_state、waiting_policy 与 capacity-aware FIFO 标记，前端运行设置已展示队列 fairness/运行态/可用槽位/压力状态/等待策略摘要，backend queue e2e 脚本已加入 idle/压力诊断断言并复用已被 slice 覆盖的安全 queue snapshot helper，外部 SSE / trace / export shape 保持不变
+  - 当前核心主线：concurrency-fairness-policy；已完成可选按用户/按 session 并发执行槽位上限，默认 0 关闭，开启后同用户/同会话上限不会阻塞其他用户/会话；等待队列已保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充；settings 已暴露只读 task_queue_diagnostics，包含全局与当前用户 active/waiting 安全计数、available_slots、pressure_state、waiting_policy 与 capacity-aware FIFO 标记，前端运行设置已展示队列 fairness/运行态/当前用户计数/可用槽位/压力状态/等待策略摘要，backend queue e2e 脚本已加入 idle/压力诊断断言并复用已被 slice 覆盖的安全 queue snapshot helper，外部 SSE / trace / export shape 保持不变
   - queue-and-concurrency-lite 首轮主线已完成：queued 状态标准化、label/rank、create 默认 queued、进程内执行槽位、queued SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复、低并发 backend/frontend queue phase 与完整 Chromium 均已 fresh 复验
   - pre-flight cleanup 已完成文档瘦身、test_tool_runtime_slice 主题拆分与 tool_runtime.py planner/execution/HTTP JSON/registry facade 拆分；当前 facade 约 3.0k 行，继续开发时保持原测试入口命令不变
   - registry-governance 作为维护线，继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 语义
@@ -25,7 +25,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium rerun 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: concurrency-fairness-policy 本轮增量：先补前端 model settings 红测，确认 `available_slots` 已在 settings diagnostics 暴露但前端摘要未展示；实现 settings task queue 摘要中的 available N 可用槽位显示，不改变后端接口、SSE / trace / export shape。已通过 frontend model settings utils 7/7、frontend node tests 73/73 与 frontend lint；后端代码未改动，完整 backend slice 基线仍为上一轮 fresh 的 1731/1731。
+latest_validation_note: concurrency-fairness-policy 本轮增量：先补 settings diagnostics 与前端 model settings 红测，确认 settings summary 尚未把当前用户 scoped 队列计数带入 task_queue_diagnostics，前端也无法显示 your active/waiting；实现 get_task_queue_snapshot 可选 user/session scoped 计数、GET/PUT settings 注入 current_user_id，并在前端摘要展示当前用户 active/waiting，不暴露 user/session/task id，不改变 SSE / trace / export shape。已通过 task_queue_fairness 2/2、task_queue targeted 9/9、settings targeted 193/193、完整 backend slice 1731/1731、frontend model settings utils 7/7、frontend node tests 73/73、frontend lint 与 settings/task_queue py_compile。
 todos:
   - id: docs-slimming
     status: completed
@@ -41,7 +41,7 @@ todos:
     content: 首轮主线完成；已补 queued 状态标准化、label/rank、stream gate、create 默认 queued、进程内执行槽位、queued wait SSE state、安全 queue snapshot、queued cancel 等待项移除、前端排队位置展示、queued recover 初始 phase、低并发 backend/frontend queue phase、前端 queued recover/cancel Chromium 专项、running cancel 终态专项、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 复验；后续按用户/按 session 并发策略可作为新主线增量推进。
   - id: concurrency-fairness-policy
     status: in_progress
-    content: 当前核心主线；已完成可选 TASK_QUEUE_MAX_CONCURRENT_PER_USER / TASK_QUEUE_MAX_CONCURRENT_PER_SESSION 执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings task_queue_diagnostics 限额/运行态安全计数/可用槽位/压力状态/等待策略诊断、前端运行设置可观测入口、backend queue e2e-like idle/压力诊断断言与安全 queue snapshot helper 覆盖，默认关闭并保持 SSE / trace / export 外形稳定；下一步按风险补真实低并发 e2e 复验或更细公平策略。
+    content: 当前核心主线；已完成可选 TASK_QUEUE_MAX_CONCURRENT_PER_USER / TASK_QUEUE_MAX_CONCURRENT_PER_SESSION 执行槽位上限、capacity-aware oldest eligible FIFO 防插队、settings task_queue_diagnostics 限额/全局与当前用户安全计数/可用槽位/压力状态/等待策略诊断、前端运行设置可观测入口、backend queue e2e-like idle/压力诊断断言与安全 queue snapshot helper 覆盖，默认关闭并保持 SSE / trace / export 外形稳定；下一步按风险补真实低并发 e2e 复验或更细公平策略。
   - id: development-runbook
     status: completed
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。

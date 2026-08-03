@@ -470,7 +470,11 @@ def _merge_runtime_settings_for_summary(
     return SimpleNamespace(**merged_values)
 
 
-def _build_task_queue_diagnostics(*, runtime_settings: object) -> dict[str, object]:
+def _build_task_queue_diagnostics(
+    *,
+    runtime_settings: object,
+    current_user_id: str | None = None,
+) -> dict[str, object]:
     max_concurrent = max(
         1,
         int(getattr(runtime_settings, "task_queue_max_concurrent", 1) or 1),
@@ -491,7 +495,10 @@ def _build_task_queue_diagnostics(*, runtime_settings: object) -> dict[str, obje
     )
     per_user_limit_enabled = max_concurrent_per_user > 0
     per_session_limit_enabled = max_concurrent_per_session > 0
-    queue_snapshot = get_task_queue_snapshot(max_concurrent=max_concurrent)
+    queue_snapshot = get_task_queue_snapshot(
+        max_concurrent=max_concurrent,
+        user_id=current_user_id,
+    )
     active_count = max(0, int(queue_snapshot.get("active_count", 0) or 0))
     waiting_count = max(0, int(queue_snapshot.get("waiting_count", 0) or 0))
     available_slots = max(0, max_concurrent - active_count)
@@ -505,7 +512,7 @@ def _build_task_queue_diagnostics(*, runtime_settings: object) -> dict[str, obje
         pressure_state = "active"
     else:
         pressure_state = "idle"
-    return {
+    diagnostics: dict[str, object] = {
         "max_concurrent": max_concurrent,
         "active_count": active_count,
         "waiting_count": waiting_count,
@@ -524,6 +531,26 @@ def _build_task_queue_diagnostics(*, runtime_settings: object) -> dict[str, obje
         "waiting_policy": "capacity_aware_oldest_eligible_fifo",
         "capacity_aware_fifo_enabled": True,
     }
+    if current_user_id:
+        current_user_active_count = max(
+            0,
+            int(queue_snapshot.get("active_count_for_user", 0) or 0),
+        )
+        current_user_waiting_count = max(
+            0,
+            int(queue_snapshot.get("waiting_count_for_user", 0) or 0),
+        )
+        diagnostics.update(
+            {
+                "current_user_active_count": current_user_active_count,
+                "current_user_waiting_count": current_user_waiting_count,
+                "current_user_limit_reached": (
+                    max_concurrent_per_user > 0
+                    and current_user_active_count >= max_concurrent_per_user
+                ),
+            }
+        )
+    return diagnostics
 
 
 def _resolve_effective_tool_registry_selection(
@@ -591,6 +618,7 @@ def _build_settings_summary_response(
     settings: StoredSettings,
     runtime_settings: object | None = None,
     database_locator: str | None = None,
+    current_user_id: str | None = None,
 ) -> SettingsSummaryResponse:
     effective_settings = _merge_runtime_settings_for_summary(
         settings=settings,
@@ -626,7 +654,8 @@ def _build_settings_summary_response(
             option_bundle["available_tool_registry_provider_source_details"]
         ),
         task_queue_diagnostics=_build_task_queue_diagnostics(
-            runtime_settings=effective_settings
+            runtime_settings=effective_settings,
+            current_user_id=current_user_id,
         ),
         database_locator=database_locator or get_database_locator(),
     )
@@ -636,7 +665,10 @@ def _build_settings_summary_response(
 def get_settings_summary(current_user: dict = Depends(get_current_user)) -> SettingsSummaryResponse:
     user_id = str(current_user["id"])
     settings = get_stored_settings(user_id)
-    return _build_settings_summary_response(settings=settings)
+    return _build_settings_summary_response(
+        settings=settings,
+        current_user_id=user_id,
+    )
 
 
 @router.put("", response_model=SettingsSummaryResponse)
@@ -705,7 +737,10 @@ def update_settings(
             "tool_registry_provider_source": settings.tool_registry_provider_source,
         },
     )
-    return _build_settings_summary_response(settings=settings)
+    return _build_settings_summary_response(
+        settings=settings,
+        current_user_id=user_id,
+    )
 
 
 @router.post("/validate", response_model=SettingsValidateResponse)
