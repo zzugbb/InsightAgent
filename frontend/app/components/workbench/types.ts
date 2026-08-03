@@ -57,6 +57,9 @@ export type ToolRegistryProviderToolDetail = {
 
 export type TaskQueueDiagnostics = {
   max_concurrent: number;
+  active_count?: number;
+  waiting_count?: number;
+  available_slots?: number;
   max_concurrent_per_user: number;
   max_concurrent_per_session: number;
   poll_interval_sec: number;

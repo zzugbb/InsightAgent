@@ -208,6 +208,18 @@ export function formatTaskQueueDiagnosticsSummary(
     diagnostics.poll_interval_sec || 0,
   );
   const parts = [`global ${maxConcurrent}`];
+  if (
+    typeof diagnostics.active_count === "number"
+    && Number.isFinite(diagnostics.active_count)
+  ) {
+    parts.push(`active ${Math.max(0, Math.trunc(diagnostics.active_count))}`);
+  }
+  if (
+    typeof diagnostics.waiting_count === "number"
+    && Number.isFinite(diagnostics.waiting_count)
+  ) {
+    parts.push(`waiting ${Math.max(0, Math.trunc(diagnostics.waiting_count))}`);
+  }
   if (diagnostics.per_user_limit_enabled) {
     parts.push(
       `per user ${Math.max(

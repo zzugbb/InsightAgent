@@ -146,6 +146,9 @@ test("formatToolRegistryProviderSourceDiagnosticsSummary humanizes missing entri
 test("formatTaskQueueDiagnosticsSummary shows enabled fairness limits", () => {
   const result = formatTaskQueueDiagnosticsSummary({
     max_concurrent: 8,
+    active_count: 1,
+    waiting_count: 2,
+    available_slots: 7,
     max_concurrent_per_user: 2,
     max_concurrent_per_session: 1,
     poll_interval_sec: 0.15,
@@ -158,7 +161,7 @@ test("formatTaskQueueDiagnosticsSummary shows enabled fairness limits", () => {
 
   assert.equal(
     result,
-    "global 8 · per user 2 · per session 1 · capacity-aware FIFO · poll 0.15s",
+    "global 8 · active 1 · waiting 2 · per user 2 · per session 1 · capacity-aware FIFO · poll 0.15s",
   );
 });
 

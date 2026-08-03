@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.db import get_database_locator
 from app.services.audit_service import safe_record_audit_event
 from app.services.settings_service import StoredSettings, get_stored_settings, save_settings
+from app.services.task_queue_service import get_task_queue_snapshot
 from app.services.tool_runtime import (
     build_configured_tool_registry_provider_preflight_tool_details,
     build_tool_registry_diagnostics_summary,
@@ -490,8 +491,14 @@ def _build_task_queue_diagnostics(*, runtime_settings: object) -> dict[str, obje
     )
     per_user_limit_enabled = max_concurrent_per_user > 0
     per_session_limit_enabled = max_concurrent_per_session > 0
+    queue_snapshot = get_task_queue_snapshot(max_concurrent=max_concurrent)
+    active_count = max(0, int(queue_snapshot.get("active_count", 0) or 0))
+    waiting_count = max(0, int(queue_snapshot.get("waiting_count", 0) or 0))
     return {
         "max_concurrent": max_concurrent,
+        "active_count": active_count,
+        "waiting_count": waiting_count,
+        "available_slots": max(0, max_concurrent - active_count),
         "max_concurrent_per_user": max_concurrent_per_user,
         "max_concurrent_per_session": max_concurrent_per_session,
         "poll_interval_sec": poll_interval_sec,

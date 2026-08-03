@@ -149,32 +149,57 @@ class SettingsRegistryMixin:
     def test_build_settings_summary_response_exposes_task_queue_fairness_diagnostics(
         self,
     ) -> None:
-        summary = _build_settings_summary_response(
-            settings=StoredSettings(
-                mode="mock",
-                provider="mock",
-                model="mock-gpt",
-                base_url=None,
-                api_key=None,
-                tool_registry_profile="default",
-                tool_registry_provider_source="default",
-            ),
-            runtime_settings=SimpleNamespace(
-                tool_registry_profile="default",
-                tool_registry_provider_source="default",
-                tool_registry_provider_sources_json=None,
-                task_queue_max_concurrent=8,
-                task_queue_max_concurrent_per_user=2,
-                task_queue_max_concurrent_per_session=1,
-                task_queue_poll_interval_sec=0.15,
-            ),
-            database_locator="postgresql://demo",
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
         )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="settings-active-task",
+                max_concurrent=8,
+            )
+            self.assertIsNotNone(active_slot)
+            waiting_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="settings-waiting-task",
+                max_concurrent=1,
+            )
+            self.assertIsNone(waiting_slot)
+
+            summary = _build_settings_summary_response(
+                settings=StoredSettings(
+                    mode="mock",
+                    provider="mock",
+                    model="mock-gpt",
+                    base_url=None,
+                    api_key=None,
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="default",
+                ),
+                runtime_settings=SimpleNamespace(
+                    tool_registry_profile="default",
+                    tool_registry_provider_source="default",
+                    tool_registry_provider_sources_json=None,
+                    task_queue_max_concurrent=8,
+                    task_queue_max_concurrent_per_user=2,
+                    task_queue_max_concurrent_per_session=1,
+                    task_queue_poll_interval_sec=0.15,
+                ),
+                database_locator="postgresql://demo",
+            )
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
 
         self.assertEqual(
             summary.task_queue_diagnostics,
             {
                 "max_concurrent": 8,
+                "active_count": 1,
+                "waiting_count": 1,
+                "available_slots": 7,
                 "max_concurrent_per_user": 2,
                 "max_concurrent_per_session": 1,
                 "poll_interval_sec": 0.15,
@@ -215,6 +240,9 @@ class SettingsRegistryMixin:
             summary.task_queue_diagnostics,
             {
                 "max_concurrent": 32,
+                "active_count": 0,
+                "waiting_count": 0,
+                "available_slots": 32,
                 "max_concurrent_per_user": 0,
                 "max_concurrent_per_session": 0,
                 "poll_interval_sec": 0.25,
