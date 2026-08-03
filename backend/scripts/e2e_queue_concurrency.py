@@ -279,6 +279,13 @@ def assert_safe_queue_settings_diagnostics(
             ),
         )
     if "current_user_available_slots" in diagnostics:
+        _assert(
+            "current_user_active_count" in diagnostics,
+            (
+                "current_user_available_slots requires "
+                f"current_user_active_count: {diagnostics}"
+            ),
+        )
         current_user_available_slots = int(
             diagnostics.get("current_user_available_slots") or 0
         )
@@ -381,6 +388,13 @@ def assert_safe_queue_settings_diagnostics(
             ),
         )
     if "current_session_available_slots" in diagnostics:
+        _assert(
+            "current_session_active_count" in diagnostics,
+            (
+                "current_session_available_slots requires "
+                f"current_session_active_count: {diagnostics}"
+            ),
+        )
         current_session_available_slots = int(
             diagnostics.get("current_session_available_slots") or 0
         )

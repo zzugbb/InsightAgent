@@ -25,7 +25,8 @@ export function buildModelSettingsUrl(
   activeSessionId: string | null | undefined,
 ): string {
   const normalizedActiveSessionId = activeSessionId?.trim() ?? "";
-  const baseUrl = `${apiBaseUrl}/api/settings`;
+  const normalizedApiBaseUrl = apiBaseUrl.replace(/\/+$/, "");
+  const baseUrl = `${normalizedApiBaseUrl}/api/settings`;
   if (!normalizedActiveSessionId) {
     return baseUrl;
   }

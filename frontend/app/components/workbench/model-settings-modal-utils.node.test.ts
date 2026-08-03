@@ -23,6 +23,13 @@ test("buildModelSettingsUrl omits session query when blank", () => {
   );
 });
 
+test("buildModelSettingsUrl normalizes trailing slash on API base URL", () => {
+  assert.equal(
+    buildModelSettingsUrl("http://127.0.0.1:8000/", "session-a"),
+    "http://127.0.0.1:8000/api/settings?session_id=session-a",
+  );
+});
+
 test("resolveModelSettingsSelectionDetails uses preview source detail summaries", () => {
   const result = resolveModelSettingsSelectionDetails({
     previewSource: {
