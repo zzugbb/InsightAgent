@@ -540,9 +540,28 @@ def assert_safe_queued_state_payload(
         f"queued waiting_count should be non-negative: {queue_payload}",
     )
     _assert(
+        active_count <= max_concurrent,
+        (
+            "queued active_count should not exceed max_concurrent: "
+            f"{queue_payload}"
+        ),
+    )
+    wait_position = int(queue_payload.get("wait_position") or 0)
+    _assert(
+        wait_position >= 1,
+        f"queued wait_position should be positive: {queue_payload}",
+    )
+    _assert(
         queue_payload.get("wait_position") == expected_wait_position,
         (
             f"queued wait_position should be {expected_wait_position}: "
+            f"{queue_payload}"
+        ),
+    )
+    _assert(
+        wait_position <= waiting_count,
+        (
+            "queued wait_position should not exceed waiting_count: "
             f"{queue_payload}"
         ),
     )

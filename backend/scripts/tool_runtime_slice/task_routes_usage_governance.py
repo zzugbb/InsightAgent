@@ -911,6 +911,75 @@ class TaskRoutesUsageGovernanceMixin:
                 expected_wait_position=1,
             )
 
+    def test_backend_queue_e2e_rejects_inconsistent_queue_snapshot_counts(self) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queued_state_payload"],
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "active_count should not exceed max_concurrent",
+        ):
+            queue_e2e_module.assert_safe_queued_state_payload(
+                [
+                    {
+                        "phase": "queued",
+                        "task_id": "task-e2e-queued",
+                        "queue": {
+                            "active_count": 2,
+                            "max_concurrent": 1,
+                            "waiting_count": 1,
+                            "wait_position": 1,
+                        },
+                    }
+                ],
+                task_id="task-e2e-queued",
+                expected_wait_position=1,
+            )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "wait_position should be positive",
+        ):
+            queue_e2e_module.assert_safe_queued_state_payload(
+                [
+                    {
+                        "phase": "queued",
+                        "task_id": "task-e2e-queued",
+                        "queue": {
+                            "active_count": 1,
+                            "max_concurrent": 1,
+                            "waiting_count": 1,
+                            "wait_position": 0,
+                        },
+                    }
+                ],
+                task_id="task-e2e-queued",
+                expected_wait_position=0,
+            )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "wait_position should not exceed waiting_count",
+        ):
+            queue_e2e_module.assert_safe_queued_state_payload(
+                [
+                    {
+                        "phase": "queued",
+                        "task_id": "task-e2e-queued",
+                        "queue": {
+                            "active_count": 1,
+                            "max_concurrent": 1,
+                            "waiting_count": 1,
+                            "wait_position": 2,
+                        },
+                    }
+                ],
+                task_id="task-e2e-queued",
+                expected_wait_position=2,
+            )
+
     def test_backend_queue_e2e_rejects_missing_queued_state_payload(self) -> None:
         queue_e2e_module = __import__(
             "scripts.e2e_queue_concurrency",
@@ -950,7 +1019,7 @@ class TaskRoutesUsageGovernanceMixin:
                         "queue": {
                             "active_count": 1,
                             "max_concurrent": 1,
-                            "waiting_count": 1,
+                            "waiting_count": 2,
                             "wait_position": 2,
                         },
                     }
