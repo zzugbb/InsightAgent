@@ -259,6 +259,9 @@ export function formatTaskQueueDiagnosticsSummary(
       )}`,
     );
   }
+  if (diagnostics.current_user_limit_reached) {
+    parts.push("your limit reached");
+  }
   const pressureState =
     typeof diagnostics.pressure_state === "string"
       ? diagnostics.pressure_state.trim().toLowerCase()

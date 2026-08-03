@@ -168,7 +168,7 @@ test("formatTaskQueueDiagnosticsSummary shows enabled fairness limits", () => {
 
   assert.equal(
     result,
-    "global 8 · active 1 · waiting 2 · available 7 · your active 1 · your waiting 1 · your available 1 · scope-limited · per user 2 · per session 1 · capacity-aware FIFO · poll 0.15s",
+    "global 8 · active 1 · waiting 2 · available 7 · your active 1 · your waiting 1 · your available 1 · your limit reached · scope-limited · per user 2 · per session 1 · capacity-aware FIFO · poll 0.15s",
   );
 });
 
