@@ -210,7 +210,22 @@ def assert_safe_queue_settings_diagnostics(
             available_slots == expected_available_slots,
             f"available_slots should be {expected_available_slots}: {diagnostics}",
         )
-    pressure_state = str(diagnostics.get("pressure_state") or "").strip()
+    pressure_state = str(diagnostics.get("pressure_state") or "").strip().lower()
+    expected_derived_pressure_state = "idle"
+    if waiting_count > 0 and available_slots > 0:
+        expected_derived_pressure_state = "scope_limited"
+    elif waiting_count > 0 or available_slots <= 0:
+        expected_derived_pressure_state = "saturated"
+    elif active_count > 0:
+        expected_derived_pressure_state = "active"
+    if pressure_state:
+        _assert(
+            pressure_state == expected_derived_pressure_state,
+            (
+                "pressure_state should match queue pressure "
+                f"{expected_derived_pressure_state}: {diagnostics}"
+            ),
+        )
     if expected_pressure_state is not None:
         _assert(
             pressure_state == expected_pressure_state,
@@ -277,6 +292,33 @@ def assert_safe_queue_settings_diagnostics(
                     "current_user_available_slots should match per-user "
                     f"limit-active and global capacity: {diagnostics}"
                 ),
+        )
+        else:
+            _assert(
+                current_user_available_slots == available_slots,
+                (
+                    "current_user_available_slots should match global "
+                    f"capacity when per-user limit is disabled: {diagnostics}"
+                ),
+            )
+    if "current_user_limit_reached" in diagnostics:
+        _assert(
+            "current_user_active_count" in diagnostics,
+            f"current_user_limit_reached requires current_user_active_count: {diagnostics}",
+        )
+        current_user_active_count = int(
+            diagnostics.get("current_user_active_count") or 0
+        )
+        _assert(
+            bool(diagnostics.get("current_user_limit_reached"))
+            == (
+                per_user_limit > 0
+                and current_user_active_count >= per_user_limit
+            ),
+            (
+                "current_user_limit_reached should match per-user "
+                f"limit-active: {diagnostics}"
+            ),
         )
     if expected_current_user_available_slots is not None:
         _assert(
