@@ -227,6 +227,12 @@ export function formatTaskQueueDiagnosticsSummary(
   if (!diagnostics.fairness_limits_enabled) {
     parts.push("fairness disabled");
   }
+  if (
+    diagnostics.capacity_aware_fifo_enabled
+    || diagnostics.waiting_policy === "capacity_aware_oldest_eligible_fifo"
+  ) {
+    parts.push("capacity-aware FIFO");
+  }
   parts.push(`poll ${formatFiniteNumber(pollIntervalSec, 0)}s`);
   return parts.join(" · ");
 }

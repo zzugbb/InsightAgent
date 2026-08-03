@@ -500,6 +500,8 @@ def _build_task_queue_diagnostics(*, runtime_settings: object) -> dict[str, obje
         "fairness_limits_enabled": (
             per_user_limit_enabled or per_session_limit_enabled
         ),
+        "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+        "capacity_aware_fifo_enabled": True,
     }
 
 

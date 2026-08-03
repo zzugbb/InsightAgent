@@ -181,6 +181,8 @@ class SettingsRegistryMixin:
                 "per_user_limit_enabled": True,
                 "per_session_limit_enabled": True,
                 "fairness_limits_enabled": True,
+                "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+                "capacity_aware_fifo_enabled": True,
             },
         )
 
@@ -219,6 +221,8 @@ class SettingsRegistryMixin:
                 "per_user_limit_enabled": False,
                 "per_session_limit_enabled": False,
                 "fairness_limits_enabled": False,
+                "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+                "capacity_aware_fifo_enabled": True,
             },
         )
 

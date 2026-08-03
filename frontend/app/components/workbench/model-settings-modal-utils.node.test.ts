@@ -152,11 +152,13 @@ test("formatTaskQueueDiagnosticsSummary shows enabled fairness limits", () => {
     per_user_limit_enabled: true,
     per_session_limit_enabled: true,
     fairness_limits_enabled: true,
+    waiting_policy: "capacity_aware_oldest_eligible_fifo",
+    capacity_aware_fifo_enabled: true,
   });
 
   assert.equal(
     result,
-    "global 8 · per user 2 · per session 1 · poll 0.15s",
+    "global 8 · per user 2 · per session 1 · capacity-aware FIFO · poll 0.15s",
   );
 });
 
@@ -169,11 +171,13 @@ test("formatTaskQueueDiagnosticsSummary marks default fairness limits disabled",
     per_user_limit_enabled: false,
     per_session_limit_enabled: false,
     fairness_limits_enabled: false,
+    waiting_policy: "capacity_aware_oldest_eligible_fifo",
+    capacity_aware_fifo_enabled: true,
   });
 
   assert.equal(
     result,
-    "global 32 · fairness disabled · poll 0.25s",
+    "global 32 · fairness disabled · capacity-aware FIFO · poll 0.25s",
   );
 });
 
