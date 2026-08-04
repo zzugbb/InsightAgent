@@ -112,6 +112,42 @@ def _assert(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def _read_int_diagnostic_field(
+    diagnostics: dict[str, Any],
+    field_name: str,
+) -> int:
+    value = diagnostics.get(field_name)
+    _assert(
+        isinstance(value, int) and not isinstance(value, bool),
+        f"{field_name} should be an integer: {diagnostics}",
+    )
+    return value
+
+
+def _read_non_negative_int_diagnostic_field(
+    diagnostics: dict[str, Any],
+    field_name: str,
+) -> int:
+    value = _read_int_diagnostic_field(diagnostics, field_name)
+    _assert(
+        value >= 0,
+        f"{field_name} should be non-negative: {diagnostics}",
+    )
+    return value
+
+
+def _read_bool_diagnostic_field(
+    diagnostics: dict[str, Any],
+    field_name: str,
+) -> bool:
+    value = diagnostics.get(field_name)
+    _assert(
+        isinstance(value, bool),
+        f"{field_name} should be boolean: {diagnostics}",
+    )
+    return value
+
+
 def _register(base_url: str, email: str, password: str) -> dict[str, Any]:
     res = _request(
         method="POST",
@@ -210,21 +246,36 @@ def assert_safe_queue_settings_diagnostics(
             status_field in diagnostics,
             f"{status_field} is required: {diagnostics}",
         )
-    active_count = int(diagnostics.get("active_count") or 0)
-    waiting_count = int(diagnostics.get("waiting_count") or 0)
-    available_slots = int(diagnostics.get("available_slots") or 0)
-    _assert(active_count >= 0, f"active_count should be non-negative: {diagnostics}")
-    _assert(waiting_count >= 0, f"waiting_count should be non-negative: {diagnostics}")
+    active_count = _read_non_negative_int_diagnostic_field(
+        diagnostics,
+        "active_count",
+    )
+    waiting_count = _read_non_negative_int_diagnostic_field(
+        diagnostics,
+        "waiting_count",
+    )
+    available_slots = _read_non_negative_int_diagnostic_field(
+        diagnostics,
+        "available_slots",
+    )
     _assert(
         available_slots == max(0, expected_max_concurrent - active_count),
         f"available_slots should match max-active: {diagnostics}",
     )
+    has_waiting_tasks = _read_bool_diagnostic_field(
+        diagnostics,
+        "has_waiting_tasks",
+    )
+    saturated = _read_bool_diagnostic_field(
+        diagnostics,
+        "saturated",
+    )
     _assert(
-        bool(diagnostics.get("has_waiting_tasks")) == (waiting_count > 0),
+        has_waiting_tasks == (waiting_count > 0),
         f"has_waiting_tasks should match waiting_count: {diagnostics}",
     )
     _assert(
-        bool(diagnostics.get("saturated")) == (available_slots <= 0),
+        saturated == (available_slots <= 0),
         f"saturated should match available_slots: {diagnostics}",
     )
     if expected_active_count is not None:
@@ -266,23 +317,22 @@ def assert_safe_queue_settings_diagnostics(
             pressure_state == expected_pressure_state,
             f"pressure_state should be {expected_pressure_state}: {diagnostics}",
         )
-    per_user_limit = int(diagnostics.get("max_concurrent_per_user") or 0)
-    per_session_limit = int(diagnostics.get("max_concurrent_per_session") or 0)
-    _assert(
-        per_user_limit >= 0,
-        f"max_concurrent_per_user should be non-negative: {diagnostics}",
+    per_user_limit = _read_non_negative_int_diagnostic_field(
+        diagnostics,
+        "max_concurrent_per_user",
     )
-    _assert(
-        per_session_limit >= 0,
-        f"max_concurrent_per_session should be non-negative: {diagnostics}",
+    per_session_limit = _read_non_negative_int_diagnostic_field(
+        diagnostics,
+        "max_concurrent_per_session",
     )
     if expected_current_user_active_count is not None:
         _assert(
             "current_user_active_count" in diagnostics,
             f"current_user_active_count is required: {diagnostics}",
         )
-        current_user_active_count = int(
-            diagnostics.get("current_user_active_count") or 0
+        current_user_active_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_user_active_count",
         )
         _assert(
             current_user_active_count == expected_current_user_active_count,
@@ -292,12 +342,9 @@ def assert_safe_queue_settings_diagnostics(
             ),
         )
     if "current_user_active_count" in diagnostics:
-        current_user_active_count = int(
-            diagnostics.get("current_user_active_count") or 0
-        )
-        _assert(
-            current_user_active_count >= 0,
-            f"current_user_active_count should be non-negative: {diagnostics}",
+        current_user_active_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_user_active_count",
         )
         _assert(
             current_user_active_count <= active_count,
@@ -311,8 +358,9 @@ def assert_safe_queue_settings_diagnostics(
             "current_user_waiting_count" in diagnostics,
             f"current_user_waiting_count is required: {diagnostics}",
         )
-        current_user_waiting_count = int(
-            diagnostics.get("current_user_waiting_count") or 0
+        current_user_waiting_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_user_waiting_count",
         )
         _assert(
             current_user_waiting_count == expected_current_user_waiting_count,
@@ -329,12 +377,9 @@ def assert_safe_queue_settings_diagnostics(
                 f"current_user_active_count: {diagnostics}"
             ),
         )
-        current_user_waiting_count = int(
-            diagnostics.get("current_user_waiting_count") or 0
-        )
-        _assert(
-            current_user_waiting_count >= 0,
-            f"current_user_waiting_count should be non-negative: {diagnostics}",
+        current_user_waiting_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_user_waiting_count",
         )
         _assert(
             current_user_waiting_count <= waiting_count,
@@ -351,15 +396,13 @@ def assert_safe_queue_settings_diagnostics(
                 f"current_user_active_count: {diagnostics}"
             ),
         )
-        current_user_available_slots = int(
-            diagnostics.get("current_user_available_slots") or 0
+        current_user_available_slots = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_user_available_slots",
         )
-        current_user_active_count = int(
-            diagnostics.get("current_user_active_count") or 0
-        )
-        _assert(
-            current_user_available_slots >= 0,
-            f"current_user_available_slots should be non-negative: {diagnostics}",
+        current_user_active_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_user_active_count",
         )
         _assert(
             current_user_available_slots <= available_slots,
@@ -393,11 +436,12 @@ def assert_safe_queue_settings_diagnostics(
             "current_user_active_count" in diagnostics,
             f"current_user_limit_reached requires current_user_active_count: {diagnostics}",
         )
-        current_user_active_count = int(
-            diagnostics.get("current_user_active_count") or 0
+        current_user_active_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_user_active_count",
         )
         _assert(
-            bool(diagnostics.get("current_user_limit_reached"))
+            _read_bool_diagnostic_field(diagnostics, "current_user_limit_reached")
             == (
                 per_user_limit > 0
                 and current_user_active_count >= per_user_limit
@@ -412,8 +456,9 @@ def assert_safe_queue_settings_diagnostics(
             "current_user_available_slots" in diagnostics,
             f"current_user_available_slots is required: {diagnostics}",
         )
-        current_user_available_slots = int(
-            diagnostics.get("current_user_available_slots") or 0
+        current_user_available_slots = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_user_available_slots",
         )
         _assert(
             current_user_available_slots == expected_current_user_available_slots,
@@ -427,8 +472,9 @@ def assert_safe_queue_settings_diagnostics(
             "current_session_active_count" in diagnostics,
             f"current_session_active_count is required: {diagnostics}",
         )
-        current_session_active_count = int(
-            diagnostics.get("current_session_active_count") or 0
+        current_session_active_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_session_active_count",
         )
         _assert(
             current_session_active_count == expected_current_session_active_count,
@@ -438,12 +484,9 @@ def assert_safe_queue_settings_diagnostics(
             ),
         )
     if "current_session_active_count" in diagnostics:
-        current_session_active_count = int(
-            diagnostics.get("current_session_active_count") or 0
-        )
-        _assert(
-            current_session_active_count >= 0,
-            f"current_session_active_count should be non-negative: {diagnostics}",
+        current_session_active_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_session_active_count",
         )
         _assert(
             current_session_active_count <= active_count,
@@ -457,8 +500,9 @@ def assert_safe_queue_settings_diagnostics(
             "current_session_waiting_count" in diagnostics,
             f"current_session_waiting_count is required: {diagnostics}",
         )
-        current_session_waiting_count = int(
-            diagnostics.get("current_session_waiting_count") or 0
+        current_session_waiting_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_session_waiting_count",
         )
         _assert(
             current_session_waiting_count == expected_current_session_waiting_count,
@@ -475,12 +519,9 @@ def assert_safe_queue_settings_diagnostics(
                 f"current_session_active_count: {diagnostics}"
             ),
         )
-        current_session_waiting_count = int(
-            diagnostics.get("current_session_waiting_count") or 0
-        )
-        _assert(
-            current_session_waiting_count >= 0,
-            f"current_session_waiting_count should be non-negative: {diagnostics}",
+        current_session_waiting_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_session_waiting_count",
         )
         _assert(
             current_session_waiting_count <= waiting_count,
@@ -497,15 +538,13 @@ def assert_safe_queue_settings_diagnostics(
                 f"current_session_active_count: {diagnostics}"
             ),
         )
-        current_session_available_slots = int(
-            diagnostics.get("current_session_available_slots") or 0
+        current_session_available_slots = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_session_available_slots",
         )
-        current_session_active_count = int(
-            diagnostics.get("current_session_active_count") or 0
-        )
-        _assert(
-            current_session_available_slots >= 0,
-            f"current_session_available_slots should be non-negative: {diagnostics}",
+        current_session_active_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_session_active_count",
         )
         _assert(
             current_session_available_slots <= available_slots,
@@ -542,11 +581,12 @@ def assert_safe_queue_settings_diagnostics(
                 f"current_session_active_count: {diagnostics}"
             ),
         )
-        current_session_active_count = int(
-            diagnostics.get("current_session_active_count") or 0
+        current_session_active_count = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_session_active_count",
         )
         _assert(
-            bool(diagnostics.get("current_session_limit_reached"))
+            _read_bool_diagnostic_field(diagnostics, "current_session_limit_reached")
             == (
                 per_session_limit > 0
                 and current_session_active_count >= per_session_limit
@@ -561,8 +601,9 @@ def assert_safe_queue_settings_diagnostics(
             "current_session_available_slots" in diagnostics,
             f"current_session_available_slots is required: {diagnostics}",
         )
-        current_session_available_slots = int(
-            diagnostics.get("current_session_available_slots") or 0
+        current_session_available_slots = _read_non_negative_int_diagnostic_field(
+            diagnostics,
+            "current_session_available_slots",
         )
         _assert(
             current_session_available_slots == expected_current_session_available_slots,
@@ -572,15 +613,17 @@ def assert_safe_queue_settings_diagnostics(
             ),
         )
     _assert(
-        bool(diagnostics.get("per_user_limit_enabled")) == (per_user_limit > 0),
+        _read_bool_diagnostic_field(diagnostics, "per_user_limit_enabled")
+        == (per_user_limit > 0),
         f"per-user fairness flag does not match limit: {diagnostics}",
     )
     _assert(
-        bool(diagnostics.get("per_session_limit_enabled")) == (per_session_limit > 0),
+        _read_bool_diagnostic_field(diagnostics, "per_session_limit_enabled")
+        == (per_session_limit > 0),
         f"per-session fairness flag does not match limit: {diagnostics}",
     )
     _assert(
-        bool(diagnostics.get("fairness_limits_enabled"))
+        _read_bool_diagnostic_field(diagnostics, "fairness_limits_enabled")
         == (per_user_limit > 0 or per_session_limit > 0),
         f"fairness aggregate flag does not match limits: {diagnostics}",
     )
@@ -594,7 +637,7 @@ def assert_safe_queue_settings_diagnostics(
         f"queue waiting policy diagnostic mismatch: {diagnostics}",
     )
     _assert(
-        bool(diagnostics.get("capacity_aware_fifo_enabled")),
+        _read_bool_diagnostic_field(diagnostics, "capacity_aware_fifo_enabled"),
         f"capacity-aware FIFO diagnostic should be enabled: {diagnostics}",
     )
     return diagnostics
