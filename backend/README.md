@@ -4,38 +4,32 @@
 
 ## 当前状态
 
-- 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL 单后端、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、任务/会话导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution` 当前验收基线已完成收尾：已能注册/规划的 real search、real calc 等 extra tool 已从“可展示、可规划”推进到“可稳定接真实上游协议与 e2e 回归”。
-- `http_json` 真实执行器当前覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算响应别名、GraphQL/Elastic/OData/向量/RAG SDK 风格输出、safe chunks、request_id、preview/output/result-summary、observation、trace/export/SSE/audit/settings diagnostics。
-- provider/source/settings/file-backed registry 治理已覆盖 direct source、named provider/loader、provider/loader factory、factory alias、profile reset、forward reference 与 diagnostics 并回。
-- `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口继续保留，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题拆到 `backend/scripts/tool_runtime_slice/`；二次细分后最大主题模块约 4.7k 行。
-- `app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `app/services/tool_runtime_planning.py`、`app/services/tool_runtime_execution.py`、`app/services/tool_runtime_http_json.py`、`app/services/tool_runtime_registry.py`，外部 import facade 保持稳定；当前 facade 约 3.0k 行。
-- `queue-and-concurrency-lite` 首轮主线已完成：`queued` 已进入任务状态标准化、label/rank、stream gate 与 create 默认状态；`app/services/task_queue_service.py` 提供单进程执行槽位、安全等待快照与等待项移除入口，SSE 执行入口拿到槽位后才切 `running`，等待期间只暴露计数与当前任务 `wait_position`，queued cancel 会移出等待队列，默认 `TASK_QUEUE_MAX_CONCURRENT=32`，低并发 backend/frontend queue phase、running cancel 终态、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 均已 fresh 复验。
-- `concurrency-fairness-policy` 已完成收尾：`app/services/task_queue_service.py` 的执行槽位新增可选 `TASK_QUEUE_MAX_CONCURRENT_PER_USER` 与 `TASK_QUEUE_MAX_CONCURRENT_PER_SESSION`，默认 `0` 关闭，开启后可限制单用户/单会话并发且不阻塞其他用户/会话；等待队列现在保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充，并已补同一 active task 重复 acquire 的非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算与旧等待项预占 scope quota 后的当前任务准入判断；`GET /api/settings` 现暴露只读 `task_queue_diagnostics`，包含限额、全局 active/waiting/available 安全计数、当前用户 active/waiting/available 安全计数与可选 `session_id` 查询参数下的当前会话 active/waiting/available 安全计数；当前用户 available 会同时受全局空槽与 per-user 剩余额度约束，当前会话 available 会同时受全局空槽与 per-session 剩余额度约束；前端会显示 current user / current session 触顶状态，同时展示 `pressure_state`、fairness 开关、`waiting_policy` 与 capacity-aware FIFO 标记，前端 `TaskQueueDiagnostics` 类型与后端 `SettingsSummaryResponse` / `_build_task_queue_diagnostics()` typed diagnostics 契约均已锁住基础运行态字段、等待策略治理字段，并把 `pressure_state` / `waiting_policy` 收紧为同一组固定枚举，后端 scope 字段保持 optional 以避免默认响应多出空字段；backend queue e2e 脚本会校验 queued SSE queue snapshot 基础字段存在性、安全计数类型、scope 计数类型与结构一致性、低并发 settings 诊断基础计数字段存在性、整数型 `max_concurrent`/计数/治理限额字段、数值型 poll interval、精确 `pressure_state` 枚举、布尔型状态/治理标记、非负治理限额、governance 必填字段、`has_waiting_tasks`/`saturated`/`pressure_state` 必填、固定枚举值与派生一致性、当前用户/当前会话 active/waiting scope 计数成组依赖且不超过全局计数、限额触顶、可用槽位一致性与 available slots 对 active count 字段依赖，不改变外部 SSE / trace / export shape。
-- 默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
+- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
+- `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
+- `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
+- `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 
 ## 当前验证基线
 
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1776/1776` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
-- backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 本轮 fresh 通过，覆盖 queued cancel、safe wait_position、settings 全局/当前用户 active/waiting/available 安全计数、current session diagnostics 与 followup completion；脚本 helper 现额外校验 queued snapshot 结构一致性、queued snapshot count/wait_position/scope count 整数类型、scope available slots 字段依赖、scope active/waiting 计数上界、整数型 settings `max_concurrent`/计数/治理限额、数值型 poll interval、布尔型 settings 状态/治理标记、非负治理限额、governance 必填字段与 settings `pressure_state` 精确枚举值
-- frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 最近 fresh 通过，`1 passed`；默认 full 环境下该低并发专项显式 skip，避免污染完整 Chromium
-- frontend running cancel Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "running task cancel reaches"` 通过
-- frontend multi-task Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "task center separates active session"` 通过
-- frontend reload isolation Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "reload keeps background session stream"` 通过
+- backend queue e2e phase：低并发 `8011` latest fresh 通过，覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
+- frontend targeted Chromium：queued recover/cancel、running cancel、Task Center session/global 隔离、刷新恢复隔离均已通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：通过
-- 完整 Chromium e2e：真实 backend/frontend 服务下 `bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001` 本轮 fresh 通过，`50 passed / 1 skipped`；低并发排队语义现由 slice、backend queue e2e phase 与 frontend queue phase 共同覆盖
-- 本轮启动的 8011 低并发 backend 与 8000/3001 默认 backend/frontend 均已发送 Ctrl+C 并正常退出，`lsof -nP -iTCP:8011 -sTCP:LISTEN`、`lsof -nP -iTCP:8000 -sTCP:LISTEN`、`lsof -nP -iTCP:3001 -sTCP:LISTEN` 均无输出。
+- 完整 Chromium e2e：默认 `8000/3001` latest fresh 通过，`50 passed / 1 skipped`
+- 本轮相关 `8011/8000/3001` 服务均已停止，`lsof` 无监听残留。
 - `git diff --check`：通过
 - 后续运行 backend slice、启动 backend、跑 backend e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 venv 与提权边界，避免重复触发本机端口 / `.git/index.lock` 权限错误。
 
 ## 下一步后端计划
 
-1. `concurrency-fairness-policy`：当前主线，`100%` 封板；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断、queued SSE queue snapshot 基础字段存在性、整数类型、scope 上界与结构一致性、settings `task_queue_diagnostics` 基础字段存在性、等待策略/全局与当前用户/当前会话 active/waiting/available 安全计数、整数型 `max_concurrent`/计数/治理限额字段、数值型 poll interval、精确 `pressure_state` 枚举、布尔型状态/治理标记、governance 必填字段、非负治理限额、前端 diagnostics 类型契约、后端 `SettingsSummaryResponse`/builder typed diagnostics 契约、基础运行态字段必填契约、`pressure_state`/`waiting_policy` 跨端枚举契约、`has_waiting_tasks`/`saturated`/`pressure_state` e2e helper 必填、固定枚举值与一致性契约、当前用户/当前会话 active/waiting scope 计数成组依赖与全局上界、限额触顶与可用槽位诊断、available slots 字段依赖；backend queue e2e-like idle/压力诊断断言、安全 queue snapshot helper、当前用户/当前会话可用槽位一致性覆盖与本轮真实低并发 backend queue e2e fresh 复验完成，frontend node/type/lint 本轮 fresh 通过，frontend queue phase 保持最近 fresh 复验，完整 Chromium 本轮 fresh 通过。
-2. `pre-flight cleanup`：文档瘦身与 `backend/scripts/test_tool_runtime_slice.py` 主题拆分已完成，保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口不变。
-3. `tool_runtime.py` 分阶段抽模块：`tool_runtime_planning.py`、`tool_runtime_execution.py`、`tool_runtime_http_json.py`、`tool_runtime_registry.py` 已完成 facade 拆分，保留现有 import facade；下一轮不再继续拆分。
-4. `registry-governance` 与 `rag-governance-hardening` 作为后续维护线，不和第一轮队列状态机混在同一改动里。
+1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`。
+2. 下一候选主线：`registry-governance`，聚焦 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 的治理语义。
+3. 后续候选：`rag-governance-hardening`，聚焦知识库版本化、来源治理与更细粒度 shared 规则。
+4. 进入下一主线时继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约与 runbook 提权流程稳定。
 
 ## 当前已有内容
 

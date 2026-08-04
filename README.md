@@ -4,14 +4,12 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 ## 当前状态
 
-- W1-W4 与阶段 5 基础产品化已完成：会话/任务/消息持久化、SSE、Trace 回放与增量同步、Memory、RAG、鉴权、PostgreSQL、任务取消/超时、running task 恢复、usage dashboard、审计与任务/会话导出已具备可演示闭环。
-- `tool-runtime-productionization` 已归档，不再作为活跃 spec 维护；当前以代码、三份 README 与 `.cursor/plans/insightagent_开发计划_306e7915.plan.md` 为准。
-- `real-tool-execution` 当前验收基线已完成收尾：provider/source/settings/file-backed 组合里的 real search / real calc 已稳定打通请求模板、鉴权/header/query/body、response_path/result_fields、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- `backend/scripts/test_tool_runtime_slice.py` 拆分已完成：原入口缩为兼容入口，测试主体按 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等主题搬到 `backend/scripts/tool_runtime_slice/` mixin 包；二次细分后最大主题模块约 4.7k 行。
-- `backend/app/services/tool_runtime.py` pre-flight 拆分已完成：planner、execution/result/trace/rag、HTTP JSON/diagnostics、registry/file-backed/provider-source 治理已分别抽到 `backend/app/services/tool_runtime_planning.py`、`backend/app/services/tool_runtime_execution.py`、`backend/app/services/tool_runtime_http_json.py`、`backend/app/services/tool_runtime_registry.py`，`from app.services.tool_runtime import ...` 外部导出保持不变；当前 facade 约 3.0k 行。
+- 阶段 5 基础产品化已完成：会话/任务/消息持久化、SSE、Trace、Memory、RAG、鉴权、PostgreSQL、任务取消/超时、running task 恢复、usage dashboard、审计与任务/会话导出已具备可演示闭环。
+- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；`tool-runtime-productionization` 已归档，不再作为活跃 spec 维护。
+- 当前队列基线：任务默认 `queued`，拿到进程内执行槽位后切 `running`；全局并发默认 `TASK_QUEUE_MAX_CONCURRENT=32`，可选 per-user/per-session 限额默认 `0` 关闭；等待队列保持 capacity-aware oldest eligible FIFO，queued cancel 会移出等待队列。
+- `GET /api/settings` 暴露只读 `task_queue_diagnostics`，覆盖全局、当前用户与可选当前会话 active/waiting/available 计数、限额触顶、`pressure_state`、fairness 开关、等待策略与 poll interval；前后端 typed contract 已固定 required governance 字段、optional scope 字段和枚举值。
+- `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
-- `queue-and-concurrency-lite` 首轮主线已完成：任务创建默认进入 `queued`，SSE 执行入口在拿到进程内执行槽位后才切 `running`；默认单进程并发上限为 `TASK_QUEUE_MAX_CONCURRENT=32`，等待期间发送安全 queue snapshot（计数与当前任务 `wait_position`，不暴露内部 task ids），queued cancel 会移出等待队列，前端 live phase 可显示排队位置并在取消/恢复时保持正确 phase；低并发 backend/frontend queue phase、running cancel 终态、Task Center session/global 多任务隔离、刷新后后台会话 stream 不误恢复与完整 Chromium 均已 fresh 复验。
-- `concurrency-fairness-policy` 已完成收尾：队列执行槽位新增可选 `TASK_QUEUE_MAX_CONCURRENT_PER_USER` 与 `TASK_QUEUE_MAX_CONCURRENT_PER_SESSION`，默认 `0` 关闭，开启后可限制单用户/单会话并发且不阻塞其他用户/会话；等待队列现在保持 capacity-aware oldest eligible FIFO，槽位紧张时新任务不会抢在已可执行的旧等待任务前面，空槽足够时仍可并行填充，并已补同一 active task 重复 acquire 的非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算与旧等待项预占 scope quota 后的当前任务准入判断；`GET /api/settings` 现暴露只读 `task_queue_diagnostics`，前端运行设置可查看全局、当前用户与当前会话 active/waiting/available 安全计数，settings URL helper 会归一化 API base 尾斜杠并带 encoded `session_id` 请求当前会话诊断；其中当前用户 available 会同时受全局空槽与 per-user 剩余额度约束，当前会话 available 会同时受全局空槽与 per-session 剩余额度约束，并在对应 scope 触顶时显示 `your limit reached` / `session limit reached`；同时展示 `pressure_state`、fairness 开关、capacity-aware FIFO 等待策略与 poll interval，前端 `TaskQueueDiagnostics` 类型已把基础运行态计数、waiting policy 与 capacity-aware FIFO 标记收紧为必填字段，并把 `pressure_state` / `waiting_policy` 收紧为固定枚举；后端 `SettingsSummaryResponse` 与 `_build_task_queue_diagnostics()` 也已用 `TaskQueueDiagnosticsSummary` typed 契约固定 required 基础字段、governance 字段、optional scope 字段与同一组枚举值，backend queue e2e 脚本会校验 queued SSE queue snapshot 基础字段存在性、安全计数类型、scope 计数类型与结构一致性（active_count 不超过 max_concurrent、scope 计数不超过全局计数、wait_position 为正且不超过 waiting_count）、settings 基础计数字段存在性、安全计数、整数型 `max_concurrent`/计数/限额字段、数值型 poll interval、精确 `pressure_state` 枚举、布尔型状态/治理标记、非负治理限额、governance 必填字段、`has_waiting_tasks`/`saturated`/`pressure_state` 必填、固定枚举值与派生一致性、current user/session active/waiting scope 计数成组依赖且不超过全局计数、当前用户/当前会话限额触顶、可用槽位一致性与 available slots 对 active count 字段依赖，不改变外部 SSE / trace / export shape。
 
 ## 当前验证基线
 
@@ -19,24 +17,20 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `bash scripts/test_ci_e2e_tooling.sh all`：最近一次通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
-- backend queue e2e phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 `bash scripts/ci_run_backend_e2e.sh --phase queue --base-url http://127.0.0.1:8011 --log-dir /tmp` 本轮 fresh 通过，覆盖 queued cancel、safe wait_position、settings 全局/当前用户 active/waiting/available 安全计数、current session diagnostics 与 followup completion；脚本 helper 现额外校验 queued snapshot 结构一致性、queued snapshot count/wait_position/scope count 整数类型、scope available slots 字段依赖、scope active/waiting 计数上界、整数型 settings `max_concurrent`/计数/治理限额、数值型 poll interval、布尔型 settings 状态/治理标记、非负治理限额、governance 必填字段与 settings `pressure_state` 精确枚举值
-- frontend queue phase：低并发 backend/frontend 下 `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` 最近 fresh 通过，`1 passed`；默认 full 环境下该低并发专项显式 skip，避免污染完整 Chromium
-- frontend running cancel Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "running task cancel reaches"` 通过
-- frontend multi-task Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "task center separates active session"` 通过
-- frontend reload isolation Chromium：默认 backend/frontend 下 `npm run test:e2e -- e2e/workbench-edge-cases.spec.ts -g "reload keeps background session stream"` 通过
-- 完整 Chromium e2e：真实 backend/frontend 服务下 `bash scripts/ci_run_frontend_e2e.sh --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001` 本轮 fresh 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
-- 本轮启动的 8011 低并发 backend 与 8000/3001 默认 backend/frontend 均已发送 Ctrl+C 并正常退出，`lsof -nP -iTCP:8011 -sTCP:LISTEN`、`lsof -nP -iTCP:8000 -sTCP:LISTEN`、`lsof -nP -iTCP:3001 -sTCP:LISTEN` 均无输出。
+- backend queue e2e phase：低并发 `8011` latest fresh 通过，覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
+- frontend targeted Chromium：queued recover/cancel、running cancel、Task Center session/global 隔离、刷新恢复隔离均已通过
+- 完整 Chromium e2e：默认 `8000/3001` latest fresh 通过，`50 passed / 1 skipped`
+- 本轮相关 `8011/8000/3001` 服务均已停止，`lsof` 无监听残留。
 - `git diff --check`：通过
 - 普通沙箱访问本机 Docker/端口会被权限拦截时，按流程提权后重跑，不拿旧结果冒充新结果。
 - 测试/e2e/启动/提交的权限与依赖路径已固化到 `docs/development-runbook.md`；后续优先按 runbook 直接使用正确 venv、端口提权和 git 提权流程。
 
 ## 当前开发计划
 
-1. `concurrency-fairness-policy`：当前主线，`100%` 封板；已完成可选按用户/按 session 并发执行槽位上限、capacity-aware oldest eligible FIFO 防插队、duplicate active task 非拥有 slot 释放防护、旧等待项互斥 eligibility 容量估算、旧等待项预占 scope quota 后的当前任务准入判断、queued SSE queue snapshot 基础字段存在性、整数类型、scope 上界与结构一致性、settings `task_queue_diagnostics` 基础字段存在性、等待策略、全局/当前用户/当前会话 active/waiting/available 安全计数、整数型 `max_concurrent`/计数/治理限额字段、数值型 poll interval、精确 `pressure_state` 枚举、布尔型状态/治理标记、governance 必填字段、非负治理限额、前端 diagnostics 类型契约、后端 `SettingsSummaryResponse`/builder typed diagnostics 契约、基础运行态字段必填契约、`pressure_state`/`waiting_policy` 跨端枚举契约、`has_waiting_tasks`/`saturated`/`pressure_state` e2e helper 必填、固定枚举值与一致性契约、当前用户/当前会话 active/waiting scope 计数成组依赖与全局上界、限额触顶与可用槽位诊断、settings session URL helper 边界与 available slots 字段依赖；backend queue e2e 本轮 fresh 复验，frontend node/type/lint 本轮 fresh 通过，frontend queue phase 保持最近 fresh 复验，完整 Chromium 本轮 fresh 通过。
-2. `pre-flight cleanup`：文档流水账压缩与 `test_tool_runtime_slice.py` 主题拆分已完成，原测试入口命令保持不变。
-3. `registry-governance`：作为维护线继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
-4. `rag-governance-hardening`：后续补知识库版本化、来源治理与更细粒度 shared 规则。
-5. `tool_runtime.py` 拆分：planner、execution、HTTP JSON、registry 四块 facade 拆分已完成；下一轮不再继续拆分，直接进入队列并发主线。
+1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`。
+2. 进入下一主线前：保持四份活跃文档瘦身，只保留当前状态、验证基线、稳定契约和少量高信号摘要。
+3. 候选下一主线：`registry-governance`，聚焦 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的治理语义。
+4. 后续候选：`rag-governance-hardening`，聚焦知识库版本化、来源治理与更细粒度 shared 规则。
 
 ## 关键能力边界
 
