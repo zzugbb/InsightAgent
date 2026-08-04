@@ -160,6 +160,18 @@ def _read_number_diagnostic_field(
     return float(value)
 
 
+def _read_queued_snapshot_int_field(
+    queue_payload: dict[str, Any],
+    field_name: str,
+) -> int:
+    value = queue_payload.get(field_name)
+    _assert(
+        isinstance(value, int) and not isinstance(value, bool),
+        f"queued {field_name} should be an integer: {queue_payload}",
+    )
+    return value
+
+
 def _register(base_url: str, email: str, password: str) -> dict[str, Any]:
     res = _request(
         method="POST",
@@ -833,9 +845,9 @@ def assert_safe_queued_state_payload(
             count_field in queue_payload,
             f"{count_field} is required: {queue_payload}",
         )
-    active_count = int(queue_payload.get("active_count") or 0)
-    max_concurrent = int(queue_payload.get("max_concurrent") or 0)
-    waiting_count = int(queue_payload.get("waiting_count") or 0)
+    active_count = _read_queued_snapshot_int_field(queue_payload, "active_count")
+    max_concurrent = _read_queued_snapshot_int_field(queue_payload, "max_concurrent")
+    waiting_count = _read_queued_snapshot_int_field(queue_payload, "waiting_count")
     _assert(
         active_count >= 0,
         f"queued active_count should be non-negative: {queue_payload}",
@@ -855,7 +867,7 @@ def assert_safe_queued_state_payload(
             f"{queue_payload}"
         ),
     )
-    wait_position = int(queue_payload.get("wait_position") or 0)
+    wait_position = _read_queued_snapshot_int_field(queue_payload, "wait_position")
     _assert(
         wait_position >= 1,
         f"queued wait_position should be positive: {queue_payload}",
