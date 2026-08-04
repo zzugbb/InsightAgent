@@ -981,6 +981,102 @@ class TaskRoutesUsageGovernanceMixin:
                         expected_wait_position=1,
                     )
 
+    def test_backend_queue_e2e_rejects_non_integer_queue_snapshot_scope_counts(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queued_state_payload"],
+        )
+        base_queue = {
+            "active_count": 1,
+            "max_concurrent": 2,
+            "waiting_count": 1,
+            "wait_position": 1,
+            "active_count_for_user": 1,
+            "waiting_count_for_user": 1,
+            "active_count_for_session": 1,
+            "waiting_count_for_session": 1,
+        }
+
+        invalid_values = {
+            "active_count_for_user": "1",
+            "waiting_count_for_user": 1.5,
+            "active_count_for_session": True,
+            "waiting_count_for_session": "1",
+        }
+        for field_name, invalid_value in invalid_values.items():
+            with self.subTest(field_name=field_name):
+                queue_payload = dict(base_queue)
+                queue_payload[field_name] = invalid_value
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    f"queued {field_name} should be an integer",
+                ):
+                    queue_e2e_module.assert_safe_queued_state_payload(
+                        [
+                            {
+                                "phase": "queued",
+                                "task_id": "task-e2e-queued",
+                                "queue": queue_payload,
+                            }
+                        ],
+                        task_id="task-e2e-queued",
+                        expected_wait_position=1,
+                    )
+
+    def test_backend_queue_e2e_rejects_queue_snapshot_scope_counts_above_global(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queued_state_payload"],
+        )
+        base_queue = {
+            "active_count": 1,
+            "max_concurrent": 2,
+            "waiting_count": 1,
+            "wait_position": 1,
+            "active_count_for_user": 1,
+            "waiting_count_for_user": 1,
+            "active_count_for_session": 1,
+            "waiting_count_for_session": 1,
+        }
+        invalid_values = {
+            "active_count_for_user": 2,
+            "waiting_count_for_user": 2,
+            "active_count_for_session": 2,
+            "waiting_count_for_session": 2,
+        }
+
+        for field_name, invalid_value in invalid_values.items():
+            with self.subTest(field_name=field_name):
+                queue_payload = dict(base_queue)
+                queue_payload[field_name] = invalid_value
+                expected_global_field = (
+                    "active_count"
+                    if field_name.startswith("active_count")
+                    else "waiting_count"
+                )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    (
+                        f"queued {field_name} should not exceed "
+                        f"{expected_global_field}"
+                    ),
+                ):
+                    queue_e2e_module.assert_safe_queued_state_payload(
+                        [
+                            {
+                                "phase": "queued",
+                                "task_id": "task-e2e-queued",
+                                "queue": queue_payload,
+                            }
+                        ],
+                        task_id="task-e2e-queued",
+                        expected_wait_position=1,
+                    )
+
     def test_backend_queue_e2e_rejects_inconsistent_queue_snapshot_counts(self) -> None:
         queue_e2e_module = __import__(
             "scripts.e2e_queue_concurrency",

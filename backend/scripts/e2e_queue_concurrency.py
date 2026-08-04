@@ -886,6 +886,48 @@ def assert_safe_queued_state_payload(
             f"{queue_payload}"
         ),
     )
+    for active_scope_field in (
+        "active_count_for_user",
+        "active_count_for_session",
+    ):
+        if active_scope_field not in queue_payload:
+            continue
+        active_scope_count = _read_queued_snapshot_int_field(
+            queue_payload,
+            active_scope_field,
+        )
+        _assert(
+            active_scope_count >= 0,
+            f"queued {active_scope_field} should be non-negative: {queue_payload}",
+        )
+        _assert(
+            active_scope_count <= active_count,
+            (
+                f"queued {active_scope_field} should not exceed "
+                f"active_count: {queue_payload}"
+            ),
+        )
+    for waiting_scope_field in (
+        "waiting_count_for_user",
+        "waiting_count_for_session",
+    ):
+        if waiting_scope_field not in queue_payload:
+            continue
+        waiting_scope_count = _read_queued_snapshot_int_field(
+            queue_payload,
+            waiting_scope_field,
+        )
+        _assert(
+            waiting_scope_count >= 0,
+            f"queued {waiting_scope_field} should be non-negative: {queue_payload}",
+        )
+        _assert(
+            waiting_scope_count <= waiting_count,
+            (
+                f"queued {waiting_scope_field} should not exceed "
+                f"waiting_count: {queue_payload}"
+            ),
+        )
     _assert(
         "active_task_ids" not in queue_payload,
         "queue snapshot leaked active_task_ids",
