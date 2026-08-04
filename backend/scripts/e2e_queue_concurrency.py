@@ -268,6 +268,14 @@ def assert_safe_queue_settings_diagnostics(
         )
     per_user_limit = int(diagnostics.get("max_concurrent_per_user") or 0)
     per_session_limit = int(diagnostics.get("max_concurrent_per_session") or 0)
+    _assert(
+        per_user_limit >= 0,
+        f"max_concurrent_per_user should be non-negative: {diagnostics}",
+    )
+    _assert(
+        per_session_limit >= 0,
+        f"max_concurrent_per_session should be non-negative: {diagnostics}",
+    )
     if expected_current_user_active_count is not None:
         _assert(
             "current_user_active_count" in diagnostics,
@@ -283,6 +291,21 @@ def assert_safe_queue_settings_diagnostics(
                 f"{expected_current_user_active_count}: {diagnostics}"
             ),
         )
+    if "current_user_active_count" in diagnostics:
+        current_user_active_count = int(
+            diagnostics.get("current_user_active_count") or 0
+        )
+        _assert(
+            current_user_active_count >= 0,
+            f"current_user_active_count should be non-negative: {diagnostics}",
+        )
+        _assert(
+            current_user_active_count <= active_count,
+            (
+                "current_user_active_count should not exceed "
+                f"active_count: {diagnostics}"
+            ),
+        )
     if expected_current_user_waiting_count is not None:
         _assert(
             "current_user_waiting_count" in diagnostics,
@@ -296,6 +319,28 @@ def assert_safe_queue_settings_diagnostics(
             (
                 "current_user_waiting_count should be "
                 f"{expected_current_user_waiting_count}: {diagnostics}"
+            ),
+        )
+    if "current_user_waiting_count" in diagnostics:
+        _assert(
+            "current_user_active_count" in diagnostics,
+            (
+                "current_user_waiting_count requires "
+                f"current_user_active_count: {diagnostics}"
+            ),
+        )
+        current_user_waiting_count = int(
+            diagnostics.get("current_user_waiting_count") or 0
+        )
+        _assert(
+            current_user_waiting_count >= 0,
+            f"current_user_waiting_count should be non-negative: {diagnostics}",
+        )
+        _assert(
+            current_user_waiting_count <= waiting_count,
+            (
+                "current_user_waiting_count should not exceed "
+                f"waiting_count: {diagnostics}"
             ),
         )
     if "current_user_available_slots" in diagnostics:
@@ -392,6 +437,21 @@ def assert_safe_queue_settings_diagnostics(
                 f"{expected_current_session_active_count}: {diagnostics}"
             ),
         )
+    if "current_session_active_count" in diagnostics:
+        current_session_active_count = int(
+            diagnostics.get("current_session_active_count") or 0
+        )
+        _assert(
+            current_session_active_count >= 0,
+            f"current_session_active_count should be non-negative: {diagnostics}",
+        )
+        _assert(
+            current_session_active_count <= active_count,
+            (
+                "current_session_active_count should not exceed "
+                f"active_count: {diagnostics}"
+            ),
+        )
     if expected_current_session_waiting_count is not None:
         _assert(
             "current_session_waiting_count" in diagnostics,
@@ -405,6 +465,28 @@ def assert_safe_queue_settings_diagnostics(
             (
                 "current_session_waiting_count should be "
                 f"{expected_current_session_waiting_count}: {diagnostics}"
+            ),
+        )
+    if "current_session_waiting_count" in diagnostics:
+        _assert(
+            "current_session_active_count" in diagnostics,
+            (
+                "current_session_waiting_count requires "
+                f"current_session_active_count: {diagnostics}"
+            ),
+        )
+        current_session_waiting_count = int(
+            diagnostics.get("current_session_waiting_count") or 0
+        )
+        _assert(
+            current_session_waiting_count >= 0,
+            f"current_session_waiting_count should be non-negative: {diagnostics}",
+        )
+        _assert(
+            current_session_waiting_count <= waiting_count,
+            (
+                "current_session_waiting_count should not exceed "
+                f"waiting_count: {diagnostics}"
             ),
         )
     if "current_session_available_slots" in diagnostics:
