@@ -148,6 +148,18 @@ def _read_bool_diagnostic_field(
     return value
 
 
+def _read_number_diagnostic_field(
+    diagnostics: dict[str, Any],
+    field_name: str,
+) -> float:
+    value = diagnostics.get(field_name)
+    _assert(
+        isinstance(value, (int, float)) and not isinstance(value, bool),
+        f"{field_name} should be a number: {diagnostics}",
+    )
+    return float(value)
+
+
 def _register(base_url: str, email: str, password: str) -> dict[str, Any]:
     res = _request(
         method="POST",
@@ -207,8 +219,12 @@ def assert_safe_queue_settings_diagnostics(
         isinstance(diagnostics, dict),
         f"settings summary missing task_queue_diagnostics: {diagnostics}",
     )
+    max_concurrent = _read_non_negative_int_diagnostic_field(
+        diagnostics,
+        "max_concurrent",
+    )
     _assert(
-        diagnostics.get("max_concurrent") == expected_max_concurrent,
+        max_concurrent == expected_max_concurrent,
         (
             "queue phase settings diagnostics max_concurrent mismatch; "
             f"got {diagnostics}"
@@ -293,10 +309,11 @@ def assert_safe_queue_settings_diagnostics(
             available_slots == expected_available_slots,
             f"available_slots should be {expected_available_slots}: {diagnostics}",
         )
-    pressure_state = str(diagnostics.get("pressure_state") or "").strip().lower()
+    pressure_state = diagnostics.get("pressure_state")
     _assert(
-        pressure_state in {"idle", "active", "saturated", "scope_limited"},
-        f"pressure_state diagnostic enum mismatch: {diagnostics}",
+        isinstance(pressure_state, str)
+        and pressure_state in {"idle", "active", "saturated", "scope_limited"},
+        f"pressure_state should be an exact enum value: {diagnostics}",
     )
     expected_derived_pressure_state = "idle"
     if waiting_count > 0 and available_slots > 0:
@@ -627,7 +644,10 @@ def assert_safe_queue_settings_diagnostics(
         == (per_user_limit > 0 or per_session_limit > 0),
         f"fairness aggregate flag does not match limits: {diagnostics}",
     )
-    poll_interval_sec = float(diagnostics.get("poll_interval_sec") or 0)
+    poll_interval_sec = _read_number_diagnostic_field(
+        diagnostics,
+        "poll_interval_sec",
+    )
     _assert(
         0 < poll_interval_sec <= 5,
         f"queue poll interval diagnostic should be positive: {diagnostics}",

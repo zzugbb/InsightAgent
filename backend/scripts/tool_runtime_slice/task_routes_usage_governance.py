@@ -1210,6 +1210,39 @@ class TaskRoutesUsageGovernanceMixin:
                         expected_max_concurrent=2,
                     )
 
+    def test_backend_queue_e2e_rejects_non_integer_settings_diagnostics_max_concurrent(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "max_concurrent should be an integer",
+        ):
+            queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                {
+                    "max_concurrent": True,
+                    "active_count": 0,
+                    "waiting_count": 0,
+                    "available_slots": 1,
+                    "has_waiting_tasks": False,
+                    "saturated": False,
+                    "pressure_state": "idle",
+                    "max_concurrent_per_user": 0,
+                    "max_concurrent_per_session": 0,
+                    "poll_interval_sec": 0.1,
+                    "per_user_limit_enabled": False,
+                    "per_session_limit_enabled": False,
+                    "fairness_limits_enabled": False,
+                    "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+                    "capacity_aware_fifo_enabled": True,
+                },
+                expected_max_concurrent=1,
+            )
+
     def test_backend_queue_e2e_requires_settings_diagnostics_governance_fields(
         self,
     ) -> None:
@@ -1294,6 +1327,44 @@ class TaskRoutesUsageGovernanceMixin:
                 with self.assertRaisesRegex(
                     RuntimeError,
                     f"{field_name} should be an integer",
+                ):
+                    queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                        payload,
+                        expected_max_concurrent=2,
+                    )
+
+    def test_backend_queue_e2e_rejects_non_numeric_settings_diagnostics_poll_interval(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+        base_payload = {
+            "max_concurrent": 2,
+            "active_count": 0,
+            "waiting_count": 0,
+            "available_slots": 2,
+            "has_waiting_tasks": False,
+            "saturated": False,
+            "pressure_state": "idle",
+            "max_concurrent_per_user": 0,
+            "max_concurrent_per_session": 0,
+            "poll_interval_sec": 0.1,
+            "per_user_limit_enabled": False,
+            "per_session_limit_enabled": False,
+            "fairness_limits_enabled": False,
+            "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+            "capacity_aware_fifo_enabled": True,
+        }
+
+        for invalid_value in ("0.1", True):
+            with self.subTest(invalid_value=invalid_value):
+                payload = dict(base_payload)
+                payload["poll_interval_sec"] = invalid_value
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "poll_interval_sec should be a number",
                 ):
                     queue_e2e_module.assert_safe_queue_settings_diagnostics(
                         payload,
@@ -1424,6 +1495,44 @@ class TaskRoutesUsageGovernanceMixin:
                         expected_max_concurrent=2,
                     )
 
+    def test_backend_queue_e2e_rejects_non_exact_pressure_state_diagnostic(
+        self,
+    ) -> None:
+        queue_e2e_module = __import__(
+            "scripts.e2e_queue_concurrency",
+            fromlist=["assert_safe_queue_settings_diagnostics"],
+        )
+        base_payload = {
+            "max_concurrent": 2,
+            "active_count": 0,
+            "waiting_count": 0,
+            "available_slots": 2,
+            "has_waiting_tasks": False,
+            "saturated": False,
+            "pressure_state": "idle",
+            "max_concurrent_per_user": 0,
+            "max_concurrent_per_session": 0,
+            "poll_interval_sec": 0.1,
+            "per_user_limit_enabled": False,
+            "per_session_limit_enabled": False,
+            "fairness_limits_enabled": False,
+            "waiting_policy": "capacity_aware_oldest_eligible_fifo",
+            "capacity_aware_fifo_enabled": True,
+        }
+
+        for invalid_value in (" IDLE ", "Idle"):
+            with self.subTest(invalid_value=invalid_value):
+                payload = dict(base_payload)
+                payload["pressure_state"] = invalid_value
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "pressure_state should be an exact enum value",
+                ):
+                    queue_e2e_module.assert_safe_queue_settings_diagnostics(
+                        payload,
+                        expected_max_concurrent=2,
+                    )
+
     def test_backend_queue_e2e_rejects_inconsistent_has_waiting_tasks_diagnostic(
         self,
     ) -> None:
@@ -1533,7 +1642,7 @@ class TaskRoutesUsageGovernanceMixin:
 
         with self.assertRaisesRegex(
             RuntimeError,
-            "pressure_state diagnostic enum mismatch",
+            "pressure_state should be an exact enum value",
         ):
             queue_e2e_module.assert_safe_queue_settings_diagnostics(
                 {
