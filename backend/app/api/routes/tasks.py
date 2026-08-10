@@ -233,11 +233,10 @@ def _coerce_task_response_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
     if "governance" in summary:
-        if not summary_is_dict or not isinstance(summary.get("governance"), dict):
-            summary["governance"] = _coerce_task_governance_for_route(
-                summary.get("governance"),
-                normalize_dict=not summary_is_dict,
-            )
+        summary["governance"] = _coerce_task_governance_for_route(
+            summary.get("governance"),
+            normalize_dict=not summary_is_dict,
+        )
     if "trace_json" in summary:
         summary["trace_json"] = chat_persistence_service._sanitize_task_response_trace_json(
             summary.get("trace_json")
@@ -262,7 +261,7 @@ def _coerce_tasks_usage_dashboard_response_summary(value: object) -> dict[str, A
             row_summary = _coerce_payload_mapping(row)
             if not row_summary:
                 continue
-            if not summary_is_dict or not isinstance(row_summary.get("governance"), dict):
+            if "governance" in row_summary:
                 row_summary["governance"] = _coerce_session_governance_for_route(
                     row_summary.get("governance"),
                     normalize_dict=not summary_is_dict,
@@ -276,7 +275,7 @@ def _coerce_tasks_usage_dashboard_response_summary(value: object) -> dict[str, A
             row_summary = _coerce_payload_mapping(row)
             if not row_summary:
                 continue
-            if not summary_is_dict or not isinstance(row_summary.get("governance"), dict):
+            if "governance" in row_summary:
                 row_summary["governance"] = _coerce_task_governance_for_route(
                     row_summary.get("governance"),
                     normalize_dict=not summary_is_dict,
