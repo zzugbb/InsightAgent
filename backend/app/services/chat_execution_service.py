@@ -36,6 +36,7 @@ from app.services.tool_runtime import (
     execute_tool_plan_item_service_actions,
     execute_tool_plan_item_service_execution,
     resolve_tool_registration,
+    _sanitize_tool_runtime_provider_source_name_for_artifact,
     sanitize_tool_registry_diagnostics_artifact_payload,
 )
 
@@ -60,6 +61,28 @@ def sse_event(event: str, data: dict[str, object]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+_SSE_PROVIDER_SOURCE_TEXT_RE = re.compile(
+    r"(?i)\b("
+    r"provider_source|provider_source_name|tool_registry_provider_source"
+    r")(\s*[:=]\s*)([^\s,;}\]]+)"
+)
+
+
+def _sanitize_sse_provider_source_text(value: object) -> str:
+    text = str(value)
+
+    def redact(match: re.Match[str]) -> str:
+        key = match.group(1)
+        separator = match.group(2)
+        raw_source = match.group(3).strip("\"'")
+        safe_source = _sanitize_tool_runtime_provider_source_name_for_artifact(
+            raw_source
+        )
+        return f"{key}{separator}{safe_source}"
+
+    return _SSE_PROVIDER_SOURCE_TEXT_RE.sub(redact, text)
+
+
 def sse_error_payload(
     *,
     task_id: str,
@@ -74,6 +97,7 @@ def sse_error_payload(
     safe_message = sanitize_tool_registry_diagnostics_artifact_payload(message)
     if not isinstance(safe_message, str):
         safe_message = message
+    safe_message = _sanitize_sse_provider_source_text(safe_message)
     payload: dict[str, object] = {
         "task_id": task_id,
         "message": safe_message,
@@ -86,7 +110,8 @@ def sse_error_payload(
         payload["step_id"] = step_id
     if detail:
         safe_detail = sanitize_tool_registry_diagnostics_artifact_payload(detail)
-        payload["detail"] = safe_detail if isinstance(safe_detail, str) else detail
+        safe_detail_text = safe_detail if isinstance(safe_detail, str) else detail
+        payload["detail"] = _sanitize_sse_provider_source_text(safe_detail_text)
     if isinstance(status_code, int):
         payload["status_code"] = status_code
     return payload

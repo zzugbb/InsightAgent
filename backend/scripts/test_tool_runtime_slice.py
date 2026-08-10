@@ -267,6 +267,7 @@ from tool_runtime_slice.registry_provider_source_artifacts import RegistryProvid
 from tool_runtime_slice.export_provider_source_artifacts import ExportProviderSourceArtifactsMixin
 from tool_runtime_slice.response_provider_source_artifacts import ResponseProviderSourceArtifactsMixin
 from tool_runtime_slice.audit_provider_source_artifacts import AuditProviderSourceArtifactsMixin
+from tool_runtime_slice.sse_provider_source_artifacts import SseProviderSourceArtifactsMixin
 from tool_runtime_slice.registry_provider_settings import RegistryProviderSettingsMixin
 from tool_runtime_slice.registry_runtime_models import RegistryRuntimeModelsMixin
 from tool_runtime_slice.registry_runtime_service_models import RegistryRuntimeServiceModelsMixin
@@ -316,6 +317,7 @@ class ToolRuntimeSliceTests(
     ExportProviderSourceArtifactsMixin,
     ResponseProviderSourceArtifactsMixin,
     AuditProviderSourceArtifactsMixin,
+    SseProviderSourceArtifactsMixin,
     RegistryProviderSettingsMixin,
     RegistryFileDiagnosticsMixin,
     RegistrySourceFileDiagnosticsMixin,

@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite 与 concurrency-fairness-policy 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前主线：registry-governance，进度约 32%；已收口 diagnostics summary 脱敏后去重、provider source values 安全化、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response 与 audit detail provider source 脱敏。
+  - 当前主线：registry-governance，进度约 35%；已收口 diagnostics summary 脱敏后去重、provider source values 安全化、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response、audit detail 与 SSE error provider source 脱敏。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy。
   - 本主线继续保持外部 SSE / trace / export / e2e shape 稳定，并按小红测、实现、targeted/full slice 推进。
   - 后续候选：rag-governance-hardening。
@@ -14,7 +14,7 @@ constraints:
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1801/1801)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1802/1802)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (76/76)
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
@@ -26,7 +26,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: registry-governance 进度约 32%；本轮新增 audit_provider_source_artifacts 主题测试，先补 audit detail provider source 脱敏红测，再把 audit_service 通用 detail sanitizer 扩展到 provider_source/provider_source_name/provider_sources 值，同时保持既有 HTTP JSON 审计脱敏兼容。targeted 与 backend full slice 1801/1801 均通过，完整 Chromium 基线仍沿用 50 passed / 1 skipped。
+latest_validation_note: registry-governance 进度约 35%；本轮新增 sse_provider_source_artifacts 主题测试，先补 SSE error message/detail provider source 脱敏红测，再把 sse_error_payload 的现有 diagnostics sanitizer 扩展到 provider_source/provider_source_name/tool_registry_provider_source 文本片段，同时保持既有 HTTP JSON SSE error 脱敏兼容。targeted 与 backend full slice 1802/1802 均通过，完整 Chromium 基线仍沿用 50 passed / 1 skipped。
 todos:
   - id: docs-slimming
     status: completed
@@ -51,7 +51,7 @@ todos:
     content: 新增单文件规模治理规则；后续不把历史大文件作为默认追加点，测试/实现优先进入主题文件，必要时先拆新主题文件或新模块。
   - id: registry-governance
     status: in_progress
-    content: 当前主线，进度约 32%；已完成 diagnostics_summary 脱敏后安全值稳定去重、provider source values 安全化、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response 与 audit detail provider source 脱敏，继续统一 registry / profile / provider source / selected source / loader_factory / settings/preflight/trace/export/audit 的治理语义。
+    content: 当前主线，进度约 35%；已完成 diagnostics_summary 脱敏后安全值稳定去重、provider source values 安全化、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response、audit detail 与 SSE error provider source 脱敏，继续统一 registry / profile / provider source / selected source / loader_factory / settings/preflight/trace/export/audit/SSE 的治理语义。
   - id: rag-governance-hardening
     status: pending
     content: 后续补知识库版本化、来源治理与更细粒度 shared 规则。
@@ -79,7 +79,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1801/1801`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1802/1802`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel / queued SSE safe wait_position、settings safe global/current-user active/waiting/available counts、基础计数字段存在性、queued snapshot count/wait_position/scope count 整数类型、整数型 max_concurrent/计数/治理限额字段、数值型 poll interval、精确 pressure_state 枚举、布尔型状态/治理标记、非负治理限额、governance 必填字段、has_waiting_tasks/saturated/pressure_state 必填、固定枚举值与派生一致性、current-user limit 与 available 一致性 / followup completion latest fresh 通过；脚本现额外校验 queued snapshot 基础计数字段、结构一致性、current session diagnostics、settings `task_queue_diagnostics`、scope available slots 字段依赖与 scope active/waiting 计数全局上界。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `76/76`。
@@ -99,12 +99,12 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前主线
 
-- `registry-governance`：进度约 `32%`；已完成 diagnostics summary 脱敏后安全值稳定去重、provider source values 安全化、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response 与 audit detail provider source 脱敏，不改变 settings/preflight/trace/export/audit 可见字段 shape。
+- `registry-governance`：进度约 `35%`；已完成 diagnostics summary 脱敏后安全值稳定去重、provider source values 安全化、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response、audit detail 与 SSE error provider source 脱敏，不改变 settings/preflight/trace/export/audit/SSE 可见字段 shape。
 
 ## Pre-flight Cleanup
 
 - 文档瘦身：四份活跃文档只保留当前状态、当前验证基线、下一主线、稳定契约与少量高信号能力摘要。
-- 测试拆分：`backend/scripts/test_tool_runtime_slice.py` 已缩为兼容入口，测试主体拆到 `backend/scripts/tool_runtime_slice/` mixin 包并保持原入口命令不变；本轮新增 `audit_provider_source_artifacts.py` 承接 audit detail provider source 输出层测试，避免继续加大既有 model_dump/audit 大文件。
+- 测试拆分：`backend/scripts/test_tool_runtime_slice.py` 已缩为兼容入口，测试主体拆到 `backend/scripts/tool_runtime_slice/` mixin 包并保持原入口命令不变；本轮新增 `sse_provider_source_artifacts.py` 承接 SSE error provider source 输出层测试，避免继续加大既有 runtime_result 大文件。
 - 主题包摘要：provider/source、planner、settings/registry、http_json request/response/mapping/error、task trace/export/session/usage、registry governance/file diagnostics/runtime models、runtime result/attempt/observation/rag execution。
 - `tool_runtime.py` 拆分放在测试拆分之后分阶段推进，优先抽旁路模块并保留现有 import facade；planner 已抽到 `backend/app/services/tool_runtime_planning.py`，runtime context/result/attempt/trace/rag/plan-item execution 已抽到 `backend/app/services/tool_runtime_execution.py`，HTTP JSON/diagnostics 已抽到 `backend/app/services/tool_runtime_http_json.py`，registry/file-backed/provider-source 治理已抽到 `backend/app/services/tool_runtime_registry.py`；pre-flight 拆分到此收口。
 
