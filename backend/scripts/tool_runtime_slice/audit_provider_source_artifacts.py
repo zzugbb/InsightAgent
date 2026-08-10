@@ -87,3 +87,31 @@ class AuditProviderSourceArtifactsMixin:
         )
         self.assertNotIn("api_key=hidden", str(detail_json))
         self.assertNotIn("access_token=hidden", str(detail_json))
+
+    def test_sanitize_audit_event_detail_redacts_tool_registry_provider_source_values(
+        self,
+    ) -> None:
+        result = audit_service_module.sanitize_audit_event_detail(
+            {
+                "tool_registry_provider_source": "suite_api_key=hidden",
+                "nested": {
+                    "tool_registry_provider_sources": [
+                        "suite_api_key=hidden",
+                        "fallback_access_token=hidden",
+                    ],
+                },
+            }
+        )
+
+        self.assertIsInstance(result, dict)
+        assert isinstance(result, dict)
+        self.assertEqual(
+            result["tool_registry_provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            result["nested"]["tool_registry_provider_sources"],
+            ["suite_[redacted]", "fallback_[redacted]"],
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(result, default=str))
+        self.assertNotIn("access_token=hidden", json.dumps(result, default=str))

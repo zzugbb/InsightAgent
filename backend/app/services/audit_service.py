@@ -28,6 +28,20 @@ SUPPORTED_AUDIT_EVENT_TYPES = frozenset(
     }
 )
 
+_PROVIDER_SOURCE_DETAIL_KEYS = frozenset(
+    {
+        "provider_source",
+        "provider_source_name",
+        "tool_registry_provider_source",
+    }
+)
+_PROVIDER_SOURCES_DETAIL_KEYS = frozenset(
+    {
+        "provider_sources",
+        "tool_registry_provider_sources",
+    }
+)
+
 
 def _now_iso() -> str:
     return datetime.now().isoformat()
@@ -73,14 +87,17 @@ def _redact_provider_source_event_detail_values(value: object) -> object:
         redacted: dict[str, object] = {}
         for key, item in value.items():
             safe_key = str(key)
-            if safe_key in {"provider_source", "provider_source_name"}:
+            if safe_key in _PROVIDER_SOURCE_DETAIL_KEYS:
                 redacted[safe_key] = (
                     _sanitize_tool_runtime_provider_source_name_for_artifact(item)
                     if isinstance(item, str) and item.strip()
                     else item
                 )
                 continue
-            if safe_key == "provider_sources" and isinstance(item, (list, tuple)):
+            if (
+                safe_key in _PROVIDER_SOURCES_DETAIL_KEYS
+                and isinstance(item, (list, tuple))
+            ):
                 redacted[safe_key] = [
                     _sanitize_tool_runtime_provider_source_name_for_artifact(source)
                     if isinstance(source, str) and source.strip()
