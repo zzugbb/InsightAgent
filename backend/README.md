@@ -5,15 +5,15 @@
 ## 当前状态
 
 - 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `38%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `41%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
 - `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
-- `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定；`tool_runtime_registry.py` 与 route/audit/SSE 边界已开始收紧 diagnostics summary、runtime/preflight/action 回灌 totals、模型输出层、export artifact、task/usage response、audit detail 与 SSE error provider source 安全摘要；审计 detail 已覆盖 `tool_registry_provider_source` 长字段。
+- `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定；`tool_runtime_registry.py` 与 route/audit/SSE/trace 边界已开始收紧 diagnostics summary、runtime/preflight/action 回灌 totals、模型输出层、export artifact、task/usage response、audit detail、SSE error 与 trace meta provider source 安全摘要。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1803/1803` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1805/1805` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
 - backend queue e2e phase：低并发 `8011` latest fresh 通过，覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
@@ -27,7 +27,7 @@
 ## 下一步后端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`。
-2. 当前主线：`registry-governance`，聚焦 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export/audit/SSE 的治理语义；本轮收紧 audit detail 里的 `tool_registry_provider_source` / `tool_registry_provider_sources` 长字段脱敏，同时保持短字段与既有 HTTP JSON 审计脱敏兼容。
+2. 当前主线：`registry-governance`，聚焦 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export/audit/SSE 的治理语义；本轮收紧 trace meta 里的 `provider_source*` / `tool_registry_provider_source*` 脱敏，同时保持 `TraceStep` 外部 shape 与既有导出/详情响应兼容。
 3. 后续候选：`rag-governance-hardening`，聚焦知识库版本化、来源治理与更细粒度 shared 规则。
 4. 本主线继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
 
@@ -45,7 +45,7 @@
 - `app/services/tool_runtime_execution.py`：tool runtime context、result preview/output/summary、attempt loop、trace event、rag follow-up 与 plan-item service execution，作为 `tool_runtime.py` 的 facade 拆分模块
 - `app/services/tool_runtime_http_json.py`：HTTP JSON request/template/response/mapping、execution diagnostics 与敏感信息脱敏，作为 `tool_runtime.py` 的 facade 拆分模块
 - `app/services/tool_runtime_registry.py`：registry/file-backed/provider-source、settings/preflight diagnostics、runtime artifacts 与 service action 模型，作为 `tool_runtime.py` 的 facade 拆分模块
-- `scripts/tool_runtime_slice/`：`test_tool_runtime_slice.py` 的主题 mixin 包，承接 provider/source、planner、settings/registry、http_json、task/export/governance、runtime/result/rag 等 slice 测试；当前最大主题模块约 4.7k 行
+- `scripts/tool_runtime_slice/`：`test_tool_runtime_slice.py` 的主题 mixin 包，承接 provider/source、planner、settings/registry、http_json、task/export/governance、trace provider source、runtime/result/rag 等 slice 测试；当前最大主题模块约 4.7k 行
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
 - `app/services/chroma_rag_service.py`：RAG ingest/query/status、knowledge base list/clear/delete 与 shared/private 语义
 - `app/services/settings_service.py`：用户级模型设置读取/保存与 `api_key` 加密解密

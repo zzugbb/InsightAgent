@@ -538,6 +538,61 @@ def _sanitize_session_governance_provider_source_values_for_export(
     return value
 
 
+_PROVIDER_SOURCE_TRACE_META_KEYS = frozenset(
+    {
+        "provider_source",
+        "provider_source_name",
+        "tool_registry_provider_source",
+    }
+)
+_PROVIDER_SOURCES_TRACE_META_KEYS = frozenset(
+    {
+        "provider_sources",
+        "tool_registry_provider_sources",
+    }
+)
+
+
+def _sanitize_trace_provider_source_meta_values_for_export(value: object) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[object, object] = {}
+        for key, item in value.items():
+            safe_key = str(key)
+            if safe_key in _PROVIDER_SOURCE_TRACE_META_KEYS:
+                sanitized[key] = (
+                    _sanitize_tool_runtime_provider_source_name_for_artifact(item)
+                    if isinstance(item, str) and item.strip()
+                    else item
+                )
+                continue
+            if (
+                safe_key in _PROVIDER_SOURCES_TRACE_META_KEYS
+                and isinstance(item, (list, tuple))
+            ):
+                sanitized[key] = [
+                    _sanitize_tool_runtime_provider_source_name_for_artifact(source)
+                    if isinstance(source, str) and source.strip()
+                    else source
+                    for source in item
+                ]
+                continue
+            sanitized[key] = _sanitize_trace_provider_source_meta_values_for_export(
+                item
+            )
+        return sanitized
+    if isinstance(value, list):
+        return [
+            _sanitize_trace_provider_source_meta_values_for_export(item)
+            for item in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _sanitize_trace_provider_source_meta_values_for_export(item)
+            for item in value
+        )
+    return value
+
+
 def _normalize_session_governance_payload_or_original(value: object) -> object:
     if isinstance(value, dict):
         return dict(value)
@@ -1954,6 +2009,7 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
             payload[diagnostics_key] = sanitize_tool_registry_diagnostics_artifact_payload(
                 payload.get(diagnostics_key)
             )
+    payload = _sanitize_trace_provider_source_meta_values_for_export(payload)
     return payload
 
 
