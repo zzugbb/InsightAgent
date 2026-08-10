@@ -2446,3 +2446,67 @@ class TaskUsageDashboardMixin:
             captured["tool_registry_provider_source_filter"],
             " Planning_Suite ",
         )
+
+    def test_get_tasks_usage_dashboard_route_resolves_unique_redacted_provider_source_alias_filter(
+        self,
+    ) -> None:
+        original_get_settings = task_routes_module.get_settings
+        original_get_tasks_usage_dashboard = task_routes_module.get_tasks_usage_dashboard
+        captured: dict[str, object] = {}
+        try:
+            task_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_api_key=hidden": {
+                            "provider": "default",
+                            "profile": "planning_only",
+                        }
+                    }
+                )
+            )
+
+            def fake_get_tasks_usage_dashboard(user_id, **kwargs):
+                captured["user_id"] = user_id
+                captured.update(kwargs)
+                return {
+                    "window_days": 14,
+                    "summary": {
+                        "tasks_total": 0,
+                        "tasks_with_usage": 0,
+                        "source_tasks_provider": 0,
+                        "source_tasks_estimated": 0,
+                        "source_tasks_mixed": 0,
+                        "source_tasks_legacy": 0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "avg_total_tokens": None,
+                        "avg_cost_estimate": None,
+                    },
+                    "trend": [],
+                    "by_session": [],
+                    "top_tasks": [],
+                }
+
+            task_routes_module.get_tasks_usage_dashboard = fake_get_tasks_usage_dashboard
+
+            task_routes_module.get_tasks_usage_dashboard_route(
+                session_id=None,
+                window_days=14,
+                top_sessions=10,
+                top_tasks=14,
+                source_kind="all",
+                tool_registry_profile=None,
+                tool_registry_provider_source="suite_[redacted]",
+                current_user={"id": "user-usage-alias-filter"},
+            )
+        finally:
+            task_routes_module.get_settings = original_get_settings
+            task_routes_module.get_tasks_usage_dashboard = original_get_tasks_usage_dashboard
+
+        self.assertEqual(captured["user_id"], "user-usage-alias-filter")
+        self.assertEqual(
+            captured["tool_registry_provider_source_filter"],
+            "suite_api_key=hidden",
+        )

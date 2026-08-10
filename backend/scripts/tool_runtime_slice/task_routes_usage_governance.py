@@ -2728,6 +2728,77 @@ class TaskRoutesUsageGovernanceMixin:
             },
         )
 
+    def test_get_tasks_resolves_unique_redacted_provider_source_alias_filter(
+        self,
+    ) -> None:
+        original_get_settings = task_routes_module.get_settings
+        original_get_session = task_routes_module.get_session
+        original_list_tasks = task_routes_module.list_tasks
+        original_count_tasks = task_routes_module.count_tasks
+        captured: dict[str, object] = {}
+        try:
+            task_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_api_key=hidden": {
+                            "provider": "default",
+                            "profile": "planning_only",
+                        }
+                    }
+                )
+            )
+            task_routes_module.get_session = (
+                lambda session_id, user_id: {
+                    "id": session_id,
+                    "user_id": user_id,
+                    "title": "Alias Filter Session",
+                }
+            )
+
+            def fake_list_tasks(
+                *,
+                user_id,
+                limit,
+                session_id=None,
+                offset=0,
+                query=None,
+                tool_registry_profile_filter=None,
+                tool_registry_provider_source_filter=None,
+            ):
+                captured["list_provider_source"] = tool_registry_provider_source_filter
+                return []
+
+            def fake_count_tasks(
+                user_id,
+                session_id=None,
+                query=None,
+                tool_registry_profile_filter=None,
+                tool_registry_provider_source_filter=None,
+            ):
+                captured["count_provider_source"] = tool_registry_provider_source_filter
+                return 0
+
+            task_routes_module.list_tasks = fake_list_tasks
+            task_routes_module.count_tasks = fake_count_tasks
+
+            task_routes_module.get_tasks(
+                limit=20,
+                offset=0,
+                session_id="session-alias-filter",
+                query=None,
+                tool_registry_profile=None,
+                tool_registry_provider_source="suite_[redacted]",
+                current_user={"id": "user-alias-filter"},
+            )
+        finally:
+            task_routes_module.get_settings = original_get_settings
+            task_routes_module.get_session = original_get_session
+            task_routes_module.list_tasks = original_list_tasks
+            task_routes_module.count_tasks = original_count_tasks
+
+        self.assertEqual(captured["list_provider_source"], "suite_api_key=hidden")
+        self.assertEqual(captured["count_provider_source"], "suite_api_key=hidden")
+
     def test_list_tasks_applies_query_to_prompt_id_and_trace_json(self) -> None:
         captured: dict[str, object] = {}
 

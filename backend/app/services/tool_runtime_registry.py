@@ -424,6 +424,43 @@ def _impl__sanitize_tool_registry_provider_source_name_for_artifact(
     return safe_value or "default"
 
 
+def _impl_resolve_unique_tool_registry_provider_source_alias(
+    *,
+    settings: object,
+    tool_registry_provider_source: object,
+) -> str:
+    raw_requested_source = str(tool_registry_provider_source)
+    requested_source = raw_requested_source.strip()
+    if not requested_source:
+        return raw_requested_source
+
+    source_artifacts = build_tool_registry_provider_sources_from_settings_artifacts(
+        settings=settings
+    )
+    named_sources = source_artifacts["sources"]
+    normalized_source_specs = get_tool_registry_provider_source_specs_from_settings(
+        settings=settings
+    )
+    available_sources = ["default"]
+    available_sources.extend(
+        name
+        for name in sorted({*named_sources.keys(), *normalized_source_specs.keys()})
+        if name and name != "default"
+    )
+    if raw_requested_source in available_sources:
+        return raw_requested_source
+
+    alias_matches = [
+        source_name
+        for source_name in available_sources
+        if _impl__sanitize_tool_registry_provider_source_name_for_artifact(source_name)
+        == requested_source
+    ]
+    if len(alias_matches) == 1:
+        return alias_matches[0]
+    return raw_requested_source
+
+
 def _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
     payload: object,
 ) -> object:
@@ -4812,6 +4849,10 @@ def build_tool_registry_provider_sources_from_settings(*args, **kwargs):
 @wraps(_impl_build_tool_registry_provider_sources_from_settings_artifacts)
 def build_tool_registry_provider_sources_from_settings_artifacts(*args, **kwargs):
     return _call_public_or_impl("build_tool_registry_provider_sources_from_settings_artifacts", _impl_build_tool_registry_provider_sources_from_settings_artifacts, *args, **kwargs)
+
+@wraps(_impl_resolve_unique_tool_registry_provider_source_alias)
+def resolve_unique_tool_registry_provider_source_alias(*args, **kwargs):
+    return _call_public_or_impl("resolve_unique_tool_registry_provider_source_alias", _impl_resolve_unique_tool_registry_provider_source_alias, *args, **kwargs)
 
 @wraps(_impl_build_tool_registry_extra_tools_from_settings)
 def build_tool_registry_extra_tools_from_settings(*args, **kwargs):

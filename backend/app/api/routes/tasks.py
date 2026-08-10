@@ -35,6 +35,7 @@ from app.services.chat_persistence_service import (
 )
 from app.services.task_queue_service import forget_waiting_task
 from app.services.task_status_service import normalize_task_status
+from app.services.tool_runtime import resolve_unique_tool_registry_provider_source_alias
 
 
 router = APIRouter()
@@ -296,6 +297,20 @@ def _parse_last_event_id(value: str | None) -> int | None:
     except ValueError:
         return None
     return parsed if parsed >= 0 else None
+
+
+def _resolve_tool_registry_provider_source_filter_alias(
+    tool_registry_provider_source: str | None,
+) -> str | None:
+    if not isinstance(tool_registry_provider_source, str):
+        return tool_registry_provider_source
+    if not tool_registry_provider_source.strip():
+        return tool_registry_provider_source
+    return resolve_unique_tool_registry_provider_source_alias(
+        settings=get_settings(),
+        tool_registry_provider_source=tool_registry_provider_source,
+    )
+
 
 async def stream_running_task_reconnect(
     task_id: str,
@@ -873,6 +888,9 @@ def get_tasks(
 ) -> TaskListResponse:
     user_id = str(current_user["id"])
     search_query = query.strip() if query is not None and query.strip() else None
+    provider_source_filter = _resolve_tool_registry_provider_source_filter_alias(
+        tool_registry_provider_source
+    )
     if session_id is not None and session_id.strip():
         sid = session_id.strip()
         if get_session(sid, user_id) is None:
@@ -884,14 +902,14 @@ def get_tasks(
             offset=offset,
             query=search_query,
             tool_registry_profile_filter=tool_registry_profile,
-            tool_registry_provider_source_filter=tool_registry_provider_source,
+            tool_registry_provider_source_filter=provider_source_filter,
         )
         total = count_tasks(
             user_id,
             sid,
             search_query,
             tool_registry_profile_filter=tool_registry_profile,
-            tool_registry_provider_source_filter=tool_registry_provider_source,
+            tool_registry_provider_source_filter=provider_source_filter,
         )
     else:
         tasks = list_tasks(
@@ -900,14 +918,14 @@ def get_tasks(
             offset=offset,
             query=search_query,
             tool_registry_profile_filter=tool_registry_profile,
-            tool_registry_provider_source_filter=tool_registry_provider_source,
+            tool_registry_provider_source_filter=provider_source_filter,
         )
         total = count_tasks(
             user_id,
             None,
             search_query,
             tool_registry_profile_filter=tool_registry_profile,
-            tool_registry_provider_source_filter=tool_registry_provider_source,
+            tool_registry_provider_source_filter=provider_source_filter,
         )
     n = len(tasks)
     return TaskListResponse(
@@ -988,12 +1006,15 @@ def get_tasks_usage_dashboard_route(
             status_code=422,
             detail="source_kind must be one of: all, provider, estimated, mixed, legacy",
         )
+    provider_source_filter = _resolve_tool_registry_provider_source_filter_alias(
+        tool_registry_provider_source
+    )
     payload = get_tasks_usage_dashboard(
         user_id,
         session_id=sid,
         source_filter=None if source_normalized == "all" else source_normalized,
         tool_registry_profile_filter=tool_registry_profile,
-        tool_registry_provider_source_filter=tool_registry_provider_source,
+        tool_registry_provider_source_filter=provider_source_filter,
         window_days=window_days,
         top_sessions=top_sessions,
         top_tasks=top_tasks,

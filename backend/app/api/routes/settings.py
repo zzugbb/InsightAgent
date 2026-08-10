@@ -26,6 +26,7 @@ from app.services.tool_runtime import (
     get_tool_registry_profile_name_from_settings,
     get_tool_registry_provider_source_name_from_settings,
     get_tool_registry_provider_source_specs_from_settings,
+    resolve_unique_tool_registry_provider_source_alias,
     sanitize_tool_registry_diagnostics_artifact_payload,
 )
 
@@ -736,24 +737,10 @@ def _resolve_tool_registry_provider_source_request_alias(
     effective_settings: object,
     tool_registry_provider_source: str,
 ) -> str:
-    option_bundle = _build_tool_registry_options_bundle(
-        effective_settings=effective_settings
+    return resolve_unique_tool_registry_provider_source_alias(
+        settings=effective_settings,
+        tool_registry_provider_source=tool_registry_provider_source,
     )
-    available_sources = [
-        str(source_name)
-        for source_name in option_bundle["available_tool_registry_provider_sources"]
-    ]
-    if tool_registry_provider_source in available_sources:
-        return tool_registry_provider_source
-    alias_matches = [
-        source_name
-        for source_name in available_sources
-        if _sanitize_tool_runtime_provider_source_name_for_artifact(source_name)
-        == tool_registry_provider_source
-    ]
-    if len(alias_matches) == 1:
-        return alias_matches[0]
-    return tool_registry_provider_source
 
 
 def _build_settings_summary_response(

@@ -1952,6 +1952,7 @@ from app.services.tool_runtime_registry import (
     build_tool_registry_providers_from_settings_artifacts,
     build_tool_registry_provider_sources_from_settings,
     build_tool_registry_provider_sources_from_settings_artifacts,
+    resolve_unique_tool_registry_provider_source_alias,
     build_tool_registry_extra_tools_from_settings,
     _build_registry_overrides_from_specs,
     build_tool_registry_settings_config,
