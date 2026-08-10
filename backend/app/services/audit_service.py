@@ -8,6 +8,7 @@ from app.db import get_db_connection
 from app.services.tool_runtime import (
     _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE,
     _redact_http_json_raw_fallback_value,
+    _sanitize_tool_runtime_provider_source_name_for_artifact,
 )
 
 SUPPORTED_AUDIT_EVENT_TYPES = frozenset(
@@ -67,6 +68,37 @@ def _redact_sensitive_event_detail_keys(value: object) -> object:
     return value
 
 
+def _redact_provider_source_event_detail_values(value: object) -> object:
+    if isinstance(value, dict):
+        redacted: dict[str, object] = {}
+        for key, item in value.items():
+            safe_key = str(key)
+            if safe_key in {"provider_source", "provider_source_name"}:
+                redacted[safe_key] = (
+                    _sanitize_tool_runtime_provider_source_name_for_artifact(item)
+                    if isinstance(item, str) and item.strip()
+                    else item
+                )
+                continue
+            if safe_key == "provider_sources" and isinstance(item, (list, tuple)):
+                redacted[safe_key] = [
+                    _sanitize_tool_runtime_provider_source_name_for_artifact(source)
+                    if isinstance(source, str) and source.strip()
+                    else source
+                    for source in item
+                ]
+                continue
+            redacted[safe_key] = _redact_provider_source_event_detail_values(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_provider_source_event_detail_values(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(
+            _redact_provider_source_event_detail_values(item) for item in value
+        )
+    return value
+
+
 def sanitize_audit_event_detail(
     detail: dict[str, object] | None,
 ) -> dict[str, object] | None:
@@ -76,6 +108,7 @@ def sanitize_audit_event_detail(
     if not isinstance(redacted, dict):
         return None
     safe_detail = _redact_sensitive_event_detail_keys(redacted)
+    safe_detail = _redact_provider_source_event_detail_values(safe_detail)
     if isinstance(safe_detail, dict):
         return safe_detail
     return None
