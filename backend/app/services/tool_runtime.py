@@ -136,6 +136,67 @@ class ToolRegistrySettingsConfig:
     disabled_tool_names: tuple[str, ...] = ()
 
 
+_TOOL_RUNTIME_PROVIDER_SOURCE_SENSITIVE_TOKEN_RE = re.compile(
+    r"(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|secret|token|password)"
+    r"(?:\s*[:=][^\s,;/]+|[^\s,;/]*)?"
+)
+
+
+def _sanitize_tool_runtime_provider_source_name_for_artifact(
+    provider_source_name: object,
+) -> str:
+    safe_value = _redact_tool_registry_diagnostic_value(
+        str(provider_source_name).strip()
+    )
+    safe_value = _TOOL_RUNTIME_PROVIDER_SOURCE_SENSITIVE_TOKEN_RE.sub(
+        "[redacted]",
+        safe_value,
+    )
+    return safe_value or "default"
+
+
+def _sanitize_tool_runtime_provider_source_fields_for_artifact(
+    payload: object,
+) -> object:
+    if isinstance(payload, dict):
+        sanitized: dict[object, object] = {}
+        for key, value in payload.items():
+            if str(key) in {"provider_source", "provider_source_name"}:
+                sanitized[key] = _sanitize_tool_runtime_provider_source_name_for_artifact(
+                    value
+                )
+                continue
+            sanitized[key] = _sanitize_tool_runtime_provider_source_fields_for_artifact(
+                value
+            )
+        return sanitized
+    if isinstance(payload, tuple):
+        return tuple(
+            _sanitize_tool_runtime_provider_source_fields_for_artifact(value)
+            for value in payload
+        )
+    if isinstance(payload, list):
+        return [
+            _sanitize_tool_runtime_provider_source_fields_for_artifact(value)
+            for value in payload
+        ]
+    return payload
+
+
+def _sanitize_tool_runtime_provider_sources_for_artifact(
+    provider_sources: dict[str, ToolRegistryProvider],
+) -> dict[str, ToolRegistryProvider]:
+    sanitized: dict[str, ToolRegistryProvider] = {}
+    for source_name, provider in provider_sources.items():
+        safe_source_name = _sanitize_tool_runtime_provider_source_name_for_artifact(
+            source_name
+        )
+        if safe_source_name in sanitized:
+            continue
+        sanitized[safe_source_name] = provider
+    return sanitized
+
+
 @dataclass(frozen=True)
 class ConfiguredToolRegistryProviderPreflightSummaryModel:
     provider_source_name: str
@@ -154,7 +215,9 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "provider_source_name": self.provider_source_name,
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_for_artifact(
+                self.provider_source_name
+            ),
             "tool_count": self.tool_count,
             "tool_names": self.tool_names,
             "tool_details": self.tool_details,
@@ -183,7 +246,9 @@ class ConfiguredToolRegistryProviderPreflightResultModel:
     def to_dict(self) -> dict[str, object]:
         return {
             "provider": self.provider,
-            "provider_source_name": self.provider_source_name,
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_for_artifact(
+                self.provider_source_name
+            ),
             "runtime_artifacts": self.runtime_artifacts.to_dict(),
             "service_execution": self.service_execution.to_dict(),
             "trace_write_count": self.trace_write_count,
@@ -214,6 +279,7 @@ class ToolRegistryDiagnosticsSummaryModel:
 
 def _sanitize_tool_runtime_trace_artifact_payload(payload: object) -> object:
     sanitized = sanitize_tool_registry_diagnostics_artifact_payload(payload)
+    sanitized = _sanitize_tool_runtime_provider_source_fields_for_artifact(sanitized)
     return _sanitize_tool_runtime_trace_artifact_http_json_payload(sanitized)
 
 
@@ -281,8 +347,12 @@ class ConfiguredToolRegistryProviderRuntimeArtifactsModel:
     def to_dict(self) -> dict[str, object]:
         return {
             "provider": self.provider,
-            "provider_source_name": self.provider_source_name,
-            "provider_sources": self.provider_sources,
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_for_artifact(
+                self.provider_source_name
+            ),
+            "provider_sources": _sanitize_tool_runtime_provider_sources_for_artifact(
+                self.provider_sources
+            ),
             "selected_source_diagnostics": sanitize_tool_registry_file_diagnostics(
                 self.selected_source_diagnostics
             ),
@@ -355,7 +425,9 @@ class ConfiguredToolRegistryProviderServiceExecutionModel:
     def to_dict(self) -> dict[str, object]:
         return {
             "provider": self.provider,
-            "provider_source_name": self.provider_source_name,
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_for_artifact(
+                self.provider_source_name
+            ),
             "runtime_artifacts": self.runtime_artifacts.to_dict(),
             "service_actions": [action.to_dict() for action in self.service_actions],
         }
@@ -372,7 +444,9 @@ class ConfiguredToolRegistryProviderServiceExecutionResultModel:
     def to_dict(self) -> dict[str, object]:
         return {
             "provider": self.provider,
-            "provider_source_name": self.provider_source_name,
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_for_artifact(
+                self.provider_source_name
+            ),
             "runtime_artifacts": self.runtime_artifacts.to_dict(),
             "trace_write_count": self.trace_write_count,
             "audit_event_count": self.audit_event_count,

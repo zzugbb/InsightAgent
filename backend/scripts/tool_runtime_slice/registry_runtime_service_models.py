@@ -100,6 +100,47 @@ class RegistryRuntimeServiceModelsMixin:
         self.assertNotIn("token=hidden", serialized)
         self.assertNotIn('"request_id"', serialized)
 
+    def test_tool_registry_diagnostics_runtime_artifacts_model_redacts_provider_source_fields(
+        self,
+    ) -> None:
+        model = tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+            trace_step={
+                "id": "step-registry",
+                "meta": {
+                    "tool_registry": {
+                        "provider_source": "suite_api_key=hidden",
+                    },
+                },
+            },
+            trace_event={
+                "task_id": "task-1",
+                "step": {
+                    "meta": {
+                        "tool_registry": {
+                            "provider_source": "suite_api_key=hidden",
+                        },
+                    },
+                },
+            },
+            audit_detail={
+                "provider_source": "suite_api_key=hidden",
+            },
+        )
+
+        result = model.to_dict()
+
+        self.assertEqual(
+            result["trace_step"]["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            result["trace_event"]["step"]["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(result["audit_detail"]["provider_source"], "suite_[redacted]")
+        self.assertNotIn("api_key=hidden", json.dumps(result, default=str))
+
     def test_build_tool_registry_diagnostics_runtime_artifacts_keeps_empty_shape(self) -> None:
         diagnostics = {
             "skipped_registry_sources": (),
@@ -683,6 +724,50 @@ class RegistryRuntimeServiceModelsMixin:
         self.assertNotIn("token=hidden", serialized)
         self.assertNotIn('"request_id"', serialized)
 
+    def test_runtime_service_action_model_redacts_provider_source_fields(
+        self,
+    ) -> None:
+        model = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+            kind="internal_trace_write",
+            trace_step={
+                "id": "step-registry",
+                "meta": {
+                    "tool_registry": {
+                        "provider_source": "suite_api_key=hidden",
+                    },
+                },
+            },
+            trace_event={
+                "task_id": "task-1",
+                "step": {
+                    "meta": {
+                        "tool_registry": {
+                            "provider_source": "suite_api_key=hidden",
+                        },
+                    },
+                },
+            },
+            persist_force=True,
+            kwargs={
+                "detail": {
+                    "provider_source": "suite_api_key=hidden",
+                },
+            },
+        )
+
+        result = model.to_dict()
+
+        self.assertEqual(
+            result["trace_step"]["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            result["trace_event"]["step"]["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(result["kwargs"]["detail"]["provider_source"], "suite_[redacted]")
+        self.assertNotIn("api_key=hidden", json.dumps(result, default=str))
+
     def test_runtime_service_action_model_from_dict_redacts_http_json_trace_step_outputs(
         self,
     ) -> None:
@@ -1093,6 +1178,63 @@ class RegistryRuntimeServiceModelsMixin:
         self.assertEqual(result.diagnostics_runtime.summary.missing_total, 1)
         self.assertEqual(result.audit_event["event_type"], "tool_registry_diagnostics")
         self.assertEqual(tuple(sorted(result.provider.load_tool_registry())), ("calc_eval_fast",))
+
+    def test_runtime_artifacts_model_to_dict_redacts_provider_source_fields(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider({})
+        model = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeArtifactsModel(
+            provider=provider,
+            provider_source_name="suite_api_key=hidden",
+            provider_sources={"suite_api_key=hidden": provider},
+            selected_source_diagnostics={
+                "missing_registry_files": ("suite_api_key=hidden",),
+            },
+            source_diagnostics={
+                "suite_api_key=hidden": {
+                    "missing_registry_files": ("suite_api_key=hidden",),
+                },
+            },
+            diagnostics_runtime=tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+                summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+                trace_step={
+                    "id": "step-registry",
+                    "meta": {
+                        "tool_registry": {
+                            "provider_source": "suite_api_key=hidden",
+                        },
+                    },
+                },
+                trace_event=None,
+                audit_detail={
+                    "provider_source": "suite_api_key=hidden",
+                },
+            ),
+            audit_event={
+                "event_type": "tool_registry_diagnostics",
+                "detail": {
+                    "provider_source": "suite_api_key=hidden",
+                },
+            },
+        )
+
+        result = model.to_dict()
+
+        self.assertEqual(result["provider_source_name"], "suite_[redacted]")
+        self.assertEqual(tuple(result["provider_sources"]), ("suite_[redacted]",))
+        self.assertEqual(
+            result["diagnostics_runtime"]["trace_step"]["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            result["diagnostics_runtime"]["audit_detail"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            result["audit_event"]["detail"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(result, default=str))
 
     def test_build_configured_tool_registry_provider_service_execution_keeps_shape(
         self,

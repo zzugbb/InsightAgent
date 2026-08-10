@@ -309,7 +309,9 @@ def _impl_sanitize_tool_registry_file_diagnostics(
         if not isinstance(values, (list, tuple)):
             continue
         for raw_value in values:
-            safe_value = _redact_tool_registry_diagnostic_value(raw_value)
+            safe_value = _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                raw_value
+            )
             if not safe_value or safe_value in sanitized[key]:
                 continue
             sanitized[key].append(safe_value)
