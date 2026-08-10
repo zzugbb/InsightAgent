@@ -197,6 +197,41 @@ def _sanitize_tool_runtime_provider_sources_for_artifact(
     return sanitized
 
 
+def _sanitize_tool_runtime_diagnostics_summary_for_artifact(
+    diagnostics_summary: object,
+) -> dict[str, object]:
+    if not isinstance(diagnostics_summary, dict):
+        return {}
+    sanitized_payload = _sanitize_tool_runtime_provider_source_fields_for_artifact(
+        sanitize_tool_registry_diagnostics_artifact_payload(diagnostics_summary)
+    )
+    if not isinstance(sanitized_payload, dict):
+        return {}
+    entries = sanitized_payload.get("entries")
+    if not isinstance(entries, (list, tuple)):
+        return sanitized_payload
+    safe_entries: list[dict[str, object]] = []
+    for entry in sanitize_tool_registry_diagnostics_summary_entries(entries):
+        safe_entry = dict(
+            _sanitize_tool_runtime_provider_source_fields_for_artifact(entry)
+        )
+        values = safe_entry.get("values")
+        if isinstance(values, (list, tuple)):
+            deduped_safe_values: list[str] = []
+            for value in values:
+                safe_value = _sanitize_tool_runtime_provider_source_name_for_artifact(
+                    value
+                )
+                if not safe_value or safe_value in deduped_safe_values:
+                    continue
+                deduped_safe_values.append(safe_value)
+            safe_entry["values"] = tuple(deduped_safe_values)
+            safe_entry["count"] = len(deduped_safe_values)
+        safe_entries.append(safe_entry)
+    sanitized_payload["entries"] = tuple(safe_entries)
+    return sanitized_payload
+
+
 @dataclass(frozen=True)
 class ConfiguredToolRegistryProviderPreflightSummaryModel:
     provider_source_name: str
@@ -220,7 +255,9 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
             ),
             "tool_count": self.tool_count,
             "tool_names": self.tool_names,
-            "tool_details": self.tool_details,
+            "tool_details": _sanitize_tool_runtime_trace_artifact_payload(
+                self.tool_details
+            ),
             "service_action_count": self.service_action_count,
             "service_action_kinds": self.service_action_kinds,
             "trace_write_count": self.trace_write_count,
@@ -229,7 +266,9 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
             "diagnostics_total": self.diagnostics_total,
             "skipped_total": self.skipped_total,
             "missing_total": self.missing_total,
-            "diagnostics_summary": self.diagnostics_summary,
+            "diagnostics_summary": _sanitize_tool_runtime_diagnostics_summary_for_artifact(
+                self.diagnostics_summary
+            ),
         }
 
 
