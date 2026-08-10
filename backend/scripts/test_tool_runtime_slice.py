@@ -264,6 +264,7 @@ from tool_runtime_slice.registry_source_file_diagnostics import RegistrySourceFi
 from tool_runtime_slice.registry_runtime_governance import RegistryRuntimeGovernanceMixin
 from tool_runtime_slice.registry_http_json_projection import RegistryHttpJsonProjectionMixin
 from tool_runtime_slice.registry_provider_source_artifacts import RegistryProviderSourceArtifactsMixin
+from tool_runtime_slice.export_provider_source_artifacts import ExportProviderSourceArtifactsMixin
 from tool_runtime_slice.registry_provider_settings import RegistryProviderSettingsMixin
 from tool_runtime_slice.registry_runtime_models import RegistryRuntimeModelsMixin
 from tool_runtime_slice.registry_runtime_service_models import RegistryRuntimeServiceModelsMixin
@@ -310,6 +311,7 @@ class ToolRuntimeSliceTests(
     RegistryRuntimeGovernanceMixin,
     RegistryHttpJsonProjectionMixin,
     RegistryProviderSourceArtifactsMixin,
+    ExportProviderSourceArtifactsMixin,
     RegistryProviderSettingsMixin,
     RegistryFileDiagnosticsMixin,
     RegistrySourceFileDiagnosticsMixin,

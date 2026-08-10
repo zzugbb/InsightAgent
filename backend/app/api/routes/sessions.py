@@ -83,9 +83,21 @@ def _coerce_task_governance_for_route(
 ) -> object:
     if isinstance(value, dict):
         if not normalize_dict:
-            return value
-        return chat_persistence_service._normalize_task_governance_payload(value)
-    return chat_persistence_service._normalize_task_governance_payload(value)
+            return (
+                chat_persistence_service._sanitize_task_governance_provider_source_values_for_export(
+                    value
+                )
+            )
+        return (
+            chat_persistence_service._sanitize_task_governance_provider_source_values_for_export(
+                chat_persistence_service._normalize_task_governance_payload(value)
+            )
+        )
+    return (
+        chat_persistence_service._sanitize_task_governance_provider_source_values_for_export(
+            chat_persistence_service._normalize_task_governance_payload(value)
+        )
+    )
 
 
 def _coerce_session_governance_for_route(
@@ -95,21 +107,35 @@ def _coerce_session_governance_for_route(
 ) -> object:
     if isinstance(value, dict):
         if not normalize_dict:
-            return value
-        return (
+            return (
+                chat_persistence_service._sanitize_session_governance_provider_source_values_for_export(
+                    value
+                )
+            )
+        normalized = (
             chat_persistence_service._normalize_session_governance_summary_dict(
                 value
             )
             or value
         )
+        return (
+            chat_persistence_service._sanitize_session_governance_provider_source_values_for_export(
+                normalized
+            )
+        )
     governance = _coerce_payload_mapping(value)
     if not governance:
         return None
-    return (
+    normalized = (
         chat_persistence_service._normalize_session_governance_summary_dict(
             governance
         )
         or governance
+    )
+    return (
+        chat_persistence_service._sanitize_session_governance_provider_source_values_for_export(
+            normalized
+        )
     )
 
 
@@ -172,7 +198,7 @@ def _coerce_session_export_task_for_route(
     summary_is_dict: bool,
 ) -> dict[str, Any]:
     task_summary = dict(task)
-    if not summary_is_dict or not isinstance(task_summary.get("governance"), dict):
+    if "governance" in task_summary:
         task_summary["governance"] = _coerce_task_governance_for_route(
             task_summary.get("governance"),
             normalize_dict=not summary_is_dict,
@@ -188,11 +214,10 @@ def _coerce_session_export_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
     if "governance" in summary:
-        if not summary_is_dict or not isinstance(summary.get("governance"), dict):
-            summary["governance"] = _coerce_session_governance_for_route(
-                summary.get("governance"),
-                normalize_dict=not summary_is_dict,
-            )
+        summary["governance"] = _coerce_session_governance_for_route(
+            summary.get("governance"),
+            normalize_dict=not summary_is_dict,
+        )
     if "messages" in summary:
         summary["messages"] = _coerce_session_export_messages_for_route(
             summary.get("messages")

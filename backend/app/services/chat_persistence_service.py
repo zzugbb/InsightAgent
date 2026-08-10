@@ -22,6 +22,7 @@ from app.services.tool_runtime import (
     _normalize_http_json_safe_output_shape,
     _redact_http_json_raw_fallback_value,
     _redact_http_json_sensitive_payload_value,
+    _sanitize_tool_runtime_provider_source_name_for_artifact,
     _redact_tool_registry_diagnostic_value,
     get_configured_tool_registry_provider,
     get_tool_display_name,
@@ -493,6 +494,47 @@ def _normalize_task_governance_payload_or_original(value: object) -> object:
         dumped = model_dump()
         if isinstance(dumped, dict):
             return _normalize_task_governance_payload(dumped)
+    return value
+
+
+def _sanitize_task_governance_provider_source_values_for_export(
+    value: object,
+) -> object:
+    governance = _coerce_payload_mapping_or_none(value)
+    if governance is None:
+        return value
+    provider_source = governance.get("provider_source")
+    if isinstance(provider_source, str) and provider_source.strip():
+        safe_provider_source = (
+            _sanitize_tool_runtime_provider_source_name_for_artifact(
+                provider_source
+            )
+        )
+        if safe_provider_source != provider_source:
+            sanitized = dict(governance)
+            sanitized["provider_source"] = safe_provider_source
+            return sanitized
+    return value
+
+
+def _sanitize_session_governance_provider_source_values_for_export(
+    value: object,
+) -> object:
+    governance = _coerce_payload_mapping_or_none(value)
+    if governance is None:
+        return value
+    provider_sources = governance.get("provider_sources")
+    if isinstance(provider_sources, (list, tuple)):
+        safe_provider_sources = [
+            _sanitize_tool_runtime_provider_source_name_for_artifact(item)
+            if isinstance(item, str) and item.strip()
+            else item
+            for item in provider_sources
+        ]
+        if list(provider_sources) != safe_provider_sources:
+            sanitized = dict(governance)
+            sanitized["provider_sources"] = safe_provider_sources
+            return sanitized
     return value
 
 
