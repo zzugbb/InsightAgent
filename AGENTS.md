@@ -13,3 +13,7 @@
    - 本机端口 / Docker 访问、e2e、本地服务启动通常需要提权
    - `git add` / `git commit` 写 `.git/index` 通常需要提权
    - `.cursor/plans/insightagent_开发计划_306e7915.plan.md` 被 ignore 但已 tracked，提交时需要继续纳入
+4. 控制单文件规模，避免无限追加：
+   - 新增测试、文档或实现时，优先放入已有主题文件；如果主题文件已经明显膨胀，先拆分到新主题文件/新模块
+   - 不把历史大文件当作默认追加点；曾经的 `backend/scripts/test_tool_runtime_slice.py` 和 `app/services/tool_runtime.py` 已拆分为主题包与 facade 模块，后续继续沿用该拆分方式
+   - 单轮变更如果会显著增加单文件长度，应同步评估拆分方案，再继续实现

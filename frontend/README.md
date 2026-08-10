@@ -31,7 +31,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`。
 2. 当前主线：`registry-governance`，前端重点在 model settings、provider/source diagnostics、tool details、trace/export 回放语义。
 3. 后续体验维护：Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
-4. 回归门：frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium。
+4. 回归门：frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium；新增测试/实现继续按主题文件拆分，避免把单文件当作无限追加点。
 
 ## 当前已有内容
 

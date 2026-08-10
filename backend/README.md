@@ -29,7 +29,7 @@
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`。
 2. 当前主线：`registry-governance`，聚焦 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export 的治理语义；本轮收紧模型 `to_dict()` 输出层 provider source 脱敏。
 3. 后续候选：`rag-governance-hardening`，聚焦知识库版本化、来源治理与更细粒度 shared 规则。
-4. 本主线继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约与 runbook 提权流程稳定。
+4. 本主线继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
 
 ## 当前已有内容
 

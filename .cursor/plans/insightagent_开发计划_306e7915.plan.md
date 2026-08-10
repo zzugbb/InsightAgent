@@ -12,6 +12,7 @@ constraints:
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
+  - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
   backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1790/1790)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (76/76)
@@ -45,6 +46,9 @@ todos:
   - id: development-runbook
     status: completed
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。
+  - id: single-file-size-governance
+    status: completed
+    content: 新增单文件规模治理规则；后续不把历史大文件作为默认追加点，测试/实现优先进入主题文件，必要时先拆新主题文件或新模块。
   - id: registry-governance
     status: in_progress
     content: 当前主线，进度约 17%；已完成 diagnostics_summary 脱敏后安全值稳定去重、runtime/preflight/action 回灌 totals 派生/安全规整、模型输出层与 provider source artifact 脱敏，继续统一 registry / profile / provider source / selected source / loader_factory / settings/preflight/trace/export 的治理语义。

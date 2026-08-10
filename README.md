@@ -36,6 +36,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 - 外部 SSE / trace / export / e2e 契约保持稳定，优先做内部 runtime/helper/display 收口。
 - 新增 provider/source 协议继续按 `real-tool-execution` 已完成验收基线补小红测，不再作为当前主线阻塞项。
+- 单文件规模纳入治理：新增测试/实现优先使用主题文件；主题文件明显膨胀时先拆分到新文件/新模块，沿用既有 slice 主题包与 facade 拆分方式。
 - `data/insightagent.plan.back.md` 是只读备份计划，不参与活跃开发同步。
 
 ## 阶段 5 已完成基线
