@@ -321,9 +321,18 @@ def _impl_sanitize_tool_registry_file_diagnostics(
         values = diagnostics.get(key, ())
         if not isinstance(values, (list, tuple)):
             continue
+        alias_by_value = (
+            _impl_build_safe_tool_registry_provider_source_alias_map(values)
+            if key.endswith("_registry_sources")
+            else {}
+        )
         for raw_value in values:
-            safe_value = _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-                raw_value
+            raw_value_key = str(raw_value)
+            safe_value = alias_by_value.get(
+                raw_value_key,
+                _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                    raw_value
+                ),
             )
             if not safe_value or safe_value in sanitized[key]:
                 continue
@@ -367,12 +376,22 @@ def _impl_sanitize_tool_registry_diagnostics_summary_entries(
             continue
         sanitized_entry: dict[str, object] = {}
         safe_values: tuple[str, ...] | None = None
+        use_provider_source_aliases = str(raw_entry.get("target")) == "registry_sources"
         for key, value in raw_entry.items():
             if key == "values" and isinstance(value, (list, tuple)):
+                alias_by_value = (
+                    _impl_build_safe_tool_registry_provider_source_alias_map(value)
+                    if use_provider_source_aliases
+                    else {}
+                )
                 deduped_safe_values: list[str] = []
                 for raw_value in value:
-                    safe_value = _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-                        raw_value
+                    raw_value_key = str(raw_value)
+                    safe_value = alias_by_value.get(
+                        raw_value_key,
+                        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                            raw_value
+                        ),
                     )
                     if not safe_value or safe_value in deduped_safe_values:
                         continue
@@ -446,6 +465,8 @@ def _impl_build_safe_tool_registry_provider_source_alias_map(
     alias_by_raw: dict[str, str] = {}
     used_aliases: set[str] = set()
     for source_name in raw_source_names:
+        if source_name in alias_by_raw:
+            continue
         base_alias = base_alias_by_raw[source_name]
         if base_alias_counts.get(base_alias, 0) <= 1:
             alias = base_alias
@@ -2959,10 +2980,19 @@ def _impl_build_tool_registry_diagnostics_summary_model(
         values = diagnostics.get(key, ())
         if not isinstance(values, (list, tuple)) or not values:
             continue
+        alias_by_value = (
+            _impl_build_safe_tool_registry_provider_source_alias_map(values)
+            if key.endswith("_registry_sources")
+            else {}
+        )
         deduped_safe_values: list[str] = []
         for raw_value in values:
-            safe_value = _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-                raw_value
+            raw_value_key = str(raw_value)
+            safe_value = alias_by_value.get(
+                raw_value_key,
+                _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                    raw_value
+                ),
             )
             if not safe_value or safe_value in deduped_safe_values:
                 continue

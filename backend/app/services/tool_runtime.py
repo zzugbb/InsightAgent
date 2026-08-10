@@ -258,10 +258,19 @@ def _sanitize_tool_runtime_diagnostics_summary_for_artifact(
         )
         values = safe_entry.get("values")
         if isinstance(values, (list, tuple)):
+            alias_by_value = (
+                build_safe_tool_registry_provider_source_alias_map(values)
+                if str(safe_entry.get("target")) == "registry_sources"
+                else {}
+            )
             deduped_safe_values: list[str] = []
             for value in values:
-                safe_value = _sanitize_tool_runtime_provider_source_name_for_artifact(
-                    value
+                value_key = str(value)
+                safe_value = alias_by_value.get(
+                    value_key,
+                    _sanitize_tool_runtime_provider_source_name_for_artifact(
+                        value
+                    ),
                 )
                 if not safe_value or safe_value in deduped_safe_values:
                     continue

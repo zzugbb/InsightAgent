@@ -646,3 +646,63 @@ class RegistryProviderSourceAliasesMixin:
         )
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_diagnostics_summary_values_disambiguate_colliding_redacted_provider_source_aliases(
+        self,
+    ) -> None:
+        payload = build_tool_registry_diagnostics_summary(
+            diagnostics={
+                "skipped_registry_sources": (
+                    "suite_access_token=two",
+                    "suite_api_key=one",
+                ),
+                "missing_registry_sources": (),
+                "skipped_registry_files": (),
+                "missing_registry_files": (),
+                "skipped_registry_dirs": (),
+                "missing_registry_dirs": (),
+            }
+        )
+
+        self.assertEqual(payload["skipped_total"], 2)
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual(
+            payload["entries"][0]["values"],
+            ("suite_[redacted]#1", "suite_[redacted]#2"),
+        )
+        self.assertEqual(payload["entries"][0]["count"], 2)
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_runtime_diagnostics_summary_artifact_sanitizer_disambiguates_colliding_values(
+        self,
+    ) -> None:
+        payload = tool_runtime_module._sanitize_tool_runtime_diagnostics_summary_for_artifact(
+            {
+                "has_diagnostics": True,
+                "total": 2,
+                "skipped_total": 2,
+                "missing_total": 0,
+                "entries": (
+                    {
+                        "kind": "skipped",
+                        "target": "registry_sources",
+                        "count": 2,
+                        "values": (
+                            "suite_access_token=two",
+                            "suite_api_key=one",
+                        ),
+                    },
+                ),
+            }
+        )
+
+        self.assertEqual(payload["skipped_total"], 2)
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual(
+            payload["entries"][0]["values"],
+            ("suite_[redacted]#1", "suite_[redacted]#2"),
+        )
+        self.assertEqual(payload["entries"][0]["count"], 2)
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
