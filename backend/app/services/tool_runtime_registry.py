@@ -382,6 +382,66 @@ def _impl_sanitize_tool_registry_diagnostics_artifact_payload(payload: object) -
     return payload
 
 
+def _impl__coerce_tool_registry_diagnostics_count(value: object) -> int:
+    if isinstance(value, str):
+        value = value.strip()
+    if value in (None, ""):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _impl__build_tool_registry_diagnostics_summary_model_from_payload(
+    summary_payload: dict[str, object],
+) -> ToolRegistryDiagnosticsSummaryModel:
+    entries = sanitize_tool_registry_diagnostics_summary_entries(
+        summary_payload.get("entries", ())
+    )
+    has_value_entries = any(
+        isinstance(entry.get("values"), (list, tuple)) for entry in entries
+    )
+    if not has_value_entries:
+        return ToolRegistryDiagnosticsSummaryModel(
+            has_diagnostics=bool(summary_payload.get("has_diagnostics", False)),
+            skipped_total=_impl__coerce_tool_registry_diagnostics_count(
+                summary_payload.get("skipped_total", 0)
+            ),
+            missing_total=_impl__coerce_tool_registry_diagnostics_count(
+                summary_payload.get("missing_total", 0)
+            ),
+            total=_impl__coerce_tool_registry_diagnostics_count(
+                summary_payload.get("total", 0)
+            ),
+            entries=entries,
+        )
+
+    skipped_total = 0
+    missing_total = 0
+    total = 0
+    normalized_entries: list[dict[str, object]] = []
+    for entry in entries:
+        normalized_entry = dict(entry)
+        values = normalized_entry.get("values")
+        count = len(values) if isinstance(values, (list, tuple)) else 0
+        normalized_entry["count"] = count
+        normalized_entries.append(normalized_entry)
+        total += count
+        kind = str(normalized_entry.get("kind", "")).strip().lower()
+        if kind == "skipped":
+            skipped_total += count
+        elif kind == "missing":
+            missing_total += count
+    return ToolRegistryDiagnosticsSummaryModel(
+        has_diagnostics=total > 0,
+        skipped_total=skipped_total,
+        missing_total=missing_total,
+        total=total,
+        entries=tuple(normalized_entries),
+    )
+
+
 def _impl__filter_tool_registry_json_object_setting_for_visited_registry_files(
     *,
     raw_value: object,
@@ -3111,14 +3171,8 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model_from_d
             runtime_artifacts.get("source_diagnostics", {})
         ),
         diagnostics_runtime=ToolRegistryDiagnosticsRuntimeArtifactsModel(
-            summary=ToolRegistryDiagnosticsSummaryModel(
-                has_diagnostics=bool(summary_payload.get("has_diagnostics", False)),
-                skipped_total=int(summary_payload.get("skipped_total", 0) or 0),
-                missing_total=int(summary_payload.get("missing_total", 0) or 0),
-                total=int(summary_payload.get("total", 0) or 0),
-                entries=sanitize_tool_registry_diagnostics_summary_entries(
-                    summary_payload.get("entries", ())
-                ),
+            summary=_impl__build_tool_registry_diagnostics_summary_model_from_payload(
+                summary_payload
             ),
             trace_step=_sanitize_tool_runtime_trace_artifact_payload(
                 diagnostics_runtime_payload.get("trace_step")

@@ -5,15 +5,15 @@
 ## 当前状态
 
 - 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `2%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `5%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
 - `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
-- `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定；`tool_runtime_registry.py` 已开始收紧 diagnostics summary 脱敏后安全值去重。
+- `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定；`tool_runtime_registry.py` 已开始收紧 diagnostics summary 脱敏后安全值去重、runtime artifact 回灌 totals 派生与脏 totals 安全规整。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1777/1777` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1779/1779` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
 - backend queue e2e phase：低并发 `8011` latest fresh 通过，覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion

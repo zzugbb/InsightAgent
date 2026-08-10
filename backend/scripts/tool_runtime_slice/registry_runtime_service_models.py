@@ -2039,6 +2039,110 @@ class RegistryRuntimeServiceModelsMixin:
         self.assertNotIn("token=hidden", serialized)
         self.assertNotIn("client_secret", serialized)
 
+    def test_build_configured_tool_registry_provider_runtime_artifacts_model_from_dict_derives_summary_totals_from_sanitized_entries(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        result = build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+            provider=provider,
+            provider_source_name="provider_suite",
+            runtime_artifacts={
+                "provider_source_name": "provider_suite",
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": False,
+                        "skipped_total": 99,
+                        "missing_total": 42,
+                        "total": 141,
+                        "entries": (
+                            {
+                                "kind": "skipped",
+                                "target": "registry_sources",
+                                "count": 99,
+                                "values": (
+                                    "provider_search: unsupported tool execution kind api_key=hidden",
+                                ),
+                            },
+                            {
+                                "kind": "missing",
+                                "target": "registry_files",
+                                "count": 42,
+                                "values": (
+                                    "/tmp/missing.json",
+                                    "/tmp/missing.json",
+                                ),
+                            },
+                        ),
+                    },
+                    "trace_step": None,
+                    "trace_event": None,
+                    "audit_detail": None,
+                },
+            },
+        )
+
+        summary = result.diagnostics_runtime.summary
+        self.assertTrue(summary.has_diagnostics)
+        self.assertEqual(summary.skipped_total, 1)
+        self.assertEqual(summary.missing_total, 1)
+        self.assertEqual(summary.total, 2)
+        self.assertEqual(
+            summary.entries,
+            (
+                {
+                    "kind": "skipped",
+                    "target": "registry_sources",
+                    "count": 1,
+                    "values": (
+                        "provider_search: unsupported tool execution kind [redacted]",
+                    ),
+                },
+                {
+                    "kind": "missing",
+                    "target": "registry_files",
+                    "count": 1,
+                    "values": ("/tmp/missing.json",),
+                },
+            ),
+        )
+
+    def test_build_configured_tool_registry_provider_runtime_artifacts_model_from_dict_safely_coerces_invalid_summary_totals(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        result = build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+            provider=provider,
+            provider_source_name="provider_suite",
+            runtime_artifacts={
+                "provider_source_name": "provider_suite",
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": True,
+                        "skipped_total": "not-a-number",
+                        "missing_total": object(),
+                        "total": "",
+                        "entries": (),
+                    },
+                    "trace_step": None,
+                    "trace_event": None,
+                    "audit_detail": None,
+                },
+            },
+        )
+
+        summary = result.diagnostics_runtime.summary
+        self.assertTrue(summary.has_diagnostics)
+        self.assertEqual(summary.skipped_total, 0)
+        self.assertEqual(summary.missing_total, 0)
+        self.assertEqual(summary.total, 0)
+        self.assertEqual(summary.entries, ())
+
     def test_build_configured_tool_registry_provider_service_execution_model_from_dict_keeps_fields(
         self,
     ) -> None:
