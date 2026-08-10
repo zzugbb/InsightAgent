@@ -1275,6 +1275,48 @@ class RegistryExecutionDiagnosticsMixin:
             ),
         )
 
+    def test_build_tool_registry_diagnostics_summary_deduplicates_safe_values(
+        self,
+    ) -> None:
+        diagnostics = {
+            "skipped_registry_sources": (
+                "planning_suite",
+                "planning_suite",
+            ),
+            "missing_registry_sources": (),
+            "skipped_registry_files": (),
+            "missing_registry_files": (
+                "/tmp/missing.json",
+                "/tmp/missing.json",
+            ),
+            "skipped_registry_dirs": (),
+            "missing_registry_dirs": (),
+        }
+
+        result = build_tool_registry_diagnostics_summary(diagnostics=diagnostics)
+
+        self.assertTrue(result["has_diagnostics"])
+        self.assertEqual(result["skipped_total"], 1)
+        self.assertEqual(result["missing_total"], 1)
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(
+            result["entries"],
+            (
+                {
+                    "kind": "skipped",
+                    "target": "registry_sources",
+                    "count": 1,
+                    "values": ("planning_suite",),
+                },
+                {
+                    "kind": "missing",
+                    "target": "registry_files",
+                    "count": 1,
+                    "values": ("/tmp/missing.json",),
+                },
+            ),
+        )
+
     def test_build_tool_registry_diagnostics_summary_model_keeps_fields(self) -> None:
         diagnostics = {
             "skipped_registry_sources": ("planning_suite",),
@@ -1418,7 +1460,6 @@ class RegistryExecutionDiagnosticsMixin:
             result["summary"]["entries"][0]["values"],
             (
                 "provider_status: unsupported tool execution kind [redacted]",
-                "provider_search: http_json execution [redacted] must be safe",
                 "provider_search: http_json execution [redacted] must be safe",
             ),
         )

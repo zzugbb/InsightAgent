@@ -7,11 +7,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - 前端 W1-W4 与阶段 5 基础产品化已完成：Auth Gate、Workbench、Trace 双视图、Memory/RAG 调试、usage dashboard、任务/会话导出、任务详情页、running task 恢复、审计与知识库治理已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
+- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `2%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
 - Workbench 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 队列 UI 已覆盖 `queued/pending/running` 活跃任务识别、安全 queue snapshot 排队位置、queued/running cancel、跨会话隔离、刷新恢复与 Task Center session/global 多任务隔离。
 - 运行设置会带 active session 请求只读 `task_queue_diagnostics`，展示全局、当前用户、当前会话 active/waiting/available、安全限额触顶、`pressure_state`、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
-- 前端 `TaskQueueDiagnostics` 类型已固定基础运行态、governance 字段与 `pressure_state` / `waiting_policy` 枚举；后端 runtime slice 拆分与 `tool_runtime.py` facade 拆分已完成，原测试入口保持不变。
+- 前端 `TaskQueueDiagnostics` 类型已固定基础运行态、governance 字段与 `pressure_state` / `waiting_policy` 枚举；后端 runtime slice 拆分与 `tool_runtime.py` facade 拆分已完成，原测试入口保持不变；registry diagnostics summary 首轮收口不改变前端可见 shape。
 
 ## 当前验证基线
 
@@ -29,7 +29,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`。
-2. 下一候选主线：`registry-governance`，前端重点在 model settings、provider/source diagnostics、tool details、trace/export 回放语义。
+2. 当前主线：`registry-governance`，前端重点在 model settings、provider/source diagnostics、tool details、trace/export 回放语义。
 3. 后续体验维护：Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. 回归门：frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium。
 
@@ -149,5 +149,5 @@ npm run test:e2e:smoke:matrix
 ## 当前约束
 
 - 当前前端优先保持与后端 SSE / trace / export 契约稳定对齐，不主动发散出新的本地语义分支。
-- 下一阶段优先跟进真实工具执行本体接入后的 settings/preflight/runtime trace/display/export 一致性，不优先继续扩张旧 payload fallback。
+- 当前阶段优先跟进 registry-governance 的 settings/preflight/runtime trace/display/export 一致性，不优先继续扩张旧 payload fallback。
 - 文档只保留当前能力、当前主线、关键实现位置和最近校验基线，不继续累积长串历史同步记录。

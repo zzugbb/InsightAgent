@@ -1,11 +1,11 @@
 ---
 name: InsightAgent 开发计划
-overview: real-tool-execution 与 queue-and-concurrency-lite 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
+overview: real-tool-execution、queue-and-concurrency-lite 与 concurrency-fairness-policy 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前无新主线开发；concurrency-fairness-policy 已 100% 封板，默认关闭 per-user/per-session 限额并保持外部 SSE / trace / export shape 稳定。
+  - 当前主线：registry-governance，进度约 2%；第一项收口为 registry diagnostics summary 脱敏后安全值稳定去重。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy。
-  - 进入下一主线前保持四份活跃文档瘦身，只保留当前状态、验证基线、稳定契约和少量高信号摘要。
-  - 候选下一主线：registry-governance；后续候选：rag-governance-hardening。
+  - 本主线继续保持外部 SSE / trace / export / e2e shape 稳定，并按小红测、实现、targeted/full slice 推进。
+  - 后续候选：rag-governance-hardening。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
   - 保持先补 failing test 再改实现
@@ -13,7 +13,7 @@ constraints:
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1776/1776)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1777/1777)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (76/76)
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
@@ -25,7 +25,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: concurrency-fairness-policy 已封板；最新完整 Chromium fresh 为 50 passed / 1 skipped，backend queue/settings/full slice 与 frontend node/type/lint 均保持通过。当前轮只做四文档瘦身同步，不进入下一主线。
+latest_validation_note: registry-governance 已启动，进度约 2%；本轮先补 diagnostics summary 去重红测，再在 tool_runtime_registry.py 对脱敏后安全值稳定去重，保持 settings/preflight 可见 shape 不变。targeted dedupe、settings slice、registry slice 与 backend full slice 均通过，完整 Chromium 基线仍沿用 50 passed / 1 skipped。
 todos:
   - id: docs-slimming
     status: completed
@@ -47,7 +47,7 @@ todos:
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。
   - id: registry-governance
     status: in_progress
-    content: 维护线；保持 registry / profile / provider source / selected source / diagnostics_summary / loader_factory 的统一治理语义。
+    content: 当前主线，进度约 2%；已完成 diagnostics_summary 脱敏后安全值稳定去重，继续统一 registry / profile / provider source / selected source / loader_factory / settings/preflight/trace/export 的治理语义。
   - id: rag-governance-hardening
     status: pending
     content: 后续补知识库版本化、来源治理与更细粒度 shared 规则。
@@ -61,7 +61,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- `queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口与 e2e 基线均已收口。
+- `queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口与 e2e 基线均已收口；当前进入 `registry-governance`。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程直接提权，避免每轮重复触发权限失败。
 
 ## 已完成能力摘要
@@ -75,7 +75,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1776/1776`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1777/1777`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel / queued SSE safe wait_position、settings safe global/current-user active/waiting/available counts、基础计数字段存在性、queued snapshot count/wait_position/scope count 整数类型、整数型 max_concurrent/计数/治理限额字段、数值型 poll interval、精确 pressure_state 枚举、布尔型状态/治理标记、非负治理限额、governance 必填字段、has_waiting_tasks/saturated/pressure_state 必填、固定枚举值与派生一致性、current-user limit 与 available 一致性 / followup completion latest fresh 通过；脚本现额外校验 queued snapshot 基础计数字段、结构一致性、current session diagnostics、settings `task_queue_diagnostics`、scope available slots 字段依赖与 scope active/waiting 计数全局上界。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `76/76`。
@@ -93,6 +93,10 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - `queue-and-concurrency-lite`：queued 状态、进程内执行槽位、queued cancel、恢复/隔离与低并发/full e2e 基线已收口。
 - `concurrency-fairness-policy`：可选 per-user/per-session 限额、capacity-aware FIFO、settings diagnostics、typed 契约与 full Chromium 封板复验已收口。
 
+## 当前主线
+
+- `registry-governance`：进度约 `2%`；已完成 diagnostics summary 脱敏后安全值稳定去重，不改变 settings/preflight/trace/export 可见字段 shape。
+
 ## Pre-flight Cleanup
 
 - 文档瘦身：四份活跃文档只保留当前状态、当前验证基线、下一主线、稳定契约与少量高信号能力摘要。
@@ -102,7 +106,6 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 后续维护线
 
-- `registry-governance`：继续统一 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export 的安全摘要与错误语义。
 - `rag-governance-hardening`：补知识库版本化、来源治理与更细粒度 shared 规则。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 

@@ -338,14 +338,13 @@ def _impl_sanitize_tool_registry_diagnostics_summary_entries(
         safe_values: tuple[str, ...] | None = None
         for key, value in raw_entry.items():
             if key == "values" and isinstance(value, (list, tuple)):
-                safe_values = tuple(
-                    safe_value
-                    for safe_value in (
-                        _redact_tool_registry_diagnostic_value(raw_value)
-                        for raw_value in value
-                    )
-                    if safe_value
-                )
+                deduped_safe_values: list[str] = []
+                for raw_value in value:
+                    safe_value = _redact_tool_registry_diagnostic_value(raw_value)
+                    if not safe_value or safe_value in deduped_safe_values:
+                        continue
+                    deduped_safe_values.append(safe_value)
+                safe_values = tuple(deduped_safe_values)
                 sanitized_entry[key] = safe_values
                 continue
             sanitized_entry[key] = sanitize_tool_registry_diagnostics_artifact_payload(
@@ -2714,14 +2713,13 @@ def _impl_build_tool_registry_diagnostics_summary_model(
         values = diagnostics.get(key, ())
         if not isinstance(values, (list, tuple)) or not values:
             continue
-        safe_values = tuple(
-            value
-            for value in (
-                _redact_tool_registry_diagnostic_value(raw_value)
-                for raw_value in values
-            )
-            if value
-        )
+        deduped_safe_values: list[str] = []
+        for raw_value in values:
+            safe_value = _redact_tool_registry_diagnostic_value(raw_value)
+            if not safe_value or safe_value in deduped_safe_values:
+                continue
+            deduped_safe_values.append(safe_value)
+        safe_values = tuple(deduped_safe_values)
         if not safe_values:
             continue
         kind, target = key.split("_", 1)
