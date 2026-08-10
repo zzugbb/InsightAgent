@@ -4,6 +4,98 @@ from .context import *
 
 
 class RegistryProviderSourceArtifactsMixin:
+    def test_diagnostics_summary_redacts_provider_source_values(
+        self,
+    ) -> None:
+        result = build_tool_registry_diagnostics_summary(
+            diagnostics={
+                "skipped_registry_sources": (
+                    "suite_api_key=hidden",
+                    "suite_api_key=hidden",
+                ),
+                "missing_registry_sources": ("fallback_access_token=hidden",),
+                "skipped_registry_files": (),
+                "missing_registry_files": (),
+                "skipped_registry_dirs": (),
+                "missing_registry_dirs": (),
+            }
+        )
+
+        self.assertEqual(result["skipped_total"], 1)
+        self.assertEqual(result["missing_total"], 1)
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(
+            result["entries"][0]["values"],
+            ("suite_[redacted]",),
+        )
+        self.assertEqual(
+            result["entries"][1]["values"],
+            ("fallback_[redacted]",),
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(result, default=str))
+        self.assertNotIn("access_token=hidden", json.dumps(result, default=str))
+
+    def test_diagnostics_summary_model_to_dict_redacts_provider_source_values(
+        self,
+    ) -> None:
+        summary_model = build_tool_registry_diagnostics_summary_model(
+            diagnostics={
+                "skipped_registry_sources": ("suite_api_key=hidden",),
+                "missing_registry_sources": ("fallback_access_token=hidden",),
+                "skipped_registry_files": (),
+                "missing_registry_files": (),
+                "skipped_registry_dirs": (),
+                "missing_registry_dirs": (),
+            }
+        )
+
+        result = summary_model.to_dict()
+
+        self.assertEqual(
+            result["entries"][0]["values"],
+            ("suite_[redacted]",),
+        )
+        self.assertEqual(
+            result["entries"][1]["values"],
+            ("fallback_[redacted]",),
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(result, default=str))
+        self.assertNotIn("access_token=hidden", json.dumps(result, default=str))
+
+    def test_diagnostics_runtime_artifacts_redacts_summary_provider_source_values(
+        self,
+    ) -> None:
+        result = build_tool_registry_diagnostics_runtime_artifacts(
+            task_id="task-1",
+            step_id="step-registry",
+            seq=2,
+            model="mock-gpt",
+            provider_source_name="suite_api_key=hidden",
+            diagnostics={
+                "skipped_registry_sources": ("suite_api_key=hidden",),
+                "missing_registry_sources": ("fallback_access_token=hidden",),
+                "skipped_registry_files": (),
+                "missing_registry_files": (),
+                "skipped_registry_dirs": (),
+                "missing_registry_dirs": (),
+            },
+        )
+
+        self.assertEqual(
+            result["summary"]["entries"][0]["values"],
+            ("suite_[redacted]",),
+        )
+        self.assertEqual(
+            result["summary"]["entries"][1]["values"],
+            ("fallback_[redacted]",),
+        )
+        self.assertEqual(
+            result["trace_step"]["meta"]["tool_registry"]["entries"][0]["values"],
+            ("suite_[redacted]",),
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(result, default=str))
+        self.assertNotIn("access_token=hidden", json.dumps(result, default=str))
+
     def _make_sensitive_preflight_summary_model(
         self,
     ) -> object:

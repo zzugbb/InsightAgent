@@ -354,7 +354,9 @@ def _impl_sanitize_tool_registry_diagnostics_summary_entries(
             if key == "values" and isinstance(value, (list, tuple)):
                 deduped_safe_values: list[str] = []
                 for raw_value in value:
-                    safe_value = _redact_tool_registry_diagnostic_value(raw_value)
+                    safe_value = _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                        raw_value
+                    )
                     if not safe_value or safe_value in deduped_safe_values:
                         continue
                     deduped_safe_values.append(safe_value)
@@ -2834,7 +2836,9 @@ def _impl_build_tool_registry_diagnostics_summary_model(
             continue
         deduped_safe_values: list[str] = []
         for raw_value in values:
-            safe_value = _redact_tool_registry_diagnostic_value(raw_value)
+            safe_value = _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                raw_value
+            )
             if not safe_value or safe_value in deduped_safe_values:
                 continue
             deduped_safe_values.append(safe_value)
