@@ -4,6 +4,134 @@ from .context import *
 
 
 class ResponseProviderSourceArtifactsMixin:
+    def test_task_response_summary_redacts_sensitive_provider_source_values(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_task_response_summary_from_task(
+            {
+                "id": "task-response-summary-source-redaction",
+                "session_id": "session-response-summary-source-redaction",
+                "prompt": "provider source response summary redaction",
+                "status": "completed",
+                "governance": {
+                    "profile": "planning_only",
+                    "provider_source": "suite_api_key=hidden",
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner"],
+                },
+                "trace_json": None,
+                "usage_json": None,
+                "created_at": "2026-08-10T11:00:00",
+                "updated_at": "2026-08-10T11:01:00",
+            }
+        )
+
+        self.assertEqual(
+            payload["governance"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(payload, default=str))
+
+    def test_task_export_summaries_redact_sensitive_provider_source_values(
+        self,
+    ) -> None:
+        task = {
+            "id": "task-export-summary-source-redaction",
+            "session_id": "session-export-summary-source-redaction",
+            "prompt": "provider source export summary redaction",
+            "status": "completed",
+            "governance": {
+                "profile": "planning_only",
+                "provider_source": "suite_api_key=hidden",
+                "allowed_tool_names": ["task_plan"],
+                "allowed_tool_labels": ["Task Planner"],
+            },
+            "trace_json": None,
+            "usage_json": None,
+            "created_at": "2026-08-10T11:00:00",
+            "updated_at": "2026-08-10T11:01:00",
+        }
+
+        export_summary = chat_persistence_module.get_task_export_summary_from_task(
+            task
+        )
+        response_summary = chat_persistence_module.get_task_export_response_summary(
+            task,
+            [],
+        )
+
+        self.assertEqual(
+            export_summary["trace"]["governance"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            response_summary["trace"]["governance"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(export_summary, default=str))
+        self.assertNotIn("api_key=hidden", json.dumps(response_summary, default=str))
+
+    def test_usage_dashboard_response_summary_redacts_sensitive_provider_source_values(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_tasks_usage_dashboard_response_summary(
+            {
+                "window_days": 14,
+                "summary": {"tasks_total": 1},
+                "trend": [],
+                "by_session": [
+                    {
+                        "session_id": "session-response-summary-source-redaction",
+                        "session_title": "Provider Source Redaction",
+                        "tasks_with_usage": 1,
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "last_task_at": "2026-08-10T11:01:00",
+                        "governance": {
+                            "profiles": ["planning_only"],
+                            "provider_sources": [
+                                "suite_api_key=hidden",
+                                "fallback_access_token=hidden",
+                            ],
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        },
+                    }
+                ],
+                "top_tasks": [
+                    {
+                        "task_id": "task-response-summary-source-redaction",
+                        "session_id": "session-response-summary-source-redaction",
+                        "session_title": "Provider Source Redaction",
+                        "prompt_excerpt": "provider source response redaction",
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "created_at": "2026-08-10T11:00:00",
+                        "updated_at": "2026-08-10T11:01:00",
+                        "source_kind": "provider",
+                        "governance": {
+                            "profile": "planning_only",
+                            "provider_source": "suite_api_key=hidden",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(
+            payload["by_session"][0]["governance"]["provider_sources"],
+            ["suite_[redacted]", "fallback_[redacted]"],
+        )
+        self.assertEqual(
+            payload["top_tasks"][0]["governance"]["provider_source"],
+            "suite_[redacted]",
+        )
+        payload_blob = json.dumps(payload, default=str)
+        self.assertNotIn("api_key=hidden", payload_blob)
+        self.assertNotIn("access_token=hidden", payload_blob)
+
     def test_task_detail_response_redacts_sensitive_provider_source_values(
         self,
     ) -> None:

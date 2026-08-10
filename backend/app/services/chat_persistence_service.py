@@ -498,6 +498,16 @@ def _normalize_task_governance_payload_or_original(value: object) -> object:
     return value
 
 
+def _normalize_task_governance_payload_for_response(value: object) -> object:
+    normalized = _normalize_task_governance_payload(value)
+    return _sanitize_task_governance_provider_source_values_for_export(normalized)
+
+
+def _normalize_session_governance_payload_for_response(value: object) -> object:
+    normalized = _normalize_session_governance_payload_or_original(value)
+    return _sanitize_session_governance_provider_source_values_for_export(normalized)
+
+
 def _sanitize_task_governance_provider_source_values_for_export(
     value: object,
 ) -> object:
@@ -2326,7 +2336,9 @@ def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
         "session_id": str(task.get("session_id", "")),
         "prompt": str(task.get("prompt", "")),
         **_get_task_status_summary_from_task(task),
-        "governance": _normalize_task_governance_payload(task.get("governance")),
+        "governance": _normalize_task_governance_payload_for_response(
+            task.get("governance")
+        ),
         "trace_json": _sanitize_task_response_trace_json(task.get("trace_json")),
         "usage_json": usage_json,
         "created_at": str(task.get("created_at", "")),
@@ -2377,7 +2389,9 @@ def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
         },
         "usage": get_task_usage_from_task(task),
         "trace": {
-            "governance": _normalize_task_governance_payload(task.get("governance")),
+            "governance": _normalize_task_governance_payload_for_response(
+                task.get("governance")
+            ),
             "steps": trace_steps,
             "step_count": int(trace_summary.get("step_count", 0) or 0),
             "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
@@ -2604,7 +2618,7 @@ def get_task_export_response_summary(
         "task": payload_summary.get("task"),
         "usage": payload_summary.get("usage"),
         "trace": {
-            "governance": _normalize_task_governance_payload(
+            "governance": _normalize_task_governance_payload_for_response(
                 trace_summary.get("governance")
             ),
             "step_count": int(trace_summary.get("step_count", len(trace_steps)) or 0),
@@ -3202,7 +3216,9 @@ def _get_session_export_task_response_summary_from_payload_row(
             "trace_preview": _sanitize_session_export_trace_preview_rows(
                 row.get("trace_preview")
             ),
-            "governance": _normalize_task_governance_payload(row.get("governance")),
+            "governance": _normalize_task_governance_payload_for_response(
+                row.get("governance")
+            ),
         }
     task_summary = _coerce_export_payload_block_to_dict(row.get("task"))
     trace_summary = _coerce_export_payload_block_to_dict(row.get("trace"))
@@ -3221,7 +3237,7 @@ def _get_session_export_task_response_summary_from_payload_row(
         "trace_preview": _sanitize_session_export_trace_preview_rows(
             trace_summary.get("preview")
         ),
-        "governance": _normalize_task_governance_payload(
+        "governance": _normalize_task_governance_payload_for_response(
             trace_summary.get("governance")
         ),
     }
@@ -3260,7 +3276,7 @@ def get_session_export_response_summary(
             "trace_step_count": int(stats_summary.get("trace_step_count", 0) or 0),
             "rag_hit_count": int(stats_summary.get("rag_hit_count", 0) or 0),
         },
-        "governance": _normalize_session_governance_payload_or_original(
+        "governance": _normalize_session_governance_payload_for_response(
             payload_summary.get("governance")
         ),
         "messages": _sanitize_export_message_rows(payload_summary.get("messages", [])),
@@ -3570,7 +3586,7 @@ def get_tasks_usage_dashboard_response_summary(
                     if isinstance(row.get("last_task_at"), str)
                     else None
                 ),
-                "governance": _normalize_session_governance_payload_or_original(
+                "governance": _normalize_session_governance_payload_for_response(
                     row.get("governance")
                 ),
             }
@@ -3591,8 +3607,10 @@ def get_tasks_usage_dashboard_response_summary(
                 "created_at": str(row.get("created_at", "")),
                 "updated_at": str(row.get("updated_at", "")),
                 "source_kind": str(row.get("source_kind", "legacy") or "legacy"),
-                "governance": _normalize_task_governance_payload_or_original(
-                    row.get("governance")
+                "governance": _sanitize_task_governance_provider_source_values_for_export(
+                    _normalize_task_governance_payload_or_original(
+                        row.get("governance")
+                    )
                 ),
             }
             for row in top_task_rows
