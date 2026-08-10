@@ -355,3 +355,68 @@ class RegistryProviderSourceAliasesMixin:
             payload["top_tasks"][0]["task_id"],
             "task-usage-filtered-disambiguated-alias-1",
         )
+
+    def test_session_governance_export_disambiguates_colliding_redacted_provider_source_aliases(
+        self,
+    ) -> None:
+        payload = (
+            chat_persistence_module._sanitize_session_governance_provider_source_values_for_export(
+                {
+                    "profiles": ["planning_only", "retrieval_only"],
+                    "provider_sources": [
+                        "suite_access_token=two",
+                        "suite_api_key=one",
+                    ],
+                    "allowed_tool_names": ["task_plan"],
+                    "allowed_tool_labels": ["Task Planner Suite"],
+                }
+            )
+        )
+
+        self.assertIsInstance(payload, dict)
+        self.assertEqual(
+            payload["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_usage_dashboard_summary_disambiguates_colliding_session_provider_source_aliases(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_tasks_usage_dashboard_response_summary(
+            {
+                "window_days": 14,
+                "summary": {"tasks_total": 2},
+                "trend": [],
+                "by_session": [
+                    {
+                        "session_id": "session-usage-disambiguated-summary",
+                        "session_title": "Disambiguated Usage Summary",
+                        "tasks_with_usage": 2,
+                        "total_tokens": 46,
+                        "cost_estimate": 0.12,
+                        "last_task_at": "2026-06-22T20:00:00",
+                        "governance": {
+                            "profiles": ["planning_only", "retrieval_only"],
+                            "provider_sources": [
+                                "suite_access_token=two",
+                                "suite_api_key=one",
+                            ],
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner Suite"],
+                        },
+                    }
+                ],
+                "top_tasks": [],
+            }
+        )
+
+        governance = payload["by_session"][0]["governance"]
+        self.assertIsInstance(governance, dict)
+        self.assertEqual(
+            governance["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))

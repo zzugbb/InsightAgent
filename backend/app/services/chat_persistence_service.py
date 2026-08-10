@@ -24,6 +24,7 @@ from app.services.tool_runtime import (
     _redact_http_json_sensitive_payload_value,
     _sanitize_tool_runtime_provider_source_name_for_artifact,
     _redact_tool_registry_diagnostic_value,
+    build_safe_tool_registry_provider_source_alias_map,
     get_configured_tool_registry_provider,
     get_tool_display_name,
     normalize_tool_registry_name,
@@ -536,8 +537,18 @@ def _sanitize_session_governance_provider_source_values_for_export(
         return value
     provider_sources = governance.get("provider_sources")
     if isinstance(provider_sources, (list, tuple)):
+        alias_by_source = build_safe_tool_registry_provider_source_alias_map(
+            [
+                source
+                for source in provider_sources
+                if isinstance(source, str) and source.strip()
+            ]
+        )
         safe_provider_sources = [
-            _sanitize_tool_runtime_provider_source_name_for_artifact(item)
+            alias_by_source.get(
+                item,
+                _sanitize_tool_runtime_provider_source_name_for_artifact(item),
+            )
             if isinstance(item, str) and item.strip()
             else item
             for item in provider_sources
