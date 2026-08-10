@@ -714,6 +714,54 @@ class RegistryRuntimeServiceModelsMixin:
         self.assertNotIn("token=hidden", serialized)
         self.assertNotIn('"request_id"', serialized)
 
+    def test_runtime_service_action_model_from_dict_redacts_provider_source_fields(
+        self,
+    ) -> None:
+        model = build_configured_tool_registry_provider_runtime_service_action_model_from_dict(
+            {
+                "kind": "internal_trace_write",
+                "trace_step": {
+                    "id": "step-registry",
+                    "meta": {
+                        "tool_registry": {
+                            "provider_source": "suite_api_key=hidden",
+                        },
+                    },
+                },
+                "trace_event": {
+                    "task_id": "task-1",
+                    "step": {
+                        "meta": {
+                            "tool_registry": {
+                                "provider_source": "suite_api_key=hidden",
+                            },
+                        },
+                    },
+                },
+                "persist_force": True,
+                "kwargs": {
+                    "detail": {
+                        "provider_source": "suite_api_key=hidden",
+                    },
+                },
+            }
+        )
+
+        self.assertEqual(
+            model.trace_step["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            model.trace_event["step"]["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            model.kwargs["detail"]["provider_source"],
+            "suite_[redacted]",
+        )
+        serialized = json.dumps(model.to_dict(), default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+
     def test_execute_configured_tool_registry_provider_runtime_service_actions_records_audit(
         self,
     ) -> None:
@@ -2958,6 +3006,58 @@ class RegistryRuntimeServiceModelsMixin:
             result.actions[1].kwargs,
             {"event_type": "tool_registry_diagnostics"},
         )
+
+    def test_build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts_redacts_provider_source_fields(
+        self,
+    ) -> None:
+        result = build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts(
+            service_actions=[
+                {
+                    "kind": "internal_trace_write",
+                    "trace_step": {
+                        "id": "step-registry",
+                        "meta": {
+                            "tool_registry": {
+                                "provider_source": "suite_api_key=hidden",
+                            },
+                        },
+                    },
+                    "trace_event": {
+                        "task_id": "task-1",
+                        "step": {
+                            "meta": {
+                                "tool_registry": {
+                                    "provider_source": "suite_api_key=hidden",
+                                },
+                            },
+                        },
+                    },
+                    "persist_force": True,
+                    "kwargs": {
+                        "detail": {
+                            "provider_source": "suite_api_key=hidden",
+                        },
+                    },
+                },
+            ]
+        )
+
+        self.assertEqual(len(result.actions), 1)
+        action = result.actions[0]
+        self.assertEqual(
+            action.trace_step["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            action.trace_event["step"]["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            action.kwargs["detail"]["provider_source"],
+            "suite_[redacted]",
+        )
+        serialized = json.dumps(result.to_dict(), default=str)
+        self.assertNotIn("api_key=hidden", serialized)
 
     def test_build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts_uses_action_model_builder(
         self,

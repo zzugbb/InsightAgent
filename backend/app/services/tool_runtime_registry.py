@@ -3164,19 +3164,25 @@ def _impl_build_configured_tool_registry_provider_runtime_service_action_model_f
 ) -> ConfiguredToolRegistryProviderRuntimeServiceActionModel:
     return ConfiguredToolRegistryProviderRuntimeServiceActionModel(
         kind=str(service_action.get("kind")),
-        trace_step=_sanitize_tool_runtime_trace_artifact_payload(
-            service_action.get("trace_step")
+        trace_step=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+            _sanitize_tool_runtime_trace_artifact_payload(
+                service_action.get("trace_step")
+            )
         )
         if isinstance(service_action.get("trace_step"), dict)
         else None,
-        trace_event=_sanitize_tool_runtime_trace_artifact_payload(
-            service_action.get("trace_event")
+        trace_event=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+            _sanitize_tool_runtime_trace_artifact_payload(
+                service_action.get("trace_event")
+            )
         )
         if isinstance(service_action.get("trace_event"), dict)
         else None,
         persist_force=bool(service_action.get("persist_force")),
-        kwargs=_sanitize_tool_runtime_trace_artifact_payload(
-            service_action.get("kwargs")
+        kwargs=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+            _sanitize_tool_runtime_trace_artifact_payload(
+                service_action.get("kwargs")
+            )
         )
         if isinstance(service_action.get("kwargs"), dict)
         else None,
