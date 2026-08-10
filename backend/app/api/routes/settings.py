@@ -731,6 +731,31 @@ def _validate_tool_registry_selection(
         )
 
 
+def _resolve_tool_registry_provider_source_request_alias(
+    *,
+    effective_settings: object,
+    tool_registry_provider_source: str,
+) -> str:
+    option_bundle = _build_tool_registry_options_bundle(
+        effective_settings=effective_settings
+    )
+    available_sources = [
+        str(source_name)
+        for source_name in option_bundle["available_tool_registry_provider_sources"]
+    ]
+    if tool_registry_provider_source in available_sources:
+        return tool_registry_provider_source
+    alias_matches = [
+        source_name
+        for source_name in available_sources
+        if _sanitize_tool_runtime_provider_source_name_for_artifact(source_name)
+        == tool_registry_provider_source
+    ]
+    if len(alias_matches) == 1:
+        return alias_matches[0]
+    return tool_registry_provider_source
+
+
 def _build_settings_summary_response(
     *,
     settings: StoredSettings,
@@ -843,6 +868,16 @@ def update_settings(
             runtime_settings=runtime_settings,
         )
     )
+    if (
+        isinstance(payload.tool_registry_provider_source, str)
+        and payload.tool_registry_provider_source.strip()
+    ):
+        effective_tool_registry_provider_source = (
+            _resolve_tool_registry_provider_source_request_alias(
+                effective_settings=runtime_settings,
+                tool_registry_provider_source=effective_tool_registry_provider_source,
+            )
+        )
     _validate_tool_registry_selection(
         effective_settings=runtime_settings,
         tool_registry_profile=effective_tool_registry_profile,
@@ -919,6 +954,16 @@ def validate_settings(
             runtime_settings=runtime_settings,
         )
     )
+    if (
+        isinstance(payload.tool_registry_provider_source, str)
+        and payload.tool_registry_provider_source.strip()
+    ):
+        effective_tool_registry_provider_source = (
+            _resolve_tool_registry_provider_source_request_alias(
+                effective_settings=runtime_settings,
+                tool_registry_provider_source=effective_tool_registry_provider_source,
+            )
+        )
     effective_runtime_settings = _merge_runtime_settings_for_summary(
         settings=StoredSettings(
             mode=payload.mode,

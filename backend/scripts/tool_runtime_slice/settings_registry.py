@@ -306,6 +306,139 @@ class SettingsRegistryMixin:
         )
         self.assertNotIn("api_key=hidden", json.dumps(payload, default=str))
 
+    def test_validate_settings_accepts_unique_redacted_provider_source_alias(
+        self,
+    ) -> None:
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_settings = settings_routes_module.get_settings
+        original_safe_record_audit_event = settings_routes_module.safe_record_audit_event
+        audit_details: list[dict[str, object]] = []
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_api_key=hidden": {
+                            "profile": "planning_only",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            settings_routes_module.safe_record_audit_event = (
+                lambda **kwargs: audit_details.append(dict(kwargs.get("detail", {})))
+            )
+
+            result = settings_routes_module.validate_settings(
+                settings_routes_module.SettingsUpdateRequest(
+                    mode="mock",
+                    provider="mock",
+                    model="mock-gpt",
+                    tool_registry_provider_source="suite_[redacted]",
+                ),
+                current_user={"id": "user-1"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_settings = original_get_settings
+            settings_routes_module.safe_record_audit_event = (
+                original_safe_record_audit_event
+            )
+
+        payload = result.model_dump()
+        self.assertTrue(result.ok)
+        self.assertEqual(payload["tool_registry_provider_source"], "suite_[redacted]")
+        self.assertEqual(
+            [
+                detail["name"]
+                for detail in payload["available_tool_registry_provider_source_details"]
+            ],
+            ["default", "suite_[redacted]"],
+        )
+        self.assertEqual(
+            audit_details[-1]["tool_registry_provider_source"],
+            "suite_api_key=hidden",
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(payload, default=str))
+
+    def test_update_settings_saves_unique_redacted_provider_source_alias_as_raw_source(
+        self,
+    ) -> None:
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_settings = settings_routes_module.get_settings
+        original_save_settings = settings_routes_module.save_settings
+        original_build_settings_summary_response = (
+            settings_routes_module._build_settings_summary_response
+        )
+        original_safe_record_audit_event = settings_routes_module.safe_record_audit_event
+        saved_settings: list[StoredSettings] = []
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_api_key=hidden": {
+                            "profile": "planning_only",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            settings_routes_module.save_settings = lambda _user_id, settings: (
+                saved_settings.append(settings) or settings
+            )
+            settings_routes_module._build_settings_summary_response = (
+                lambda *, settings, runtime_settings=None, database_locator=None, **_kwargs: settings
+            )
+            settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
+
+            result = settings_routes_module.update_settings(
+                settings_routes_module.SettingsUpdateRequest(
+                    mode="mock",
+                    provider="mock",
+                    model="mock-gpt",
+                    tool_registry_provider_source="suite_[redacted]",
+                ),
+                current_user={"id": "user-1"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_settings = original_get_settings
+            settings_routes_module.save_settings = original_save_settings
+            settings_routes_module._build_settings_summary_response = (
+                original_build_settings_summary_response
+            )
+            settings_routes_module.safe_record_audit_event = (
+                original_safe_record_audit_event
+            )
+
+        self.assertEqual(len(saved_settings), 1)
+        self.assertEqual(
+            saved_settings[0].tool_registry_provider_source,
+            "suite_api_key=hidden",
+        )
+        self.assertEqual(result.tool_registry_provider_source, "suite_api_key=hidden")
+
     def test_build_settings_summary_response_exposes_task_queue_fairness_diagnostics(
         self,
     ) -> None:
