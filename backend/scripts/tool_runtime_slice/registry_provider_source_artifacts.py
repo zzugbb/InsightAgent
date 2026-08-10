@@ -209,3 +209,150 @@ class RegistryProviderSourceArtifactsMixin:
             ("suite_[redacted]",),
         )
         self.assertNotIn("api_key=hidden", json.dumps(result, default=str))
+
+    def test_runtime_service_action_from_dict_redacts_provider_source_name_artifacts(
+        self,
+    ) -> None:
+        action_model = build_configured_tool_registry_provider_runtime_service_action_model_from_dict(
+            {
+                "kind": "internal_trace_write",
+                "trace_step": {
+                    "id": "registry-source-redaction",
+                    "type": "observation",
+                    "content": "registry source redaction",
+                    "meta": {
+                        "provider_source_name": "suite_api_key=hidden",
+                        "tool_registry_provider_source": "fallback_access_token=hidden",
+                        "tool_registry_provider_sources": [
+                            "suite_api_key=hidden",
+                            "fallback_access_token=hidden",
+                        ],
+                    },
+                },
+                "trace_event": {
+                    "event": "trace",
+                    "data": {
+                        "step": {
+                            "meta": {
+                                "provider_source_name": "suite_api_key=hidden",
+                            }
+                        }
+                    },
+                },
+                "kwargs": {
+                    "audit_event": {
+                        "detail": {
+                            "tool_registry_provider_source": "suite_api_key=hidden",
+                        }
+                    }
+                },
+                "persist_force": True,
+            }
+        )
+
+        payload = action_model.to_dict()
+
+        self.assertEqual(
+            payload["trace_step"]["meta"]["provider_source_name"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            payload["trace_step"]["meta"]["tool_registry_provider_source"],
+            "fallback_[redacted]",
+        )
+        self.assertEqual(
+            payload["trace_step"]["meta"]["tool_registry_provider_sources"],
+            ["suite_[redacted]", "fallback_[redacted]"],
+        )
+        self.assertEqual(
+            payload["trace_event"]["data"]["step"]["meta"]["provider_source_name"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            payload["kwargs"]["audit_event"]["detail"][
+                "tool_registry_provider_source"
+            ],
+            "suite_[redacted]",
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=hidden", json.dumps(payload, default=str))
+
+    def test_runtime_artifacts_model_from_dict_redacts_diagnostics_provider_source_name_artifacts(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        model = build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+            provider=provider,
+            provider_source_name="suite_api_key=hidden",
+            runtime_artifacts={
+                "provider_source_name": "suite_api_key=hidden",
+                "provider_sources": {"suite_api_key=hidden": provider},
+                "selected_source_diagnostics": {},
+                "source_diagnostics": {},
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": False,
+                        "skipped_total": 0,
+                        "missing_total": 0,
+                        "total": 0,
+                        "entries": (),
+                    },
+                    "trace_step": {
+                        "meta": {
+                            "provider_source_name": "suite_api_key=hidden",
+                        }
+                    },
+                    "trace_event": {
+                        "data": {
+                            "step": {
+                                "meta": {
+                                    "tool_registry_provider_source": (
+                                        "fallback_access_token=hidden"
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    "audit_detail": {
+                        "provider_source_name": "suite_api_key=hidden",
+                    },
+                },
+                "audit_event": {
+                    "detail": {
+                        "tool_registry_provider_sources": [
+                            "suite_api_key=hidden",
+                            "fallback_access_token=hidden",
+                        ],
+                    },
+                },
+            },
+        )
+
+        payload = model.to_dict()
+
+        self.assertEqual(payload["provider_source_name"], "suite_[redacted]")
+        self.assertEqual(
+            payload["diagnostics_runtime"]["trace_step"]["meta"][
+                "provider_source_name"
+            ],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            payload["diagnostics_runtime"]["trace_event"]["data"]["step"]["meta"][
+                "tool_registry_provider_source"
+            ],
+            "fallback_[redacted]",
+        )
+        self.assertEqual(
+            payload["diagnostics_runtime"]["audit_detail"]["provider_source_name"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            payload["audit_event"]["detail"]["tool_registry_provider_sources"],
+            ["suite_[redacted]", "fallback_[redacted]"],
+        )
+        self.assertNotIn("api_key=hidden", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=hidden", json.dumps(payload, default=str))
