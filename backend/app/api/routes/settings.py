@@ -17,6 +17,7 @@ from app.services.task_queue_service import get_task_queue_snapshot
 from app.services.tool_runtime import (
     _sanitize_tool_runtime_provider_source_name_for_artifact,
     build_configured_tool_registry_provider_preflight_tool_details,
+    build_safe_tool_registry_provider_source_alias_map,
     build_tool_registry_diagnostics_summary,
     build_tool_registry_provider_sources_from_settings_artifacts,
     get_available_tool_registry_profile_names,
@@ -407,13 +408,17 @@ def _sanitize_provider_source_option_names_for_response(
     source_names: list[object],
     source_details: list[object],
 ) -> tuple[list[str], list[object]]:
-    safe_name_by_raw: dict[str, str] = {}
+    safe_name_by_raw = build_safe_tool_registry_provider_source_alias_map(
+        [str(source_name) for source_name in source_names]
+    )
     safe_source_names: list[str] = []
     seen_safe_names: set[str] = set()
     for source_name in source_names:
         raw_name = str(source_name)
-        safe_name = _sanitize_tool_runtime_provider_source_name_for_artifact(raw_name)
-        safe_name_by_raw[raw_name] = safe_name
+        safe_name = safe_name_by_raw.get(
+            raw_name,
+            _sanitize_tool_runtime_provider_source_name_for_artifact(raw_name),
+        )
         if safe_name in seen_safe_names:
             continue
         seen_safe_names.add(safe_name)
@@ -454,21 +459,29 @@ def _apply_tool_registry_preview_to_validate_response(
     option_bundle = _build_tool_registry_options_bundle(
         effective_settings=effective_settings
     )
+    source_names = list(option_bundle["available_tool_registry_provider_sources"])
+    alias_by_source = build_safe_tool_registry_provider_source_alias_map(
+        [str(source_name) for source_name in source_names]
+    )
     _, safe_provider_source_details = (
         _sanitize_provider_source_option_names_for_response(
-            source_names=list(option_bundle["available_tool_registry_provider_sources"]),
+            source_names=source_names,
             source_details=list(
                 option_bundle["available_tool_registry_provider_source_details"]
             ),
         )
     )
+    raw_provider_source = str(preview_fields["tool_registry_provider_source"])
     return SettingsValidateResponse(
         **{
             **result.model_dump(),
             **{
                 **preview_fields,
-                "tool_registry_provider_source": _sanitize_tool_runtime_provider_source_name_for_artifact(
-                    preview_fields["tool_registry_provider_source"]
+                "tool_registry_provider_source": alias_by_source.get(
+                    raw_provider_source,
+                    _sanitize_tool_runtime_provider_source_name_for_artifact(
+                        raw_provider_source
+                    ),
                 ),
             },
             "available_tool_registry_profile_details": option_bundle[
@@ -761,14 +774,19 @@ def _build_settings_summary_response(
     option_bundle = _build_tool_registry_options_bundle(
         effective_settings=effective_settings
     )
+    source_names = list(option_bundle["available_tool_registry_provider_sources"])
+    alias_by_source = build_safe_tool_registry_provider_source_alias_map(
+        [str(source_name) for source_name in source_names]
+    )
     safe_provider_sources, safe_provider_source_details = (
         _sanitize_provider_source_option_names_for_response(
-            source_names=list(option_bundle["available_tool_registry_provider_sources"]),
+            source_names=source_names,
             source_details=list(
                 option_bundle["available_tool_registry_provider_source_details"]
             ),
         )
     )
+    raw_provider_source = str(preview_fields["tool_registry_provider_source"])
     return SettingsSummaryResponse(
         mode=settings.mode,
         provider=settings.provider,
@@ -777,8 +795,11 @@ def _build_settings_summary_response(
         api_key_configured=bool(settings.api_key),
         base_url_configured=bool(settings.base_url),
         tool_registry_profile=str(preview_fields["tool_registry_profile"]),
-        tool_registry_provider_source=_sanitize_tool_runtime_provider_source_name_for_artifact(
-            preview_fields["tool_registry_provider_source"]
+        tool_registry_provider_source=alias_by_source.get(
+            raw_provider_source,
+            _sanitize_tool_runtime_provider_source_name_for_artifact(
+                raw_provider_source
+            ),
         ),
         enabled_tool_names=list(preview_fields["enabled_tool_names"]),
         enabled_tool_labels=list(preview_fields["enabled_tool_labels"]),

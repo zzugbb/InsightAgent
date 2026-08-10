@@ -424,6 +424,42 @@ def _impl__sanitize_tool_registry_provider_source_name_for_artifact(
     return safe_value or "default"
 
 
+def _impl_build_safe_tool_registry_provider_source_alias_map(
+    source_names: Sequence[object],
+) -> dict[str, str]:
+    raw_source_names = [str(source_name) for source_name in source_names]
+    base_alias_by_raw = {
+        source_name: _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+            source_name
+        )
+        for source_name in raw_source_names
+    }
+    base_alias_counts: dict[str, int] = {}
+    for base_alias in base_alias_by_raw.values():
+        base_alias_counts[base_alias] = base_alias_counts.get(base_alias, 0) + 1
+
+    collision_index_by_base_alias: dict[str, int] = {}
+    alias_by_raw: dict[str, str] = {}
+    used_aliases: set[str] = set()
+    for source_name in raw_source_names:
+        base_alias = base_alias_by_raw[source_name]
+        if base_alias_counts.get(base_alias, 0) <= 1:
+            alias = base_alias
+        else:
+            next_index = collision_index_by_base_alias.get(base_alias, 0) + 1
+            collision_index_by_base_alias[base_alias] = next_index
+            alias = f"{base_alias}#{next_index}"
+
+        deduped_alias = alias
+        dedupe_index = 1
+        while deduped_alias in used_aliases:
+            dedupe_index += 1
+            deduped_alias = f"{alias}-{dedupe_index}"
+        used_aliases.add(deduped_alias)
+        alias_by_raw[source_name] = deduped_alias
+    return alias_by_raw
+
+
 def _impl_resolve_unique_tool_registry_provider_source_alias(
     *,
     settings: object,
@@ -449,6 +485,17 @@ def _impl_resolve_unique_tool_registry_provider_source_alias(
     )
     if raw_requested_source in available_sources:
         return raw_requested_source
+
+    alias_by_source = build_safe_tool_registry_provider_source_alias_map(
+        available_sources
+    )
+    alias_matches = [
+        source_name
+        for source_name, alias in alias_by_source.items()
+        if alias == requested_source
+    ]
+    if len(alias_matches) == 1:
+        return alias_matches[0]
 
     alias_matches = [
         source_name
@@ -4849,6 +4896,10 @@ def build_tool_registry_provider_sources_from_settings(*args, **kwargs):
 @wraps(_impl_build_tool_registry_provider_sources_from_settings_artifacts)
 def build_tool_registry_provider_sources_from_settings_artifacts(*args, **kwargs):
     return _call_public_or_impl("build_tool_registry_provider_sources_from_settings_artifacts", _impl_build_tool_registry_provider_sources_from_settings_artifacts, *args, **kwargs)
+
+@wraps(_impl_build_safe_tool_registry_provider_source_alias_map)
+def build_safe_tool_registry_provider_source_alias_map(*args, **kwargs):
+    return _call_public_or_impl("build_safe_tool_registry_provider_source_alias_map", _impl_build_safe_tool_registry_provider_source_alias_map, *args, **kwargs)
 
 @wraps(_impl_resolve_unique_tool_registry_provider_source_alias)
 def resolve_unique_tool_registry_provider_source_alias(*args, **kwargs):

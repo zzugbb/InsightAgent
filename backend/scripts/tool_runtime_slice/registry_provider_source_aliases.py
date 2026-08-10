@@ -1,0 +1,357 @@
+from __future__ import annotations
+
+from .context import *
+
+
+class RegistryProviderSourceAliasesMixin:
+    def test_settings_summary_disambiguates_colliding_redacted_provider_source_aliases(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="suite_api_key=one",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_access_token=two": {
+                            "profile": "retrieval_only",
+                        },
+                        "suite_api_key=one": {
+                            "profile": "planning_only",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                task_queue_max_concurrent=1,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.25,
+            ),
+            database_locator="postgresql://demo",
+        )
+        payload = summary.model_dump()
+
+        self.assertEqual(
+            payload["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload["available_tool_registry_provider_sources"],
+            ["default", "suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            [
+                detail["name"]
+                for detail in payload["available_tool_registry_provider_source_details"]
+            ],
+            ["default", "suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_validate_settings_accepts_disambiguated_redacted_provider_source_alias(
+        self,
+    ) -> None:
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_settings = settings_routes_module.get_settings
+        original_safe_record_audit_event = settings_routes_module.safe_record_audit_event
+        audit_details: list[dict[str, object]] = []
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_access_token=two": {
+                            "profile": "retrieval_only",
+                        },
+                        "suite_api_key=one": {
+                            "profile": "planning_only",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            settings_routes_module.safe_record_audit_event = (
+                lambda **kwargs: audit_details.append(dict(kwargs.get("detail", {})))
+            )
+
+            result = settings_routes_module.validate_settings(
+                settings_routes_module.SettingsUpdateRequest(
+                    mode="mock",
+                    provider="mock",
+                    model="mock-gpt",
+                    tool_registry_provider_source="suite_[redacted]#2",
+                ),
+                current_user={"id": "user-1"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_settings = original_get_settings
+            settings_routes_module.safe_record_audit_event = (
+                original_safe_record_audit_event
+            )
+
+        payload = result.model_dump()
+        self.assertTrue(result.ok)
+        self.assertEqual(payload["tool_registry_provider_source"], "suite_[redacted]#2")
+        self.assertEqual(
+            [
+                detail["name"]
+                for detail in payload["available_tool_registry_provider_source_details"]
+            ],
+            ["default", "suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            audit_details[-1]["tool_registry_provider_source"],
+            "suite_api_key=one",
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_update_settings_saves_disambiguated_redacted_provider_source_alias_as_raw_source(
+        self,
+    ) -> None:
+        original_get_stored_settings = settings_routes_module.get_stored_settings
+        original_get_settings = settings_routes_module.get_settings
+        original_save_settings = settings_routes_module.save_settings
+        original_build_settings_summary_response = (
+            settings_routes_module._build_settings_summary_response
+        )
+        original_safe_record_audit_event = settings_routes_module.safe_record_audit_event
+        saved_settings: list[StoredSettings] = []
+        try:
+            settings_routes_module.get_stored_settings = lambda _user_id: StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+            )
+            settings_routes_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_access_token=two": {
+                            "profile": "retrieval_only",
+                        },
+                        "suite_api_key=one": {
+                            "profile": "planning_only",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            settings_routes_module.save_settings = lambda _user_id, settings: (
+                saved_settings.append(settings) or settings
+            )
+            settings_routes_module._build_settings_summary_response = (
+                lambda *, settings, runtime_settings=None, database_locator=None, **_kwargs: settings
+            )
+            settings_routes_module.safe_record_audit_event = lambda **_kwargs: None
+
+            result = settings_routes_module.update_settings(
+                settings_routes_module.SettingsUpdateRequest(
+                    mode="mock",
+                    provider="mock",
+                    model="mock-gpt",
+                    tool_registry_provider_source="suite_[redacted]#1",
+                ),
+                current_user={"id": "user-1"},
+            )
+        finally:
+            settings_routes_module.get_stored_settings = original_get_stored_settings
+            settings_routes_module.get_settings = original_get_settings
+            settings_routes_module.save_settings = original_save_settings
+            settings_routes_module._build_settings_summary_response = (
+                original_build_settings_summary_response
+            )
+            settings_routes_module.safe_record_audit_event = (
+                original_safe_record_audit_event
+            )
+
+        self.assertEqual(len(saved_settings), 1)
+        self.assertEqual(
+            saved_settings[0].tool_registry_provider_source,
+            "suite_access_token=two",
+        )
+        self.assertEqual(result.tool_registry_provider_source, "suite_access_token=two")
+
+    def test_task_list_queries_resolve_disambiguated_redacted_provider_source_alias_filter(
+        self,
+    ) -> None:
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        original_get_settings = chat_persistence_module.get_settings
+        captured: dict[str, list[tuple[object, ...]]] = {"params": []}
+
+        class FakeListCursor:
+            def fetchall(self) -> list[dict]:
+                return []
+
+        class FakeCountCursor:
+            def fetchone(self) -> dict[str, int]:
+                return {"n": 0}
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["params"].append(tuple(params))
+                if "COUNT(*)" in query:
+                    return FakeCountCursor()
+                return FakeListCursor()
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_access_token=two": {
+                            "profile": "retrieval_only",
+                        },
+                        "suite_api_key=one": {
+                            "profile": "planning_only",
+                        },
+                    }
+                )
+            )
+            chat_persistence_module.list_tasks(
+                user_id="user-governance-alias",
+                limit=20,
+                session_id="session-governance-alias",
+                offset=0,
+                tool_registry_provider_source_filter="suite_[redacted]#2",
+            )
+            chat_persistence_module.count_tasks(
+                user_id="user-governance-alias",
+                session_id="session-governance-alias",
+                tool_registry_provider_source_filter="suite_[redacted]#2",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+            chat_persistence_module.get_settings = original_get_settings
+
+        self.assertEqual(
+            captured["params"],
+            [
+                (
+                    "user-governance-alias",
+                    "session-governance-alias",
+                    "suite_api_key=one",
+                    20,
+                    0,
+                ),
+                (
+                    "user-governance-alias",
+                    "session-governance-alias",
+                    "suite_api_key=one",
+                ),
+            ],
+        )
+
+    def test_get_tasks_usage_dashboard_resolves_disambiguated_redacted_provider_source_alias_filter(
+        self,
+    ) -> None:
+        rows = [
+            {
+                "id": "task-usage-filtered-disambiguated-alias-1",
+                "session_id": "session-usage-filtered-disambiguated-alias-1",
+                "prompt": "disambiguated alias-filtered dashboard row",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 15,
+                        "cost_estimate": 0.05,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": None,
+                "tool_registry_profile": "planning_only",
+                "tool_registry_provider_source": "suite_api_key=one",
+                "allowed_tool_names_json": json.dumps(["task_plan"]),
+                "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                "created_at": "2026-06-10T10:00:00",
+                "updated_at": "2026-06-10T10:05:00",
+                "session_title": "Disambiguated Alias Filter Session",
+            }
+        ]
+
+        class FakeCursor:
+            def __init__(self, payload: list[dict]):
+                self._payload = payload
+
+            def fetchall(self) -> list[dict]:
+                return self._payload
+
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return FakeCursor(rows)
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        original_get_settings = chat_persistence_module.get_settings
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_access_token=two": {
+                            "profile": "retrieval_only",
+                        },
+                        "suite_api_key=one": {
+                            "profile": "planning_only",
+                        },
+                    }
+                )
+            )
+            payload = chat_persistence_module.get_tasks_usage_dashboard(
+                "user-usage-filtered-disambiguated-alias",
+                tool_registry_provider_source_filter="suite_[redacted]#2",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+            chat_persistence_module.get_settings = original_get_settings
+
+        self.assertEqual(payload["summary"]["tasks_with_usage"], 1)
+        self.assertEqual(len(payload["by_session"]), 1)
+        self.assertEqual(
+            payload["by_session"][0]["session_id"],
+            "session-usage-filtered-disambiguated-alias-1",
+        )
+        self.assertEqual(len(payload["top_tasks"]), 1)
+        self.assertEqual(
+            payload["top_tasks"][0]["task_id"],
+            "task-usage-filtered-disambiguated-alias-1",
+        )
