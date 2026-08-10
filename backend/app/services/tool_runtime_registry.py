@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from collections.abc import Mapping, Sequence
 
@@ -41,6 +42,12 @@ from app.services.tool_runtime_execution import (
     build_tool_registry_provider,
     build_tool_trace_event,
 )
+
+_TOOL_REGISTRY_PROVIDER_SOURCE_SENSITIVE_TOKEN_RE = re.compile(
+    r"(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|secret|token|password)"
+    r"(?:\s*[:=][^\s,;/]+|[^\s,;/]*)?"
+)
+
 
 def _runtime_module():
     from app.services import tool_runtime
@@ -316,11 +323,16 @@ def _impl_sanitize_tool_registry_source_diagnostics(
         return {}
     sanitized: dict[str, dict[str, tuple[str, ...]]] = {}
     for source_name, diagnostics in source_diagnostics.items():
-        normalized_source_name = str(source_name).strip()
+        normalized_source_name = (
+            _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                source_name
+            )
+        )
         if not normalized_source_name:
             continue
-        sanitized[normalized_source_name] = sanitize_tool_registry_file_diagnostics(
-            diagnostics
+        sanitized[normalized_source_name] = _merge_tool_registry_file_diagnostics(
+            sanitized.get(normalized_source_name),
+            sanitize_tool_registry_file_diagnostics(diagnostics),
         )
     return sanitized
 
@@ -379,6 +391,51 @@ def _impl_sanitize_tool_registry_diagnostics_artifact_payload(payload: object) -
         ]
     if isinstance(payload, str):
         return _redact_tool_registry_diagnostic_value(payload)
+    return payload
+
+
+def _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+    provider_source_name: object,
+) -> str:
+    safe_value = _redact_tool_registry_diagnostic_value(
+        str(provider_source_name).strip()
+    )
+    safe_value = _TOOL_REGISTRY_PROVIDER_SOURCE_SENSITIVE_TOKEN_RE.sub(
+        "[redacted]",
+        safe_value,
+    )
+    return safe_value or "default"
+
+
+def _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+    payload: object,
+) -> object:
+    if isinstance(payload, dict):
+        sanitized: dict[object, object] = {}
+        for key, value in payload.items():
+            if str(key) == "provider_source":
+                sanitized[key] = (
+                    _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                        value
+                    )
+                )
+                continue
+            sanitized[key] = (
+                _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+                    value
+                )
+            )
+        return sanitized
+    if isinstance(payload, tuple):
+        return tuple(
+            _impl__sanitize_tool_registry_provider_source_fields_for_artifact(value)
+            for value in payload
+        )
+    if isinstance(payload, list):
+        return [
+            _impl__sanitize_tool_registry_provider_source_fields_for_artifact(value)
+            for value in payload
+        ]
     return payload
 
 
@@ -2863,6 +2920,11 @@ def _impl_build_tool_registry_diagnostics_runtime_artifacts_model(
             trace_event=None,
             audit_detail=None,
         )
+    safe_provider_source_name = (
+        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+            provider_source_name
+        )
+    )
 
     trace_step = {
         "id": step_id,
@@ -2871,7 +2933,7 @@ def _impl_build_tool_registry_diagnostics_runtime_artifacts_model(
         "content": "\n".join(
             (
                 "Tool registry diagnostics: "
-                f"source={provider_source_name} "
+                f"source={safe_provider_source_name} "
                 f"skipped={int(summary.skipped_total)} "
                 f"missing={int(summary.missing_total)}",
                 *build_tool_registry_diagnostics_display_lines(
@@ -2885,7 +2947,7 @@ def _impl_build_tool_registry_diagnostics_runtime_artifacts_model(
             "tokens": None,
             "cost_estimate": None,
             "tool_registry": {
-                "provider_source": provider_source_name,
+                "provider_source": safe_provider_source_name,
                 "has_diagnostics": bool(summary.has_diagnostics),
                 "skipped_total": int(summary.skipped_total),
                 "missing_total": int(summary.missing_total),
@@ -2903,7 +2965,7 @@ def _impl_build_tool_registry_diagnostics_runtime_artifacts_model(
             step=trace_step,
         ),
         audit_detail={
-            "provider_source": provider_source_name,
+            "provider_source": safe_provider_source_name,
             "has_diagnostics": bool(summary.has_diagnostics),
             "skipped_total": int(summary.skipped_total),
             "missing_total": int(summary.missing_total),
@@ -3160,9 +3222,14 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model_from_d
     summary_payload = diagnostics_runtime_payload.get("summary", {})
     if not isinstance(summary_payload, dict):
         summary_payload = {}
+    safe_provider_source_name = (
+        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+            runtime_artifacts.get("provider_source_name", provider_source_name)
+        )
+    )
     return ConfiguredToolRegistryProviderRuntimeArtifactsModel(
         provider=provider,
-        provider_source_name=str(runtime_artifacts.get("provider_source_name", provider_source_name)),
+        provider_source_name=safe_provider_source_name,
         provider_sources=runtime_artifacts.get("provider_sources", {}),
         selected_source_diagnostics=sanitize_tool_registry_file_diagnostics(
             runtime_artifacts.get("selected_source_diagnostics", {})
@@ -3174,24 +3241,32 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model_from_d
             summary=_impl__build_tool_registry_diagnostics_summary_model_from_payload(
                 summary_payload
             ),
-            trace_step=_sanitize_tool_runtime_trace_artifact_payload(
-                diagnostics_runtime_payload.get("trace_step")
+            trace_step=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+                _sanitize_tool_runtime_trace_artifact_payload(
+                    diagnostics_runtime_payload.get("trace_step")
+                )
             )
             if isinstance(diagnostics_runtime_payload.get("trace_step"), dict)
             else None,
-            trace_event=_sanitize_tool_runtime_trace_artifact_payload(
-                diagnostics_runtime_payload.get("trace_event")
+            trace_event=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+                _sanitize_tool_runtime_trace_artifact_payload(
+                    diagnostics_runtime_payload.get("trace_event")
+                )
             )
             if isinstance(diagnostics_runtime_payload.get("trace_event"), dict)
             else None,
-            audit_detail=_sanitize_tool_runtime_trace_artifact_payload(
-                diagnostics_runtime_payload.get("audit_detail")
+            audit_detail=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+                _sanitize_tool_runtime_trace_artifact_payload(
+                    diagnostics_runtime_payload.get("audit_detail")
+                )
             )
             if isinstance(diagnostics_runtime_payload.get("audit_detail"), dict)
             else None,
         ),
-        audit_event=_sanitize_tool_runtime_trace_artifact_payload(
-            runtime_artifacts.get("audit_event")
+        audit_event=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+            _sanitize_tool_runtime_trace_artifact_payload(
+                runtime_artifacts.get("audit_event")
+            )
         )
         if isinstance(runtime_artifacts.get("audit_event"), dict)
         else None,

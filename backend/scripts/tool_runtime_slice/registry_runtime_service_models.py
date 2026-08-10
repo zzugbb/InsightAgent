@@ -1949,6 +1949,107 @@ class RegistryRuntimeServiceModelsMixin:
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("x-api-key", serialized)
 
+    def test_build_configured_tool_registry_provider_runtime_artifacts_model_from_dict_redacts_sensitive_provider_source_name(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        result = build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+            provider=provider,
+            provider_source_name="fallback_api_key=hidden",
+            runtime_artifacts={
+                "provider_source_name": "suite_api_key=hidden",
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": True,
+                        "skipped_total": 1,
+                        "missing_total": 0,
+                        "total": 1,
+                        "entries": (),
+                    },
+                    "trace_step": {
+                        "meta": {
+                            "tool_registry": {
+                                "provider_source": "suite_api_key=hidden",
+                            },
+                        },
+                    },
+                    "trace_event": None,
+                    "audit_detail": {
+                        "provider_source": "suite_api_key=hidden",
+                    },
+                },
+                "audit_event": {
+                    "event_type": "tool_registry_diagnostics",
+                    "detail": {
+                        "provider_source": "suite_api_key=hidden",
+                    },
+                },
+            },
+        )
+
+        self.assertEqual(result.provider_source_name, "suite_[redacted]")
+        self.assertEqual(
+            result.diagnostics_runtime.trace_step["meta"]["tool_registry"][
+                "provider_source"
+            ],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            result.diagnostics_runtime.audit_detail["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            result.audit_event["detail"]["provider_source"],
+            "suite_[redacted]",
+        )
+        serialized = json.dumps(result.to_dict(), default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+
+    def test_build_configured_tool_registry_provider_runtime_artifacts_model_from_dict_redacts_sensitive_source_diagnostics_keys(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        result = build_configured_tool_registry_provider_runtime_artifacts_model_from_dict(
+            provider=provider,
+            provider_source_name="provider_suite",
+            runtime_artifacts={
+                "provider_source_name": "provider_suite",
+                "source_diagnostics": {
+                    "suite_api_key=hidden": {
+                        "invalid_tool_executions": (
+                            "provider_search: unsupported tool execution kind api_key=hidden",
+                        ),
+                    },
+                },
+                "diagnostics_runtime": {
+                    "summary": {
+                        "has_diagnostics": True,
+                        "skipped_total": 0,
+                        "missing_total": 0,
+                        "total": 1,
+                        "entries": (),
+                    },
+                    "trace_step": None,
+                    "trace_event": None,
+                    "audit_detail": None,
+                },
+            },
+        )
+
+        self.assertEqual(tuple(result.source_diagnostics), ("suite_[redacted]",))
+        self.assertEqual(
+            result.source_diagnostics["suite_[redacted]"]["invalid_tool_executions"],
+            ("provider_search: unsupported tool execution kind [redacted]",),
+        )
+        serialized = json.dumps(result.to_dict(), default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+
     def test_build_configured_tool_registry_provider_runtime_artifacts_model_from_dict_redacts_diagnostics_runtime_payload(
         self,
     ) -> None:

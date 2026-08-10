@@ -1468,3 +1468,36 @@ class RegistryExecutionDiagnosticsMixin:
         self.assertIn("http_json execution [redacted] must be safe", content)
         self.assertNotIn("api_key=hidden", content)
         self.assertNotIn("access_token", content)
+
+    def test_build_tool_registry_diagnostics_runtime_artifacts_redacts_sensitive_provider_source_name(
+        self,
+    ) -> None:
+        diagnostics = {
+            "skipped_registry_sources": ("planning_suite",),
+            "missing_registry_sources": (),
+            "skipped_registry_files": (),
+            "missing_registry_files": (),
+            "skipped_registry_dirs": (),
+            "missing_registry_dirs": (),
+        }
+
+        result = build_tool_registry_diagnostics_runtime_artifacts(
+            task_id="task-1",
+            step_id="step-1",
+            seq=4,
+            model="mock-gpt",
+            provider_source_name="suite_api_key=hidden",
+            diagnostics=diagnostics,
+        )
+
+        self.assertEqual(
+            result["trace_step"]["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertIn("source=suite_[redacted]", result["trace_step"]["content"])
+        self.assertEqual(
+            result["audit_detail"]["provider_source"],
+            "suite_[redacted]",
+        )
+        serialized = json.dumps(result, default=str)
+        self.assertNotIn("api_key=hidden", serialized)
