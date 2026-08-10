@@ -591,8 +591,20 @@ def _sanitize_trace_provider_source_meta_values_for_export(value: object) -> obj
                 safe_key in _PROVIDER_SOURCES_TRACE_META_KEYS
                 and isinstance(item, (list, tuple))
             ):
+                alias_by_source = build_safe_tool_registry_provider_source_alias_map(
+                    [
+                        source
+                        for source in item
+                        if isinstance(source, str) and source.strip()
+                    ]
+                )
                 sanitized[key] = [
-                    _sanitize_tool_runtime_provider_source_name_for_artifact(source)
+                    alias_by_source.get(
+                        source,
+                        _sanitize_tool_runtime_provider_source_name_for_artifact(
+                            source
+                        ),
+                    )
                     if isinstance(source, str) and source.strip()
                     else source
                     for source in item

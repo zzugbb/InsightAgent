@@ -526,10 +526,22 @@ def _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
                 safe_key in _TOOL_REGISTRY_PROVIDER_SOURCES_ARTIFACT_KEYS
                 and isinstance(value, (list, tuple))
             ):
-                sanitized[key] = [
-                    _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                alias_by_source = _impl_build_safe_tool_registry_provider_source_alias_map(
+                    [
                         source_name
+                        for source_name in value
+                        if isinstance(source_name, str) and source_name.strip()
+                    ]
+                )
+                sanitized[key] = [
+                    alias_by_source.get(
+                        source_name,
+                        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                            source_name
+                        ),
                     )
+                    if isinstance(source_name, str) and source_name.strip()
+                    else source_name
                     for source_name in value
                 ]
                 continue

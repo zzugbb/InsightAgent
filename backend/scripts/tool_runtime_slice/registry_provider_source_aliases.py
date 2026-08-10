@@ -420,3 +420,135 @@ class RegistryProviderSourceAliasesMixin:
         )
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_audit_detail_disambiguates_colliding_redacted_provider_source_aliases(
+        self,
+    ) -> None:
+        payload = audit_service_module.sanitize_audit_event_detail(
+            {
+                "diagnostics": {
+                    "provider_sources": [
+                        "suite_access_token=two",
+                        "suite_api_key=one",
+                    ],
+                    "tool_registry_provider_sources": [
+                        "suite_access_token=two",
+                        "suite_api_key=one",
+                    ],
+                },
+            }
+        )
+
+        self.assertIsInstance(payload, dict)
+        assert isinstance(payload, dict)
+        self.assertEqual(
+            payload["diagnostics"]["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            payload["diagnostics"]["tool_registry_provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_trace_meta_disambiguates_colliding_redacted_provider_source_aliases(
+        self,
+    ) -> None:
+        step = chat_persistence_module.TraceStep(  # type: ignore[attr-defined]
+            id="trace-source-alias-disambiguation",
+            type="thought",
+            content="trace provider source alias disambiguation",
+            seq=1,
+            meta={
+                "provider_sources": [
+                    "suite_access_token=two",
+                    "suite_api_key=one",
+                ],
+                "nested": {
+                    "tool_registry_provider_sources": [
+                        "suite_access_token=two",
+                        "suite_api_key=one",
+                    ],
+                },
+            },
+        )
+
+        sanitized = chat_persistence_module._sanitize_trace_step_for_export(step)  # type: ignore[attr-defined]
+        payload = sanitized.model_dump()
+
+        self.assertEqual(
+            payload["meta"]["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            payload["meta"]["nested"]["tool_registry_provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_runtime_artifact_sanitizer_disambiguates_colliding_redacted_provider_source_aliases(
+        self,
+    ) -> None:
+        payload = (
+            tool_runtime_module._sanitize_tool_runtime_provider_source_fields_for_artifact(
+                {
+                    "provider_sources": [
+                        "suite_access_token=two",
+                        "suite_api_key=one",
+                    ],
+                    "nested": {
+                        "tool_registry_provider_sources": [
+                            "suite_access_token=two",
+                            "suite_api_key=one",
+                        ],
+                    },
+                }
+            )
+        )
+
+        self.assertEqual(
+            payload["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            payload["nested"]["tool_registry_provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_registry_artifact_sanitizer_disambiguates_colliding_redacted_provider_source_aliases(
+        self,
+    ) -> None:
+        registry_module = __import__(
+            "app.services.tool_runtime_registry",
+            fromlist=["_impl__sanitize_tool_registry_provider_source_fields_for_artifact"],
+        )
+
+        payload = registry_module._impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+            {
+                "provider_sources": [
+                    "suite_access_token=two",
+                    "suite_api_key=one",
+                ],
+                "nested": {
+                    "tool_registry_provider_sources": [
+                        "suite_access_token=two",
+                        "suite_api_key=one",
+                    ],
+                },
+            }
+        )
+
+        self.assertEqual(
+            payload["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            payload["nested"]["tool_registry_provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))

@@ -9,6 +9,7 @@ from app.services.tool_runtime import (
     _HTTP_JSON_ERROR_BODY_SENSITIVE_KEY_RE,
     _redact_http_json_raw_fallback_value,
     _sanitize_tool_runtime_provider_source_name_for_artifact,
+    build_safe_tool_registry_provider_source_alias_map,
 )
 
 SUPPORTED_AUDIT_EVENT_TYPES = frozenset(
@@ -98,8 +99,20 @@ def _redact_provider_source_event_detail_values(value: object) -> object:
                 safe_key in _PROVIDER_SOURCES_DETAIL_KEYS
                 and isinstance(item, (list, tuple))
             ):
+                alias_by_source = build_safe_tool_registry_provider_source_alias_map(
+                    [
+                        source
+                        for source in item
+                        if isinstance(source, str) and source.strip()
+                    ]
+                )
                 redacted[safe_key] = [
-                    _sanitize_tool_runtime_provider_source_name_for_artifact(source)
+                    alias_by_source.get(
+                        source,
+                        _sanitize_tool_runtime_provider_source_name_for_artifact(
+                            source
+                        ),
+                    )
                     if isinstance(source, str) and source.strip()
                     else source
                     for source in item
