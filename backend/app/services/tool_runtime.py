@@ -224,9 +224,13 @@ def _sanitize_tool_runtime_provider_sources_for_artifact(
     provider_sources: dict[str, ToolRegistryProvider],
 ) -> dict[str, ToolRegistryProvider]:
     sanitized: dict[str, ToolRegistryProvider] = {}
+    alias_by_source = build_safe_tool_registry_provider_source_alias_map(
+        list(provider_sources.keys())
+    )
     for source_name, provider in provider_sources.items():
-        safe_source_name = _sanitize_tool_runtime_provider_source_name_for_artifact(
-            source_name
+        safe_source_name = alias_by_source.get(
+            source_name,
+            _sanitize_tool_runtime_provider_source_name_for_artifact(source_name),
         )
         if safe_source_name in sanitized:
             continue

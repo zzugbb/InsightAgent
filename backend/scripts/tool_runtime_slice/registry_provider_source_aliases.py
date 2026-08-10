@@ -552,3 +552,97 @@ class RegistryProviderSourceAliasesMixin:
         )
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_provider_sources_dict_sanitizer_preserves_colliding_redacted_aliases(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        payload = (
+            tool_runtime_module._sanitize_tool_runtime_provider_sources_for_artifact(
+                {
+                    "suite_access_token=two": provider,
+                    "suite_api_key=one": provider,
+                }
+            )
+        )
+
+        self.assertEqual(
+            list(payload.keys()),
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(list(payload.values()), [provider, provider])
+        self.assertNotIn("api_key=one", json.dumps(list(payload.keys()), default=str))
+        self.assertNotIn(
+            "access_token=two",
+            json.dumps(list(payload.keys()), default=str),
+        )
+
+    def test_runtime_artifacts_to_dict_preserves_colliding_provider_source_alias_keys(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        diagnostics_runtime = tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+            trace_step=None,
+            trace_event=None,
+            audit_detail=None,
+        )
+        model = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeArtifactsModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            provider_sources={
+                "suite_access_token=two": provider,
+                "suite_api_key=one": provider,
+            },
+            selected_source_diagnostics={},
+            source_diagnostics={
+                "suite_access_token=two": {
+                    "skipped_registry_sources": ("suite_access_token=two",),
+                    "missing_registry_sources": (),
+                    "skipped_registry_files": (),
+                    "missing_registry_files": (),
+                    "skipped_registry_dirs": (),
+                    "missing_registry_dirs": (),
+                },
+                "suite_api_key=one": {
+                    "skipped_registry_sources": (),
+                    "missing_registry_sources": ("suite_api_key=one",),
+                    "skipped_registry_files": (),
+                    "missing_registry_files": (),
+                    "skipped_registry_dirs": (),
+                    "missing_registry_dirs": (),
+                },
+            },
+            diagnostics_runtime=diagnostics_runtime,
+            audit_event=None,
+        )
+
+        payload = model.to_dict()
+
+        self.assertEqual(
+            list(payload["provider_sources"].keys()),
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            list(payload["source_diagnostics"].keys()),
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            payload["source_diagnostics"]["suite_[redacted]#1"][
+                "skipped_registry_sources"
+            ],
+            ("suite_[redacted]",),
+        )
+        self.assertEqual(
+            payload["source_diagnostics"]["suite_[redacted]#2"][
+                "missing_registry_sources"
+            ],
+            ("suite_[redacted]",),
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))

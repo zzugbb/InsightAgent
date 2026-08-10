@@ -337,11 +337,15 @@ def _impl_sanitize_tool_registry_source_diagnostics(
     if not isinstance(source_diagnostics, dict):
         return {}
     sanitized: dict[str, dict[str, tuple[str, ...]]] = {}
+    alias_by_source = _impl_build_safe_tool_registry_provider_source_alias_map(
+        list(source_diagnostics.keys())
+    )
     for source_name, diagnostics in source_diagnostics.items():
-        normalized_source_name = (
+        normalized_source_name = alias_by_source.get(
+            str(source_name),
             _impl__sanitize_tool_registry_provider_source_name_for_artifact(
                 source_name
-            )
+            ),
         )
         if not normalized_source_name:
             continue
