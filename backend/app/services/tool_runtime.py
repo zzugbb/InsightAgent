@@ -140,6 +140,19 @@ _TOOL_RUNTIME_PROVIDER_SOURCE_SENSITIVE_TOKEN_RE = re.compile(
     r"(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|secret|token|password)"
     r"(?:\s*[:=][^\s,;/]+|[^\s,;/]*)?"
 )
+_TOOL_RUNTIME_PROVIDER_SOURCE_ARTIFACT_KEYS = frozenset(
+    {
+        "provider_source",
+        "provider_source_name",
+        "tool_registry_provider_source",
+    }
+)
+_TOOL_RUNTIME_PROVIDER_SOURCES_ARTIFACT_KEYS = frozenset(
+    {
+        "provider_sources",
+        "tool_registry_provider_sources",
+    }
+)
 
 
 def _sanitize_tool_runtime_provider_source_name_for_artifact(
@@ -161,10 +174,22 @@ def _sanitize_tool_runtime_provider_source_fields_for_artifact(
     if isinstance(payload, dict):
         sanitized: dict[object, object] = {}
         for key, value in payload.items():
-            if str(key) in {"provider_source", "provider_source_name"}:
+            safe_key = str(key)
+            if safe_key in _TOOL_RUNTIME_PROVIDER_SOURCE_ARTIFACT_KEYS:
                 sanitized[key] = _sanitize_tool_runtime_provider_source_name_for_artifact(
                     value
                 )
+                continue
+            if (
+                safe_key in _TOOL_RUNTIME_PROVIDER_SOURCES_ARTIFACT_KEYS
+                and isinstance(value, (list, tuple))
+            ):
+                sanitized[key] = [
+                    _sanitize_tool_runtime_provider_source_name_for_artifact(
+                        source_name
+                    )
+                    for source_name in value
+                ]
                 continue
             sanitized[key] = _sanitize_tool_runtime_provider_source_fields_for_artifact(
                 value
