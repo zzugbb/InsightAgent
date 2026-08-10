@@ -2646,6 +2646,61 @@ class RegistryRuntimeModelsMixin:
         self.assertEqual(result.summary.service_action_kinds, ("record_audit_event",))
         self.assertEqual(result.summary.missing_total, 1)
 
+    def test_build_configured_tool_registry_provider_preflight_result_model_from_dict_redacts_sensitive_provider_source_name(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        result = build_configured_tool_registry_provider_preflight_result_model_from_dict(
+            preflight_result={
+                "provider": provider,
+                "provider_source_name": "suite_api_key=hidden",
+                "runtime_artifacts": {
+                    "provider_source_name": "suite_api_key=hidden",
+                    "diagnostics_runtime": {
+                        "summary": {
+                            "has_diagnostics": True,
+                            "total": 1,
+                            "skipped_total": 0,
+                            "missing_total": 1,
+                        }
+                    },
+                },
+                "service_execution": {
+                    "provider": provider,
+                    "provider_source_name": "suite_api_key=hidden",
+                    "runtime_artifacts": {
+                        "provider_source_name": "suite_api_key=hidden",
+                        "diagnostics_runtime": {
+                            "summary": {
+                                "has_diagnostics": True,
+                                "total": 1,
+                                "skipped_total": 0,
+                                "missing_total": 1,
+                            }
+                        },
+                    },
+                    "service_actions": [],
+                },
+                "trace_write_count": 0,
+                "audit_event_count": 0,
+            }
+        )
+
+        self.assertEqual(result.provider_source_name, "suite_[redacted]")
+        self.assertEqual(result.summary.provider_source_name, "suite_[redacted]")
+        self.assertEqual(
+            result.service_execution.provider_source_name,
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            result.runtime_artifacts.provider_source_name,
+            "suite_[redacted]",
+        )
+        serialized = json.dumps(result.to_dict(), default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+
     def test_build_configured_tool_registry_provider_preflight_result_model_from_dict_uses_service_execution_defaults(
         self,
     ) -> None:

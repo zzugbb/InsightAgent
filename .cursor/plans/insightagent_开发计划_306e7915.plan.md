@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite 与 concurrency-fairness-policy 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前主线：registry-governance，进度约 8%；已收口 diagnostics summary 脱敏后去重、runtime artifact 回灌 totals 派生/安全规整与 provider source 名称脱敏。
+  - 当前主线：registry-governance，进度约 11%；已收口 diagnostics summary 脱敏后去重、runtime/preflight 回灌 totals 派生/安全规整与 provider source 名称脱敏。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy。
   - 本主线继续保持外部 SSE / trace / export / e2e shape 稳定，并按小红测、实现、targeted/full slice 推进。
   - 后续候选：rag-governance-hardening。
@@ -13,7 +13,7 @@ constraints:
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1782/1782)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1785/1785)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (76/76)
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
@@ -25,7 +25,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: registry-governance 进度约 8%；本轮先补 diagnostics runtime provider_source_name、回灌 provider_source 与 source_diagnostics key 脱敏红测，再在 tool_runtime_registry.py 统一 provider source artifact 安全摘要。targeted source 脱敏、settings slice、registry slice 与 backend full slice 均通过，完整 Chromium 基线仍沿用 50 passed / 1 skipped。
+latest_validation_note: registry-governance 进度约 11%；本轮先补 service_execution 回灌 provider_source_name、preflight result dict 与 runtime service action trace/audit provider_source 脱敏红测，再在 tool_runtime_registry.py 统一 provider source artifact 安全摘要。targeted from-dict/service-action、settings slice、registry slice 与 backend full slice 均通过，完整 Chromium 基线仍沿用 50 passed / 1 skipped。
 todos:
   - id: docs-slimming
     status: completed
@@ -47,7 +47,7 @@ todos:
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。
   - id: registry-governance
     status: in_progress
-    content: 当前主线，进度约 8%；已完成 diagnostics_summary 脱敏后安全值稳定去重、runtime artifact 回灌 totals 派生/安全规整与 provider source artifact 脱敏，继续统一 registry / profile / provider source / selected source / loader_factory / settings/preflight/trace/export 的治理语义。
+    content: 当前主线，进度约 11%；已完成 diagnostics_summary 脱敏后安全值稳定去重、runtime/preflight 回灌 totals 派生/安全规整与 provider source artifact 脱敏，继续统一 registry / profile / provider source / selected source / loader_factory / settings/preflight/trace/export 的治理语义。
   - id: rag-governance-hardening
     status: pending
     content: 后续补知识库版本化、来源治理与更细粒度 shared 规则。
@@ -75,7 +75,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1782/1782`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1785/1785`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel / queued SSE safe wait_position、settings safe global/current-user active/waiting/available counts、基础计数字段存在性、queued snapshot count/wait_position/scope count 整数类型、整数型 max_concurrent/计数/治理限额字段、数值型 poll interval、精确 pressure_state 枚举、布尔型状态/治理标记、非负治理限额、governance 必填字段、has_waiting_tasks/saturated/pressure_state 必填、固定枚举值与派生一致性、current-user limit 与 available 一致性 / followup completion latest fresh 通过；脚本现额外校验 queued snapshot 基础计数字段、结构一致性、current session diagnostics、settings `task_queue_diagnostics`、scope available slots 字段依赖与 scope active/waiting 计数全局上界。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `76/76`。
@@ -95,7 +95,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前主线
 
-- `registry-governance`：进度约 `8%`；已完成 diagnostics summary 脱敏后安全值稳定去重、runtime artifact 回灌 totals 派生/安全规整与 provider source artifact 脱敏，不改变 settings/preflight/trace/export 可见字段 shape。
+- `registry-governance`：进度约 `11%`；已完成 diagnostics summary 脱敏后安全值稳定去重、runtime/preflight 回灌 totals 派生/安全规整与 provider source artifact 脱敏，不改变 settings/preflight/trace/export 可见字段 shape。
 
 ## Pre-flight Cleanup
 

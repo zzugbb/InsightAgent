@@ -2288,6 +2288,41 @@ class RegistryRuntimeServiceModelsMixin:
             ("internal_trace_write", "record_audit_event"),
         )
 
+    def test_build_configured_tool_registry_provider_service_execution_model_from_dict_redacts_sensitive_provider_source_name(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+
+        result = build_configured_tool_registry_provider_service_execution_model_from_dict(
+            service_execution={
+                "provider": provider,
+                "provider_source_name": "suite_api_key=hidden",
+                "runtime_artifacts": {
+                    "provider_source_name": "suite_api_key=hidden",
+                    "diagnostics_runtime": {
+                        "summary": {
+                            "has_diagnostics": True,
+                            "skipped_total": 0,
+                            "missing_total": 1,
+                            "total": 1,
+                            "entries": (),
+                        },
+                        "trace_step": None,
+                        "trace_event": None,
+                        "audit_detail": None,
+                    },
+                },
+                "service_actions": [],
+            }
+        )
+
+        self.assertEqual(result.provider_source_name, "suite_[redacted]")
+        self.assertEqual(result.runtime_artifacts.provider_source_name, "suite_[redacted]")
+        serialized = json.dumps(result.to_dict(), default=str)
+        self.assertNotIn("api_key=hidden", serialized)
+
     def test_build_configured_tool_registry_provider_service_execution_model_from_dict_accepts_tuple_service_actions(
         self,
     ) -> None:
@@ -2824,6 +2859,73 @@ class RegistryRuntimeServiceModelsMixin:
                 "audit_event_count": 2,
             },
         )
+
+    def test_execute_configured_tool_registry_provider_runtime_service_actions_outputs_redacts_provider_source_fields(
+        self,
+    ) -> None:
+        trace_steps: list[dict[str, object]] = []
+        persisted: list[bool] = []
+        audit_calls: list[dict[str, object]] = []
+
+        result_model, result_dict = (
+            execute_configured_tool_registry_provider_runtime_service_actions_outputs(
+                service_actions=[
+                    {
+                        "kind": "internal_trace_write",
+                        "trace_step": {
+                            "id": "step-registry",
+                            "meta": {
+                                "tool_registry": {
+                                    "provider_source": "suite_api_key=hidden",
+                                },
+                            },
+                        },
+                        "trace_event": {
+                            "task_id": "task-1",
+                            "step": {
+                                "meta": {
+                                    "tool_registry": {
+                                        "provider_source": "suite_api_key=hidden",
+                                    },
+                                },
+                            },
+                        },
+                        "persist_force": True,
+                    },
+                    {
+                        "kind": "record_audit_event",
+                        "kwargs": {
+                            "event_type": "tool_registry_diagnostics",
+                            "detail": {
+                                "provider_source": "suite_api_key=hidden",
+                            },
+                        },
+                    },
+                ],
+                trace_steps=trace_steps,
+                persist_trace_fn=lambda **kwargs: persisted.append(
+                    bool(kwargs["force"])
+                ),
+                record_audit_event_fn=lambda **kwargs: audit_calls.append(kwargs),
+            )
+        )
+
+        self.assertEqual(result_model.trace_write_count, 1)
+        self.assertEqual(result_dict["audit_event_count"], 1)
+        self.assertEqual(persisted, [True])
+        self.assertEqual(
+            trace_steps[0]["meta"]["tool_registry"]["provider_source"],
+            "suite_[redacted]",
+        )
+        self.assertEqual(
+            audit_calls[0]["detail"]["provider_source"],
+            "suite_[redacted]",
+        )
+        serialized = json.dumps(
+            {"trace_steps": trace_steps, "audit_calls": audit_calls},
+            default=str,
+        )
+        self.assertNotIn("api_key=hidden", serialized)
 
     def test_build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts_keeps_fields(
         self,
