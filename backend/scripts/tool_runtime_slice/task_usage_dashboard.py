@@ -2253,6 +2253,85 @@ class TaskUsageDashboardMixin:
         self.assertEqual(len(payload["by_session"]), 1)
         self.assertEqual(len(payload["top_tasks"]), 1)
 
+    def test_get_tasks_usage_dashboard_resolves_unique_redacted_provider_source_alias_filter(
+        self,
+    ) -> None:
+        rows = [
+            {
+                "id": "task-usage-filtered-alias-1",
+                "session_id": "session-usage-filtered-alias-1",
+                "prompt": "alias-filtered dashboard row",
+                "usage_json": json.dumps(
+                    {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 15,
+                        "cost_estimate": 0.05,
+                        "usage_source": "provider",
+                    }
+                ),
+                "trace_json": None,
+                "tool_registry_profile": "planning_only",
+                "tool_registry_provider_source": "suite_api_key=hidden",
+                "allowed_tool_names_json": json.dumps(["task_plan"]),
+                "allowed_tool_labels_json": json.dumps(["Task Planner Suite"]),
+                "created_at": "2026-06-10T10:00:00",
+                "updated_at": "2026-06-10T10:05:00",
+                "session_title": "Alias Filter Session",
+            }
+        ]
+
+        class FakeCursor:
+            def __init__(self, payload: list[dict]):
+                self._payload = payload
+
+            def fetchall(self) -> list[dict]:
+                return self._payload
+
+        class FakeConnection:
+            def execute(self, _query: str, _params=()):
+                return FakeCursor(rows)
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        original_get_settings = chat_persistence_module.get_settings
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_api_key=hidden": {
+                            "provider": "default",
+                            "profile": "planning_only",
+                        }
+                    }
+                )
+            )
+            payload = chat_persistence_module.get_tasks_usage_dashboard(
+                "user-usage-filtered-alias",
+                tool_registry_provider_source_filter="suite_[redacted]",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+            chat_persistence_module.get_settings = original_get_settings
+
+        self.assertEqual(payload["summary"]["tasks_with_usage"], 1)
+        self.assertEqual(len(payload["by_session"]), 1)
+        self.assertEqual(
+            payload["by_session"][0]["session_id"],
+            "session-usage-filtered-alias-1",
+        )
+        self.assertEqual(len(payload["top_tasks"]), 1)
+        self.assertEqual(
+            payload["top_tasks"][0]["task_id"],
+            "task-usage-filtered-alias-1",
+        )
+
     def test_get_tasks_usage_dashboard_reuses_shared_task_governance_filter_matcher(
         self,
     ) -> None:

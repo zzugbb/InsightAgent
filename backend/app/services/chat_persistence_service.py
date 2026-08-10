@@ -27,6 +27,7 @@ from app.services.tool_runtime import (
     get_configured_tool_registry_provider,
     get_tool_display_name,
     normalize_tool_registry_name,
+    resolve_unique_tool_registry_provider_source_alias,
     sanitize_tool_registry_diagnostics_artifact_payload,
 )
 
@@ -939,7 +940,7 @@ def _build_task_governance_filter_clause(
     if normalized_profile:
         clauses.append("LOWER(COALESCE(tool_registry_profile, '')) = ?")
         params.append(normalized_profile)
-    normalized_provider_source = _normalize_governance_filter(
+    normalized_provider_source = _normalize_governance_provider_source_filter(
         tool_registry_provider_source_filter
     )
     if normalized_provider_source:
@@ -2835,6 +2836,19 @@ def _normalize_governance_filter(value: str | None) -> str | None:
     return normalized or None
 
 
+def _normalize_governance_provider_source_filter(value: str | None) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return _normalize_governance_filter(value)
+    try:
+        value = resolve_unique_tool_registry_provider_source_alias(
+            settings=get_settings(),
+            tool_registry_provider_source=value,
+        )
+    except Exception:
+        pass
+    return _normalize_governance_filter(value)
+
+
 def _task_governance_matches_filters(
     governance: object,
     tool_registry_profile_filter: str | None,
@@ -3275,7 +3289,7 @@ def get_tasks_usage_dashboard(
     safe_top_sessions = max(1, min(int(top_sessions), 30))
     safe_top_tasks = max(1, min(int(top_tasks), 50))
     safe_profile_filter = _normalize_governance_filter(tool_registry_profile_filter)
-    safe_provider_source_filter = _normalize_governance_filter(
+    safe_provider_source_filter = _normalize_governance_provider_source_filter(
         tool_registry_provider_source_filter
     )
 

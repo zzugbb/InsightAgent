@@ -2952,6 +2952,81 @@ class TaskRoutesUsageGovernanceMixin:
             ),
         )
 
+    def test_task_list_queries_resolve_unique_redacted_provider_source_alias_filter(
+        self,
+    ) -> None:
+        original_get_db_connection = chat_persistence_module.get_db_connection
+        original_get_settings = chat_persistence_module.get_settings
+        captured: dict[str, list[tuple[object, ...]]] = {"params": []}
+
+        class FakeListCursor:
+            def fetchall(self) -> list[dict]:
+                return []
+
+        class FakeCountCursor:
+            def fetchone(self) -> dict[str, int]:
+                return {"n": 0}
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["params"].append(tuple(params))
+                if "COUNT(*)" in query:
+                    return FakeCountCursor()
+                return FakeListCursor()
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        try:
+            chat_persistence_module.get_db_connection = lambda: FakeContextManager()
+            chat_persistence_module.get_settings = lambda: SimpleNamespace(
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_api_key=hidden": {
+                            "provider": "default",
+                            "profile": "planning_only",
+                        }
+                    }
+                )
+            )
+            chat_persistence_module.list_tasks(
+                user_id="user-governance-alias",
+                limit=20,
+                session_id="session-governance-alias",
+                offset=0,
+                tool_registry_provider_source_filter="suite_[redacted]",
+            )
+            chat_persistence_module.count_tasks(
+                user_id="user-governance-alias",
+                session_id="session-governance-alias",
+                tool_registry_provider_source_filter="suite_[redacted]",
+            )
+        finally:
+            chat_persistence_module.get_db_connection = original_get_db_connection
+            chat_persistence_module.get_settings = original_get_settings
+
+        self.assertEqual(
+            captured["params"],
+            [
+                (
+                    "user-governance-alias",
+                    "session-governance-alias",
+                    "suite_api_key=hidden",
+                    20,
+                    0,
+                ),
+                (
+                    "user-governance-alias",
+                    "session-governance-alias",
+                    "suite_api_key=hidden",
+                ),
+            ],
+        )
+
     def test_task_list_queries_reuse_shared_governance_filter_normalizer(self) -> None:
         original_get_db_connection = chat_persistence_module.get_db_connection
         original_normalize_governance_filter = (
