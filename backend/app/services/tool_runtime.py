@@ -279,6 +279,17 @@ def _build_tool_runtime_artifact_provider_source_aliases(
     return build_safe_tool_registry_provider_source_alias_map(source_names)
 
 
+def _sanitize_tool_runtime_provider_source_name_with_aliases(
+    provider_source_name: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> str:
+    return (provider_source_aliases or {}).get(
+        str(provider_source_name),
+        _sanitize_tool_runtime_provider_source_name_for_artifact(provider_source_name),
+    )
+
+
 def _sanitize_tool_runtime_diagnostics_summary_for_artifact(
     diagnostics_summary: object,
 ) -> dict[str, object]:
@@ -339,10 +350,15 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
     missing_total: int
     diagnostics_summary: dict[str, object]
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(
+        self,
+        *,
+        provider_source_aliases: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         return {
-            "provider_source_name": _sanitize_tool_runtime_provider_source_name_for_artifact(
-                self.provider_source_name
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_with_aliases(
+                self.provider_source_name,
+                provider_source_aliases=provider_source_aliases,
             ),
             "tool_count": self.tool_count,
             "tool_names": self.tool_names,
@@ -374,16 +390,27 @@ class ConfiguredToolRegistryProviderPreflightResultModel:
     summary: ConfiguredToolRegistryProviderPreflightSummaryModel
 
     def to_dict(self) -> dict[str, object]:
+        provider_source_aliases = _build_tool_runtime_artifact_provider_source_aliases(
+            provider_source_name=self.provider_source_name,
+            provider_sources=self.runtime_artifacts.provider_sources,
+            selected_source_diagnostics=self.runtime_artifacts.selected_source_diagnostics,
+            source_diagnostics=self.runtime_artifacts.source_diagnostics,
+        )
         return {
             "provider": self.provider,
-            "provider_source_name": _sanitize_tool_runtime_provider_source_name_for_artifact(
-                self.provider_source_name
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_with_aliases(
+                self.provider_source_name,
+                provider_source_aliases=provider_source_aliases,
             ),
             "runtime_artifacts": self.runtime_artifacts.to_dict(),
-            "service_execution": self.service_execution.to_dict(),
+            "service_execution": self.service_execution.to_dict(
+                provider_source_aliases=provider_source_aliases,
+            ),
             "trace_write_count": self.trace_write_count,
             "audit_event_count": self.audit_event_count,
-            "summary": self.summary.to_dict(),
+            "summary": self.summary.to_dict(
+                provider_source_aliases=provider_source_aliases,
+            ),
         }
 
 
@@ -564,11 +591,16 @@ class ConfiguredToolRegistryProviderServiceExecutionModel:
     runtime_artifacts: ConfiguredToolRegistryProviderRuntimeArtifactsModel
     service_actions: tuple[ConfiguredToolRegistryProviderRuntimeServiceActionModel, ...]
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(
+        self,
+        *,
+        provider_source_aliases: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         return {
             "provider": self.provider,
-            "provider_source_name": _sanitize_tool_runtime_provider_source_name_for_artifact(
-                self.provider_source_name
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_with_aliases(
+                self.provider_source_name,
+                provider_source_aliases=provider_source_aliases,
             ),
             "runtime_artifacts": self.runtime_artifacts.to_dict(),
             "service_actions": [action.to_dict() for action in self.service_actions],
@@ -583,11 +615,16 @@ class ConfiguredToolRegistryProviderServiceExecutionResultModel:
     trace_write_count: int
     audit_event_count: int
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(
+        self,
+        *,
+        provider_source_aliases: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         return {
             "provider": self.provider,
-            "provider_source_name": _sanitize_tool_runtime_provider_source_name_for_artifact(
-                self.provider_source_name
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_with_aliases(
+                self.provider_source_name,
+                provider_source_aliases=provider_source_aliases,
             ),
             "runtime_artifacts": self.runtime_artifacts.to_dict(),
             "trace_write_count": self.trace_write_count,
