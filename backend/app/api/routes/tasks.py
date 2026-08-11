@@ -301,6 +301,45 @@ def _build_tasks_usage_dashboard_provider_source_aliases(
     return build_safe_tool_registry_provider_source_alias_map(source_names)
 
 
+def _build_task_list_provider_source_aliases(tasks: list[object]) -> dict[str, str]:
+    source_names: list[str] = []
+    for task in tasks:
+        task_summary = _coerce_payload_mapping(task)
+        if not task_summary:
+            continue
+        _append_governance_provider_source_alias_inputs(
+            source_names,
+            task_summary.get("governance"),
+        )
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
+def _coerce_task_list_response_item_summary(
+    task: object,
+    *,
+    provider_source_aliases: dict[str, str],
+) -> dict[str, Any]:
+    summary = _coerce_task_response_summary(
+        chat_persistence_service.get_task_response_summary_from_task(task)
+    )
+    task_summary = _coerce_payload_mapping(task)
+    raw_governance = _coerce_payload_mapping(task_summary.get("governance"))
+    raw_provider_source = raw_governance.get("provider_source")
+    safe_provider_source = (
+        provider_source_aliases.get(raw_provider_source)
+        if isinstance(raw_provider_source, str)
+        else None
+    )
+    if safe_provider_source is None:
+        return summary
+    response_governance = _coerce_payload_mapping(summary.get("governance"))
+    if not response_governance:
+        return summary
+    response_governance["provider_source"] = safe_provider_source
+    summary["governance"] = response_governance
+    return summary
+
+
 def _coerce_tasks_usage_dashboard_response_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
@@ -981,11 +1020,13 @@ def get_tasks(
             tool_registry_profile_filter=tool_registry_profile,
             tool_registry_provider_source_filter=provider_source_filter,
         )
+    provider_source_aliases = _build_task_list_provider_source_aliases(tasks)
     n = len(tasks)
     return TaskListResponse(
         items=[
-            _coerce_task_response_summary(
-                chat_persistence_service.get_task_response_summary_from_task(task)
+            _coerce_task_list_response_item_summary(
+                task,
+                provider_source_aliases=provider_source_aliases,
             )
             for task in tasks
         ],
