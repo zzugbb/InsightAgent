@@ -170,32 +170,40 @@ def _sanitize_tool_runtime_provider_source_name_for_artifact(
 
 def _sanitize_tool_runtime_provider_source_fields_for_artifact(
     payload: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> object:
     if isinstance(payload, dict):
         sanitized: dict[object, object] = {}
         for key, value in payload.items():
             safe_key = str(key)
             if safe_key in _TOOL_RUNTIME_PROVIDER_SOURCE_ARTIFACT_KEYS:
-                sanitized[key] = _sanitize_tool_runtime_provider_source_name_for_artifact(
-                    value
+                sanitized[key] = _sanitize_tool_runtime_provider_source_name_with_aliases(
+                    value,
+                    provider_source_aliases=provider_source_aliases,
                 )
                 continue
             if (
                 safe_key in _TOOL_RUNTIME_PROVIDER_SOURCES_ARTIFACT_KEYS
                 and isinstance(value, (list, tuple))
             ):
-                alias_by_source = build_safe_tool_registry_provider_source_alias_map(
+                alias_by_source = provider_source_aliases or {}
+                local_alias_by_source = build_safe_tool_registry_provider_source_alias_map(
                     [
                         source_name
                         for source_name in value
                         if isinstance(source_name, str) and source_name.strip()
+                        and source_name not in alias_by_source
                     ]
                 )
                 sanitized[key] = [
                     alias_by_source.get(
                         source_name,
-                        _sanitize_tool_runtime_provider_source_name_for_artifact(
-                            source_name
+                        local_alias_by_source.get(
+                            source_name,
+                            _sanitize_tool_runtime_provider_source_name_for_artifact(
+                                source_name
+                            ),
                         ),
                     )
                     if isinstance(source_name, str) and source_name.strip()
@@ -204,17 +212,24 @@ def _sanitize_tool_runtime_provider_source_fields_for_artifact(
                 ]
                 continue
             sanitized[key] = _sanitize_tool_runtime_provider_source_fields_for_artifact(
-                value
+                value,
+                provider_source_aliases=provider_source_aliases,
             )
         return sanitized
     if isinstance(payload, tuple):
         return tuple(
-            _sanitize_tool_runtime_provider_source_fields_for_artifact(value)
+            _sanitize_tool_runtime_provider_source_fields_for_artifact(
+                value,
+                provider_source_aliases=provider_source_aliases,
+            )
             for value in payload
         )
     if isinstance(payload, list):
         return [
-            _sanitize_tool_runtime_provider_source_fields_for_artifact(value)
+            _sanitize_tool_runtime_provider_source_fields_for_artifact(
+                value,
+                provider_source_aliases=provider_source_aliases,
+            )
             for value in payload
         ]
     return payload
@@ -463,9 +478,16 @@ class ToolRegistryDiagnosticsSummaryModel:
         }
 
 
-def _sanitize_tool_runtime_trace_artifact_payload(payload: object) -> object:
+def _sanitize_tool_runtime_trace_artifact_payload(
+    payload: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> object:
     sanitized = sanitize_tool_registry_diagnostics_artifact_payload(payload)
-    sanitized = _sanitize_tool_runtime_provider_source_fields_for_artifact(sanitized)
+    sanitized = _sanitize_tool_runtime_provider_source_fields_for_artifact(
+        sanitized,
+        provider_source_aliases=provider_source_aliases,
+    )
     return _sanitize_tool_runtime_trace_artifact_http_json_payload(sanitized)
 
 
@@ -572,23 +594,30 @@ class ConfiguredToolRegistryProviderRuntimeServiceActionModel:
     persist_force: bool = False
     kwargs: dict[str, object] | None = None
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(
+        self,
+        *,
+        provider_source_aliases: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         payload: dict[str, object] = {
             "kind": self.kind,
         }
         if self.trace_step is not None:
             payload["trace_step"] = _sanitize_tool_runtime_trace_artifact_payload(
-                self.trace_step
+                self.trace_step,
+                provider_source_aliases=provider_source_aliases,
             )
         if self.trace_event is not None:
             payload["trace_event"] = _sanitize_tool_runtime_trace_artifact_payload(
-                self.trace_event
+                self.trace_event,
+                provider_source_aliases=provider_source_aliases,
             )
         if self.persist_force:
             payload["persist_force"] = self.persist_force
         if self.kwargs is not None:
             payload["kwargs"] = _sanitize_tool_runtime_trace_artifact_payload(
-                self.kwargs
+                self.kwargs,
+                provider_source_aliases=provider_source_aliases,
             )
         return payload
 
@@ -597,8 +626,15 @@ class ConfiguredToolRegistryProviderRuntimeServiceActionModel:
 class ConfiguredToolRegistryProviderRuntimeServiceActionsModel:
     actions: tuple[ConfiguredToolRegistryProviderRuntimeServiceActionModel, ...]
 
-    def to_dict(self) -> list[dict[str, object]]:
-        return [action.to_dict() for action in self.actions]
+    def to_dict(
+        self,
+        *,
+        provider_source_aliases: dict[str, str] | None = None,
+    ) -> list[dict[str, object]]:
+        return [
+            action.to_dict(provider_source_aliases=provider_source_aliases)
+            for action in self.actions
+        ]
 
 
 @dataclass(frozen=True)
@@ -640,7 +676,10 @@ class ConfiguredToolRegistryProviderServiceExecutionModel:
                 provider_source_aliases=provider_source_aliases,
             ),
             "runtime_artifacts": self.runtime_artifacts.to_dict(),
-            "service_actions": [action.to_dict() for action in self.service_actions],
+            "service_actions": [
+                action.to_dict(provider_source_aliases=provider_source_aliases)
+                for action in self.service_actions
+            ],
         }
 
 

@@ -837,6 +837,81 @@ class RegistryProviderSourceAliasesMixin:
         self.assertNotIn("api_key=one", json.dumps(result_dict, default=str))
         self.assertNotIn("access_token=two", json.dumps(result_dict, default=str))
 
+    def test_service_execution_to_dict_preserves_service_action_provider_source_alias(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        diagnostics_runtime = tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+            trace_step=None,
+            trace_event=None,
+            audit_detail=None,
+        )
+        runtime_artifacts = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeArtifactsModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            provider_sources={
+                "suite_access_token=two": provider,
+                "suite_api_key=one": provider,
+            },
+            selected_source_diagnostics={},
+            source_diagnostics={},
+            diagnostics_runtime=diagnostics_runtime,
+            audit_event=None,
+        )
+        service_execution = tool_runtime_module.ConfiguredToolRegistryProviderServiceExecutionModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            runtime_artifacts=runtime_artifacts,
+            service_actions=(
+                tool_runtime_module.ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+                    kind="internal_trace_write",
+                    trace_step={
+                        "id": "step-registry",
+                        "meta": {
+                            "provider_source_name": "suite_api_key=one",
+                            "tool_registry_provider_sources": [
+                                "suite_access_token=two",
+                                "suite_api_key=one",
+                            ],
+                        },
+                    },
+                    kwargs={
+                        "audit_event": {
+                            "detail": {
+                                "provider_source_name": "suite_api_key=one",
+                            }
+                        }
+                    },
+                ),
+            ),
+        )
+
+        payload = service_execution.to_dict()
+
+        self.assertEqual(
+            payload["service_actions"][0]["trace_step"]["meta"][
+                "provider_source_name"
+            ],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload["service_actions"][0]["trace_step"]["meta"][
+                "tool_registry_provider_sources"
+            ],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            payload["service_actions"][0]["kwargs"]["audit_event"]["detail"][
+                "provider_source_name"
+            ],
+            "suite_[redacted]#2",
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
     def test_diagnostics_summary_values_disambiguate_colliding_redacted_provider_source_aliases(
         self,
     ) -> None:
