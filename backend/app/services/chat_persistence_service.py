@@ -499,14 +499,28 @@ def _normalize_task_governance_payload_or_original(value: object) -> object:
     return value
 
 
-def _normalize_task_governance_payload_for_response(value: object) -> object:
+def _normalize_task_governance_payload_for_response(
+    value: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> object:
     normalized = _normalize_task_governance_payload(value)
-    return _sanitize_task_governance_provider_source_values_for_export(normalized)
+    return _sanitize_task_governance_provider_source_values_for_export(
+        normalized,
+        provider_source_aliases=provider_source_aliases,
+    )
 
 
-def _normalize_session_governance_payload_for_response(value: object) -> object:
+def _normalize_session_governance_payload_for_response(
+    value: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> object:
     normalized = _normalize_session_governance_payload_or_original(value)
-    return _sanitize_session_governance_provider_source_values_for_export(normalized)
+    return _sanitize_session_governance_provider_source_values_for_export(
+        normalized,
+        provider_source_aliases=provider_source_aliases,
+    )
 
 
 def _sanitize_governance_provider_source_with_aliases(
@@ -655,6 +669,44 @@ def sanitize_session_export_governance_provider_source_values(
             sanitized_tasks.append(normalized_task)
         sanitized["tasks"] = sanitized_tasks
     return sanitized
+
+
+def _append_governance_provider_source_alias_inputs(
+    source_names: list[str],
+    governance: object,
+) -> None:
+    governance_payload = _coerce_payload_mapping_or_none(governance)
+    if governance_payload is None:
+        return
+    provider_sources = governance_payload.get("provider_sources")
+    if isinstance(provider_sources, (list, tuple)):
+        source_names.extend(
+            source
+            for source in provider_sources
+            if isinstance(source, str) and source.strip()
+        )
+    provider_source = governance_payload.get("provider_source")
+    if isinstance(provider_source, str) and provider_source.strip():
+        source_names.append(provider_source)
+
+
+def _build_usage_dashboard_provider_source_aliases(
+    *,
+    session_rows: list[dict[str, object]],
+    top_task_rows: list[dict[str, object]],
+) -> dict[str, str]:
+    source_names: list[str] = []
+    for row in session_rows:
+        _append_governance_provider_source_alias_inputs(
+            source_names,
+            row.get("governance"),
+        )
+    for row in top_task_rows:
+        _append_governance_provider_source_alias_inputs(
+            source_names,
+            row.get("governance"),
+        )
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
 
 
 _PROVIDER_SOURCE_TRACE_META_KEYS = frozenset(
@@ -3694,6 +3746,10 @@ def get_tasks_usage_dashboard_response_summary(
     top_task_rows = _normalize_export_payload_block_list_to_dicts(
         payload.get("top_tasks")
     )
+    provider_source_aliases = _build_usage_dashboard_provider_source_aliases(
+        session_rows=session_rows,
+        top_task_rows=top_task_rows,
+    )
     return {
         "window_days": int(payload.get("window_days", 0) or 0),
         "summary": _coerce_export_payload_block_to_dict(payload.get("summary")),
@@ -3715,7 +3771,8 @@ def get_tasks_usage_dashboard_response_summary(
                     else None
                 ),
                 "governance": _normalize_session_governance_payload_for_response(
-                    row.get("governance")
+                    row.get("governance"),
+                    provider_source_aliases=provider_source_aliases,
                 ),
             }
             for row in session_rows
@@ -3738,7 +3795,8 @@ def get_tasks_usage_dashboard_response_summary(
                 "governance": _sanitize_task_governance_provider_source_values_for_export(
                     _normalize_task_governance_payload_or_original(
                         row.get("governance")
-                    )
+                    ),
+                    provider_source_aliases=provider_source_aliases,
                 ),
             }
             for row in top_task_rows

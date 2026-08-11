@@ -132,6 +132,88 @@ class ResponseProviderSourceArtifactsMixin:
         self.assertNotIn("api_key=hidden", payload_blob)
         self.assertNotIn("access_token=hidden", payload_blob)
 
+    def test_usage_dashboard_response_summary_preserves_cross_section_provider_source_aliases(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_tasks_usage_dashboard_response_summary(
+            {
+                "window_days": 14,
+                "summary": {"tasks_total": 2},
+                "trend": [],
+                "by_session": [
+                    {
+                        "session_id": "session-response-summary-source-alias",
+                        "session_title": "Provider Source Alias",
+                        "tasks_with_usage": 2,
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "last_task_at": "2026-08-10T12:01:00",
+                        "governance": {
+                            "profiles": ["planning_only"],
+                            "provider_sources": [
+                                "suite_access_token=two",
+                                "suite_api_key=one",
+                            ],
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        },
+                    }
+                ],
+                "top_tasks": [
+                    {
+                        "task_id": "task-response-summary-api-key",
+                        "session_id": "session-response-summary-source-alias",
+                        "session_title": "Provider Source Alias",
+                        "prompt_excerpt": "provider source alias api key",
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "created_at": "2026-08-10T12:00:00",
+                        "updated_at": "2026-08-10T12:01:00",
+                        "source_kind": "provider",
+                        "governance": {
+                            "profile": "planning_only",
+                            "provider_source": "suite_api_key=one",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        },
+                    },
+                    {
+                        "task_id": "task-response-summary-access-token",
+                        "session_id": "session-response-summary-source-alias",
+                        "session_title": "Provider Source Alias",
+                        "prompt_excerpt": "provider source alias access token",
+                        "total_tokens": 0,
+                        "cost_estimate": 0.0,
+                        "created_at": "2026-08-10T12:00:00",
+                        "updated_at": "2026-08-10T12:01:00",
+                        "source_kind": "provider",
+                        "governance": {
+                            "profile": "planning_only",
+                            "provider_source": "suite_access_token=two",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        },
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual(
+            payload["by_session"][0]["governance"]["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            payload["top_tasks"][0]["governance"]["provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload["top_tasks"][1]["governance"]["provider_source"],
+            "suite_[redacted]#1",
+        )
+        payload_blob = json.dumps(payload, default=str)
+        self.assertNotIn("api_key=one", payload_blob)
+        self.assertNotIn("access_token=two", payload_blob)
+
     def test_task_detail_response_redacts_sensitive_provider_source_values(
         self,
     ) -> None:
