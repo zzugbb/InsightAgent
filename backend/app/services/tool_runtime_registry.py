@@ -309,8 +309,26 @@ def _impl__merge_tool_registry_file_diagnostics(
     return _normalize_tool_registry_file_diagnostics(merged)
 
 
-def _impl_sanitize_tool_registry_file_diagnostics(
+def _impl__iter_tool_registry_provider_source_diagnostic_values(
     diagnostics: object,
+):
+    if not isinstance(diagnostics, dict):
+        return
+    for key in _TOOL_REGISTRY_FILE_DIAGNOSTIC_KEYS:
+        if not key.endswith("_registry_sources"):
+            continue
+        values = diagnostics.get(key, ())
+        if not isinstance(values, (list, tuple)):
+            continue
+        for value in values:
+            if isinstance(value, str) and value.strip():
+                yield value
+
+
+def _impl__sanitize_tool_registry_file_diagnostics_with_provider_source_aliases(
+    diagnostics: object,
+    *,
+    provider_source_aliases: Mapping[str, str] | None = None,
 ) -> dict[str, tuple[str, ...]]:
     if not isinstance(diagnostics, dict):
         return _empty_tool_registry_file_diagnostics()
@@ -328,11 +346,14 @@ def _impl_sanitize_tool_registry_file_diagnostics(
         )
         for raw_value in values:
             raw_value_key = str(raw_value)
-            safe_value = alias_by_value.get(
-                raw_value_key,
-                _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-                    raw_value
-                ),
+            safe_value = (
+                provider_source_aliases.get(raw_value_key)
+                if provider_source_aliases is not None
+                else None
+            ) or alias_by_value.get(
+                raw_value_key
+            ) or _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                raw_value
             )
             if not safe_value or safe_value in sanitized[key]:
                 continue
@@ -340,15 +361,42 @@ def _impl_sanitize_tool_registry_file_diagnostics(
     return _normalize_tool_registry_file_diagnostics(sanitized)
 
 
-def _impl_sanitize_tool_registry_source_diagnostics(
+def _impl_sanitize_tool_registry_file_diagnostics(
+    diagnostics: object,
+) -> dict[str, tuple[str, ...]]:
+    return _impl__sanitize_tool_registry_file_diagnostics_with_provider_source_aliases(
+        diagnostics
+    )
+
+
+def _impl__sanitize_tool_registry_source_diagnostics_with_provider_source_aliases(
     source_diagnostics: object,
+    *,
+    provider_source_aliases: Mapping[str, str] | None = None,
 ) -> dict[str, dict[str, tuple[str, ...]]]:
     if not isinstance(source_diagnostics, dict):
         return {}
-    sanitized: dict[str, dict[str, tuple[str, ...]]] = {}
-    alias_by_source = _impl_build_safe_tool_registry_provider_source_alias_map(
-        list(source_diagnostics.keys())
+    alias_inputs: list[object] = list(source_diagnostics.keys())
+    for diagnostics in source_diagnostics.values():
+        alias_inputs.extend(
+            _impl__iter_tool_registry_provider_source_diagnostic_values(diagnostics)
+        )
+    alias_by_source = dict(provider_source_aliases or {})
+    alias_by_source.update(
+        {
+            source_name: alias
+            for source_name, alias in _impl_build_safe_tool_registry_provider_source_alias_map(
+                [
+                    source_name
+                    for source_name in alias_inputs
+                    if str(source_name).strip()
+                    and str(source_name) not in alias_by_source
+                ]
+            ).items()
+            if source_name not in alias_by_source
+        }
     )
+    sanitized: dict[str, dict[str, tuple[str, ...]]] = {}
     for source_name, diagnostics in source_diagnostics.items():
         normalized_source_name = alias_by_source.get(
             str(source_name),
@@ -360,9 +408,20 @@ def _impl_sanitize_tool_registry_source_diagnostics(
             continue
         sanitized[normalized_source_name] = _merge_tool_registry_file_diagnostics(
             sanitized.get(normalized_source_name),
-            sanitize_tool_registry_file_diagnostics(diagnostics),
+            _impl__sanitize_tool_registry_file_diagnostics_with_provider_source_aliases(
+                diagnostics,
+                provider_source_aliases=alias_by_source,
+            ),
         )
     return sanitized
+
+
+def _impl_sanitize_tool_registry_source_diagnostics(
+    source_diagnostics: object,
+) -> dict[str, dict[str, tuple[str, ...]]]:
+    return _impl__sanitize_tool_registry_source_diagnostics_with_provider_source_aliases(
+        source_diagnostics
+    )
 
 
 def _impl_sanitize_tool_registry_diagnostics_summary_entries(

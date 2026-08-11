@@ -636,13 +636,83 @@ class RegistryProviderSourceAliasesMixin:
             payload["source_diagnostics"]["suite_[redacted]#1"][
                 "skipped_registry_sources"
             ],
-            ("suite_[redacted]",),
+            ("suite_[redacted]#1",),
         )
         self.assertEqual(
             payload["source_diagnostics"]["suite_[redacted]#2"][
                 "missing_registry_sources"
             ],
-            ("suite_[redacted]",),
+            ("suite_[redacted]#2",),
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_runtime_artifacts_to_dict_preserves_source_diagnostics_alias_references(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        diagnostics_runtime = tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+            trace_step=None,
+            trace_event=None,
+            audit_detail=None,
+        )
+        model = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeArtifactsModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            provider_sources={
+                "suite_access_token=two": provider,
+                "suite_api_key=one": provider,
+            },
+            selected_source_diagnostics={
+                "skipped_registry_sources": ("suite_access_token=two",),
+                "missing_registry_sources": (),
+                "skipped_registry_files": (),
+                "missing_registry_files": (),
+                "skipped_registry_dirs": (),
+                "missing_registry_dirs": (),
+            },
+            source_diagnostics={
+                "suite_access_token=two": {
+                    "skipped_registry_sources": ("suite_api_key=one",),
+                    "missing_registry_sources": (),
+                    "skipped_registry_files": (),
+                    "missing_registry_files": (),
+                    "skipped_registry_dirs": (),
+                    "missing_registry_dirs": (),
+                },
+                "suite_api_key=one": {
+                    "skipped_registry_sources": (),
+                    "missing_registry_sources": ("suite_access_token=two",),
+                    "skipped_registry_files": (),
+                    "missing_registry_files": (),
+                    "skipped_registry_dirs": (),
+                    "missing_registry_dirs": (),
+                },
+            },
+            diagnostics_runtime=diagnostics_runtime,
+            audit_event=None,
+        )
+
+        payload = model.to_dict()
+
+        self.assertEqual(
+            payload["selected_source_diagnostics"]["skipped_registry_sources"],
+            ("suite_[redacted]#1",),
+        )
+        self.assertEqual(
+            payload["source_diagnostics"]["suite_[redacted]#1"][
+                "skipped_registry_sources"
+            ],
+            ("suite_[redacted]#2",),
+        )
+        self.assertEqual(
+            payload["source_diagnostics"]["suite_[redacted]#2"][
+                "missing_registry_sources"
+            ],
+            ("suite_[redacted]#1",),
         )
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
