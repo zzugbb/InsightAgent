@@ -485,6 +485,26 @@ def _impl_build_safe_tool_registry_provider_source_alias_map(
     return alias_by_raw
 
 
+def _impl__sanitize_tool_registry_provider_sources_for_artifact(
+    provider_sources: object,
+) -> dict[str, ToolRegistryProvider]:
+    if not isinstance(provider_sources, dict):
+        return {}
+    sanitized: dict[str, ToolRegistryProvider] = {}
+    alias_by_source = _impl_build_safe_tool_registry_provider_source_alias_map(
+        list(provider_sources.keys())
+    )
+    for source_name, provider in provider_sources.items():
+        safe_source_name = alias_by_source.get(
+            str(source_name),
+            _impl__sanitize_tool_registry_provider_source_name_for_artifact(source_name),
+        )
+        if safe_source_name in sanitized:
+            continue
+        sanitized[safe_source_name] = provider
+    return sanitized
+
+
 def _impl_resolve_unique_tool_registry_provider_source_alias(
     *,
     settings: object,
@@ -3397,7 +3417,9 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model_from_d
     return ConfiguredToolRegistryProviderRuntimeArtifactsModel(
         provider=provider,
         provider_source_name=safe_provider_source_name,
-        provider_sources=runtime_artifacts.get("provider_sources", {}),
+        provider_sources=_impl__sanitize_tool_registry_provider_sources_for_artifact(
+            runtime_artifacts.get("provider_sources", {})
+        ),
         selected_source_diagnostics=sanitize_tool_registry_file_diagnostics(
             runtime_artifacts.get("selected_source_diagnostics", {})
         ),
@@ -4754,10 +4776,22 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model(
         provider_source_name=str(artifacts["provider_source_name"]),
         diagnostics=artifacts["selected_source_diagnostics"],
     )
+    provider_sources = artifacts["provider_sources"]
+    alias_by_source = _impl_build_safe_tool_registry_provider_source_alias_map(
+        list(provider_sources.keys()) if isinstance(provider_sources, dict) else ()
+    )
+    safe_provider_source_name = alias_by_source.get(
+        str(artifacts["provider_source_name"]),
+        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+            artifacts["provider_source_name"]
+        ),
+    )
     return ConfiguredToolRegistryProviderRuntimeArtifactsModel(
         provider=artifacts["provider"],
-        provider_source_name=str(artifacts["provider_source_name"]),
-        provider_sources=artifacts["provider_sources"],
+        provider_source_name=safe_provider_source_name,
+        provider_sources=_impl__sanitize_tool_registry_provider_sources_for_artifact(
+            provider_sources
+        ),
         selected_source_diagnostics=artifacts["selected_source_diagnostics"],
         source_diagnostics=artifacts["source_diagnostics"],
         diagnostics_runtime=diagnostics_runtime,

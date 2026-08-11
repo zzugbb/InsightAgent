@@ -357,6 +357,34 @@ class RegistryProviderSourceArtifactsMixin:
         self.assertNotIn("api_key=hidden", json.dumps(payload, default=str))
         self.assertNotIn("access_token=hidden", json.dumps(payload, default=str))
 
+    def test_runtime_artifacts_model_from_settings_redacts_provider_source_fields(
+        self,
+    ) -> None:
+        model = build_configured_tool_registry_provider_runtime_artifacts_model(
+            settings=SimpleNamespace(
+                tool_registry_provider_source="suite_api_key=hidden",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_api_key=hidden": {
+                            "provider": "default",
+                            "profile": "planning_only",
+                        }
+                    }
+                ),
+            ),
+            task_id="task-1",
+            step_id="step-registry",
+            seq=2,
+            model="mock-gpt",
+        )
+
+        self.assertEqual(model.provider_source_name, "suite_[redacted]")
+        self.assertEqual(list(model.provider_sources.keys()), ["suite_[redacted]"])
+        self.assertNotIn(
+            "api_key=hidden",
+            json.dumps(model.to_dict(), default=str),
+        )
+
     def test_runtime_service_action_model_to_dict_redacts_tool_registry_provider_source_fields(
         self,
     ) -> None:
