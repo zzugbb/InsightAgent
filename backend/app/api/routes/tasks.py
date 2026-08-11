@@ -72,7 +72,8 @@ def _coerce_trace_steps_for_route(value: object) -> object:
     trace_steps = _coerce_payload_model_dump_list(value)
     if not isinstance(trace_steps, list):
         return trace_steps
-    normalized_steps: list[object] = []
+    route_steps: list[object] = []
+    parsed_steps: list[TraceStep] = []
     for item in trace_steps:
         step = item if isinstance(item, TraceStep) else None
         if step is None:
@@ -80,11 +81,26 @@ def _coerce_trace_steps_for_route(value: object) -> object:
             if payload:
                 step = TraceStep.model_validate(payload)
         if step is None:
-            normalized_steps.append(item)
+            route_steps.append(item)
             continue
-        normalized_steps.append(
-            chat_persistence_service._sanitize_trace_step_for_export(step)
+        route_steps.append(step)
+        parsed_steps.append(step)
+    provider_source_aliases = (
+        chat_persistence_service._build_trace_steps_provider_source_aliases(
+            parsed_steps
         )
+    )
+    normalized_steps: list[object] = []
+    for item in route_steps:
+        if isinstance(item, TraceStep):
+            normalized_steps.append(
+                chat_persistence_service._sanitize_trace_step_for_export(
+                    item,
+                    provider_source_aliases=provider_source_aliases,
+                )
+            )
+            continue
+        normalized_steps.append(item)
     return normalized_steps
 
 

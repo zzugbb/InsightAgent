@@ -294,6 +294,118 @@ class TaskTraceExportGovernanceMixin:
         self.assertNotIn("api_key=one", serialized)
         self.assertNotIn("access_token=two", serialized)
 
+    def test_get_task_trace_response_summary_from_task_shares_provider_source_aliases_across_steps(
+        self,
+    ) -> None:
+        trace_json = json.dumps(
+            [
+                {
+                    "id": "trace-response-source-alias-1",
+                    "type": "action",
+                    "content": "First provider source",
+                    "seq": 1,
+                    "meta": {
+                        "tool_registry_provider_source": "suite_api_key=one",
+                    },
+                },
+                {
+                    "id": "trace-response-source-alias-2",
+                    "type": "action",
+                    "content": "Second provider source",
+                    "seq": 2,
+                    "meta": {
+                        "tool_registry_provider_source": "suite_access_token=two",
+                        "provider_sources": ["suite_api_key=one"],
+                    },
+                },
+            ]
+        )
+
+        payload = chat_persistence_module.get_task_trace_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": "task-trace-response-shared-source-alias",
+                "session_id": "session-trace-response-shared-source-alias",
+                "prompt": "trace response shared source alias",
+                "status": "completed",
+                "trace_json": trace_json,
+            }
+        )
+
+        step_meta = [step.meta.model_dump() for step in payload["steps"]]
+
+        self.assertEqual(
+            step_meta[0]["tool_registry_provider_source"],
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            step_meta[1]["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(step_meta[1]["provider_sources"], ["suite_[redacted]#1"])
+        serialized = json.dumps(
+            [step.model_dump() for step in payload["steps"]],
+            ensure_ascii=False,
+        )
+        self.assertNotIn("api_key=one", serialized)
+        self.assertNotIn("access_token=two", serialized)
+
+    def test_get_task_trace_delta_response_summary_from_task_shares_provider_source_aliases_across_steps(
+        self,
+    ) -> None:
+        trace_json = json.dumps(
+            [
+                {
+                    "id": "trace-delta-source-alias-1",
+                    "type": "action",
+                    "content": "First provider source",
+                    "seq": 1,
+                    "meta": {
+                        "tool_registry_provider_source": "suite_api_key=one",
+                    },
+                },
+                {
+                    "id": "trace-delta-source-alias-2",
+                    "type": "action",
+                    "content": "Second provider source",
+                    "seq": 2,
+                    "meta": {
+                        "tool_registry_provider_source": "suite_access_token=two",
+                        "provider_sources": ["suite_api_key=one"],
+                    },
+                },
+            ]
+        )
+
+        payload = chat_persistence_module.get_task_trace_delta_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": "task-trace-delta-shared-source-alias",
+                "session_id": "session-trace-delta-shared-source-alias",
+                "prompt": "trace delta shared source alias",
+                "status": "running",
+                "trace_json": trace_json,
+            },
+            after_seq=0,
+            limit=10,
+        )
+
+        step_meta = [step.meta.model_dump() for step in payload["steps"]]
+
+        self.assertEqual(
+            step_meta[0]["tool_registry_provider_source"],
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            step_meta[1]["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(step_meta[1]["provider_sources"], ["suite_[redacted]#1"])
+        serialized = json.dumps(
+            [step.model_dump() for step in payload["steps"]],
+            ensure_ascii=False,
+        )
+        self.assertNotIn("api_key=one", serialized)
+        self.assertNotIn("access_token=two", serialized)
+
     def test_get_task_response_summary_from_task_accepts_model_dump_row(self) -> None:
         class TaskRowPayload:
             def model_dump(self):

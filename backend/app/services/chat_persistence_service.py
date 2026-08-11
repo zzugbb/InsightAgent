@@ -752,6 +752,27 @@ def _append_trace_provider_source_alias_inputs(
             _append_trace_provider_source_alias_inputs(source_names, item)
 
 
+def _build_trace_steps_provider_source_aliases(
+    trace_steps: list[TraceStep],
+) -> dict[str, str]:
+    source_names: list[str] = []
+    for step in trace_steps:
+        meta = getattr(step, "meta", None)
+        if meta is None:
+            continue
+        meta_payload = (
+            meta.model_dump(exclude_none=True)
+            if hasattr(meta, "model_dump")
+            else dict(meta)
+            if isinstance(meta, dict)
+            else None
+        )
+        if meta_payload is None:
+            continue
+        _append_trace_provider_source_alias_inputs(source_names, meta_payload)
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
 def _sanitize_trace_provider_source_meta_values_for_export(
     value: object,
     *,
@@ -2492,7 +2513,14 @@ def get_trace_rag_export_summary(
 def get_task_trace_export_summary_from_task(task: dict) -> dict[str, object]:
     trace_steps = get_task_trace_steps_from_task(task)
     rag_summary = get_trace_rag_export_summary(trace_steps)
-    export_steps = [_sanitize_trace_step_for_export(step) for step in trace_steps]
+    provider_source_aliases = _build_trace_steps_provider_source_aliases(trace_steps)
+    export_steps = [
+        _sanitize_trace_step_for_export(
+            step,
+            provider_source_aliases=provider_source_aliases,
+        )
+        for step in trace_steps
+    ]
     rag_knowledge_base_ids = _coerce_export_string_list(
         rag_summary.get("rag_knowledge_base_ids", [])
     )
@@ -2540,8 +2568,15 @@ def get_task_trace_delta_response_summary_from_task(
             limit=limit,
         )
     )
+    provider_source_aliases = _build_trace_steps_provider_source_aliases(parsed_steps)
     return {
-        "steps": parsed_steps,
+        "steps": [
+            _sanitize_trace_step_for_export(
+                step,
+                provider_source_aliases=provider_source_aliases,
+            )
+            for step in parsed_steps
+        ],
         "next_cursor": next_cursor,
         "has_more": has_more,
         "lag_seq": max(0, latest_seq - next_cursor),
@@ -2909,9 +2944,16 @@ def get_task_trace_delta_snapshot_from_task(
 ) -> tuple[list[TraceStep], int, bool, int, str | None]:
     task = _coerce_export_payload_block_to_dict(task)
     bounded_limit = max(1, int(limit))
+    raw_trace_steps = get_task_trace_steps_from_task(task)
+    provider_source_aliases = _build_trace_steps_provider_source_aliases(
+        raw_trace_steps
+    )
     trace_steps = [
-        _sanitize_trace_step_for_export(step)
-        for step in get_task_trace_steps_from_task(task)
+        _sanitize_trace_step_for_export(
+            step,
+            provider_source_aliases=provider_source_aliases,
+        )
+        for step in raw_trace_steps
     ]
     latest_seq = max((int(step.seq or 0) for step in trace_steps), default=0)
     latest_step_id = trace_steps[-1].id if trace_steps else None
