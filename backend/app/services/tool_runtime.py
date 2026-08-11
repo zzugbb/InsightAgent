@@ -290,6 +290,35 @@ def _sanitize_tool_runtime_provider_source_name_with_aliases(
     )
 
 
+def _sanitize_tool_runtime_provider_source_name_with_runtime_alias(
+    provider_source_name: object,
+    *,
+    runtime_artifacts: ConfiguredToolRegistryProviderRuntimeArtifactsModel,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> str:
+    safe_provider_source_name = _sanitize_tool_runtime_provider_source_name_with_aliases(
+        provider_source_name,
+        provider_source_aliases=provider_source_aliases,
+    )
+    safe_runtime_provider_source_name = (
+        _sanitize_tool_runtime_provider_source_name_with_aliases(
+            runtime_artifacts.provider_source_name,
+            provider_source_aliases=provider_source_aliases,
+        )
+    )
+    fallback_provider_source_name = (
+        _sanitize_tool_runtime_provider_source_name_for_artifact(provider_source_name)
+    )
+    if (
+        safe_provider_source_name == fallback_provider_source_name
+        and safe_runtime_provider_source_name.startswith(
+            f"{fallback_provider_source_name}#"
+        )
+    ):
+        return safe_runtime_provider_source_name
+    return safe_provider_source_name
+
+
 def _sanitize_tool_runtime_diagnostics_summary_for_artifact(
     diagnostics_summary: object,
 ) -> dict[str, object]:
@@ -596,10 +625,18 @@ class ConfiguredToolRegistryProviderServiceExecutionModel:
         *,
         provider_source_aliases: dict[str, str] | None = None,
     ) -> dict[str, object]:
+        if provider_source_aliases is None:
+            provider_source_aliases = _build_tool_runtime_artifact_provider_source_aliases(
+                provider_source_name=self.provider_source_name,
+                provider_sources=self.runtime_artifacts.provider_sources,
+                selected_source_diagnostics=self.runtime_artifacts.selected_source_diagnostics,
+                source_diagnostics=self.runtime_artifacts.source_diagnostics,
+            )
         return {
             "provider": self.provider,
-            "provider_source_name": _sanitize_tool_runtime_provider_source_name_with_aliases(
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_with_runtime_alias(
                 self.provider_source_name,
+                runtime_artifacts=self.runtime_artifacts,
                 provider_source_aliases=provider_source_aliases,
             ),
             "runtime_artifacts": self.runtime_artifacts.to_dict(),
@@ -620,10 +657,18 @@ class ConfiguredToolRegistryProviderServiceExecutionResultModel:
         *,
         provider_source_aliases: dict[str, str] | None = None,
     ) -> dict[str, object]:
+        if provider_source_aliases is None:
+            provider_source_aliases = _build_tool_runtime_artifact_provider_source_aliases(
+                provider_source_name=self.provider_source_name,
+                provider_sources=self.runtime_artifacts.provider_sources,
+                selected_source_diagnostics=self.runtime_artifacts.selected_source_diagnostics,
+                source_diagnostics=self.runtime_artifacts.source_diagnostics,
+            )
         return {
             "provider": self.provider,
-            "provider_source_name": _sanitize_tool_runtime_provider_source_name_with_aliases(
+            "provider_source_name": _sanitize_tool_runtime_provider_source_name_with_runtime_alias(
                 self.provider_source_name,
+                runtime_artifacts=self.runtime_artifacts,
                 provider_source_aliases=provider_source_aliases,
             ),
             "runtime_artifacts": self.runtime_artifacts.to_dict(),

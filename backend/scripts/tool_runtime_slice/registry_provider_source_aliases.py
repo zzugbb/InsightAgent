@@ -789,6 +789,54 @@ class RegistryProviderSourceAliasesMixin:
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
 
+    def test_service_execution_outputs_preserve_runtime_provider_source_alias(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        diagnostics_runtime = tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+            trace_step=None,
+            trace_event=None,
+            audit_detail=None,
+        )
+        runtime_artifacts = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeArtifactsModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            provider_sources={
+                "suite_access_token=two": provider,
+                "suite_api_key=one": provider,
+            },
+            selected_source_diagnostics={},
+            source_diagnostics={},
+            diagnostics_runtime=diagnostics_runtime,
+            audit_event=None,
+        )
+
+        _result_model, result_dict = (
+            build_configured_tool_registry_provider_service_execution_outputs(
+                service_execution={
+                    "provider": provider,
+                    "provider_source_name": "suite_api_key=one",
+                    "runtime_artifacts": runtime_artifacts.to_dict(),
+                    "service_actions": [],
+                },
+                execution_result={
+                    "trace_write_count": 1,
+                    "audit_event_count": 2,
+                },
+            )
+        )
+
+        self.assertEqual(result_dict["provider_source_name"], "suite_[redacted]#2")
+        self.assertEqual(
+            result_dict["runtime_artifacts"]["provider_source_name"],
+            "suite_[redacted]#2",
+        )
+        self.assertNotIn("api_key=one", json.dumps(result_dict, default=str))
+        self.assertNotIn("access_token=two", json.dumps(result_dict, default=str))
+
     def test_diagnostics_summary_values_disambiguate_colliding_redacted_provider_source_aliases(
         self,
     ) -> None:
