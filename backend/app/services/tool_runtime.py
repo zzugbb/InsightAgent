@@ -268,12 +268,67 @@ def _iter_tool_runtime_provider_source_diagnostic_values(diagnostics: object):
                 yield value
 
 
+def _iter_tool_runtime_provider_source_artifact_values(payload: object):
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            safe_key = str(key)
+            if (
+                safe_key in _TOOL_RUNTIME_PROVIDER_SOURCE_ARTIFACT_KEYS
+                and isinstance(value, str)
+                and value.strip()
+            ):
+                yield value
+            elif (
+                safe_key in _TOOL_RUNTIME_PROVIDER_SOURCES_ARTIFACT_KEYS
+                and isinstance(value, (list, tuple))
+            ):
+                for source_name in value:
+                    if isinstance(source_name, str) and source_name.strip():
+                        yield source_name
+            elif (
+                safe_key == "values"
+                and str(payload.get("target")) == "registry_sources"
+                and isinstance(value, (list, tuple))
+            ):
+                for source_name in value:
+                    if isinstance(source_name, str) and source_name.strip():
+                        yield source_name
+            yield from _iter_tool_runtime_provider_source_artifact_values(value)
+        return
+    if isinstance(payload, (list, tuple)):
+        for value in payload:
+            yield from _iter_tool_runtime_provider_source_artifact_values(value)
+        return
+    if hasattr(payload, "entries"):
+        yield from _iter_tool_runtime_provider_source_artifact_values(
+            getattr(payload, "entries")
+        )
+    if hasattr(payload, "summary"):
+        yield from _iter_tool_runtime_provider_source_artifact_values(
+            getattr(payload, "summary")
+        )
+    if hasattr(payload, "trace_step"):
+        yield from _iter_tool_runtime_provider_source_artifact_values(
+            getattr(payload, "trace_step")
+        )
+    if hasattr(payload, "trace_event"):
+        yield from _iter_tool_runtime_provider_source_artifact_values(
+            getattr(payload, "trace_event")
+        )
+    if hasattr(payload, "audit_detail"):
+        yield from _iter_tool_runtime_provider_source_artifact_values(
+            getattr(payload, "audit_detail")
+        )
+
+
 def _build_tool_runtime_artifact_provider_source_aliases(
     *,
     provider_source_name: object,
     provider_sources: object,
     selected_source_diagnostics: object,
     source_diagnostics: object,
+    diagnostics_runtime: object = None,
+    audit_event: object = None,
 ) -> dict[str, str]:
     source_names: list[object] = []
     if isinstance(provider_sources, dict):
@@ -291,6 +346,10 @@ def _build_tool_runtime_artifact_provider_source_aliases(
             selected_source_diagnostics
         )
     )
+    source_names.extend(
+        _iter_tool_runtime_provider_source_artifact_values(diagnostics_runtime)
+    )
+    source_names.extend(_iter_tool_runtime_provider_source_artifact_values(audit_event))
     return build_safe_tool_registry_provider_source_alias_map(source_names)
 
 
@@ -458,6 +517,8 @@ class ConfiguredToolRegistryProviderPreflightResultModel:
             provider_sources=self.runtime_artifacts.provider_sources,
             selected_source_diagnostics=self.runtime_artifacts.selected_source_diagnostics,
             source_diagnostics=self.runtime_artifacts.source_diagnostics,
+            diagnostics_runtime=self.runtime_artifacts.diagnostics_runtime,
+            audit_event=self.runtime_artifacts.audit_event,
         )
         return {
             "provider": self.provider,
@@ -598,6 +659,8 @@ class ConfiguredToolRegistryProviderRuntimeArtifactsModel:
                 provider_sources=self.provider_sources,
                 selected_source_diagnostics=self.selected_source_diagnostics,
                 source_diagnostics=self.source_diagnostics,
+                diagnostics_runtime=self.diagnostics_runtime,
+                audit_event=self.audit_event,
             )
         return {
             "provider": self.provider,
@@ -710,6 +773,8 @@ class ConfiguredToolRegistryProviderServiceExecutionModel:
                 provider_sources=self.runtime_artifacts.provider_sources,
                 selected_source_diagnostics=self.runtime_artifacts.selected_source_diagnostics,
                 source_diagnostics=self.runtime_artifacts.source_diagnostics,
+                diagnostics_runtime=self.runtime_artifacts.diagnostics_runtime,
+                audit_event=self.runtime_artifacts.audit_event,
             )
         return {
             "provider": self.provider,
@@ -747,6 +812,8 @@ class ConfiguredToolRegistryProviderServiceExecutionResultModel:
                 provider_sources=self.runtime_artifacts.provider_sources,
                 selected_source_diagnostics=self.runtime_artifacts.selected_source_diagnostics,
                 source_diagnostics=self.runtime_artifacts.source_diagnostics,
+                diagnostics_runtime=self.runtime_artifacts.diagnostics_runtime,
+                audit_event=self.runtime_artifacts.audit_event,
             )
         return {
             "provider": self.provider,
