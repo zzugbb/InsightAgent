@@ -509,18 +509,32 @@ def _normalize_session_governance_payload_for_response(value: object) -> object:
     return _sanitize_session_governance_provider_source_values_for_export(normalized)
 
 
+def _sanitize_governance_provider_source_with_aliases(
+    provider_source: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> str:
+    if isinstance(provider_source, str):
+        return (provider_source_aliases or {}).get(
+            provider_source,
+            _sanitize_tool_runtime_provider_source_name_for_artifact(provider_source),
+        )
+    return _sanitize_tool_runtime_provider_source_name_for_artifact(provider_source)
+
+
 def _sanitize_task_governance_provider_source_values_for_export(
     value: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> object:
     governance = _coerce_payload_mapping_or_none(value)
     if governance is None:
         return value
     provider_source = governance.get("provider_source")
     if isinstance(provider_source, str) and provider_source.strip():
-        safe_provider_source = (
-            _sanitize_tool_runtime_provider_source_name_for_artifact(
-                provider_source
-            )
+        safe_provider_source = _sanitize_governance_provider_source_with_aliases(
+            provider_source,
+            provider_source_aliases=provider_source_aliases,
         )
         if safe_provider_source != provider_source:
             sanitized = dict(governance)
@@ -531,18 +545,22 @@ def _sanitize_task_governance_provider_source_values_for_export(
 
 def _sanitize_session_governance_provider_source_values_for_export(
     value: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> object:
     governance = _coerce_payload_mapping_or_none(value)
     if governance is None:
         return value
     provider_sources = governance.get("provider_sources")
     if isinstance(provider_sources, (list, tuple)):
-        alias_by_source = build_safe_tool_registry_provider_source_alias_map(
-            [
-                source
-                for source in provider_sources
-                if isinstance(source, str) and source.strip()
-            ]
+        alias_by_source = provider_source_aliases or (
+            build_safe_tool_registry_provider_source_alias_map(
+                [
+                    source
+                    for source in provider_sources
+                    if isinstance(source, str) and source.strip()
+                ]
+            )
         )
         safe_provider_sources = [
             alias_by_source.get(
@@ -558,6 +576,85 @@ def _sanitize_session_governance_provider_source_values_for_export(
             sanitized["provider_sources"] = safe_provider_sources
             return sanitized
     return value
+
+
+def build_session_export_provider_source_aliases(
+    export_summary: object,
+) -> dict[str, str]:
+    summary = _coerce_payload_mapping_or_none(export_summary)
+    if summary is None:
+        return {}
+    source_names: list[object] = []
+    governance = _coerce_payload_mapping_or_none(summary.get("governance"))
+    if governance is not None:
+        provider_sources = governance.get("provider_sources")
+        if isinstance(provider_sources, (list, tuple)):
+            source_names.extend(
+                source
+                for source in provider_sources
+                if isinstance(source, str) and source.strip()
+            )
+    tasks = summary.get("tasks")
+    if isinstance(tasks, list):
+        for task in tasks:
+            task_summary = _coerce_payload_mapping_or_none(task)
+            if task_summary is None:
+                continue
+            task_governance = _coerce_payload_mapping_or_none(
+                task_summary.get("governance")
+            )
+            if task_governance is None:
+                continue
+            provider_source = task_governance.get("provider_source")
+            if isinstance(provider_source, str) and provider_source.strip():
+                source_names.append(provider_source)
+            provider_sources = task_governance.get("provider_sources")
+            if isinstance(provider_sources, (list, tuple)):
+                source_names.extend(
+                    source
+                    for source in provider_sources
+                    if isinstance(source, str) and source.strip()
+                )
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
+def sanitize_session_export_governance_provider_source_values(
+    export_summary: object,
+) -> object:
+    summary = _coerce_payload_mapping_or_none(export_summary)
+    if summary is None:
+        return export_summary
+    provider_source_aliases = build_session_export_provider_source_aliases(summary)
+    if not provider_source_aliases:
+        return export_summary
+
+    sanitized = dict(summary)
+    if "governance" in sanitized:
+        sanitized["governance"] = (
+            _sanitize_session_governance_provider_source_values_for_export(
+                sanitized.get("governance"),
+                provider_source_aliases=provider_source_aliases,
+            )
+        )
+    tasks = sanitized.get("tasks")
+    if isinstance(tasks, list):
+        sanitized_tasks: list[object] = []
+        for task in tasks:
+            task_summary = _coerce_payload_mapping_or_none(task)
+            if task_summary is None:
+                sanitized_tasks.append(task)
+                continue
+            normalized_task = dict(task_summary)
+            if "governance" in normalized_task:
+                normalized_task["governance"] = (
+                    _sanitize_task_governance_provider_source_values_for_export(
+                        normalized_task.get("governance"),
+                        provider_source_aliases=provider_source_aliases,
+                    )
+                )
+            sanitized_tasks.append(normalized_task)
+        sanitized["tasks"] = sanitized_tasks
+    return sanitized
 
 
 _PROVIDER_SOURCE_TRACE_META_KEYS = frozenset(
@@ -3290,7 +3387,7 @@ def get_session_export_response_summary(
             _get_session_export_task_response_summary_from_payload_row(row_summary)
         )
     stats_summary = _coerce_export_payload_block_to_dict(payload_summary.get("stats"))
-    return {
+    response_summary = {
         "usage_summary": payload_summary.get("usage_summary"),
         "tasks": task_summaries,
         "stats": {
@@ -3304,6 +3401,14 @@ def get_session_export_response_summary(
         ),
         "messages": _sanitize_export_message_rows(payload_summary.get("messages", [])),
     }
+    sanitized_response_summary = sanitize_session_export_governance_provider_source_values(
+        response_summary
+    )
+    return (
+        sanitized_response_summary
+        if isinstance(sanitized_response_summary, dict)
+        else response_summary
+    )
 
 
 def get_tasks_usage_dashboard(

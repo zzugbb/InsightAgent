@@ -80,22 +80,26 @@ def _coerce_task_governance_for_route(
     value: object,
     *,
     normalize_dict: bool = False,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> object:
     if isinstance(value, dict):
         if not normalize_dict:
             return (
                 chat_persistence_service._sanitize_task_governance_provider_source_values_for_export(
-                    value
+                    value,
+                    provider_source_aliases=provider_source_aliases,
                 )
             )
         return (
             chat_persistence_service._sanitize_task_governance_provider_source_values_for_export(
-                chat_persistence_service._normalize_task_governance_payload(value)
+                chat_persistence_service._normalize_task_governance_payload(value),
+                provider_source_aliases=provider_source_aliases,
             )
         )
     return (
         chat_persistence_service._sanitize_task_governance_provider_source_values_for_export(
-            chat_persistence_service._normalize_task_governance_payload(value)
+            chat_persistence_service._normalize_task_governance_payload(value),
+            provider_source_aliases=provider_source_aliases,
         )
     )
 
@@ -104,12 +108,14 @@ def _coerce_session_governance_for_route(
     value: object,
     *,
     normalize_dict: bool = False,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> object:
     if isinstance(value, dict):
         if not normalize_dict:
             return (
                 chat_persistence_service._sanitize_session_governance_provider_source_values_for_export(
-                    value
+                    value,
+                    provider_source_aliases=provider_source_aliases,
                 )
             )
         normalized = (
@@ -120,7 +126,8 @@ def _coerce_session_governance_for_route(
         )
         return (
             chat_persistence_service._sanitize_session_governance_provider_source_values_for_export(
-                normalized
+                normalized,
+                provider_source_aliases=provider_source_aliases,
             )
         )
     governance = _coerce_payload_mapping(value)
@@ -134,7 +141,8 @@ def _coerce_session_governance_for_route(
     )
     return (
         chat_persistence_service._sanitize_session_governance_provider_source_values_for_export(
-            normalized
+            normalized,
+            provider_source_aliases=provider_source_aliases,
         )
     )
 
@@ -196,12 +204,14 @@ def _coerce_session_export_task_for_route(
     task: dict[str, Any],
     *,
     summary_is_dict: bool,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     task_summary = dict(task)
     if "governance" in task_summary:
         task_summary["governance"] = _coerce_task_governance_for_route(
             task_summary.get("governance"),
             normalize_dict=not summary_is_dict,
+            provider_source_aliases=provider_source_aliases,
         )
     if "trace_preview" in task_summary:
         task_summary["trace_preview"] = _coerce_trace_preview_for_route(
@@ -213,10 +223,19 @@ def _coerce_session_export_task_for_route(
 def _coerce_session_export_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
+    provider_source_aliases = (
+        chat_persistence_service.build_session_export_provider_source_aliases(summary)
+    )
+    summary = dict(
+        chat_persistence_service.sanitize_session_export_governance_provider_source_values(
+            summary
+        )
+    )
     if "governance" in summary:
         summary["governance"] = _coerce_session_governance_for_route(
             summary.get("governance"),
             normalize_dict=not summary_is_dict,
+            provider_source_aliases=provider_source_aliases,
         )
     if "messages" in summary:
         summary["messages"] = _coerce_session_export_messages_for_route(
@@ -235,6 +254,7 @@ def _coerce_session_export_summary(value: object) -> dict[str, Any]:
             normalized_task = _coerce_session_export_task_for_route(
                 task_summary,
                 summary_is_dict=summary_is_dict,
+                provider_source_aliases=provider_source_aliases,
             )
             if summary_is_dict and task_is_model and normalized_task == task_summary:
                 normalized_tasks.append(task)
