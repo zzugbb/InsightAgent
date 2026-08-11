@@ -724,28 +724,72 @@ _PROVIDER_SOURCES_TRACE_META_KEYS = frozenset(
 )
 
 
-def _sanitize_trace_provider_source_meta_values_for_export(value: object) -> object:
+def _append_trace_provider_source_alias_inputs(
+    source_names: list[str],
+    value: object,
+) -> None:
+    value = _normalize_trace_json_compatible_value(value)
+    if isinstance(value, dict):
+        for key, item in value.items():
+            safe_key = str(key)
+            if safe_key in _PROVIDER_SOURCE_TRACE_META_KEYS:
+                if isinstance(item, str) and item.strip():
+                    source_names.append(item)
+                continue
+            if safe_key in _PROVIDER_SOURCES_TRACE_META_KEYS and isinstance(
+                item, (list, tuple)
+            ):
+                source_names.extend(
+                    source
+                    for source in item
+                    if isinstance(source, str) and source.strip()
+                )
+                continue
+            _append_trace_provider_source_alias_inputs(source_names, item)
+        return
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _append_trace_provider_source_alias_inputs(source_names, item)
+
+
+def _sanitize_trace_provider_source_meta_values_for_export(
+    value: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> object:
     if isinstance(value, dict):
         sanitized: dict[object, object] = {}
         for key, item in value.items():
             safe_key = str(key)
             if safe_key in _PROVIDER_SOURCE_TRACE_META_KEYS:
-                sanitized[key] = (
-                    _sanitize_tool_runtime_provider_source_name_for_artifact(item)
-                    if isinstance(item, str) and item.strip()
-                    else item
-                )
+                if isinstance(item, str) and item.strip():
+                    sanitized[key] = (
+                        provider_source_aliases.get(
+                            item,
+                            _sanitize_tool_runtime_provider_source_name_for_artifact(
+                                item
+                            ),
+                        )
+                        if provider_source_aliases is not None
+                        else _sanitize_tool_runtime_provider_source_name_for_artifact(
+                            item
+                        )
+                    )
+                else:
+                    sanitized[key] = item
                 continue
             if (
                 safe_key in _PROVIDER_SOURCES_TRACE_META_KEYS
                 and isinstance(item, (list, tuple))
             ):
-                alias_by_source = build_safe_tool_registry_provider_source_alias_map(
-                    [
-                        source
-                        for source in item
-                        if isinstance(source, str) and source.strip()
-                    ]
+                alias_by_source = provider_source_aliases or (
+                    build_safe_tool_registry_provider_source_alias_map(
+                        [
+                            source
+                            for source in item
+                            if isinstance(source, str) and source.strip()
+                        ]
+                    )
                 )
                 sanitized[key] = [
                     alias_by_source.get(
@@ -760,17 +804,24 @@ def _sanitize_trace_provider_source_meta_values_for_export(value: object) -> obj
                 ]
                 continue
             sanitized[key] = _sanitize_trace_provider_source_meta_values_for_export(
-                item
+                item,
+                provider_source_aliases=provider_source_aliases,
             )
         return sanitized
     if isinstance(value, list):
         return [
-            _sanitize_trace_provider_source_meta_values_for_export(item)
+            _sanitize_trace_provider_source_meta_values_for_export(
+                item,
+                provider_source_aliases=provider_source_aliases,
+            )
             for item in value
         ]
     if isinstance(value, tuple):
         return tuple(
-            _sanitize_trace_provider_source_meta_values_for_export(item)
+            _sanitize_trace_provider_source_meta_values_for_export(
+                item,
+                provider_source_aliases=provider_source_aliases,
+            )
             for item in value
         )
     return value
@@ -2080,7 +2131,11 @@ def get_trace_step_display_content(step: TraceStep) -> str:
     return "\n".join([*base_lines, *diagnostics_lines])
 
 
-def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
+def get_trace_step_markdown_meta(
+    step: TraceStep,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> dict[str, object] | None:
     meta = getattr(step, "meta", None)
     if meta is None:
         return None
@@ -2192,7 +2247,10 @@ def get_trace_step_markdown_meta(step: TraceStep) -> dict[str, object] | None:
             payload[diagnostics_key] = sanitize_tool_registry_diagnostics_artifact_payload(
                 payload.get(diagnostics_key)
             )
-    payload = _sanitize_trace_provider_source_meta_values_for_export(payload)
+    payload = _sanitize_trace_provider_source_meta_values_for_export(
+        payload,
+        provider_source_aliases=provider_source_aliases,
+    )
     return payload
 
 
@@ -2319,8 +2377,15 @@ def _trace_preview_title(step: TraceStep) -> str:
     return get_trace_step_display_title(step)
 
 
-def _sanitize_trace_step_for_export(step: TraceStep) -> TraceStep:
-    sanitized_meta = get_trace_step_markdown_meta(step)
+def _sanitize_trace_step_for_export(
+    step: TraceStep,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> TraceStep:
+    sanitized_meta = get_trace_step_markdown_meta(
+        step,
+        provider_source_aliases=provider_source_aliases,
+    )
     original_meta = getattr(step, "meta", None)
     original_meta_payload = (
         original_meta.model_dump(exclude_none=True)
@@ -2484,7 +2549,11 @@ def get_task_trace_delta_response_summary_from_task(
     }
 
 
-def _sanitize_task_response_trace_json(trace_json: object) -> object:
+def _sanitize_task_response_trace_json(
+    trace_json: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> object:
     trace_json = _coerce_trace_string_like_value(trace_json)
     if not isinstance(trace_json, str) or not trace_json.strip():
         return trace_json
@@ -2493,25 +2562,50 @@ def _sanitize_task_response_trace_json(trace_json: object) -> object:
         if _trace_http_json_export_content_needs_sanitization(trace_json):
             return _redact_trace_http_json_export_content_fallback(trace_json)
         return trace_json
-    sanitized_steps = [_sanitize_trace_step_for_export(step) for step in trace_steps]
+    sanitized_steps = [
+        _sanitize_trace_step_for_export(
+            step,
+            provider_source_aliases=provider_source_aliases,
+        )
+        for step in trace_steps
+    ]
     return json.dumps(
         [step.model_dump(exclude_none=True) for step in sanitized_steps],
         ensure_ascii=False,
     )
 
 
+def _build_task_response_provider_source_aliases(task: dict[str, object]) -> dict[str, str]:
+    source_names: list[str] = []
+    _append_governance_provider_source_alias_inputs(
+        source_names,
+        task.get("governance"),
+    )
+    for trace_step in _load_trace_steps_from_trace_json(task.get("trace_json")):
+        _append_trace_provider_source_alias_inputs(
+            source_names,
+            trace_step.get("meta"),
+        )
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
 def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
     task = _coerce_export_payload_block_to_dict(task)
     usage_json = _coerce_trace_string_like_value(task.get("usage_json"))
+    provider_source_aliases = _build_task_response_provider_source_aliases(task)
     return {
         "id": str(task.get("id", "")),
         "session_id": str(task.get("session_id", "")),
         "prompt": str(task.get("prompt", "")),
         **_get_task_status_summary_from_task(task),
         "governance": _normalize_task_governance_payload_for_response(
-            task.get("governance")
+            task.get("governance"),
+            provider_source_aliases=provider_source_aliases,
         ),
-        "trace_json": _sanitize_task_response_trace_json(task.get("trace_json")),
+        "trace_json": _sanitize_task_response_trace_json(
+            task.get("trace_json"),
+            provider_source_aliases=provider_source_aliases,
+        ),
         "usage_json": usage_json,
         "created_at": str(task.get("created_at", "")),
         "updated_at": str(task.get("updated_at", "")),

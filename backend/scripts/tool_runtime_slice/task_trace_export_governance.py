@@ -241,6 +241,59 @@ class TaskTraceExportGovernanceMixin:
             },
         )
 
+    def test_get_task_response_summary_from_task_shares_provider_source_aliases_with_trace_json(
+        self,
+    ) -> None:
+        trace_json = json.dumps(
+            [
+                {
+                    "id": "task-response-trace-source-alias",
+                    "type": "action",
+                    "content": "Planner used provider source",
+                    "seq": 1,
+                    "meta": {
+                        "tool_registry_provider_source": "suite_access_token=two",
+                        "provider_sources": ["suite_api_key=one"],
+                    },
+                }
+            ]
+        )
+
+        payload = chat_persistence_module.get_task_response_summary_from_task(  # type: ignore[attr-defined]
+            {
+                "id": "task-response-shared-source-alias",
+                "session_id": "session-response-shared-source-alias",
+                "prompt": "response shared provider source alias",
+                "status": "completed",
+                "trace_json": trace_json,
+                "usage_json": None,
+                "created_at": "2026-08-11T10:00:00",
+                "updated_at": "2026-08-11T10:01:00",
+                "governance": {
+                    "profile": "planning_only",
+                    "provider_source": "suite_api_key=one",
+                },
+            }
+        )
+
+        trace_steps = json.loads(str(payload["trace_json"]))
+
+        self.assertEqual(
+            payload["governance"]["provider_source"],
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            trace_steps[0]["meta"]["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            trace_steps[0]["meta"]["provider_sources"],
+            ["suite_[redacted]#1"],
+        )
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertNotIn("api_key=one", serialized)
+        self.assertNotIn("access_token=two", serialized)
+
     def test_get_task_response_summary_from_task_accepts_model_dump_row(self) -> None:
         class TaskRowPayload:
             def model_dump(self):
