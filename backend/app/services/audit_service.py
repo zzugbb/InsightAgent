@@ -83,14 +83,60 @@ def _redact_sensitive_event_detail_keys(value: object) -> object:
     return value
 
 
-def _redact_provider_source_event_detail_values(value: object) -> object:
+def _iter_provider_source_event_detail_values(value: object):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            safe_key = str(key)
+            if (
+                safe_key in _PROVIDER_SOURCE_DETAIL_KEYS
+                and isinstance(item, str)
+                and item.strip()
+            ):
+                yield item
+            elif (
+                safe_key in _PROVIDER_SOURCES_DETAIL_KEYS
+                and isinstance(item, (list, tuple))
+            ):
+                for source in item:
+                    if isinstance(source, str) and source.strip():
+                        yield source
+            yield from _iter_provider_source_event_detail_values(item)
+        return
+    if isinstance(value, list):
+        for item in value:
+            yield from _iter_provider_source_event_detail_values(item)
+        return
+    if isinstance(value, tuple):
+        for item in value:
+            yield from _iter_provider_source_event_detail_values(item)
+
+
+def _build_provider_source_event_detail_aliases(value: object) -> dict[str, str]:
+    source_names: list[str] = []
+    seen_source_names: set[str] = set()
+    for source_name in _iter_provider_source_event_detail_values(value):
+        if source_name in seen_source_names:
+            continue
+        seen_source_names.add(source_name)
+        source_names.append(source_name)
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
+def _redact_provider_source_event_detail_values(
+    value: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> object:
     if isinstance(value, dict):
         redacted: dict[str, object] = {}
         for key, item in value.items():
             safe_key = str(key)
             if safe_key in _PROVIDER_SOURCE_DETAIL_KEYS:
                 redacted[safe_key] = (
-                    _sanitize_tool_runtime_provider_source_name_for_artifact(item)
+                    (provider_source_aliases or {}).get(
+                        item,
+                        _sanitize_tool_runtime_provider_source_name_for_artifact(item),
+                    )
                     if isinstance(item, str) and item.strip()
                     else item
                 )
@@ -99,12 +145,16 @@ def _redact_provider_source_event_detail_values(value: object) -> object:
                 safe_key in _PROVIDER_SOURCES_DETAIL_KEYS
                 and isinstance(item, (list, tuple))
             ):
-                alias_by_source = build_safe_tool_registry_provider_source_alias_map(
-                    [
-                        source
-                        for source in item
-                        if isinstance(source, str) and source.strip()
-                    ]
+                alias_by_source = (
+                    build_safe_tool_registry_provider_source_alias_map(
+                        [
+                            source
+                            for source in item
+                            if isinstance(source, str) and source.strip()
+                        ]
+                    )
+                    if provider_source_aliases is None
+                    else provider_source_aliases
                 )
                 redacted[safe_key] = [
                     alias_by_source.get(
@@ -118,13 +168,26 @@ def _redact_provider_source_event_detail_values(value: object) -> object:
                     for source in item
                 ]
                 continue
-            redacted[safe_key] = _redact_provider_source_event_detail_values(item)
+            redacted[safe_key] = _redact_provider_source_event_detail_values(
+                item,
+                provider_source_aliases=provider_source_aliases,
+            )
         return redacted
     if isinstance(value, list):
-        return [_redact_provider_source_event_detail_values(item) for item in value]
+        return [
+            _redact_provider_source_event_detail_values(
+                item,
+                provider_source_aliases=provider_source_aliases,
+            )
+            for item in value
+        ]
     if isinstance(value, tuple):
         return tuple(
-            _redact_provider_source_event_detail_values(item) for item in value
+            _redact_provider_source_event_detail_values(
+                item,
+                provider_source_aliases=provider_source_aliases,
+            )
+            for item in value
         )
     return value
 
@@ -138,7 +201,12 @@ def sanitize_audit_event_detail(
     if not isinstance(redacted, dict):
         return None
     safe_detail = _redact_sensitive_event_detail_keys(redacted)
-    safe_detail = _redact_provider_source_event_detail_values(safe_detail)
+    safe_detail = _redact_provider_source_event_detail_values(
+        safe_detail,
+        provider_source_aliases=_build_provider_source_event_detail_aliases(
+            safe_detail
+        ),
+    )
     if isinstance(safe_detail, dict):
         return safe_detail
     return None
