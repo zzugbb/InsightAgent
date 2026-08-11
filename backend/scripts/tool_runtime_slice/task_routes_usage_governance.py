@@ -114,6 +114,55 @@ class TaskRoutesUsageGovernanceMixin:
         self.assertEqual(payload.status_normalized, "queued")
         self.assertEqual(payload.status_label, "Queued")
 
+    def test_tasks_usage_dashboard_response_preserves_cross_section_provider_source_aliases(
+        self,
+    ) -> None:
+        normalized = task_routes_module._coerce_tasks_usage_dashboard_response_summary(  # type: ignore[attr-defined]
+            {
+                "by_session": [
+                    {
+                        "session_id": "session-dashboard-alias",
+                        "governance": {
+                            "provider_sources": [
+                                "suite_access_token=two",
+                                "suite_api_key=one",
+                            ],
+                        },
+                    }
+                ],
+                "top_tasks": [
+                    {
+                        "task_id": "task-dashboard-api-key",
+                        "governance": {
+                            "provider_source": "suite_api_key=one",
+                        },
+                    },
+                    {
+                        "task_id": "task-dashboard-access-token",
+                        "governance": {
+                            "provider_source": "suite_access_token=two",
+                        },
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual(
+            normalized["by_session"][0]["governance"]["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            normalized["top_tasks"][0]["governance"]["provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            normalized["top_tasks"][1]["governance"]["provider_source"],
+            "suite_[redacted]#1",
+        )
+        serialized = json.dumps(normalized, ensure_ascii=False)
+        self.assertNotIn("api_key=one", serialized)
+        self.assertNotIn("access_token=two", serialized)
+
     def test_stream_task_execution_waits_in_queued_state_when_slot_is_busy(self) -> None:
         original_try_acquire = getattr(
             chat_execution_module,

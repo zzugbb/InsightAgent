@@ -35,7 +35,10 @@ from app.services.chat_persistence_service import (
 )
 from app.services.task_queue_service import forget_waiting_task
 from app.services.task_status_service import normalize_task_status
-from app.services.tool_runtime import resolve_unique_tool_registry_provider_source_alias
+from app.services.tool_runtime import (
+    build_safe_tool_registry_provider_source_alias_map,
+    resolve_unique_tool_registry_provider_source_alias,
+)
 
 
 router = APIRouter()
@@ -89,22 +92,26 @@ def _coerce_task_governance_for_route(
     value: object,
     *,
     normalize_dict: bool = False,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> object:
     if isinstance(value, dict):
         if not normalize_dict:
             return (
                 chat_persistence_service._sanitize_task_governance_provider_source_values_for_export(
-                    value
+                    value,
+                    provider_source_aliases=provider_source_aliases,
                 )
             )
         return (
             chat_persistence_service._sanitize_task_governance_provider_source_values_for_export(
-                chat_persistence_service._normalize_task_governance_payload(value)
+                chat_persistence_service._normalize_task_governance_payload(value),
+                provider_source_aliases=provider_source_aliases,
             )
         )
     return (
         chat_persistence_service._sanitize_task_governance_provider_source_values_for_export(
-            chat_persistence_service._normalize_task_governance_payload(value)
+            chat_persistence_service._normalize_task_governance_payload(value),
+            provider_source_aliases=provider_source_aliases,
         )
     )
 
@@ -113,12 +120,14 @@ def _coerce_session_governance_for_route(
     value: object,
     *,
     normalize_dict: bool = False,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> object:
     if isinstance(value, dict):
         if not normalize_dict:
             return (
                 chat_persistence_service._sanitize_session_governance_provider_source_values_for_export(
-                    value
+                    value,
+                    provider_source_aliases=provider_source_aliases,
                 )
             )
         normalized = (
@@ -129,7 +138,8 @@ def _coerce_session_governance_for_route(
         )
         return (
             chat_persistence_service._sanitize_session_governance_provider_source_values_for_export(
-                normalized
+                normalized,
+                provider_source_aliases=provider_source_aliases,
             )
         )
     governance = _coerce_payload_mapping(value)
@@ -143,7 +153,8 @@ def _coerce_session_governance_for_route(
     )
     return (
         chat_persistence_service._sanitize_session_governance_provider_source_values_for_export(
-            normalized
+            normalized,
+            provider_source_aliases=provider_source_aliases,
         )
     )
 
@@ -252,9 +263,50 @@ def _coerce_task_trace_response_summary(value: object) -> dict[str, Any]:
     return summary
 
 
+def _append_governance_provider_source_alias_inputs(
+    source_names: list[str],
+    governance: object,
+) -> None:
+    governance_summary = _coerce_payload_mapping(governance)
+    if not governance_summary:
+        return
+    provider_sources = governance_summary.get("provider_sources")
+    if isinstance(provider_sources, (list, tuple)):
+        source_names.extend(
+            source
+            for source in provider_sources
+            if isinstance(source, str) and source.strip()
+        )
+    provider_source = governance_summary.get("provider_source")
+    if isinstance(provider_source, str) and provider_source.strip():
+        source_names.append(provider_source)
+
+
+def _build_tasks_usage_dashboard_provider_source_aliases(
+    summary: dict[str, Any],
+) -> dict[str, str]:
+    source_names: list[str] = []
+    for section_name in ("by_session", "top_tasks"):
+        rows = summary.get(section_name)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            row_summary = _coerce_payload_mapping(row)
+            if not row_summary:
+                continue
+            _append_governance_provider_source_alias_inputs(
+                source_names,
+                row_summary.get("governance"),
+            )
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
 def _coerce_tasks_usage_dashboard_response_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
+    provider_source_aliases = _build_tasks_usage_dashboard_provider_source_aliases(
+        summary
+    )
     by_session = summary.get("by_session")
     if isinstance(by_session, list):
         normalized_sessions: list[dict[str, Any]] = []
@@ -266,6 +318,7 @@ def _coerce_tasks_usage_dashboard_response_summary(value: object) -> dict[str, A
                 row_summary["governance"] = _coerce_session_governance_for_route(
                     row_summary.get("governance"),
                     normalize_dict=not summary_is_dict,
+                    provider_source_aliases=provider_source_aliases,
                 )
             normalized_sessions.append(row_summary)
         summary["by_session"] = normalized_sessions
@@ -280,6 +333,7 @@ def _coerce_tasks_usage_dashboard_response_summary(value: object) -> dict[str, A
                 row_summary["governance"] = _coerce_task_governance_for_route(
                     row_summary.get("governance"),
                     normalize_dict=not summary_is_dict,
+                    provider_source_aliases=provider_source_aliases,
                 )
             normalized_tasks.append(row_summary)
         summary["top_tasks"] = normalized_tasks
