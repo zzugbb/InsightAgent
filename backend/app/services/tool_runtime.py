@@ -336,23 +336,37 @@ def _sanitize_tool_runtime_provider_source_name_with_runtime_alias(
 
 def _sanitize_tool_runtime_diagnostics_summary_for_artifact(
     diagnostics_summary: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if not isinstance(diagnostics_summary, dict):
         return {}
+    artifact_payload = sanitize_tool_registry_diagnostics_artifact_payload(
+        diagnostics_summary
+    )
     sanitized_payload = _sanitize_tool_runtime_provider_source_fields_for_artifact(
-        sanitize_tool_registry_diagnostics_artifact_payload(diagnostics_summary)
+        artifact_payload,
+        provider_source_aliases=provider_source_aliases,
     )
     if not isinstance(sanitized_payload, dict):
         return {}
-    entries = sanitized_payload.get("entries")
+    entries = diagnostics_summary.get("entries")
     if not isinstance(entries, (list, tuple)):
         return sanitized_payload
     safe_entries: list[dict[str, object]] = []
-    for entry in sanitize_tool_registry_diagnostics_summary_entries(entries):
-        safe_entry = dict(
-            _sanitize_tool_runtime_provider_source_fields_for_artifact(entry)
-        )
-        values = safe_entry.get("values")
+    for raw_entry in entries:
+        if not isinstance(raw_entry, dict):
+            continue
+        safe_entry: dict[str, object] = {}
+        values: object = None
+        for key, value in raw_entry.items():
+            if key == "values" and isinstance(value, (list, tuple)):
+                values = value
+                continue
+            safe_entry[key] = _sanitize_tool_runtime_provider_source_fields_for_artifact(
+                sanitize_tool_registry_diagnostics_artifact_payload(value),
+                provider_source_aliases=provider_source_aliases,
+            )
         if isinstance(values, (list, tuple)):
             alias_by_value = (
                 build_safe_tool_registry_provider_source_alias_map(values)
@@ -362,11 +376,14 @@ def _sanitize_tool_runtime_diagnostics_summary_for_artifact(
             deduped_safe_values: list[str] = []
             for value in values:
                 value_key = str(value)
-                safe_value = alias_by_value.get(
-                    value_key,
-                    _sanitize_tool_runtime_provider_source_name_for_artifact(
-                        value
-                    ),
+                safe_value = (
+                    (
+                        provider_source_aliases.get(value_key)
+                        if provider_source_aliases is not None
+                        else None
+                    )
+                    or alias_by_value.get(value_key)
+                    or _sanitize_tool_runtime_provider_source_name_for_artifact(value)
                 )
                 if not safe_value or safe_value in deduped_safe_values:
                     continue
@@ -407,7 +424,8 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
             "tool_count": self.tool_count,
             "tool_names": self.tool_names,
             "tool_details": _sanitize_tool_runtime_trace_artifact_payload(
-                self.tool_details
+                self.tool_details,
+                provider_source_aliases=provider_source_aliases,
             ),
             "service_action_count": self.service_action_count,
             "service_action_kinds": self.service_action_kinds,
@@ -418,7 +436,8 @@ class ConfiguredToolRegistryProviderPreflightSummaryModel:
             "skipped_total": self.skipped_total,
             "missing_total": self.missing_total,
             "diagnostics_summary": _sanitize_tool_runtime_diagnostics_summary_for_artifact(
-                self.diagnostics_summary
+                self.diagnostics_summary,
+                provider_source_aliases=provider_source_aliases,
             ),
         }
 
@@ -446,7 +465,9 @@ class ConfiguredToolRegistryProviderPreflightResultModel:
                 self.provider_source_name,
                 provider_source_aliases=provider_source_aliases,
             ),
-            "runtime_artifacts": self.runtime_artifacts.to_dict(),
+            "runtime_artifacts": self.runtime_artifacts.to_dict(
+                provider_source_aliases=provider_source_aliases,
+            ),
             "service_execution": self.service_execution.to_dict(
                 provider_source_aliases=provider_source_aliases,
             ),
@@ -466,16 +487,21 @@ class ToolRegistryDiagnosticsSummaryModel:
     total: int
     entries: tuple[dict[str, object], ...]
 
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "has_diagnostics": self.has_diagnostics,
-            "skipped_total": self.skipped_total,
-            "missing_total": self.missing_total,
-            "total": self.total,
-            "entries": sanitize_tool_registry_diagnostics_summary_entries(
-                self.entries
-            ),
-        }
+    def to_dict(
+        self,
+        *,
+        provider_source_aliases: dict[str, str] | None = None,
+    ) -> dict[str, object]:
+        return _sanitize_tool_runtime_diagnostics_summary_for_artifact(
+            {
+                "has_diagnostics": self.has_diagnostics,
+                "skipped_total": self.skipped_total,
+                "missing_total": self.missing_total,
+                "total": self.total,
+                "entries": self.entries,
+            },
+            provider_source_aliases=provider_source_aliases,
+        )
 
 
 def _sanitize_tool_runtime_trace_artifact_payload(
@@ -527,17 +553,26 @@ class ToolRegistryDiagnosticsRuntimeArtifactsModel:
     trace_event: dict[str, object] | None
     audit_detail: dict[str, object] | None
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(
+        self,
+        *,
+        provider_source_aliases: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         return {
-            "summary": self.summary.to_dict(),
+            "summary": self.summary.to_dict(
+                provider_source_aliases=provider_source_aliases,
+            ),
             "trace_step": _sanitize_tool_runtime_trace_artifact_payload(
-                self.trace_step
+                self.trace_step,
+                provider_source_aliases=provider_source_aliases,
             ),
             "trace_event": _sanitize_tool_runtime_trace_artifact_payload(
-                self.trace_event
+                self.trace_event,
+                provider_source_aliases=provider_source_aliases,
             ),
             "audit_detail": _sanitize_tool_runtime_trace_artifact_payload(
-                self.audit_detail
+                self.audit_detail,
+                provider_source_aliases=provider_source_aliases,
             ),
         }
 
@@ -552,13 +587,18 @@ class ConfiguredToolRegistryProviderRuntimeArtifactsModel:
     diagnostics_runtime: ToolRegistryDiagnosticsRuntimeArtifactsModel
     audit_event: dict[str, object] | None
 
-    def to_dict(self) -> dict[str, object]:
-        provider_source_aliases = _build_tool_runtime_artifact_provider_source_aliases(
-            provider_source_name=self.provider_source_name,
-            provider_sources=self.provider_sources,
-            selected_source_diagnostics=self.selected_source_diagnostics,
-            source_diagnostics=self.source_diagnostics,
-        )
+    def to_dict(
+        self,
+        *,
+        provider_source_aliases: dict[str, str] | None = None,
+    ) -> dict[str, object]:
+        if provider_source_aliases is None:
+            provider_source_aliases = _build_tool_runtime_artifact_provider_source_aliases(
+                provider_source_name=self.provider_source_name,
+                provider_sources=self.provider_sources,
+                selected_source_diagnostics=self.selected_source_diagnostics,
+                source_diagnostics=self.source_diagnostics,
+            )
         return {
             "provider": self.provider,
             "provider_source_name": provider_source_aliases.get(
@@ -579,9 +619,12 @@ class ConfiguredToolRegistryProviderRuntimeArtifactsModel:
                 self.source_diagnostics,
                 provider_source_aliases=provider_source_aliases,
             ),
-            "diagnostics_runtime": self.diagnostics_runtime.to_dict(),
+            "diagnostics_runtime": self.diagnostics_runtime.to_dict(
+                provider_source_aliases=provider_source_aliases,
+            ),
             "audit_event": _sanitize_tool_runtime_trace_artifact_payload(
-                self.audit_event
+                self.audit_event,
+                provider_source_aliases=provider_source_aliases,
             ),
         }
 
@@ -675,7 +718,9 @@ class ConfiguredToolRegistryProviderServiceExecutionModel:
                 runtime_artifacts=self.runtime_artifacts,
                 provider_source_aliases=provider_source_aliases,
             ),
-            "runtime_artifacts": self.runtime_artifacts.to_dict(),
+            "runtime_artifacts": self.runtime_artifacts.to_dict(
+                provider_source_aliases=provider_source_aliases,
+            ),
             "service_actions": [
                 action.to_dict(provider_source_aliases=provider_source_aliases)
                 for action in self.service_actions
@@ -710,7 +755,9 @@ class ConfiguredToolRegistryProviderServiceExecutionResultModel:
                 runtime_artifacts=self.runtime_artifacts,
                 provider_source_aliases=provider_source_aliases,
             ),
-            "runtime_artifacts": self.runtime_artifacts.to_dict(),
+            "runtime_artifacts": self.runtime_artifacts.to_dict(
+                provider_source_aliases=provider_source_aliases,
+            ),
             "trace_write_count": self.trace_write_count,
             "audit_event_count": self.audit_event_count,
         }

@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite 与 concurrency-fairness-policy 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前主线：registry-governance，进度约 76%；已收口 diagnostics summary 脱敏后去重、registry_sources values 冲突 alias、provider source values 安全化、settings/validate provider source options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、service action trace/audit payload provider source alias 对齐、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs provider source 字段集合、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response、audit detail 短/长字段、SSE error 与 trace meta provider source 脱敏。
+  - 当前主线：registry-governance，进度约 77%；已收口 diagnostics summary 脱敏后去重、registry_sources values 冲突 alias、provider source values 安全化、settings/validate provider source options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、service action trace/audit payload provider source alias 对齐、diagnostics runtime/direct audit event provider source alias 对齐、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs provider source 字段集合、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response、audit detail 短/长字段、SSE error 与 trace meta provider source 脱敏。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy。
   - 本主线继续保持外部 SSE / trace / export / e2e shape 稳定，并按小红测、实现、targeted/full slice 推进。
   - 后续候选：rag-governance-hardening。
@@ -14,7 +14,7 @@ constraints:
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1840/1840)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1841/1841)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (76/76)
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
@@ -26,7 +26,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: registry-governance 进度约 76%；本轮补 service action trace/audit payload provider source alias 对齐红测，并让 trace artifact provider source sanitizer 与 runtime service action/model 输出支持 runtime alias context，避免 action 详情与 runtime artifacts 编号不一致。targeted new 1/1、provider_source 122/122、backend full slice 1840/1840 均通过，完整 Chromium 基线仍沿用 50 passed / 1 skipped。
+latest_validation_note: registry-governance 进度约 77%；本轮补 diagnostics runtime/direct audit event provider source alias 对齐红测，并让 runtime artifacts、service execution 与 preflight 输出继续向 summary/trace/audit 子结构传递同一 alias context。targeted new 1/1、provider_source 123/123、backend full slice 1841/1841 均通过，完整 Chromium 基线仍沿用 50 passed / 1 skipped。
 todos:
   - id: docs-slimming
     status: completed
@@ -51,7 +51,7 @@ todos:
     content: 新增单文件规模治理规则；后续不把历史大文件作为默认追加点，测试/实现优先进入主题文件，必要时先拆新主题文件或新模块。
   - id: registry-governance
     status: in_progress
-    content: 当前主线，进度约 76%；已完成 diagnostics_summary 脱敏后安全值稳定去重、registry_sources values 冲突 alias、provider source values 安全化、settings/validate provider source options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、service action trace/audit payload provider source alias 对齐、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs provider source 字段集合、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response、audit detail 短/长字段、SSE error 与 trace meta provider source 脱敏，继续统一 registry / profile / provider source / selected source / loader_factory / settings/preflight/trace/export/audit/SSE 的治理语义。
+    content: 当前主线，进度约 77%；已完成 diagnostics_summary 脱敏后安全值稳定去重、registry_sources values 冲突 alias、provider source values 安全化、settings/validate provider source options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、service action trace/audit payload provider source alias 对齐、diagnostics runtime/direct audit event provider source alias 对齐、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs provider source 字段集合、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response、audit detail 短/长字段、SSE error 与 trace meta provider source 脱敏，继续统一 registry / profile / provider source / selected source / loader_factory / settings/preflight/trace/export/audit/SSE 的治理语义。
   - id: rag-governance-hardening
     status: pending
     content: 后续补知识库版本化、来源治理与更细粒度 shared 规则。
@@ -79,7 +79,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1840/1840`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1841/1841`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel / queued SSE safe wait_position、settings safe global/current-user active/waiting/available counts、基础计数字段存在性、queued snapshot count/wait_position/scope count 整数类型、整数型 max_concurrent/计数/治理限额字段、数值型 poll interval、精确 pressure_state 枚举、布尔型状态/治理标记、非负治理限额、governance 必填字段、has_waiting_tasks/saturated/pressure_state 必填、固定枚举值与派生一致性、current-user limit 与 available 一致性 / followup completion latest fresh 通过；脚本现额外校验 queued snapshot 基础计数字段、结构一致性、current session diagnostics、settings `task_queue_diagnostics`、scope available slots 字段依赖与 scope active/waiting 计数全局上界。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `76/76`。
@@ -99,7 +99,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前主线
 
-- `registry-governance`：进度约 `76%`；已完成 diagnostics summary 脱敏后安全值稳定去重、registry_sources values 冲突 alias、provider source values 安全化、settings/validate provider source options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、service action trace/audit payload provider source alias 对齐、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs provider source 字段集合、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response、audit detail 短/长字段、SSE error 与 trace meta provider source 脱敏，不改变 settings/preflight/trace/export/audit/SSE 可见字段 shape。
+- `registry-governance`：进度约 `77%`；已完成 diagnostics summary 脱敏后安全值稳定去重、registry_sources values 冲突 alias、provider source values 安全化、settings/validate provider source options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、service action trace/audit payload provider source alias 对齐、diagnostics runtime/direct audit event provider source alias 对齐、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs provider source 字段集合、runtime/preflight/action 回灌 totals 派生/安全规整、preflight 模型输出层、task/session export artifact、task/usage response、audit detail 短/长字段、SSE error 与 trace meta provider source 脱敏，不改变 settings/preflight/trace/export/audit/SSE 可见字段 shape。
 
 ## Pre-flight Cleanup
 
