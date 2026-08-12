@@ -12,6 +12,14 @@ from app.config import get_settings
 
 SHARED_RAG_SCOPE_USER_ID = "__shared__"
 SHARED_RAG_KB_PREFIX = "shared-"
+_RAG_SENSITIVE_KEY_RE = re.compile(
+    r"(api[_-]?key|access[_-]?token|authorization|bearer|token|secret|password)",
+    re.IGNORECASE,
+)
+_RAG_BEARER_TOKEN_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
+_RAG_SENSITIVE_ASSIGNMENT_RE = re.compile(
+    r"(?i)(^|[?&#;\s])(?:api[_-]?key|access[_-]?token|token|secret|password)=[^&#;\s]+"
+)
 
 
 def _http_client() -> chromadb.HttpClient:
@@ -142,11 +150,32 @@ def _normalize_metadata(metadata: object) -> dict[str, object]:
         return {}
     normalized: dict[str, object] = {}
     for key, value in metadata_dict.items():
-        k = str(key).strip()
+        k = _sanitize_rag_metadata_key(key)
         if not k:
             continue
-        normalized[k[:128]] = str(value)[:2000]
+        normalized[k] = _sanitize_rag_metadata_text(value, limit=2000)
     return normalized
+
+
+def _sanitize_rag_metadata_text(value: object, *, limit: int) -> str:
+    raw = str(value).strip()
+    if not raw:
+        return ""
+    safe = _RAG_BEARER_TOKEN_RE.sub("[redacted]", raw)
+    safe = _RAG_SENSITIVE_ASSIGNMENT_RE.sub(
+        lambda match: f"{match.group(1)}[redacted]",
+        safe,
+    )
+    return safe[:limit]
+
+
+def _sanitize_rag_metadata_key(value: object) -> str:
+    raw = str(value).strip()
+    if not raw:
+        return ""
+    if _RAG_SENSITIVE_KEY_RE.search(raw):
+        return "[redacted]"
+    return raw[:128]
 
 
 def ingest_knowledge_documents(
@@ -178,8 +207,14 @@ def ingest_knowledge_documents(
         text = str(doc.get("text", "") or "").strip()
         if not text:
             continue
-        source = str(doc.get("source", "") or "manual").strip() or "manual"
-        doc_id = str(doc.get("document_id", "") or "").strip() or str(uuid4())
+        source = (
+            _sanitize_rag_metadata_text(doc.get("source", "") or "manual", limit=240)
+            or "manual"
+        )
+        doc_id = (
+            _sanitize_rag_metadata_text(doc.get("document_id", "") or "", limit=128)
+            or str(uuid4())
+        )
         extra_meta = _normalize_metadata(doc.get("metadata"))
         doc_chunks = _chunk_text(
             text,
@@ -198,7 +233,7 @@ def ingest_knowledge_documents(
             metadatas.append(
                 {
                     "knowledge_base_id": kb_id,
-                    "source": source[:240],
+                    "source": source,
                     "document_id": doc_id,
                     "chunk_index": index,
                     "chunk_total": total,
@@ -286,7 +321,7 @@ def query_knowledge_base(
                 "id": str(doc_id),
                 "content": str(content or ""),
                 "distance": float(distance) if isinstance(distance, (int, float)) else None,
-                "metadata": _coerce_metadata_mapping(metadata),
+                "metadata": _normalize_metadata(metadata),
             }
         )
 
