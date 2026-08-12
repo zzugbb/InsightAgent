@@ -1077,6 +1077,72 @@ class RegistryProviderSourceAliasesMixin:
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
 
+    def test_runtime_artifacts_model_from_settings_preserves_provider_source_aliases(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_file = Path(tmpdir) / "root-manifest.json"
+            missing_file = Path(tmpdir) / "missing-registry.json"
+            root_file.write_text(
+                json.dumps(
+                    {
+                        "registry_files": [str(missing_file)],
+                        "extra_tools": {
+                            "calc_eval_fast": {
+                                "template": "calc_eval",
+                                "label": "Fast Calculator",
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = SimpleNamespace(
+                tool_registry_provider_source="suite_api_key=one",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_access_token=two": {
+                            "profile": "retrieval_only",
+                        },
+                        "suite_api_key=one": {
+                            "registry_file": str(root_file),
+                        },
+                    }
+                ),
+            )
+
+            model = build_configured_tool_registry_provider_runtime_artifacts_model(
+                settings=settings,
+                task_id="task-1",
+                step_id="step-registry",
+                seq=2,
+                model="mock-gpt",
+            )
+
+        payload = model.to_dict()
+
+        self.assertEqual(payload["provider_source_name"], "suite_[redacted]#2")
+        self.assertEqual(
+            list(payload["provider_sources"].keys()),
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            payload["diagnostics_runtime"]["trace_step"]["meta"]["tool_registry"][
+                "provider_source"
+            ],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload["diagnostics_runtime"]["audit_detail"]["provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload["audit_event"]["detail"]["provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
     def test_preflight_result_to_dict_preserves_runtime_provider_source_alias(
         self,
     ) -> None:

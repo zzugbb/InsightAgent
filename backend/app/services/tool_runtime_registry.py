@@ -3170,6 +3170,7 @@ def _impl_build_tool_registry_diagnostics_runtime_artifacts_model(
     model: str,
     provider_source_name: str,
     diagnostics: dict[str, tuple[str, ...]],
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> ToolRegistryDiagnosticsRuntimeArtifactsModel:
     summary = build_tool_registry_diagnostics_summary_model(diagnostics=diagnostics)
     if not bool(summary.has_diagnostics):
@@ -3180,8 +3181,11 @@ def _impl_build_tool_registry_diagnostics_runtime_artifacts_model(
             audit_detail=None,
         )
     safe_provider_source_name = (
-        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-            provider_source_name
+        (provider_source_aliases or {}).get(
+            str(provider_source_name),
+            _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                provider_source_name
+            ),
         )
     )
 
@@ -3242,6 +3246,7 @@ def _impl_build_tool_registry_diagnostics_runtime_artifacts(
     model: str,
     provider_source_name: str,
     diagnostics: dict[str, tuple[str, ...]],
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> dict[str, object]:
     return build_tool_registry_diagnostics_runtime_artifacts_model(
         task_id=task_id,
@@ -3250,6 +3255,7 @@ def _impl_build_tool_registry_diagnostics_runtime_artifacts(
         model=model,
         provider_source_name=provider_source_name,
         diagnostics=diagnostics,
+        provider_source_aliases=provider_source_aliases,
     ).to_dict()
 
 
@@ -4941,6 +4947,10 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model(
     settings: object | None = None,
 ) -> ConfiguredToolRegistryProviderRuntimeArtifactsModel:
     artifacts = get_configured_tool_registry_provider_artifacts(settings=settings)
+    provider_sources = artifacts["provider_sources"]
+    alias_by_source = _impl_build_safe_tool_registry_provider_source_alias_map(
+        list(provider_sources.keys()) if isinstance(provider_sources, dict) else ()
+    )
     diagnostics_runtime = build_tool_registry_diagnostics_runtime_artifacts_model(
         task_id=task_id,
         step_id=step_id,
@@ -4948,10 +4958,7 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model(
         model=model,
         provider_source_name=str(artifacts["provider_source_name"]),
         diagnostics=artifacts["selected_source_diagnostics"],
-    )
-    provider_sources = artifacts["provider_sources"]
-    alias_by_source = _impl_build_safe_tool_registry_provider_source_alias_map(
-        list(provider_sources.keys()) if isinstance(provider_sources, dict) else ()
+        provider_source_aliases=alias_by_source,
     )
     safe_provider_source_name = alias_by_source.get(
         str(artifacts["provider_source_name"]),

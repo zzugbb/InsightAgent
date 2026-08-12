@@ -7,12 +7,12 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - 前端 W1-W4 与阶段 5 基础产品化已完成：Auth Gate、Workbench、Trace 双视图、Memory/RAG 调试、usage dashboard、任务/会话导出、任务详情页、running task 恢复、审计与知识库治理已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `99%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
+- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `100%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
 - Workbench 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 队列 UI 已覆盖 `queued/pending/running` 活跃任务识别、安全 queue snapshot 排队位置、queued/running cancel、跨会话隔离、刷新恢复与 Task Center session/global 多任务隔离。
 - 运行设置会带 active session 请求只读 `task_queue_diagnostics`，展示全局、当前用户、当前会话 active/waiting/available、安全限额触顶、`pressure_state`、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
 - 前端 `TaskQueueDiagnostics` 类型已固定基础运行态、governance 字段与 `pressure_state` / `waiting_policy` 枚举；后端 runtime slice 拆分与 `tool_runtime.py` facade 拆分已完成，原测试入口保持不变；registry diagnostics summary、registry_sources values 冲突 alias、provider source values、settings/validate options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、standalone/executed service action/actions trace/audit payload provider source alias 对齐、diagnostics runtime/direct audit event provider source alias 对齐、diagnostics/audit 子结构专属 provider source 纳入全局 alias map、session export task/session governance provider source alias 对齐、audit detail provider source 单值/列表共享 alias map、usage dashboard route/service 跨区块 provider source 共享 alias map、task list 跨 item provider source 共享 alias map、task list governance/trace_json 跨 item provider source 共享 alias map、task detail governance/trace_json 跨结构共享 alias map、task detail raw summary route governance/trace_json 共享 alias map、trace/trace delta steps 跨 step 共享 alias map、task export trace governance/steps 共享 alias map、task export response summary 共享 alias map、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs、runtime/preflight/action 回灌、preflight 模型输出层、task/session export artifact、task/usage response、audit detail、SSE error、trace meta、dict service actions outputs、service execution dict、preflight dict payload 与 runtime_artifacts dict payload 脱敏收口不改变前端可见 shape。
-- 本轮后端继续收口 runtime_artifacts dict payload provider source alias 编号，前端 trace/export 回放可见字段 shape 不变。
+- 本轮后端继续收口 runtime_artifacts dict payload 与 settings runtime_artifacts diagnostics provider source alias 编号，前端 trace/export 回放可见字段 shape 不变。
 
 ## 当前验证基线
 
@@ -30,7 +30,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`。
-2. 当前主线：`registry-governance`，前端重点在 model settings、provider/source diagnostics、tool details、trace/export 回放语义。
+2. 当前主线：`registry-governance` 已基本收口，前端重点在 model settings、provider/source diagnostics、tool details、trace/export 回放语义。
 3. 后续体验维护：Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. 回归门：frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium；新增测试/实现继续按主题文件拆分，避免把单文件当作无限追加点。
 
