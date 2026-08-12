@@ -5,22 +5,22 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前状态
 
 - 阶段 5 基础产品化已完成：会话/任务/消息持久化、SSE、Trace、Memory、RAG、鉴权、PostgreSQL、任务取消/超时、running task 恢复、usage dashboard、审计与任务/会话导出已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `100%`。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；下一候选主线为 `rag-governance-hardening`。
 - 当前队列基线：任务默认 `queued`，拿到进程内执行槽位后切 `running`；全局并发默认 `TASK_QUEUE_MAX_CONCURRENT=32`，可选 per-user/per-session 限额默认 `0` 关闭；等待队列保持 capacity-aware oldest eligible FIFO，queued cancel 会移出等待队列。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，覆盖全局、当前用户与可选当前会话 active/waiting/available 计数、限额触顶、`pressure_state`、fairness 开关、等待策略与 poll interval；前后端 typed contract 已固定 required governance 字段、optional scope 字段和枚举值。
-- `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定；registry diagnostics summary、registry_sources values 冲突 alias、settings/validate options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、standalone/executed service action/actions trace/audit payload provider source alias 对齐、diagnostics runtime/direct audit event provider source alias 对齐、diagnostics/audit 子结构专属 provider source 纳入全局 alias map、session export task/session governance provider source alias 对齐、audit detail provider source 单值/列表共享 alias map、usage dashboard route/service 跨区块 provider source 共享 alias map、task list 跨 item provider source 共享 alias map、task list governance/trace_json 跨 item provider source 共享 alias map、task detail governance/trace_json 跨结构共享 alias map、task detail raw summary route governance/trace_json 共享 alias map、trace/trace delta steps 跨 step 共享 alias map、task export trace governance/steps 共享 alias map、task export response summary 共享 alias map、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs、runtime/preflight/action 回灌、模型输出层、export artifact、task/usage response、audit detail、SSE error 与 trace meta、dict service actions outputs、service execution dict 跨结构、preflight dict payload、runtime_artifacts dict payload 与 settings runtime_artifacts diagnostics provider source 安全摘要已开始收紧。
-- 本轮继续收口 settings runtime_artifacts 构建路径，让 diagnostics_runtime 与 provider_sources 共享 provider source alias map，避免实际 settings 路径中 diagnostics meta/audit detail 使用无后缀脱敏值。
+- `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定；registry diagnostics summary、registry_sources values 冲突 alias、settings/validate options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、standalone/executed service action/actions trace/audit payload provider source alias 对齐、diagnostics runtime/direct audit event provider source alias 对齐、diagnostics/audit 子结构专属 provider source 纳入全局 alias map、session export task/session governance provider source alias 对齐、audit detail provider source 单值/列表共享 alias map、usage dashboard route/service 跨区块 provider source 共享 alias map、task list 跨 item provider source 共享 alias map、task list governance/trace_json 跨 item provider source 共享 alias map、task detail governance/trace_json 跨结构共享 alias map、task detail raw summary route governance/trace_json 共享 alias map、trace/trace delta steps 跨 step 共享 alias map、task export trace governance/steps 共享 alias map、task export response summary 共享 alias map、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs、runtime/preflight/action 回灌、模型输出层、export artifact、task/usage response、audit detail、SSE error 与 trace meta、dict service actions outputs、service execution dict 跨结构、preflight dict payload、runtime_artifacts dict payload 与 settings runtime_artifacts diagnostics provider source 安全摘要已封板。
+- 本轮完成封板复验：backend slice、frontend node/type/lint、CI tooling、backend main/queue e2e、frontend full/queue Chromium 均 fresh 通过。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
 
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1868/1868` 通过
-- `bash scripts/test_ci_e2e_tooling.sh all`：最近一次通过
+- `bash scripts/test_ci_e2e_tooling.sh all`：本轮 fresh 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
-- backend queue e2e phase：低并发 `8011` latest fresh 通过，覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
+- backend queue e2e phase：低并发 `8011` 本轮 fresh 通过，覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
 - frontend targeted Chromium：queued recover/cancel、running cancel、Task Center session/global 隔离、刷新恢复隔离均已通过
-- 完整 Chromium e2e：默认 `8000/3001` latest fresh 通过，`50 passed / 1 skipped`
+- 完整 Chromium e2e：默认 `8000/3001` 本轮 fresh 通过，`50 passed / 1 skipped`
 - 本轮相关 `8011/8000/3001` 服务均已停止，`lsof` 无监听残留。
 - `git diff --check`：通过
 - 普通沙箱访问本机 Docker/端口会被权限拦截时，按流程提权后重跑，不拿旧结果冒充新结果。
@@ -28,15 +28,15 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 ## 当前开发计划
 
-1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`。
-2. 当前主线：`registry-governance` 已基本收口，聚焦 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export/audit/SSE 的治理语义；当前已收口 diagnostics summary 脱敏后去重、registry_sources values 冲突 alias、provider source values 安全化、settings/validate provider source options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、standalone/executed service action/actions trace/audit payload provider source alias 对齐、diagnostics runtime/direct audit event provider source alias 对齐、diagnostics/audit 子结构专属 provider source 纳入全局 alias map、session export task/session governance provider source alias 对齐、audit detail provider source 单值/列表共享 alias map、usage dashboard route/service 跨区块 provider source 共享 alias map、task list 跨 item provider source 共享 alias map、task list governance/trace_json 跨 item provider source 共享 alias map、task detail governance/trace_json 跨结构共享 alias map、task detail raw summary route governance/trace_json 共享 alias map、trace/trace delta steps 跨 step 共享 alias map、task export trace governance/steps 共享 alias map、task export response summary 共享 alias map、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs provider source 字段集合、runtime/preflight/action 回灌 totals 派生/安全规整、模型 `to_dict()` 输出层、task/session export artifact、task/usage response、audit detail 短/长字段、SSE error、trace meta、dict service actions outputs、service execution dict 跨结构、preflight dict payload 与 runtime_artifacts dict payload 与 settings runtime_artifacts diagnostics provider source 脱敏。
-3. 本主线继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
+1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`。
+2. 最近封板主线：`registry-governance` 已完成 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/search/export/audit/SSE 的治理语义收口；provider source 脱敏、冲突 alias、跨 settings/preflight/runtime/trace/export/audit/SSE 共享 alias map 与模型输出层安全摘要均已通过 full slice 与 e2e 复验。
+3. 后续开发继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
 4. 后续候选：`rag-governance-hardening`，聚焦知识库版本化、来源治理与更细粒度 shared 规则。
 
 ## 关键能力边界
 
 - 外部 SSE / trace / export / e2e 契约保持稳定，优先做内部 runtime/helper/display 收口。
-- 新增 provider/source 协议继续按 `real-tool-execution` 已完成验收基线补小红测，不再作为当前主线阻塞项。
+- 新增 provider/source 协议继续按 `real-tool-execution` 已完成验收基线补小红测，不再作为封板主线阻塞项。
 - 单文件规模纳入治理：新增测试/实现优先使用主题文件；主题文件明显膨胀时先拆分到新文件/新模块，沿用既有 slice 主题包与 facade 拆分方式。
 - `data/insightagent.plan.back.md` 是只读备份计划，不参与活跃开发同步。
 
@@ -132,7 +132,7 @@ docker compose -f compose.full.yml up -d
 
 ## 文档维护约定
 
-- 活跃进度只保留“当前状态、当前主线、最近校验基线、下一步候选”这类高信号内容。
+- 活跃进度只保留“当前状态、封板主线、最近校验基线、下一步候选”这类高信号内容。
 - 长串历史流水账、阶段内小切片和重复能力摘要不再继续堆积到 README。
 - 每轮开发完成后同步更新：
   - `README.md`
