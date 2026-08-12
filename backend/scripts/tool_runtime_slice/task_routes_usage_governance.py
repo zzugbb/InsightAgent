@@ -2454,6 +2454,11 @@ class TaskRoutesUsageGovernanceMixin:
     def test_cancel_queued_task_forgets_waiting_queue_entry(self) -> None:
         original_get_task = task_routes_module.get_task
         original_update_task_status = task_routes_module.update_task_status
+        original_mark_cancel = getattr(
+            task_routes_module,
+            "mark_task_cancel_requested",
+            None,
+        )
         original_forget_waiting_task = getattr(
             task_routes_module,
             "forget_waiting_task",
@@ -2481,6 +2486,9 @@ class TaskRoutesUsageGovernanceMixin:
                 lambda _task_id, _user_id: dict(task_reads.pop(0))
             )
             task_routes_module.update_task_status = lambda **_kwargs: None
+            task_routes_module.mark_task_cancel_requested = (  # type: ignore[attr-defined]
+                lambda **_kwargs: 1
+            )
             task_routes_module.forget_waiting_task = forgotten.append  # type: ignore[attr-defined]
             task_routes_module.safe_record_audit_event = lambda **_kwargs: None
             task_routes_module.chat_persistence_service.get_task_cancel_response_summary_from_task = (
@@ -2502,6 +2510,11 @@ class TaskRoutesUsageGovernanceMixin:
         finally:
             task_routes_module.get_task = original_get_task
             task_routes_module.update_task_status = original_update_task_status
+            if original_mark_cancel is None:
+                if hasattr(task_routes_module, "mark_task_cancel_requested"):
+                    delattr(task_routes_module, "mark_task_cancel_requested")
+            else:
+                task_routes_module.mark_task_cancel_requested = original_mark_cancel  # type: ignore[attr-defined]
             if original_forget_waiting_task is None:
                 if hasattr(task_routes_module, "forget_waiting_task"):
                     delattr(task_routes_module, "forget_waiting_task")

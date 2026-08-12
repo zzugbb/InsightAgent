@@ -898,6 +898,11 @@ class TaskTraceExportGovernanceMixin:
     ) -> None:
         original_get_task = task_routes_module.get_task
         original_update_task_status = task_routes_module.update_task_status
+        original_mark_cancel = getattr(
+            task_routes_module,
+            "mark_task_cancel_requested",
+            None,
+        )
         original_safe_record_audit_event = task_routes_module.safe_record_audit_event
         original_cancel_summary_helper = getattr(
             task_routes_module.chat_persistence_service,
@@ -928,6 +933,9 @@ class TaskTraceExportGovernanceMixin:
                 task_reads.pop(0)
             )
             task_routes_module.update_task_status = lambda **_kwargs: None
+            task_routes_module.mark_task_cancel_requested = (  # type: ignore[attr-defined]
+                lambda **_kwargs: 1
+            )
             task_routes_module.safe_record_audit_event = lambda **_kwargs: None
             task_routes_module.normalize_task_status = lambda status: (  # type: ignore[assignment]
                 "running"
@@ -969,6 +977,11 @@ class TaskTraceExportGovernanceMixin:
         finally:
             task_routes_module.get_task = original_get_task
             task_routes_module.update_task_status = original_update_task_status
+            if original_mark_cancel is None:
+                if hasattr(task_routes_module, "mark_task_cancel_requested"):
+                    delattr(task_routes_module, "mark_task_cancel_requested")
+            else:
+                task_routes_module.mark_task_cancel_requested = original_mark_cancel  # type: ignore[attr-defined]
             task_routes_module.safe_record_audit_event = original_safe_record_audit_event
             if original_cancel_summary_helper is None:
                 if hasattr(

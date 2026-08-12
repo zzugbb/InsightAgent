@@ -1,9 +1,126 @@
 from __future__ import annotations
 
-from .context import SimpleNamespace, chat_execution_module
+from .context import SimpleNamespace, chat_execution_module, task_routes_module
 
 
 class ProductionReliabilityExecutionMixin:
+    def test_production_reliability_mark_cancel_requested_does_not_overwrite_terminal_tasks(
+        self,
+    ) -> None:
+        persistence_module = __import__(
+            "app.services.chat_persistence_service",
+            fromlist=["mark_task_cancel_requested"],
+        )
+        original_get_db_connection = persistence_module.get_db_connection
+        captured: dict[str, object] = {}
+
+        class FakeCursor:
+            rowcount = 0
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["query"] = " ".join(query.split())
+                captured["params"] = tuple(params)
+                return FakeCursor()
+
+            def commit(self) -> None:
+                captured["committed"] = True
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+        try:
+            persistence_module.get_db_connection = lambda: FakeContextManager()
+
+            updated_count = persistence_module.mark_task_cancel_requested(
+                task_id="task-cancel-terminal-race",
+                user_id="user-cancel-terminal-race",
+            )
+        finally:
+            persistence_module.get_db_connection = original_get_db_connection
+
+        rendered_query = str(captured.get("query", ""))
+        rendered_params = tuple(captured.get("params", ()))
+        self.assertEqual(updated_count, 0)
+        self.assertIn("LOWER(status) IN", rendered_query)
+        self.assertNotIn("completed", rendered_params)
+        self.assertNotIn("failed", rendered_params)
+        self.assertEqual(
+            rendered_params[-2:],
+            ("task-cancel-terminal-race", "user-cancel-terminal-race"),
+        )
+
+    def test_production_reliability_cancel_task_does_not_overwrite_terminal_race(
+        self,
+    ) -> None:
+        original_get_task = task_routes_module.get_task
+        original_mark_cancel = getattr(
+            task_routes_module,
+            "mark_task_cancel_requested",
+            None,
+        )
+        original_update_status = task_routes_module.update_task_status
+        original_forget_waiting_task = task_routes_module.forget_waiting_task
+        original_safe_audit = task_routes_module.safe_record_audit_event
+
+        status_updates: list[dict[str, object]] = []
+        forgotten: list[str] = []
+        audits: list[dict[str, object]] = []
+        task_reads = [
+            {
+                "id": "task-cancel-terminal-race",
+                "session_id": "session-cancel-terminal-race",
+                "status": "running",
+            },
+            {
+                "id": "task-cancel-terminal-race",
+                "session_id": "session-cancel-terminal-race",
+                "status": "completed",
+            },
+        ]
+
+        try:
+            task_routes_module.get_task = (
+                lambda _task_id, _user_id: dict(task_reads.pop(0))
+            )
+            task_routes_module.mark_task_cancel_requested = (  # type: ignore[attr-defined]
+                lambda *, task_id, user_id: 0
+            )
+            task_routes_module.update_task_status = (
+                lambda **kwargs: status_updates.append(dict(kwargs))
+            )
+            task_routes_module.forget_waiting_task = forgotten.append  # type: ignore[assignment]
+            task_routes_module.safe_record_audit_event = (
+                lambda **kwargs: audits.append(dict(kwargs))
+            )
+
+            payload = task_routes_module.cancel_task(
+                "task-cancel-terminal-race",
+                current_user={"id": "user-cancel-terminal-race"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            if original_mark_cancel is None:
+                if hasattr(task_routes_module, "mark_task_cancel_requested"):
+                    delattr(task_routes_module, "mark_task_cancel_requested")
+            else:
+                task_routes_module.mark_task_cancel_requested = original_mark_cancel  # type: ignore[attr-defined]
+            task_routes_module.update_task_status = original_update_status
+            task_routes_module.forget_waiting_task = original_forget_waiting_task
+            task_routes_module.safe_record_audit_event = original_safe_audit
+
+        self.assertEqual(status_updates, [])
+        self.assertEqual(forgotten, [])
+        self.assertEqual(payload.previous_status, "running")
+        self.assertEqual(payload.status, "completed")
+        self.assertEqual(payload.status_normalized, "completed")
+        self.assertTrue(payload.already_terminal)
+        self.assertEqual(audits[0]["detail"]["status"], "completed")
+
     def test_production_reliability_mark_queued_does_not_resurrect_terminal_tasks(
         self,
     ) -> None:

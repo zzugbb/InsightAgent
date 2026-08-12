@@ -30,6 +30,7 @@ from app.services.chat_persistence_service import (
     get_tasks_usage_dashboard,
     get_tasks_usage_summary,
     get_task,
+    mark_task_cancel_requested,
     update_task_status,
     list_tasks,
 )
@@ -1238,7 +1239,7 @@ def cancel_task(
     already_terminal = normalized_prev in {"completed", "failed", "cancelled", "timed_out"}
 
     if not already_terminal:
-        update_task_status(task_id=task_id, status="cancelled", user_id=user_id)
+        updated_count = mark_task_cancel_requested(task_id=task_id, user_id=user_id)
         if normalized_prev in {"queued", "pending"}:
             forget_waiting_task(task_id)
         refreshed_raw = get_task(task_id, user_id)
@@ -1247,6 +1248,14 @@ def cancel_task(
             if refreshed_raw is not None
             else {**task, "status": "cancelled"}
         )
+        if updated_count <= 0:
+            refreshed_status = str(task.get("status", ""))
+            already_terminal = normalize_task_status(refreshed_status) in {
+                "completed",
+                "failed",
+                "cancelled",
+                "timed_out",
+            }
 
     response_summary = (
         chat_persistence_service.get_task_cancel_response_summary_from_task(
