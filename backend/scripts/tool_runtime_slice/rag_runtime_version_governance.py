@@ -4,6 +4,97 @@ from .context import *
 
 
 class RagRuntimeVersionGovernanceMixin:
+    def test_rag_result_summary_redacts_sensitive_knowledge_base_id(self) -> None:
+        registration = ToolRegistration(
+            name="task_retrieve_hot",
+            kind="hot_knowledge_retrieval",
+            label="Hot Retrieval",
+            retryable_by_default=False,
+            default_timeout_ms=12_000,
+            requires_user_context=False,
+            supports_result_preview=True,
+            result_preview_keys=("hit_count", "knowledge_base_id"),
+            result_output_keys=("hit_count", "knowledge_base_id"),
+            runtime_semantic_kind="knowledge_retrieval",
+            runner=lambda *, tool_input, prompt, user_id: {
+                "tool_input": tool_input,
+                "prompt": prompt,
+                "user_id": user_id,
+            },
+        )
+        output = {
+            "hit_count": 2,
+            "knowledge_base_id": "team?api_key=raw-secret&token=raw-token",
+        }
+
+        result_summary = build_tool_result_summary(
+            name="task_retrieve_hot",
+            output=output,
+            display_name="Hot Retrieval",
+            registration=registration,
+        )
+        success_meta = build_tool_success_meta(
+            name="task_retrieve_hot",
+            tool_input={"query": "secret lookup"},
+            output=output,
+            retry_count=0,
+            last_error=None,
+            display_name="Hot Retrieval",
+            registration=registration,
+        )
+        tool_end = build_tool_end_payload(
+            name="task_retrieve_hot",
+            task_id="task-rag-summary-redact",
+            step_id="step-rag-summary-redact",
+            output=output,
+            retry_count=0,
+            registration=registration,
+        )
+        observation = build_tool_observation_entry(
+            name="task_retrieve_hot",
+            output=None,
+            step_tool_meta={
+                "name": "task_retrieve_hot",
+                "label": "Hot Retrieval",
+                "output": output,
+                "runtime_semantic_kind": "knowledge_retrieval",
+                "semantic_kind": "knowledge_retrieval",
+                "effective_result_output_keys": ["hit_count", "knowledge_base_id"],
+            },
+            registration=registration,
+        )
+
+        self.assertEqual(
+            result_summary,
+            "Retrieved 2 hits from knowledge base team-redacted-redacted.",
+        )
+        self.assertEqual(
+            success_meta["tool"]["result_summary"],
+            "Retrieved 2 hits from knowledge base team-redacted-redacted.",
+        )
+        self.assertEqual(
+            tool_end["result_summary"],
+            "Retrieved 2 hits from knowledge base team-redacted-redacted.",
+        )
+        self.assertEqual(
+            observation,
+            "Hot Retrieval: Retrieved 2 hits from knowledge base team-redacted-redacted.",
+        )
+        serialized = json.dumps(
+            {
+                "result_summary": result_summary,
+                "success_meta": success_meta,
+                "tool_end": tool_end,
+                "observation": observation,
+            },
+            ensure_ascii=False,
+        )
+        self.assertIn("team-redacted-redacted", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("token=", serialized)
+
     def test_build_tool_rag_followup_redacts_sensitive_runtime_knowledge_base_id(
         self,
     ) -> None:

@@ -7,13 +7,13 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - 前端 W1-W4 与阶段 5 基础产品化已完成：Auth Gate、Workbench、Trace 双视图、Memory/RAG 调试、usage dashboard、任务/会话导出、任务详情页、running task 恢复、审计与知识库治理已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；当前主线进入 `rag-governance-hardening`，进度约 `96%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；当前主线进入 `rag-governance-hardening`，进度约 `98%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
 - Workbench 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 队列 UI 已覆盖 `queued/pending/running` 活跃任务识别、安全 queue snapshot 排队位置、queued/running cancel、跨会话隔离、刷新恢复与 Task Center session/global 多任务隔离。
 - 运行设置会带 active session 请求只读 `task_queue_diagnostics`，展示全局、当前用户、当前会话 active/waiting/available、安全限额触顶、`pressure_state`、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
 - 前端 `TaskQueueDiagnostics` 类型已固定基础运行态、governance 字段与 `pressure_state` / `waiting_policy` 枚举；后端 runtime slice 拆分与 `tool_runtime.py` facade 拆分已完成，原测试入口保持不变。
 - `registry-governance` 已封板：provider/source diagnostics、settings/preflight、runtime artifacts、trace/export/audit/SSE 与 task/usage 回放语义已完成脱敏和 alias 对齐，前端可见字段 shape 不变。
-- 后端 `rag-governance-hardening` 已完成 RAG source/metadata 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定版本 metadata、status/list 版本摘要、历史 collection 列表出口安全化、task export/Markdown 版本锚点、runtime trace 版本 metadata 透传、reserved metadata 防覆盖、出站版本字段过滤与 alias canonicalization、敏感 `knowledge_base_id` 安全化、RAG 400/503 错误出口脱敏、`shared-*` 私有 shadow 隔离；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
+- 后端 `rag-governance-hardening` 已完成 RAG source/metadata 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定版本 metadata、status/list 版本摘要、历史 collection 列表出口安全化、task export/Markdown 版本锚点、runtime trace 版本 metadata 透传、reserved metadata 防覆盖、出站版本字段过滤与 alias canonicalization、敏感 `knowledge_base_id` 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏、`shared-*` 私有 shadow 隔离；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
 
 ## 当前验证基线
 
@@ -22,6 +22,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts`：通过
 - 最近 targeted Chromium：主路径导出、404 ownership 导出、取消后立即重发、queued recover/cancel、running cancel、Task Center session/global 隔离、刷新恢复隔离均已通过
 - 最近 backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
+- 后端可见契约回归：RAG slice `77/77`、result summary slice `30/30`、backend full slice `1903/1903` 通过；本轮未改前端代码。
 - 最近完整 Chromium e2e：默认 `8000/3001` 通过，`50 passed / 1 skipped`；本轮未重跑本机 e2e。
 - 最近 CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
@@ -30,7 +31,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`。
-2. 当前主线：`rag-governance-hardening`，进度约 `96%`；后端已收口 RAG source/metadata 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定文档版本 metadata、status/list 版本摘要、历史 collection 列表出口安全化、export 版本锚点与 knowledge_base_id 规整、runtime trace 版本 metadata、reserved metadata 防覆盖、出站版本字段过滤、敏感 `knowledge_base_id` 安全化、RAG 400/503 错误出口脱敏与 shared scope 列表边界，前端已补 trace 类型和搜索兼容。
+2. 当前主线：`rag-governance-hardening`，进度约 `98%`；后端已收口 RAG source/metadata 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定文档版本 metadata、status/list 版本摘要、历史 collection 列表出口安全化、export 版本锚点与 knowledge_base_id 规整、runtime trace 版本 metadata、reserved metadata 防覆盖、出站版本字段过滤、敏感 `knowledge_base_id` 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏与 shared scope 列表边界，前端已补 trace 类型和搜索兼容。
 3. 后续体验维护：Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. 回归门：frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium；新增测试/实现继续按主题文件拆分，避免把单文件当作无限追加点。
 

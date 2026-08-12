@@ -539,6 +539,10 @@ def build_tool_result_preview(
         registry_provider=registry_provider,
         registry_loader=registry_loader,
     )
+    normalized_output = _sanitize_tool_rag_knowledge_base_output(
+        normalized_output,
+        semantic_kind=semantic_kind,
+    )
     if result_preview_keys:
         preview = {
             key: normalized_output[key]
@@ -600,6 +604,10 @@ def build_tool_result_output(
         registry=registry,
         registry_provider=registry_provider,
         registry_loader=registry_loader,
+    )
+    normalized_source_output = _sanitize_tool_rag_knowledge_base_output(
+        normalized_source_output,
+        semantic_kind=semantic_kind,
     )
     if not result_output_keys:
         if has_explicit_output_keys:
@@ -672,6 +680,30 @@ def _summarize_generic_tool_result_payload(payload: dict[str, object]) -> str | 
     if not parts:
         return None
     return ", ".join(parts[:3])
+
+
+def _sanitize_tool_rag_knowledge_base_id_for_display(value: object) -> str | None:
+    raw_value = _coerce_tool_execution_string_like_value(value)
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return None
+    return normalize_knowledge_base_id(raw_value)
+
+
+def _sanitize_tool_rag_knowledge_base_output(
+    output: dict[str, object],
+    *,
+    semantic_kind: str | None,
+) -> dict[str, object]:
+    if semantic_kind != "knowledge_retrieval" or "knowledge_base_id" not in output:
+        return output
+    safe_knowledge_base_id = _sanitize_tool_rag_knowledge_base_id_for_display(
+        output.get("knowledge_base_id")
+    )
+    if not safe_knowledge_base_id:
+        return output
+    sanitized_output = dict(output)
+    sanitized_output["knowledge_base_id"] = safe_knowledge_base_id
+    return sanitized_output
 
 
 def build_tool_result_summary(
@@ -775,21 +807,24 @@ def build_tool_result_summary(
     knowledge_base_id = _coerce_tool_execution_string_like_value(
         outward_output.get("knowledge_base_id")
     )
+    safe_knowledge_base_id = _sanitize_tool_rag_knowledge_base_id_for_display(
+        knowledge_base_id
+    )
     if hit_count is not None:
         hit_label = "hit" if hit_count == 1 else "hits"
         if (
             runtime_semantic_kind == "knowledge_retrieval"
-            and isinstance(knowledge_base_id, str)
-            and knowledge_base_id.strip()
+            and isinstance(safe_knowledge_base_id, str)
+            and safe_knowledge_base_id.strip()
         ):
             if isinstance(request_id, str) and request_id.strip():
                 return (
                     f"Retrieved {hit_count} {hit_label} from knowledge base "
-                    f"{knowledge_base_id.strip()} (request id {request_id.strip()})."
+                    f"{safe_knowledge_base_id.strip()} (request id {request_id.strip()})."
                 )
             return (
                 f"Retrieved {hit_count} {hit_label} from knowledge base "
-                f"{knowledge_base_id.strip()}."
+                f"{safe_knowledge_base_id.strip()}."
             )
         if (
             runtime_semantic_kind != "knowledge_retrieval"
@@ -808,11 +843,11 @@ def build_tool_result_summary(
     if documents_total is not None:
         document_label = "document" if documents_total == 1 else "documents"
         source_suffix = ""
-        if isinstance(knowledge_base_id, str) and knowledge_base_id.strip():
+        if isinstance(safe_knowledge_base_id, str) and safe_knowledge_base_id.strip():
             if runtime_semantic_kind == "knowledge_retrieval":
-                source_suffix = f" from knowledge base {knowledge_base_id.strip()}"
+                source_suffix = f" from knowledge base {safe_knowledge_base_id.strip()}"
             elif semantic_family == "knowledge_retrieval":
-                source_suffix = f" from {knowledge_base_id.strip()}"
+                source_suffix = f" from {safe_knowledge_base_id.strip()}"
         if isinstance(request_id, str) and request_id.strip():
             return (
                 f"Retrieved {documents_total} {document_label}{source_suffix} "
@@ -2585,21 +2620,24 @@ def _build_tool_result_summary_from_step_meta_semantics(
 
     hit_count = _normalize_nonnegative_int_count_value(output.get("hit_count"))
     knowledge_base_id = output.get("knowledge_base_id")
+    safe_knowledge_base_id = _sanitize_tool_rag_knowledge_base_id_for_display(
+        knowledge_base_id
+    )
     if hit_count is not None:
         hit_label = "hit" if hit_count == 1 else "hits"
         if (
             allow_local_knowledge_base_summary
-            and isinstance(knowledge_base_id, str)
-            and knowledge_base_id.strip()
+            and isinstance(safe_knowledge_base_id, str)
+            and safe_knowledge_base_id.strip()
         ):
             if isinstance(request_id, str) and request_id.strip():
                 return (
                     f"Retrieved {hit_count} {hit_label} from knowledge base "
-                    f"{knowledge_base_id.strip()} (request id {request_id.strip()})."
+                    f"{safe_knowledge_base_id.strip()} (request id {request_id.strip()})."
                 )
             return (
                 f"Retrieved {hit_count} {hit_label} from knowledge base "
-                f"{knowledge_base_id.strip()}."
+                f"{safe_knowledge_base_id.strip()}."
             )
         if semantic_family == "knowledge_retrieval":
             if isinstance(request_id, str) and request_id.strip():
