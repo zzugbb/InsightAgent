@@ -91,6 +91,10 @@ def _resolve_rag_owner_user_id(
     return SHARED_RAG_SCOPE_USER_ID
 
 
+def _raise_rag_bad_request(exc: ValueError) -> None:
+    raise HTTPException(status_code=400, detail=sanitize_rag_error_message(exc)) from exc
+
+
 class RagDocumentInput(BaseModel):
     text: str = Field(min_length=1, max_length=64_000)
     source: str | None = Field(default=None, max_length=240)
@@ -245,7 +249,7 @@ def post_rag_clear_knowledge_base(
             )
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _raise_rag_bad_request(exc)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
@@ -287,7 +291,7 @@ def delete_rag_knowledge_base(
             )
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _raise_rag_bad_request(exc)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
@@ -330,7 +334,7 @@ def post_rag_ingest(
             )
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _raise_rag_bad_request(exc)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
@@ -373,7 +377,7 @@ def post_rag_query(
             )
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _raise_rag_bad_request(exc)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
