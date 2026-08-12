@@ -3507,6 +3507,22 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model_from_d
     summary_payload = diagnostics_runtime_payload.get("summary", {})
     if not isinstance(summary_payload, dict):
         summary_payload = {}
+    if provider_source_aliases is None:
+        provider_source_aliases = dict(
+            _call_runtime(
+                "_build_tool_runtime_artifact_provider_source_aliases",
+                provider_source_name=runtime_artifacts.get(
+                    "provider_source_name", provider_source_name
+                ),
+                provider_sources=runtime_artifacts.get("provider_sources", {}),
+                selected_source_diagnostics=runtime_artifacts.get(
+                    "selected_source_diagnostics", {}
+                ),
+                source_diagnostics=runtime_artifacts.get("source_diagnostics", {}),
+                diagnostics_runtime=diagnostics_runtime_payload,
+                audit_event=runtime_artifacts.get("audit_event"),
+            )
+        )
     safe_provider_source_name = (
         (provider_source_aliases or {}).get(
             str(runtime_artifacts.get("provider_source_name", provider_source_name)),
