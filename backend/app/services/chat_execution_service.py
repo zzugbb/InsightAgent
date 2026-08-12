@@ -24,6 +24,7 @@ from app.services.task_queue_service import (
     try_acquire_task_execution_slot,
 )
 from app.services.tool_runtime import (
+    build_safe_tool_registry_provider_source_alias_map,
     build_tool_plan_summary,
     build_tool_plan_artifacts,
     execute_configured_tool_registry_provider_preflight,
@@ -68,15 +69,42 @@ _SSE_PROVIDER_SOURCE_TEXT_RE = re.compile(
 )
 
 
-def _sanitize_sse_provider_source_text(value: object) -> str:
+def _iter_sse_provider_source_text_values(*values: object) -> Iterator[str]:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value)
+        for match in _SSE_PROVIDER_SOURCE_TEXT_RE.finditer(text):
+            raw_source = match.group(3).strip("\"'")
+            if raw_source:
+                yield raw_source
+
+
+def _build_sse_provider_source_aliases(*values: object) -> dict[str, str]:
+    source_names: list[str] = []
+    seen_source_names: set[str] = set()
+    for source_name in _iter_sse_provider_source_text_values(*values):
+        if source_name in seen_source_names:
+            continue
+        seen_source_names.add(source_name)
+        source_names.append(source_name)
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
+def _sanitize_sse_provider_source_text(
+    value: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> str:
     text = str(value)
 
     def redact(match: re.Match[str]) -> str:
         key = match.group(1)
         separator = match.group(2)
         raw_source = match.group(3).strip("\"'")
-        safe_source = _sanitize_tool_runtime_provider_source_name_for_artifact(
-            raw_source
+        safe_source = (provider_source_aliases or {}).get(
+            raw_source,
+            _sanitize_tool_runtime_provider_source_name_for_artifact(raw_source),
         )
         return f"{key}{separator}{safe_source}"
 
@@ -97,7 +125,18 @@ def sse_error_payload(
     safe_message = sanitize_tool_registry_diagnostics_artifact_payload(message)
     if not isinstance(safe_message, str):
         safe_message = message
-    safe_message = _sanitize_sse_provider_source_text(safe_message)
+    safe_detail_text: str | None = None
+    if detail:
+        safe_detail = sanitize_tool_registry_diagnostics_artifact_payload(detail)
+        safe_detail_text = safe_detail if isinstance(safe_detail, str) else detail
+    provider_source_aliases = _build_sse_provider_source_aliases(
+        safe_message,
+        safe_detail_text,
+    )
+    safe_message = _sanitize_sse_provider_source_text(
+        safe_message,
+        provider_source_aliases=provider_source_aliases,
+    )
     payload: dict[str, object] = {
         "task_id": task_id,
         "message": safe_message,
@@ -108,10 +147,11 @@ def sse_error_payload(
     }
     if step_id:
         payload["step_id"] = step_id
-    if detail:
-        safe_detail = sanitize_tool_registry_diagnostics_artifact_payload(detail)
-        safe_detail_text = safe_detail if isinstance(safe_detail, str) else detail
-        payload["detail"] = _sanitize_sse_provider_source_text(safe_detail_text)
+    if safe_detail_text:
+        payload["detail"] = _sanitize_sse_provider_source_text(
+            safe_detail_text,
+            provider_source_aliases=provider_source_aliases,
+        )
     if isinstance(status_code, int):
         payload["status_code"] = status_code
     return payload

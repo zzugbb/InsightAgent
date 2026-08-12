@@ -5,16 +5,16 @@
 ## 当前状态
 
 - 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `89%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- `real-tool-execution`、`queue-and-concurrency-lite` 与 `concurrency-fairness-policy` 均已封板；当前主线进入 `registry-governance`，进度约 `90%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
 - `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定；`tool_runtime_registry.py` 与 settings/route/audit/SSE/trace 边界已开始收紧 diagnostics summary、registry_sources values 冲突 alias、settings/validate options 与唯一脱敏 alias round-trip、冲突 alias 可回写后缀、provider_sources dict/source_diagnostics key 冲突 alias、source diagnostics 内部 registry_sources alias 引用、preflight result/summary/service execution provider source alias 对齐、service execution result 输出层 alias 对齐、service action trace/audit payload provider source alias 对齐、diagnostics runtime/direct audit event provider source alias 对齐、diagnostics/audit 子结构专属 provider source 纳入全局 alias map、session export task/session governance provider source alias 对齐、audit detail provider source 单值/列表共享 alias map、usage dashboard route/service 跨区块 provider source 共享 alias map、task list 跨 item provider source 共享 alias map、task list governance/trace_json 跨 item provider source 共享 alias map、task detail governance/trace_json 跨结构共享 alias map、trace/trace delta steps 跨 step 共享 alias map、task export trace governance/steps 共享 alias map、task export response summary 共享 alias map、session governance provider_sources 冲突 alias、audit/trace/runtime artifact provider_sources 冲突 alias、task list/usage dashboard route/service filter alias round-trip、response summary helper provider source 脱敏、runtime artifacts/service actions、settings 构建路径 runtime artifact model 字段、direct model outputs、runtime/preflight/action 回灌 totals、模型输出层、export artifact、task/usage response、audit detail、SSE error 与 trace meta provider source 安全摘要。
-- 本轮把 session export response summary 的 task/session governance 统一接入整份 export payload 的 provider source alias map，避免 service helper 内 task 行提前脱敏后丢失碰撞后缀。
+- 本轮把 SSE error payload 的 message/detail provider source 文本统一接入同一 alias map，避免 error 边界同 base 碰撞 source 丢失后缀编号。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1854/1854` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1855/1855` 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
 - backend queue e2e phase：低并发 `8011` latest fresh 通过，覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
@@ -28,7 +28,7 @@
 ## 下一步后端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`。
-2. 当前主线：`registry-governance`，聚焦 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export/audit/SSE 的治理语义；本轮继续把 session export response summary 的 task/session governance 接到同一 export payload alias map，确保 service 层导出摘要里的碰撞 source 编号一致。
+2. 当前主线：`registry-governance`，聚焦 selected source、settings/preflight、tool details、per-tool diagnostics、runtime semantic、trace/export/audit/SSE 的治理语义；本轮继续把 SSE error message/detail 接到同一 provider source alias map，确保 error payload 里的碰撞 source 编号一致。
 3. 后续候选：`rag-governance-hardening`，聚焦知识库版本化、来源治理与更细粒度 shared 规则。
 4. 本主线继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
 
