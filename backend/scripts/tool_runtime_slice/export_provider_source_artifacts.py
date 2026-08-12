@@ -69,6 +69,92 @@ class ExportProviderSourceArtifactsMixin:
         self.assertNotIn("api_key=hidden", artifact_blob)
         self.assertIn("suite_[redacted]", artifact_blob)
 
+    def test_task_export_payload_preserves_trace_governance_and_step_provider_source_aliases(
+        self,
+    ) -> None:
+        original_get_task_messages = task_routes_module.get_task_messages
+        original_export_summary = (
+            task_routes_module.chat_persistence_service.get_task_export_response_summary
+        )
+        try:
+            task_routes_module.get_task_messages = lambda *_args, **_kwargs: []
+            task_routes_module.chat_persistence_service.get_task_export_response_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "task": {
+                        "id": "task-export-trace-source-alias",
+                        "session_id": "session-export-trace-source-alias",
+                        "prompt": "provider source export trace alias",
+                        "status": "completed",
+                        "status_normalized": "completed",
+                        "status_label": "Completed",
+                        "status_rank": 30,
+                        "created_at": "2026-08-12T10:00:00",
+                        "updated_at": "2026-08-12T10:01:00",
+                    },
+                    "usage": None,
+                    "messages": [],
+                    "trace": {
+                        "governance": {
+                            "profile": "planning_only",
+                            "provider_source": "suite_api_key=one",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        },
+                        "steps": [
+                            {
+                                "id": "task-export-trace-source-alias-step",
+                                "type": "action",
+                                "content": "Provider source trace step",
+                                "seq": 1,
+                                "meta": {
+                                    "tool_registry_provider_source": "suite_access_token=two",
+                                    "provider_sources": ["suite_api_key=one"],
+                                },
+                            }
+                        ],
+                        "step_count": 1,
+                        "rag_hit_count": 0,
+                        "rag_knowledge_base_ids": [],
+                        "rag_chunks": [],
+                    },
+                }
+            )
+            payload = task_routes_module._build_task_export_payload(  # type: ignore[attr-defined]
+                {
+                    "id": "task-export-trace-source-alias",
+                    "session_id": "session-export-trace-source-alias",
+                    "prompt": "provider source export trace alias",
+                    "status": "completed",
+                    "created_at": "2026-08-12T10:00:00",
+                    "updated_at": "2026-08-12T10:01:00",
+                },
+                "user-export-trace-source-alias",
+            )
+        finally:
+            task_routes_module.get_task_messages = original_get_task_messages
+            task_routes_module.chat_persistence_service.get_task_export_response_summary = original_export_summary  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(payload.trace.governance)
+        assert payload.trace.governance is not None
+        self.assertEqual(
+            payload.trace.governance.provider_source,
+            "suite_[redacted]#1",
+        )
+        step_meta = payload.trace.steps[0].meta
+        self.assertIsNotNone(step_meta)
+        assert step_meta is not None
+        self.assertEqual(
+            step_meta.tool_registry_provider_source,
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(step_meta.provider_sources, ["suite_[redacted]#1"])
+        markdown = task_routes_module._build_task_export_markdown(payload)  # type: ignore[attr-defined]
+        artifact_blob = json.dumps(payload.model_dump(), default=str) + markdown
+        self.assertNotIn("api_key=one", artifact_blob)
+        self.assertNotIn("access_token=two", artifact_blob)
+        self.assertIn("suite_[redacted]#1", artifact_blob)
+        self.assertIn("suite_[redacted]#2", artifact_blob)
+
     def test_session_export_payload_redacts_sensitive_provider_source_values(
         self,
     ) -> None:

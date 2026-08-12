@@ -68,7 +68,11 @@ def _coerce_payload_model_dump_list(value: object) -> object:
     return items
 
 
-def _coerce_trace_steps_for_route(value: object) -> object:
+def _coerce_trace_steps_for_route(
+    value: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> object:
     trace_steps = _coerce_payload_model_dump_list(value)
     if not isinstance(trace_steps, list):
         return trace_steps
@@ -85,9 +89,9 @@ def _coerce_trace_steps_for_route(value: object) -> object:
             continue
         route_steps.append(step)
         parsed_steps.append(step)
-    provider_source_aliases = (
+    alias_by_source = provider_source_aliases or (
         chat_persistence_service._build_trace_steps_provider_source_aliases(
-            parsed_steps
+            parsed_steps,
         )
     )
     normalized_steps: list[object] = []
@@ -96,7 +100,7 @@ def _coerce_trace_steps_for_route(value: object) -> object:
             normalized_steps.append(
                 chat_persistence_service._sanitize_trace_step_for_export(
                     item,
-                    provider_source_aliases=provider_source_aliases,
+                    provider_source_aliases=alias_by_source,
                 )
             )
             continue
@@ -205,16 +209,42 @@ def _coerce_task_export_messages_for_route(value: object) -> object:
     return normalized_messages
 
 
+def _build_task_export_trace_provider_source_aliases(
+    trace: dict[str, Any],
+) -> dict[str, str]:
+    source_names: list[str] = []
+    _append_governance_provider_source_alias_inputs(
+        source_names,
+        trace.get("governance"),
+    )
+    raw_steps = trace.get("steps")
+    steps = _coerce_payload_model_dump_list(raw_steps)
+    if isinstance(steps, list):
+        for item in steps:
+            step = _coerce_payload_mapping(item)
+            if not step:
+                continue
+            chat_persistence_service._append_trace_provider_source_alias_inputs(
+                source_names,
+                step.get("meta"),
+            )
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
 def _coerce_task_export_trace_for_route(
     trace: dict[str, Any],
     *,
     summary_is_dict: bool,
 ) -> dict[str, Any]:
     normalized_trace = dict(trace)
+    provider_source_aliases = _build_task_export_trace_provider_source_aliases(
+        normalized_trace
+    )
     if "governance" in normalized_trace:
         normalized_trace["governance"] = _coerce_task_governance_for_route(
             normalized_trace.get("governance"),
             normalize_dict=not summary_is_dict,
+            provider_source_aliases=provider_source_aliases,
         )
     if "rag_chunks" in normalized_trace:
         normalized_trace["rag_chunks"] = (
@@ -224,7 +254,8 @@ def _coerce_task_export_trace_for_route(
         )
     if "steps" in normalized_trace:
         normalized_trace["steps"] = _coerce_trace_steps_for_route(
-            normalized_trace.get("steps")
+            normalized_trace.get("steps"),
+            provider_source_aliases=provider_source_aliases,
         )
     return normalized_trace
 
