@@ -714,6 +714,14 @@ class ConfiguredToolRegistryProviderRuntimeServiceActionModel:
         *,
         provider_source_aliases: dict[str, str] | None = None,
     ) -> dict[str, object]:
+        if provider_source_aliases is None:
+            provider_source_aliases = _build_tool_runtime_artifact_provider_source_aliases(
+                provider_source_name="",
+                provider_sources={},
+                selected_source_diagnostics={},
+                source_diagnostics={},
+                service_actions=(self,),
+            )
         payload: dict[str, object] = {
             "kind": self.kind,
         }
@@ -746,6 +754,14 @@ class ConfiguredToolRegistryProviderRuntimeServiceActionsModel:
         *,
         provider_source_aliases: dict[str, str] | None = None,
     ) -> list[dict[str, object]]:
+        if provider_source_aliases is None:
+            provider_source_aliases = _build_tool_runtime_artifact_provider_source_aliases(
+                provider_source_name="",
+                provider_sources={},
+                selected_source_diagnostics={},
+                source_diagnostics={},
+                service_actions=self.actions,
+            )
         return [
             action.to_dict(provider_source_aliases=provider_source_aliases)
             for action in self.actions
