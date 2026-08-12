@@ -20,6 +20,9 @@ _RAG_BEARER_TOKEN_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECA
 _RAG_SENSITIVE_ASSIGNMENT_RE = re.compile(
     r"(?i)(^|[?&#;\s])(?:api[_-]?key|access[_-]?token|token|secret|password)=[^&#;\s]+"
 )
+_RAG_NORMALIZED_SENSITIVE_SEGMENT_RE = re.compile(
+    r"(?i)(^|[-_])(?:api[-_]?key|access[-_]?token|token|secret|password)(?=$|[-_])(?:[-_][a-z0-9]+)*"
+)
 _RAG_DOCUMENT_VERSION_RE = re.compile(r"^sha256:[a-f0-9]{16,64}$")
 _RAG_CONTENT_HASH_RE = re.compile(r"^[a-f0-9]{64}$")
 _RAG_RESERVED_METADATA_KEY_TOKENS = {
@@ -73,6 +76,10 @@ def normalize_knowledge_base_id(value: str | None) -> str:
     if not raw:
         return "default"
     normalized = re.sub(r"[^a-z0-9_-]+", "-", raw).strip("-")
+    normalized = _RAG_NORMALIZED_SENSITIVE_SEGMENT_RE.sub(
+        lambda match: f"{match.group(1)}redacted",
+        normalized,
+    ).strip("-_")
     if not normalized:
         return "default"
     return normalized[:48]
@@ -575,9 +582,10 @@ def list_knowledge_bases(*, user_id: str) -> dict[str, object]:
             continue
         if user_id != SHARED_RAG_SCOPE_USER_ID and is_shared_knowledge_base_id(kb_id):
             continue
+        safe_kb_id = normalize_knowledge_base_id(kb_id)
         row: dict[str, object] = {
-            "knowledge_base_id": kb_id,
-            "collection": collection_name,
+            "knowledge_base_id": safe_kb_id,
+            "collection": f"{prefix}{safe_kb_id}",
             "document_count": 0,
             "unique_document_count": 0,
             "document_versions": [],

@@ -266,6 +266,51 @@ class RagGovernanceMixin:
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("Bearer", serialized)
 
+    def test_list_knowledge_bases_redacts_legacy_sensitive_collection_suffix(
+        self,
+    ) -> None:
+        user_id = "user-rag-legacy-collection"
+        prefix = chroma_rag_module._rag_collection_prefix(user_id)
+        raw_collection_name = f"{prefix}team-api_key-raw-secret-token-raw-token"
+
+        class FakeCollection:
+            def count(self) -> int:
+                return 0
+
+        class FakeClient:
+            def __init__(self) -> None:
+                self.requested_collection_names: list[str] = []
+
+            def heartbeat(self) -> None:
+                return None
+
+            def list_collections(self) -> list[dict[str, str]]:
+                return [{"name": raw_collection_name}]
+
+            def get_collection(self, *, name: str) -> FakeCollection:
+                self.requested_collection_names.append(name)
+                return FakeCollection()
+
+        client = FakeClient()
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: client  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.list_knowledge_bases(user_id=user_id)
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertEqual(client.requested_collection_names, [raw_collection_name])
+        self.assertEqual(result["knowledge_base_count"], 1)
+        row = result["knowledge_bases"][0]
+        self.assertEqual(row["knowledge_base_id"], "team-redacted")
+        self.assertEqual(row["collection"], f"{prefix}team-redacted")
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("redacted", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("token=", serialized)
+
     def test_list_knowledge_bases_with_shared_hides_private_shared_prefix_shadow(
         self,
     ) -> None:
