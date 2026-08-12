@@ -2510,14 +2510,20 @@ def get_trace_rag_export_summary(
     }
 
 
-def get_task_trace_export_summary_from_task(task: dict) -> dict[str, object]:
+def get_task_trace_export_summary_from_task(
+    task: dict,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> dict[str, object]:
     trace_steps = get_task_trace_steps_from_task(task)
     rag_summary = get_trace_rag_export_summary(trace_steps)
-    provider_source_aliases = _build_trace_steps_provider_source_aliases(trace_steps)
+    alias_by_source = provider_source_aliases or (
+        _build_trace_steps_provider_source_aliases(trace_steps)
+    )
     export_steps = [
         _sanitize_trace_step_for_export(
             step,
-            provider_source_aliases=provider_source_aliases,
+            provider_source_aliases=alias_by_source,
         )
         for step in trace_steps
     ]
@@ -2675,10 +2681,67 @@ def get_task_create_response_summary(
     }
 
 
+def _get_task_trace_export_summary_with_provider_source_aliases(
+    task: dict[str, object],
+    *,
+    provider_source_aliases: dict[str, str],
+) -> dict[str, object]:
+    try:
+        return get_task_trace_export_summary_from_task(
+            task,
+            provider_source_aliases=provider_source_aliases,
+        )
+    except TypeError as exc:
+        if "provider_source_aliases" not in str(exc):
+            raise
+        return get_task_trace_export_summary_from_task(task)
+
+
+def _build_task_export_provider_source_aliases(
+    task: dict[str, object],
+    trace_summary: dict[str, object],
+) -> dict[str, str]:
+    source_names: list[str] = []
+    _append_governance_provider_source_alias_inputs(
+        source_names,
+        task.get("governance"),
+    )
+    _append_governance_provider_source_alias_inputs(
+        source_names,
+        trace_summary.get("governance"),
+    )
+    for trace_step in _load_trace_steps_from_trace_json(task.get("trace_json")):
+        _append_trace_provider_source_alias_inputs(
+            source_names,
+            trace_step.get("meta"),
+        )
+    raw_steps = trace_summary.get("steps")
+    if isinstance(raw_steps, UserList):
+        raw_steps = raw_steps.data
+    if isinstance(raw_steps, (list, tuple)):
+        for item in raw_steps:
+            row = _coerce_payload_mapping_or_none(item)
+            if row is None:
+                continue
+            _append_trace_provider_source_alias_inputs(source_names, row.get("meta"))
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
 def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
     task = _coerce_export_payload_block_to_dict(task)
-    trace_summary = get_task_trace_export_summary_from_task(task)
-    trace_steps = _coerce_export_trace_steps(trace_summary.get("steps"))
+    provider_source_aliases = _build_task_response_provider_source_aliases(task)
+    trace_summary = _get_task_trace_export_summary_with_provider_source_aliases(
+        task,
+        provider_source_aliases=provider_source_aliases,
+    )
+    provider_source_aliases = _build_task_export_provider_source_aliases(
+        task,
+        trace_summary,
+    )
+    trace_steps = _coerce_export_trace_steps(
+        trace_summary.get("steps"),
+        provider_source_aliases=provider_source_aliases,
+    )
     return {
         "task": {
             "id": str(task.get("id", "")),
@@ -2691,7 +2754,8 @@ def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
         "usage": get_task_usage_from_task(task),
         "trace": {
             "governance": _normalize_task_governance_payload_for_response(
-                task.get("governance")
+                task.get("governance"),
+                provider_source_aliases=provider_source_aliases,
             ),
             "steps": trace_steps,
             "step_count": int(trace_summary.get("step_count", 0) or 0),
@@ -2836,7 +2900,31 @@ def _coerce_payload_mapping_or_none(value: object) -> dict[str, object] | None:
     return mapped if isinstance(mapped, dict) else None
 
 
-def _coerce_export_trace_steps(value: object) -> list[TraceStep]:
+def _build_export_trace_provider_source_aliases(
+    trace_summary: dict[str, object],
+) -> dict[str, str]:
+    source_names: list[str] = []
+    _append_governance_provider_source_alias_inputs(
+        source_names,
+        trace_summary.get("governance"),
+    )
+    raw_steps = trace_summary.get("steps")
+    if isinstance(raw_steps, UserList):
+        raw_steps = raw_steps.data
+    if isinstance(raw_steps, (list, tuple)):
+        for item in raw_steps:
+            row = _coerce_payload_mapping_or_none(item)
+            if row is None:
+                continue
+            _append_trace_provider_source_alias_inputs(source_names, row.get("meta"))
+    return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
+def _coerce_export_trace_steps(
+    value: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> list[TraceStep]:
     if isinstance(value, UserList):
         value = value.data
     if not isinstance(value, (list, tuple)):
@@ -2844,14 +2932,24 @@ def _coerce_export_trace_steps(value: object) -> list[TraceStep]:
     steps: list[TraceStep] = []
     for item in value:
         if isinstance(item, TraceStep):
-            steps.append(_sanitize_trace_step_for_export(item))
+            steps.append(
+                _sanitize_trace_step_for_export(
+                    item,
+                    provider_source_aliases=provider_source_aliases,
+                )
+            )
             continue
         row = _coerce_export_payload_block_to_dict(item)
         if row:
             normalized_row = _normalize_trace_json_compatible_value(row)
             if isinstance(normalized_row, dict):
                 row = normalized_row
-            steps.append(_sanitize_trace_step_for_export(TraceStep.model_validate(row)))
+            steps.append(
+                _sanitize_trace_step_for_export(
+                    TraceStep.model_validate(row),
+                    provider_source_aliases=provider_source_aliases,
+                )
+            )
     return steps
 
 
@@ -2914,13 +3012,20 @@ def get_task_export_response_summary(
         get_task_export_payload_summary(task, message_rows)
     )
     trace_summary = _coerce_export_payload_block_to_dict(payload_summary.get("trace"))
-    trace_steps = _coerce_export_trace_steps(trace_summary.get("steps"))
+    provider_source_aliases = _build_export_trace_provider_source_aliases(
+        trace_summary
+    )
+    trace_steps = _coerce_export_trace_steps(
+        trace_summary.get("steps"),
+        provider_source_aliases=provider_source_aliases,
+    )
     return {
         "task": payload_summary.get("task"),
         "usage": payload_summary.get("usage"),
         "trace": {
             "governance": _normalize_task_governance_payload_for_response(
-                trace_summary.get("governance")
+                trace_summary.get("governance"),
+                provider_source_aliases=provider_source_aliases,
             ),
             "step_count": int(trace_summary.get("step_count", len(trace_steps)) or 0),
             "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),

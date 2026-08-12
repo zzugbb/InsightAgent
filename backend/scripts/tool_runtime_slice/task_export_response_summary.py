@@ -1545,6 +1545,82 @@ class TaskExportResponseSummaryMixin:
         self.assertNotIn("secret-token", serialized_step)
         self.assertNotIn("top-secret", serialized_step)
 
+    def test_get_task_export_response_summary_preserves_trace_governance_and_step_provider_source_aliases(
+        self,
+    ) -> None:
+        original_payload_helper = (
+            chat_persistence_module.get_task_export_payload_summary
+        )
+
+        try:
+            chat_persistence_module.get_task_export_payload_summary = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "task": {
+                        "id": "task-export-response-source-alias",
+                        "session_id": "session-export-response-source-alias",
+                        "prompt": "shared prompt",
+                        "status": "completed",
+                        "status_normalized": "normalized::completed",
+                        "status_label": "label::completed",
+                        "status_rank": 9,
+                        "created_at": "2026-08-12T11:30:00",
+                        "updated_at": "2026-08-12T11:31:00",
+                    },
+                    "usage": None,
+                    "messages": [],
+                    "trace": {
+                        "governance": {
+                            "profile": "planning_only",
+                            "provider_source": "suite_api_key=one",
+                            "allowed_tool_names": ["task_plan"],
+                            "allowed_tool_labels": ["Task Planner"],
+                        },
+                        "steps": [
+                            {
+                                "id": "step-export-response-source-alias",
+                                "type": "action",
+                                "content": "Provider source trace step",
+                                "seq": 3,
+                                "meta": {
+                                    "tool_registry_provider_source": "suite_access_token=two",
+                                    "provider_sources": ["suite_api_key=one"],
+                                },
+                            }
+                        ],
+                        "step_count": 1,
+                        "rag_hit_count": 0,
+                        "rag_knowledge_base_ids": [],
+                        "rag_chunks": [],
+                    },
+                }
+            )
+            payload = chat_persistence_module.get_task_export_response_summary(  # type: ignore[attr-defined]
+                {"id": "task-export-response-source-alias"},
+                [],
+            )
+        finally:
+            chat_persistence_module.get_task_export_payload_summary = original_payload_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            payload["trace"]["governance"]["provider_source"],
+            "suite_[redacted]#1",
+        )
+        step_meta = payload["trace"]["steps"][0].meta.model_dump()
+        self.assertEqual(
+            step_meta["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(step_meta["provider_sources"], ["suite_[redacted]#1"])
+        serialized = json.dumps(
+            {
+                "governance": payload["trace"]["governance"],
+                "steps": [step.model_dump() for step in payload["trace"]["steps"]],
+            },
+            ensure_ascii=False,
+        )
+        self.assertNotIn("api_key=one", serialized)
+        self.assertNotIn("access_token=two", serialized)
+
     def test_task_export_summary_coercion_redacts_provider_trace_step_rows(
         self,
     ) -> None:
