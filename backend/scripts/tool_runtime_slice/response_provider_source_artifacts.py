@@ -320,6 +320,83 @@ class ResponseProviderSourceArtifactsMixin:
             json.dumps(response.model_dump(), default=str),
         )
 
+    def test_task_detail_response_shares_provider_source_aliases_with_trace_json(
+        self,
+    ) -> None:
+        trace_json = json.dumps(
+            [
+                {
+                    "id": "step-task-detail-source-alias",
+                    "type": "tool",
+                    "title": "Task detail source alias step",
+                    "content": "provider source alias step",
+                    "meta": {
+                        "provider_source": "suite_access_token=two",
+                        "provider_sources": [
+                            "suite_access_token=two",
+                            "suite_api_key=one",
+                        ],
+                    },
+                }
+            ]
+        )
+        original_get_task = task_routes_module.get_task
+        original_response_summary = (
+            task_routes_module.chat_persistence_service.get_task_response_summary_from_task
+        )
+        try:
+            task_routes_module.get_task = lambda *_args, **_kwargs: {
+                "id": "task-detail-trace-source-alias",
+            }
+            task_routes_module.chat_persistence_service.get_task_response_summary_from_task = (  # type: ignore[attr-defined]
+                lambda *_args, **_kwargs: {
+                    "id": "task-detail-trace-source-alias",
+                    "session_id": "session-detail-trace-source-alias",
+                    "prompt": "provider source trace alias detail",
+                    "status": "completed",
+                    "status_normalized": "completed",
+                    "status_label": "Completed",
+                    "status_rank": 30,
+                    "governance": {
+                        "profile": "planning_only",
+                        "provider_source": "suite_api_key=one",
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner"],
+                    },
+                    "trace_json": trace_json,
+                    "usage_json": None,
+                    "created_at": "2026-08-10T13:00:00",
+                    "updated_at": "2026-08-10T13:01:00",
+                }
+            )
+
+            response = task_routes_module.get_task_detail(
+                "task-detail-trace-source-alias",
+                current_user={"id": "user-detail-trace-source-alias"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            task_routes_module.chat_persistence_service.get_task_response_summary_from_task = original_response_summary  # type: ignore[attr-defined]
+
+        self.assertIsNotNone(response.governance)
+        assert response.governance is not None
+        steps = json.loads(str(response.trace_json))
+        self.assertEqual(
+            response.governance.provider_source,
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            steps[0]["meta"]["provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            steps[0]["meta"]["provider_sources"],
+            ["suite_[redacted]#2", "suite_[redacted]#1"],
+        )
+        response_blob = json.dumps(response.model_dump(), default=str)
+        self.assertNotIn("api_key=one", response_blob)
+        self.assertNotIn("access_token=two", response_blob)
+
     def test_usage_dashboard_response_redacts_sensitive_provider_source_values(
         self,
     ) -> None:

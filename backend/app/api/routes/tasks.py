@@ -291,14 +291,19 @@ def _coerce_task_export_summary(value: object) -> dict[str, Any]:
 def _coerce_task_response_summary(value: object) -> dict[str, Any]:
     summary_is_dict = isinstance(value, dict)
     summary = dict(value) if summary_is_dict else _coerce_payload_mapping(value)
+    provider_source_aliases = (
+        chat_persistence_service._build_task_response_provider_source_aliases(summary)
+    )
     if "governance" in summary:
         summary["governance"] = _coerce_task_governance_for_route(
             summary.get("governance"),
             normalize_dict=not summary_is_dict,
+            provider_source_aliases=provider_source_aliases,
         )
     if "trace_json" in summary:
         summary["trace_json"] = chat_persistence_service._sanitize_task_response_trace_json(
-            summary.get("trace_json")
+            summary.get("trace_json"),
+            provider_source_aliases=provider_source_aliases,
         )
     return summary
 
