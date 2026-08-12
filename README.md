@@ -5,27 +5,28 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前状态
 
 - 阶段 5 基础产品化已完成：会话/任务/消息持久化、SSE、Trace、Memory、RAG、鉴权、PostgreSQL、任务取消/超时、running task 恢复、usage dashboard、审计与任务/会话导出已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 均已封板；当前主线切到 `production-reliability-hardening`，进度约 `8%`。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 均已封板；当前主线为 `production-reliability-hardening`，进度约 `14%`。
 - 当前队列基线：任务默认 `queued`，拿到进程内执行槽位后切 `running`；全局并发默认 `TASK_QUEUE_MAX_CONCURRENT=32`，可选 per-user/per-session 限额默认 `0` 关闭；等待队列保持 capacity-aware oldest eligible FIFO，queued cancel 会移出等待队列。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，覆盖全局、当前用户与可选当前会话 active/waiting/available 计数、限额触顶、`pressure_state`、fairness 开关、等待策略与 poll interval；前后端 typed contract 已固定 required governance 字段、optional scope 字段和枚举值。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `registry-governance` 已封板：provider/source 脱敏、冲突 alias、跨 settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
 - `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口，外部 SSE / trace / export / e2e shape 保持稳定。
-- `production-reliability-hardening` 首批后端收口：新增按 user/session scope 清理 waiting queue 的服务层能力，删除会话后会清理该会话残留 queued waiting entries；active slot 与外部删除响应 shape 保持不变。
+- `production-reliability-hardening` 已完成首批后端收口：按 user/session scope 清理 waiting queue、删除会话后清理残留 queued waiting entries、启动时将 orphaned `running` 任务标记为 `failed`；active slot、DELETE 204、SSE / trace / export shape 保持不变。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`3/3` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`5/5` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`：`63/63` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1907/1907` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`：`348/348` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1909/1909` 通过
 - RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`78/78` 通过
 - RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
 - Result summary targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，`30/30` 通过
 - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`77/77` 通过
 - `cd frontend && npm run lint`：通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
-- `backend/.venv/bin/python -m py_compile` 本轮相关 backend queue/session/test 模块：通过
+- `backend/.venv/bin/python -m py_compile` 本轮相关 backend startup/persistence/queue/session/test 模块：通过
 - 进入本主线前的完整 e2e 封板基线：backend main phase、backend queue phase、frontend full Chromium `50 passed / 1 skipped`、frontend queue phase `1/1` 与 CI tooling 均已通过；本轮未重跑 e2e / frontend。
 - `git diff --check`：通过
 - 普通沙箱访问本机 Docker/端口会被权限拦截时，按流程提权后重跑，不拿旧结果冒充新结果。
@@ -34,8 +35,8 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前开发计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`。
-2. 当前主线：`production-reliability-hardening`，进度约 `8%`；首批完成 queue scope cleanup 与 session delete waiting cleanup。
-3. 后续优先围绕任务恢复、异常退出后的队列清理、队列持久化边界、多实例并发风险与 e2e 稳定性继续补红测。
+2. 当前主线：`production-reliability-hardening`，进度约 `14%`；已完成 queue scope cleanup、session delete waiting cleanup 与 startup orphan running cleanup。
+3. 后续优先围绕异常退出后的队列清理、队列持久化边界、多实例并发风险与 e2e 稳定性继续补红测。
 4. 继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
 
 ## 后续候选主线

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.config import get_settings
 from app.db import initialize_database
+from app.services.chat_persistence_service import recover_orphaned_running_tasks_on_startup
 
 
 settings = get_settings()
@@ -14,6 +15,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     initialize_database()
+    recover_orphaned_running_tasks_on_startup()
     yield
 
 

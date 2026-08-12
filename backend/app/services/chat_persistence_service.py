@@ -993,6 +993,21 @@ def update_task_status(task_id: str, status: str, user_id: str) -> None:
         connection.commit()
 
 
+def recover_orphaned_running_tasks_on_startup() -> int:
+    current_time = _now_iso()
+    with get_db_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE tasks
+            SET status = ?, updated_at = ?
+            WHERE LOWER(status) = ?
+            """,
+            ("failed", current_time, "running"),
+        )
+        connection.commit()
+        return max(0, int(getattr(cursor, "rowcount", 0) or 0))
+
+
 def update_task_trace_steps(task_id: str, trace_steps: list[dict], user_id: str) -> None:
     """流式执行过程中写入部分 trace（不改变任务状态）。"""
     current_time = _now_iso()
