@@ -6,7 +6,8 @@ current_focus:
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening。
   - 外部 SSE / trace / export / e2e shape 本轮完整复验通过；本轮新增 RAG route status/list document_versions source/document_id 末端规整，不破坏既有可见字段 shape。
-  - 下一主线尚未打开；进入新主线前以三份 README 与本计划文件的封板基线为准。
+  - 下一主线尚未打开；候选方向为 production-reliability-hardening、rag-product-experience、observability-experience、provider-tool-expansion、ci-release-engineering。
+  - 进入新主线前以三份 README 与本计划文件的封板基线为准，并先明确主线名、验收边界和回归门。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
   - 保持先补 failing test 再改实现
@@ -60,6 +61,9 @@ todos:
   - id: rag-governance-hardening
     status: completed
     content: 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、reserved alias、shared/private 边界、route/runtime trace/export/display、错误出口、前端治理表和 trace 搜索均已完成治理收口并通过完整复验。
+  - id: next-mainline-candidates
+    status: pending
+    content: 候选下一主线：production-reliability-hardening（服务启动/恢复/队列持久化/多实例并发/异常恢复/e2e 稳定性）、rag-product-experience（版本对比/文档治理/检索解释/召回质量评估）、observability-experience（Workbench/Task Center/Trace/失败诊断/任务回放体验）、provider-tool-expansion（真实 provider/tool 协议扩展）、ci-release-engineering（分层 CI/e2e/发布前检查）。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -117,6 +121,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 ## 后续维护线
 
 - 下一主线尚未打开；进入新主线前以本轮封板验证基线为准。
+- 候选下一主线：`production-reliability-hardening`、`rag-product-experience`、`observability-experience`、`provider-tool-expansion`、`ci-release-engineering`；正式开启前先补主线验收边界和首批红测计划。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 维护约定

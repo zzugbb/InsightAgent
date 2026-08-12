@@ -35,6 +35,14 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. 下一主线尚未打开；回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
+## 候选下一主线
+
+- `production-reliability-hardening`：围绕 running/queued 恢复、Task Center 多任务隔离、取消态、低并发 queue phase 与 full Chromium 稳定性补强。
+- `rag-product-experience`：知识库版本对比、文档治理操作、检索解释、召回质量呈现与 RAG 调试体验。
+- `observability-experience`：优化 Workbench、Task Center、Trace、失败诊断、任务回放和知识库治理的可读性与操作效率。
+- `provider-tool-expansion`：配合后端新增 provider/tool 协议，保持 settings/preflight/runtime/trace/export 显示契约稳定。
+- `ci-release-engineering`：把 frontend node/type/lint、targeted Chromium、queue phase 与 full Chromium 基线沉淀为更明确的发布前门禁。
+
 ## 当前已有内容
 
 - 三栏工作台：会话、消息、轨迹/上下文

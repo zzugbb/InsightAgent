@@ -38,6 +38,14 @@
 3. 后续开发继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
 4. 下一主线尚未打开；进入新主线前以本轮封板验证基线为准。
 
+## 候选下一主线
+
+- `production-reliability-hardening`：服务启动、任务恢复、队列持久化、多实例并发、异常恢复、低并发/全量 e2e 稳定性。
+- `rag-product-experience`：知识库版本对比、文档治理、检索解释、召回质量评估与 RAG 调试接口体验。
+- `observability-experience`：trace 诊断、失败详情、任务回放、usage/audit 关联与后端可观测摘要。
+- `provider-tool-expansion`：新增真实 provider/tool 协议时先补红测，再局部归一化 registry/runtime 输出。
+- `ci-release-engineering`：把 backend slice、targeted RAG、queue phase、full e2e 和 diff hygiene 固化成更清晰的分层门禁。
+
 ## 当前已有内容
 
 - `app/config.py`：统一配置读取

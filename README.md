@@ -35,6 +35,14 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 3. 后续开发继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
 4. 下一主线尚未打开；进入新主线前以本文件、backend/frontend README 与实时计划的封板基线为准。
 
+## 候选下一主线
+
+- `production-reliability-hardening`：优先提升服务启动、任务恢复、队列持久化、多实例并发、异常恢复与 e2e 稳定性。
+- `rag-product-experience`：面向用户可见能力增强，聚焦知识库版本对比、文档治理、检索解释与召回质量评估。
+- `observability-experience`：打磨 Workbench、Task Center、Trace、失败诊断、任务回放与知识库治理的可读性和操作效率。
+- `provider-tool-expansion`：按小红测继续扩展真实 provider、工具协议与 registry 管理能力，不扩大既有外部契约。
+- `ci-release-engineering`：把当前手工封板验证基线进一步沉淀为分层 CI、e2e 编排和发布前检查。
+
 ## 关键能力边界
 
 - 外部 SSE / trace / export / e2e 契约保持稳定，优先做内部 runtime/helper/display 收口。
