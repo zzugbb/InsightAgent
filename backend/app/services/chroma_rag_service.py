@@ -24,6 +24,7 @@ _RAG_SENSITIVE_ASSIGNMENT_RE = re.compile(
 _RAG_NORMALIZED_SENSITIVE_SEGMENT_RE = re.compile(
     r"(?i)(^|[-_])(?:api[-_]?key|access[-_]?token|token|secret|password)(?=$|[-_])(?:[-_][a-z0-9]+)*"
 )
+_RAG_COLLECTION_NAME_RE = re.compile(r"^(kb_[^_]+_)(.+)$")
 _RAG_DOCUMENT_VERSION_RE = re.compile(r"^sha256:[a-f0-9]{16,64}$")
 _RAG_CONTENT_HASH_RE = re.compile(r"^[a-f0-9]{64}$")
 _RAG_RESERVED_METADATA_KEY_TOKENS = {
@@ -100,6 +101,16 @@ def _normalize_user_scope(user_id: str) -> str:
 
 def rag_collection_name(user_id: str, knowledge_base_id: str) -> str:
     return f"kb_{_normalize_user_scope(user_id)}_{normalize_knowledge_base_id(knowledge_base_id)}"
+
+
+def sanitize_rag_collection_name(value: object) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    match = _RAG_COLLECTION_NAME_RE.match(raw)
+    if match:
+        return f"{match.group(1)}{normalize_knowledge_base_id(match.group(2))}"
+    return _sanitize_rag_metadata_text(raw, limit=240)
 
 
 def _rag_collection_prefix(user_id: str) -> str:

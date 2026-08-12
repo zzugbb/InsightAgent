@@ -13,7 +13,9 @@ from app.services.chroma_rag_service import (
     ingest_knowledge_documents,
     is_shared_knowledge_base_id,
     list_knowledge_bases_with_shared,
+    normalize_knowledge_base_id,
     query_knowledge_base,
+    sanitize_rag_collection_name,
     sanitize_rag_error_message,
 )
 
@@ -41,6 +43,32 @@ def _coerce_payload_block_list(value: object) -> list[dict[str, Any]]:
         if row:
             rows.append(row)
     return rows
+
+
+def _sanitize_rag_route_identifier_values(value: object) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            safe_key = str(key)
+            if safe_key == "knowledge_base_id":
+                sanitized[safe_key] = normalize_knowledge_base_id(str(item or ""))
+                continue
+            if safe_key == "collection":
+                sanitized[safe_key] = sanitize_rag_collection_name(item)
+                continue
+            sanitized[safe_key] = _sanitize_rag_route_identifier_values(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_rag_route_identifier_values(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_rag_route_identifier_values(item) for item in value)
+    return value
+
+
+def _coerce_safe_payload_mapping(value: object) -> dict[str, Any]:
+    raw = _coerce_payload_mapping(value)
+    safe = _sanitize_rag_route_identifier_values(raw)
+    return safe if isinstance(safe, dict) else {}
 
 
 def _is_admin_user(current_user: dict) -> bool:
@@ -172,7 +200,7 @@ def get_rag_status(
         knowledge_base_id=knowledge_base_id,
         mutate=False,
     )
-    raw = _coerce_payload_mapping(
+    raw = _coerce_safe_payload_mapping(
         get_knowledge_base_status(
             user_id=owner_user_id,
             knowledge_base_id=knowledge_base_id,
@@ -185,7 +213,7 @@ def get_rag_status(
 def get_rag_knowledge_bases(
     current_user: dict = Depends(get_current_user),
 ) -> RagKnowledgeBaseListResponse:
-    raw = _coerce_payload_mapping(
+    raw = _coerce_safe_payload_mapping(
         list_knowledge_bases_with_shared(
             user_id=str(current_user["id"]),
             include_shared=True,
@@ -210,7 +238,7 @@ def post_rag_clear_knowledge_base(
         mutate=True,
     )
     try:
-        raw = _coerce_payload_mapping(
+        raw = _coerce_safe_payload_mapping(
             clear_knowledge_base(
                 user_id=owner_user_id,
                 knowledge_base_id=knowledge_base_id,
@@ -252,7 +280,7 @@ def delete_rag_knowledge_base(
         mutate=True,
     )
     try:
-        raw = _coerce_payload_mapping(
+        raw = _coerce_safe_payload_mapping(
             delete_knowledge_base(
                 user_id=owner_user_id,
                 knowledge_base_id=knowledge_base_id,
@@ -292,7 +320,7 @@ def post_rag_ingest(
     )
     docs = [x.model_dump(exclude_none=True) for x in payload.documents]
     try:
-        raw = _coerce_payload_mapping(
+        raw = _coerce_safe_payload_mapping(
             ingest_knowledge_documents(
                 user_id=owner_user_id,
                 knowledge_base_id=payload.knowledge_base_id,
@@ -336,7 +364,7 @@ def post_rag_query(
         mutate=False,
     )
     try:
-        raw = _coerce_payload_mapping(
+        raw = _coerce_safe_payload_mapping(
             query_knowledge_base(
                 user_id=owner_user_id,
                 knowledge_base_id=payload.knowledge_base_id,
