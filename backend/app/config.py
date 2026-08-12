@@ -134,6 +134,11 @@ class Settings(BaseSettings):
         alias="TASK_QUEUE_POLL_INTERVAL_SEC",
         description="queued 任务等待执行槽位时的 SSE 状态刷新/重试间隔（秒）",
     )
+    task_execution_owner_id: str = Field(
+        default="default",
+        alias="TASK_EXECUTION_OWNER_ID",
+        description="当前 backend 执行实例 ID；多实例部署时应为每个执行实例设置唯一稳定值",
+    )
     rag_default_knowledge_base_id: str = Field(
         default="default",
         alias="RAG_DEFAULT_KNOWLEDGE_BASE_ID",

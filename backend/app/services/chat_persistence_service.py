@@ -993,16 +993,68 @@ def update_task_status(task_id: str, status: str, user_id: str) -> None:
         connection.commit()
 
 
-def recover_orphaned_running_tasks_on_startup() -> int:
+def get_task_execution_owner_id(settings: object | None = None) -> str:
+    raw_owner_id = (
+        getattr(settings, "task_execution_owner_id", None)
+        if settings is not None
+        else getattr(get_settings(), "task_execution_owner_id", None)
+    )
+    normalized = str(raw_owner_id or "").strip()
+    return normalized or "default"
+
+
+def mark_task_running_started(
+    *,
+    task_id: str,
+    user_id: str,
+    execution_owner_id: str,
+) -> int:
     current_time = _now_iso()
+    owner_id = get_task_execution_owner_id(
+        SimpleNamespace(task_execution_owner_id=execution_owner_id)
+    )
     with get_db_connection() as connection:
         cursor = connection.execute(
             """
             UPDATE tasks
-            SET status = ?, updated_at = ?
-            WHERE LOWER(status) = ?
+            SET
+                status = ?,
+                updated_at = ?,
+                execution_owner_id = ?,
+                execution_heartbeat_at = ?
+            WHERE id = ? AND user_id = ?
             """,
-            ("failed", current_time, "running"),
+            ("running", current_time, owner_id, current_time, task_id, user_id),
+        )
+        connection.commit()
+        return max(0, int(getattr(cursor, "rowcount", 0) or 0))
+
+
+def recover_orphaned_running_tasks_on_startup(
+    *,
+    execution_owner_id: str | None = None,
+) -> int:
+    current_time = _now_iso()
+    owner_id = get_task_execution_owner_id(
+        SimpleNamespace(task_execution_owner_id=execution_owner_id)
+    )
+    with get_db_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE tasks
+            SET
+                status = ?,
+                updated_at = ?,
+                execution_owner_id = NULL,
+                execution_heartbeat_at = NULL
+            WHERE LOWER(status) = ?
+              AND (
+                execution_owner_id IS NULL
+                OR TRIM(execution_owner_id) = ''
+                OR execution_owner_id = ?
+              )
+            """,
+            ("failed", current_time, "running", owner_id),
         )
         connection.commit()
         return max(0, int(getattr(cursor, "rowcount", 0) or 0))
@@ -1075,7 +1127,9 @@ def complete_task(
                 tool_registry_profile = ?,
                 tool_registry_provider_source = ?,
                 allowed_tool_names_json = ?,
-                allowed_tool_labels_json = ?
+                allowed_tool_labels_json = ?,
+                execution_owner_id = NULL,
+                execution_heartbeat_at = NULL
             WHERE id = ? AND user_id = ?
             """,
             (

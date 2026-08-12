@@ -136,6 +136,8 @@ def _ensure_postgres_schema(pg_connection) -> None:
             tool_registry_provider_source TEXT,
             allowed_tool_names_json TEXT,
             allowed_tool_labels_json TEXT,
+            execution_owner_id TEXT,
+            execution_heartbeat_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

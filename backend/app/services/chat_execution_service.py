@@ -11,7 +11,9 @@ from app.services.audit_service import safe_record_audit_event
 from app.services.chat_persistence_service import (
     complete_task,
     create_message,
+    get_task_execution_owner_id,
     get_task,
+    mark_task_running_started,
     update_task_status,
     update_task_trace_steps,
 )
@@ -353,6 +355,7 @@ def stream_task_execution(
         0.01,
         float(getattr(runtime_config, "task_queue_poll_interval_sec", 0.25) or 0.25),
     )
+    TASK_EXECUTION_OWNER_ID = get_task_execution_owner_id(runtime_config)
     trace_steps: list[dict[str, object]] = []
     seq_cursor = 0
     last_trace_persist_ts = 0.0
@@ -510,7 +513,11 @@ def stream_task_execution(
             )
             sleep(TASK_QUEUE_POLL_INTERVAL_SEC)
 
-        update_task_status(task_id=task_id, status="running", user_id=user_id)
+        mark_task_running_started(
+            task_id=task_id,
+            user_id=user_id,
+            execution_owner_id=TASK_EXECUTION_OWNER_ID,
+        )
         probe_task_status(force=True)
 
         runtime_settings = get_stored_settings(user_id)

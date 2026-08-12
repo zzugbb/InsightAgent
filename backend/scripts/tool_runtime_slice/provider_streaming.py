@@ -39,6 +39,9 @@ class ProviderStreamingMixin:
             chat_execution_module.execute_configured_tool_registry_provider_preflight
         )
         original_update_task_status = chat_execution_module.update_task_status
+        original_mark_task_running_started = (
+            chat_execution_module.mark_task_running_started
+        )
         original_get_task = chat_execution_module.get_task
         original_update_task_trace_steps = chat_execution_module.update_task_trace_steps
         original_complete_task = chat_execution_module.complete_task
@@ -108,6 +111,9 @@ class ProviderStreamingMixin:
                 fake_execute_preflight
             )
             chat_execution_module.update_task_status = lambda *args, **kwargs: None
+            chat_execution_module.mark_task_running_started = (
+                lambda *args, **kwargs: 1
+            )
             chat_execution_module.get_task = lambda *args, **kwargs: {"status": "running"}
             chat_execution_module.update_task_trace_steps = lambda *args, **kwargs: None
             chat_execution_module.complete_task = lambda *args, **kwargs: None
@@ -137,6 +143,9 @@ class ProviderStreamingMixin:
                 original_execute_preflight
             )
             chat_execution_module.update_task_status = original_update_task_status
+            chat_execution_module.mark_task_running_started = (
+                original_mark_task_running_started
+            )
             chat_execution_module.get_task = original_get_task
             chat_execution_module.update_task_trace_steps = original_update_task_trace_steps
             chat_execution_module.complete_task = original_complete_task
@@ -1105,6 +1114,9 @@ class ProviderStreamingMixin:
             chat_execution_module.execute_tool_plan_item_service_actions
         )
         original_update_task_status = chat_execution_module.update_task_status
+        original_mark_task_running_started = (
+            chat_execution_module.mark_task_running_started
+        )
         original_get_task = chat_execution_module.get_task
         original_update_task_trace_steps = chat_execution_module.update_task_trace_steps
         original_complete_task = chat_execution_module.complete_task
@@ -1201,6 +1213,9 @@ class ProviderStreamingMixin:
                 fake_execute_tool_plan_item_service_actions
             )
             chat_execution_module.update_task_status = lambda *args, **kwargs: None
+            chat_execution_module.mark_task_running_started = (
+                lambda *args, **kwargs: 1
+            )
             chat_execution_module.get_task = lambda *args, **kwargs: {"status": "running"}
             chat_execution_module.update_task_trace_steps = lambda *args, **kwargs: None
             chat_execution_module.complete_task = (
@@ -1238,6 +1253,9 @@ class ProviderStreamingMixin:
                 original_execute_tool_plan_item_service_actions
             )
             chat_execution_module.update_task_status = original_update_task_status
+            chat_execution_module.mark_task_running_started = (
+                original_mark_task_running_started
+            )
             chat_execution_module.get_task = original_get_task
             chat_execution_module.update_task_trace_steps = original_update_task_trace_steps
             chat_execution_module.complete_task = original_complete_task
@@ -1296,6 +1314,9 @@ class ProviderStreamingMixin:
             chat_execution_module.execute_tool_plan_item_service_actions
         )
         original_update_task_status = chat_execution_module.update_task_status
+        original_mark_task_running_started = (
+            chat_execution_module.mark_task_running_started
+        )
         original_get_task = chat_execution_module.get_task
         original_update_task_trace_steps = chat_execution_module.update_task_trace_steps
         original_complete_task = chat_execution_module.complete_task
@@ -1413,6 +1434,9 @@ class ProviderStreamingMixin:
                 fake_execute_tool_plan_item_service_actions
             )
             chat_execution_module.update_task_status = lambda *args, **kwargs: None
+            chat_execution_module.mark_task_running_started = (
+                lambda *args, **kwargs: 1
+            )
             chat_execution_module.get_task = lambda *args, **kwargs: {"status": "running"}
             chat_execution_module.update_task_trace_steps = lambda *args, **kwargs: None
             chat_execution_module.complete_task = (
@@ -1450,6 +1474,9 @@ class ProviderStreamingMixin:
                 original_execute_tool_plan_item_service_actions
             )
             chat_execution_module.update_task_status = original_update_task_status
+            chat_execution_module.mark_task_running_started = (
+                original_mark_task_running_started
+            )
             chat_execution_module.get_task = original_get_task
             chat_execution_module.update_task_trace_steps = original_update_task_trace_steps
             chat_execution_module.complete_task = original_complete_task
@@ -1512,6 +1539,9 @@ class ProviderStreamingMixin:
             chat_execution_module.execute_tool_plan_item_service_actions
         )
         original_update_task_status = chat_execution_module.update_task_status
+        original_mark_task_running_started = (
+            chat_execution_module.mark_task_running_started
+        )
         original_get_task = chat_execution_module.get_task
         original_update_task_trace_steps = chat_execution_module.update_task_trace_steps
         original_complete_task = chat_execution_module.complete_task
@@ -1603,6 +1633,9 @@ class ProviderStreamingMixin:
                 fake_execute_tool_plan_item_service_actions
             )
             chat_execution_module.update_task_status = lambda *args, **kwargs: None
+            chat_execution_module.mark_task_running_started = (
+                lambda *args, **kwargs: 1
+            )
             chat_execution_module.get_task = lambda *args, **kwargs: {"status": "running"}
             chat_execution_module.update_task_trace_steps = lambda *args, **kwargs: None
             chat_execution_module.complete_task = (
@@ -1640,6 +1673,9 @@ class ProviderStreamingMixin:
                 original_execute_tool_plan_item_service_actions
             )
             chat_execution_module.update_task_status = original_update_task_status
+            chat_execution_module.mark_task_running_started = (
+                original_mark_task_running_started
+            )
             chat_execution_module.get_task = original_get_task
             chat_execution_module.update_task_trace_steps = original_update_task_trace_steps
             chat_execution_module.complete_task = original_complete_task
