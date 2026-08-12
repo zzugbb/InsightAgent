@@ -28,7 +28,10 @@ from app.providers.response_utils import (
 from app.services.chroma_rag_service import (
     SHARED_RAG_SCOPE_USER_ID,
     is_shared_knowledge_base_id,
+    normalize_knowledge_base_id,
     query_knowledge_base,
+    sanitize_rag_collection_name,
+    sanitize_rag_query_hits,
 )
 
 
@@ -1139,18 +1142,20 @@ def _run_task_retrieve(
             f"RAG query failed: {exc}",
             fatal=False,
         ) from exc
+    safe_hits = sanitize_rag_query_hits(result.get("hits"))
     chunks = [
         str(x.get("content", "")).strip()
-        for x in result.get("hits", [])
+        for x in safe_hits
         if isinstance(x, dict)
     ]
     clean_chunks = [x for x in chunks if x]
+    raw_kb_id = str(result.get("knowledge_base_id", kb_id))
     return {
         "chunks": clean_chunks,
-        "hits": result.get("hits", []),
+        "hits": safe_hits,
         "hit_count": int(result.get("hit_count", 0) or 0),
-        "knowledge_base_id": str(result.get("knowledge_base_id", kb_id)),
-        "collection": result.get("collection"),
+        "knowledge_base_id": normalize_knowledge_base_id(raw_kb_id),
+        "collection": sanitize_rag_collection_name(result.get("collection")),
     }
 
 

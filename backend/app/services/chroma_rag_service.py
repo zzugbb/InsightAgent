@@ -328,6 +328,54 @@ def _rag_document_version(
     return f"sha256:{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:16]}"
 
 
+def sanitize_rag_query_hit(
+    hit: object,
+    *,
+    fallback_id: object | None = None,
+    include_defaults: bool = False,
+) -> dict[str, object]:
+    row = _coerce_document_mapping(hit)
+    sanitized: dict[str, object] = {}
+    if include_defaults or "id" in row:
+        raw_id = row.get("id", fallback_id if fallback_id is not None else "")
+        safe_id = _sanitize_rag_metadata_text(raw_id, limit=240)
+        if not safe_id and fallback_id is not None:
+            safe_id = _sanitize_rag_metadata_text(fallback_id, limit=240)
+        sanitized["id"] = safe_id
+    if include_defaults or "content" in row:
+        sanitized["content"] = str(row.get("content") or "")
+    if include_defaults or "distance" in row:
+        distance = row.get("distance")
+        sanitized["distance"] = (
+            float(distance) if isinstance(distance, (int, float)) else None
+        )
+    if include_defaults or "metadata" in row:
+        sanitized["metadata"] = _normalize_metadata(row.get("metadata"))
+    return sanitized
+
+
+def sanitize_rag_query_hits(
+    value: object,
+    *,
+    include_defaults: bool = False,
+) -> list[dict[str, object]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    hits: list[dict[str, object]] = []
+    for index, item in enumerate(value):
+        row = _coerce_document_mapping(item)
+        if not row:
+            continue
+        hits.append(
+            sanitize_rag_query_hit(
+                row,
+                fallback_id=index,
+                include_defaults=include_defaults,
+            )
+        )
+    return hits
+
+
 def _collection_document_version_summaries(
     collection: object,
     *,
@@ -545,12 +593,16 @@ def query_knowledge_base(
         metadata = row_metas[index] if index < len(row_metas) else {}
 
         hits.append(
-            {
-                "id": _sanitize_rag_metadata_text(doc_id, limit=240),
-                "content": str(content or ""),
-                "distance": float(distance) if isinstance(distance, (int, float)) else None,
-                "metadata": _normalize_metadata(metadata),
-            }
+            sanitize_rag_query_hit(
+                {
+                    "id": doc_id,
+                    "content": content,
+                    "distance": distance,
+                    "metadata": metadata,
+                },
+                fallback_id=index,
+                include_defaults=True,
+            )
         )
 
     return {
