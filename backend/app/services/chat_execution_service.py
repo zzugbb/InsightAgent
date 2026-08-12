@@ -13,6 +13,7 @@ from app.services.chat_persistence_service import (
     create_message,
     get_task_execution_owner_id,
     get_task,
+    mark_task_queued_waiting,
     mark_task_running_started,
     touch_task_execution_heartbeat,
     update_task_status,
@@ -525,8 +526,30 @@ def stream_task_execution(
             if task_slot is not None:
                 break
             if cached_task_status not in {"queued", "queueing", "enqueued"}:
-                update_task_status(task_id=task_id, status="queued", user_id=user_id)
+                queued_marked_count = mark_task_queued_waiting(
+                    task_id=task_id,
+                    user_id=user_id,
+                )
                 probe_task_status(force=True)
+                if queued_marked_count <= 0:
+                    release_task_slot()
+                    record_failure_event(
+                        event_type="task_failed",
+                        code="task_queue_start_conflict",
+                        message="Task could not be marked queued before waiting.",
+                    )
+                    yield sse_event("state", {"task_id": task_id, "phase": "error"})
+                    yield sse_event(
+                        "error",
+                        sse_error_payload(
+                            task_id=task_id,
+                            message="Task could not be marked queued before waiting.",
+                            code="task_queue_start_conflict",
+                            fatal=True,
+                            retry_count=0,
+                        ),
+                    )
+                    return
             yield sse_event(
                 "state",
                 {

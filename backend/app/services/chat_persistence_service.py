@@ -993,6 +993,26 @@ def update_task_status(task_id: str, status: str, user_id: str) -> None:
         connection.commit()
 
 
+def mark_task_queued_waiting(
+    *,
+    task_id: str,
+    user_id: str,
+) -> int:
+    current_time = _now_iso()
+    with get_db_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE tasks
+            SET status = ?, updated_at = ?
+            WHERE id = ? AND user_id = ?
+              AND LOWER(status) IN ('pending', 'queued')
+            """,
+            ("queued", current_time, task_id, user_id),
+        )
+        connection.commit()
+        return max(0, int(getattr(cursor, "rowcount", 0) or 0))
+
+
 def get_task_execution_owner_id(settings: object | None = None) -> str:
     raw_owner_id = (
         getattr(settings, "task_execution_owner_id", None)
