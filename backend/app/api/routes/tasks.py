@@ -358,7 +358,30 @@ def _build_task_list_provider_source_aliases(tasks: list[object]) -> dict[str, s
             source_names,
             task_summary.get("governance"),
         )
+        for trace_step in chat_persistence_service._load_trace_steps_from_trace_json(
+            task_summary.get("trace_json")
+        ):
+            chat_persistence_service._append_trace_provider_source_alias_inputs(
+                source_names,
+                trace_step.get("meta"),
+            )
     return build_safe_tool_registry_provider_source_alias_map(source_names)
+
+
+def _get_task_list_response_summary_from_task(
+    task: object,
+    *,
+    provider_source_aliases: dict[str, str],
+) -> object:
+    try:
+        return chat_persistence_service.get_task_response_summary_from_task(
+            task,
+            provider_source_aliases=provider_source_aliases,
+        )
+    except TypeError as exc:
+        if "provider_source_aliases" not in str(exc):
+            raise
+        return chat_persistence_service.get_task_response_summary_from_task(task)
 
 
 def _coerce_task_list_response_item_summary(
@@ -367,7 +390,10 @@ def _coerce_task_list_response_item_summary(
     provider_source_aliases: dict[str, str],
 ) -> dict[str, Any]:
     summary = _coerce_task_response_summary(
-        chat_persistence_service.get_task_response_summary_from_task(task)
+        _get_task_list_response_summary_from_task(
+            task,
+            provider_source_aliases=provider_source_aliases,
+        )
     )
     task_summary = _coerce_payload_mapping(task)
     raw_governance = _coerce_payload_mapping(task_summary.get("governance"))

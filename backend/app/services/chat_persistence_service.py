@@ -2630,10 +2630,18 @@ def _build_task_response_provider_source_aliases(task: dict[str, object]) -> dic
     return build_safe_tool_registry_provider_source_alias_map(source_names)
 
 
-def get_task_response_summary_from_task(task: dict) -> dict[str, object]:
+def get_task_response_summary_from_task(
+    task: dict,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
+) -> dict[str, object]:
     task = _coerce_export_payload_block_to_dict(task)
     usage_json = _coerce_trace_string_like_value(task.get("usage_json"))
-    provider_source_aliases = _build_task_response_provider_source_aliases(task)
+    provider_source_aliases = (
+        provider_source_aliases
+        if provider_source_aliases is not None
+        else _build_task_response_provider_source_aliases(task)
+    )
     return {
         "id": str(task.get("id", "")),
         "session_id": str(task.get("session_id", "")),

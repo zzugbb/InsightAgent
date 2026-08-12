@@ -423,3 +423,114 @@ class ResponseProviderSourceArtifactsMixin:
         response_blob = json.dumps(response.model_dump(), default=str)
         self.assertNotIn("api_key=one", response_blob)
         self.assertNotIn("access_token=two", response_blob)
+
+    def test_task_list_response_shares_provider_source_aliases_with_trace_json(
+        self,
+    ) -> None:
+        first_trace_step = {
+            "id": "step-task-list-api-key",
+            "type": "tool",
+            "title": "API key step",
+            "content": "step with api key provider source",
+            "meta": {
+                "provider_source": "suite_api_key=one",
+                "provider_sources": [
+                    "suite_api_key=one",
+                    "suite_access_token=two",
+                ],
+            },
+        }
+        second_trace_step = {
+            "id": "step-task-list-access-token",
+            "type": "tool",
+            "title": "Access token step",
+            "content": "step with access token provider source",
+            "meta": {
+                "provider_source": "suite_access_token=two",
+                "provider_sources": [
+                    "suite_access_token=two",
+                    "suite_api_key=one",
+                ],
+            },
+        }
+        original_list_tasks = task_routes_module.list_tasks
+        original_count_tasks = task_routes_module.count_tasks
+        try:
+            task_routes_module.list_tasks = lambda **_kwargs: [
+                {
+                    "id": "task-list-trace-api-key",
+                    "session_id": "session-list-trace-source-alias",
+                    "prompt": "provider source trace alias api key",
+                    "status": "completed",
+                    "governance": {
+                        "profile": "planning_only",
+                        "provider_source": "suite_api_key=one",
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner"],
+                    },
+                    "trace_json": json.dumps([first_trace_step]),
+                    "usage_json": None,
+                    "created_at": "2026-08-10T13:00:00",
+                    "updated_at": "2026-08-10T13:01:00",
+                },
+                {
+                    "id": "task-list-trace-access-token",
+                    "session_id": "session-list-trace-source-alias",
+                    "prompt": "provider source trace alias access token",
+                    "status": "completed",
+                    "governance": {
+                        "profile": "planning_only",
+                        "provider_source": "suite_access_token=two",
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner"],
+                    },
+                    "trace_json": json.dumps([second_trace_step]),
+                    "usage_json": None,
+                    "created_at": "2026-08-10T13:00:00",
+                    "updated_at": "2026-08-10T13:01:00",
+                },
+            ]
+            task_routes_module.count_tasks = lambda *_args, **_kwargs: 2
+
+            response = task_routes_module.get_tasks(
+                limit=20,
+                offset=0,
+                session_id=None,
+                query=None,
+                tool_registry_profile=None,
+                tool_registry_provider_source=None,
+                current_user={"id": "user-list-trace-source-alias"},
+            )
+        finally:
+            task_routes_module.list_tasks = original_list_tasks
+            task_routes_module.count_tasks = original_count_tasks
+
+        first_steps = json.loads(str(response.items[0].trace_json))
+        second_steps = json.loads(str(response.items[1].trace_json))
+        self.assertEqual(
+            response.items[0].governance.provider_source,
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            response.items[1].governance.provider_source,
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            first_steps[0]["meta"]["provider_source"],
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            first_steps[0]["meta"]["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            second_steps[0]["meta"]["provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            second_steps[0]["meta"]["provider_sources"],
+            ["suite_[redacted]#2", "suite_[redacted]#1"],
+        )
+        response_blob = json.dumps(response.model_dump(), default=str)
+        self.assertNotIn("api_key=one", response_blob)
+        self.assertNotIn("access_token=two", response_blob)
