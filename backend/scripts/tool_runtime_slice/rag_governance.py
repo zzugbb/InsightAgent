@@ -616,6 +616,76 @@ class RagGovernanceMixin:
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("Authorization", serialized)
 
+    def test_ingest_knowledge_documents_redacts_nested_sensitive_metadata_values(
+        self,
+    ) -> None:
+        class FakeCollection:
+            def __init__(self) -> None:
+                self.metadatas: list[dict[str, object]] = []
+
+            def add(
+                self,
+                *,
+                ids: list[str],
+                documents: list[str],
+                metadatas: list[dict[str, object]],
+            ) -> None:
+                self.metadatas = metadatas
+
+            def count(self) -> int:
+                return len(self.metadatas)
+
+        class FakeClient:
+            def __init__(self, collection: FakeCollection) -> None:
+                self.collection = collection
+
+            def get_or_create_collection(self, *, name: str) -> FakeCollection:
+                return self.collection
+
+        collection = FakeCollection()
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient(collection)  # type: ignore[assignment]
+        try:
+            chroma_rag_module.ingest_knowledge_documents(
+                user_id="user-rag-nested-metadata",
+                knowledge_base_id="kb-rag-nested-metadata",
+                documents=[
+                    {
+                        "text": "Nested RAG source policy metadata must be safe.",
+                        "source": "nested.md",
+                        "document_id": "doc-rag-nested-metadata",
+                        "metadata": {
+                            "headers": {
+                                "Authorization": "Bearer raw-secret",
+                                "X-Api-Key": "raw-key",
+                            },
+                            "links": [
+                                "https://example.test/path?api_key=raw-secret",
+                                {"token": "raw-token", "label": "safe-label"},
+                            ],
+                            "kind": "handbook",
+                        },
+                    }
+                ],
+                chunk_size=120,
+                chunk_overlap=0,
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertEqual(len(collection.metadatas), 1)
+        serialized = json.dumps(collection.metadatas[0], ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("safe-label", serialized)
+        self.assertIn("handbook", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("raw-key", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("Authorization", serialized)
+        self.assertNotIn("X-Api-Key", serialized)
+
     def test_ingest_knowledge_documents_rejects_user_metadata_reserved_overrides(
         self,
     ) -> None:
@@ -756,6 +826,69 @@ class RagGovernanceMixin:
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("Authorization", serialized)
+
+    def test_query_knowledge_base_redacts_nested_sensitive_hit_metadata(
+        self,
+    ) -> None:
+        class FakeCollection:
+            def count(self) -> int:
+                return 1
+
+            def query(
+                self,
+                *,
+                query_texts: list[str],
+                n_results: int,
+            ) -> dict[str, object]:
+                return {
+                    "ids": [["hit-nested"]],
+                    "documents": [["safe nested retrieval content"]],
+                    "distances": [[0.1]],
+                    "metadatas": [
+                        [
+                            {
+                                "source": "nested-hit.md",
+                                "headers": {
+                                    "Authorization": "Bearer raw-secret",
+                                    "X-Access-Token": "raw-token",
+                                },
+                                "links": [
+                                    {"api_key": "raw-key", "label": "safe-label"}
+                                ],
+                                "kind": "handbook",
+                            }
+                        ]
+                    ],
+                }
+
+        class FakeClient:
+            def get_collection(self, *, name: str) -> FakeCollection:
+                return FakeCollection()
+
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient()  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.query_knowledge_base(
+                user_id="user-rag-nested-query",
+                knowledge_base_id="kb-rag-nested-query",
+                query_text="nested content",
+                top_k=1,
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        metadata = result["hits"][0]["metadata"]
+        serialized = json.dumps(metadata, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertIn("safe-label", serialized)
+        self.assertIn("handbook", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("raw-key", serialized)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("Authorization", serialized)
+        self.assertNotIn("X-Access-Token", serialized)
 
     def test_query_knowledge_base_filters_invalid_version_metadata_before_response(
         self,

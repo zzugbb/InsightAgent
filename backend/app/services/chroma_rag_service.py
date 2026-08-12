@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from uuid import uuid4
 
@@ -238,7 +239,7 @@ def _normalize_metadata(
     return normalized
 
 
-def _sanitize_rag_metadata_text(value: object, *, limit: int) -> str:
+def _sanitize_rag_metadata_scalar_text(value: object, *, limit: int) -> str:
     raw = str(value).strip()
     if not raw:
         return ""
@@ -248,6 +249,48 @@ def _sanitize_rag_metadata_text(value: object, *, limit: int) -> str:
         safe,
     )
     return safe[:limit]
+
+
+def _sanitize_rag_structured_metadata_value(value: object, *, depth: int) -> object:
+    if depth >= 4:
+        return "[redacted]"
+    if isinstance(value, dict):
+        normalized: dict[str, object] = {}
+        for key, nested_value in value.items():
+            raw_key = str(key)
+            safe_key = _sanitize_rag_metadata_key(raw_key)
+            if not safe_key:
+                continue
+            if _RAG_SENSITIVE_KEY_RE.search(raw_key):
+                normalized["[redacted]"] = "[redacted]"
+                continue
+            normalized[safe_key] = _sanitize_rag_structured_metadata_value(
+                nested_value,
+                depth=depth + 1,
+            )
+        return normalized
+    if isinstance(value, (list, tuple, set)):
+        return [
+            _sanitize_rag_structured_metadata_value(item, depth=depth + 1)
+            for item in value
+        ]
+    return _sanitize_rag_metadata_scalar_text(value, limit=2000)
+
+
+def _sanitize_rag_metadata_text(value: object, *, limit: int) -> str:
+    if isinstance(value, (dict, list, tuple, set)):
+        structured = _sanitize_rag_structured_metadata_value(value, depth=0)
+        try:
+            rendered = json.dumps(
+                structured,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        except TypeError:
+            rendered = str(structured)
+        return _sanitize_rag_metadata_scalar_text(rendered, limit=limit)
+    return _sanitize_rag_metadata_scalar_text(value, limit=limit)
 
 
 def _sanitize_rag_metadata_key(value: object) -> str:
