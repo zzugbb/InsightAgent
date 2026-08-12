@@ -11,7 +11,7 @@
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `tool_runtime_registry.py` 与 settings/route/audit/SSE/trace 边界已完成 provider/source 脱敏、冲突 alias、跨结构共享 alias map、runtime artifacts/service actions、模型输出层、export/task/usage/audit/SSE/trace 安全摘要。
-- `rag-governance-hardening` 已完成首批收口：`chroma_rag_service.py` 统一规整 ingest/query source metadata 敏感信息，嵌套 metadata value 会先递归清理再持久化/出站，query hit id 出站前也会脱敏；runtime `task_retrieve` 对 `shared-*` 知识库使用 shared scope，与 RAG route 读路径一致，且会对底层 helper 返回的 hits / `knowledge_base_id` / `collection` 做兜底规整；RAG route 对 `knowledge_base_id` / `collection` 做最终出口规整后再响应和写审计，并对 status/list `document_versions` 的 `source/document_id` 做末端兜底脱敏；runtime trace follow-up 对 `knowledge_base_id` 做同源安全化；runtime result summary/output/preview/observation 会对知识库标识做最终规整；ingest 为每个 chunk 写入稳定 `document_version` 与 `content_hash`，并禁止用户扩展 metadata 覆盖系统保留字段；query/status 出站只保留合法版本/hash 并 canonicalize `documentVersion/contentHash/documentId` 等 reserved alias；敏感 `knowledge_base_id` 在 collection/response/metadata/list 可见字段前安全化；status/list 聚合安全版本摘要、脱敏错误出口，并避免历史 collection suffix 泄漏；RAG route 400/503 detail 复用同一错误脱敏；task export/Markdown 保留合法版本锚点并清理污染字段，`rag_knowledge_base_ids` 与 rag chunk `knowledge_base_id` 也会统一规整；runtime trace follow-up 透传安全 `chunk_metadata` / `document_versions`，export summary 可合并并继续脱敏；私有 scope 下残留 `shared-*` collection 不再混入 shared 列表。
+- `rag-governance-hardening` 已封板：RAG ingest/query source metadata、嵌套 metadata value、query hit id、知识库标识、版本摘要、reserved alias、route/runtime trace/export/display、错误出口与 shared/private 列表边界均已收口；后端外部响应 shape 保持稳定。
 
 ## 当前验证基线
 
@@ -34,7 +34,7 @@
 ## 下一步后端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`。
-2. `rag-governance-hardening` 已完成 100% 封板：RAG source/metadata 入站持久化与 query 出站脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定文档版本 metadata、status/list 可见治理摘要与 route 末端来源字段兜底、历史 collection 列表出口安全化、task export/Markdown 版本锚点、runtime trace 版本 metadata 透传、export summary 合并与 knowledge_base_id 规整、reserved metadata 防覆盖、出站版本字段过滤与 alias canonicalization、敏感 `knowledge_base_id` 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏、`shared-*` 私有 shadow 隔离。
+2. `rag-governance-hardening` 已完成 100% 封板；当前后端计划只保留封板边界与回归门，不再展开逐项治理流水账。
 3. 后续开发继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
 4. 下一主线尚未打开；进入新主线前以本轮封板验证基线为准。
 

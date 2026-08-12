@@ -10,7 +10,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，覆盖全局、当前用户与可选当前会话 active/waiting/available 计数、限额触顶、`pressure_state`、fairness 开关、等待策略与 poll interval；前后端 typed contract 已固定 required governance 字段、optional scope 字段和枚举值。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `registry-governance` 已封板：provider/source 脱敏、冲突 alias、跨 settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
-- `rag-governance-hardening` 已完成首批收口：RAG ingest/query source metadata 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定 `document_version` / `content_hash` 入库、status/list 安全版本摘要、route status/list `document_versions` 来源字段末端兜底、历史 collection 列表出口安全化、知识库治理表版本列、task export/Markdown 版本锚点、runtime trace `chunk_metadata` / `document_versions` 透传、前端 trace 搜索、ingest reserved metadata 防覆盖、query/status 出站版本字段过滤与 alias canonicalization、敏感 `knowledge_base_id` 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG status/list/400/503 错误出口脱敏、`shared-*` 私有 shadow 隔离已落地。
+- `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口，外部 SSE / trace / export / e2e shape 保持稳定。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
@@ -31,7 +31,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前开发计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`。
-2. `rag-governance-hardening` 已完成 100% 封板：RAG source/metadata 入站持久化与 query 出站脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定文档版本 metadata、status/list 可见治理摘要与 route 末端来源字段兜底、历史 collection 列表出口安全化、task export/Markdown 版本锚点、runtime trace 版本 metadata 透传、前端 trace 搜索、reserved metadata 防覆盖、出站版本字段过滤与 alias canonicalization、敏感 `knowledge_base_id` 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏、`shared-*` 私有 shadow 隔离。
+2. `rag-governance-hardening` 已完成 100% 封板；本轮只保留封板基线，不再把逐项治理流水账作为当前计划。
 3. 后续开发继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
 4. 下一主线尚未打开；进入新主线前以本文件、backend/frontend README 与实时计划的封板基线为准。
 
@@ -47,7 +47,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - 鉴权与数据层：JWT + refresh 会话管理、用户级设置与密钥加密、PostgreSQL 单后端运行时已落地。
 - 基础治理：`RBAC-lite`、`rag-rbac-lite`、shared/private 知识库语义、审计事件扩展已落地。
 - 执行可靠性：任务取消/超时、running task 恢复、任务/会话导出、usage dashboard 与主链路 e2e / CI tooling 已落地。
-- 当前未完成的重点不是这些基线能力，而是 registry 治理深化与后续 RAG 治理硬化。
+- 当前阶段性治理主线已封板；下一主线尚未打开。
 
 ## SSE 与 TraceStep 契约（当前实现）
 

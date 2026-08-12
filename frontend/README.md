@@ -13,7 +13,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 运行设置会带 active session 请求只读 `task_queue_diagnostics`，展示全局、当前用户、当前会话 active/waiting/available、安全限额触顶、`pressure_state`、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
 - 前端 `TaskQueueDiagnostics` 类型已固定基础运行态、governance 字段与 `pressure_state` / `waiting_policy` 枚举；后端 runtime slice 拆分与 `tool_runtime.py` facade 拆分已完成，原测试入口保持不变。
 - `registry-governance` 已封板：provider/source diagnostics、settings/preflight、runtime artifacts、trace/export/audit/SSE 与 task/usage 回放语义已完成脱敏和 alias 对齐，前端可见字段 shape 不变。
-- 后端 `rag-governance-hardening` 已完成 RAG source/metadata 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定版本 metadata、status/list 版本摘要与 route 末端来源字段兜底、历史 collection 列表出口安全化、task export/Markdown 版本锚点、runtime trace 版本 metadata 透传、reserved metadata 防覆盖、出站版本字段过滤与 alias canonicalization、敏感 `knowledge_base_id` 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏、`shared-*` 私有 shadow 隔离；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
+- 后端 `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
 
 ## 当前验证基线
 
@@ -31,7 +31,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`。
-2. `rag-governance-hardening` 已完成 100% 封板；后端已收口 RAG source/metadata 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定文档版本 metadata、status/list 版本摘要与 route 末端来源字段兜底、历史 collection 列表出口安全化、export 版本锚点与 knowledge_base_id 规整、runtime trace 版本 metadata、reserved metadata 防覆盖、出站版本字段过滤、敏感 `knowledge_base_id` 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏与 shared scope 列表边界，前端 trace 类型、搜索和治理表展示已兼容。
+2. `rag-governance-hardening` 已完成 100% 封板；前端 trace 类型、搜索、治理表展示、导出回放与后端安全字段 shape 已兼容。
 3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. 下一主线尚未打开；回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
