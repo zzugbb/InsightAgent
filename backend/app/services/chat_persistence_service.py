@@ -16,6 +16,7 @@ from app.services.task_status_service import (
     task_status_label,
     task_status_rank,
 )
+from app.services.chroma_rag_service import normalize_knowledge_base_id
 from app.services.tool_runtime import (
     _get_safe_http_json_request_id_display_value,
     _normalize_http_json_output_shape,
@@ -2323,6 +2324,25 @@ def _sanitize_rag_export_content_hash(value: object) -> str | None:
     return None
 
 
+def _sanitize_rag_export_knowledge_base_id(value: object) -> str | None:
+    raw = _coerce_trace_string_like_value(value)
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    return normalize_knowledge_base_id(raw)
+
+
+def _sanitize_rag_export_knowledge_base_ids(value: object) -> list[str]:
+    sanitized_ids: list[str] = []
+    seen: set[str] = set()
+    for item in _coerce_export_string_list(value):
+        safe_id = _sanitize_rag_export_knowledge_base_id(item)
+        if safe_id is None or safe_id in seen:
+            continue
+        seen.add(safe_id)
+        sanitized_ids.append(safe_id)
+    return sanitized_ids
+
+
 def _sanitize_trace_tool_result_summary_text(result_summary: str) -> str:
     if not _trace_http_json_export_content_needs_sanitization(result_summary):
         return result_summary
@@ -2511,8 +2531,9 @@ def get_trace_rag_export_summary(
             if isinstance(raw_chunk_metadata, (list, tuple))
             else []
         )
-        kb_id = _coerce_trace_string_like_value(rag_meta.get("knowledge_base_id"))
-        kb_id_text = kb_id.strip() if isinstance(kb_id, str) and kb_id.strip() else None
+        kb_id_text = _sanitize_rag_export_knowledge_base_id(
+            rag_meta.get("knowledge_base_id")
+        )
         if kb_id_text and kb_id_text not in seen_kb_ids:
             seen_kb_ids.add(kb_id_text)
             rag_knowledge_base_ids.append(kb_id_text)
@@ -2581,12 +2602,10 @@ def get_task_trace_export_summary_from_task(
         )
         for step in trace_steps
     ]
-    rag_knowledge_base_ids = _coerce_export_string_list(
+    rag_knowledge_base_ids = _sanitize_rag_export_knowledge_base_ids(
         rag_summary.get("rag_knowledge_base_ids", [])
     )
-    rag_chunks = _coerce_export_payload_block_list_to_dicts(
-        rag_summary.get("rag_chunks")
-    )
+    rag_chunks = _sanitize_export_rag_chunk_rows(rag_summary.get("rag_chunks"))
     return {
         "steps": export_steps,
         "step_count": len(trace_steps),
@@ -2822,10 +2841,10 @@ def get_task_export_summary_from_task(task: dict) -> dict[str, object]:
             "steps": trace_steps,
             "step_count": int(trace_summary.get("step_count", 0) or 0),
             "rag_hit_count": int(trace_summary.get("rag_hit_count", 0) or 0),
-            "rag_knowledge_base_ids": _coerce_export_string_list(
+            "rag_knowledge_base_ids": _sanitize_rag_export_knowledge_base_ids(
                 trace_summary.get("rag_knowledge_base_ids", [])
             ),
-            "rag_chunks": _coerce_export_payload_block_list_to_dicts(
+            "rag_chunks": _sanitize_export_rag_chunk_rows(
                 trace_summary.get("rag_chunks")
             ),
         },
@@ -3032,6 +3051,13 @@ def _sanitize_export_rag_chunk_rows(value: object) -> list[dict[str, object]]:
             )
         elif isinstance(content, str):
             sanitized_chunk["content"] = content
+        knowledge_base_id = _sanitize_rag_export_knowledge_base_id(
+            sanitized_chunk.get("knowledge_base_id")
+        )
+        if knowledge_base_id is not None:
+            sanitized_chunk["knowledge_base_id"] = knowledge_base_id
+        else:
+            sanitized_chunk.pop("knowledge_base_id", None)
         source = _sanitize_rag_export_text(sanitized_chunk.get("source"), limit=240)
         if source is not None:
             sanitized_chunk["source"] = source

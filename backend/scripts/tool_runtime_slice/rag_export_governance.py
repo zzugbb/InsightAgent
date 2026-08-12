@@ -4,6 +4,40 @@ from .context import *
 
 
 class RagExportGovernanceMixin:
+    def test_rag_trace_export_summary_redacts_sensitive_knowledge_base_ids(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_trace_rag_export_summary(  # type: ignore[attr-defined]
+            [
+                chat_persistence_module.TraceStep(  # type: ignore[attr-defined]
+                    id="step-rag-export-sensitive-kb",
+                    type="thought",
+                    content="planner note",
+                    seq=1,
+                    meta={
+                        "rag": {
+                            "chunks": ["safe exported chunk"],
+                            "knowledge_base_id": (
+                                "team?api_key=raw-secret&token=raw-token"
+                            ),
+                        }
+                    },
+                )
+            ]
+        )
+
+        self.assertEqual(payload["rag_knowledge_base_ids"], ["team-redacted-redacted"])
+        self.assertEqual(
+            payload["rag_chunks"][0]["knowledge_base_id"],
+            "team-redacted-redacted",
+        )
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertIn("team-redacted-redacted", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("token=", serialized)
+
     def test_get_task_export_response_summary_preserves_safe_rag_version_fields(
         self,
     ) -> None:
