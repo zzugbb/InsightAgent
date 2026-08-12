@@ -2,11 +2,11 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite 与 concurrency-fairness-policy 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前主线：rag-governance-hardening，进度约 5%；本轮先收口 RAG source/metadata 入站持久化与 query 出站脱敏，避免来源治理字段泄漏 token/API key/Bearer 信息。
+  - 当前主线：rag-governance-hardening，进度约 12%；已收口 RAG source/metadata 入站持久化与 query 出站脱敏，并为 ingest chunk metadata 补入稳定 document_version/content_hash。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance。
   - 外部 SSE / trace / export / e2e shape 已完成本轮 fresh 复验。
-  - 后续继续聚焦知识库版本化、来源治理与更细粒度 shared 规则。
+  - 后续继续聚焦版本字段的查询/导出治理、来源策略与更细粒度 shared 规则。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
   - 保持先补 failing test 再改实现
@@ -15,7 +15,7 @@ constraints:
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1870/1870)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1871/1871)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (76/76)
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
@@ -27,7 +27,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: rag-governance-hardening 进度约 5%；本轮补 RAG source/metadata 入站持久化与 query 出站脱敏红测并实现，targeted sensitive 53/53、rag 58/58、backend full slice 1870/1870、py_compile chroma_rag_service/rag route 均通过；data/insightagent.plan.back.md 无 diff。
+latest_validation_note: rag-governance-hardening 进度约 12%；本轮补 RAG 稳定 document_version/content_hash 红测并实现，targeted stable_document_version 通过、rag 58/58、backend full slice 1871/1871、frontend node 76/76、py_compile chroma_rag_service/rag route、git diff --check 均通过；data/insightagent.plan.back.md 无 diff。
 todos:
   - id: docs-slimming
     status: completed
@@ -55,7 +55,7 @@ todos:
     content: 已封板；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口；通过 backend/full frontend/e2e fresh 复验。
   - id: rag-governance-hardening
     status: in_progress
-    content: 当前主线，进度约 5%；已完成 RAG ingest 持久化前 source/document_id/metadata key/value 脱敏，以及 query response 对历史 hit metadata 出站脱敏；后续补知识库版本化、来源治理与更细粒度 shared 规则。
+    content: 当前主线，进度约 12%；已完成 RAG ingest 持久化前 source/document_id/metadata key/value 脱敏、query response 对历史 hit metadata 出站脱敏，以及 ingest chunk metadata 稳定 document_version/content_hash；后续补版本字段查询/导出治理、来源策略与更细粒度 shared 规则。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -66,7 +66,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- `queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口、registry/provider source 治理与 e2e 基线均已收口；当前进入 `rag-governance-hardening`。
+- `queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口、registry/provider source 治理与 e2e 基线均已收口；当前推进 `rag-governance-hardening`。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程直接提权，避免每轮重复触发权限失败。
 
 ## 已完成能力摘要
@@ -80,7 +80,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1870/1870`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1871/1871`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel、queued SSE safe wait_position、settings diagnostics、typed queue governance checks 与 followup completion current-turn fresh 通过。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `76/76`。
@@ -108,7 +108,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 后续维护线
 
-- `rag-governance-hardening`：当前主线，继续补知识库版本化、来源治理与更细粒度 shared 规则。
+- `rag-governance-hardening`：当前主线，继续补版本字段的查询/导出治理、来源策略与更细粒度 shared 规则。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 维护约定

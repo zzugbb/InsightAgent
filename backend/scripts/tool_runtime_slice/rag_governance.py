@@ -4,6 +4,85 @@ from .context import *
 
 
 class RagGovernanceMixin:
+    def test_ingest_knowledge_documents_adds_stable_document_version_metadata(
+        self,
+    ) -> None:
+        class FakeCollection:
+            def __init__(self) -> None:
+                self.calls: list[list[dict[str, object]]] = []
+
+            def add(
+                self,
+                *,
+                ids: list[str],
+                documents: list[str],
+                metadatas: list[dict[str, object]],
+            ) -> None:
+                self.calls.append(metadatas)
+
+            def count(self) -> int:
+                return sum(len(call) for call in self.calls)
+
+        class FakeClient:
+            def __init__(self, collection: FakeCollection) -> None:
+                self.collection = collection
+
+            def get_or_create_collection(self, *, name: str) -> FakeCollection:
+                return self.collection
+
+        collection = FakeCollection()
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient(collection)  # type: ignore[assignment]
+        try:
+            for text in [
+                "Stable RAG document version metadata keeps all chunks auditable."
+                * 4,
+                "Stable RAG document version metadata keeps all chunks auditable."
+                * 4,
+                "Changed RAG document version metadata must produce a new version.",
+            ]:
+                chroma_rag_module.ingest_knowledge_documents(
+                    user_id="user-rag-version",
+                    knowledge_base_id="kb-rag-version",
+                    documents=[
+                        {
+                            "text": text,
+                            "source": "handbook.md",
+                            "document_id": "doc-rag-version",
+                        }
+                    ],
+                    chunk_size=80,
+                    chunk_overlap=10,
+                )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertEqual(len(collection.calls), 3)
+        first_call = collection.calls[0]
+        repeat_call = collection.calls[1]
+        changed_call = collection.calls[2]
+        self.assertGreater(len(first_call), 1)
+
+        first_versions = {
+            str(meta.get("document_version") or "") for meta in first_call
+        }
+        first_hashes = {str(meta.get("content_hash") or "") for meta in first_call}
+        repeat_versions = {
+            str(meta.get("document_version") or "") for meta in repeat_call
+        }
+        changed_versions = {
+            str(meta.get("document_version") or "") for meta in changed_call
+        }
+
+        self.assertEqual(len(first_versions), 1)
+        self.assertEqual(len(first_hashes), 1)
+        first_version = next(iter(first_versions))
+        first_hash = next(iter(first_hashes))
+        self.assertRegex(first_version, r"^sha256:[a-f0-9]{16}$")
+        self.assertRegex(first_hash, r"^[a-f0-9]{64}$")
+        self.assertEqual(first_versions, repeat_versions)
+        self.assertNotEqual(first_versions, changed_versions)
+
     def test_ingest_knowledge_documents_redacts_sensitive_source_metadata_before_persist(
         self,
     ) -> None:

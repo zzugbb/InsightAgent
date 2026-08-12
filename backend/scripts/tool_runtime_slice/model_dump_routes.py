@@ -432,19 +432,15 @@ class ModelDumpRoutesMixin:
             fake_client.collection.add_calls[0]["documents"],
             ["alpha beta gamma"],
         )
-        self.assertEqual(
-            fake_client.collection.add_calls[0]["metadatas"],
-            [
-                {
-                    "knowledge_base_id": "demo",
-                    "source": "typed-source",
-                    "document_id": "doc-1",
-                    "chunk_index": 1,
-                    "chunk_total": 1,
-                    "topic": "plans",
-                }
-            ],
-        )
+        metadata = fake_client.collection.add_calls[0]["metadatas"][0]
+        self.assertEqual(metadata["knowledge_base_id"], "demo")
+        self.assertEqual(metadata["source"], "typed-source")
+        self.assertEqual(metadata["document_id"], "doc-1")
+        self.assertEqual(metadata["chunk_index"], 1)
+        self.assertEqual(metadata["chunk_total"], 1)
+        self.assertEqual(metadata["topic"], "plans")
+        self.assertRegex(str(metadata.get("document_version") or ""), r"^sha256:")
+        self.assertRegex(str(metadata.get("content_hash") or ""), r"^[a-f0-9]{64}$")
 
     def test_ingest_knowledge_documents_accepts_model_metadata_rows(self) -> None:
         original_http_client = chroma_rag_module._http_client  # type: ignore[attr-defined]
@@ -495,19 +491,15 @@ class ModelDumpRoutesMixin:
             chroma_rag_module._http_client = original_http_client  # type: ignore[attr-defined]
 
         self.assertEqual(payload["documents_ingested"], 1)
-        self.assertEqual(
-            fake_client.collection.add_calls[0]["metadatas"],
-            [
-                {
-                    "knowledge_base_id": "demo",
-                    "source": "typed-source",
-                    "document_id": "doc-1",
-                    "chunk_index": 1,
-                    "chunk_total": 1,
-                    "topic": "plans",
-                }
-            ],
-        )
+        metadata = fake_client.collection.add_calls[0]["metadatas"][0]
+        self.assertEqual(metadata["knowledge_base_id"], "demo")
+        self.assertEqual(metadata["source"], "typed-source")
+        self.assertEqual(metadata["document_id"], "doc-1")
+        self.assertEqual(metadata["chunk_index"], 1)
+        self.assertEqual(metadata["chunk_total"], 1)
+        self.assertEqual(metadata["topic"], "plans")
+        self.assertRegex(str(metadata.get("document_version") or ""), r"^sha256:")
+        self.assertRegex(str(metadata.get("content_hash") or ""), r"^[a-f0-9]{64}$")
 
     def test_get_rag_knowledge_bases_accepts_model_dump_payload_and_rows(self) -> None:
         original_list_helper = rag_routes_module.list_knowledge_bases_with_shared

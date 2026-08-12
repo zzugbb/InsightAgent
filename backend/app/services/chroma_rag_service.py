@@ -178,6 +178,21 @@ def _sanitize_rag_metadata_key(value: object) -> str:
     return raw[:128]
 
 
+def _rag_document_content_hash(text: str) -> str:
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+
+
+def _rag_document_version(
+    *,
+    knowledge_base_id: str,
+    source: str,
+    document_id: str,
+    content_hash: str,
+) -> str:
+    seed = "\x1f".join([knowledge_base_id, source, document_id, content_hash])
+    return f"sha256:{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:16]}"
+
+
 def ingest_knowledge_documents(
     *,
     user_id: str,
@@ -215,6 +230,13 @@ def ingest_knowledge_documents(
             _sanitize_rag_metadata_text(doc.get("document_id", "") or "", limit=128)
             or str(uuid4())
         )
+        content_hash = _rag_document_content_hash(text)
+        document_version = _rag_document_version(
+            knowledge_base_id=kb_id,
+            source=source,
+            document_id=doc_id,
+            content_hash=content_hash,
+        )
         extra_meta = _normalize_metadata(doc.get("metadata"))
         doc_chunks = _chunk_text(
             text,
@@ -235,6 +257,8 @@ def ingest_knowledge_documents(
                     "knowledge_base_id": kb_id,
                     "source": source,
                     "document_id": doc_id,
+                    "document_version": document_version,
+                    "content_hash": content_hash,
                     "chunk_index": index,
                     "chunk_total": total,
                     **extra_meta,
