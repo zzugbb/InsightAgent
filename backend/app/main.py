@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.db import initialize_database
 from app.services.chat_persistence_service import (
     get_task_execution_owner_id,
+    get_task_execution_stale_after_sec,
     recover_orphaned_running_tasks_on_startup,
 )
 
@@ -19,7 +20,8 @@ settings = get_settings()
 async def lifespan(_: FastAPI):
     initialize_database()
     recover_orphaned_running_tasks_on_startup(
-        execution_owner_id=get_task_execution_owner_id(settings)
+        execution_owner_id=get_task_execution_owner_id(settings),
+        execution_stale_after_sec=get_task_execution_stale_after_sec(settings),
     )
     yield
 

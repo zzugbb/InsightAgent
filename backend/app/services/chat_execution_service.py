@@ -14,6 +14,7 @@ from app.services.chat_persistence_service import (
     get_task_execution_owner_id,
     get_task,
     mark_task_running_started,
+    touch_task_execution_heartbeat,
     update_task_status,
     update_task_trace_steps,
 )
@@ -356,10 +357,18 @@ def stream_task_execution(
         float(getattr(runtime_config, "task_queue_poll_interval_sec", 0.25) or 0.25),
     )
     TASK_EXECUTION_OWNER_ID = get_task_execution_owner_id(runtime_config)
+    TASK_EXECUTION_HEARTBEAT_INTERVAL_SEC = max(
+        0.0,
+        float(
+            getattr(runtime_config, "task_execution_heartbeat_interval_sec", 2.0)
+            or 0.0
+        ),
+    )
     trace_steps: list[dict[str, object]] = []
     seq_cursor = 0
     last_trace_persist_ts = 0.0
     last_status_probe_ts = 0.0
+    last_execution_heartbeat_ts = 0.0
     cached_task_status = "pending"
     stream_started_ts = monotonic()
     task_slot = None
@@ -429,6 +438,24 @@ def stream_task_execution(
             cached_task_status = str(task.get("status", "")).strip().lower()
         last_status_probe_ts = now
         return cached_task_status
+
+    def maybe_touch_execution_heartbeat(*, now: float | None = None) -> None:
+        nonlocal last_execution_heartbeat_ts
+        if TASK_EXECUTION_HEARTBEAT_INTERVAL_SEC <= 0:
+            return
+        current_ts = monotonic() if now is None else now
+        if (
+            last_execution_heartbeat_ts > 0
+            and current_ts - last_execution_heartbeat_ts
+            < TASK_EXECUTION_HEARTBEAT_INTERVAL_SEC
+        ):
+            return
+        touch_task_execution_heartbeat(
+            task_id=task_id,
+            user_id=user_id,
+            execution_owner_id=TASK_EXECUTION_OWNER_ID,
+        )
+        last_execution_heartbeat_ts = current_ts
 
     def raise_if_should_abort(*, force_status_probe: bool = False) -> None:
         status = probe_task_status(force=force_status_probe)
@@ -518,6 +545,7 @@ def stream_task_execution(
             user_id=user_id,
             execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
+        last_execution_heartbeat_ts = monotonic()
         probe_task_status(force=True)
 
         runtime_settings = get_stored_settings(user_id)
@@ -616,6 +644,7 @@ def stream_task_execution(
 
         for idx, tool_spec in enumerate(tool_plan, start=1):
             raise_if_should_abort()
+            maybe_touch_execution_heartbeat()
             tool_name = str(tool_spec["name"])
             tool_input = tool_spec.get("input")
             if not isinstance(tool_input, dict):
@@ -738,6 +767,7 @@ def stream_task_execution(
             raise_if_should_abort()
             stream_chunk_count += 1
             now = monotonic()
+            maybe_touch_execution_heartbeat(now=now)
             if now - last_heartbeat_ts >= STREAM_HEARTBEAT_INTERVAL_SEC:
                 yield sse_event(
                     "heartbeat",

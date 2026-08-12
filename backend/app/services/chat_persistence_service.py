@@ -1003,6 +1003,19 @@ def get_task_execution_owner_id(settings: object | None = None) -> str:
     return normalized or "default"
 
 
+def get_task_execution_stale_after_sec(settings: object | None = None) -> float:
+    raw_stale_after = (
+        getattr(settings, "task_execution_stale_after_sec", None)
+        if settings is not None
+        else getattr(get_settings(), "task_execution_stale_after_sec", None)
+    )
+    try:
+        stale_after = float(raw_stale_after or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, stale_after)
+
+
 def mark_task_running_started(
     *,
     task_id: str,
@@ -1030,9 +1043,11 @@ def mark_task_running_started(
         return max(0, int(getattr(cursor, "rowcount", 0) or 0))
 
 
-def recover_orphaned_running_tasks_on_startup(
+def touch_task_execution_heartbeat(
     *,
-    execution_owner_id: str | None = None,
+    task_id: str,
+    user_id: str,
+    execution_owner_id: str,
 ) -> int:
     current_time = _now_iso()
     owner_id = get_task_execution_owner_id(
@@ -1043,18 +1058,71 @@ def recover_orphaned_running_tasks_on_startup(
             """
             UPDATE tasks
             SET
+                updated_at = ?,
+                execution_heartbeat_at = ?
+            WHERE id = ?
+              AND user_id = ?
+              AND LOWER(status) = ?
+              AND execution_owner_id = ?
+            """,
+            (current_time, current_time, task_id, user_id, "running", owner_id),
+        )
+        connection.commit()
+        return max(0, int(getattr(cursor, "rowcount", 0) or 0))
+
+
+def recover_orphaned_running_tasks_on_startup(
+    *,
+    execution_owner_id: str | None = None,
+    execution_stale_after_sec: float | None = None,
+) -> int:
+    current_time = _now_iso()
+    owner_id = get_task_execution_owner_id(
+        SimpleNamespace(task_execution_owner_id=execution_owner_id)
+    )
+    stale_after_sec = (
+        get_task_execution_stale_after_sec(
+            SimpleNamespace(task_execution_stale_after_sec=execution_stale_after_sec)
+        )
+        if execution_stale_after_sec is not None
+        else get_task_execution_stale_after_sec()
+    )
+    owner_clauses = [
+        "execution_owner_id IS NULL",
+        "TRIM(execution_owner_id) = ''",
+        "execution_owner_id = ?",
+    ]
+    params: list[object] = ["failed", current_time, "running", owner_id]
+    if stale_after_sec > 0:
+        try:
+            cutoff_time = datetime.fromisoformat(current_time) - timedelta(
+                seconds=stale_after_sec
+            )
+        except ValueError:
+            cutoff_time = datetime.now() - timedelta(seconds=stale_after_sec)
+        owner_clauses.extend(
+            [
+                "execution_heartbeat_at IS NULL",
+                "execution_heartbeat_at < ?",
+            ]
+        )
+        params.append(cutoff_time.isoformat())
+    owner_condition = "\n                OR ".join(owner_clauses)
+    with get_db_connection() as connection:
+        cursor = connection.execute(
+            f"""
+            UPDATE tasks
+            SET
                 status = ?,
                 updated_at = ?,
                 execution_owner_id = NULL,
                 execution_heartbeat_at = NULL
             WHERE LOWER(status) = ?
               AND (
-                execution_owner_id IS NULL
-                OR TRIM(execution_owner_id) = ''
-                OR execution_owner_id = ?
+                {owner_condition}
               )
             """,
-            ("failed", current_time, "running", owner_id),
+            tuple(params),
         )
         connection.commit()
         return max(0, int(getattr(cursor, "rowcount", 0) or 0))

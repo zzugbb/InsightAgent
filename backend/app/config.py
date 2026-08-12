@@ -139,6 +139,16 @@ class Settings(BaseSettings):
         alias="TASK_EXECUTION_OWNER_ID",
         description="当前 backend 执行实例 ID；多实例部署时应为每个执行实例设置唯一稳定值",
     )
+    task_execution_stale_after_sec: float = Field(
+        default=0.0,
+        alias="TASK_EXECUTION_STALE_AFTER_SEC",
+        description="启动恢复时接管其他执行实例 running 任务的 heartbeat 过期阈值（秒）；0 表示关闭",
+    )
+    task_execution_heartbeat_interval_sec: float = Field(
+        default=2.0,
+        alias="TASK_EXECUTION_HEARTBEAT_INTERVAL_SEC",
+        description="running 任务执行期间刷新 execution heartbeat 的最小间隔（秒）",
+    )
     rag_default_knowledge_base_id: str = Field(
         default="default",
         alias="RAG_DEFAULT_KNOWLEDGE_BASE_ID",
