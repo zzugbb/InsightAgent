@@ -911,6 +911,28 @@ export function matchesTraceStepSearchQuery(
         .filter((item): item is string => typeof item === "string")
         .map((item) => item.toLowerCase())
     : [];
+  const ragChunkMetadata = Array.isArray(step.meta?.rag?.chunk_metadata)
+    ? step.meta.rag.chunk_metadata
+        .flatMap((item) => [
+          item.source,
+          item.document_id,
+          item.document_version,
+          item.content_hash,
+        ])
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.toLowerCase())
+    : [];
+  const ragDocumentVersions = Array.isArray(step.meta?.rag?.document_versions)
+    ? step.meta.rag.document_versions
+        .flatMap((item) => [
+          item.source,
+          item.document_id,
+          item.document_version,
+          item.content_hash,
+        ])
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.toLowerCase())
+    : [];
   return (
     title.includes(q) ||
     content.includes(q) ||
@@ -927,6 +949,8 @@ export function matchesTraceStepSearchQuery(
     safeOutput.includes(q) ||
     ragKnowledgeBaseId.includes(q) ||
     ragChunks.some((chunk) => chunk.includes(q)) ||
+    ragChunkMetadata.some((item) => item.includes(q)) ||
+    ragDocumentVersions.some((item) => item.includes(q)) ||
     previewKeys.some((key) => key.includes(q)) ||
     outputKeys.some((key) => key.includes(q))
   );

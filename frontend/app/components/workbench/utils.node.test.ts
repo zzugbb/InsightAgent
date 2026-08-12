@@ -1171,6 +1171,42 @@ test("matchesTraceStepSearchQuery matches preview policy keys for running tool s
   assert.equal(matches, true);
 });
 
+test("matchesTraceStepSearchQuery matches rag version metadata", () => {
+  const step = {
+    id: "rag-version-step",
+    type: "thought",
+    content: "Knowledge Retrieval returned snippets.",
+    meta: {
+      rag: {
+        knowledge_base_id: "kb-provider",
+        chunks: ["Versioned safe snippet"],
+        chunk_metadata: [
+          {
+            source: "handbook.md?[redacted]",
+            document_id: "doc-1",
+            document_version: "sha256:aaaaaaaaaaaaaaaa",
+            content_hash:
+              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          },
+        ],
+        document_versions: [
+          {
+            document_version: "sha256:aaaaaaaaaaaaaaaa",
+            content_hash:
+              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            source: "handbook.md?[redacted]",
+            document_id: "doc-1",
+            chunk_count: 1,
+          },
+        ],
+      },
+    },
+  };
+
+  assert.equal(matchesTraceStepSearchQuery(step, "sha256:aaaaaaaa"), true);
+  assert.equal(matchesTraceStepSearchQuery(step, "handbook.md"), true);
+});
+
 test("matchesTraceStepSearchQuery matches output policy keys for tool steps", () => {
   const matches = matchesTraceStepSearchQuery(
     {

@@ -132,6 +132,62 @@ class RagExportGovernanceMixin:
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("Bearer", serialized)
 
+    def test_get_trace_rag_export_summary_merges_parallel_runtime_chunk_metadata(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_trace_rag_export_summary(  # type: ignore[attr-defined]
+            [
+                chat_persistence_module.TraceStep(  # type: ignore[attr-defined]
+                    id="step-parallel-rag-1",
+                    type="thought",
+                    content="planner note",
+                    seq=1,
+                    meta={
+                        "rag": {
+                            "chunks": [
+                                "versioned chunk",
+                                "poisoned chunk",
+                            ],
+                            "chunk_metadata": [
+                                {
+                                    "source": "handbook.md?api_key=raw-secret",
+                                    "document_id": "doc-1 token=raw-token",
+                                    "document_version": "sha256:aaaaaaaaaaaaaaaa",
+                                    "content_hash": "b" * 64,
+                                },
+                                {
+                                    "document_version": "Bearer raw-secret",
+                                    "content_hash": "token=raw-token",
+                                },
+                            ],
+                            "knowledge_base_id": "kb-1",
+                        }
+                    },
+                )
+            ]
+        )
+
+        self.assertEqual(payload["rag_hit_count"], 2)
+        self.assertEqual(
+            payload["rag_chunks"][0],
+            {
+                "step_id": "step-parallel-rag-1",
+                "knowledge_base_id": "kb-1",
+                "content": "versioned chunk",
+                "source": "handbook.md?[redacted]",
+                "document_id": "doc-1 [redacted]",
+                "document_version": "sha256:aaaaaaaaaaaaaaaa",
+                "content_hash": "b" * 64,
+            },
+        )
+        self.assertNotIn("document_version", payload["rag_chunks"][1])
+        self.assertNotIn("content_hash", payload["rag_chunks"][1])
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("Bearer", serialized)
+
     def test_task_export_summary_coercion_preserves_safe_rag_version_fields(
         self,
     ) -> None:

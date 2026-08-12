@@ -2503,26 +2503,43 @@ def get_trace_rag_export_summary(
         raw_chunks = rag_meta.get("chunks")
         if isinstance(raw_chunks, UserList):
             raw_chunks = raw_chunks.data
+        raw_chunk_metadata = rag_meta.get("chunk_metadata")
+        if isinstance(raw_chunk_metadata, UserList):
+            raw_chunk_metadata = raw_chunk_metadata.data
+        chunk_metadata_rows = (
+            list(raw_chunk_metadata)
+            if isinstance(raw_chunk_metadata, (list, tuple))
+            else []
+        )
         kb_id = _coerce_trace_string_like_value(rag_meta.get("knowledge_base_id"))
         kb_id_text = kb_id.strip() if isinstance(kb_id, str) and kb_id.strip() else None
         if kb_id_text and kb_id_text not in seen_kb_ids:
             seen_kb_ids.add(kb_id_text)
             rag_knowledge_base_ids.append(kb_id_text)
         if isinstance(raw_chunks, (list, tuple)):
-            for chunk in raw_chunks:
+            for index, chunk in enumerate(raw_chunks):
                 chunk_text = _coerce_trace_string_like_value(chunk)
                 if isinstance(chunk_text, str):
                     chunk_text = chunk_text.strip()
                     if not chunk_text:
                         continue
-                    rag_hit_count += 1
-                    rag_chunks.append(
+                    chunk_payload: dict[str, object] = {}
+                    if index < len(chunk_metadata_rows):
+                        chunk_metadata = _coerce_payload_mapping_or_none(
+                            chunk_metadata_rows[index]
+                        )
+                        if chunk_metadata is not None:
+                            chunk_payload.update(chunk_metadata)
+                    chunk_payload.update(
                         {
                             "step_id": step.id,
                             "knowledge_base_id": kb_id_text,
                             "content": chunk_text,
                         }
                     )
+                    sanitized_rows = _sanitize_export_rag_chunk_rows([chunk_payload])
+                    rag_hit_count += 1
+                    rag_chunks.append(sanitized_rows[0] if sanitized_rows else chunk_payload)
                     continue
                 chunk_row = _coerce_payload_mapping_or_none(chunk)
                 if chunk_row is None:

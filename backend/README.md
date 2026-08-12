@@ -5,32 +5,34 @@
 ## 当前状态
 
 - 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；当前主线进入 `rag-governance-hardening`，进度约 `30%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；当前主线进入 `rag-governance-hardening`，进度约 `40%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
 - `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `tool_runtime_registry.py` 与 settings/route/audit/SSE/trace 边界已完成 provider/source 脱敏、冲突 alias、跨结构共享 alias map、runtime artifacts/service actions、模型输出层、export/task/usage/audit/SSE/trace 安全摘要。
-- `rag-governance-hardening` 已完成首批收口：`chroma_rag_service.py` 统一规整 ingest/query source metadata 敏感信息；ingest 为每个 chunk 写入稳定 `document_version` 与 `content_hash`；status/list 聚合安全版本摘要；task export/Markdown 保留合法版本锚点并清理污染字段。
+- `rag-governance-hardening` 已完成首批收口：`chroma_rag_service.py` 统一规整 ingest/query source metadata 敏感信息；ingest 为每个 chunk 写入稳定 `document_version` 与 `content_hash`；status/list 聚合安全版本摘要；task export/Markdown 保留合法版本锚点并清理污染字段；runtime trace follow-up 透传安全 `chunk_metadata` / `document_versions`，export summary 可合并并继续脱敏。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1878/1878` 通过
-- backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1882/1882` 通过
+- RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`67/67` 通过
+- RAG runtime/export targeted：safe version metadata、legacy chunk shape、chunk object metadata alignment、parallel runtime chunk metadata 均通过
+- `python3 -m py_compile` 本轮相关 backend runtime/export 模块：通过
+- 最近 backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
-- backend queue e2e phase：低并发 `8011` 本轮 fresh 通过，覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
-- frontend targeted Chromium：queued recover/cancel、running cancel、Task Center session/global 隔离、刷新恢复隔离均已通过
-- `bash scripts/test_ci_e2e_tooling.sh all`：通过
-- 完整 Chromium e2e：默认 `8000/3001` 本轮 fresh 通过，`50 passed / 1 skipped`
-- 本轮相关 `8011/8000/3001` 服务均已停止，`lsof` 无监听残留。
+- 最近 backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
+- 最近 frontend targeted Chromium：queued recover/cancel、running cancel、Task Center session/global 隔离、刷新恢复隔离均已通过
+- 最近 CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
+- 最近完整 Chromium e2e：默认 `8000/3001` 通过，`50 passed / 1 skipped`；本轮未重跑本机 e2e。
 - `git diff --check`：通过
 - 后续运行 backend slice、启动 backend、跑 backend e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 venv 与提权边界，避免重复触发本机端口 / `.git/index.lock` 权限错误。
 
 ## 下一步后端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`。
-2. 当前主线：`rag-governance-hardening`，进度约 `30%`；已收口 RAG source/metadata 入站持久化与 query 出站脱敏、稳定文档版本 metadata、status/list 可见治理摘要与 task export/Markdown 版本锚点。
-3. 后续聚焦 RAG trace/runtime 版本透传、来源策略与更细粒度 shared 规则。
+2. 当前主线：`rag-governance-hardening`，进度约 `40%`；已收口 RAG source/metadata 入站持久化与 query 出站脱敏、稳定文档版本 metadata、status/list 可见治理摘要、task export/Markdown 版本锚点、runtime trace 版本 metadata 透传与 export summary 合并。
+3. 后续聚焦 RAG 来源策略、shared 知识库边界与更细粒度 shared 规则。
 4. 后续开发继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
 
 ## 当前已有内容

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
@@ -2962,6 +2963,7 @@ def build_tool_rag_step(
     seq: int,
     model: str,
     chunks: list[str],
+    chunk_metadata: list[dict[str, object]] | None = None,
     knowledge_base_id: str | None,
     token_count: int,
     content: str | None = None,
@@ -2971,6 +2973,16 @@ def build_tool_rag_step(
     }
     if isinstance(knowledge_base_id, str) and knowledge_base_id:
         rag_meta["knowledge_base_id"] = knowledge_base_id
+    safe_chunk_metadata = [
+        dict(metadata)
+        for metadata in (chunk_metadata or [])
+        if isinstance(metadata, dict) and metadata
+    ]
+    if safe_chunk_metadata:
+        rag_meta["chunk_metadata"] = safe_chunk_metadata
+        document_versions = _build_tool_rag_document_versions(safe_chunk_metadata)
+        if document_versions:
+            rag_meta["document_versions"] = document_versions
     return {
         "id": step_id,
         "seq": seq,
@@ -3074,10 +3086,87 @@ _TOOL_RAG_DOCUMENT_LIST_FIELDS = (
     "records",
     "value",
 )
+_TOOL_RAG_DOCUMENT_VERSION_RE = re.compile(r"^sha256:[a-f0-9]{16,64}$")
+_TOOL_RAG_CONTENT_HASH_RE = re.compile(r"^[a-f0-9]{64}$")
+_TOOL_RAG_SENSITIVE_ASSIGNMENT_RE = re.compile(
+    r"(?i)(^|[?&#;\s])(?:api[_-]?key|access[_-]?token|token|secret|password)=[^&#;\s]+"
+)
 
 
 def _redact_tool_rag_chunk_text(raw_value: str) -> str:
     return _redact_http_json_sensitive_payload_text(raw_value)
+
+
+def _sanitize_tool_rag_metadata_text(value: object, *, limit: int) -> str | None:
+    raw = _coerce_tool_execution_string_like_value(value)
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if not text:
+        return None
+    safe = _redact_tool_rag_chunk_text(text)
+    safe = _TOOL_RAG_SENSITIVE_ASSIGNMENT_RE.sub(
+        lambda match: f"{match.group(1)}[redacted]",
+        safe,
+    )
+    return safe[:limit]
+
+
+def _sanitize_tool_rag_document_version(value: object) -> str | None:
+    raw = _sanitize_tool_rag_metadata_text(value, limit=80)
+    if raw and _TOOL_RAG_DOCUMENT_VERSION_RE.fullmatch(raw):
+        return raw
+    return None
+
+
+def _sanitize_tool_rag_content_hash(value: object) -> str | None:
+    raw = _sanitize_tool_rag_metadata_text(value, limit=80)
+    if raw and _TOOL_RAG_CONTENT_HASH_RE.fullmatch(raw):
+        return raw
+    return None
+
+
+def _coerce_tool_rag_metadata_mapping(raw_document: Mapping) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    raw_metadata = raw_document.get("metadata")
+    if isinstance(raw_metadata, Mapping):
+        metadata.update(dict(raw_metadata))
+    for key in (
+        "source",
+        "document_id",
+        "documentId",
+        "document_version",
+        "documentVersion",
+        "content_hash",
+        "contentHash",
+    ):
+        if key in raw_document:
+            metadata[key] = raw_document[key]
+    return metadata
+
+
+def _build_tool_rag_chunk_metadata(raw_document: Mapping) -> dict[str, object]:
+    raw_metadata = _coerce_tool_rag_metadata_mapping(raw_document)
+    metadata: dict[str, object] = {}
+    source = _sanitize_tool_rag_metadata_text(raw_metadata.get("source"), limit=240)
+    if source:
+        metadata["source"] = source
+    raw_document_id = raw_metadata.get("document_id", raw_metadata.get("documentId"))
+    document_id = _sanitize_tool_rag_metadata_text(raw_document_id, limit=128)
+    if document_id:
+        metadata["document_id"] = document_id
+    raw_document_version = raw_metadata.get(
+        "document_version",
+        raw_metadata.get("documentVersion"),
+    )
+    document_version = _sanitize_tool_rag_document_version(raw_document_version)
+    if document_version:
+        metadata["document_version"] = document_version
+    raw_content_hash = raw_metadata.get("content_hash", raw_metadata.get("contentHash"))
+    content_hash = _sanitize_tool_rag_content_hash(raw_content_hash)
+    if content_hash:
+        metadata["content_hash"] = content_hash
+    return metadata
 
 
 def _extract_tool_rag_chunk_from_document_mapping(
@@ -3164,6 +3253,80 @@ def _extract_tool_rag_chunks_from_output(output: dict[str, object]) -> list[str]
         if extracted_chunks:
             return extracted_chunks
     return []
+
+
+def _extract_tool_rag_chunk_metadata_from_document_list(
+    raw_documents: object,
+) -> list[dict[str, object]]:
+    normalized_documents = _extract_http_json_retrieval_list_from_container(raw_documents)
+    if normalized_documents is None:
+        return []
+    chunk_metadata: list[dict[str, object]] = []
+    for raw_document in normalized_documents:
+        if isinstance(raw_document, str):
+            if raw_document.strip():
+                chunk_metadata.append({})
+            continue
+        if not isinstance(raw_document, Mapping):
+            continue
+        raw_mapping = dict(raw_document)
+        normalized_chunk = _extract_tool_rag_chunk_from_document_mapping(raw_mapping)
+        if normalized_chunk:
+            chunk_metadata.append(_build_tool_rag_chunk_metadata(raw_document))
+    return chunk_metadata
+
+
+def _extract_tool_rag_chunk_metadata_from_output(
+    output: dict[str, object],
+) -> list[dict[str, object]]:
+    extracted = _extract_tool_rag_chunk_metadata_from_document_list(
+        output.get("chunks")
+    )
+    if extracted and any(item for item in extracted):
+        return extracted
+    for list_field_name in _TOOL_RAG_DOCUMENT_LIST_FIELDS:
+        extracted = _extract_tool_rag_chunk_metadata_from_document_list(
+            output.get(list_field_name)
+        )
+        if extracted and any(item for item in extracted):
+            return extracted
+    return []
+
+
+def _build_tool_rag_document_versions(
+    chunk_metadata: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    grouped: dict[str, dict[str, object]] = {}
+    for metadata in chunk_metadata:
+        document_version = str(metadata.get("document_version") or "").strip()
+        content_hash = str(metadata.get("content_hash") or "").strip()
+        if not _TOOL_RAG_DOCUMENT_VERSION_RE.fullmatch(document_version):
+            continue
+        if not _TOOL_RAG_CONTENT_HASH_RE.fullmatch(content_hash):
+            continue
+        key = f"{document_version}\x1f{content_hash}"
+        if key not in grouped:
+            grouped[key] = {
+                "document_version": document_version,
+                "content_hash": content_hash,
+                "chunk_count": 0,
+            }
+            source = str(metadata.get("source") or "").strip()
+            if source:
+                grouped[key]["source"] = source
+            document_id = str(metadata.get("document_id") or "").strip()
+            if document_id:
+                grouped[key]["document_id"] = document_id
+        grouped[key]["chunk_count"] = int(grouped[key]["chunk_count"]) + 1
+    document_versions = list(grouped.values())
+    document_versions.sort(
+        key=lambda item: (
+            str(item.get("source") or ""),
+            str(item.get("document_id") or ""),
+            str(item.get("document_version") or ""),
+        )
+    )
+    return document_versions
 
 
 def build_tool_prompt_with_observations(
@@ -3396,12 +3559,14 @@ def build_tool_rag_followup(
     chunks = _extract_tool_rag_chunks_from_output(output)
     if not chunks:
         return None
+    chunk_metadata = _extract_tool_rag_chunk_metadata_from_output(output)
     kb = output.get("knowledge_base_id")
     step = build_tool_rag_step(
         step_id=step_id,
         seq=seq,
         model=model,
         chunks=chunks,
+        chunk_metadata=chunk_metadata,
         knowledge_base_id=str(kb) if kb else None,
         token_count=token_count,
         content=_build_tool_rag_followup_content(

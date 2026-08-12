@@ -64,7 +64,23 @@ export type TraceStepMeta = {
     retry_count?: number;
     error?: string | null;
   };
-  rag?: { chunks: string[]; knowledge_base_id?: string };
+  rag?: {
+    chunks: string[];
+    knowledge_base_id?: string;
+    chunk_metadata?: Array<{
+      source?: string;
+      document_id?: string;
+      document_version?: string;
+      content_hash?: string;
+    }>;
+    document_versions?: Array<{
+      document_version: string;
+      content_hash: string;
+      source?: string;
+      document_id?: string;
+      chunk_count?: number;
+    }>;
+  };
   memory?: string[];
   latency?: number;
   tokens?: number | null;
