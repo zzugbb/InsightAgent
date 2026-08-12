@@ -95,6 +95,56 @@ class RagGovernanceMixin:
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("Bearer", serialized)
 
+    def test_get_knowledge_base_status_canonicalizes_version_alias_metadata(
+        self,
+    ) -> None:
+        class FakeCollection:
+            def count(self) -> int:
+                return 1
+
+            def get(self, *, include: list[str], limit: int) -> dict[str, object]:
+                return {
+                    "metadatas": [
+                        {
+                            "source": "alias-guide.md",
+                            "documentId": "doc-alias",
+                            "documentVersion": "sha256:cccccccccccccccc",
+                            "contentHash": "d" * 64,
+                        }
+                    ]
+                }
+
+        class FakeClient:
+            def heartbeat(self) -> None:
+                return None
+
+            def get_collection(self, *, name: str) -> FakeCollection:
+                return FakeCollection()
+
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient()  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.get_knowledge_base_status(
+                user_id="user-rag-version-alias",
+                knowledge_base_id="kb-rag-version-alias",
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertEqual(result["unique_document_count"], 1)
+        self.assertEqual(
+            result["document_versions"],
+            [
+                {
+                    "document_version": "sha256:cccccccccccccccc",
+                    "content_hash": "d" * 64,
+                    "source": "alias-guide.md",
+                    "document_id": "doc-alias",
+                    "chunk_count": 1,
+                }
+            ],
+        )
+
     def test_list_knowledge_bases_summarizes_safe_document_versions(
         self,
     ) -> None:
@@ -543,3 +593,132 @@ class RagGovernanceMixin:
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("Authorization", serialized)
+
+    def test_query_knowledge_base_filters_invalid_version_metadata_before_response(
+        self,
+    ) -> None:
+        class FakeCollection:
+            def count(self) -> int:
+                return 2
+
+            def query(
+                self,
+                *,
+                query_texts: list[str],
+                n_results: int,
+            ) -> dict[str, object]:
+                return {
+                    "ids": [["hit-safe", "hit-poisoned"]],
+                    "documents": [["safe version content", "poisoned version content"]],
+                    "distances": [[0.1, 0.2]],
+                    "metadatas": [
+                        [
+                            {
+                                "source": "safe.md",
+                                "document_id": "doc-safe",
+                                "document_version": "sha256:aaaaaaaaaaaaaaaa",
+                                "content_hash": "b" * 64,
+                            },
+                            {
+                                "source": "poisoned.md?api_key=raw-secret",
+                                "document_id": "doc-poisoned token=raw-token",
+                                "document_version": "Bearer raw-secret",
+                                "content_hash": "token=raw-token",
+                            },
+                        ]
+                    ],
+                }
+
+        class FakeClient:
+            def get_collection(self, *, name: str) -> FakeCollection:
+                return FakeCollection()
+
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient()  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.query_knowledge_base(
+                user_id="user-rag-query-version",
+                knowledge_base_id="kb-rag-query-version",
+                query_text="version content",
+                top_k=2,
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertEqual(result["hit_count"], 2)
+        hits = result["hits"]
+        self.assertIsInstance(hits, list)
+        self.assertEqual(
+            hits[0]["metadata"],
+            {
+                "source": "safe.md",
+                "document_id": "doc-safe",
+                "document_version": "sha256:aaaaaaaaaaaaaaaa",
+                "content_hash": "b" * 64,
+            },
+        )
+        poisoned_metadata = hits[1]["metadata"]
+        self.assertEqual(poisoned_metadata["source"], "poisoned.md?[redacted]")
+        self.assertEqual(poisoned_metadata["document_id"], "doc-poisoned [redacted]")
+        self.assertNotIn("document_version", poisoned_metadata)
+        self.assertNotIn("content_hash", poisoned_metadata)
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("Bearer", serialized)
+
+    def test_query_knowledge_base_canonicalizes_safe_version_metadata_aliases(
+        self,
+    ) -> None:
+        class FakeCollection:
+            def count(self) -> int:
+                return 1
+
+            def query(
+                self,
+                *,
+                query_texts: list[str],
+                n_results: int,
+            ) -> dict[str, object]:
+                return {
+                    "ids": [["hit-alias"]],
+                    "documents": [["safe alias content"]],
+                    "distances": [[0.1]],
+                    "metadatas": [
+                        [
+                            {
+                                "source": "alias.md",
+                                "documentId": "doc-alias",
+                                "documentVersion": "sha256:cccccccccccccccc",
+                                "contentHash": "d" * 64,
+                            }
+                        ]
+                    ],
+                }
+
+        class FakeClient:
+            def get_collection(self, *, name: str) -> FakeCollection:
+                return FakeCollection()
+
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient()  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.query_knowledge_base(
+                user_id="user-rag-query-version-alias",
+                knowledge_base_id="kb-rag-query-version-alias",
+                query_text="alias content",
+                top_k=1,
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertEqual(
+            result["hits"][0]["metadata"],
+            {
+                "source": "alias.md",
+                "document_id": "doc-alias",
+                "document_version": "sha256:cccccccccccccccc",
+                "content_hash": "d" * 64,
+            },
+        )

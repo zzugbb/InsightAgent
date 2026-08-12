@@ -31,6 +31,15 @@ _RAG_RESERVED_METADATA_KEY_TOKENS = {
     "chunkindex",
     "chunktotal",
 }
+_RAG_RESERVED_METADATA_CANONICAL_KEYS = {
+    "knowledgebaseid": "knowledge_base_id",
+    "source": "source",
+    "documentid": "document_id",
+    "documentversion": "document_version",
+    "contenthash": "content_hash",
+    "chunkindex": "chunk_index",
+    "chunktotal": "chunk_total",
+}
 
 
 def _http_client() -> chromadb.HttpClient:
@@ -182,14 +191,27 @@ def _normalize_metadata(
         return {}
     normalized: dict[str, object] = {}
     for key, value in metadata_dict.items():
-        if not allow_reserved and _is_reserved_rag_metadata_key(key):
+        key_token = _rag_metadata_key_token(key)
+        if not allow_reserved and key_token in _RAG_RESERVED_METADATA_KEY_TOKENS:
             continue
         k = _sanitize_rag_metadata_key(key)
         if not k:
             continue
-        if not allow_reserved and _is_reserved_rag_metadata_key(k):
+        safe_key_token = _rag_metadata_key_token(k)
+        if not allow_reserved and safe_key_token in _RAG_RESERVED_METADATA_KEY_TOKENS:
             continue
-        normalized[k] = _sanitize_rag_metadata_text(value, limit=2000)
+        safe_value = _sanitize_rag_metadata_text(value, limit=2000)
+        if safe_key_token == "documentversion" and not _RAG_DOCUMENT_VERSION_RE.fullmatch(
+            safe_value
+        ):
+            continue
+        if safe_key_token == "contenthash" and not _RAG_CONTENT_HASH_RE.fullmatch(
+            safe_value
+        ):
+            continue
+        normalized[_RAG_RESERVED_METADATA_CANONICAL_KEYS.get(safe_key_token, k)] = (
+            safe_value
+        )
     return normalized
 
 
