@@ -759,6 +759,10 @@ class TaskExportRagChunk(BaseModel):
     step_id: str
     knowledge_base_id: str | None = None
     content: str
+    document_version: str | None = None
+    content_hash: str | None = None
+    source: str | None = None
+    document_id: str | None = None
 
 
 class TaskExportTask(BaseModel):
@@ -939,6 +943,10 @@ def _build_task_export_markdown(payload: TaskExportJsonResponse) -> str:
             header = f"### {idx}. step={chunk.step_id}"
             if chunk.knowledge_base_id:
                 header += f" · kb={chunk.knowledge_base_id}"
+            if chunk.document_version:
+                header += f" · version={chunk.document_version}"
+            if chunk.source:
+                header += f" · source={chunk.source}"
             lines.append(header)
             lines.append("")
             _append_fenced_block(

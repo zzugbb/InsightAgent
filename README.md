@@ -5,17 +5,17 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前状态
 
 - 阶段 5 基础产品化已完成：会话/任务/消息持久化、SSE、Trace、Memory、RAG、鉴权、PostgreSQL、任务取消/超时、running task 恢复、usage dashboard、审计与任务/会话导出已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；当前主线进入 `rag-governance-hardening`，进度约 `22%`。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；当前主线进入 `rag-governance-hardening`，进度约 `30%`。
 - 当前队列基线：任务默认 `queued`，拿到进程内执行槽位后切 `running`；全局并发默认 `TASK_QUEUE_MAX_CONCURRENT=32`，可选 per-user/per-session 限额默认 `0` 关闭；等待队列保持 capacity-aware oldest eligible FIFO，queued cancel 会移出等待队列。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，覆盖全局、当前用户与可选当前会话 active/waiting/available 计数、限额触顶、`pressure_state`、fairness 开关、等待策略与 poll interval；前后端 typed contract 已固定 required governance 字段、optional scope 字段和枚举值。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `registry-governance` 已封板：provider/source 脱敏、冲突 alias、跨 settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
-- `rag-governance-hardening` 已完成首批收口：RAG ingest/query source metadata 脱敏、稳定 `document_version` / `content_hash` 入库、status/list 安全版本摘要与知识库治理表版本列已落地，支撑后续版本审计与来源治理。
+- `rag-governance-hardening` 已完成首批收口：RAG ingest/query source metadata 脱敏、稳定 `document_version` / `content_hash` 入库、status/list 安全版本摘要、知识库治理表版本列与 task export/Markdown 版本锚点治理已落地。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1874/1874` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1878/1878` 通过
 - `bash scripts/test_ci_e2e_tooling.sh all`：本轮 fresh 通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
@@ -30,9 +30,9 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前开发计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`。
-2. 当前主线：`rag-governance-hardening`，进度约 `22%`；已收口 RAG source/metadata 入站持久化与 query 出站脱敏、稳定文档版本 metadata，以及 status/list/query 可见治理摘要。
+2. 当前主线：`rag-governance-hardening`，进度约 `30%`；已收口 RAG source/metadata 入站持久化与 query 出站脱敏、稳定文档版本 metadata、status/list 可见治理摘要与 task export/Markdown 版本锚点。
 3. 后续开发继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
-4. 后续继续聚焦版本摘要导出治理、来源策略与更细粒度 shared 规则。
+4. 后续继续聚焦 RAG trace/runtime 版本透传、来源策略与更细粒度 shared 规则。
 
 ## 关键能力边界
 

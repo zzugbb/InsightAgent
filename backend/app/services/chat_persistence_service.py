@@ -2272,6 +2272,8 @@ def get_trace_step_markdown_meta(
 _TRACE_HTTP_JSON_EXPORT_CONTENT_SENSITIVE_RE = re.compile(
     r"(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|authorization|bearer\s+\S+|token\s*=|secret\s*=)"
 )
+_RAG_EXPORT_DOCUMENT_VERSION_RE = re.compile(r"^sha256:[a-f0-9]{16,64}$")
+_RAG_EXPORT_CONTENT_HASH_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 def _trace_http_json_export_content_needs_sanitization(content: str) -> bool:
@@ -2293,6 +2295,32 @@ def _redact_trace_http_json_export_content_fallback(content: str) -> str:
     redacted_content = _redact_tool_registry_diagnostic_value(safe_content)
     safe_text = redacted_content if isinstance(redacted_content, str) else safe_content
     return re.sub(r"(?i)\bbearer\s+\S+", "[redacted]", safe_text)
+
+
+def _sanitize_rag_export_text(value: object, *, limit: int) -> str | None:
+    raw = _coerce_trace_string_like_value(value)
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if not text:
+        return None
+    if _trace_http_json_export_content_needs_sanitization(text):
+        text = _redact_trace_http_json_export_content_fallback(text)
+    return text[:limit]
+
+
+def _sanitize_rag_export_document_version(value: object) -> str | None:
+    raw = _sanitize_rag_export_text(value, limit=80)
+    if raw and _RAG_EXPORT_DOCUMENT_VERSION_RE.fullmatch(raw):
+        return raw
+    return None
+
+
+def _sanitize_rag_export_content_hash(value: object) -> str | None:
+    raw = _sanitize_rag_export_text(value, limit=80)
+    if raw and _RAG_EXPORT_CONTENT_HASH_RE.fullmatch(raw):
+        return raw
+    return None
 
 
 def _sanitize_trace_tool_result_summary_text(result_summary: str) -> str:
@@ -2482,20 +2510,35 @@ def get_trace_rag_export_summary(
             rag_knowledge_base_ids.append(kb_id_text)
         if isinstance(raw_chunks, (list, tuple)):
             for chunk in raw_chunks:
-                chunk = _coerce_trace_string_like_value(chunk)
-                if not isinstance(chunk, str):
+                chunk_text = _coerce_trace_string_like_value(chunk)
+                if isinstance(chunk_text, str):
+                    chunk_text = chunk_text.strip()
+                    if not chunk_text:
+                        continue
+                    rag_hit_count += 1
+                    rag_chunks.append(
+                        {
+                            "step_id": step.id,
+                            "knowledge_base_id": kb_id_text,
+                            "content": chunk_text,
+                        }
+                    )
                     continue
-                chunk_text = chunk.strip()
-                if not chunk_text:
+                chunk_row = _coerce_payload_mapping_or_none(chunk)
+                if chunk_row is None:
+                    continue
+                chunk_payload = dict(chunk_row)
+                content = _coerce_trace_string_like_value(chunk_payload.get("content"))
+                if not isinstance(content, str) or not content.strip():
+                    continue
+                chunk_payload["content"] = content.strip()
+                chunk_payload["step_id"] = step.id
+                chunk_payload["knowledge_base_id"] = kb_id_text
+                sanitized_rows = _sanitize_export_rag_chunk_rows([chunk_payload])
+                if not sanitized_rows:
                     continue
                 rag_hit_count += 1
-                rag_chunks.append(
-                    {
-                        "step_id": step.id,
-                        "knowledge_base_id": kb_id_text,
-                        "content": chunk_text,
-                    }
-                )
+                rag_chunks.append(sanitized_rows[0])
 
     return {
         "rag_hit_count": rag_hit_count,
@@ -2972,6 +3015,29 @@ def _sanitize_export_rag_chunk_rows(value: object) -> list[dict[str, object]]:
             )
         elif isinstance(content, str):
             sanitized_chunk["content"] = content
+        source = _sanitize_rag_export_text(sanitized_chunk.get("source"), limit=240)
+        if source is not None:
+            sanitized_chunk["source"] = source
+        document_id = _sanitize_rag_export_text(
+            sanitized_chunk.get("document_id"),
+            limit=128,
+        )
+        if document_id is not None:
+            sanitized_chunk["document_id"] = document_id
+        document_version = _sanitize_rag_export_document_version(
+            sanitized_chunk.get("document_version")
+        )
+        content_hash = _sanitize_rag_export_content_hash(
+            sanitized_chunk.get("content_hash")
+        )
+        if document_version is not None:
+            sanitized_chunk["document_version"] = document_version
+        else:
+            sanitized_chunk.pop("document_version", None)
+        if content_hash is not None:
+            sanitized_chunk["content_hash"] = content_hash
+        else:
+            sanitized_chunk.pop("content_hash", None)
         sanitized_chunks.append(sanitized_chunk)
     return sanitized_chunks
 

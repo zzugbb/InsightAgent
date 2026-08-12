@@ -7,13 +7,13 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - 前端 W1-W4 与阶段 5 基础产品化已完成：Auth Gate、Workbench、Trace 双视图、Memory/RAG 调试、usage dashboard、任务/会话导出、任务详情页、running task 恢复、审计与知识库治理已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；当前主线进入 `rag-governance-hardening`，进度约 `22%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；当前主线进入 `rag-governance-hardening`，进度约 `30%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
 - Workbench 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 队列 UI 已覆盖 `queued/pending/running` 活跃任务识别、安全 queue snapshot 排队位置、queued/running cancel、跨会话隔离、刷新恢复与 Task Center session/global 多任务隔离。
 - 运行设置会带 active session 请求只读 `task_queue_diagnostics`，展示全局、当前用户、当前会话 active/waiting/available、安全限额触顶、`pressure_state`、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
 - 前端 `TaskQueueDiagnostics` 类型已固定基础运行态、governance 字段与 `pressure_state` / `waiting_policy` 枚举；后端 runtime slice 拆分与 `tool_runtime.py` facade 拆分已完成，原测试入口保持不变。
 - `registry-governance` 已封板：provider/source diagnostics、settings/preflight、runtime artifacts、trace/export/audit/SSE 与 task/usage 回放语义已完成脱敏和 alias 对齐，前端可见字段 shape 不变。
-- 后端 `rag-governance-hardening` 已完成 RAG source/metadata 脱敏、稳定版本 metadata 与 status/list 版本摘要；知识库治理表新增版本列展示唯一文档版本数与首个版本号。
+- 后端 `rag-governance-hardening` 已完成 RAG source/metadata 脱敏、稳定版本 metadata、status/list 版本摘要与 task export/Markdown 版本锚点治理；知识库治理表继续展示唯一文档版本数与首个版本号。
 
 ## 当前验证基线
 
@@ -31,7 +31,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`。
-2. 当前主线：`rag-governance-hardening`，进度约 `22%`；后端已收口 RAG source/metadata 脱敏、稳定文档版本 metadata 与 status/list 版本摘要，前端保持增量兼容展示。
+2. 当前主线：`rag-governance-hardening`，进度约 `30%`；后端已收口 RAG source/metadata 脱敏、稳定文档版本 metadata、status/list 版本摘要与 export 版本锚点，前端保持增量兼容展示。
 3. 后续体验维护：Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. 回归门：frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium；新增测试/实现继续按主题文件拆分，避免把单文件当作无限追加点。
 

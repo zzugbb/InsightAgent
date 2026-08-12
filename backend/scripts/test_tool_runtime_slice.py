@@ -278,6 +278,7 @@ from tool_runtime_slice.runtime_attempt_lifecycle import RuntimeAttemptLifecycle
 from tool_runtime_slice.runtime_observation_display import RuntimeObservationDisplayMixin
 from tool_runtime_slice.runtime_facade_split import RuntimeFacadeSplitMixin
 from tool_runtime_slice.rag_governance import RagGovernanceMixin
+from tool_runtime_slice.rag_export_governance import RagExportGovernanceMixin
 from tool_runtime_slice.runtime_rag_execution import RuntimeRagExecutionMixin
 from tool_runtime_slice.runtime_result_rag import RuntimeResultRagMixin
 from tool_runtime_slice.runtime_result_semantics import RuntimeResultSemanticsMixin
@@ -331,6 +332,7 @@ class ToolRuntimeSliceTests(
     RegistryRuntimeServiceModelsMixin,
     RuntimeFacadeSplitMixin,
     RagGovernanceMixin,
+    RagExportGovernanceMixin,
     RuntimeResultRagMixin,
     RuntimeResultSemanticsMixin,
     RuntimeAttemptLifecycleMixin,
