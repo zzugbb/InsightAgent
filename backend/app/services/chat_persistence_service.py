@@ -1216,7 +1216,7 @@ def complete_task(
     user_id: str,
     status: str = "completed",
     usage: dict[str, object] | None = None,
-) -> None:
+) -> int:
     current_time = _now_iso()
     normalized_trace_steps = _normalize_trace_steps(trace_steps)
     usage_blob = json.dumps(usage, ensure_ascii=False) if usage is not None else None
@@ -1228,7 +1228,7 @@ def complete_task(
     ) = _serialize_task_governance_columns(normalized_trace_steps)
 
     with get_db_connection() as connection:
-        connection.execute(
+        cursor = connection.execute(
             """
             UPDATE tasks
             SET
@@ -1243,6 +1243,7 @@ def complete_task(
                 execution_owner_id = NULL,
                 execution_heartbeat_at = NULL
             WHERE id = ? AND user_id = ?
+              AND LOWER(status) IN ('pending', 'queued', 'running')
             """,
             (
                 status,
@@ -1258,6 +1259,7 @@ def complete_task(
             ),
         )
         connection.commit()
+        return max(0, int(getattr(cursor, "rowcount", 0) or 0))
 
 
 def create_session_record(title: str | None = None, user_id: str = "") -> dict:

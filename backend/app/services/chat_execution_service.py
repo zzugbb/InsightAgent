@@ -476,7 +476,12 @@ def stream_task_execution(
             )
         elapsed = monotonic() - stream_started_ts
         if elapsed >= TASK_TIMEOUT_SEC:
-            update_task_status(task_id=task_id, status="timed_out", user_id=user_id)
+            complete_task(
+                task_id=task_id,
+                trace_steps=trace_steps,
+                user_id=user_id,
+                status="timed_out",
+            )
             probe_task_status(force=True)
             raise TaskExecutionAbortError(
                 code="task_timeout",
@@ -874,24 +879,32 @@ def stream_task_execution(
         }
         persist_trace(force=True)
 
+        usage_payload = _merge_usage_payloads(
+            final_usage=final_usage_payload,
+            planning_usage=planning_usage_payload,
+        )
+
+        completed_count = complete_task(
+            task_id=task_id,
+            trace_steps=trace_steps,
+            user_id=user_id,
+            usage=usage_payload,
+        )
+        if completed_count <= 0:
+            raise_if_should_abort(force_status_probe=True)
+            raise TaskExecutionAbortError(
+                code="task_terminal_race",
+                status="failed",
+                event="error",
+                user_message="Task reached terminal state before completion could be recorded.",
+            )
+
         create_message(
             session_id=session_id,
             user_id=user_id,
             task_id=task_id,
             role="assistant",
             content=final_content,
-        )
-
-        usage_payload = _merge_usage_payloads(
-            final_usage=final_usage_payload,
-            planning_usage=planning_usage_payload,
-        )
-
-        complete_task(
-            task_id=task_id,
-            trace_steps=trace_steps,
-            user_id=user_id,
-            usage=usage_payload,
         )
         try_append_task_memory(
             session_id,
