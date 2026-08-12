@@ -5,42 +5,44 @@
 ## 当前状态
 
 - 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 均已封板；当前主线进度 `100%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 均已封板；当前主线切到 `production-reliability-hardening`，进度约 `8%`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
 - `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `tool_runtime_registry.py` 与 settings/route/audit/SSE/trace 边界已完成 provider/source 脱敏、冲突 alias、跨结构共享 alias map、runtime artifacts/service actions、模型输出层、export/task/usage/audit/SSE/trace 安全摘要。
 - `rag-governance-hardening` 已封板：RAG ingest/query source metadata、嵌套 metadata value、query hit id、知识库标识、版本摘要、reserved alias、route/runtime trace/export/display、错误出口与 shared/private 列表边界均已收口；后端外部响应 shape 保持稳定。
+- `production-reliability-hardening` 首批完成：`task_queue_service.py` 支持按 user/session scope 清理 waiting entries；`DELETE /api/sessions/{session_id}` 成功删除后会清理该用户会话的 queued waiting entries，active slot 与 204 响应契约不变。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1904/1904` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`3/3` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`：`63/63` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1907/1907` 通过
 - RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`78/78` 通过
 - RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
 - Result summary targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，`30/30` 通过
 - RAG source/version/shared/route/runtime/error targeted：sensitive knowledge_base_id redaction、nested metadata value redaction、query hit id redaction、runtime helper output redaction、runtime shared retrieve scope、runtime knowledge_base_id redaction、route service identifier redaction、route document_versions source/document_id redaction、legacy sensitive collection suffix redaction、invalid version metadata filtering、version alias canonicalization、reserved metadata override、private `shared-*` shadow 隔离、status/list/400/503 error redaction 均通过
 - RAG runtime/export targeted：safe version metadata、legacy chunk shape、chunk object metadata alignment、parallel runtime chunk metadata、export knowledge_base_id redaction、result summary/output/preview/observation knowledge_base_id redaction 均通过
-- `backend/.venv/bin/python -m py_compile` 本轮相关 backend RAG route/service/test 模块：通过
-- 本轮 backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
+- `backend/.venv/bin/python -m py_compile` 本轮相关 backend queue/session/test 模块：通过
+- 进入本主线前 backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过；本轮未重跑 e2e。
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
-- 本轮 backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
-- 本轮 frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
-- 本轮 frontend queue phase：低并发 `8011/3001` 通过，`1/1`
-- 本轮 CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
+- 进入本主线前 backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
+- 进入本主线前 frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
+- 进入本主线前 frontend queue phase：低并发 `8011/3001` 通过，`1/1`
+- 进入本主线前 CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
 - 后续运行 backend slice、启动 backend、跑 backend e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 venv 与提权边界，避免重复触发本机端口 / `.git/index.lock` 权限错误。
 
 ## 下一步后端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`。
-2. `rag-governance-hardening` 已完成 100% 封板；当前后端计划只保留封板边界与回归门，不再展开逐项治理流水账。
-3. 后续开发继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
-4. 下一主线尚未打开；进入新主线前以本轮封板验证基线为准。
+2. 当前主线：`production-reliability-hardening`，进度约 `8%`；首批收口 queue scope cleanup 与 session delete waiting cleanup。
+3. 后续优先补任务恢复、异常退出队列清理、队列持久化边界、多实例并发风险与 e2e 稳定性红测。
+4. 后续开发继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
 
-## 候选下一主线
+## 后续候选主线
 
-- `production-reliability-hardening`：服务启动、任务恢复、队列持久化、多实例并发、异常恢复、低并发/全量 e2e 稳定性。
 - `rag-product-experience`：知识库版本对比、文档治理、检索解释、召回质量评估与 RAG 调试接口体验。
 - `observability-experience`：trace 诊断、失败详情、任务回放、usage/audit 关联与后端可观测摘要。
 - `provider-tool-expansion`：新增真实 provider/tool 协议时先补红测，再局部归一化 registry/runtime 输出。

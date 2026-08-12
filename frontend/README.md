@@ -7,37 +7,37 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - 前端 W1-W4 与阶段 5 基础产品化已完成：Auth Gate、Workbench、Trace 双视图、Memory/RAG 调试、usage dashboard、任务/会话导出、任务详情页、running task 恢复、审计与知识库治理已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 均已封板；当前主线进度 `100%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 均已封板；当前主线切到 `production-reliability-hardening`，进度约 `8%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
 - Workbench 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 队列 UI 已覆盖 `queued/pending/running` 活跃任务识别、安全 queue snapshot 排队位置、queued/running cancel、跨会话隔离、刷新恢复与 Task Center session/global 多任务隔离。
 - 运行设置会带 active session 请求只读 `task_queue_diagnostics`，展示全局、当前用户、当前会话 active/waiting/available、安全限额触顶、`pressure_state`、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
 - 前端 `TaskQueueDiagnostics` 类型已固定基础运行态、governance 字段与 `pressure_state` / `waiting_policy` 枚举；后端 runtime slice 拆分与 `tool_runtime.py` facade 拆分已完成，原测试入口保持不变。
 - `registry-governance` 已封板：provider/source diagnostics、settings/preflight、runtime artifacts、trace/export/audit/SSE 与 task/usage 回放语义已完成脱敏和 alias 对齐，前端可见字段 shape 不变。
 - 后端 `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
+- 后端 `production-reliability-hardening` 首批完成 queue scope cleanup 与 session delete waiting cleanup；前端可见删除会话响应、SSE、trace 与 export shape 不变。
 
 ## 当前验证基线
 
 - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`77/77` 通过
 - `cd frontend && npm run lint`：通过
 - `npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts`：通过
-- 本轮 frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
-- 本轮 frontend queue phase：低并发 `8011/3001` 通过，`1/1`
-- 本轮 backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
-- 后端可见契约回归：RAG slice `78/78`、RAG route slice `2/2`、result summary slice `30/30`、backend full slice `1904/1904` 通过。
-- 本轮 CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
+- 进入本主线前 frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
+- 进入本主线前 frontend queue phase：低并发 `8011/3001` 通过，`1/1`
+- 进入本主线前 backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
+- 后端可见契约回归：production reliability `3/3`、queue `63/63`、backend full slice `1907/1907` 通过；本轮未重跑 frontend/e2e。
+- 进入本主线前 CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
 - 后续启动 frontend、访问本机 e2e 服务、跑 Chromium e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 Node/npm 路径与提权边界，避免重复触发端口 / `.git/index.lock` 权限错误。
 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`。
-2. `rag-governance-hardening` 已完成 100% 封板；前端 trace 类型、搜索、治理表展示、导出回放与后端安全字段 shape 已兼容。
+2. 当前主线：`production-reliability-hardening`，进度约 `8%`；首批后端清理能力不改变前端可见契约。
 3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
-4. 下一主线尚未打开；回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
+4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。
 
-## 候选下一主线
+## 后续候选主线
 
-- `production-reliability-hardening`：围绕 running/queued 恢复、Task Center 多任务隔离、取消态、低并发 queue phase 与 full Chromium 稳定性补强。
 - `rag-product-experience`：知识库版本对比、文档治理操作、检索解释、召回质量呈现与 RAG 调试体验。
 - `observability-experience`：优化 Workbench、Task Center、Trace、失败诊断、任务回放和知识库治理的可读性与操作效率。
 - `provider-tool-expansion`：配合后端新增 provider/tool 协议，保持 settings/preflight/runtime/trace/export 显示契约稳定。

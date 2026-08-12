@@ -111,6 +111,32 @@ class TaskQueueState:
         with self._lock:
             self._forget_waiting(task_id)
 
+    def forget_waiting_for_scope(
+        self,
+        *,
+        user_id: str | None = None,
+        session_id: str | None = None,
+    ) -> int:
+        scope = TaskQueueScope(
+            user_id=_normalize_scope_value(user_id),
+            session_id=_normalize_scope_value(session_id),
+        )
+        if scope.user_id is None and scope.session_id is None:
+            return 0
+        with self._lock:
+            kept_waiting_task_ids: list[str] = []
+            forgotten_count = 0
+            for waiting_task_id in self._waiting_task_ids:
+                waiting_scope = self._task_scopes.get(waiting_task_id)
+                if _scope_matches(waiting_scope, scope):
+                    forgotten_count += 1
+                    if waiting_task_id not in self._active_task_ids:
+                        self._task_scopes.pop(waiting_task_id, None)
+                    continue
+                kept_waiting_task_ids.append(waiting_task_id)
+            self._waiting_task_ids = kept_waiting_task_ids
+            return forgotten_count
+
     def snapshot(
         self,
         *,
@@ -334,6 +360,22 @@ def _count_tasks_for_scope(
     return count
 
 
+def _scope_matches(
+    actual_scope: TaskQueueScope | None,
+    expected_scope: TaskQueueScope,
+) -> bool:
+    if actual_scope is None:
+        return False
+    if expected_scope.user_id is not None and actual_scope.user_id != expected_scope.user_id:
+        return False
+    if (
+        expected_scope.session_id is not None
+        and actual_scope.session_id != expected_scope.session_id
+    ):
+        return False
+    return True
+
+
 _TASK_QUEUE_STATE = TaskQueueState()
 
 
@@ -377,6 +419,17 @@ def release_task_execution_slot(task_id: str) -> None:
 
 def forget_waiting_task(task_id: str) -> None:
     _TASK_QUEUE_STATE.forget_waiting(task_id)
+
+
+def forget_waiting_tasks_for_scope(
+    *,
+    user_id: str | None = None,
+    session_id: str | None = None,
+) -> int:
+    return _TASK_QUEUE_STATE.forget_waiting_for_scope(
+        user_id=user_id,
+        session_id=session_id,
+    )
 
 
 def reset_task_queue_state_for_tests() -> None:

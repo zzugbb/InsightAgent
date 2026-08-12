@@ -26,6 +26,7 @@ from app.services.chat_persistence_service import (
     list_sessions,
     update_session_title,
 )
+from app.services.task_queue_service import forget_waiting_tasks_for_scope
 from app.services.tool_runtime import (
     _normalize_http_json_safe_output_shape,
     _redact_http_json_raw_fallback_value,
@@ -1228,6 +1229,7 @@ def delete_session_route(
         raise HTTPException(status_code=404, detail="Session not found")
     if not delete_session(session_id, user_id):
         raise HTTPException(status_code=404, detail="Session not found")
+    forget_waiting_tasks_for_scope(user_id=user_id, session_id=session_id)
     # best-effort: 清理 Chroma 会话 memory collection，失败不阻塞主删除流程
     cleanup_session_memory_collection(session_id)
     return Response(status_code=204)
