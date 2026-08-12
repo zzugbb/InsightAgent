@@ -25,7 +25,11 @@ from app.providers.response_utils import (
     extract_response_text,
     normalize_response_text,
 )
-from app.services.chroma_rag_service import query_knowledge_base
+from app.services.chroma_rag_service import (
+    SHARED_RAG_SCOPE_USER_ID,
+    is_shared_knowledge_base_id,
+    query_knowledge_base,
+)
 
 
 class MockToolExecutionError(RuntimeError):
@@ -1120,9 +1124,12 @@ def _run_task_retrieve(
     top_k = top_k_raw if isinstance(top_k_raw, int) else 4
     kb_raw = tool_input.get("knowledge_base_id")
     kb_id = str(kb_raw or get_settings().rag_default_knowledge_base_id)
+    owner_user_id = (
+        SHARED_RAG_SCOPE_USER_ID if is_shared_knowledge_base_id(kb_id) else user_id
+    )
     try:
         result = query_knowledge_base(
-            user_id=user_id,
+            user_id=owner_user_id,
             knowledge_base_id=kb_id,
             query_text=query or prompt,
             top_k=top_k,
