@@ -3416,28 +3416,36 @@ def _impl_build_configured_tool_registry_provider_runtime_service_actions_model_
 
 def _impl_build_configured_tool_registry_provider_runtime_service_action_model_from_dict(
     service_action: dict[str, object],
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> ConfiguredToolRegistryProviderRuntimeServiceActionModel:
     return ConfiguredToolRegistryProviderRuntimeServiceActionModel(
         kind=str(service_action.get("kind")),
         trace_step=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
             _sanitize_tool_runtime_trace_artifact_payload(
-                service_action.get("trace_step")
-            )
+                service_action.get("trace_step"),
+                provider_source_aliases=provider_source_aliases,
+            ),
+            provider_source_aliases=provider_source_aliases,
         )
         if isinstance(service_action.get("trace_step"), dict)
         else None,
         trace_event=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
             _sanitize_tool_runtime_trace_artifact_payload(
-                service_action.get("trace_event")
-            )
+                service_action.get("trace_event"),
+                provider_source_aliases=provider_source_aliases,
+            ),
+            provider_source_aliases=provider_source_aliases,
         )
         if isinstance(service_action.get("trace_event"), dict)
         else None,
         persist_force=bool(service_action.get("persist_force")),
         kwargs=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
             _sanitize_tool_runtime_trace_artifact_payload(
-                service_action.get("kwargs")
-            )
+                service_action.get("kwargs"),
+                provider_source_aliases=provider_source_aliases,
+            ),
+            provider_source_aliases=provider_source_aliases,
         )
         if isinstance(service_action.get("kwargs"), dict)
         else None,
@@ -3448,10 +3456,19 @@ def _impl_build_configured_tool_registry_provider_runtime_service_actions_model_
     *,
     service_actions: list[dict[str, object]],
 ) -> ConfiguredToolRegistryProviderRuntimeServiceActionsModel:
+    provider_source_aliases = _impl_build_safe_tool_registry_provider_source_alias_map(
+        list(
+            _call_runtime(
+                "_iter_tool_runtime_provider_source_artifact_values",
+                [action for action in service_actions if isinstance(action, dict)],
+            )
+        )
+    )
     return ConfiguredToolRegistryProviderRuntimeServiceActionsModel(
         actions=tuple(
             build_configured_tool_registry_provider_runtime_service_action_model_from_dict(
-                service_action
+                service_action,
+                provider_source_aliases=provider_source_aliases,
             )
             for service_action in service_actions
             if isinstance(service_action, dict)

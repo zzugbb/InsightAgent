@@ -1263,6 +1263,69 @@ class RegistryProviderSourceAliasesMixin:
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
 
+    def test_runtime_service_actions_outputs_from_dicts_preserve_action_provider_source_aliases(
+        self,
+    ) -> None:
+        _result_model, payload = (
+            build_configured_tool_registry_provider_runtime_service_actions_outputs_from_dicts(
+                service_actions=[
+                    {
+                        "kind": "internal_trace_write",
+                        "trace_step": {
+                            "id": "step-dict-trace-source",
+                            "meta": {
+                                "provider_source_name": "suite_api_key=one",
+                                "tool_registry_provider_sources": [
+                                    "suite_access_token=two",
+                                    "suite_api_key=one",
+                                ],
+                            },
+                        },
+                        "trace_event": {
+                            "provider_source_name": "suite_access_token=two"
+                        },
+                        "persist_force": True,
+                    },
+                    {
+                        "kind": "record_audit_event",
+                        "kwargs": {
+                            "event_type": "tool_registry_diagnostics",
+                            "detail": {
+                                "tool_registry_provider_source": "suite_access_token=two",
+                                "tool_registry_provider_sources": [
+                                    "suite_access_token=two",
+                                    "suite_api_key=one",
+                                ],
+                            },
+                        },
+                    },
+                ]
+            )
+        )
+
+        self.assertEqual(
+            payload[0]["trace_step"]["meta"]["provider_source_name"],
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            payload[0]["trace_step"]["meta"]["tool_registry_provider_sources"],
+            ["suite_[redacted]#2", "suite_[redacted]#1"],
+        )
+        self.assertEqual(
+            payload[0]["trace_event"]["provider_source_name"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload[1]["kwargs"]["detail"]["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload[1]["kwargs"]["detail"]["tool_registry_provider_sources"],
+            ["suite_[redacted]#2", "suite_[redacted]#1"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
     def test_preflight_result_to_dict_aliases_service_action_only_provider_sources(
         self,
     ) -> None:
