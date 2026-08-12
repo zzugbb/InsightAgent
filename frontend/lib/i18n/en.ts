@@ -339,6 +339,7 @@ export const en: Messages = {
       tableKbId: "Knowledge base ID",
       tableCollection: "Collection",
       tableDocuments: "Chunks",
+      tableVersions: "Versions",
       tableActions: "Actions",
       actionClear: "Clear",
       actionDelete: "Delete",

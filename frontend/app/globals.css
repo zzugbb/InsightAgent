@@ -3188,6 +3188,15 @@ code {
   font-variant-numeric: tabular-nums;
 }
 
+.kb-version-cell {
+  display: inline-block;
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+
 .kb-row-actions {
   display: inline-flex;
   flex-direction: row;

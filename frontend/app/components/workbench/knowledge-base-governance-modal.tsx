@@ -116,6 +116,30 @@ export function KnowledgeBaseGovernanceModal({
       ),
     },
     {
+      title: t.sidebar.knowledgeBase.tableVersions,
+      dataIndex: "unique_document_count",
+      width: 150,
+      render: (_value: number | undefined, row) => {
+        const versions = row.document_versions ?? [];
+        const versionCount = row.unique_document_count ?? versions.length;
+        const firstVersion = versions[0]?.document_version;
+        return (
+          <Space direction="vertical" size={0}>
+            <span className="kb-count-cell">{versionCount.toLocaleString()}</span>
+            {firstVersion ? (
+              <Typography.Text
+                type="secondary"
+                className="kb-version-cell"
+                title={firstVersion}
+              >
+                {firstVersion}
+              </Typography.Text>
+            ) : null}
+          </Space>
+        );
+      },
+    },
+    {
       title: t.sidebar.knowledgeBase.tableActions,
       className: "kb-actions-col",
       width: 118,

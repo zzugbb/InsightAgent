@@ -117,6 +117,14 @@ class RagQueryResponse(BaseModel):
     hit_count: int
 
 
+class RagDocumentVersionSummary(BaseModel):
+    document_version: str
+    content_hash: str
+    source: str = ""
+    document_id: str = ""
+    chunk_count: int
+
+
 class RagStatusResponse(BaseModel):
     knowledge_base_id: str
     collection: str
@@ -124,6 +132,8 @@ class RagStatusResponse(BaseModel):
     chroma_reachable: bool
     collection_exists: bool
     document_count: int
+    unique_document_count: int = 0
+    document_versions: list[RagDocumentVersionSummary] = Field(default_factory=list)
     error: str | None = None
 
 
@@ -131,6 +141,8 @@ class RagKnowledgeBaseSummary(BaseModel):
     knowledge_base_id: str
     collection: str
     document_count: int
+    unique_document_count: int = 0
+    document_versions: list[RagDocumentVersionSummary] = Field(default_factory=list)
 
 
 class RagKnowledgeBaseListResponse(BaseModel):

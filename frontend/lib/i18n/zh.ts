@@ -333,6 +333,7 @@ export const zh: Messages = {
       tableKbId: "知识库 ID",
       tableCollection: "Collection",
       tableDocuments: "条数",
+      tableVersions: "版本",
       tableActions: "操作",
       actionClear: "清空",
       actionDelete: "删除",

@@ -4,6 +4,210 @@ from .context import *
 
 
 class RagGovernanceMixin:
+    def test_get_knowledge_base_status_summarizes_safe_document_versions(
+        self,
+    ) -> None:
+        test_case = self
+
+        class FakeCollection:
+            def count(self) -> int:
+                return 4
+
+            def get(self, *, include: list[str], limit: int) -> dict[str, object]:
+                test_case.assertEqual(include, ["metadatas"])
+                test_case.assertEqual(limit, 4)
+                return {
+                    "metadatas": [
+                        {
+                            "source": "handbook.md?api_key=raw-secret",
+                            "document_id": "doc-1",
+                            "document_version": "sha256:1111111111111111",
+                            "content_hash": "a" * 64,
+                            "chunk_index": 1,
+                        },
+                        {
+                            "source": "handbook.md?api_key=raw-secret",
+                            "document_id": "doc-1",
+                            "document_version": "sha256:1111111111111111",
+                            "content_hash": "a" * 64,
+                            "chunk_index": 2,
+                        },
+                        {
+                            "source": "runbook.md?access_token=raw-token",
+                            "document_id": "doc-2 token=raw-token",
+                            "document_version": "sha256:2222222222222222",
+                            "content_hash": "b" * 64,
+                            "chunk_index": 1,
+                        },
+                        {
+                            "source": "legacy.md",
+                            "document_id": "legacy-doc",
+                            "document_version": "Bearer raw-secret",
+                            "content_hash": "token=raw-token",
+                        },
+                    ]
+                }
+
+        class FakeClient:
+            def heartbeat(self) -> None:
+                return None
+
+            def get_collection(self, *, name: str) -> FakeCollection:
+                return FakeCollection()
+
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient()  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.get_knowledge_base_status(
+                user_id="user-rag-version-summary",
+                knowledge_base_id="kb-rag-version-summary",
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertTrue(result["collection_exists"])
+        self.assertEqual(result["document_count"], 4)
+        self.assertEqual(result["unique_document_count"], 2)
+        versions = result["document_versions"]
+        self.assertEqual(
+            versions,
+            [
+                {
+                    "document_version": "sha256:1111111111111111",
+                    "content_hash": "a" * 64,
+                    "source": "handbook.md?[redacted]",
+                    "document_id": "doc-1",
+                    "chunk_count": 2,
+                },
+                {
+                    "document_version": "sha256:2222222222222222",
+                    "content_hash": "b" * 64,
+                    "source": "runbook.md?[redacted]",
+                    "document_id": "doc-2 [redacted]",
+                    "chunk_count": 1,
+                },
+            ],
+        )
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
+
+    def test_list_knowledge_bases_summarizes_safe_document_versions(
+        self,
+    ) -> None:
+        test_case = self
+        collection_name = chroma_rag_module.rag_collection_name(
+            "user-rag-version-list",
+            "kb-rag-version-list",
+        )
+
+        class FakeCollection:
+            def count(self) -> int:
+                return 2
+
+            def get(self, *, include: list[str], limit: int) -> dict[str, object]:
+                return {
+                    "metadatas": [
+                        {
+                            "source": "handbook.md?api_key=raw-secret",
+                            "document_id": "doc-1",
+                            "document_version": "sha256:aaaaaaaaaaaaaaaa",
+                            "content_hash": "c" * 64,
+                        },
+                        {
+                            "source": "handbook.md?api_key=raw-secret",
+                            "document_id": "doc-1",
+                            "document_version": "sha256:aaaaaaaaaaaaaaaa",
+                            "content_hash": "c" * 64,
+                        },
+                    ]
+                }
+
+        class FakeClient:
+            def heartbeat(self) -> None:
+                return None
+
+            def list_collections(self) -> list[dict[str, str]]:
+                return [{"name": collection_name}]
+
+            def get_collection(self, *, name: str) -> FakeCollection:
+                test_case.assertEqual(name, collection_name)
+                return FakeCollection()
+
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient()  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.list_knowledge_bases(
+                user_id="user-rag-version-list",
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        rows = result["knowledge_bases"]
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["document_count"], 2)
+        self.assertEqual(row["unique_document_count"], 1)
+        self.assertEqual(
+            row["document_versions"],
+            [
+                {
+                    "document_version": "sha256:aaaaaaaaaaaaaaaa",
+                    "content_hash": "c" * 64,
+                    "source": "handbook.md?[redacted]",
+                    "document_id": "doc-1",
+                    "chunk_count": 2,
+                }
+            ],
+        )
+        serialized = json.dumps(row, ensure_ascii=False)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("api_key", serialized)
+
+    def test_get_rag_status_route_exposes_document_version_summary(self) -> None:
+        original_status_helper = rag_routes_module.get_knowledge_base_status
+
+        try:
+            rag_routes_module.get_knowledge_base_status = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "knowledge_base_id": "demo",
+                    "collection": "kb_demo",
+                    "chroma_url": "http://127.0.0.1:8001",
+                    "chroma_reachable": True,
+                    "collection_exists": True,
+                    "document_count": 2,
+                    "unique_document_count": 1,
+                    "document_versions": [
+                        {
+                            "document_version": "sha256:aaaaaaaaaaaaaaaa",
+                            "content_hash": "c" * 64,
+                            "source": "handbook.md",
+                            "document_id": "doc-1",
+                            "chunk_count": 2,
+                        }
+                    ],
+                    "error": None,
+                }
+            )
+            payload = rag_routes_module.get_rag_status(
+                knowledge_base_id="demo",
+                current_user={"id": "user-rag-route"},
+            )
+        finally:
+            rag_routes_module.get_knowledge_base_status = original_status_helper  # type: ignore[attr-defined]
+
+        self.assertEqual(payload.document_count, 2)
+        self.assertEqual(payload.unique_document_count, 1)
+        self.assertEqual(len(payload.document_versions), 1)
+        self.assertEqual(
+            payload.document_versions[0].document_version,
+            "sha256:aaaaaaaaaaaaaaaa",
+        )
+        self.assertEqual(payload.document_versions[0].chunk_count, 2)
+
     def test_ingest_knowledge_documents_adds_stable_document_version_metadata(
         self,
     ) -> None:

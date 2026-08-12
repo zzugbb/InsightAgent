@@ -20,6 +20,8 @@ _RAG_BEARER_TOKEN_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECA
 _RAG_SENSITIVE_ASSIGNMENT_RE = re.compile(
     r"(?i)(^|[?&#;\s])(?:api[_-]?key|access[_-]?token|token|secret|password)=[^&#;\s]+"
 )
+_RAG_DOCUMENT_VERSION_RE = re.compile(r"^sha256:[a-f0-9]{16,64}$")
+_RAG_CONTENT_HASH_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 def _http_client() -> chromadb.HttpClient:
@@ -123,6 +125,15 @@ def _coerce_payload_block_list(value: object) -> list[dict[str, object]]:
     return rows
 
 
+def _coerce_metadata_block_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    rows: list[dict[str, object]] = []
+    for item in value:
+        rows.append(_normalize_metadata(item))
+    return [row for row in rows if row]
+
+
 def _chunk_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[str]:
     src = text.strip()
     if not src:
@@ -191,6 +202,75 @@ def _rag_document_version(
 ) -> str:
     seed = "\x1f".join([knowledge_base_id, source, document_id, content_hash])
     return f"sha256:{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _collection_document_version_summaries(
+    collection: object,
+    *,
+    document_count: int,
+) -> list[dict[str, object]]:
+    if document_count <= 0:
+        return []
+    getter = getattr(collection, "get", None)
+    if not callable(getter):
+        return []
+    try:
+        raw = _coerce_query_payload_mapping(
+            getter(include=["metadatas"], limit=min(document_count, 5000))
+        )
+    except TypeError:
+        try:
+            raw = _coerce_query_payload_mapping(getter(include=["metadatas"]))
+        except Exception:
+            return []
+    except Exception:
+        return []
+
+    rows = _coerce_metadata_block_list(raw.get("metadatas"))
+    grouped: dict[str, dict[str, object]] = {}
+    for metadata in rows:
+        document_version = str(metadata.get("document_version") or "").strip()
+        content_hash = str(metadata.get("content_hash") or "").strip()
+        if not _RAG_DOCUMENT_VERSION_RE.fullmatch(document_version):
+            continue
+        if not _RAG_CONTENT_HASH_RE.fullmatch(content_hash):
+            continue
+        key = f"{document_version}\x1f{content_hash}"
+        source = str(metadata.get("source") or "").strip()
+        document_id = str(metadata.get("document_id") or "").strip()
+        if key not in grouped:
+            grouped[key] = {
+                "document_version": document_version,
+                "content_hash": content_hash,
+                "source": source,
+                "document_id": document_id,
+                "chunk_count": 0,
+            }
+        grouped[key]["chunk_count"] = int(grouped[key]["chunk_count"]) + 1
+
+    summaries = list(grouped.values())
+    summaries.sort(
+        key=lambda item: (
+            str(item.get("source") or ""),
+            str(item.get("document_id") or ""),
+            str(item.get("document_version") or ""),
+        )
+    )
+    return summaries
+
+
+def _apply_document_version_summary(
+    row: dict[str, object],
+    collection: object,
+    *,
+    document_count: int,
+) -> None:
+    document_versions = _collection_document_version_summaries(
+        collection,
+        document_count=document_count,
+    )
+    row["unique_document_count"] = len(document_versions)
+    row["document_versions"] = document_versions
 
 
 def ingest_knowledge_documents(
@@ -368,6 +448,8 @@ def get_knowledge_base_status(*, user_id: str, knowledge_base_id: str) -> dict[s
         "chroma_reachable": False,
         "collection_exists": False,
         "document_count": 0,
+        "unique_document_count": 0,
+        "document_versions": [],
         "error": None,
     }
 
@@ -381,10 +463,18 @@ def get_knowledge_base_status(*, user_id: str, knowledge_base_id: str) -> dict[s
     try:
         collection = client.get_collection(name=collection_name)
         base["collection_exists"] = True
-        base["document_count"] = int(collection.count())
+        document_count = int(collection.count())
+        base["document_count"] = document_count
+        _apply_document_version_summary(
+            base,
+            collection,
+            document_count=document_count,
+        )
     except Exception:
         base["collection_exists"] = False
         base["document_count"] = 0
+        base["unique_document_count"] = 0
+        base["document_versions"] = []
 
     return base
 
@@ -424,10 +514,18 @@ def list_knowledge_bases(*, user_id: str) -> dict[str, object]:
             "knowledge_base_id": kb_id,
             "collection": collection_name,
             "document_count": 0,
+            "unique_document_count": 0,
+            "document_versions": [],
         }
         try:
             collection = client.get_collection(name=collection_name)
-            row["document_count"] = int(collection.count())
+            document_count = int(collection.count())
+            row["document_count"] = document_count
+            _apply_document_version_summary(
+                row,
+                collection,
+                document_count=document_count,
+            )
         except Exception:
             pass
         rows.append(row)

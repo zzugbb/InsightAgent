@@ -273,6 +273,7 @@ export type Messages = {
       tableKbId: string;
       tableCollection: string;
       tableDocuments: string;
+      tableVersions: string;
       tableActions: string;
       actionClear: string;
       actionDelete: string;

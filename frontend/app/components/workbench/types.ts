@@ -278,13 +278,25 @@ export type RagStatus = {
   chroma_reachable: boolean;
   collection_exists: boolean;
   document_count: number;
+  unique_document_count?: number;
+  document_versions?: RagDocumentVersionSummary[];
   error: string | null;
+};
+
+export type RagDocumentVersionSummary = {
+  document_version: string;
+  content_hash: string;
+  source: string;
+  document_id: string;
+  chunk_count: number;
 };
 
 export type RagKnowledgeBaseSummary = {
   knowledge_base_id: string;
   collection: string;
   document_count: number;
+  unique_document_count?: number;
+  document_versions?: RagDocumentVersionSummary[];
 };
 
 export type RagKnowledgeBaseListResponse = {
