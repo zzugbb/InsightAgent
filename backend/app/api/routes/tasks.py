@@ -33,7 +33,7 @@ from app.services.chat_persistence_service import (
     update_task_status,
     list_tasks,
 )
-from app.services.task_queue_service import forget_waiting_task
+from app.services.task_queue_service import forget_waiting_task, is_task_execution_active
 from app.services.task_status_service import normalize_task_status
 from app.services.tool_runtime import (
     build_safe_tool_registry_provider_source_alias_map,
@@ -1394,7 +1394,7 @@ def stream_task_detail(
             detail="Task stream can only be opened for queued/pending/running tasks",
         )
 
-    if normalized_status == "running":
+    if normalized_status == "running" or is_task_execution_active(task_id):
         header_cursor = _parse_last_event_id(request.headers.get("Last-Event-ID"))
         resume_cursor = max(after_seq, header_cursor or 0)
         return StreamingResponse(

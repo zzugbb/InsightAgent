@@ -1,7 +1,98 @@
 from __future__ import annotations
 
+from .context import SimpleNamespace, task_routes_module
+
 
 class ProductionReliabilityQueueMixin:
+    def test_production_reliability_task_queue_reports_active_execution(
+        self,
+    ) -> None:
+        task_queue_module = __import__(
+            "app.services.task_queue_service",
+            fromlist=[
+                "is_task_execution_active",
+                "reset_task_queue_state_for_tests",
+                "try_acquire_task_execution_slot",
+            ],
+        )
+        task_queue_module.reset_task_queue_state_for_tests()
+        try:
+            self.assertFalse(task_queue_module.is_task_execution_active("task-active"))
+            active_slot = task_queue_module.try_acquire_task_execution_slot(
+                task_id="task-active",
+                user_id="user-active",
+                session_id="session-active",
+                max_concurrent=1,
+            )
+            self.assertIsNotNone(active_slot)
+            self.assertTrue(task_queue_module.is_task_execution_active("task-active"))
+            active_slot.release()
+            self.assertFalse(task_queue_module.is_task_execution_active("task-active"))
+        finally:
+            task_queue_module.reset_task_queue_state_for_tests()
+
+    def test_production_reliability_pending_active_stream_uses_reconnect(
+        self,
+    ) -> None:
+        original_get_task = task_routes_module.get_task
+        original_stream_execution = task_routes_module.stream_task_execution
+        original_stream_reconnect = task_routes_module.stream_running_task_reconnect
+        original_is_active = getattr(task_routes_module, "is_task_execution_active", None)
+        captured: dict[str, object] = {}
+
+        def fake_stream_task_execution(**kwargs):
+            captured["execution"] = dict(kwargs)
+            return iter(())
+
+        def fake_stream_running_task_reconnect(task_id: str, user_id: str, *, after_seq: int = 0):
+            captured["reconnect"] = {
+                "task_id": task_id,
+                "user_id": user_id,
+                "after_seq": after_seq,
+            }
+            return iter(())
+
+        try:
+            task_routes_module.get_task = lambda task_id, user_id: {
+                "id": task_id,
+                "user_id": user_id,
+                "session_id": "session-active-race",
+                "prompt": "active race prompt",
+                "status": "pending",
+            }
+            task_routes_module.stream_task_execution = fake_stream_task_execution
+            task_routes_module.stream_running_task_reconnect = (
+                fake_stream_running_task_reconnect
+            )
+            task_routes_module.is_task_execution_active = lambda task_id: True  # type: ignore[attr-defined]
+
+            response = task_routes_module.stream_task_detail(
+                "task-active-race",
+                request=SimpleNamespace(headers={"Last-Event-ID": "3"}),
+                after_seq=5,
+                current_user={"id": "user-active-race"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            task_routes_module.stream_task_execution = original_stream_execution
+            task_routes_module.stream_running_task_reconnect = original_stream_reconnect
+            if original_is_active is None:
+                if hasattr(task_routes_module, "is_task_execution_active"):
+                    delattr(task_routes_module, "is_task_execution_active")
+            else:
+                task_routes_module.is_task_execution_active = original_is_active  # type: ignore[attr-defined]
+
+        self.assertEqual(response.media_type, "text/event-stream")
+        self.assertNotIn("execution", captured)
+        self.assertEqual(
+            captured.get("reconnect"),
+            {
+                "task_id": "task-active-race",
+                "user_id": "user-active-race",
+                "after_seq": 5,
+            },
+        )
+
     def test_production_reliability_forget_waiting_tasks_for_session_preserves_active_slot(
         self,
     ) -> None:

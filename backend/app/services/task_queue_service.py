@@ -111,6 +111,10 @@ class TaskQueueState:
         with self._lock:
             self._forget_waiting(task_id)
 
+    def is_active(self, task_id: str) -> bool:
+        with self._lock:
+            return task_id in self._active_task_ids
+
     def forget_waiting_for_scope(
         self,
         *,
@@ -415,6 +419,10 @@ def get_task_queue_snapshot(
 
 def release_task_execution_slot(task_id: str) -> None:
     _TASK_QUEUE_STATE.release(task_id)
+
+
+def is_task_execution_active(task_id: str) -> bool:
+    return _TASK_QUEUE_STATE.is_active(task_id)
 
 
 def forget_waiting_task(task_id: str) -> None:
