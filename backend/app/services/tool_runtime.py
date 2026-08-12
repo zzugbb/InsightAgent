@@ -319,6 +319,10 @@ def _iter_tool_runtime_provider_source_artifact_values(payload: object):
         yield from _iter_tool_runtime_provider_source_artifact_values(
             getattr(payload, "audit_detail")
         )
+    if hasattr(payload, "kwargs"):
+        yield from _iter_tool_runtime_provider_source_artifact_values(
+            getattr(payload, "kwargs")
+        )
 
 
 def _build_tool_runtime_artifact_provider_source_aliases(
@@ -329,6 +333,7 @@ def _build_tool_runtime_artifact_provider_source_aliases(
     source_diagnostics: object,
     diagnostics_runtime: object = None,
     audit_event: object = None,
+    service_actions: object = None,
 ) -> dict[str, str]:
     source_names: list[object] = []
     if isinstance(provider_sources, dict):
@@ -350,6 +355,9 @@ def _build_tool_runtime_artifact_provider_source_aliases(
         _iter_tool_runtime_provider_source_artifact_values(diagnostics_runtime)
     )
     source_names.extend(_iter_tool_runtime_provider_source_artifact_values(audit_event))
+    source_names.extend(
+        _iter_tool_runtime_provider_source_artifact_values(service_actions)
+    )
     return build_safe_tool_registry_provider_source_alias_map(source_names)
 
 
@@ -519,6 +527,7 @@ class ConfiguredToolRegistryProviderPreflightResultModel:
             source_diagnostics=self.runtime_artifacts.source_diagnostics,
             diagnostics_runtime=self.runtime_artifacts.diagnostics_runtime,
             audit_event=self.runtime_artifacts.audit_event,
+            service_actions=self.service_execution.service_actions,
         )
         return {
             "provider": self.provider,
@@ -775,6 +784,7 @@ class ConfiguredToolRegistryProviderServiceExecutionModel:
                 source_diagnostics=self.runtime_artifacts.source_diagnostics,
                 diagnostics_runtime=self.runtime_artifacts.diagnostics_runtime,
                 audit_event=self.runtime_artifacts.audit_event,
+                service_actions=self.service_actions,
             )
         return {
             "provider": self.provider,

@@ -1186,6 +1186,183 @@ class RegistryProviderSourceAliasesMixin:
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
 
+    def test_service_execution_to_dict_aliases_action_only_provider_sources(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        diagnostics_runtime = tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+            trace_step=None,
+            trace_event=None,
+            audit_detail=None,
+        )
+        runtime_artifacts = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeArtifactsModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            provider_sources={
+                "suite_api_key=one": provider,
+            },
+            selected_source_diagnostics={},
+            source_diagnostics={},
+            diagnostics_runtime=diagnostics_runtime,
+            audit_event=None,
+        )
+        service_execution = tool_runtime_module.ConfiguredToolRegistryProviderServiceExecutionModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            runtime_artifacts=runtime_artifacts,
+            service_actions=(
+                tool_runtime_module.ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+                    kind="internal_trace_write",
+                    trace_step={
+                        "id": "step-action-only-source",
+                        "meta": {
+                            "provider_source_name": "suite_access_token=two",
+                            "provider_sources": [
+                                "suite_access_token=two",
+                                "suite_api_key=one",
+                            ],
+                        },
+                    },
+                    kwargs={
+                        "audit_event": {
+                            "detail": {
+                                "tool_registry_provider_source": "suite_access_token=two",
+                            }
+                        }
+                    },
+                ),
+            ),
+        )
+
+        payload = service_execution.to_dict()
+
+        self.assertEqual(payload["provider_source_name"], "suite_[redacted]#1")
+        self.assertEqual(
+            payload["runtime_artifacts"]["provider_source_name"],
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            payload["service_actions"][0]["trace_step"]["meta"][
+                "provider_source_name"
+            ],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload["service_actions"][0]["trace_step"]["meta"]["provider_sources"],
+            ["suite_[redacted]#2", "suite_[redacted]#1"],
+        )
+        self.assertEqual(
+            payload["service_actions"][0]["kwargs"]["audit_event"]["detail"][
+                "tool_registry_provider_source"
+            ],
+            "suite_[redacted]#2",
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_preflight_result_to_dict_aliases_service_action_only_provider_sources(
+        self,
+    ) -> None:
+        provider = StaticToolRegistryProvider(
+            {"calc_eval": get_default_tool_registry()["calc_eval"]}
+        )
+        diagnostics_runtime = tool_runtime_module.ToolRegistryDiagnosticsRuntimeArtifactsModel(
+            summary=build_tool_registry_diagnostics_summary_model(diagnostics={}),
+            trace_step=None,
+            trace_event=None,
+            audit_detail=None,
+        )
+        runtime_artifacts = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeArtifactsModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            provider_sources={
+                "suite_api_key=one": provider,
+            },
+            selected_source_diagnostics={},
+            source_diagnostics={},
+            diagnostics_runtime=diagnostics_runtime,
+            audit_event=None,
+        )
+        service_execution = tool_runtime_module.ConfiguredToolRegistryProviderServiceExecutionModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            runtime_artifacts=runtime_artifacts,
+            service_actions=(
+                tool_runtime_module.ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+                    kind="internal_trace_write",
+                    trace_event={
+                        "data": {
+                            "step": {
+                                "meta": {
+                                    "tool_registry_provider_source": (
+                                        "suite_access_token=two"
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    kwargs={
+                        "audit_event": {
+                            "detail": {
+                                "provider_sources": [
+                                    "suite_access_token=two",
+                                    "suite_api_key=one",
+                                ],
+                            }
+                        }
+                    },
+                ),
+            ),
+        )
+        result_model = tool_runtime_module.ConfiguredToolRegistryProviderPreflightResultModel(
+            provider=provider,
+            provider_source_name="suite_api_key=one",
+            runtime_artifacts=runtime_artifacts,
+            service_execution=service_execution,
+            trace_write_count=1,
+            audit_event_count=1,
+            summary=tool_runtime_module.ConfiguredToolRegistryProviderPreflightSummaryModel(
+                provider_source_name="suite_api_key=one",
+                tool_count=1,
+                tool_names=("calc_eval",),
+                tool_details=(),
+                service_action_count=1,
+                service_action_kinds=("internal_trace_write",),
+                trace_write_count=1,
+                audit_event_count=1,
+                has_diagnostics=False,
+                diagnostics_total=0,
+                skipped_total=0,
+                missing_total=0,
+                diagnostics_summary={},
+            ),
+        )
+
+        payload = result_model.to_dict()
+
+        self.assertEqual(payload["provider_source_name"], "suite_[redacted]#1")
+        self.assertEqual(
+            payload["summary"]["provider_source_name"],
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            payload["service_execution"]["service_actions"][0]["trace_event"]["data"][
+                "step"
+            ]["meta"]["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload["service_execution"]["service_actions"][0]["kwargs"][
+                "audit_event"
+            ]["detail"]["provider_sources"],
+            ["suite_[redacted]#2", "suite_[redacted]#1"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
     def test_diagnostics_summary_values_disambiguate_colliding_redacted_provider_source_aliases(
         self,
     ) -> None:
