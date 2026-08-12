@@ -52,8 +52,19 @@ def _http_client() -> chromadb.HttpClient:
     return client
 
 
+def _sanitize_rag_identifier_text(value: str | None) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    safe = _RAG_BEARER_TOKEN_RE.sub("[redacted]", raw)
+    return _RAG_SENSITIVE_ASSIGNMENT_RE.sub(
+        lambda match: f"{match.group(1)}[redacted]",
+        safe,
+    )
+
+
 def normalize_knowledge_base_id(value: str | None) -> str:
-    raw = (value or "default").strip().lower()
+    raw = (_sanitize_rag_identifier_text(value) or "default").strip().lower()
     if not raw:
         return "default"
     normalized = re.sub(r"[^a-z0-9_-]+", "-", raw).strip("-")

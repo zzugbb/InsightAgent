@@ -386,6 +386,75 @@ class RagGovernanceMixin:
         self.assertEqual(first_versions, repeat_versions)
         self.assertNotEqual(first_versions, changed_versions)
 
+    def test_ingest_knowledge_documents_redacts_sensitive_knowledge_base_id(
+        self,
+    ) -> None:
+        class FakeCollection:
+            def __init__(self) -> None:
+                self.metadatas: list[dict[str, object]] = []
+
+            def add(
+                self,
+                *,
+                ids: list[str],
+                documents: list[str],
+                metadatas: list[dict[str, object]],
+            ) -> None:
+                self.metadatas = metadatas
+
+            def count(self) -> int:
+                return len(self.metadatas)
+
+        class FakeClient:
+            def __init__(self, collection: FakeCollection) -> None:
+                self.collection = collection
+                self.collection_name = ""
+
+            def get_or_create_collection(self, *, name: str) -> FakeCollection:
+                self.collection_name = name
+                return self.collection
+
+        collection = FakeCollection()
+        client = FakeClient(collection)
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: client  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.ingest_knowledge_documents(
+                user_id="user-rag-kb-id-governance",
+                knowledge_base_id="team?api_key=raw-secret&token=raw-token",
+                documents=[
+                    {
+                        "text": "Sensitive knowledge base IDs must be safe.",
+                        "source": "handbook.md",
+                        "document_id": "doc-rag-kb-id",
+                    }
+                ],
+                chunk_size=120,
+                chunk_overlap=0,
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertEqual(result["knowledge_base_id"], "team-redacted-redacted")
+        self.assertIn("team-redacted-redacted", result["collection"])
+        self.assertEqual(client.collection_name, result["collection"])
+        self.assertEqual(
+            collection.metadatas[0]["knowledge_base_id"],
+            result["knowledge_base_id"],
+        )
+        serialized = json.dumps(
+            {
+                "result": result,
+                "metadatas": collection.metadatas,
+                "collection_name": client.collection_name,
+            },
+            ensure_ascii=False,
+        )
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("token=", serialized)
+
     def test_ingest_knowledge_documents_redacts_sensitive_source_metadata_before_persist(
         self,
     ) -> None:
