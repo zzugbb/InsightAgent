@@ -295,6 +295,9 @@ from tool_runtime_slice.session_export_markdown import SessionExportMarkdownMixi
 from tool_runtime_slice.task_export_response_summary import TaskExportResponseSummaryMixin
 from tool_runtime_slice.task_session_export_payload import TaskSessionExportPayloadMixin
 from tool_runtime_slice.task_trace_export_governance import TaskTraceExportGovernanceMixin
+from tool_runtime_slice.production_reliability_execution import (
+    ProductionReliabilityExecutionMixin,
+)
 from tool_runtime_slice.production_reliability_queue import ProductionReliabilityQueueMixin
 from tool_runtime_slice.production_reliability_startup import ProductionReliabilityStartupMixin
 
@@ -350,6 +353,7 @@ class ToolRuntimeSliceTests(
     HttpJsonResponseProtocolMixin,
     HttpJsonResponseBodyMixin,
     RuntimeServiceExecutionSemanticsMixin,
+    ProductionReliabilityExecutionMixin,
     ProductionReliabilityQueueMixin,
     ProductionReliabilityStartupMixin,
     unittest.TestCase,

@@ -540,13 +540,33 @@ def stream_task_execution(
             )
             sleep(TASK_QUEUE_POLL_INTERVAL_SEC)
 
-        mark_task_running_started(
+        running_started_count = mark_task_running_started(
             task_id=task_id,
             user_id=user_id,
             execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         last_execution_heartbeat_ts = monotonic()
         probe_task_status(force=True)
+        if running_started_count <= 0:
+            raise_if_should_abort()
+            release_task_slot()
+            record_failure_event(
+                event_type="task_failed",
+                code="task_start_conflict",
+                message="Task could not be marked running before execution started.",
+            )
+            yield sse_event("state", {"task_id": task_id, "phase": "error"})
+            yield sse_event(
+                "error",
+                sse_error_payload(
+                    task_id=task_id,
+                    message="Task could not be marked running before execution started.",
+                    code="task_start_conflict",
+                    fatal=True,
+                    retry_count=0,
+                ),
+            )
+            return
 
         runtime_settings = get_stored_settings(user_id)
         provider = get_llm_provider(user_id)

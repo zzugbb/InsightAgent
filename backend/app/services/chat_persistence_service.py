@@ -1036,6 +1036,7 @@ def mark_task_running_started(
                 execution_owner_id = ?,
                 execution_heartbeat_at = ?
             WHERE id = ? AND user_id = ?
+              AND LOWER(status) IN ('queued', 'pending', 'running')
             """,
             ("running", current_time, owner_id, current_time, task_id, user_id),
         )
