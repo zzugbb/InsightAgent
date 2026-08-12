@@ -4,6 +4,39 @@ from .context import *
 
 
 class RagRuntimeVersionGovernanceMixin:
+    def test_build_tool_rag_followup_redacts_sensitive_runtime_knowledge_base_id(
+        self,
+    ) -> None:
+        followup = build_tool_rag_followup(
+            task_id="task-rag-runtime-kb-id",
+            step_id="rag-runtime-kb-id-1",
+            seq=4,
+            model="mock-gpt",
+            tool_name="provider_search",
+            tool_kind="provider_search",
+            tool_semantic_family="knowledge_retrieval",
+            display_name="Provider Search",
+            output={
+                "knowledge_base_id": "team?api_key=raw-secret&token=raw-token",
+                "chunks": ["safe runtime chunk"],
+            },
+            token_count=2,
+        )
+
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        rag_meta = followup["step"]["meta"]["rag"]
+        self.assertEqual(
+            rag_meta["knowledge_base_id"],
+            "team-redacted-redacted",
+        )
+        serialized = json.dumps(followup, ensure_ascii=False)
+        self.assertIn("team-redacted-redacted", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("token=", serialized)
+
     def test_build_tool_rag_followup_preserves_safe_version_metadata_separately(
         self,
     ) -> None:

@@ -5,6 +5,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
+from app.services.chroma_rag_service import normalize_knowledge_base_id
+
 
 def _runtime_module():
     from app.services import tool_runtime
@@ -2972,7 +2974,7 @@ def build_tool_rag_step(
         "chunks": chunks,
     }
     if isinstance(knowledge_base_id, str) and knowledge_base_id:
-        rag_meta["knowledge_base_id"] = knowledge_base_id
+        rag_meta["knowledge_base_id"] = normalize_knowledge_base_id(knowledge_base_id)
     safe_chunk_metadata = [
         dict(metadata)
         for metadata in (chunk_metadata or [])
