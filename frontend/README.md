@@ -7,7 +7,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - 前端 W1-W4 与阶段 5 基础产品化已完成：Auth Gate、Workbench、Trace 双视图、Memory/RAG 调试、usage dashboard、任务/会话导出、任务详情页、running task 恢复、审计与知识库治理已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy` 与 `registry-governance` 均已封板；当前主线进入 `rag-governance-hardening`，进度约 `99%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 均已封板；当前主线进度 `100%`；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
 - Workbench 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 队列 UI 已覆盖 `queued/pending/running` 活跃任务识别、安全 queue snapshot 排队位置、queued/running cancel、跨会话隔离、刷新恢复与 Task Center session/global 多任务隔离。
 - 运行设置会带 active session 请求只读 `task_queue_diagnostics`，展示全局、当前用户、当前会话 active/waiting/available、安全限额触顶、`pressure_state`、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
@@ -20,20 +20,20 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`77/77` 通过
 - `cd frontend && npm run lint`：通过
 - `npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts`：通过
-- 最近 targeted Chromium：主路径导出、404 ownership 导出、取消后立即重发、queued recover/cancel、running cancel、Task Center session/global 隔离、刷新恢复隔离均已通过
-- 最近 backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
-- 后端可见契约回归：RAG slice `78/78`、RAG route slice `2/2`、result summary slice `30/30`、backend full slice `1904/1904` 通过；本轮未改前端代码。
-- 最近完整 Chromium e2e：默认 `8000/3001` 通过，`50 passed / 1 skipped`；本轮未重跑本机 e2e。
-- 最近 CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
+- 本轮 frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
+- 本轮 frontend queue phase：低并发 `8011/3001` 通过，`1/1`
+- 本轮 backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
+- 后端可见契约回归：RAG slice `78/78`、RAG route slice `2/2`、result summary slice `30/30`、backend full slice `1904/1904` 通过。
+- 本轮 CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
 - 后续启动 frontend、访问本机 e2e 服务、跑 Chromium e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 Node/npm 路径与提权边界，避免重复触发端口 / `.git/index.lock` 权限错误。
 
 ## 下一步前端计划
 
-1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`。
-2. 当前主线：`rag-governance-hardening`，进度约 `99%`；后端已收口 RAG source/metadata 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定文档版本 metadata、status/list 版本摘要与 route 末端来源字段兜底、历史 collection 列表出口安全化、export 版本锚点与 knowledge_base_id 规整、runtime trace 版本 metadata、reserved metadata 防覆盖、出站版本字段过滤、敏感 `knowledge_base_id` 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏与 shared scope 列表边界，前端已补 trace 类型和搜索兼容。
-3. 后续体验维护：Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
-4. 回归门：frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium；新增测试/实现继续按主题文件拆分，避免把单文件当作无限追加点。
+1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`。
+2. `rag-governance-hardening` 已完成 100% 封板；后端已收口 RAG source/metadata 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime `shared-*` retrieve scope 对齐、runtime `task_retrieve` helper 输出兜底规整、route/runtime trace/export identifier 最终规整、稳定文档版本 metadata、status/list 版本摘要与 route 末端来源字段兜底、历史 collection 列表出口安全化、export 版本锚点与 knowledge_base_id 规整、runtime trace 版本 metadata、reserved metadata 防覆盖、出站版本字段过滤、敏感 `knowledge_base_id` 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏与 shared scope 列表边界，前端 trace 类型、搜索和治理表展示已兼容。
+3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
+4. 下一主线尚未打开；回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 当前已有内容
 
