@@ -546,7 +546,7 @@ def query_knowledge_base(
 
         hits.append(
             {
-                "id": str(doc_id),
+                "id": _sanitize_rag_metadata_text(doc_id, limit=240),
                 "content": str(content or ""),
                 "distance": float(distance) if isinstance(distance, (int, float)) else None,
                 "metadata": _normalize_metadata(metadata),

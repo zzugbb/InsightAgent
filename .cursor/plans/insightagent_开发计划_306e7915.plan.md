@@ -2,10 +2,10 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite 与 concurrency-fairness-policy 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前主线：rag-governance-hardening，进度约 80%；已收口 RAG source/metadata 入站持久化与 query 出站脱敏、嵌套 metadata value 安全化、runtime shared-* retrieve scope 对齐、route/runtime trace identifier 最终规整、ingest 稳定 document_version/content_hash、status/list 安全版本摘要、历史 collection 列表出口安全化、知识库治理表版本列、task export/Markdown 版本锚点治理、runtime trace chunk_metadata/document_versions 透传、前端 trace 搜索、reserved metadata 防覆盖、query/status 出站版本字段过滤与 alias canonicalization、敏感 knowledge_base_id 安全化、RAG 错误出口脱敏、shared-* 私有 shadow 隔离。
+  - 当前主线：rag-governance-hardening，进度约 84%；已收口 RAG source/metadata 入站持久化与 query 出站脱敏、嵌套 metadata value 与 query hit id 安全化、runtime shared-* retrieve scope 对齐、route/runtime trace identifier 最终规整、ingest 稳定 document_version/content_hash、status/list 安全版本摘要、历史 collection 列表出口安全化、知识库治理表版本列、task export/Markdown 版本锚点治理、runtime trace chunk_metadata/document_versions 透传、前端 trace 搜索、reserved metadata 防覆盖、query/status 出站版本字段过滤与 alias canonicalization、敏感 knowledge_base_id 安全化、RAG 错误出口脱敏、shared-* 私有 shadow 隔离。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance。
-  - 外部 SSE / trace / export / e2e shape 最近完整基线保持通过；本轮新增 runtime trace knowledge_base_id 最终规整，不破坏既有 response shape。
+  - 外部 SSE / trace / export / e2e shape 最近完整基线保持通过；本轮新增 RAG query hit id 出站脱敏，不破坏既有 response shape。
   - 后续继续聚焦 RAG 来源策略、shared 知识库边界细化与更细粒度 shared 规则。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
@@ -15,8 +15,8 @@ constraints:
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1898/1898)
-  backend_rag_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag (72/72)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1899/1899)
+  backend_rag_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag (73/73)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (77/77)
   frontend_lint: cd frontend && npm run lint
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
@@ -29,7 +29,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: rag-governance-hardening 进度约 80%；本轮补 runtime rag follow-up trace meta knowledge_base_id 安全化；targeted runtime_knowledge_base_id、build_tool_rag_followup 19/19、rag 72/72、backend full slice 1898/1898、py_compile、git diff --check 均通过；`-k rag_runtime` 未匹配测试不计入通过；本轮未改前端代码、未重跑本机 e2e；data/insightagent.plan.back.md 无 diff。
+latest_validation_note: rag-governance-hardening 进度约 84%；本轮补 RAG query hit id 出站脱敏；targeted sensitive_hit_ids、query_knowledge_base 7/7、rag 73/73、backend full slice 1899/1899、py_compile、git diff --check 均通过；`-k rag_governance` 未匹配测试不计入通过；本轮未改前端代码、未重跑本机 e2e；data/insightagent.plan.back.md 无 diff。
 todos:
   - id: docs-slimming
     status: completed
@@ -57,7 +57,7 @@ todos:
     content: 已封板；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口；通过 backend/full frontend/e2e fresh 复验。
   - id: rag-governance-hardening
     status: in_progress
-    content: 当前主线，进度约 80%；已完成 RAG ingest 持久化前 source/document_id/metadata key/value 脱敏、嵌套 metadata value 安全化、runtime shared-* retrieve scope 对齐、route/runtime trace identifier 最终规整、敏感 knowledge_base_id 安全化、query response 对历史 hit metadata 出站脱敏、query/status 出站版本字段合法性过滤与 reserved alias canonicalization、RAG status/list/route error 出口脱敏、历史 collection 列表出口安全化、ingest chunk metadata 稳定 document_version/content_hash、reserved metadata 防覆盖、status/list 安全 document_versions 聚合、shared-* 私有 shadow 列表隔离、前端治理表版本列、task export/Markdown 版本锚点治理、runtime trace chunk_metadata/document_versions 透传、export summary 合并与前端 trace 搜索；后续补来源策略、shared 知识库边界细化与更细粒度 shared 规则。
+    content: 当前主线，进度约 84%；已完成 RAG ingest 持久化前 source/document_id/metadata key/value 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime shared-* retrieve scope 对齐、route/runtime trace identifier 最终规整、敏感 knowledge_base_id 安全化、query response 对历史 hit metadata 出站脱敏、query/status 出站版本字段合法性过滤与 reserved alias canonicalization、RAG status/list/route error 出口脱敏、历史 collection 列表出口安全化、ingest chunk metadata 稳定 document_version/content_hash、reserved metadata 防覆盖、status/list 安全 document_versions 聚合、shared-* 私有 shadow 列表隔离、前端治理表版本列、task export/Markdown 版本锚点治理、runtime trace chunk_metadata/document_versions 透传、export summary 合并与前端 trace 搜索；后续补来源策略、shared 知识库边界细化与更细粒度 shared 规则。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -82,8 +82,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1898/1898`。
-- Backend RAG slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，当前 `72/72`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1899/1899`。
+- Backend RAG slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，当前 `73/73`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel、queued SSE safe wait_position、settings diagnostics、typed queue governance checks 与 followup completion current-turn fresh 通过。
 - Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `77/77`。

@@ -890,6 +890,49 @@ class RagGovernanceMixin:
         self.assertNotIn("Authorization", serialized)
         self.assertNotIn("X-Access-Token", serialized)
 
+    def test_rag_query_knowledge_base_redacts_sensitive_hit_ids_before_response(
+        self,
+    ) -> None:
+        class FakeCollection:
+            def count(self) -> int:
+                return 1
+
+            def query(
+                self,
+                *,
+                query_texts: list[str],
+                n_results: int,
+            ) -> dict[str, object]:
+                return {
+                    "ids": [["chunk?api_key=raw-secret&token=raw-token"]],
+                    "documents": [["safe id governance content"]],
+                    "distances": [[0.1]],
+                    "metadatas": [[{"source": "safe-id.md"}]],
+                }
+
+        class FakeClient:
+            def get_collection(self, *, name: str) -> FakeCollection:
+                return FakeCollection()
+
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient()  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.query_knowledge_base(
+                user_id="user-rag-query-hit-id",
+                knowledge_base_id="kb-rag-query-hit-id",
+                query_text="id governance content",
+                top_k=1,
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertEqual(result["hits"][0]["id"], "chunk?[redacted]&[redacted]")
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("token=", serialized)
+
     def test_query_knowledge_base_filters_invalid_version_metadata_before_response(
         self,
     ) -> None:
