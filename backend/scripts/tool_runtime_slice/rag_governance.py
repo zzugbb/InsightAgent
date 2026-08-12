@@ -167,6 +167,55 @@ class RagGovernanceMixin:
         self.assertNotIn("raw-secret", serialized)
         self.assertNotIn("api_key", serialized)
 
+    def test_list_knowledge_bases_with_shared_hides_private_shared_prefix_shadow(
+        self,
+    ) -> None:
+        user_id = "user-rag-shared-boundary"
+        private_kb = chroma_rag_module.rag_collection_name(user_id, "private-kb")
+        private_shared_shadow = chroma_rag_module.rag_collection_name(
+            user_id,
+            "shared-shadow",
+        )
+        real_shared_kb = chroma_rag_module.rag_collection_name(
+            chroma_rag_module.SHARED_RAG_SCOPE_USER_ID,
+            "shared-canonical",
+        )
+
+        class FakeCollection:
+            def count(self) -> int:
+                return 0
+
+        class FakeClient:
+            def heartbeat(self) -> None:
+                return None
+
+            def list_collections(self) -> list[dict[str, str]]:
+                return [
+                    {"name": private_kb},
+                    {"name": private_shared_shadow},
+                    {"name": real_shared_kb},
+                ]
+
+            def get_collection(self, *, name: str) -> FakeCollection:
+                return FakeCollection()
+
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient()  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.list_knowledge_bases_with_shared(
+                user_id=user_id,
+                include_shared=True,
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        kb_ids = [
+            str(row.get("knowledge_base_id") or "")
+            for row in result["knowledge_bases"]
+        ]
+        self.assertEqual(kb_ids, ["private-kb", "shared-canonical"])
+        self.assertNotIn("shared-shadow", kb_ids)
+
     def test_get_rag_status_route_exposes_document_version_summary(self) -> None:
         original_status_helper = rag_routes_module.get_knowledge_base_status
 
@@ -353,6 +402,86 @@ class RagGovernanceMixin:
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("access_token", serialized)
         self.assertNotIn("Authorization", serialized)
+
+    def test_ingest_knowledge_documents_rejects_user_metadata_reserved_overrides(
+        self,
+    ) -> None:
+        class FakeCollection:
+            def __init__(self) -> None:
+                self.metadatas: list[dict[str, object]] = []
+
+            def add(
+                self,
+                *,
+                ids: list[str],
+                documents: list[str],
+                metadatas: list[dict[str, object]],
+            ) -> None:
+                self.metadatas = metadatas
+
+            def count(self) -> int:
+                return len(self.metadatas)
+
+        class FakeClient:
+            def __init__(self, collection: FakeCollection) -> None:
+                self.collection = collection
+
+            def get_or_create_collection(self, *, name: str) -> FakeCollection:
+                return self.collection
+
+        collection = FakeCollection()
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient(collection)  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.ingest_knowledge_documents(
+                user_id="user-rag-reserved-metadata",
+                knowledge_base_id="kb-rag-reserved-metadata",
+                documents=[
+                    {
+                        "text": "Reserved RAG metadata must stay canonical." * 4,
+                        "source": "canonical.md",
+                        "document_id": "canonical-doc",
+                        "metadata": {
+                            "source": "evil.md?api_key=raw-secret",
+                            "document_id": "evil-doc",
+                            "knowledge_base_id": "evil-kb",
+                            "document_version": "sha256:ffffffffffffffff",
+                            "content_hash": "e" * 64,
+                            "chunk_index": "999",
+                            "chunk_total": "999",
+                            "kind": "handbook",
+                        },
+                    }
+                ],
+                chunk_size=120,
+                chunk_overlap=0,
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertEqual(result["chunks_added"], len(collection.metadatas))
+        self.assertGreater(len(collection.metadatas), 1)
+        versions = {
+            str(meta.get("document_version") or "") for meta in collection.metadatas
+        }
+        hashes = {
+            str(meta.get("content_hash") or "") for meta in collection.metadatas
+        }
+        self.assertEqual(len(versions), 1)
+        self.assertEqual(len(hashes), 1)
+        self.assertNotEqual(versions, {"sha256:ffffffffffffffff"})
+        self.assertNotEqual(hashes, {"e" * 64})
+        for index, metadata in enumerate(collection.metadatas, start=1):
+            self.assertEqual(metadata["knowledge_base_id"], "kb-rag-reserved-metadata")
+            self.assertEqual(metadata["source"], "canonical.md")
+            self.assertEqual(metadata["document_id"], "canonical-doc")
+            self.assertEqual(metadata["chunk_index"], index)
+            self.assertEqual(metadata["chunk_total"], len(collection.metadatas))
+            self.assertEqual(metadata["kind"], "handbook")
+        serialized = json.dumps(collection.metadatas, ensure_ascii=False)
+        self.assertNotIn("evil", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("api_key", serialized)
 
     def test_query_knowledge_base_redacts_sensitive_hit_metadata_before_response(
         self,

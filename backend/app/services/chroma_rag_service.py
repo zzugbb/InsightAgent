@@ -22,6 +22,15 @@ _RAG_SENSITIVE_ASSIGNMENT_RE = re.compile(
 )
 _RAG_DOCUMENT_VERSION_RE = re.compile(r"^sha256:[a-f0-9]{16,64}$")
 _RAG_CONTENT_HASH_RE = re.compile(r"^[a-f0-9]{64}$")
+_RAG_RESERVED_METADATA_KEY_TOKENS = {
+    "knowledgebaseid",
+    "source",
+    "documentid",
+    "documentversion",
+    "contenthash",
+    "chunkindex",
+    "chunktotal",
+}
 
 
 def _http_client() -> chromadb.HttpClient:
@@ -155,14 +164,30 @@ def _chunk_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[str]:
     return chunks
 
 
-def _normalize_metadata(metadata: object) -> dict[str, object]:
+def _rag_metadata_key_token(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
+
+
+def _is_reserved_rag_metadata_key(value: object) -> bool:
+    return _rag_metadata_key_token(value) in _RAG_RESERVED_METADATA_KEY_TOKENS
+
+
+def _normalize_metadata(
+    metadata: object,
+    *,
+    allow_reserved: bool = True,
+) -> dict[str, object]:
     metadata_dict = _coerce_metadata_mapping(metadata)
     if not metadata_dict:
         return {}
     normalized: dict[str, object] = {}
     for key, value in metadata_dict.items():
+        if not allow_reserved and _is_reserved_rag_metadata_key(key):
+            continue
         k = _sanitize_rag_metadata_key(key)
         if not k:
+            continue
+        if not allow_reserved and _is_reserved_rag_metadata_key(k):
             continue
         normalized[k] = _sanitize_rag_metadata_text(value, limit=2000)
     return normalized
@@ -317,7 +342,7 @@ def ingest_knowledge_documents(
             document_id=doc_id,
             content_hash=content_hash,
         )
-        extra_meta = _normalize_metadata(doc.get("metadata"))
+        extra_meta = _normalize_metadata(doc.get("metadata"), allow_reserved=False)
         doc_chunks = _chunk_text(
             text,
             chunk_size=chunk_size,
@@ -509,6 +534,8 @@ def list_knowledge_bases(*, user_id: str) -> dict[str, object]:
             continue
         kb_id = collection_name[len(prefix) :].strip()
         if not kb_id:
+            continue
+        if user_id != SHARED_RAG_SCOPE_USER_ID and is_shared_knowledge_base_id(kb_id):
             continue
         row: dict[str, object] = {
             "knowledge_base_id": kb_id,
