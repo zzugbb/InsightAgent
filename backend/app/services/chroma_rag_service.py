@@ -63,6 +63,11 @@ def _sanitize_rag_identifier_text(value: str | None) -> str:
     )
 
 
+def sanitize_rag_error_message(value: object, *, limit: int = 400) -> str:
+    safe = _sanitize_rag_metadata_text(value, limit=limit)
+    return safe or type(value).__name__
+
+
 def normalize_knowledge_base_id(value: str | None) -> str:
     raw = (_sanitize_rag_identifier_text(value) or "default").strip().lower()
     if not raw:
@@ -515,7 +520,7 @@ def get_knowledge_base_status(*, user_id: str, knowledge_base_id: str) -> dict[s
         client = _http_client()
         base["chroma_reachable"] = True
     except Exception as exc:  # noqa: BLE001
-        base["error"] = (str(exc).strip() or type(exc).__name__)[:300]
+        base["error"] = sanitize_rag_error_message(exc, limit=300)
         return base
 
     try:
@@ -550,14 +555,14 @@ def list_knowledge_bases(*, user_id: str) -> dict[str, object]:
         client = _http_client()
         result["chroma_reachable"] = True
     except Exception as exc:  # noqa: BLE001
-        result["error"] = (str(exc).strip() or type(exc).__name__)[:300]
+        result["error"] = sanitize_rag_error_message(exc, limit=300)
         return result
 
     prefix = _rag_collection_prefix(user_id)
     try:
         collections = client.list_collections()
     except Exception as exc:  # noqa: BLE001
-        result["error"] = (str(exc).strip() or type(exc).__name__)[:300]
+        result["error"] = sanitize_rag_error_message(exc, limit=300)
         return result
 
     rows: list[dict[str, object]] = []

@@ -145,6 +145,32 @@ class RagGovernanceMixin:
             ],
         )
 
+    def test_get_knowledge_base_status_redacts_sensitive_chroma_error(
+        self,
+    ) -> None:
+        original_http_client = chroma_rag_module._http_client
+
+        def fail_http_client() -> object:
+            raise RuntimeError(
+                "chroma connect failed api_key=raw-secret Bearer raw-token"
+            )
+
+        chroma_rag_module._http_client = fail_http_client  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.get_knowledge_base_status(
+                user_id="user-rag-error",
+                knowledge_base_id="kb-rag-error",
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("Bearer", serialized)
+
     def test_list_knowledge_bases_summarizes_safe_document_versions(
         self,
     ) -> None:
@@ -216,6 +242,29 @@ class RagGovernanceMixin:
         serialized = json.dumps(row, ensure_ascii=False)
         self.assertNotIn("raw-secret", serialized)
         self.assertNotIn("api_key", serialized)
+
+    def test_list_knowledge_bases_redacts_sensitive_chroma_error(self) -> None:
+        original_http_client = chroma_rag_module._http_client
+
+        def fail_http_client() -> object:
+            raise RuntimeError(
+                "list failed access_token=raw-token Bearer raw-secret"
+            )
+
+        chroma_rag_module._http_client = fail_http_client  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.list_knowledge_bases(
+                user_id="user-rag-list-error",
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        serialized = json.dumps(result, ensure_ascii=False)
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("access_token", serialized)
+        self.assertNotIn("Bearer", serialized)
 
     def test_list_knowledge_bases_with_shared_hides_private_shared_prefix_shadow(
         self,
@@ -736,6 +785,35 @@ class RagGovernanceMixin:
         self.assertNotIn("raw-token", serialized)
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("Bearer", serialized)
+
+    def test_post_rag_query_redacts_sensitive_service_error_detail(self) -> None:
+        original_query = rag_routes_module.query_knowledge_base
+
+        def fail_query(**_kwargs: object) -> object:
+            raise RuntimeError(
+                "query failed api_key=raw-secret Bearer raw-token"
+            )
+
+        rag_routes_module.query_knowledge_base = fail_query  # type: ignore[attr-defined]
+        try:
+            with self.assertRaises(rag_routes_module.HTTPException) as ctx:
+                rag_routes_module.post_rag_query(
+                    payload=rag_routes_module.RagQueryRequest(
+                        query="hello",
+                        knowledge_base_id="kb-route-error",
+                    ),
+                    current_user={"id": "user-rag-route-error"},
+                )
+        finally:
+            rag_routes_module.query_knowledge_base = original_query  # type: ignore[attr-defined]
+
+        self.assertEqual(ctx.exception.status_code, 503)
+        detail = str(ctx.exception.detail)
+        self.assertIn("[redacted]", detail)
+        self.assertNotIn("raw-secret", detail)
+        self.assertNotIn("raw-token", detail)
+        self.assertNotIn("api_key", detail)
+        self.assertNotIn("Bearer", detail)
 
     def test_query_knowledge_base_canonicalizes_safe_version_metadata_aliases(
         self,

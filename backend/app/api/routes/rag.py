@@ -14,6 +14,7 @@ from app.services.chroma_rag_service import (
     is_shared_knowledge_base_id,
     list_knowledge_bases_with_shared,
     query_knowledge_base,
+    sanitize_rag_error_message,
 )
 
 
@@ -218,8 +219,10 @@ def post_rag_clear_knowledge_base(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        msg = str(exc).strip() or type(exc).__name__
-        raise HTTPException(status_code=503, detail=msg[:400]) from exc
+        raise HTTPException(
+            status_code=503,
+            detail=sanitize_rag_error_message(exc),
+        ) from exc
     safe_record_audit_event(
         user_id=user_id,
         event_type="rag_kb_clear",
@@ -258,8 +261,10 @@ def delete_rag_knowledge_base(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        msg = str(exc).strip() or type(exc).__name__
-        raise HTTPException(status_code=503, detail=msg[:400]) from exc
+        raise HTTPException(
+            status_code=503,
+            detail=sanitize_rag_error_message(exc),
+        ) from exc
     safe_record_audit_event(
         user_id=user_id,
         event_type="rag_kb_delete",
@@ -299,8 +304,10 @@ def post_rag_ingest(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        msg = str(exc).strip() or type(exc).__name__
-        raise HTTPException(status_code=503, detail=msg[:400]) from exc
+        raise HTTPException(
+            status_code=503,
+            detail=sanitize_rag_error_message(exc),
+        ) from exc
     safe_record_audit_event(
         user_id=user_id,
         event_type="rag_ingest",
@@ -340,7 +347,9 @@ def post_rag_query(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        msg = str(exc).strip() or type(exc).__name__
-        raise HTTPException(status_code=503, detail=msg[:400]) from exc
+        raise HTTPException(
+            status_code=503,
+            detail=sanitize_rag_error_message(exc),
+        ) from exc
     raw["hits"] = _coerce_payload_block_list(raw.get("hits"))
     return RagQueryResponse(**raw)
