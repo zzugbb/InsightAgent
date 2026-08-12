@@ -58,6 +58,97 @@ class RegistryProviderSourceAliasesMixin:
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
 
+    def test_settings_summary_disambiguates_selected_provider_source_outside_options(
+        self,
+    ) -> None:
+        summary = _build_settings_summary_response(
+            settings=StoredSettings(
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                base_url=None,
+                api_key=None,
+                tool_registry_profile="default",
+                tool_registry_provider_source="suite_api_key=one",
+            ),
+            runtime_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="default",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_access_token=two": {
+                            "profile": "retrieval_only",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                task_queue_max_concurrent=1,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.25,
+            ),
+            database_locator="postgresql://demo",
+        )
+        payload = summary.model_dump()
+
+        self.assertEqual(
+            payload["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload["available_tool_registry_provider_sources"],
+            ["default", "suite_[redacted]#1"],
+        )
+        self.assertEqual(
+            [
+                detail["name"]
+                for detail in payload["available_tool_registry_provider_source_details"]
+            ],
+            ["default", "suite_[redacted]#1"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
+    def test_validate_response_disambiguates_selected_provider_source_outside_options(
+        self,
+    ) -> None:
+        response = _apply_tool_registry_preview_to_validate_response(
+            result=SettingsValidateResponse(
+                ok=True,
+                mode="mock",
+                provider="mock",
+                model="mock-gpt",
+                message="ok",
+            ),
+            effective_settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="suite_api_key=one",
+                tool_registry_provider_sources_json=json.dumps(
+                    {
+                        "suite_access_token=two": {
+                            "profile": "retrieval_only",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+        payload = response.model_dump()
+
+        self.assertEqual(
+            payload["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            [
+                detail["name"]
+                for detail in payload["available_tool_registry_provider_source_details"]
+            ],
+            ["default", "suite_[redacted]#1"],
+        )
+        self.assertNotIn("api_key=one", json.dumps(payload, default=str))
+        self.assertNotIn("access_token=two", json.dumps(payload, default=str))
+
     def test_validate_settings_accepts_disambiguated_redacted_provider_source_alias(
         self,
     ) -> None:

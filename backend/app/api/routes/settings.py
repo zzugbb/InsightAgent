@@ -407,9 +407,13 @@ def _sanitize_provider_source_option_names_for_response(
     *,
     source_names: list[object],
     source_details: list[object],
+    alias_by_source: dict[str, str] | None = None,
 ) -> tuple[list[str], list[object]]:
-    safe_name_by_raw = build_safe_tool_registry_provider_source_alias_map(
-        [str(source_name) for source_name in source_names]
+    safe_name_by_raw = (
+        alias_by_source
+        or build_safe_tool_registry_provider_source_alias_map(
+            [str(source_name) for source_name in source_names]
+        )
     )
     safe_source_names: list[str] = []
     seen_safe_names: set[str] = set()
@@ -448,6 +452,18 @@ def _sanitize_provider_source_option_names_for_response(
     return safe_source_names, safe_details
 
 
+def _build_provider_source_response_aliases(
+    *,
+    source_names: list[object],
+    selected_source: object,
+) -> dict[str, str]:
+    alias_source_names = [str(source_name) for source_name in source_names]
+    selected_source_name = str(selected_source)
+    if selected_source_name not in alias_source_names:
+        alias_source_names.append(selected_source_name)
+    return build_safe_tool_registry_provider_source_alias_map(alias_source_names)
+
+
 def _apply_tool_registry_preview_to_validate_response(
     *,
     result: SettingsValidateResponse,
@@ -460,8 +476,10 @@ def _apply_tool_registry_preview_to_validate_response(
         effective_settings=effective_settings
     )
     source_names = list(option_bundle["available_tool_registry_provider_sources"])
-    alias_by_source = build_safe_tool_registry_provider_source_alias_map(
-        [str(source_name) for source_name in source_names]
+    raw_provider_source = str(preview_fields["tool_registry_provider_source"])
+    alias_by_source = _build_provider_source_response_aliases(
+        source_names=source_names,
+        selected_source=raw_provider_source,
     )
     _, safe_provider_source_details = (
         _sanitize_provider_source_option_names_for_response(
@@ -469,9 +487,9 @@ def _apply_tool_registry_preview_to_validate_response(
             source_details=list(
                 option_bundle["available_tool_registry_provider_source_details"]
             ),
+            alias_by_source=alias_by_source,
         )
     )
-    raw_provider_source = str(preview_fields["tool_registry_provider_source"])
     return SettingsValidateResponse(
         **{
             **result.model_dump(),
@@ -775,8 +793,10 @@ def _build_settings_summary_response(
         effective_settings=effective_settings
     )
     source_names = list(option_bundle["available_tool_registry_provider_sources"])
-    alias_by_source = build_safe_tool_registry_provider_source_alias_map(
-        [str(source_name) for source_name in source_names]
+    raw_provider_source = str(preview_fields["tool_registry_provider_source"])
+    alias_by_source = _build_provider_source_response_aliases(
+        source_names=source_names,
+        selected_source=raw_provider_source,
     )
     safe_provider_sources, safe_provider_source_details = (
         _sanitize_provider_source_option_names_for_response(
@@ -784,9 +804,9 @@ def _build_settings_summary_response(
             source_details=list(
                 option_bundle["available_tool_registry_provider_source_details"]
             ),
+            alias_by_source=alias_by_source,
         )
     )
-    raw_provider_source = str(preview_fields["tool_registry_provider_source"])
     return SettingsSummaryResponse(
         mode=settings.mode,
         provider=settings.provider,
