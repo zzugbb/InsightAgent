@@ -598,36 +598,30 @@ def build_session_export_provider_source_aliases(
     summary = _coerce_payload_mapping_or_none(export_summary)
     if summary is None:
         return {}
-    source_names: list[object] = []
-    governance = _coerce_payload_mapping_or_none(summary.get("governance"))
-    if governance is not None:
-        provider_sources = governance.get("provider_sources")
-        if isinstance(provider_sources, (list, tuple)):
-            source_names.extend(
-                source
-                for source in provider_sources
-                if isinstance(source, str) and source.strip()
-            )
+    source_names: list[str] = []
+    _append_governance_provider_source_alias_inputs(
+        source_names,
+        summary.get("governance"),
+    )
     tasks = summary.get("tasks")
     if isinstance(tasks, list):
         for task in tasks:
             task_summary = _coerce_payload_mapping_or_none(task)
             if task_summary is None:
                 continue
-            task_governance = _coerce_payload_mapping_or_none(
-                task_summary.get("governance")
+            _append_governance_provider_source_alias_inputs(
+                source_names,
+                task_summary.get("governance"),
             )
-            if task_governance is None:
-                continue
-            provider_source = task_governance.get("provider_source")
-            if isinstance(provider_source, str) and provider_source.strip():
-                source_names.append(provider_source)
-            provider_sources = task_governance.get("provider_sources")
-            if isinstance(provider_sources, (list, tuple)):
-                source_names.extend(
-                    source
-                    for source in provider_sources
-                    if isinstance(source, str) and source.strip()
+            for nested_key in ("task", "trace"):
+                nested_summary = _coerce_payload_mapping_or_none(
+                    task_summary.get(nested_key)
+                )
+                if nested_summary is None:
+                    continue
+                _append_governance_provider_source_alias_inputs(
+                    source_names,
+                    nested_summary.get("governance"),
                 )
     return build_safe_tool_registry_provider_source_alias_map(source_names)
 
@@ -3620,6 +3614,8 @@ def _sanitize_session_export_trace_preview_rows(raw_preview: object) -> list[dic
 
 def _get_session_export_task_response_summary_from_payload_row(
     row: dict[str, object],
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if "task" not in row and "trace" not in row:
         return {
@@ -3638,7 +3634,8 @@ def _get_session_export_task_response_summary_from_payload_row(
                 row.get("trace_preview")
             ),
             "governance": _normalize_task_governance_payload_for_response(
-                row.get("governance")
+                row.get("governance"),
+                provider_source_aliases=provider_source_aliases,
             ),
         }
     task_summary = _coerce_export_payload_block_to_dict(row.get("task"))
@@ -3659,7 +3656,8 @@ def _get_session_export_task_response_summary_from_payload_row(
             trace_summary.get("preview")
         ),
         "governance": _normalize_task_governance_payload_for_response(
-            trace_summary.get("governance")
+            trace_summary.get("governance"),
+            provider_source_aliases=provider_source_aliases,
         ),
     }
 
@@ -3679,13 +3677,19 @@ def get_session_export_response_summary(
             preview_limit=preview_limit,
         )
     )
+    provider_source_aliases = build_session_export_provider_source_aliases(
+        payload_summary
+    )
     task_summaries: list[dict[str, object]] = []
     for row in payload_summary.get("tasks", []):
         row_summary = _coerce_export_payload_block_to_dict(row)
         if not row_summary:
             continue
         task_summaries.append(
-            _get_session_export_task_response_summary_from_payload_row(row_summary)
+            _get_session_export_task_response_summary_from_payload_row(
+                row_summary,
+                provider_source_aliases=provider_source_aliases,
+            )
         )
     stats_summary = _coerce_export_payload_block_to_dict(payload_summary.get("stats"))
     response_summary = {
@@ -3698,7 +3702,8 @@ def get_session_export_response_summary(
             "rag_hit_count": int(stats_summary.get("rag_hit_count", 0) or 0),
         },
         "governance": _normalize_session_governance_payload_for_response(
-            payload_summary.get("governance")
+            payload_summary.get("governance"),
+            provider_source_aliases=provider_source_aliases,
         ),
         "messages": _sanitize_export_message_rows(payload_summary.get("messages", [])),
     }

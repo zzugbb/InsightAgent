@@ -214,6 +214,63 @@ class ResponseProviderSourceArtifactsMixin:
         self.assertNotIn("api_key=one", payload_blob)
         self.assertNotIn("access_token=two", payload_blob)
 
+    def test_session_export_response_summary_preserves_task_provider_source_aliases(
+        self,
+    ) -> None:
+        payload = chat_persistence_module.get_session_export_response_summary(
+            usage_summary={"tasks_total": 2},
+            task_rows=[
+                {
+                    "id": "task-session-export-api-key",
+                    "prompt": "session export api key",
+                    "status": "completed",
+                    "created_at": "2026-08-10T14:00:00",
+                    "updated_at": "2026-08-10T14:01:00",
+                    "usage_json": None,
+                    "trace_json": "[]",
+                    "governance": {
+                        "profile": "planning_only",
+                        "provider_source": "suite_api_key=one",
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner"],
+                    },
+                },
+                {
+                    "id": "task-session-export-access-token",
+                    "prompt": "session export access token",
+                    "status": "completed",
+                    "created_at": "2026-08-10T14:02:00",
+                    "updated_at": "2026-08-10T14:03:00",
+                    "usage_json": None,
+                    "trace_json": "[]",
+                    "governance": {
+                        "profile": "planning_only",
+                        "provider_source": "suite_access_token=two",
+                        "allowed_tool_names": ["task_plan"],
+                        "allowed_tool_labels": ["Task Planner"],
+                    },
+                },
+            ],
+            message_rows=[],
+            preview_limit=3,
+        )
+
+        self.assertEqual(
+            payload["governance"]["provider_sources"],
+            ["suite_[redacted]#1", "suite_[redacted]#2"],
+        )
+        self.assertEqual(
+            payload["tasks"][0]["governance"]["provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            payload["tasks"][1]["governance"]["provider_source"],
+            "suite_[redacted]#1",
+        )
+        payload_blob = json.dumps(payload, default=str)
+        self.assertNotIn("api_key=one", payload_blob)
+        self.assertNotIn("access_token=two", payload_blob)
+
     def test_task_detail_response_redacts_sensitive_provider_source_values(
         self,
     ) -> None:
