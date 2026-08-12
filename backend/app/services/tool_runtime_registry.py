@@ -546,12 +546,16 @@ def _impl_build_safe_tool_registry_provider_source_alias_map(
 
 def _impl__sanitize_tool_registry_provider_sources_for_artifact(
     provider_sources: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> dict[str, ToolRegistryProvider]:
     if not isinstance(provider_sources, dict):
         return {}
     sanitized: dict[str, ToolRegistryProvider] = {}
-    alias_by_source = _impl_build_safe_tool_registry_provider_source_alias_map(
-        list(provider_sources.keys())
+    alias_by_source = provider_source_aliases or (
+        _impl_build_safe_tool_registry_provider_source_alias_map(
+            list(provider_sources.keys())
+        )
     )
     for source_name, provider in provider_sources.items():
         safe_source_name = alias_by_source.get(
@@ -3455,15 +3459,17 @@ def _impl_build_configured_tool_registry_provider_runtime_service_action_model_f
 def _impl_build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts(
     *,
     service_actions: list[dict[str, object]],
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> ConfiguredToolRegistryProviderRuntimeServiceActionsModel:
-    provider_source_aliases = _impl_build_safe_tool_registry_provider_source_alias_map(
-        list(
-            _call_runtime(
-                "_iter_tool_runtime_provider_source_artifact_values",
-                [action for action in service_actions if isinstance(action, dict)],
+    if provider_source_aliases is None:
+        provider_source_aliases = _impl_build_safe_tool_registry_provider_source_alias_map(
+            list(
+                _call_runtime(
+                    "_iter_tool_runtime_provider_source_artifact_values",
+                    [action for action in service_actions if isinstance(action, dict)],
+                )
             )
         )
-    )
     return ConfiguredToolRegistryProviderRuntimeServiceActionsModel(
         actions=tuple(
             build_configured_tool_registry_provider_runtime_service_action_model_from_dict(
@@ -3481,6 +3487,7 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model_from_d
     provider: ToolRegistryProvider,
     provider_source_name: str,
     runtime_artifacts: dict[str, object],
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> ConfiguredToolRegistryProviderRuntimeArtifactsModel:
     diagnostics_runtime_payload = runtime_artifacts.get(
         "diagnostics_runtime",
@@ -3501,21 +3508,27 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model_from_d
     if not isinstance(summary_payload, dict):
         summary_payload = {}
     safe_provider_source_name = (
-        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-            runtime_artifacts.get("provider_source_name", provider_source_name)
+        (provider_source_aliases or {}).get(
+            str(runtime_artifacts.get("provider_source_name", provider_source_name)),
+            _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                runtime_artifacts.get("provider_source_name", provider_source_name)
+            ),
         )
     )
     return ConfiguredToolRegistryProviderRuntimeArtifactsModel(
         provider=provider,
         provider_source_name=safe_provider_source_name,
         provider_sources=_impl__sanitize_tool_registry_provider_sources_for_artifact(
-            runtime_artifacts.get("provider_sources", {})
+            runtime_artifacts.get("provider_sources", {}),
+            provider_source_aliases=provider_source_aliases,
         ),
-        selected_source_diagnostics=sanitize_tool_registry_file_diagnostics(
-            runtime_artifacts.get("selected_source_diagnostics", {})
+        selected_source_diagnostics=_impl__sanitize_tool_registry_file_diagnostics_with_provider_source_aliases(
+            runtime_artifacts.get("selected_source_diagnostics", {}),
+            provider_source_aliases=provider_source_aliases,
         ),
-        source_diagnostics=sanitize_tool_registry_source_diagnostics(
-            runtime_artifacts.get("source_diagnostics", {})
+        source_diagnostics=_impl__sanitize_tool_registry_source_diagnostics_with_provider_source_aliases(
+            runtime_artifacts.get("source_diagnostics", {}),
+            provider_source_aliases=provider_source_aliases,
         ),
         diagnostics_runtime=ToolRegistryDiagnosticsRuntimeArtifactsModel(
             summary=_impl__build_tool_registry_diagnostics_summary_model_from_payload(
@@ -3523,33 +3536,75 @@ def _impl_build_configured_tool_registry_provider_runtime_artifacts_model_from_d
             ),
             trace_step=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
                 _sanitize_tool_runtime_trace_artifact_payload(
-                    diagnostics_runtime_payload.get("trace_step")
-                )
+                    diagnostics_runtime_payload.get("trace_step"),
+                    provider_source_aliases=provider_source_aliases,
+                ),
+                provider_source_aliases=provider_source_aliases,
             )
             if isinstance(diagnostics_runtime_payload.get("trace_step"), dict)
             else None,
             trace_event=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
                 _sanitize_tool_runtime_trace_artifact_payload(
-                    diagnostics_runtime_payload.get("trace_event")
-                )
+                    diagnostics_runtime_payload.get("trace_event"),
+                    provider_source_aliases=provider_source_aliases,
+                ),
+                provider_source_aliases=provider_source_aliases,
             )
             if isinstance(diagnostics_runtime_payload.get("trace_event"), dict)
             else None,
             audit_detail=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
                 _sanitize_tool_runtime_trace_artifact_payload(
-                    diagnostics_runtime_payload.get("audit_detail")
-                )
+                    diagnostics_runtime_payload.get("audit_detail"),
+                    provider_source_aliases=provider_source_aliases,
+                ),
+                provider_source_aliases=provider_source_aliases,
             )
             if isinstance(diagnostics_runtime_payload.get("audit_detail"), dict)
             else None,
         ),
         audit_event=_impl__sanitize_tool_registry_provider_source_fields_for_artifact(
             _sanitize_tool_runtime_trace_artifact_payload(
-                runtime_artifacts.get("audit_event")
-            )
+                runtime_artifacts.get("audit_event"),
+                provider_source_aliases=provider_source_aliases,
+            ),
+            provider_source_aliases=provider_source_aliases,
         )
         if isinstance(runtime_artifacts.get("audit_event"), dict)
         else None,
+    )
+
+
+def _impl_build_configured_tool_registry_provider_service_execution_provider_source_aliases(
+    *,
+    service_execution: dict[str, object],
+) -> dict[str, str]:
+    runtime_artifacts_payload = service_execution.get("runtime_artifacts", {})
+    if not isinstance(runtime_artifacts_payload, dict):
+        runtime_artifacts_payload = {}
+    service_actions_payload = service_execution.get("service_actions", [])
+    if not isinstance(service_actions_payload, (list, tuple)):
+        service_actions_payload = []
+    return _impl_build_safe_tool_registry_provider_source_alias_map(
+        list(
+            _call_runtime(
+                "_build_tool_runtime_artifact_provider_source_aliases",
+                provider_source_name=service_execution.get(
+                    "provider_source_name", "default"
+                ),
+                provider_sources=runtime_artifacts_payload.get("provider_sources", {}),
+                selected_source_diagnostics=runtime_artifacts_payload.get(
+                    "selected_source_diagnostics", {}
+                ),
+                source_diagnostics=runtime_artifacts_payload.get(
+                    "source_diagnostics", {}
+                ),
+                diagnostics_runtime=runtime_artifacts_payload.get(
+                    "diagnostics_runtime"
+                ),
+                audit_event=runtime_artifacts_payload.get("audit_event"),
+                service_actions=service_actions_payload,
+            ).keys()
+        )
     )
 
 
@@ -3558,8 +3613,16 @@ def _impl_build_configured_tool_registry_provider_service_execution_model_from_d
     service_execution: dict[str, object],
 ) -> ConfiguredToolRegistryProviderServiceExecutionModel:
     provider = service_execution["provider"]
-    provider_source_name = _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-        service_execution["provider_source_name"]
+    provider_source_aliases = (
+        _impl_build_configured_tool_registry_provider_service_execution_provider_source_aliases(
+            service_execution=service_execution,
+        )
+    )
+    provider_source_name = (provider_source_aliases or {}).get(
+        str(service_execution["provider_source_name"]),
+        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+            service_execution["provider_source_name"]
+        ),
     )
     runtime_artifacts_payload = service_execution.get("runtime_artifacts", {})
     if not isinstance(runtime_artifacts_payload, dict):
@@ -3574,9 +3637,11 @@ def _impl_build_configured_tool_registry_provider_service_execution_model_from_d
             provider=provider,
             provider_source_name=provider_source_name,
             runtime_artifacts=runtime_artifacts_payload,
+            provider_source_aliases=provider_source_aliases,
         ),
         service_actions=build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts(
-            service_actions=service_actions_payload
+            service_actions=service_actions_payload,
+            provider_source_aliases=provider_source_aliases,
         ).actions,
     )
 

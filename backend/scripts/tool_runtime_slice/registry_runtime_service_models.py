@@ -2554,13 +2554,21 @@ class RegistryRuntimeServiceModelsMixin:
             tool_runtime_module.build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts
         )
         captured: list[int] = []
+        captured_aliases: list[dict[str, str] | None] = []
 
         def record_helper(
             *,
             service_actions: list[dict[str, object]],
+            **kwargs: object,
         ) -> object:
             captured.append(len(service_actions))
-            return original_helper(service_actions=service_actions)
+            provider_source_aliases = kwargs.get("provider_source_aliases")
+            captured_aliases.append(
+                provider_source_aliases
+                if isinstance(provider_source_aliases, dict)
+                else None
+            )
+            return original_helper(service_actions=service_actions, **kwargs)
 
         tool_runtime_module.build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts = record_helper
         try:
@@ -2597,6 +2605,7 @@ class RegistryRuntimeServiceModelsMixin:
             tool_runtime_module.build_configured_tool_registry_provider_runtime_service_actions_model_from_dicts = original_helper
 
         self.assertEqual(captured, [2])
+        self.assertEqual(captured_aliases, [{"file_source": "file_source"}])
         self.assertEqual(
             tuple(action.kind for action in result.service_actions),
             ("internal_trace_write", "record_audit_event"),
