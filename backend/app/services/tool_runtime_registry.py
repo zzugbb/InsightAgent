@@ -4086,13 +4086,9 @@ def _impl_build_configured_tool_registry_provider_preflight_service_execution_pa
     provider = preflight_result.get("provider", service_execution_payload.get("provider"))
     if provider is None:
         provider = StaticToolRegistryProvider({})
-    provider_source_name = (
-        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-            preflight_result.get(
-                "provider_source_name",
-                service_execution_payload.get("provider_source_name", "default"),
-            )
-        )
+    provider_source_name = preflight_result.get(
+        "provider_source_name",
+        service_execution_payload.get("provider_source_name", "default"),
     )
     runtime_artifacts_payload = preflight_result.get("runtime_artifacts", {})
     if not isinstance(runtime_artifacts_payload, dict):
@@ -4106,8 +4102,8 @@ def _impl_build_configured_tool_registry_provider_preflight_service_execution_pa
     return {
         **service_execution_payload,
         "provider": service_execution_payload.get("provider", provider),
-        "provider_source_name": _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-            service_execution_payload.get("provider_source_name", provider_source_name)
+        "provider_source_name": service_execution_payload.get(
+            "provider_source_name", provider_source_name
         ),
         "runtime_artifacts": merged_runtime_artifacts_payload,
     }
@@ -4121,13 +4117,9 @@ def _impl__merge_configured_tool_registry_provider_preflight_service_execution_p
     provider = service_execution.get("provider", preflight_result.get("provider"))
     if provider is None:
         provider = StaticToolRegistryProvider({})
-    provider_source_name = (
-        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-            service_execution.get(
-                "provider_source_name",
-                preflight_result.get("provider_source_name", "default"),
-            )
-        )
+    provider_source_name = service_execution.get(
+        "provider_source_name",
+        preflight_result.get("provider_source_name", "default"),
     )
     runtime_artifacts_payload = preflight_result.get("runtime_artifacts", {})
     if not isinstance(runtime_artifacts_payload, dict):
@@ -4141,11 +4133,9 @@ def _impl__merge_configured_tool_registry_provider_preflight_service_execution_p
     return {
         **service_execution,
         "provider": service_execution.get("provider", provider),
-        "provider_source_name": _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-            service_execution.get(
-                "provider_source_name",
-                provider_source_name,
-            )
+        "provider_source_name": service_execution.get(
+            "provider_source_name",
+            provider_source_name,
         ),
         "runtime_artifacts": merged_runtime_artifacts_payload,
     }
