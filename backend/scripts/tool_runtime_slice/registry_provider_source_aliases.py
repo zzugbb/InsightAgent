@@ -1470,6 +1470,71 @@ class RegistryProviderSourceAliasesMixin:
         self.assertNotIn("api_key=one", json.dumps(payload, default=str))
         self.assertNotIn("access_token=two", json.dumps(payload, default=str))
 
+    def test_execute_runtime_service_actions_model_aliases_provider_sources_across_callbacks(
+        self,
+    ) -> None:
+        actions = tool_runtime_module.ConfiguredToolRegistryProviderRuntimeServiceActionsModel(
+            actions=(
+                tool_runtime_module.ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+                    kind="internal_trace_write",
+                    trace_step={
+                        "id": "step-execute-source-one",
+                        "meta": {
+                            "provider_source_name": "suite_api_key=one",
+                        },
+                    },
+                    persist_force=True,
+                ),
+                tool_runtime_module.ConfiguredToolRegistryProviderRuntimeServiceActionModel(
+                    kind="record_audit_event",
+                    kwargs={
+                        "event_type": "tool_registry_diagnostics",
+                        "detail": {
+                            "tool_registry_provider_source": (
+                                "suite_access_token=two"
+                            ),
+                            "tool_registry_provider_sources": [
+                                "suite_access_token=two",
+                                "suite_api_key=one",
+                            ],
+                        },
+                    },
+                ),
+            )
+        )
+        trace_steps: list[dict[str, object]] = []
+        persisted: list[bool] = []
+        audit_calls: list[dict[str, object]] = []
+
+        result = execute_configured_tool_registry_provider_runtime_service_actions_model(
+            service_actions=actions,
+            trace_steps=trace_steps,
+            persist_trace_fn=lambda **kwargs: persisted.append(bool(kwargs["force"])),
+            record_audit_event_fn=lambda **kwargs: audit_calls.append(kwargs),
+        )
+
+        self.assertEqual(result.trace_write_count, 1)
+        self.assertEqual(result.audit_event_count, 1)
+        self.assertEqual(persisted, [True])
+        self.assertEqual(
+            trace_steps[0]["meta"]["provider_source_name"],
+            "suite_[redacted]#1",
+        )
+        self.assertEqual(
+            audit_calls[0]["detail"]["tool_registry_provider_source"],
+            "suite_[redacted]#2",
+        )
+        self.assertEqual(
+            audit_calls[0]["detail"]["tool_registry_provider_sources"],
+            ["suite_[redacted]#2", "suite_[redacted]#1"],
+        )
+        combined = json.dumps(
+            {"trace_steps": trace_steps, "audit_calls": audit_calls},
+            default=str,
+        )
+        self.assertNotIn("api_key=one", combined)
+        self.assertNotIn("access_token=two", combined)
+
     def test_diagnostics_summary_values_disambiguate_colliding_redacted_provider_source_aliases(
         self,
     ) -> None:

@@ -614,6 +614,8 @@ def _impl_resolve_unique_tool_registry_provider_source_alias(
 
 def _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
     payload: object,
+    *,
+    provider_source_aliases: dict[str, str] | None = None,
 ) -> object:
     if isinstance(payload, dict):
         sanitized: dict[object, object] = {}
@@ -621,8 +623,11 @@ def _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
             safe_key = str(key)
             if safe_key in _TOOL_REGISTRY_PROVIDER_SOURCE_ARTIFACT_KEYS:
                 sanitized[key] = (
-                    _impl__sanitize_tool_registry_provider_source_name_for_artifact(
-                        value
+                    (provider_source_aliases or {}).get(
+                        str(value),
+                        _impl__sanitize_tool_registry_provider_source_name_for_artifact(
+                            value
+                        ),
                     )
                 )
                 continue
@@ -630,12 +635,15 @@ def _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
                 safe_key in _TOOL_REGISTRY_PROVIDER_SOURCES_ARTIFACT_KEYS
                 and isinstance(value, (list, tuple))
             ):
-                alias_by_source = _impl_build_safe_tool_registry_provider_source_alias_map(
-                    [
-                        source_name
-                        for source_name in value
-                        if isinstance(source_name, str) and source_name.strip()
-                    ]
+                alias_by_source = (
+                    provider_source_aliases
+                    or _impl_build_safe_tool_registry_provider_source_alias_map(
+                        [
+                            source_name
+                            for source_name in value
+                            if isinstance(source_name, str) and source_name.strip()
+                        ]
+                    )
                 )
                 sanitized[key] = [
                     alias_by_source.get(
@@ -651,18 +659,25 @@ def _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
                 continue
             sanitized[key] = (
                 _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
-                    value
+                    value,
+                    provider_source_aliases=provider_source_aliases,
                 )
             )
         return sanitized
     if isinstance(payload, tuple):
         return tuple(
-            _impl__sanitize_tool_registry_provider_source_fields_for_artifact(value)
+            _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+                value,
+                provider_source_aliases=provider_source_aliases,
+            )
             for value in payload
         )
     if isinstance(payload, list):
         return [
-            _impl__sanitize_tool_registry_provider_source_fields_for_artifact(value)
+            _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
+                value,
+                provider_source_aliases=provider_source_aliases,
+            )
             for value in payload
         ]
     return payload
@@ -3656,6 +3671,14 @@ def _impl_execute_configured_tool_registry_provider_runtime_service_actions_resu
 ) -> ConfiguredToolRegistryProviderRuntimeServiceActionsResultModel:
     trace_write_count = 0
     audit_event_count = 0
+    provider_source_aliases = _impl_build_safe_tool_registry_provider_source_alias_map(
+        list(
+            _call_runtime(
+                "_iter_tool_runtime_provider_source_artifact_values",
+                service_actions.actions,
+            )
+        )
+    )
     for service_action in service_actions.actions:
         kind = service_action.kind
         if kind == "internal_trace_write":
@@ -3663,11 +3686,13 @@ def _impl_execute_configured_tool_registry_provider_runtime_service_actions_resu
             if trace_step is None:
                 continue
             sanitized_trace_step = _sanitize_tool_runtime_trace_artifact_payload(
-                trace_step
+                trace_step,
+                provider_source_aliases=provider_source_aliases,
             )
             sanitized_trace_step = (
                 _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
-                    sanitized_trace_step
+                    sanitized_trace_step,
+                    provider_source_aliases=provider_source_aliases,
                 )
             )
             if not isinstance(sanitized_trace_step, dict):
@@ -3682,7 +3707,8 @@ def _impl_execute_configured_tool_registry_provider_runtime_service_actions_resu
         if kwargs is None:
             continue
         safe_kwargs = _impl__sanitize_tool_registry_provider_source_fields_for_artifact(
-            kwargs
+            kwargs,
+            provider_source_aliases=provider_source_aliases,
         )
         if not isinstance(safe_kwargs, dict):
             continue
