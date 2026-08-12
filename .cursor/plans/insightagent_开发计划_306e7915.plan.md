@@ -2,11 +2,11 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite 与 concurrency-fairness-policy 当前验收基线均已完成收尾；tool-runtime-productionization 已归档，不再作为活跃 spec 维护。
 current_focus:
-  - 当前主线：rag-governance-hardening，进度约 98%；已收口 RAG source/metadata 入站持久化与 query 出站脱敏、嵌套 metadata value 与 query hit id 安全化、runtime shared-* retrieve scope 对齐、runtime task_retrieve helper 输出兜底规整、route/runtime trace/export identifier 最终规整、ingest 稳定 document_version/content_hash、status/list 安全版本摘要、历史 collection 列表出口安全化、知识库治理表版本列、task export/Markdown 版本锚点治理、runtime trace chunk_metadata/document_versions 透传、前端 trace 搜索、reserved metadata 防覆盖、query/status 出站版本字段过滤与 alias canonicalization、敏感 knowledge_base_id 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏、shared-* 私有 shadow 隔离。
+  - 当前主线：rag-governance-hardening，进度约 99%；已收口 RAG source/metadata 入站持久化与 query 出站脱敏、嵌套 metadata value 与 query hit id 安全化、runtime shared-* retrieve scope 对齐、runtime task_retrieve helper 输出兜底规整、route/runtime trace/export identifier 最终规整、ingest 稳定 document_version/content_hash、status/list 安全版本摘要与 route 末端来源字段兜底、历史 collection 列表出口安全化、知识库治理表版本列、task export/Markdown 版本锚点治理、runtime trace chunk_metadata/document_versions 透传、前端 trace 搜索、reserved metadata 防覆盖、query/status 出站版本字段过滤与 alias canonicalization、敏感 knowledge_base_id 安全化、runtime result summary/output/preview/observation 知识库标识规整、RAG 400/503 错误出口脱敏、shared-* 私有 shadow 隔离。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance。
-  - 外部 SSE / trace / export / e2e shape 最近完整基线保持通过；本轮新增 RAG runtime result summary/output/preview/observation knowledge_base_id 规整，不破坏既有可见字段 shape。
-  - 后续继续聚焦 RAG 来源策略、shared 知识库边界细化与更细粒度 shared 规则。
+  - 外部 SSE / trace / export / e2e shape 最近完整基线保持通过；本轮新增 RAG route status/list document_versions source/document_id 末端规整，不破坏既有可见字段 shape。
+  - 后续优先做 rag-governance-hardening 封板审计与完整测试/e2e 复验；若发现真实缺口，再按红测优先继续修。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
   - 保持先补 failing test 再改实现
@@ -15,8 +15,9 @@ constraints:
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1903/1903)
-  backend_rag_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag (77/77)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1904/1904)
+  backend_rag_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag (78/78)
+  backend_rag_route_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route (2/2)
   backend_result_summary_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary (30/30)
   frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (77/77)
   frontend_lint: cd frontend && npm run lint
@@ -30,7 +31,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: rag-governance-hardening 进度约 98%；本轮补 RAG runtime result summary/output/preview/observation knowledge_base_id 规整；targeted rag_result_summary、rag 77/77、result_summary 30/30、backend full slice 1903/1903、py_compile 均通过；本轮未改前端代码、未重跑本机 e2e；data/insightagent.plan.back.md 无 diff。
+latest_validation_note: rag-governance-hardening 进度约 99%；本轮补 RAG route status/list document_versions source/document_id 末端规整；targeted route_document_version_source、rag_route 2/2、rag 78/78、backend full slice 1904/1904、py_compile 均通过；本轮未改前端代码、未重跑本机 e2e；data/insightagent.plan.back.md 无 diff。
 todos:
   - id: docs-slimming
     status: completed
@@ -58,7 +59,7 @@ todos:
     content: 已封板；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口；通过 backend/full frontend/e2e fresh 复验。
   - id: rag-governance-hardening
     status: in_progress
-    content: 当前主线，进度约 98%；已完成 RAG ingest 持久化前 source/document_id/metadata key/value 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime shared-* retrieve scope 对齐、runtime task_retrieve helper 输出兜底规整、route/runtime trace/export identifier 最终规整、敏感 knowledge_base_id 安全化、runtime result summary/output/preview/observation 知识库标识规整、query response 对历史 hit metadata 出站脱敏、query/status 出站版本字段合法性过滤与 reserved alias canonicalization、RAG status/list/route 400/503 error 出口脱敏、历史 collection 列表出口安全化、ingest chunk metadata 稳定 document_version/content_hash、reserved metadata 防覆盖、status/list 安全 document_versions 聚合、shared-* 私有 shadow 列表隔离、前端治理表版本列、task export/Markdown 版本锚点治理、runtime trace chunk_metadata/document_versions 透传、export summary 合并与前端 trace 搜索；后续补来源策略、shared 知识库边界细化与更细粒度 shared 规则。
+    content: 当前主线，进度约 99%；已完成 RAG ingest 持久化前 source/document_id/metadata key/value 脱敏、嵌套 metadata value 与 query hit id 安全化、runtime shared-* retrieve scope 对齐、runtime task_retrieve helper 输出兜底规整、route/runtime trace/export identifier 最终规整、敏感 knowledge_base_id 安全化、runtime result summary/output/preview/observation 知识库标识规整、query response 对历史 hit metadata 出站脱敏、query/status 出站版本字段合法性过滤与 reserved alias canonicalization、RAG status/list/route 400/503 error 出口脱敏、status/list document_versions route 末端来源字段兜底、历史 collection 列表出口安全化、ingest chunk metadata 稳定 document_version/content_hash、reserved metadata 防覆盖、status/list 安全 document_versions 聚合、shared-* 私有 shadow 列表隔离、前端治理表版本列、task export/Markdown 版本锚点治理、runtime trace chunk_metadata/document_versions 透传、export summary 合并与前端 trace 搜索；后续做封板审计与完整测试/e2e 复验。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -83,8 +84,9 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1903/1903`。
-- Backend RAG slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，当前 `77/77`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1904/1904`。
+- Backend RAG slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，当前 `78/78`。
+- Backend RAG route slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，当前 `2/2`。
 - Backend result summary slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，当前 `30/30`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel、queued SSE safe wait_position、settings diagnostics、typed queue governance checks 与 followup completion current-turn fresh 通过。
@@ -114,7 +116,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 后续维护线
 
-- `rag-governance-hardening`：当前主线，继续补 RAG 来源策略、shared 知识库边界细化与更细粒度 shared 规则。
+- `rag-governance-hardening`：当前主线，下一步做封板审计与完整测试/e2e 复验；若发现真实治理缺口，继续按红测优先补齐。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 维护约定

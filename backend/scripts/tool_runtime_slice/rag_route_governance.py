@@ -153,3 +153,93 @@ class RagRouteGovernanceMixin:
         self.assertNotIn("raw-token", serialized)
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("token=", serialized)
+
+    def test_rag_route_document_version_source_fields_are_redacted(self) -> None:
+        original_status = rag_routes_module.get_knowledge_base_status
+        original_list = rag_routes_module.list_knowledge_bases_with_shared
+
+        sensitive_document_versions = [
+            {
+                "document_version": "sha256:aaaaaaaaaaaaaaaa",
+                "content_hash": "b" * 64,
+                "source": "handbook.md?api_key=raw-secret",
+                "document_id": "doc-1 token=raw-token",
+                "chunk_count": 2,
+            }
+        ]
+
+        try:
+            rag_routes_module.get_knowledge_base_status = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "knowledge_base_id": "team-api_key-raw-secret-token-raw-token",
+                    "collection": "kb_abc123_team-api_key-raw-secret-token-raw-token",
+                    "chroma_url": "http://127.0.0.1:8001",
+                    "chroma_reachable": True,
+                    "collection_exists": True,
+                    "document_count": 2,
+                    "unique_document_count": 1,
+                    "document_versions": sensitive_document_versions,
+                    "error": None,
+                }
+            )
+            rag_routes_module.list_knowledge_bases_with_shared = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "knowledge_bases": [
+                        {
+                            "knowledge_base_id": (
+                                "team-api_key-raw-secret-token-raw-token"
+                            ),
+                            "collection": (
+                                "kb_abc123_team-api_key-raw-secret-token-raw-token"
+                            ),
+                            "document_count": 2,
+                            "unique_document_count": 1,
+                            "document_versions": sensitive_document_versions,
+                        }
+                    ],
+                    "knowledge_base_count": 1,
+                    "chroma_url": "http://127.0.0.1:8001",
+                    "chroma_reachable": True,
+                    "error": None,
+                }
+            )
+
+            status_payload = rag_routes_module.get_rag_status(
+                knowledge_base_id="team-safe",
+                current_user={"id": "user-rag-route-source"},
+            )
+            list_payload = rag_routes_module.get_rag_knowledge_bases(
+                current_user={"id": "user-rag-route-source"},
+            )
+        finally:
+            rag_routes_module.get_knowledge_base_status = original_status  # type: ignore[attr-defined]
+            rag_routes_module.list_knowledge_bases_with_shared = original_list  # type: ignore[attr-defined]
+
+        self.assertEqual(
+            status_payload.document_versions[0].source,
+            "handbook.md?[redacted]",
+        )
+        self.assertEqual(
+            status_payload.document_versions[0].document_id,
+            "doc-1 [redacted]",
+        )
+        self.assertEqual(
+            list_payload.knowledge_bases[0].document_versions[0].source,
+            "handbook.md?[redacted]",
+        )
+        self.assertEqual(
+            list_payload.knowledge_bases[0].document_versions[0].document_id,
+            "doc-1 [redacted]",
+        )
+        serialized = json.dumps(
+            {
+                "status": status_payload.model_dump(),
+                "list": list_payload.model_dump(),
+            },
+            ensure_ascii=False,
+        )
+        self.assertIn("[redacted]", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("token=", serialized)

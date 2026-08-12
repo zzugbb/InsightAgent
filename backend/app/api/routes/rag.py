@@ -17,6 +17,7 @@ from app.services.chroma_rag_service import (
     query_knowledge_base,
     sanitize_rag_collection_name,
     sanitize_rag_error_message,
+    sanitize_rag_metadata_display_value,
 )
 
 
@@ -55,6 +56,18 @@ def _sanitize_rag_route_identifier_values(value: object) -> object:
                 continue
             if safe_key == "collection":
                 sanitized[safe_key] = sanitize_rag_collection_name(item)
+                continue
+            if safe_key == "source":
+                sanitized[safe_key] = sanitize_rag_metadata_display_value(
+                    item,
+                    limit=240,
+                )
+                continue
+            if safe_key == "document_id":
+                sanitized[safe_key] = sanitize_rag_metadata_display_value(
+                    item,
+                    limit=128,
+                )
                 continue
             sanitized[safe_key] = _sanitize_rag_route_identifier_values(item)
         return sanitized

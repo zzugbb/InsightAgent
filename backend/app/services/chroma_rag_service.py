@@ -73,6 +73,10 @@ def sanitize_rag_error_message(value: object, *, limit: int = 400) -> str:
     return safe or type(value).__name__
 
 
+def sanitize_rag_metadata_display_value(value: object, *, limit: int = 240) -> str:
+    return _sanitize_rag_metadata_text(value, limit=limit)
+
+
 def normalize_knowledge_base_id(value: str | None) -> str:
     raw = (_sanitize_rag_identifier_text(value) or "default").strip().lower()
     if not raw:
