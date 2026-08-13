@@ -1,12 +1,12 @@
 ---
 name: InsightAgent 开发计划
-overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance 与 rag-governance-hardening 均已封板；当前主线为 production-reliability-hardening。
+overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening 与 production-reliability-hardening 均已封板。
 current_focus:
-  - 当前主线：production-reliability-hardening，进度约 95%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、duplicate active acquire 防双执行、未持有 slot 不释放 active、complete_task owner guarded terminal write、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈、任务详情 reconnect SSE 的终态结束/终态打开，以及 execution stream interrupt cleanup。
+  - 最新封板主线：production-reliability-hardening 已 100% 封板；queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、duplicate active acquire 防双执行、未持有 slot 不释放 active、complete_task owner guarded terminal write、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈、任务详情 reconnect SSE 的终态结束/终态打开，以及 execution stream interrupt cleanup 均已收口。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
-  - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening。
-  - 本轮新增 execution stream interrupt cleanup：执行流已进入 running 后若因 SSE 中断/协程取消退出，会 owner-guarded 标记 failed 并清理归属；未进入 running 的关闭只清理 waiting。
+  - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening。
+  - 本轮新增封板验证：backend full slice、frontend node/lint/type、backend main/queue e2e、frontend full/queue Chromium、CI tooling 与 diff hygiene 均 fresh 通过。
   - 后续候选方向为 rag-product-experience、observability-experience、provider-tool-expansion、ci-release-engineering。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
@@ -36,7 +36,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: production-reliability-hardening 进度约 95%；本轮新增 execution stream interrupt cleanup；production_reliability 34/34、queue 66/66、task 361/361、settings 216/216、backend full slice 1938/1938、相关 py_compile 通过；本轮未重跑 frontend/e2e；data/insightagent.plan.back.md 无 diff。
+latest_validation_note: production-reliability-hardening 已 100% 封板；production_reliability 34/34、queue 66/66、task 361/361、settings 216/216、backend full slice 1938/1938、frontend node 77/77、frontend lint/type、backend main/queue e2e、frontend full Chromium 50 passed / 1 skipped、frontend queue 1/1、CI tooling、diff hygiene 均 fresh 通过；data/insightagent.plan.back.md 无 diff。
 todos:
   - id: docs-slimming
     status: completed
@@ -69,8 +69,8 @@ todos:
     status: completed
     content: 已选择 production-reliability-hardening 作为当前主线；其余候选保留为后续方向。
   - id: production-reliability-hardening
-    status: in_progress
-    content: 进度约 95%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、duplicate active acquire 防双执行、未持有 slot 不释放 active、complete_task owner guarded terminal write、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈、任务详情 reconnect SSE 的终态结束/终态打开，以及 execution stream interrupt cleanup。下一步优先围绕 e2e 稳定性与封板验证补红测。
+    status: completed
+    content: 已 100% 封板；queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、duplicate active acquire 防双执行、未持有 slot 不释放 active、complete_task owner guarded terminal write、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈、任务详情 reconnect SSE 的终态结束/终态打开，以及 execution stream interrupt cleanup 均已收口；backend/frontend/e2e/CI/diff 封板验证 fresh 通过。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -131,8 +131,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 后续维护线
 
-- 当前主线为 `production-reliability-hardening`，进度约 `95%`；后续继续以先红测、再实现、再 targeted/full slice 的方式推进。
-- 后续候选主线：`rag-product-experience`、`observability-experience`、`provider-tool-expansion`、`ci-release-engineering`；正式开启前先补主线验收边界和首批红测计划。
+- `production-reliability-hardening` 已 100% 封板；后续继续以先红测、再实现、再 targeted/full slice 的方式推进新主线。
+- 后续候选主线：`rag-product-experience`、`observability-experience`、`provider-tool-expansion`、`ci-release-engineering`；正式开启前先确认主线验收边界和首批红测计划。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 维护约定
