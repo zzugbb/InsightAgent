@@ -1434,13 +1434,14 @@ def stream_task_detail(
         raise HTTPException(status_code=404, detail="Task not found")
     task = _coerce_payload_mapping(raw)
     normalized_status = normalize_task_status(str(task["status"]))
-    if normalized_status not in {"queued", "pending", "running"}:
+    reconnect_statuses = {"running", "completed", "failed", "cancelled", "timed_out"}
+    if normalized_status not in {"queued", "pending", *reconnect_statuses}:
         raise HTTPException(
             status_code=409,
-            detail="Task stream can only be opened for queued/pending/running tasks",
+            detail="Task stream can only be opened for queued/pending/running/terminal tasks",
         )
 
-    if normalized_status == "running" or is_task_execution_active(task_id):
+    if normalized_status in reconnect_statuses or is_task_execution_active(task_id):
         header_cursor = _parse_last_event_id(request.headers.get("Last-Event-ID"))
         resume_cursor = max(after_seq, header_cursor or 0)
         return StreamingResponse(

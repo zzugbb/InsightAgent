@@ -96,6 +96,61 @@ class ProductionReliabilityQueueMixin:
             },
         )
 
+    def test_production_reliability_terminal_stream_open_uses_reconnect(
+        self,
+    ) -> None:
+        original_get_task = task_routes_module.get_task
+        original_stream_execution = task_routes_module.stream_task_execution
+        original_stream_reconnect = task_routes_module.stream_running_task_reconnect
+        captured: dict[str, object] = {}
+
+        def fake_stream_task_execution(**kwargs):
+            captured["execution"] = dict(kwargs)
+            return iter(())
+
+        def fake_stream_running_task_reconnect(task_id: str, user_id: str, *, after_seq: int = 0):
+            captured["reconnect"] = {
+                "task_id": task_id,
+                "user_id": user_id,
+                "after_seq": after_seq,
+            }
+            return iter(())
+
+        try:
+            task_routes_module.get_task = lambda task_id, user_id: {
+                "id": task_id,
+                "user_id": user_id,
+                "session_id": "session-terminal-open",
+                "prompt": "terminal open prompt",
+                "status": "cancelled",
+            }
+            task_routes_module.stream_task_execution = fake_stream_task_execution
+            task_routes_module.stream_running_task_reconnect = (
+                fake_stream_running_task_reconnect
+            )
+
+            response = task_routes_module.stream_task_detail(
+                "task-terminal-open",
+                request=SimpleNamespace(headers={"Last-Event-ID": "7"}),
+                after_seq=3,
+                current_user={"id": "user-terminal-open"},
+            )
+        finally:
+            task_routes_module.get_task = original_get_task
+            task_routes_module.stream_task_execution = original_stream_execution
+            task_routes_module.stream_running_task_reconnect = original_stream_reconnect
+
+        self.assertEqual(response.media_type, "text/event-stream")
+        self.assertNotIn("execution", captured)
+        self.assertEqual(
+            captured.get("reconnect"),
+            {
+                "task_id": "task-terminal-open",
+                "user_id": "user-terminal-open",
+                "after_seq": 7,
+            },
+        )
+
     def test_production_reliability_reconnect_stream_terminates_on_cancelled(
         self,
     ) -> None:
