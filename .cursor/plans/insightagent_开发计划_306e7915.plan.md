@@ -2,11 +2,11 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance 与 rag-governance-hardening 均已封板；当前主线为 production-reliability-hardening。
 current_focus:
-  - 当前主线：production-reliability-hardening，进度约 76%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈，以及任务详情 reconnect SSE 的 cancelled/timed_out 终态结束。
+  - 当前主线：production-reliability-hardening，进度约 80%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈，以及任务详情 reconnect SSE 的 cancelled/timed_out 终态结束。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening。
-  - 本轮新增任务详情 reconnect 终态收口：running reconnect 期间任务变为 cancelled/timed_out 时，沿用既有 cancelled/timeout + error SSE 契约结束，不再继续等待和心跳。
+  - 本轮新增 running owner guarded start：mark running 只允许 pending/queued 或无 owner/同 owner 的 running 任务，不覆盖其他实例已持有的 running owner。
   - 后续候选方向为 rag-product-experience、observability-experience、provider-tool-expansion、ci-release-engineering。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
@@ -16,10 +16,10 @@ constraints:
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1932/1932)
-  backend_production_reliability_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability (28/28)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1933/1933)
+  backend_production_reliability_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability (29/29)
   backend_queue_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue (66/66)
-  backend_task_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task (359/359)
+  backend_task_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task (360/360)
   backend_settings_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings (216/216)
   backend_rag_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag (78/78)
   backend_rag_route_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route (2/2)
@@ -36,7 +36,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: production-reliability-hardening 进度约 76%；本轮新增任务详情 reconnect cancelled/timed_out 终态结束；production_reliability 28/28、queue 66/66、task 359/359、backend full slice 1932/1932、相关 py_compile 通过；本轮未重跑 frontend/e2e；data/insightagent.plan.back.md 无 diff。
+latest_validation_note: production-reliability-hardening 进度约 80%；本轮新增 running owner guarded start；production_reliability 29/29、queue 66/66、task 360/360、settings 216/216、backend full slice 1933/1933、相关 py_compile 通过；本轮未重跑 frontend/e2e；data/insightagent.plan.back.md 无 diff。
 todos:
   - id: docs-slimming
     status: completed
@@ -70,7 +70,7 @@ todos:
     content: 已选择 production-reliability-hardening 作为当前主线；其余候选保留为后续方向。
   - id: production-reliability-hardening
     status: in_progress
-    content: 进度约 76%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈，以及任务详情 reconnect SSE 的 cancelled/timed_out 终态结束。下一步优先围绕异常退出后的队列清理、持久化边界、剩余重连边界、e2e 稳定性与封板验证补红测。
+    content: 进度约 80%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈，以及任务详情 reconnect SSE 的 cancelled/timed_out 终态结束。下一步优先围绕异常退出后的队列清理、剩余持久化边界、剩余重连边界、e2e 稳定性与封板验证补红测。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -95,10 +95,10 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1932/1932`。
-- Backend production reliability slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`，当前 `28/28`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1933/1933`。
+- Backend production reliability slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`，当前 `29/29`。
 - Backend queue slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`，当前 `66/66`。
-- Backend task slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`，当前 `359/359`。
+- Backend task slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`，当前 `360/360`。
 - Backend settings slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings`，当前 `216/216`。
 - Backend RAG slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，当前 `78/78`。
 - Backend RAG route slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，当前 `2/2`。
@@ -131,7 +131,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 后续维护线
 
-- 当前主线为 `production-reliability-hardening`，进度约 `76%`；后续继续以先红测、再实现、再 targeted/full slice 的方式推进。
+- 当前主线为 `production-reliability-hardening`，进度约 `80%`；后续继续以先红测、再实现、再 targeted/full slice 的方式推进。
 - 后续候选主线：`rag-product-experience`、`observability-experience`、`provider-tool-expansion`、`ci-release-engineering`；正式开启前先补主线验收边界和首批红测计划。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 

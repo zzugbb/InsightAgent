@@ -1078,10 +1078,29 @@ def mark_task_running_started(
                 updated_at = ?,
                 execution_owner_id = ?,
                 execution_heartbeat_at = ?
-            WHERE id = ? AND user_id = ?
-              AND LOWER(status) IN ('queued', 'pending', 'running')
+            WHERE (
+                LOWER(status) IN ('queued', 'pending')
+                OR (
+                    LOWER(status) = ?
+                    AND (
+                        execution_owner_id IS NULL
+                        OR TRIM(execution_owner_id) = ''
+                        OR execution_owner_id = ?
+                    )
+                )
+              )
+              AND id = ? AND user_id = ?
             """,
-            ("running", current_time, owner_id, current_time, task_id, user_id),
+            (
+                "running",
+                current_time,
+                owner_id,
+                current_time,
+                "running",
+                owner_id,
+                task_id,
+                user_id,
+            ),
         )
         connection.commit()
         return max(0, int(getattr(cursor, "rowcount", 0) or 0))
