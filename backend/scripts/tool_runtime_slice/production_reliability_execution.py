@@ -567,3 +567,85 @@ class ProductionReliabilityExecutionMixin:
         self.assertEqual(queued_updates, [])
         self.assertEqual(completion_calls, [])
         self.assertTrue(any(event.startswith("event: error\n") for event in events))
+
+    def test_production_reliability_stream_does_not_release_active_slot_without_ownership(
+        self,
+    ) -> None:
+        released_slots: list[str] = []
+        provider_calls: list[str] = []
+
+        original_get_settings = chat_execution_module.get_settings
+        original_try_acquire = chat_execution_module.try_acquire_task_execution_slot
+        original_mark_queued = getattr(chat_execution_module, "mark_task_queued_waiting", None)
+        original_release_slot = chat_execution_module.release_task_execution_slot
+        original_get_task = chat_execution_module.get_task
+        original_get_stored_settings = chat_execution_module.get_stored_settings
+        original_get_llm_provider = chat_execution_module.get_llm_provider
+        original_complete_task = chat_execution_module.complete_task
+        original_safe_audit = chat_execution_module.safe_record_audit_event
+        original_sleep = chat_execution_module.sleep
+
+        try:
+            chat_execution_module.get_settings = lambda: SimpleNamespace(
+                trace_persist_min_interval_sec=0.0,
+                task_timeout_sec=60.0,
+                task_queue_max_concurrent=1,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.01,
+                task_execution_owner_id="instance-a",
+                task_execution_heartbeat_interval_sec=0.0,
+            )
+            chat_execution_module.try_acquire_task_execution_slot = (
+                lambda **_kwargs: None
+            )
+            chat_execution_module.mark_task_queued_waiting = (  # type: ignore[attr-defined]
+                lambda *, task_id, user_id: 0
+            )
+            chat_execution_module.release_task_execution_slot = released_slots.append
+            chat_execution_module.get_task = lambda *args, **kwargs: {
+                "id": "task-active-no-ownership",
+                "status": "running",
+                "session_id": "session-active-no-ownership",
+            }
+            chat_execution_module.get_stored_settings = (
+                lambda user_id: provider_calls.append("settings") or None
+            )
+            chat_execution_module.get_llm_provider = (
+                lambda user_id: provider_calls.append("provider") or None
+            )
+            chat_execution_module.complete_task = lambda **kwargs: None
+            chat_execution_module.safe_record_audit_event = lambda *args, **kwargs: None
+            chat_execution_module.sleep = (
+                lambda _seconds: (_ for _ in ()).throw(
+                    AssertionError("stream kept waiting after active duplicate conflict")
+                )
+            )
+
+            events = list(
+                chat_execution_module.stream_task_execution(
+                    task_id="task-active-no-ownership",
+                    session_id="session-active-no-ownership",
+                    user_id="user-active-no-ownership",
+                    prompt="do not release slot without ownership",
+                )
+            )
+        finally:
+            chat_execution_module.get_settings = original_get_settings
+            chat_execution_module.try_acquire_task_execution_slot = original_try_acquire
+            if original_mark_queued is None:
+                if hasattr(chat_execution_module, "mark_task_queued_waiting"):
+                    delattr(chat_execution_module, "mark_task_queued_waiting")
+            else:
+                chat_execution_module.mark_task_queued_waiting = original_mark_queued  # type: ignore[attr-defined]
+            chat_execution_module.release_task_execution_slot = original_release_slot
+            chat_execution_module.get_task = original_get_task
+            chat_execution_module.get_stored_settings = original_get_stored_settings
+            chat_execution_module.get_llm_provider = original_get_llm_provider
+            chat_execution_module.complete_task = original_complete_task
+            chat_execution_module.safe_record_audit_event = original_safe_audit
+            chat_execution_module.sleep = original_sleep
+
+        self.assertEqual(released_slots, [])
+        self.assertEqual(provider_calls, [])
+        self.assertTrue(any(event.startswith("event: error\n") for event in events))

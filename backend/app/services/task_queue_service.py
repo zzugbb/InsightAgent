@@ -59,11 +59,7 @@ class TaskQueueState:
         )
         with self._lock:
             if task_id in self._active_task_ids:
-                return TaskExecutionSlot(
-                    task_id=task_id,
-                    _state=self,
-                    _owns_slot=False,
-                )
+                return None
             (
                 older_eligible_waiting_count,
                 reserved_user_counts,

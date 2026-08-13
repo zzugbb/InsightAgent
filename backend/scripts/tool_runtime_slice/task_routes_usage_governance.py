@@ -298,7 +298,7 @@ class TaskRoutesUsageGovernanceMixin:
         finally:
             task_queue_module.reset_task_queue_state_for_tests()
 
-    def test_task_queue_service_duplicate_active_slot_release_does_not_free_original(
+    def test_task_queue_service_duplicate_active_task_does_not_get_execution_slot(
         self,
     ) -> None:
         task_queue_module = __import__(
@@ -320,9 +320,7 @@ class TaskRoutesUsageGovernanceMixin:
                 task_id="task-active-duplicate",
                 max_concurrent=1,
             )
-            self.assertIsNotNone(duplicate_slot)
-
-            duplicate_slot.release()
+            self.assertIsNone(duplicate_slot)
 
             self.assertEqual(
                 task_queue_module.get_task_queue_snapshot(

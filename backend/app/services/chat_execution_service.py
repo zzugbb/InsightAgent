@@ -23,6 +23,7 @@ from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.settings_service import get_stored_settings
 from app.services.task_queue_service import (
+    forget_waiting_task,
     get_task_queue_snapshot,
     release_task_execution_slot,
     try_acquire_task_execution_slot,
@@ -603,7 +604,7 @@ def stream_task_execution(
     def release_task_slot() -> None:
         nonlocal task_slot
         if task_slot is None:
-            release_task_execution_slot(task_id)
+            forget_waiting_task(task_id)
             return
         task_slot.release()
         task_slot = None
