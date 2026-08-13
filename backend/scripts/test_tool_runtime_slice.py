@@ -298,6 +298,9 @@ from tool_runtime_slice.task_trace_export_governance import TaskTraceExportGover
 from tool_runtime_slice.production_reliability_execution import (
     ProductionReliabilityExecutionMixin,
 )
+from tool_runtime_slice.production_reliability_failure_paths import (
+    ProductionReliabilityFailurePathsMixin,
+)
 from tool_runtime_slice.production_reliability_queue import ProductionReliabilityQueueMixin
 from tool_runtime_slice.production_reliability_startup import ProductionReliabilityStartupMixin
 
@@ -353,6 +356,7 @@ class ToolRuntimeSliceTests(
     HttpJsonResponseProtocolMixin,
     HttpJsonResponseBodyMixin,
     RuntimeServiceExecutionSemanticsMixin,
+    ProductionReliabilityFailurePathsMixin,
     ProductionReliabilityExecutionMixin,
     ProductionReliabilityQueueMixin,
     ProductionReliabilityStartupMixin,

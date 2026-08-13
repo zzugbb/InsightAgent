@@ -458,46 +458,129 @@ def stream_task_execution(
         )
         last_execution_heartbeat_ts = current_ts
 
-    def raise_if_should_abort(*, force_status_probe: bool = False) -> None:
-        status = probe_task_status(force=force_status_probe)
+    def build_abort_error_for_status(
+        status: str,
+        *,
+        timeout_message: str | None = None,
+    ) -> TaskExecutionAbortError | None:
         if status in {"cancelled", "canceled"}:
-            raise TaskExecutionAbortError(
+            return TaskExecutionAbortError(
                 code="task_cancelled",
                 status="cancelled",
                 event="cancelled",
                 user_message="Task was cancelled by user.",
             )
         if status in {"timed_out", "timeout"}:
-            raise TaskExecutionAbortError(
+            return TaskExecutionAbortError(
                 code="task_timeout",
                 status="timed_out",
                 event="timeout",
-                user_message="Task exceeded timeout limit.",
+                user_message=timeout_message or "Task exceeded timeout limit.",
             )
+        if status == "missing":
+            return TaskExecutionAbortError(
+                code="task_not_found",
+                status="failed",
+                event="error",
+                user_message="Task no longer exists.",
+            )
+        return None
+
+    def terminal_abort_after_lost_race() -> TaskExecutionAbortError | None:
+        return build_abort_error_for_status(probe_task_status(force=True))
+
+    def terminal_write_lost(completed_count: object) -> bool:
+        if completed_count is None:
+            return False
+        try:
+            return int(completed_count) <= 0
+        except (TypeError, ValueError):
+            return False
+
+    def persist_abort_terminal_status(
+        exc: TaskExecutionAbortError,
+    ) -> TaskExecutionAbortError:
+        completed_count = complete_task(
+            task_id=task_id,
+            trace_steps=trace_steps,
+            user_id=user_id,
+            status=exc.status,
+        )
+        if terminal_write_lost(completed_count):
+            terminal_exc = terminal_abort_after_lost_race()
+            if terminal_exc is not None:
+                return terminal_exc
+        return exc
+
+    def emit_abort_events(exc: TaskExecutionAbortError) -> Iterator[str]:
+        effective_exc = persist_abort_terminal_status(exc)
+        if effective_exc.event == "timeout":
+            record_failure_event(
+                event_type="task_timeout",
+                code=effective_exc.code,
+                message=effective_exc.user_message,
+            )
+        elif effective_exc.event not in {"cancelled"}:
+            record_failure_event(
+                event_type="task_failed",
+                code=effective_exc.code,
+                message=effective_exc.user_message,
+            )
+        phase = (
+            effective_exc.event
+            if effective_exc.event in {"cancelled", "timeout"}
+            else "error"
+        )
+        yield sse_event("state", {"task_id": task_id, "phase": phase})
+        if effective_exc.event in {"cancelled", "timeout"}:
+            yield sse_event(
+                effective_exc.event,
+                {
+                    "task_id": task_id,
+                    "status": effective_exc.status,
+                    "code": effective_exc.code,
+                    "message": effective_exc.user_message,
+                },
+            )
+        yield sse_event(
+            "error",
+            sse_error_payload(
+                task_id=task_id,
+                message=effective_exc.user_message,
+                code=effective_exc.code,
+                fatal=True,
+                retry_count=0,
+            ),
+        )
+
+    def raise_if_should_abort(*, force_status_probe: bool = False) -> None:
+        status = probe_task_status(force=force_status_probe)
+        abort_error = build_abort_error_for_status(status)
+        if abort_error is not None:
+            raise abort_error
         elapsed = monotonic() - stream_started_ts
         if elapsed >= TASK_TIMEOUT_SEC:
+            timeout_message = (
+                f"Task timed out after {TASK_TIMEOUT_SEC:.1f}s. "
+                "Please retry with a shorter request or cancel earlier."
+            )
             complete_task(
                 task_id=task_id,
                 trace_steps=trace_steps,
                 user_id=user_id,
                 status="timed_out",
             )
-            probe_task_status(force=True)
+            abort_error = build_abort_error_for_status(
+                probe_task_status(force=True),
+                timeout_message=timeout_message,
+            )
+            if abort_error is not None:
+                raise abort_error
             raise TaskExecutionAbortError(
                 code="task_timeout",
                 status="timed_out",
                 event="timeout",
-                user_message=(
-                    f"Task timed out after {TASK_TIMEOUT_SEC:.1f}s. "
-                    "Please retry with a shorter request or cancel earlier."
-                ),
-            )
-        if status == "missing":
-            raise TaskExecutionAbortError(
-                code="task_not_found",
-                status="failed",
-                event="error",
-                user_message="Task no longer exists.",
+                user_message=timeout_message,
             )
 
     if persist_user_message:
@@ -890,7 +973,7 @@ def stream_task_execution(
             user_id=user_id,
             usage=usage_payload,
         )
-        if completed_count <= 0:
+        if terminal_write_lost(completed_count):
             raise_if_should_abort(force_status_probe=True)
             raise TaskExecutionAbortError(
                 code="task_terminal_race",
@@ -927,54 +1010,20 @@ def stream_task_execution(
 
     except TaskExecutionAbortError as exc:
         release_task_slot()
-        complete_task(
-            task_id=task_id,
-            trace_steps=trace_steps,
-            user_id=user_id,
-            status=exc.status,
-        )
-        if exc.event == "timeout":
-            record_failure_event(
-                event_type="task_timeout",
-                code=exc.code,
-                message=exc.user_message,
-            )
-        elif exc.event not in {"cancelled"}:
-            record_failure_event(
-                event_type="task_failed",
-                code=exc.code,
-                message=exc.user_message,
-            )
-        phase = exc.event if exc.event in {"cancelled", "timeout"} else "error"
-        yield sse_event("state", {"task_id": task_id, "phase": phase})
-        if exc.event in {"cancelled", "timeout"}:
-            yield sse_event(
-                exc.event,
-                {
-                    "task_id": task_id,
-                    "status": exc.status,
-                    "code": exc.code,
-                    "message": exc.user_message,
-                },
-            )
-        yield sse_event(
-            "error",
-            sse_error_payload(
-                task_id=task_id,
-                message=exc.user_message,
-                code=exc.code,
-                fatal=True,
-                retry_count=0,
-            ),
-        )
+        yield from emit_abort_events(exc)
     except ProviderSelectionError as exc:
         release_task_slot()
-        complete_task(
+        completed_count = complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
         )
+        if terminal_write_lost(completed_count):
+            terminal_exc = terminal_abort_after_lost_race()
+            if terminal_exc is not None:
+                yield from emit_abort_events(terminal_exc)
+                return
         record_failure_event(
             event_type="task_failed",
             code=exc.code,
@@ -993,12 +1042,17 @@ def stream_task_execution(
         )
     except ProviderCallError as exc:
         release_task_slot()
-        complete_task(
+        completed_count = complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
         )
+        if terminal_write_lost(completed_count):
+            terminal_exc = terminal_abort_after_lost_race()
+            if terminal_exc is not None:
+                yield from emit_abort_events(terminal_exc)
+                return
         record_failure_event(
             event_type="task_failed",
             code=exc.code,
@@ -1023,12 +1077,17 @@ def stream_task_execution(
         )
     except Exception as exc:
         release_task_slot()
-        complete_task(
+        completed_count = complete_task(
             task_id=task_id,
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
         )
+        if terminal_write_lost(completed_count):
+            terminal_exc = terminal_abort_after_lost_race()
+            if terminal_exc is not None:
+                yield from emit_abort_events(terminal_exc)
+                return
         record_failure_event(
             event_type="task_failed",
             code="task_stream_failure",

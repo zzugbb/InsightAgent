@@ -5,22 +5,22 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前状态
 
 - 阶段 5 基础产品化已完成：会话/任务/消息持久化、SSE、Trace、Memory、RAG、鉴权、PostgreSQL、任务取消/超时、running task 恢复、usage dashboard、审计与任务/会话导出已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 均已封板；当前主线为 `production-reliability-hardening`，进度约 `61%`。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 均已封板；当前主线为 `production-reliability-hardening`，进度约 `68%`。
 - 当前队列基线：任务默认 `queued`，拿到进程内执行槽位后切 `running`；全局并发默认 `TASK_QUEUE_MAX_CONCURRENT=32`，可选 per-user/per-session 限额默认 `0` 关闭；等待队列保持 capacity-aware oldest eligible FIFO，queued cancel 会移出等待队列。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，覆盖全局、当前用户与可选当前会话 active/waiting/available 计数、限额触顶、`pressure_state`、fairness 开关、等待策略与 poll interval；前后端 typed contract 已固定 required governance 字段、optional scope 字段和枚举值。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `registry-governance` 已封板：provider/source 脱敏、冲突 alias、跨 settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
 - `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口，外部 SSE / trace / export / e2e shape 保持稳定。
-- `production-reliability-hardening` 已完成首批后端收口：按 user/session scope 清理 waiting queue、删除会话后清理残留 queued waiting entries、启动时 owner-aware 恢复 orphaned `running` 任务；任务进入 `queued/running` 使用 guarded 状态切换并周期刷新 DB heartbeat，完成时清理归属；stale heartbeat 接管默认关闭、显式配置阈值后可回收其他失联实例任务；pending/queued 任务若已在本进程 active，会走 reconnect 防止双执行；执行启动/等待/取消/收尾时不会把 terminal 任务误写回 `queued/running/cancelled/completed/failed/timed_out`；active slot、DELETE 204、SSE / trace / export shape 保持不变。
+- `production-reliability-hardening` 已完成首批后端收口：按 user/session scope 清理 waiting queue、删除会话后清理残留 queued waiting entries、启动时 owner-aware 恢复 orphaned `running` 任务；任务进入 `queued/running` 使用 guarded 状态切换并周期刷新 DB heartbeat，完成时清理归属；stale heartbeat 接管默认关闭、显式配置阈值后可回收其他失联实例任务；pending/queued 任务若已在本进程 active，会走 reconnect 防止双执行；执行启动/等待/取消/收尾/失败自愈时不会把 terminal 任务误写回 `queued/running/cancelled/completed/failed/timed_out`，provider failure / timeout 输给取消时按真实取消终态输出；active slot、DELETE 204、SSE / trace / export shape 保持不变。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`24/24` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`26/26` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`：`66/66` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`：`359/359` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings`：`216/216` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1928/1928` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1930/1930` 通过
 - RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`78/78` 通过
 - RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
 - Result summary targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，`30/30` 通过
@@ -36,7 +36,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前开发计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`。
-2. 当前主线：`production-reliability-hardening`，进度约 `61%`；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖。
+2. 当前主线：`production-reliability-hardening`，进度约 `68%`；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖，以及 provider failure / timeout lost-race 失败自愈。
 3. 后续优先围绕异常退出后的队列清理、持久化边界、失败自愈与 e2e 稳定性继续补红测。
 4. 继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
 
