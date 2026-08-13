@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from asyncio import CancelledError
 
 from app.providers.base import ProviderCallError
 
@@ -516,9 +517,10 @@ class ProductionReliabilityFailurePathsMixin:
         self.assertEqual(error_payloads[-1]["code"], "task_cancelled")
         self.assertFalse(any(audit["event_type"] == "task_failed" for audit in audits))
 
-    def test_production_reliability_stream_interruption_marks_running_failed(
+    def _exercise_running_stream_base_exception(
         self,
-    ) -> None:
+        stream_exception: BaseException,
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[str]]:
         complete_calls: list[dict[str, object]] = []
         audits: list[dict[str, object]] = []
         released_slots: list[str] = []
@@ -529,7 +531,7 @@ class ProductionReliabilityFailurePathsMixin:
 
             def stream_generate(self, prompt: str):
                 del prompt
-                raise GeneratorExit()
+                raise stream_exception
                 yield ""
 
         class FakeSlot:
@@ -611,7 +613,7 @@ class ProductionReliabilityFailurePathsMixin:
                 lambda **kwargs: audits.append(dict(kwargs))
             )
 
-            with self.assertRaises(GeneratorExit):
+            with self.assertRaises(type(stream_exception)):
                 list(
                     chat_execution_module.stream_task_execution(
                         task_id="task-stream-interrupted",
@@ -641,6 +643,24 @@ class ProductionReliabilityFailurePathsMixin:
             chat_execution_module.complete_task = original_complete_task
             chat_execution_module.safe_record_audit_event = original_safe_audit
 
+        return complete_calls, audits, released_slots
+
+    def test_production_reliability_client_stream_close_preserves_running_for_reconnect(
+        self,
+    ) -> None:
+        complete_calls, audits, released_slots = (
+            self._exercise_running_stream_base_exception(GeneratorExit())
+        )
+        self.assertEqual(released_slots, ["released"])
+        self.assertEqual(complete_calls, [])
+        self.assertEqual(audits, [])
+
+    def test_production_reliability_server_stream_cancel_marks_running_failed(
+        self,
+    ) -> None:
+        complete_calls, audits, released_slots = (
+            self._exercise_running_stream_base_exception(CancelledError())
+        )
         self.assertEqual(released_slots, ["released"])
         self.assertEqual(
             [call.get("status", "completed") for call in complete_calls],

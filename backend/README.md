@@ -12,15 +12,15 @@
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `tool_runtime_registry.py` 与 settings/route/audit/SSE/trace 边界已完成 provider/source 脱敏、冲突 alias、跨结构共享 alias map、runtime artifacts/service actions、模型输出层、export/task/usage/audit/SSE/trace 安全摘要。
 - `rag-governance-hardening` 已封板：RAG ingest/query source metadata、嵌套 metadata value、query hit id、知识库标识、版本摘要、reserved alias、route/runtime trace/export/display、错误出口与 shared/private 列表边界均已收口；后端外部响应 shape 保持稳定。
-- `production-reliability-hardening` 已 100% 封板：`task_queue_service.py` 支持按 user/session scope 清理 waiting entries、active execution 查询、duplicate active acquire 防第二执行权与 pending/queued duplicate stream 防双执行；`DELETE /api/sessions/{session_id}` 成功后清理该用户会话的 queued waiting entries；任务进入 `queued/running` 使用 guarded 状态切换，`running` 会写入 `execution_owner_id` / `execution_heartbeat_at` 并按配置刷新 DB heartbeat，完成后清理归属；启动 running 时不会覆盖其他实例已持有的 running owner，启动恢复只失败无归属或当前实例归属的 orphaned `running` 任务，`TASK_EXECUTION_STALE_AFTER_SEC` 显式开启后才接管其他失联实例任务；执行流未持有 slot 时只清理 waiting、不释放 active slot；complete/failed/timed_out 终态写入带 owner guard，不覆盖其他实例已持有的 running 任务；执行启动/等待/取消/收尾/失败自愈只允许非终态任务切 `queued/running/cancelled/completed/failed/timed_out`，避免 terminal 任务被取消/完成竞态误复活或覆盖，provider failure / timeout / tool terminal return 输给取消时按真实取消终态输出；任务详情 reconnect SSE 遇到 cancelled/timed_out 终态会沿用既有 cancelled/timeout + error 事件结束，终态任务打开详情流会直接走 reconnect 输出终态 SSE，不再因打开时已终态返回 409；执行流已进入 running 后若因 SSE 中断/协程取消退出，会 owner-guarded 标记 failed 并清理归属，未进入 running 的关闭只清理 waiting；active slot、204 响应与外部 SSE / trace / export 契约不变。
+- `production-reliability-hardening` 已 100% 封板并完成 GitHub frontend-e2e 回归修复：`task_queue_service.py` 支持按 user/session scope 清理 waiting entries、active execution 查询、duplicate active acquire 防第二执行权与 pending/queued duplicate stream 防双执行；`DELETE /api/sessions/{session_id}` 成功后清理该用户会话的 queued waiting entries；任务进入 `queued/running` 使用 guarded 状态切换，`running` 会写入 `execution_owner_id` / `execution_heartbeat_at` 并按配置刷新 DB heartbeat，完成后清理归属；启动 running 时不会覆盖其他实例已持有的 running owner，启动恢复只失败无归属或当前实例归属的 orphaned `running` 任务，`TASK_EXECUTION_STALE_AFTER_SEC` 显式开启后才接管其他失联实例任务；执行流未持有 slot 时只清理 waiting、不释放 active slot；complete/failed/timed_out 终态写入带 owner guard，不覆盖其他实例已持有的 running 任务；执行启动/等待/取消/收尾/失败自愈只允许非终态任务切 `queued/running/cancelled/completed/failed/timed_out`，避免 terminal 任务被取消/完成竞态误复活或覆盖，provider failure / timeout / tool terminal return 输给取消时按真实取消终态输出；任务详情 reconnect SSE 遇到 cancelled/timed_out 终态会沿用既有 cancelled/timeout + error 事件结束，终态任务打开详情流会直接走 reconnect 输出终态 SSE，不再因打开时已终态返回 409；客户端 SSE 断开只释放本进程 active slot 并保留 running 任务供重连/取消，服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属；active slot、204 响应与外部 SSE / trace / export 契约不变。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`34/34` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`35/35` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`：`66/66` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`：`361/361` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings`：`216/216` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1938/1938` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1939/1939` 通过
 - RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`78/78` 通过
 - RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
 - Result summary targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，`30/30` 通过
@@ -30,8 +30,10 @@
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
 - backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
+- frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
+- frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
 - 后续运行 backend slice、启动 backend、跑 backend e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 venv 与提权边界，避免重复触发本机端口 / `.git/index.lock` 权限错误。
@@ -39,7 +41,7 @@
 ## 下一步后端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. `production-reliability-hardening` 封板验证已完成：backend full slice、backend main/queue e2e、frontend full/queue Chromium 与 CI tooling 均为 fresh 通过。
+2. `production-reliability-hardening` 已补齐 GitHub frontend-e2e 回归：客户端 SSE 断开不再把 running 任务落 failed，reload/background session stream 与 reload recovery cancel targeted/full Chromium 复验通过，diagnostics finalize 在 main push strict `any` 下为 0 alert。
 3. 下一轮进入后续候选主线选择，继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 4. 后续开发继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
 

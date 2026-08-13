@@ -1125,7 +1125,7 @@ def stream_task_execution(
         )
     except BaseException as exc:
         release_task_slot()
-        if isinstance(exc, (GeneratorExit, CancelledError)):
+        if isinstance(exc, CancelledError):
             if task_running_started:
                 completed_count = complete_task(
                     task_id=task_id,

@@ -11,16 +11,16 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `registry-governance` 已封板：provider/source 脱敏、冲突 alias、跨 settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
 - `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口，外部 SSE / trace / export / e2e shape 保持稳定。
-- `production-reliability-hardening` 已 100% 封板：按 user/session scope 清理 waiting queue、删除会话后清理残留 queued waiting entries、启动时 owner-aware 恢复 orphaned `running` 任务；任务进入 `queued/running` 使用 guarded 状态切换并周期刷新 DB heartbeat，完成时清理归属，且启动 running 时不会覆盖其他实例已持有的 running owner；重复 active acquire 不会授予第二执行权，未持有 slot 的执行流退出只清理 waiting、不释放 active slot；执行流 complete/failed/timed_out 终态写入带 owner guard，不覆盖其他实例已持有的 running 任务；stale heartbeat 接管默认关闭、显式配置阈值后可回收其他失联实例任务；pending/queued 任务若已在本进程 active，会走 reconnect 防止双执行；执行启动/等待/取消/收尾/失败自愈时不会把 terminal 任务误写回 `queued/running/cancelled/completed/failed/timed_out`，provider failure / timeout / tool terminal return 输给取消时按真实取消终态输出；任务详情 reconnect SSE 遇到 cancelled/timed_out 终态会按既有 cancelled/timeout + error 契约结束，且终态任务打开详情流会直接走 reconnect 输出终态 SSE，不再因打开时已终态返回 409；执行流已进入 running 后若因 SSE 中断/协程取消退出，会 owner-guarded 标记 failed 并清理归属，未进入 running 的关闭只清理 waiting；active slot、DELETE 204、SSE / trace / export shape 保持不变。
+- `production-reliability-hardening` 已 100% 封板并完成 GitHub frontend-e2e 回归修复：按 user/session scope 清理 waiting queue、删除会话后清理残留 queued waiting entries、启动时 owner-aware 恢复 orphaned `running` 任务；任务进入 `queued/running` 使用 guarded 状态切换并周期刷新 DB heartbeat，完成时清理归属，且启动 running 时不会覆盖其他实例已持有的 running owner；重复 active acquire 不会授予第二执行权，未持有 slot 的执行流退出只清理 waiting、不释放 active slot；执行流 complete/failed/timed_out 终态写入带 owner guard，不覆盖其他实例已持有的 running 任务；stale heartbeat 接管默认关闭、显式配置阈值后可回收其他失联实例任务；pending/queued 任务若已在本进程 active，会走 reconnect 防止双执行；执行启动/等待/取消/收尾/失败自愈时不会把 terminal 任务误写回 `queued/running/cancelled/completed/failed/timed_out`，provider failure / timeout / tool terminal return 输给取消时按真实取消终态输出；任务详情 reconnect SSE 遇到 cancelled/timed_out 终态会按既有 cancelled/timeout + error 契约结束，且终态任务打开详情流会直接走 reconnect 输出终态 SSE，不再因打开时已终态返回 409；客户端 SSE 断开只释放本进程 active slot 并保留 running 任务供重连/取消，服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属；active slot、DELETE 204、SSE / trace / export shape 保持不变。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`34/34` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`35/35` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`：`66/66` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`：`361/361` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings`：`216/216` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1938/1938` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1939/1939` 通过
 - RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`78/78` 通过
 - RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
 - Result summary targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，`30/30` 通过
@@ -30,8 +30,10 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/.venv/bin/python -m py_compile` 本轮相关 backend route/test 模块：通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - backend e2e queue phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion，通过
+- frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
+- frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
 - 普通沙箱访问本机 Docker/端口会被权限拦截时，按流程提权后重跑，不拿旧结果冒充新结果。
@@ -40,7 +42,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前开发计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. `production-reliability-hardening` 封板验证已完成：backend full slice、frontend node/lint/type、backend main/queue e2e、frontend full/queue Chromium 与 CI tooling 均为 fresh 通过。
+2. `production-reliability-hardening` 已补齐 GitHub frontend-e2e 回归：客户端 SSE 断开不再把 running 任务落 failed，reload/background session stream 与 reload recovery cancel targeted/full Chromium 复验通过，diagnostics finalize 在 main push strict `any` 下为 0 alert。
 3. 下一轮进入后续候选主线选择，优先从产品体验、可观测体验、provider/tool 扩展或 CI/release 工程中选一个继续推进。
 4. 继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
 

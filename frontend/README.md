@@ -14,18 +14,20 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 前端 `TaskQueueDiagnostics` 类型已固定基础运行态、governance 字段与 `pressure_state` / `waiting_policy` 枚举；后端 runtime slice 拆分与 `tool_runtime.py` facade 拆分已完成，原测试入口保持不变。
 - `registry-governance` 已封板：provider/source diagnostics、settings/preflight、runtime artifacts、trace/export/audit/SSE 与 task/usage 回放语义已完成脱敏和 alias 对齐，前端可见字段 shape 不变。
 - 后端 `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
-- 后端 `production-reliability-hardening` 已 100% 封板：queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、duplicate active acquire 防双执行、未持有 slot 不释放 active、complete_task owner guarded terminal write、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈、任务详情 reconnect SSE 的终态结束/终态打开，以及 execution stream interrupt cleanup 均已收口；前端可见删除会话响应、SSE、trace 与 export shape 不变。
+- 后端 `production-reliability-hardening` 已 100% 封板并完成 GitHub frontend-e2e 回归修复：queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、duplicate active acquire 防双执行、未持有 slot 不释放 active、complete_task owner guarded terminal write、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈、任务详情 reconnect SSE 的终态结束/终态打开均已收口；客户端 SSE 断开保留 running 任务供 reload/reconnect/cancel，服务端执行协程取消才落 failed；前端可见删除会话响应、SSE、trace 与 export shape 不变。
 
 ## 当前验证基线
 
 - `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`77/77` 通过
 - `cd frontend && npm run lint`：通过
 - `npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts`：通过
+- frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
 - backend main e2e phase：baseline / main / export consistency / cancel-timeout 通过
 - backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
-- 后端可见契约回归：production reliability `34/34`、queue `66/66`、task `361/361`、settings `216/216`、backend full slice `1938/1938` 通过
+- 后端可见契约回归：production reliability `35/35`、queue `66/66`、task `361/361`、settings `216/216`、backend full slice `1939/1939` 通过
+- frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
 - 后续启动 frontend、访问本机 e2e 服务、跑 Chromium e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 Node/npm 路径与提权边界，避免重复触发端口 / `.git/index.lock` 权限错误。
@@ -33,7 +35,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. `production-reliability-hardening` 封板验证已完成：frontend node/lint/type、frontend full/queue Chromium、backend full slice 与 backend main/queue e2e 均为 fresh 通过。
+2. `production-reliability-hardening` 已补齐 GitHub frontend-e2e 回归：客户端 SSE 断开不再把 running 任务落 failed，reload/background session stream 与 reload recovery cancel targeted/full Chromium 复验通过，diagnostics finalize 在 main push strict `any` 下为 0 alert。
 3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
 4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。
 
