@@ -506,6 +506,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status=exc.status,
+            execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         if terminal_write_lost(completed_count):
             terminal_exc = terminal_abort_after_lost_race()
@@ -514,6 +515,7 @@ def stream_task_execution(
         return exc
 
     def complete_task_for_service_action(**kwargs: object) -> object:
+        kwargs.setdefault("execution_owner_id", TASK_EXECUTION_OWNER_ID)
         completed_count = complete_task(**kwargs)
         if terminal_write_lost(completed_count):
             terminal_exc = terminal_abort_after_lost_race()
@@ -578,6 +580,7 @@ def stream_task_execution(
                 trace_steps=trace_steps,
                 user_id=user_id,
                 status="timed_out",
+                execution_owner_id=TASK_EXECUTION_OWNER_ID,
             )
             abort_error = build_abort_error_for_status(
                 probe_task_status(force=True),
@@ -981,6 +984,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             usage=usage_payload,
+            execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         if terminal_write_lost(completed_count):
             raise_if_should_abort(force_status_probe=True)
@@ -1027,6 +1031,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
+            execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         if terminal_write_lost(completed_count):
             terminal_exc = terminal_abort_after_lost_race()
@@ -1056,6 +1061,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
+            execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         if terminal_write_lost(completed_count):
             terminal_exc = terminal_abort_after_lost_race()
@@ -1091,6 +1097,7 @@ def stream_task_execution(
             trace_steps=trace_steps,
             user_id=user_id,
             status="failed",
+            execution_owner_id=TASK_EXECUTION_OWNER_ID,
         )
         if terminal_write_lost(completed_count):
             terminal_exc = terminal_abort_after_lost_race()

@@ -1235,20 +1235,45 @@ def complete_task(
     user_id: str,
     status: str = "completed",
     usage: dict[str, object] | None = None,
+    execution_owner_id: str | None = None,
 ) -> int:
     current_time = _now_iso()
     normalized_trace_steps = _normalize_trace_steps(trace_steps)
     usage_blob = json.dumps(usage, ensure_ascii=False) if usage is not None else None
+    owner_id = (
+        get_task_execution_owner_id(
+            SimpleNamespace(task_execution_owner_id=execution_owner_id)
+        )
+        if execution_owner_id is not None
+        else None
+    )
     (
         tool_registry_profile,
         tool_registry_provider_source,
         allowed_tool_names_json,
         allowed_tool_labels_json,
     ) = _serialize_task_governance_columns(normalized_trace_steps)
+    status_guard = "LOWER(status) IN ('pending', 'queued', 'running')"
+    guard_params: tuple[object, ...] = ()
+    if owner_id is not None:
+        status_guard = """
+              (
+                LOWER(status) IN ('pending', 'queued')
+                OR (
+                    LOWER(status) = ?
+                    AND (
+                        execution_owner_id IS NULL
+                        OR TRIM(execution_owner_id) = ''
+                        OR execution_owner_id = ?
+                    )
+                )
+              )
+        """
+        guard_params = ("running", owner_id)
 
     with get_db_connection() as connection:
         cursor = connection.execute(
-            """
+            f"""
             UPDATE tasks
             SET
                 status = ?,
@@ -1261,8 +1286,8 @@ def complete_task(
                 allowed_tool_labels_json = ?,
                 execution_owner_id = NULL,
                 execution_heartbeat_at = NULL
-            WHERE id = ? AND user_id = ?
-              AND LOWER(status) IN ('pending', 'queued', 'running')
+            WHERE {status_guard}
+              AND id = ? AND user_id = ?
             """,
             (
                 status,
@@ -1273,6 +1298,7 @@ def complete_task(
                 tool_registry_provider_source,
                 allowed_tool_names_json,
                 allowed_tool_labels_json,
+                *guard_params,
                 task_id,
                 user_id,
             ),

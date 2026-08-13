@@ -278,6 +278,61 @@ class ProductionReliabilityStartupMixin:
         self.assertIn("execution_heartbeat_at = NULL", rendered_query)
         self.assertEqual(rendered_params[-2:], ("task-complete-owner", "user-owner"))
 
+    def test_production_reliability_complete_task_preserves_other_owner_running_task(
+        self,
+    ) -> None:
+        persistence_module = __import__(
+            "app.services.chat_persistence_service",
+            fromlist=["complete_task"],
+        )
+        original_get_db_connection = persistence_module.get_db_connection
+        captured: dict[str, object] = {}
+
+        class FakeCursor:
+            rowcount = 1
+
+        class FakeConnection:
+            def execute(self, query: str, params=()):
+                captured["query"] = " ".join(query.split())
+                captured["params"] = tuple(params)
+                return FakeCursor()
+
+            def commit(self) -> None:
+                captured["committed"] = True
+
+        class FakeContextManager:
+            def __enter__(self):
+                return FakeConnection()
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+        try:
+            persistence_module.get_db_connection = lambda: FakeContextManager()
+
+            persistence_module.complete_task(
+                task_id="task-complete-other-owner",
+                trace_steps=[],
+                user_id="user-complete-other-owner",
+                status="completed",
+                execution_owner_id="instance-b",
+            )
+        finally:
+            persistence_module.get_db_connection = original_get_db_connection
+
+        rendered_query = str(captured.get("query", ""))
+        rendered_params = tuple(captured.get("params", ()))
+        self.assertIn("LOWER(status) IN ('pending', 'queued')", rendered_query)
+        self.assertIn("LOWER(status) = ?", rendered_query)
+        self.assertIn("execution_owner_id IS NULL", rendered_query)
+        self.assertIn("TRIM(execution_owner_id) = ''", rendered_query)
+        self.assertIn("execution_owner_id = ?", rendered_query)
+        self.assertEqual(rendered_params.count("instance-b"), 1)
+        self.assertEqual(
+            rendered_params[-2:],
+            ("task-complete-other-owner", "user-complete-other-owner"),
+        )
+
     def test_production_reliability_marks_orphaned_running_tasks_failed_on_startup(
         self,
     ) -> None:
