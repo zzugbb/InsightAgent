@@ -512,6 +512,14 @@ def stream_task_execution(
                 return terminal_exc
         return exc
 
+    def complete_task_for_service_action(**kwargs: object) -> object:
+        completed_count = complete_task(**kwargs)
+        if terminal_write_lost(completed_count):
+            terminal_exc = terminal_abort_after_lost_race()
+            if terminal_exc is not None:
+                raise terminal_exc
+        return completed_count
+
     def emit_abort_events(exc: TaskExecutionAbortError) -> Iterator[str]:
         effective_exc = persist_abort_terminal_status(exc)
         if effective_exc.event == "timeout":
@@ -834,7 +842,7 @@ def stream_task_execution(
                 tool_observations=tool_observations,
                 seq_cursor=seq_cursor,
                 persist_trace_fn=persist_trace,
-                complete_task_fn=complete_task,
+                complete_task_fn=complete_task_for_service_action,
                 record_failure_event_fn=record_failure_event,
             ):
                 if item["kind"] == "event":

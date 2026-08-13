@@ -2,11 +2,11 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance 与 rag-governance-hardening 均已封板；当前主线为 production-reliability-hardening。
 current_focus:
-  - 当前主线：production-reliability-hardening，进度约 68%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖与 provider failure / timeout lost-race 失败自愈。
+  - 当前主线：production-reliability-hardening，进度约 72%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖与 provider failure / timeout / tool terminal return lost-race 失败自愈。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening。
-  - 本轮新增失败路径 lost-race 自愈：provider failure / timeout 写 failed/timed_out 输给取消时，回读真实取消终态并输出 cancelled，不再记录 task_failed/task_timeout。
+  - 本轮新增工具 service action 旁路 lost-race 自愈：tool terminal return 写 failed 输给取消时，回读真实取消终态并输出 cancelled，不再继续记录 task_failed 或提前 return。
   - 后续候选方向为 rag-product-experience、observability-experience、provider-tool-expansion、ci-release-engineering。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
@@ -16,8 +16,8 @@ constraints:
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1930/1930)
-  backend_production_reliability_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability (26/26)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1931/1931)
+  backend_production_reliability_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability (27/27)
   backend_queue_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue (66/66)
   backend_task_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task (359/359)
   backend_settings_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings (216/216)
@@ -36,7 +36,7 @@ validation_baseline:
   frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: production-reliability-hardening 进度约 68%；本轮新增 provider failure / timeout lost-race 失败自愈；production_reliability 26/26、queue 66/66、task 359/359、settings 216/216、backend full slice 1930/1930、相关 py_compile 通过；本轮未重跑 frontend/e2e；data/insightagent.plan.back.md 无 diff。
+latest_validation_note: production-reliability-hardening 进度约 72%；本轮新增 tool terminal return lost-race 失败自愈；production_reliability 27/27、queue 66/66、task 359/359、settings 216/216、backend full slice 1931/1931、相关 py_compile 通过；本轮未重跑 frontend/e2e；data/insightagent.plan.back.md 无 diff。
 todos:
   - id: docs-slimming
     status: completed
@@ -70,7 +70,7 @@ todos:
     content: 已选择 production-reliability-hardening 作为当前主线；其余候选保留为后续方向。
   - id: production-reliability-hardening
     status: in_progress
-    content: 进度约 68%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖与 provider failure / timeout lost-race 失败自愈。下一步优先围绕异常退出后的队列清理、持久化边界、e2e 稳定性与封板验证补红测。
+    content: 进度约 72%；已完成 queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖与 provider failure / timeout / tool terminal return lost-race 失败自愈。下一步优先围绕异常退出后的队列清理、持久化边界、e2e 稳定性与封板验证补红测。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -95,8 +95,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1930/1930`。
-- Backend production reliability slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`，当前 `26/26`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1931/1931`。
+- Backend production reliability slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`，当前 `27/27`。
 - Backend queue slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`，当前 `66/66`。
 - Backend task slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`，当前 `359/359`。
 - Backend settings slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings`，当前 `216/216`。
@@ -131,7 +131,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 后续维护线
 
-- 当前主线为 `production-reliability-hardening`，进度约 `68%`；后续继续以先红测、再实现、再 targeted/full slice 的方式推进。
+- 当前主线为 `production-reliability-hardening`，进度约 `72%`；后续继续以先红测、再实现、再 targeted/full slice 的方式推进。
 - 后续候选主线：`rag-product-experience`、`observability-experience`、`provider-tool-expansion`、`ci-release-engineering`；正式开启前先补主线验收边界和首批红测计划。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
