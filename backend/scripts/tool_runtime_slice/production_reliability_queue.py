@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import json
+
 from .context import SimpleNamespace, task_routes_module
 
 
@@ -92,6 +95,87 @@ class ProductionReliabilityQueueMixin:
                 "after_seq": 5,
             },
         )
+
+    def test_production_reliability_reconnect_stream_terminates_on_cancelled(
+        self,
+    ) -> None:
+        original_get_settings = task_routes_module.get_settings
+        original_get_task = task_routes_module.get_task
+        original_sleep = task_routes_module.asyncio.sleep
+        original_delta_snapshot_helper = getattr(
+            task_routes_module.chat_persistence_service,
+            "get_task_trace_delta_snapshot_from_task",
+            None,
+        )
+        task_reads = [
+            {
+                "id": "task-reconnect-cancelled",
+                "session_id": "session-reconnect-cancelled",
+                "status": "running",
+            },
+            {
+                "id": "task-reconnect-cancelled",
+                "session_id": "session-reconnect-cancelled",
+                "status": "cancelled",
+            },
+        ]
+
+        async def fail_sleep(_delay: float) -> None:
+            raise AssertionError(
+                "reconnect stream must terminate instead of sleeping after cancelled"
+            )
+
+        async def collect_events() -> list[str]:
+            events: list[str] = []
+            async for event in task_routes_module.stream_running_task_reconnect(
+                "task-reconnect-cancelled",
+                "user-reconnect-cancelled",
+            ):
+                events.append(event)
+            return events
+
+        try:
+            task_routes_module.get_settings = lambda: SimpleNamespace(
+                stream_reconnect_poll_fast_sec=0.05,
+                stream_reconnect_poll_max_sec=0.5,
+                stream_reconnect_heartbeat_interval_sec=60.0,
+            )
+            task_routes_module.get_task = lambda *_args, **_kwargs: task_reads.pop(0)
+            task_routes_module.asyncio.sleep = fail_sleep
+            task_routes_module.chat_persistence_service.get_task_trace_delta_snapshot_from_task = (  # type: ignore[attr-defined]
+                lambda _task, after_seq=0, limit=200: ([], after_seq, False, 0, None)
+            )
+
+            events = asyncio.run(collect_events())
+        finally:
+            task_routes_module.get_settings = original_get_settings
+            task_routes_module.get_task = original_get_task
+            task_routes_module.asyncio.sleep = original_sleep
+            if original_delta_snapshot_helper is None:
+                if hasattr(
+                    task_routes_module.chat_persistence_service,
+                    "get_task_trace_delta_snapshot_from_task",
+                ):
+                    delattr(
+                        task_routes_module.chat_persistence_service,
+                        "get_task_trace_delta_snapshot_from_task",
+                    )
+            else:
+                task_routes_module.chat_persistence_service.get_task_trace_delta_snapshot_from_task = original_delta_snapshot_helper  # type: ignore[attr-defined]
+
+        event_names = [
+            event.split("\n", 1)[0].replace("event: ", "")
+            for event in events
+            if event.startswith("event: ")
+        ]
+        error_payloads = [
+            json.loads(event.split("data: ", 1)[1])
+            for event in events
+            if event.startswith("event: error\n")
+        ]
+        self.assertEqual(event_names, ["start", "state", "cancelled", "error"])
+        self.assertEqual(error_payloads[-1]["code"], "task_cancelled")
+        self.assertTrue(error_payloads[-1]["resumed"])
 
     def test_production_reliability_forget_waiting_tasks_for_session_preserves_active_slot(
         self,

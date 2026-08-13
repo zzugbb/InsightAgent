@@ -564,8 +564,8 @@ async def stream_running_task_reconnect(
         else:
             poll_delay_sec = min(poll_delay_max_sec, poll_delay_sec * 1.6)
 
-        status = str(task.get("status", "running"))
-        if status in {"completed", "failed"}:
+        status = normalize_task_status(str(task.get("status", "running")))
+        if status in {"completed", "failed", "cancelled", "timed_out"}:
             if last_emitted_step_id is None:
                 last_emitted_step_id = latest_step_id
             if status == "completed":
@@ -581,7 +581,7 @@ async def stream_running_task_reconnect(
                         "resumed": True,
                     },
                 )
-            else:
+            elif status == "failed":
                 state_event = emit_state("error")
                 if state_event is not None:
                     yield state_event
@@ -593,6 +593,43 @@ async def stream_running_task_reconnect(
                             step_id=last_emitted_step_id,
                             message="Task ended with failed status.",
                             code="task_failed",
+                            fatal=True,
+                            retry_count=0,
+                        ),
+                        "session_id": str(task.get("session_id", "")) or session_id,
+                        "resumed": True,
+                    },
+                )
+            else:
+                event_name = "cancelled" if status == "cancelled" else "timeout"
+                code = "task_cancelled" if status == "cancelled" else "task_timeout"
+                message = (
+                    "Task was cancelled by user."
+                    if status == "cancelled"
+                    else "Task exceeded timeout limit."
+                )
+                state_event = emit_state(event_name)
+                if state_event is not None:
+                    yield state_event
+                yield sse_event(
+                    event_name,
+                    {
+                        "session_id": str(task.get("session_id", "")) or session_id,
+                        "task_id": task_id,
+                        "status": status,
+                        "code": code,
+                        "message": message,
+                        "resumed": True,
+                    },
+                )
+                yield sse_event(
+                    "error",
+                    {
+                        **sse_error_payload(
+                            task_id=task_id,
+                            step_id=last_emitted_step_id,
+                            message=message,
+                            code=code,
                             fatal=True,
                             retry_count=0,
                         ),
