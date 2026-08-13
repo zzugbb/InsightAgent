@@ -515,3 +515,213 @@ class ProductionReliabilityFailurePathsMixin:
         self.assertNotIn("provider_down", [payload["code"] for payload in error_payloads])
         self.assertEqual(error_payloads[-1]["code"], "task_cancelled")
         self.assertFalse(any(audit["event_type"] == "task_failed" for audit in audits))
+
+    def test_production_reliability_stream_interruption_marks_running_failed(
+        self,
+    ) -> None:
+        complete_calls: list[dict[str, object]] = []
+        audits: list[dict[str, object]] = []
+        released_slots: list[str] = []
+
+        class InterruptedProvider:
+            provider = "mock"
+            model = "mock-gpt"
+
+            def stream_generate(self, prompt: str):
+                del prompt
+                raise GeneratorExit()
+                yield ""
+
+        class FakeSlot:
+            def release(self) -> None:
+                released_slots.append("released")
+
+        original_get_settings = chat_execution_module.get_settings
+        original_get_stored_settings = chat_execution_module.get_stored_settings
+        original_get_llm_provider = chat_execution_module.get_llm_provider
+        original_get_configured_provider = (
+            chat_execution_module.get_configured_tool_registry_provider
+        )
+        original_build_plan_artifacts = chat_execution_module.build_tool_plan_artifacts
+        original_execute_preflight = (
+            chat_execution_module.execute_configured_tool_registry_provider_preflight
+        )
+        original_try_acquire = chat_execution_module.try_acquire_task_execution_slot
+        original_release_slot = chat_execution_module.release_task_execution_slot
+        original_mark_running = chat_execution_module.mark_task_running_started
+        original_get_task = chat_execution_module.get_task
+        original_update_trace = chat_execution_module.update_task_trace_steps
+        original_complete_task = chat_execution_module.complete_task
+        original_safe_audit = chat_execution_module.safe_record_audit_event
+
+        try:
+            chat_execution_module.get_settings = lambda: SimpleNamespace(
+                trace_persist_min_interval_sec=0.0,
+                task_timeout_sec=60.0,
+                task_queue_max_concurrent=1,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.01,
+                task_execution_owner_id="instance-interrupted",
+                task_execution_heartbeat_interval_sec=0.0,
+                usage_prompt_token_price_per_1k=0.0,
+                usage_completion_token_price_per_1k=0.0,
+            )
+            chat_execution_module.get_stored_settings = lambda _user_id: None
+            chat_execution_module.get_llm_provider = lambda _user_id: InterruptedProvider()
+            chat_execution_module.get_configured_tool_registry_provider = (
+                lambda **_kwargs: SimpleNamespace()
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                lambda *args, **kwargs: SimpleNamespace(
+                    tool_plan=[],
+                    planning_prompt=None,
+                    provider_usage=None,
+                    planning_provider_attempted=False,
+                    planning_provider_used=False,
+                    allowed_tool_names=(),
+                    allowed_tool_labels=(),
+                )
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                lambda **_kwargs: {
+                    "provider": SimpleNamespace(),
+                    "provider_source_name": "default",
+                }
+            )
+            chat_execution_module.try_acquire_task_execution_slot = (
+                lambda **_kwargs: FakeSlot()
+            )
+            chat_execution_module.release_task_execution_slot = lambda _task_id: None
+            chat_execution_module.mark_task_running_started = (
+                lambda *args, **kwargs: 1
+            )
+            chat_execution_module.get_task = (
+                lambda *args, **kwargs: {
+                    "id": "task-stream-interrupted",
+                    "session_id": "session-stream-interrupted",
+                    "status": "running",
+                }
+            )
+            chat_execution_module.update_task_trace_steps = lambda *args, **kwargs: None
+            chat_execution_module.complete_task = (
+                lambda **kwargs: complete_calls.append(dict(kwargs)) or 1
+            )
+            chat_execution_module.safe_record_audit_event = (
+                lambda **kwargs: audits.append(dict(kwargs))
+            )
+
+            with self.assertRaises(GeneratorExit):
+                list(
+                    chat_execution_module.stream_task_execution(
+                        task_id="task-stream-interrupted",
+                        session_id="session-stream-interrupted",
+                        user_id="user-stream-interrupted",
+                        prompt="client disconnect during provider stream",
+                    )
+                )
+        finally:
+            chat_execution_module.get_settings = original_get_settings
+            chat_execution_module.get_stored_settings = original_get_stored_settings
+            chat_execution_module.get_llm_provider = original_get_llm_provider
+            chat_execution_module.get_configured_tool_registry_provider = (
+                original_get_configured_provider
+            )
+            chat_execution_module.build_tool_plan_artifacts = (
+                original_build_plan_artifacts
+            )
+            chat_execution_module.execute_configured_tool_registry_provider_preflight = (
+                original_execute_preflight
+            )
+            chat_execution_module.try_acquire_task_execution_slot = original_try_acquire
+            chat_execution_module.release_task_execution_slot = original_release_slot
+            chat_execution_module.mark_task_running_started = original_mark_running
+            chat_execution_module.get_task = original_get_task
+            chat_execution_module.update_task_trace_steps = original_update_trace
+            chat_execution_module.complete_task = original_complete_task
+            chat_execution_module.safe_record_audit_event = original_safe_audit
+
+        self.assertEqual(released_slots, ["released"])
+        self.assertEqual(
+            [call.get("status", "completed") for call in complete_calls],
+            ["failed"],
+        )
+        self.assertEqual(
+            complete_calls[-1].get("execution_owner_id"),
+            "instance-interrupted",
+        )
+        self.assertEqual([audit["event_type"] for audit in audits], ["task_failed"])
+        self.assertEqual(audits[-1]["detail"]["code"], "task_stream_interrupted")
+
+    def test_production_reliability_stream_close_before_running_does_not_mark_failed(
+        self,
+    ) -> None:
+        complete_calls: list[dict[str, object]] = []
+        forgotten_waiters: list[str] = []
+
+        original_get_settings = chat_execution_module.get_settings
+        original_create_message = chat_execution_module.create_message
+        original_try_acquire = chat_execution_module.try_acquire_task_execution_slot
+        original_forget_waiting = chat_execution_module.forget_waiting_task
+        original_mark_queued = chat_execution_module.mark_task_queued_waiting
+        original_get_task = chat_execution_module.get_task
+        original_complete_task = chat_execution_module.complete_task
+        original_safe_audit = chat_execution_module.safe_record_audit_event
+        original_sleep = chat_execution_module.sleep
+
+        try:
+            chat_execution_module.get_settings = lambda: SimpleNamespace(
+                trace_persist_min_interval_sec=0.0,
+                task_timeout_sec=60.0,
+                task_queue_max_concurrent=1,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.01,
+                task_execution_owner_id="instance-before-running",
+                task_execution_heartbeat_interval_sec=0.0,
+            )
+            chat_execution_module.create_message = lambda *args, **kwargs: None
+            chat_execution_module.try_acquire_task_execution_slot = (
+                lambda **_kwargs: None
+            )
+            chat_execution_module.forget_waiting_task = (
+                lambda task_id: forgotten_waiters.append(task_id)
+            )
+            chat_execution_module.mark_task_queued_waiting = (
+                lambda *args, **kwargs: 1
+            )
+            chat_execution_module.get_task = (
+                lambda *args, **kwargs: {
+                    "id": "task-close-before-running",
+                    "session_id": "session-close-before-running",
+                    "status": "pending",
+                }
+            )
+            chat_execution_module.complete_task = (
+                lambda **kwargs: complete_calls.append(dict(kwargs)) or 1
+            )
+            chat_execution_module.safe_record_audit_event = lambda **_kwargs: None
+            chat_execution_module.sleep = lambda _seconds: None
+
+            stream = chat_execution_module.stream_task_execution(
+                task_id="task-close-before-running",
+                session_id="session-close-before-running",
+                user_id="user-close-before-running",
+                prompt="disconnect before slot acquisition",
+            )
+            first_event = next(stream)
+            self.assertTrue(first_event.startswith("event: state\n"))
+            stream.close()
+        finally:
+            chat_execution_module.get_settings = original_get_settings
+            chat_execution_module.create_message = original_create_message
+            chat_execution_module.try_acquire_task_execution_slot = original_try_acquire
+            chat_execution_module.forget_waiting_task = original_forget_waiting
+            chat_execution_module.mark_task_queued_waiting = original_mark_queued
+            chat_execution_module.get_task = original_get_task
+            chat_execution_module.complete_task = original_complete_task
+            chat_execution_module.safe_record_audit_event = original_safe_audit
+            chat_execution_module.sleep = original_sleep
+
+        self.assertEqual(forgotten_waiters, ["task-close-before-running"])
+        self.assertEqual(complete_calls, [])

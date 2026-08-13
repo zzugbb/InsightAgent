@@ -1,5 +1,6 @@
 import json
 import re
+from asyncio import CancelledError
 from collections.abc import Iterator
 from datetime import datetime
 from time import monotonic, sleep
@@ -374,6 +375,7 @@ def stream_task_execution(
     cached_task_status = "pending"
     stream_started_ts = monotonic()
     task_slot = None
+    task_running_started = False
 
     def record_audit_event(
         *,
@@ -690,6 +692,7 @@ def stream_task_execution(
                 ),
             )
             return
+        task_running_started = True
 
         runtime_settings = get_stored_settings(user_id)
         provider = get_llm_provider(user_id)
@@ -1120,6 +1123,21 @@ def stream_task_execution(
                 retry_count=0,
             ),
         )
-    except BaseException:
+    except BaseException as exc:
         release_task_slot()
+        if isinstance(exc, (GeneratorExit, CancelledError)):
+            if task_running_started:
+                completed_count = complete_task(
+                    task_id=task_id,
+                    trace_steps=trace_steps,
+                    user_id=user_id,
+                    status="failed",
+                    execution_owner_id=TASK_EXECUTION_OWNER_ID,
+                )
+                if not terminal_write_lost(completed_count):
+                    record_failure_event(
+                        event_type="task_failed",
+                        code="task_stream_interrupted",
+                        message="Task stream was interrupted before completion.",
+                    )
         raise
