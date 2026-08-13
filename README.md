@@ -11,7 +11,8 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
 - `registry-governance` 已封板：provider/source 脱敏、冲突 alias、跨 settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
 - `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口，外部 SSE / trace / export / e2e shape 保持稳定。
-- `production-reliability-hardening` 已 100% 封板并完成 GitHub frontend-e2e 回归修复：按 user/session scope 清理 waiting queue、删除会话后清理残留 queued waiting entries、启动时 owner-aware 恢复 orphaned `running` 任务；任务进入 `queued/running` 使用 guarded 状态切换并周期刷新 DB heartbeat，完成时清理归属，且启动 running 时不会覆盖其他实例已持有的 running owner；重复 active acquire 不会授予第二执行权，未持有 slot 的执行流退出只清理 waiting、不释放 active slot；执行流 complete/failed/timed_out 终态写入带 owner guard，不覆盖其他实例已持有的 running 任务；stale heartbeat 接管默认关闭、显式配置阈值后可回收其他失联实例任务；pending/queued 任务若已在本进程 active，会走 reconnect 防止双执行；执行启动/等待/取消/收尾/失败自愈时不会把 terminal 任务误写回 `queued/running/cancelled/completed/failed/timed_out`，provider failure / timeout / tool terminal return 输给取消时按真实取消终态输出；任务详情 reconnect SSE 遇到 cancelled/timed_out 终态会按既有 cancelled/timeout + error 契约结束，且终态任务打开详情流会直接走 reconnect 输出终态 SSE，不再因打开时已终态返回 409；客户端 SSE 断开只释放本进程 active slot 并保留 running 任务供重连/取消，服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属；active slot、DELETE 204、SSE / trace / export shape 保持不变。
+- `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。主线收口了 waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放与失败自愈。
+- 关键可靠性契约：客户端 SSE 断开只释放本进程 active slot，并保留 running 任务供 reload/reconnect/cancel；服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属。active slot、DELETE 204、SSE / trace / export shape 保持不变。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
@@ -34,6 +35,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
 - frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
+- GitHub checks：`7550120 fix: 保留客户端断流运行任务` 已 `2/2` 通过
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
 - 普通沙箱访问本机 Docker/端口会被权限拦截时，按流程提权后重跑，不拿旧结果冒充新结果。
@@ -42,7 +44,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前开发计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. `production-reliability-hardening` 已补齐 GitHub frontend-e2e 回归：客户端 SSE 断开不再把 running 任务落 failed，reload/background session stream 与 reload recovery cancel targeted/full Chromium 复验通过，diagnostics finalize 在 main push strict `any` 下为 0 alert。
+2. 当前主线结论：`production-reliability-hardening` 已 100% 封板；本地 targeted/full/e2e/finalize 与 GitHub checks 均已确认，可进入下一主线。
 3. 下一轮进入后续候选主线选择，优先从产品体验、可观测体验、provider/tool 扩展或 CI/release 工程中选一个继续推进。
 4. 继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
 
@@ -64,8 +66,8 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 - 鉴权与数据层：JWT + refresh 会话管理、用户级设置与密钥加密、PostgreSQL 单后端运行时已落地。
 - 基础治理：`RBAC-lite`、`rag-rbac-lite`、shared/private 知识库语义、审计事件扩展已落地。
-- 执行可靠性：任务取消/超时、running task 恢复、任务/会话导出、usage dashboard 与主链路 e2e / CI tooling 已落地。
-- 当前进入 `production-reliability-hardening` 主线，继续围绕可靠性补红测和局部收口。
+- 执行可靠性：任务取消/超时、running task 恢复、任务/会话导出、usage dashboard、生产可靠性治理与主链路 e2e / CI tooling 已落地。
+- 当前准备进入下一主线，候选方向以产品体验、可观测体验、provider/tool 扩展或 CI/release 工程为主。
 
 ## SSE 与 TraceStep 契约（当前实现）
 

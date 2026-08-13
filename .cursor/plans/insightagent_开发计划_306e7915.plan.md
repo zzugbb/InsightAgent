@@ -2,17 +2,18 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening 与 production-reliability-hardening 均已封板。
 current_focus:
-  - 最新封板主线：production-reliability-hardening 已 100% 封板并完成 GitHub frontend-e2e 回归修复；queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、duplicate active acquire 防双执行、未持有 slot 不释放 active、complete_task owner guarded terminal write、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈、任务详情 reconnect SSE 的终态结束/终态打开，以及客户端断流保留 running / 服务端协程取消落 failed 均已收口。
+  - 最新封板主线：production-reliability-hardening 已 100% 封板，最新 GitHub checks 2/2 通过；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running / 服务端协程取消落 failed 均已收口。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening。
-  - 本轮新增封板验证：backend full slice、frontend node/lint/type、backend main/queue e2e、frontend full/queue Chromium、CI tooling 与 diff hygiene 均 fresh 通过。
+  - 最终封板验证：backend full slice、frontend node/lint/type、backend main/queue e2e、frontend full/queue Chromium、frontend diagnostics finalize、CI tooling、GitHub checks 2/2 与 diff hygiene 均通过。
   - 后续候选方向为 rag-product-experience、observability-experience、provider-tool-expansion、ci-release-engineering。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
   - 保持先补 failing test 再改实现
   - 不主动破坏外部 SSE / trace / export / e2e 契约
   - 每轮结束同步 README.md、backend/README.md、frontend/README.md、.cursor/plans
+  - 每个主线确认封板后整理四份活跃文档，只保留当前状态、验证基线、下一步计划/候选主线、稳定契约与少量高信号摘要
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
@@ -38,11 +39,11 @@ validation_baseline:
   frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: GitHub frontend-e2e run 31677886259 暴露 reload/background session stream 回归；已修复客户端 GeneratorExit 不再把 running 任务落 failed，服务端 CancelledError 仍 owner-guarded 落 failed；production_reliability 35/35、queue 66/66、task 361/361、settings 216/216、backend full slice 1939/1939、frontend node 77/77、frontend lint/type、targeted reload Chromium 2/2、frontend full Chromium 50 passed / 1 skipped、frontend diagnostics finalize strict any 0 alert fresh 通过。
+latest_validation_note: production-reliability-hardening 已 100% 封板；客户端 GeneratorExit 不再把 running 任务落 failed，服务端 CancelledError 仍 owner-guarded 落 failed；production_reliability 35/35、queue 66/66、task 361/361、settings 216/216、backend full slice 1939/1939、frontend node 77/77、frontend lint/type、targeted reload Chromium 2/2、frontend full Chromium 50 passed / 1 skipped、frontend diagnostics finalize strict any 0 alert、GitHub checks 2/2 均通过，可进入下一主线。
 todos:
   - id: docs-slimming
     status: completed
-    content: 四份活跃文档只保留当前状态、验证基线、后续候选主线、稳定契约和少量高信号摘要。
+    content: 四份活跃文档只保留当前状态、验证基线、后续候选主线、稳定契约和少量高信号摘要；主线封板后必须整理文档的规则已同步到 AGENTS.md 与 docs/development-runbook.md。
   - id: test-runtime-slice-split
     status: completed
     content: backend/scripts/test_tool_runtime_slice.py 已缩为兼容入口，测试主体拆到 backend/scripts/tool_runtime_slice/ 主题 mixin；二次细分后入口 363 行、最大主题模块约 4.7k 行，原入口命令保持不变。
@@ -72,7 +73,7 @@ todos:
     content: 已选择 production-reliability-hardening 作为当前主线；其余候选保留为后续方向。
   - id: production-reliability-hardening
     status: completed
-    content: 已 100% 封板并完成 GitHub frontend-e2e 回归修复；queue scope cleanup、session delete waiting cleanup、startup orphan running cleanup、execution owner/heartbeat 归属治理、running owner guarded start、duplicate active acquire 防双执行、未持有 slot 不释放 active、complete_task owner guarded terminal write、stale heartbeat 接管开关、active stream race 防双执行、terminal start/wait/cancel/complete race 防误复活/防覆盖、provider failure / timeout / tool terminal return lost-race 失败自愈、任务详情 reconnect SSE 的终态结束/终态打开、客户端断流保留 running 与服务端协程取消落 failed 均已收口；backend/frontend/e2e/CI finalize/diff 封板验证 fresh 通过。
+    content: 已 100% 封板；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running 与服务端协程取消落 failed 均已收口；backend/frontend/e2e/CI finalize/GitHub checks/diff 封板验证通过。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -115,16 +116,17 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - Frontend multi-task Chromium：默认 backend/frontend 下 Task Center 当前会话与全局多任务隔离通过。
 - Frontend reload isolation Chromium：默认 backend/frontend 下刷新后后台会话 stream 不误恢复、切回原会话恢复并可取消通过。
 - Frontend reload recovery Chromium：默认 backend/frontend 下 running task reload 后恢复并可取消通过。
-- Frontend Chromium e2e：本轮真实 backend/frontend 服务下 full 基线 `50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip，已由 frontend queue phase 单独覆盖。
+- Frontend Chromium e2e：最终本地 backend/frontend 服务下 full 基线 `50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip，已由 frontend queue phase 单独覆盖。
 - Frontend diagnostics finalize：main push strict `any` 下 error-context counters 为 0，通过。
+- GitHub checks：`7550120 fix: 保留客户端断流运行任务` 已 `2/2` 通过。
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过。
 - Diff hygiene：`git diff --check` 通过。
 
 ## 最近封板主线
 
-- `queue-and-concurrency-lite`：queued 状态、进程内执行槽位、queued cancel、恢复/隔离与低并发/full e2e 基线已收口。
-- `concurrency-fairness-policy`：可选 per-user/per-session 限额、capacity-aware FIFO、settings diagnostics、typed 契约与 full Chromium 封板复验已收口。
 - `registry-governance`：已封板；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口，不改变 settings/preflight/trace/export/audit/SSE 可见字段 shape。
+- `rag-governance-hardening`：已封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口。
+- `production-reliability-hardening`：已封板；任务队列清理、owner/heartbeat、guarded terminal writes、reconnect/断流语义、race 防误复活与最终 GitHub checks 2/2 均已收口。
 
 ## Pre-flight Cleanup
 
@@ -144,3 +146,4 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - 本计划文件是实时快照，不是历史日志仓库。
 - 重要历史事实保留为摘要；旧失败过程、重复验证清单和按轮流水账不继续堆积。
 - 每轮完成后同步 `README.md`、`backend/README.md`、`frontend/README.md` 与本计划文件。
+- 每个主线确认封板后，必须整理四份活跃文档的当前状态、验证基线、下一步计划/候选主线与稳定契约，收缩旧过程描述。
