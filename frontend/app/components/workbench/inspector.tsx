@@ -114,7 +114,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
     "comfortable",
   );
   const [traceSemanticFilter, setTraceSemanticFilter] = useState<
-    "all" | "planner" | "retrieval" | "calculator"
+    "all" | "planner" | "retrieval" | "calculator" | "failure"
   >("all");
   const [traceKindFilter, setTraceKindFilter] = useState<
     "all" | "thought" | "action" | "observation" | "tool" | "rag" | "other"
@@ -317,13 +317,16 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
           size="small"
           value={traceSemanticFilter}
           onChange={(v) =>
-            setTraceSemanticFilter(v as "all" | "planner" | "retrieval" | "calculator")
+            setTraceSemanticFilter(
+              v as "all" | "planner" | "retrieval" | "calculator" | "failure",
+            )
           }
           options={[
             { label: t.inspector.traceSemanticFilterAll, value: "all" },
             { label: t.inspector.traceSemanticFilterPlanner, value: "planner" },
             { label: t.inspector.traceSemanticFilterRetrieval, value: "retrieval" },
             { label: t.inspector.traceSemanticFilterCalculator, value: "calculator" },
+            { label: t.inspector.traceSemanticFilterFailure, value: "failure" },
           ]}
         />
         <Segmented
@@ -373,6 +376,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         <span>{t.inspector.traceSemanticFilterPlanner}: {traceSemanticStats.planner}</span>
         <span>{t.inspector.traceSemanticFilterRetrieval}: {traceSemanticStats.retrieval}</span>
         <span>{t.inspector.traceSemanticFilterCalculator}: {traceSemanticStats.calculator}</span>
+        <span>{t.inspector.traceSemanticFilterFailure}: {traceSemanticStats.failure}</span>
       </div>
 
       {traceView === "list" && filteredTraceSteps.length > TRACE_PREVIEW ? (

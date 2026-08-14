@@ -123,6 +123,7 @@ export type Messages = {
     semanticPlannerLabel: string;
     semanticRetrievalLabel: string;
     semanticCalculatorLabel: string;
+    semanticFailureLabel: string;
     openTaskDetail: string;
     openTaskDetailAria: string;
   };
@@ -402,6 +403,7 @@ export type Messages = {
     traceSemanticFilterPlanner: string;
     traceSemanticFilterRetrieval: string;
     traceSemanticFilterCalculator: string;
+    traceSemanticFilterFailure: string;
     traceSearchPlaceholder: string;
     traceDensityComfortable: string;
     traceDensityCompact: string;
@@ -672,6 +674,11 @@ export type Messages = {
     traceFilterTool: string;
     traceFilterRag: string;
     traceFilterOther: string;
+    traceSemanticFilterAll: string;
+    traceSemanticFilterPlanner: string;
+    traceSemanticFilterRetrieval: string;
+    traceSemanticFilterCalculator: string;
+    traceSemanticFilterFailure: string;
     traceSearchPlaceholder: string;
     traceDensityComfortable: string;
     traceDensityCompact: string;
@@ -691,6 +698,7 @@ export type Messages = {
     semanticPlannerLabel: string;
     semanticRetrievalLabel: string;
     semanticCalculatorLabel: string;
+    semanticFailureLabel: string;
     taskPromptTitle: string;
     finalAnswerTitle: string;
     finalAnswerEmpty: string;

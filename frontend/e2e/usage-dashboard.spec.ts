@@ -1256,8 +1256,10 @@ for (const acceptanceCase of [
       planner: 1,
       retrieval: 0,
       calculator: 0,
+      failure: 0,
     },
-    expectedTaskCenterSemanticSummary: "Planner 1 · Retrieval 0 · Calculator 0",
+    expectedTaskCenterSemanticSummary:
+      "Planner 1 · Retrieval 0 · Calculator 0 · Failure 0",
   },
   {
     profile: "retrieval_only" as const,
@@ -1271,8 +1273,10 @@ for (const acceptanceCase of [
       planner: 0,
       retrieval: 2,
       calculator: 0,
+      failure: 0,
     },
-    expectedTaskCenterSemanticSummary: "Planner 0 · Retrieval 2 · Calculator 0",
+    expectedTaskCenterSemanticSummary:
+      "Planner 0 · Retrieval 2 · Calculator 0 · Failure 0",
   },
   {
     profile: "calculator_only" as const,
@@ -1286,8 +1290,10 @@ for (const acceptanceCase of [
       planner: 0,
       retrieval: 0,
       calculator: 1,
+      failure: 0,
     },
-    expectedTaskCenterSemanticSummary: "Planner 0 · Retrieval 0 · Calculator 1",
+    expectedTaskCenterSemanticSummary:
+      "Planner 0 · Retrieval 0 · Calculator 1 · Failure 0",
   },
 ]) {
   test(`task detail replay preserves ${acceptanceCase.profile} registry trace metadata`, async ({
@@ -1368,6 +1374,13 @@ for (const acceptanceCase of [
     ).toContainText(
       new RegExp(
         `Calculator traces\\s*${acceptanceCase.expectedSemanticStats.calculator}`,
+      ),
+    );
+    await expect(
+      detailPage.getByTestId("task-detail-semantic-failure"),
+    ).toContainText(
+      new RegExp(
+        `Failure traces\\s*${acceptanceCase.expectedSemanticStats.failure}`,
       ),
     );
 

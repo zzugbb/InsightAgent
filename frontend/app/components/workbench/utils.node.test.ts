@@ -1211,6 +1211,64 @@ test("filterTraceSteps applies shared semantic and kind filters", () => {
   assert.deepEqual(filtered.map((step) => step.id), ["step-rag-followup"]);
 });
 
+test("filterTraceSteps matches failure semantic hints", () => {
+  const filtered = filterTraceSteps(
+    [
+      {
+        id: "step-ok",
+        type: "thought",
+        content: "Plan looks good",
+        seq: 1,
+        meta: null,
+      },
+      {
+        id: "step-error-event",
+        type: "observation",
+        content: "Remote failed",
+        seq: 2,
+        meta: {
+          error_event: {
+            code: "remote_error",
+            message: "upstream timeout",
+          },
+        },
+      },
+      {
+        id: "step-tool-error",
+        type: "action",
+        content: "Tool call failed",
+        seq: 3,
+        meta: {
+          tool: {
+            name: "provider_search",
+            status: "error",
+          },
+        },
+      },
+    ],
+    {
+      semanticFilter: "failure",
+    },
+  );
+
+  assert.deepEqual(
+    filtered.map((step) => step.id),
+    ["step-error-event", "step-tool-error"],
+  );
+  assert.equal(
+    matchesTraceStepSemanticFilter(
+      {
+        id: "step-content-timeout",
+        type: "observation",
+        content: "request timeout while reading response",
+        meta: null,
+      },
+      "failure",
+    ),
+    true,
+  );
+});
+
 test("matchesTraceStepSearchQuery matches preview policy keys for running tool steps", () => {
   const matches = matchesTraceStepSearchQuery(
     {
@@ -1679,6 +1737,7 @@ test("resolveTraceStepSemanticStats counts planner retrieval and calculator trac
     planner: 1,
     retrieval: 2,
     calculator: 1,
+    failure: 0,
   });
 });
 
@@ -1724,6 +1783,7 @@ test("resolveTraceStepSemanticStats counts name-only real retrieval and calc ste
     planner: 0,
     retrieval: 1,
     calculator: 1,
+    failure: 0,
   });
 });
 
@@ -1754,6 +1814,7 @@ test("resolveTraceStepSemanticStats counts local retrieval observation when no s
     planner: 0,
     retrieval: 2,
     calculator: 0,
+    failure: 0,
   });
 });
 
@@ -1784,6 +1845,7 @@ test("resolveTraceStepSemanticStats counts name-only planner steps without seman
     planner: 1,
     retrieval: 0,
     calculator: 0,
+    failure: 0,
   });
 });
 
@@ -1860,6 +1922,7 @@ test("resolveTaskSnapshotSummary carries semantic stats for task detail snapshot
     planner: 1,
     retrieval: 2,
     calculator: 1,
+    failure: 0,
   });
 });
 
@@ -2038,13 +2101,15 @@ test("formatTraceStepSemanticStatsSummary renders compact planner retrieval calc
       planner: 1,
       retrieval: 2,
       calculator: 0,
+      failure: 3,
     },
     {
       planner: "Planner",
       retrieval: "Retrieval",
       calculator: "Calculator",
+      failure: "Failure",
     },
   );
 
-  assert.equal(content, "Planner 1 · Retrieval 2 · Calculator 0");
+  assert.equal(content, "Planner 1 · Retrieval 2 · Calculator 0 · Failure 3");
 });

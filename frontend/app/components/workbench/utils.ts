@@ -67,7 +67,8 @@ export type TraceStepSemanticFilter =
   | "all"
   | "planner"
   | "retrieval"
-  | "calculator";
+  | "calculator"
+  | "failure";
 
 export type TraceStepKindFilter =
   | "all"
@@ -1216,6 +1217,9 @@ export function matchesTraceStepSemanticFilter(
   if (filter === "all") {
     return true;
   }
+  if (filter === "failure") {
+    return resolveTraceStepFailureInsight(step) !== null;
+  }
   return resolveTraceStepSemanticCategory(step) === filter;
 }
 
@@ -1249,11 +1253,15 @@ export function resolveTraceStepSemanticStats(
     planner: 0,
     retrieval: 0,
     calculator: 0,
+    failure: 0,
   };
   const hasStandaloneRetrievalFollowup = steps.some(
     (step) => Boolean(step.meta?.rag) || normalizeTraceStepKind(step) === "rag",
   );
   for (const step of steps) {
+    if (resolveTraceStepFailureInsight(step) !== null) {
+      stats.failure += 1;
+    }
     const semantic = resolveTraceStepSemanticCategory(step);
     if (semantic && semantic in stats) {
       stats[semantic] += 1;
@@ -1277,6 +1285,7 @@ export function formatTraceStepSemanticStatsSummary(
     `${labels.planner} ${stats.planner}`,
     `${labels.retrieval} ${stats.retrieval}`,
     `${labels.calculator} ${stats.calculator}`,
+    `${labels.failure} ${stats.failure}`,
   ].join(" · ");
 }
 

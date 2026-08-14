@@ -146,6 +146,7 @@ export function TaskCenter({
                   planner: t.taskCenter.semanticPlannerLabel,
                   retrieval: t.taskCenter.semanticRetrievalLabel,
                   calculator: t.taskCenter.semanticCalculatorLabel,
+                  failure: t.taskCenter.semanticFailureLabel,
                 }).toLowerCase()
               : "";
             const governanceKeywords = governance
@@ -221,6 +222,7 @@ export function TaskCenter({
                 planner: t.taskCenter.semanticPlannerLabel,
                 retrieval: t.taskCenter.semanticRetrievalLabel,
                 calculator: t.taskCenter.semanticCalculatorLabel,
+                failure: t.taskCenter.semanticFailureLabel,
               })
             : null;
           return (
@@ -313,6 +315,7 @@ export function TaskCenter({
       taskSnapshots,
       t.inspector,
       t.taskCenter.semanticCalculatorLabel,
+      t.taskCenter.semanticFailureLabel,
       t.taskCenter.semanticPlannerLabel,
       t.taskCenter.semanticRetrievalLabel,
       t.taskCenter.openTaskDetail,

@@ -85,6 +85,9 @@ export default function TaskDetailPage() {
   const [traceDensity, setTraceDensity] = useState<"comfortable" | "compact">(
     "comfortable",
   );
+  const [traceSemanticFilter, setTraceSemanticFilter] = useState<
+    "all" | "planner" | "retrieval" | "calculator" | "failure"
+  >("all");
   const [traceKindFilter, setTraceKindFilter] = useState<
     "all" | "thought" | "action" | "observation" | "tool" | "rag" | "other"
   >("all");
@@ -147,9 +150,10 @@ export default function TaskDetailPage() {
   const filteredTraceSteps = useMemo(() => {
     return filterTraceSteps(traceSteps, {
       kindFilter: traceKindFilter,
+      semanticFilter: traceSemanticFilter,
       searchQuery: traceSearchQuery,
     });
-  }, [traceKindFilter, traceSearchQuery, traceSteps]);
+  }, [traceKindFilter, traceSearchQuery, traceSemanticFilter, traceSteps]);
 
   const exportTask = async (format: "json" | "markdown") => {
     const exportTaskId = (task?.id ?? taskId).trim();
@@ -377,6 +381,13 @@ export default function TaskDetailPage() {
                     <span>{t.taskDetail.semanticCalculatorLabel}</span>
                     <strong>{taskSnapshot.semanticStats.calculator}</strong>
                   </div>
+                  <div
+                    className="inspector-kpi-item"
+                    data-testid="task-detail-semantic-failure"
+                  >
+                    <span>{t.taskDetail.semanticFailureLabel}</span>
+                    <strong>{taskSnapshot.semanticStats.failure}</strong>
+                  </div>
                 </div>
               </section>
             ) : null}
@@ -432,6 +443,39 @@ export default function TaskDetailPage() {
                 </div>
 
                 <div className="trace-filter-toolbar">
+                  <Segmented
+                    size="small"
+                    value={traceSemanticFilter}
+                    onChange={(v) =>
+                      setTraceSemanticFilter(
+                        v as
+                          | "all"
+                          | "planner"
+                          | "retrieval"
+                          | "calculator"
+                          | "failure",
+                      )
+                    }
+                    options={[
+                      { label: t.taskDetail.traceSemanticFilterAll, value: "all" },
+                      {
+                        label: t.taskDetail.traceSemanticFilterPlanner,
+                        value: "planner",
+                      },
+                      {
+                        label: t.taskDetail.traceSemanticFilterRetrieval,
+                        value: "retrieval",
+                      },
+                      {
+                        label: t.taskDetail.traceSemanticFilterCalculator,
+                        value: "calculator",
+                      },
+                      {
+                        label: t.taskDetail.traceSemanticFilterFailure,
+                        value: "failure",
+                      },
+                    ]}
+                  />
                   <Segmented
                     size="small"
                     value={traceKindFilter}
