@@ -1,7 +1,8 @@
 "use client";
 
-import { App, Button, Input, Modal, Segmented, Select, Space, Table, Tag } from "antd";
+import { App, Button, Input, Modal, Segmented, Select, Space, Table, Tag, Tooltip } from "antd";
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { apiJson } from "../../../lib/api-client";
@@ -9,7 +10,7 @@ import { toUserFacingError } from "../../../lib/errors";
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
 import type { AuditLogItem, AuditLogListResponse } from "./types";
-import { shortenId } from "./utils";
+import { resolveAuditTaskDetailHref, shortenId } from "./utils";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -851,8 +852,33 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
                   title: t.sidebar.audit.colTask,
                   key: "task_id",
                   width: 120,
-                  render: (_value, record) =>
-                    record.task_id ? shortenId(record.task_id) : "—",
+                  render: (_value, record) => {
+                    const taskHref = resolveAuditTaskDetailHref(record);
+                    if (!taskHref) {
+                      return "—";
+                    }
+                    const taskLabel = record.task_id
+                      ? shortenId(record.task_id)
+                      : t.sidebar.audit.taskLinked;
+                    return (
+                      <Space size={4}>
+                        <span>{taskLabel}</span>
+                        <Tooltip title={t.inspector.taskOpenDetail}>
+                          <Button
+                            size="small"
+                            type="text"
+                            className="audit-task-open-detail"
+                            data-testid="audit-task-open-detail"
+                            aria-label={t.inspector.taskOpenDetail}
+                            href={taskHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            icon={<ExternalLink size={14} aria-hidden />}
+                          />
+                        </Tooltip>
+                      </Space>
+                    );
+                  },
                 },
                 {
                   title: t.sidebar.audit.colTime,

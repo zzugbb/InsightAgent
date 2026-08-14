@@ -9,6 +9,7 @@ import {
   getStepTitle,
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
+  resolveAuditTaskDetailHref,
   resolveTaskSnapshotSummary,
   resolveTaskStreamTerminalReason,
   resolveTraceStepSemanticStats,
@@ -19,6 +20,30 @@ test("buildTaskDetailHref encodes task ids for replay links", () => {
   assert.equal(
     buildTaskDetailHref("task/with space?x=1"),
     "/tasks/task%2Fwith%20space%3Fx%3D1",
+  );
+});
+
+test("resolveAuditTaskDetailHref uses top-level or detail task ids", () => {
+  assert.equal(
+    resolveAuditTaskDetailHref({
+      task_id: "task/top level",
+      event_detail: { task_id: "task-detail" },
+    }),
+    "/tasks/task%2Ftop%20level",
+  );
+  assert.equal(
+    resolveAuditTaskDetailHref({
+      task_id: null,
+      event_detail: { task_id: "task/detail?x=1" },
+    }),
+    "/tasks/task%2Fdetail%3Fx%3D1",
+  );
+  assert.equal(
+    resolveAuditTaskDetailHref({
+      task_id: " ",
+      event_detail: { task_id: " " },
+    }),
+    null,
   );
 });
 

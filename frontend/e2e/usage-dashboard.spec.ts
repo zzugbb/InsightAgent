@@ -965,7 +965,36 @@ test("saved planning suite source propagates through runtime and export governan
   );
   await usageDetailPage.close();
 
-  await page.keyboard.press("Escape");
+  await page.locator(".usage-dashboard-ant-modal .ant-modal-close").click();
+  await expect(page.locator(".usage-dashboard-ant-modal")).toBeHidden({
+    timeout: 20_000,
+  });
+
+  await openSettingsMenu(page);
+  await page.getByTestId("settings-menu-audit").click();
+  await expect(page.locator(".audit-modal")).toBeVisible({ timeout: 20_000 });
+  const auditTaskFilter = page.getByTestId("audit-task-filter");
+  await auditTaskFilter.fill(taskId);
+  const auditTaskDetailButton = page.getByTestId("audit-task-open-detail").first();
+  await expect(auditTaskDetailButton).toBeVisible({ timeout: 20_000 });
+  await expect(auditTaskDetailButton).toHaveAttribute(
+    "href",
+    `/tasks/${encodeURIComponent(taskId)}`,
+  );
+  const [auditDetailPage] = await Promise.all([
+    page.waitForEvent("popup"),
+    auditTaskDetailButton.click(),
+  ]);
+  await auditDetailPage.waitForLoadState("domcontentloaded");
+  await expect(auditDetailPage.getByTestId("task-detail-page")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(auditDetailPage).toHaveURL(
+    new RegExp(`/tasks/${taskId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+  );
+  await auditDetailPage.close();
+  await page.locator(".audit-modal .ant-modal-close").click();
+  await expect(page.locator(".audit-modal")).toBeHidden({ timeout: 20_000 });
 });
 
 test("saved retrieval suite source propagates through runtime and export governance", async ({

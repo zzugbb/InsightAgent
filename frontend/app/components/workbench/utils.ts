@@ -392,6 +392,27 @@ export function buildTaskDetailHref(taskId: string): string {
   return `/tasks/${encodeURIComponent(taskId)}`;
 }
 
+export function resolveAuditTaskDetailHref(item: {
+  task_id?: unknown;
+  event_detail?: unknown;
+}): string | null {
+  const topLevelTaskId =
+    typeof item.task_id === "string" ? item.task_id.trim() : "";
+  if (topLevelTaskId) {
+    return buildTaskDetailHref(topLevelTaskId);
+  }
+
+  const detailTaskId =
+    item.event_detail &&
+    typeof item.event_detail === "object" &&
+    !Array.isArray(item.event_detail) &&
+    typeof (item.event_detail as { task_id?: unknown }).task_id === "string"
+      ? (item.event_detail as { task_id: string }).task_id.trim()
+      : "";
+  const taskId = detailTaskId || null;
+  return taskId ? buildTaskDetailHref(taskId) : null;
+}
+
 export function getSessionLabel(
   session: SessionSummary,
   workbench: Messages["workbench"],
