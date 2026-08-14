@@ -1885,6 +1885,56 @@ test("resolveTaskSnapshotSummary prefers final answer over last observation in t
   );
 });
 
+test("resolveTaskSnapshotSummary extracts terminal failure hints from trace diagnostics", () => {
+  const summary = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-failure-hint",
+      session_id: "session-failure-hint",
+      prompt: "Need a failure hint",
+      status: "failed",
+      trace_json: null,
+      created_at: "2026-07-01T00:00:00Z",
+      updated_at: "2026-07-01T00:00:01Z",
+    },
+    traceSteps: [
+      {
+        id: "step-observation",
+        type: "observation",
+        content: "Retrieved 2 documents before failure.",
+      },
+      {
+        id: "step-tool-error",
+        type: "action",
+        content: "Tool error: Provider Search",
+        meta: {
+          tool: {
+            name: "provider_search",
+            label: "Provider Search",
+            status: "error",
+            error: "upstream timed out after 30s",
+          },
+        },
+      },
+      {
+        id: "step-error-event",
+        type: "other",
+        content: "Task failed",
+        meta: {
+          error_event: {
+            code: "tool_execution_error",
+            message: "provider_search exhausted retries",
+          },
+        },
+      },
+    ],
+  });
+
+  assert.equal(
+    summary.failureHint,
+    "provider_search exhausted retries",
+  );
+});
+
 test("formatTraceStepSemanticStatsSummary renders compact planner retrieval calculator counts", () => {
   const content = formatTraceStepSemanticStatsSummary(
     {

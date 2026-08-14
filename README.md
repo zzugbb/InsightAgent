@@ -13,6 +13,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口，外部 SSE / trace / export / e2e shape 保持稳定。
 - `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。主线收口了 waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放与失败自愈。
 - 关键可靠性契约：客户端 SSE 断开只释放本进程 active slot，并保留 running 任务供 reload/reconnect/cancel；服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属。active slot、DELETE 204、SSE / trace / export shape 保持不变。
+- 当前主线已进入 `observability-experience`，首个切口已落地：任务快照会从 trace diagnostics 中提取失败线索，Task Center 可展示/搜索该线索，任务详情页会展示同一失败摘要。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
@@ -25,14 +26,16 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`78/78` 通过
 - RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
 - Result summary targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，`30/30` 通过
-- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`77/77` 通过
+- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`78/78` 通过
 - `cd frontend && npm run lint`：通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
+- frontend targeted TS：本轮涉及的 workbench utils、Task Center、任务详情页、i18n 与 trace type 通过 targeted `tsc`
 - `backend/.venv/bin/python -m py_compile` 本轮相关 backend route/test 模块：通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
 - backend e2e queue phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion，通过
 - frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
+- frontend task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1245`，`3/3` 通过
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
 - frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
 - GitHub checks：`7550120 fix: 保留客户端断流运行任务` 已 `2/2` 通过
@@ -44,8 +47,8 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前开发计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. 当前主线结论：`production-reliability-hardening` 已 100% 封板；本地 targeted/full/e2e/finalize 与 GitHub checks 均已确认，可进入下一主线。
-3. 下一轮进入后续候选主线选择，优先从产品体验、可观测体验、provider/tool 扩展或 CI/release 工程中选一个继续推进。
+2. 当前主线：`observability-experience` 已启动，第一步完成任务失败线索摘要与任务中心/任务详情复用。
+3. 下一步继续围绕 Trace、Task Center、任务详情、失败诊断、usage/audit 关联和回放效率补红测推进。
 4. 继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
 
 ## 后续候选主线
@@ -67,7 +70,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - 鉴权与数据层：JWT + refresh 会话管理、用户级设置与密钥加密、PostgreSQL 单后端运行时已落地。
 - 基础治理：`RBAC-lite`、`rag-rbac-lite`、shared/private 知识库语义、审计事件扩展已落地。
 - 执行可靠性：任务取消/超时、running task 恢复、任务/会话导出、usage dashboard、生产可靠性治理与主链路 e2e / CI tooling 已落地。
-- 当前准备进入下一主线，候选方向以产品体验、可观测体验、provider/tool 扩展或 CI/release 工程为主。
+- 当前进入 `observability-experience` 主线，优先提升失败诊断、任务回放、Trace 与 Task Center 的可读性和定位效率。
 
 ## SSE 与 TraceStep 契约（当前实现）
 

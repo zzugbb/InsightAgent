@@ -64,6 +64,11 @@ export type TraceStepMeta = {
     retry_count?: number;
     error?: string | null;
   };
+  error_event?: {
+    code?: string;
+    message?: string;
+    detail?: string;
+  };
   rag?: {
     chunks: string[];
     knowledge_base_id?: string;

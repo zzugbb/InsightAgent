@@ -288,6 +288,16 @@ export default function TaskDetailPage() {
               </p>
             ) : null}
 
+            {taskSnapshot?.failureHint ? (
+              <section
+                className="inspector-block task-detail-failure-block"
+                data-testid="task-detail-failure-hint"
+              >
+                <p className="summary-label">{t.taskDetail.failureHintTitle}</p>
+                <p className="task-snapshot-failure">{taskSnapshot.failureHint}</p>
+              </section>
+            ) : null}
+
             {taskSnapshot?.governance ? (
               <section
                 className="inspector-block task-detail-governance-block"

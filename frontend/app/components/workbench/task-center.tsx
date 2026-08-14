@@ -15,7 +15,6 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
 import type { SessionSummary, TaskSummary } from "./types";
 import {
-  extractTaskFailureHint,
   formatTraceStepSemanticStatsSummary,
   formatTimestamp,
   getTaskLabel,
@@ -162,6 +161,7 @@ export function TaskCenter({
               prompt.includes(q)
               || id.includes(q)
               || semanticSummary.includes(q)
+              || Boolean(snapshot?.failureHint?.toLowerCase().includes(q))
               || governanceKeywords.some((item) => item.includes(q))
             );
           });
@@ -191,8 +191,8 @@ export function TaskCenter({
         title: t.taskCenter.tableTask,
         key: "task",
         render: (_value: unknown, task: TaskSummary) => {
-          const failedHint = extractTaskFailureHint(task);
           const snapshot = taskSnapshots.get(task.id);
+          const failedHint = snapshot?.failureHint ?? null;
           const governance = snapshot?.governance;
           const governanceAllowedTools =
             governance && governance.allowedToolLabels.length > 0

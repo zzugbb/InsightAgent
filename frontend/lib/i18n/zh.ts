@@ -729,6 +729,7 @@ export const zh: Messages = {
     ragHitsLabel: "RAG 命中",
     ragKnowledgeBasesLabel: (ids: string) => `命中知识库：${ids}`,
     usageLead: "用量统计",
+    failureHintTitle: "失败线索",
     traceTitle: "执行轨迹",
     traceViewList: "时间线",
     traceViewFlow: "流程图",

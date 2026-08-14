@@ -2,12 +2,13 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening 与 production-reliability-hardening 均已封板。
 current_focus:
+  - 当前主线：observability-experience 已启动；首个切口完成任务失败线索摘要，Task Center 可展示/搜索 trace diagnostics failure hint，任务详情页展示同一失败摘要，外部 SSE / trace / export shape 不变。
   - 最新封板主线：production-reliability-hardening 已 100% 封板，最新 GitHub checks 2/2 通过；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running / 服务端协程取消落 failed 均已收口。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening。
   - 最终封板验证：backend full slice、frontend node/lint/type、backend main/queue e2e、frontend full/queue Chromium、frontend diagnostics finalize、CI tooling、GitHub checks 2/2 与 diff hygiene 均通过。
-  - 后续候选方向为 rag-product-experience、observability-experience、provider-tool-expansion、ci-release-engineering。
+  - 后续候选方向为 rag-product-experience、provider-tool-expansion、ci-release-engineering；当前优先推进 observability-experience。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
   - 保持先补 failing test 再改实现
@@ -25,21 +26,23 @@ validation_baseline:
   backend_rag_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag (78/78)
   backend_rag_route_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route (2/2)
   backend_result_summary_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary (30/30)
-  frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (77/77)
+  frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (78/78)
   frontend_lint: cd frontend && npm run lint
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
+  frontend_targeted_ts: targeted tsc for workbench utils, Task Center, task detail page, i18n and trace types
+  frontend_task_detail_replay_chromium: e2e/usage-dashboard.spec.ts:1245 (3/3)
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
-  backend_e2e_queue: TASK_QUEUE_MAX_CONCURRENT=1 backend 上 queue phase current-turn fresh passed (queued cancel + safe wait_position + settings diagnostics + followup completion + typed queue governance checks)
-  frontend_queue_phase: low-concurrency backend/frontend scripts/ci_run_frontend_e2e.sh --phase queue current-turn fresh passed (1 passed); default full skips this low-concurrency-only test
+  backend_e2e_queue: TASK_QUEUE_MAX_CONCURRENT=1 backend queue phase passed (queued cancel + safe wait_position + settings diagnostics + followup completion + typed queue governance checks)
+  frontend_queue_phase: low-concurrency backend/frontend scripts/ci_run_frontend_e2e.sh --phase queue passed (1 passed); default full skips this low-concurrency-only test
   frontend_running_cancel_chromium: default backend/frontend targeted Chromium passed (running task cancel reaches server terminal state and clears live UI)
   frontend_multitask_task_center_chromium: default backend/frontend targeted Chromium passed (task center separates active session tasks from global concurrent tasks)
   frontend_reload_isolation_chromium: default backend/frontend targeted Chromium passed (reload keeps background session stream detached until that session is active)
   frontend_reload_recovery_chromium: default backend/frontend targeted Chromium passed (running task can recover after reload and be cancelled)
-  frontend_chromium_e2e: full Chromium current-turn fresh passed, 50 passed / 1 skipped against real backend/frontend services
+  frontend_chromium_e2e: full Chromium passed, 50 passed / 1 skipped against real backend/frontend services
   frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: production-reliability-hardening 已 100% 封板；客户端 GeneratorExit 不再把 running 任务落 failed，服务端 CancelledError 仍 owner-guarded 落 failed；production_reliability 35/35、queue 66/66、task 361/361、settings 216/216、backend full slice 1939/1939、frontend node 77/77、frontend lint/type、targeted reload Chromium 2/2、frontend full Chromium 50 passed / 1 skipped、frontend diagnostics finalize strict any 0 alert、GitHub checks 2/2 均通过，可进入下一主线。
+latest_validation_note: observability-experience 已启动；本轮完成任务失败线索摘要与 Task Center/任务详情复用，frontend node 78/78、frontend lint、targeted TS、task detail replay Chromium 3/3、backend full slice 1939/1939 均通过；完整 tsc 仍触发既有 node test fixture/config 噪音，未作为本轮基线。
 todos:
   - id: docs-slimming
     status: completed
@@ -70,10 +73,13 @@ todos:
     content: 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、reserved alias、shared/private 边界、route/runtime trace/export/display、错误出口、前端治理表和 trace 搜索均已完成治理收口并通过完整复验。
   - id: next-mainline-candidates
     status: completed
-    content: 已选择 production-reliability-hardening 作为当前主线；其余候选保留为后续方向。
+    content: production-reliability-hardening 已封板；observability-experience 已选为当前主线，其余候选保留为后续方向。
   - id: production-reliability-hardening
     status: completed
     content: 已 100% 封板；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running 与服务端协程取消落 failed 均已收口；backend/frontend/e2e/CI finalize/GitHub checks/diff 封板验证通过。
+  - id: observability-experience
+    status: in_progress
+    content: 当前主线；第一步已完成任务失败线索摘要，resolveTaskSnapshotSummary 从 trace diagnostics 提取 failureHint，Task Center 展示/搜索该线索，任务详情页展示同一失败摘要；下一步继续围绕 Trace、Task Center、失败诊断、usage/audit 关联与任务回放效率补红测推进。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -107,16 +113,18 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - Backend RAG route slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，当前 `2/2`。
 - Backend result summary slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，当前 `30/30`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
-- Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel、queued SSE safe wait_position、settings diagnostics、typed queue governance checks 与 followup completion current-turn fresh 通过。
-- Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `77/77`。
+- Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel、queued SSE safe wait_position、settings diagnostics、typed queue governance checks 与 followup completion 通过。
+- Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `78/78`。
 - Frontend lint：`cd frontend && npm run lint` 通过。
 - Frontend type contract：TaskQueueDiagnostics 基础运行态计数、governance 字段必填与 pressure_state/waiting_policy 枚举契约通过。
-- Frontend queue phase：低并发 backend/frontend 下 selected session 恢复 queued 任务、Inspector 排队位置与 queued cancel current-turn fresh 通过；默认 full Chromium 下该专项显式 skip。
+- Frontend targeted TS：本轮涉及的 workbench utils、Task Center、任务详情页、i18n 与 trace type 通过 targeted `tsc`。
+- Frontend queue phase：低并发 backend/frontend 下 selected session 恢复 queued 任务、Inspector 排队位置与 queued cancel 通过；默认 full Chromium 下该专项显式 skip。
 - Frontend running cancel Chromium：默认 backend/frontend 下 UI cancel 后服务端 terminal、Inspector phase 与 composer 恢复通过。
 - Frontend multi-task Chromium：默认 backend/frontend 下 Task Center 当前会话与全局多任务隔离通过。
 - Frontend reload isolation Chromium：默认 backend/frontend 下刷新后后台会话 stream 不误恢复、切回原会话恢复并可取消通过。
 - Frontend reload recovery Chromium：默认 backend/frontend 下 running task reload 后恢复并可取消通过。
 - Frontend Chromium e2e：最终本地 backend/frontend 服务下 full 基线 `50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip，已由 frontend queue phase 单独覆盖。
+- Frontend task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1245`，`3/3` 通过。
 - Frontend diagnostics finalize：main push strict `any` 下 error-context counters 为 0，通过。
 - GitHub checks：`7550120 fix: 保留客户端断流运行任务` 已 `2/2` 通过。
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过。
@@ -138,7 +146,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 ## 后续维护线
 
 - `production-reliability-hardening` 已 100% 封板；后续继续以先红测、再实现、再 targeted/full slice 的方式推进新主线。
-- 后续候选主线：`rag-product-experience`、`observability-experience`、`provider-tool-expansion`、`ci-release-engineering`；正式开启前先确认主线验收边界和首批红测计划。
+- 当前主线：`observability-experience`，优先提升 Trace、Task Center、失败诊断、任务回放和 usage/audit 关联体验。
+- 后续候选主线：`rag-product-experience`、`provider-tool-expansion`、`ci-release-engineering`；正式开启前先确认主线验收边界和首批红测计划。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 维护约定

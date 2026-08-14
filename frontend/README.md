@@ -15,12 +15,15 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `registry-governance` 已封板：provider/source diagnostics、settings/preflight、runtime artifacts、trace/export/audit/SSE 与 task/usage 回放语义已完成脱敏和 alias 对齐，前端可见字段 shape 不变。
 - 后端 `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
 - 后端 `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。前端相关契约已固定：客户端 SSE 断开保留 running 任务供 reload/reconnect/cancel，服务端执行协程取消才落 failed；前端可见删除会话响应、SSE、trace 与 export shape 不变。
+- 当前进入 `observability-experience` 主线，首个切口已落地：任务快照会从 trace diagnostics 中提取失败线索，Task Center 支持展示/搜索该线索，任务详情页展示同一失败摘要。
 
 ## 当前验证基线
 
-- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`77/77` 通过
+- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`78/78` 通过
 - `cd frontend && npm run lint`：通过
 - `npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts`：通过
+- targeted TS：本轮涉及的 workbench utils、Task Center、任务详情页、i18n 与 trace type 通过 targeted `tsc`
+- task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1245`，`3/3` 通过
 - frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
@@ -36,14 +39,14 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. 当前主线结论：`production-reliability-hardening` 已 100% 封板；本地 targeted/full/e2e/finalize 与 GitHub checks 均已确认，可进入下一主线。
-3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定。
+2. 当前主线：`observability-experience` 已启动，第一步完成任务失败线索摘要与任务中心/任务详情复用。
+3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定，并继续补齐失败诊断和任务回放效率。
 4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。
 
 ## 后续候选主线
 
 - `rag-product-experience`：知识库版本对比、文档治理操作、检索解释、召回质量呈现与 RAG 调试体验。
-- `observability-experience`：优化 Workbench、Task Center、Trace、失败诊断、任务回放和知识库治理的可读性与操作效率。
+- `observability-experience`：当前主线；优化 Workbench、Task Center、Trace、失败诊断、任务回放和知识库治理的可读性与操作效率。
 - `provider-tool-expansion`：配合后端新增 provider/tool 协议，保持 settings/preflight/runtime/trace/export 显示契约稳定。
 - `ci-release-engineering`：把 frontend node/type/lint、targeted Chromium、queue phase 与 full Chromium 基线沉淀为更明确的发布前门禁。
 
@@ -66,6 +69,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - 实时流、持久化 trace 与导出回放当前共用同一套 `TraceStep` 消费主干，前端优先避免派生本地专用语义。
 - `tool_end.result_summary`、preview/output key、retrieval follow-up 与 registry diagnostics 已进入工作台主展示链，当前重点是继续跟随后端消除 helper fallback 漏洞。
+- 任务失败线索已进入 `resolveTaskSnapshotSummary`，Task Center 和任务详情页共享同一失败摘要来源。
 - running task recovery、remote cancel、model settings diagnostics 与知识库治理 shared 权限是当前最容易回归的前端运行态重点。
 - 当前前端回归重点仍围绕 workbench 主链、remote errors、settings、usage dashboard 与 common tooling。
 
