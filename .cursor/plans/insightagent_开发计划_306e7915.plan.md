@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening 与 production-reliability-hardening 均已封板。
 current_focus:
-  - 当前主线：observability-experience 已推进到约 32%；已完成任务失败线索摘要与来源分类，Task Center 可展示/搜索 trace diagnostics failure hint 与来源，任务详情页展示同一失败摘要，Usage Dashboard 任务榜与 Audit Logs 任务列均可直接打开任务详情回放，外部 SSE / trace / export shape 不变。
+  - 当前主线：observability-experience 已推进到约 40%；已完成任务失败线索摘要与来源分类，Task Center 可展示/搜索 trace diagnostics failure hint 与来源，任务详情页展示同一失败摘要，Usage Dashboard 任务榜会显示失败摘要并可直接打开任务详情回放，Audit Logs 任务列也可进入同一回放页，外部 SSE / trace / export shape 不变。
   - 最新封板主线：production-reliability-hardening 已 100% 封板，最新 GitHub checks 2/2 通过；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running / 服务端协程取消落 failed 均已收口。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
@@ -18,7 +18,7 @@ constraints:
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1939/1939)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1941/1941)
   backend_production_reliability_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability (35/35)
   backend_queue_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue (66/66)
   backend_task_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task (361/361)
@@ -26,10 +26,10 @@ validation_baseline:
   backend_rag_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag (78/78)
   backend_rag_route_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route (2/2)
   backend_result_summary_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary (30/30)
-  frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (81/81)
+  frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (82/82)
   frontend_lint: cd frontend && npm run lint
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
-  frontend_targeted_ts: targeted tsc for workbench utils, Task Center, task detail page, i18n and trace types
+  frontend_targeted_ts: targeted tsc for workbench utils, Usage Dashboard, types and i18n
   frontend_task_detail_replay_chromium: e2e/usage-dashboard.spec.ts:1245 (3/3)
   frontend_usage_audit_to_detail_chromium: e2e/usage-dashboard.spec.ts:774 (1/1)
   backend_e2e_main: baseline / main / export consistency / cancel-timeout passed against local backend
@@ -43,7 +43,7 @@ validation_baseline:
   frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: observability-experience 继续推进；本轮完成 Audit Logs 任务列到任务详情回放入口，并保持 Usage Dashboard 任务榜回放链路稳定；frontend node 81/81、frontend lint、frontend type contract、targeted TS、backend full slice 1939/1939、usage/audit-to-detail Chromium 1/1、diff hygiene 与备份计划 diff 检查均通过。
+latest_validation_note: observability-experience 继续推进；本轮完成 Usage Dashboard top tasks 失败摘要派生与前端展示，并保持 Usage Dashboard / Audit Logs 任务详情回放链路稳定；frontend node 82/82、frontend lint、frontend type contract、targeted TS、backend usage_dashboard 40/40、backend full slice 1941/1941、usage/audit-to-detail Chromium 1/1、diff hygiene 与备份计划 diff 检查均通过。
 todos:
   - id: docs-slimming
     status: completed
@@ -80,7 +80,7 @@ todos:
     content: 已 100% 封板；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running 与服务端协程取消落 failed 均已收口；backend/frontend/e2e/CI finalize/GitHub checks/diff 封板验证通过。
   - id: observability-experience
     status: in_progress
-    content: 当前主线，进度约 32%；已完成任务失败线索摘要与来源分类，resolveTaskSnapshotSummary 从 trace diagnostics 提取 failureHint/failureSource，Task Center 展示/搜索该线索与来源，任务详情页展示同一失败摘要，Usage Dashboard 任务榜与 Audit Logs 任务列均可直接打开任务详情回放；下一步继续围绕 Trace、Task Center、失败诊断、usage/audit 关联与任务回放效率补红测推进。
+    content: 当前主线，进度约 40%；已完成任务失败线索摘要与来源分类，resolveTaskSnapshotSummary 从 trace diagnostics 提取 failureHint/failureSource，Task Center 展示/搜索该线索与来源，任务详情页展示同一失败摘要，Usage Dashboard 任务榜显示失败摘要并可直接打开任务详情回放，Audit Logs 任务列也可进入同一回放页；下一步继续围绕 Trace 搜索/过滤、Task Center 失败定位、失败诊断聚合、audit 详情可读性与任务回放效率补红测推进。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -105,7 +105,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1939/1939`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1941/1941`。
 - Backend production reliability slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`，当前 `35/35`。
 - Backend queue slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`，当前 `66/66`。
 - Backend task slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`，当前 `361/361`。
@@ -113,12 +113,13 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - Backend RAG slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，当前 `78/78`。
 - Backend RAG route slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，当前 `2/2`。
 - Backend result summary slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，当前 `30/30`。
+- Backend usage dashboard slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_dashboard`，当前 `40/40`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel、queued SSE safe wait_position、settings diagnostics、typed queue governance checks 与 followup completion 通过。
-- Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `81/81`。
+- Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `82/82`。
 - Frontend lint：`cd frontend && npm run lint` 通过。
 - Frontend type contract：TaskQueueDiagnostics 基础运行态计数、governance 字段必填与 pressure_state/waiting_policy 枚举契约通过。
-- Frontend targeted TS：本轮涉及的 workbench utils、Task Center、任务详情页、i18n 与 trace type 通过 targeted `tsc`。
+- Frontend targeted TS：本轮涉及的 workbench utils、Usage Dashboard、types 与 i18n 通过 targeted `tsc`。
 - Frontend queue phase：低并发 backend/frontend 下 selected session 恢复 queued 任务、Inspector 排队位置与 queued cancel 通过；默认 full Chromium 下该专项显式 skip。
 - Frontend running cancel Chromium：默认 backend/frontend 下 UI cancel 后服务端 terminal、Inspector phase 与 composer 恢复通过。
 - Frontend multi-task Chromium：默认 backend/frontend 下 Task Center 当前会话与全局多任务隔离通过。
@@ -148,7 +149,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 ## 后续维护线
 
 - `production-reliability-hardening` 已 100% 封板；后续继续以先红测、再实现、再 targeted/full slice 的方式推进新主线。
-- 当前主线：`observability-experience`，进度约 32%，优先提升 Trace、Task Center、失败诊断、任务回放和 usage/audit 关联体验。
+- 当前主线：`observability-experience`，进度约 40%，优先提升 Trace、Task Center、失败诊断、任务回放和 usage/audit 关联体验。
 - 后续候选主线：`rag-product-experience`、`provider-tool-expansion`、`ci-release-engineering`；正式开启前先确认主线验收边界和首批红测计划。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
@@ -158,3 +159,4 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - 重要历史事实保留为摘要；旧失败过程、重复验证清单和按轮流水账不继续堆积。
 - 每轮完成后同步 `README.md`、`backend/README.md`、`frontend/README.md` 与本计划文件。
 - 每个主线确认封板后，必须整理四份活跃文档的当前状态、验证基线、下一步计划/候选主线与稳定契约，收缩旧过程描述。
+  backend_usage_dashboard_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_dashboard (40/40)

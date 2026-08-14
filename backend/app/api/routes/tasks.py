@@ -775,6 +775,8 @@ class TaskUsageTopTaskRow(BaseModel):
     created_at: str
     updated_at: str
     source_kind: str = "legacy"
+    failure_hint: str | None = None
+    failure_source: str | None = None
     governance: TaskGovernanceSummary | None = None
 
 

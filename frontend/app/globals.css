@@ -3541,6 +3541,12 @@ code {
   line-height: 1.45;
 }
 
+.usage-task-failure {
+  color: #b42318 !important;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .usage-session-governance {
   color: var(--text-secondary);
   font-size: 0.72rem;

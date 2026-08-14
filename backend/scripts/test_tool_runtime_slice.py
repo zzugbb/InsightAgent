@@ -290,6 +290,7 @@ from tool_runtime_slice.settings_registry import SettingsRegistryMixin
 from tool_runtime_slice.task_routes_usage_governance import TaskRoutesUsageGovernanceMixin
 from tool_runtime_slice.task_trace_response_summaries import TaskTraceResponseSummariesMixin
 from tool_runtime_slice.task_usage_dashboard import TaskUsageDashboardMixin
+from tool_runtime_slice.task_usage_observability import TaskUsageObservabilityMixin
 from tool_runtime_slice.task_session_export_markdown import TaskSessionExportMarkdownMixin
 from tool_runtime_slice.session_export_markdown import SessionExportMarkdownMixin
 from tool_runtime_slice.task_export_response_summary import TaskExportResponseSummaryMixin
@@ -321,6 +322,7 @@ class ToolRuntimeSliceTests(
     TaskRoutesUsageGovernanceMixin,
     TaskTraceResponseSummariesMixin,
     TaskUsageDashboardMixin,
+    TaskUsageObservabilityMixin,
     TaskSessionExportMarkdownMixin,
     TaskSessionExportPayloadMixin,
     SessionExportMarkdownMixin,

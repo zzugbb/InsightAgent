@@ -260,6 +260,13 @@ export type UsageDashboardTaskRow = {
   created_at: string;
   updated_at: string;
   source_kind: "provider" | "estimated" | "mixed" | "legacy";
+  failure_hint?: string | null;
+  failure_source?:
+    | "error_event"
+    | "tool_error"
+    | "trace_content"
+    | "legacy_trace"
+    | null;
   governance?: TaskGovernanceSummary | null;
 };
 

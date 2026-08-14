@@ -16,7 +16,12 @@ import type {
   UsageDashboardSessionRow,
   UsageDashboardTaskRow,
 } from "./types";
-import { buildTaskDetailHref, shortenId, API_BASE_URL } from "./utils";
+import {
+  API_BASE_URL,
+  buildTaskDetailHref,
+  formatTaskFailureSummary,
+  shortenId,
+} from "./utils";
 
 type UsageDashboardModalProps = {
   open: boolean;
@@ -303,6 +308,19 @@ export function UsageDashboardModal({
           governance && governance.allowed_tool_labels.length > 0
             ? governance.allowed_tool_labels
             : governance?.allowed_tool_names ?? [];
+        const failureSummary = formatTaskFailureSummary(
+          {
+            failureHint: row.failure_hint,
+            failureSource: row.failure_source,
+          },
+          {
+            failureHintTitle: t.taskDetail.failureHintTitle,
+            taskFailureSourceErrorEvent: t.inspector.taskFailureSourceErrorEvent,
+            taskFailureSourceToolError: t.inspector.taskFailureSourceToolError,
+            taskFailureSourceTraceContent: t.inspector.taskFailureSourceTraceContent,
+            taskFailureSourceLegacyTrace: t.inspector.taskFailureSourceLegacyTrace,
+          },
+        );
         return (
           <div className="usage-task-prompt-cell">
             <strong title={prompt}>{prompt}</strong>
@@ -328,6 +346,14 @@ export function UsageDashboardModal({
                 .filter((item): item is string => Boolean(item))
                 .join(" · ")}
             </span>
+            {failureSummary ? (
+              <span
+                className="usage-task-failure"
+                data-testid="usage-task-failure-summary"
+              >
+                {failureSummary}
+              </span>
+            ) : null}
           </div>
         );
       },

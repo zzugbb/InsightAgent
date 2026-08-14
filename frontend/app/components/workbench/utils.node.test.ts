@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   filterTraceSteps,
   buildTaskDetailHref,
+  formatTaskFailureSummary,
   formatTraceStepSemanticStatsSummary,
   formatTraceStepMetaSubtitle,
   getStepTitle,
@@ -43,6 +44,36 @@ test("resolveAuditTaskDetailHref uses top-level or detail task ids", () => {
       task_id: " ",
       event_detail: { task_id: " " },
     }),
+    null,
+  );
+});
+
+test("formatTaskFailureSummary renders safe failure hint and source", () => {
+  const labels = {
+    failureHintTitle: "Failure hint",
+    taskFailureSourceErrorEvent: "SSE error",
+    taskFailureSourceToolError: "Tool error",
+    taskFailureSourceTraceContent: "Trace content",
+    taskFailureSourceLegacyTrace: "Persisted trace",
+  };
+  assert.equal(
+    formatTaskFailureSummary(
+      {
+        failureHint: " upstream timed out after 30s ",
+        failureSource: "tool_error",
+      },
+      labels,
+    ),
+    "Failure hint · Tool error: upstream timed out after 30s",
+  );
+  assert.equal(
+    formatTaskFailureSummary(
+      {
+        failureHint: "  ",
+        failureSource: "tool_error",
+      },
+      labels,
+    ),
     null,
   );
 });

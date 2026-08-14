@@ -596,6 +596,39 @@ export function formatTaskFailureSourceLabel(
   return labels.taskFailureSourceTraceContent;
 }
 
+function isTaskFailureSource(value: unknown): value is TaskFailureSource {
+  return (
+    value === "error_event" ||
+    value === "tool_error" ||
+    value === "trace_content" ||
+    value === "legacy_trace"
+  );
+}
+
+export function formatTaskFailureSummary(
+  args: {
+    failureHint?: unknown;
+    failureSource?: unknown;
+  },
+  labels: Pick<Messages["taskDetail"], "failureHintTitle"> &
+    Pick<
+      Messages["inspector"],
+      | "taskFailureSourceErrorEvent"
+      | "taskFailureSourceToolError"
+      | "taskFailureSourceTraceContent"
+      | "taskFailureSourceLegacyTrace"
+    >,
+): string | null {
+  if (typeof args.failureHint !== "string" || !args.failureHint.trim()) {
+    return null;
+  }
+  const hint = truncateTaskDiagnostic(args.failureHint);
+  const sourceLabel = isTaskFailureSource(args.failureSource)
+    ? formatTaskFailureSourceLabel(args.failureSource, labels)
+    : null;
+  return `${labels.failureHintTitle}${sourceLabel ? ` · ${sourceLabel}` : ""}: ${hint}`;
+}
+
 function normalizeTraceContent(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;

@@ -2375,6 +2375,104 @@ def get_trace_step_display_content(step: TraceStep) -> str:
     return "\n".join([*base_lines, *diagnostics_lines])
 
 
+_TASK_FAILURE_SOURCE_VALUES = {
+    "error_event",
+    "tool_error",
+    "trace_content",
+    "legacy_trace",
+}
+
+
+def _truncate_task_failure_hint(value: str) -> str:
+    normalized = " ".join(value.strip().split())
+    return f"{normalized[:96]}..." if len(normalized) > 96 else normalized
+
+
+def _normalize_task_failure_hint(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    safe_value = _redact_trace_http_json_export_content_fallback(value)
+    return _truncate_task_failure_hint(safe_value)
+
+
+def _normalize_task_failure_source(value: object) -> str | None:
+    normalized = str(value or "").strip()
+    return normalized if normalized in _TASK_FAILURE_SOURCE_VALUES else None
+
+
+def _trace_step_meta_payload(step: TraceStep) -> dict[str, object]:
+    meta = getattr(step, "meta", None)
+    if meta is None:
+        return {}
+    if hasattr(meta, "model_dump"):
+        payload = meta.model_dump(exclude_none=True)
+        return payload if isinstance(payload, dict) else {}
+    if isinstance(meta, dict):
+        return dict(meta)
+    return {}
+
+
+def _resolve_trace_step_failure_insight(
+    step: TraceStep,
+) -> dict[str, str] | None:
+    meta = _trace_step_meta_payload(step)
+    error_event = meta.get("error_event")
+    if isinstance(error_event, dict):
+        for key in ("message", "detail", "code"):
+            hint = _normalize_task_failure_hint(error_event.get(key))
+            if hint:
+                return {"failure_hint": hint, "failure_source": "error_event"}
+
+    tool_meta = meta.get("tool")
+    if isinstance(tool_meta, dict):
+        hint = _normalize_task_failure_hint(tool_meta.get("error"))
+        if hint:
+            return {"failure_hint": hint, "failure_source": "tool_error"}
+        if str(tool_meta.get("status") or "").strip().lower() == "error":
+            content_hint = _normalize_task_failure_hint(
+                get_trace_step_display_content(step)
+            )
+            if content_hint:
+                return {
+                    "failure_hint": content_hint,
+                    "failure_source": "tool_error",
+                }
+
+    content_hint = _normalize_task_failure_hint(get_trace_step_display_content(step))
+    if content_hint:
+        lower_content = content_hint.lower()
+        if any(
+            keyword in lower_content
+            for keyword in ("error", "failed", "timeout", "cancel")
+        ):
+            return {"failure_hint": content_hint, "failure_source": "trace_content"}
+    return None
+
+
+def _extract_task_failure_insight_from_trace_json(
+    *,
+    status: object,
+    trace_json: object,
+) -> dict[str, str] | None:
+    if normalize_task_status(str(status or "")) != "failed":
+        return None
+    try:
+        steps = _load_parsed_trace_steps_from_trace_json(trace_json)
+    except Exception:
+        steps = []
+    if not steps:
+        return None
+    for step in reversed(steps):
+        insight = _resolve_trace_step_failure_insight(step)
+        if insight is not None:
+            return insight
+    for step in reversed(steps):
+        hint = _normalize_task_failure_hint(getattr(step, "content", ""))
+        if hint:
+            return {"failure_hint": hint, "failure_source": "legacy_trace"}
+    return None
+
+
 def get_trace_step_markdown_meta(
     step: TraceStep,
     *,
@@ -4088,6 +4186,7 @@ def get_tasks_usage_dashboard(
                     t.id,
                     t.session_id,
                     t.prompt,
+                    t.status,
                     t.usage_json,
                     t.trace_json,
                     t.tool_registry_profile,
@@ -4112,6 +4211,7 @@ def get_tasks_usage_dashboard(
                     t.id,
                     t.session_id,
                     t.prompt,
+                    t.status,
                     t.usage_json,
                     t.trace_json,
                     t.tool_registry_profile,
@@ -4250,20 +4350,25 @@ def get_tasks_usage_dashboard(
         ):
             bucket["last_task_at"] = task_row["updated_at"]
 
-        top_task_rows.append(
-            {
-                "task_id": str(task_row["id"]),
-                "session_id": sid,
-                "session_title": task_row.get("session_title"),
-                "prompt_excerpt": _excerpt_prompt(task_row.get("prompt")),
-                "total_tokens": total_tokens_int,
-                "cost_estimate": cost_value,
-                "created_at": str(task_row["created_at"]),
-                "updated_at": str(task_row["updated_at"]),
-                "source_kind": source_kind,
-                "governance": task_governance,
-            },
+        top_task_row = {
+            "task_id": str(task_row["id"]),
+            "session_id": sid,
+            "session_title": task_row.get("session_title"),
+            "prompt_excerpt": _excerpt_prompt(task_row.get("prompt")),
+            "total_tokens": total_tokens_int,
+            "cost_estimate": cost_value,
+            "created_at": str(task_row["created_at"]),
+            "updated_at": str(task_row["updated_at"]),
+            "source_kind": source_kind,
+            "governance": task_governance,
+        }
+        failure_insight = _extract_task_failure_insight_from_trace_json(
+            status=task_row.get("status"),
+            trace_json=task_row.get("trace_json"),
         )
+        if failure_insight is not None:
+            top_task_row.update(failure_insight)
+        top_task_rows.append(top_task_row)
 
     total_tokens = prompt_sum + completion_sum
     avg_total_tokens = total_tokens / token_task_count if token_task_count > 0 else None
@@ -4383,6 +4488,19 @@ def get_tasks_usage_dashboard_response_summary(
                 "created_at": str(row.get("created_at", "")),
                 "updated_at": str(row.get("updated_at", "")),
                 "source_kind": str(row.get("source_kind", "legacy") or "legacy"),
+                **(
+                    {
+                        "failure_hint": failure_hint,
+                        "failure_source": failure_source,
+                    }
+                    if (failure_hint := _normalize_task_failure_hint(row.get("failure_hint")))
+                    and (
+                        failure_source := _normalize_task_failure_source(
+                            row.get("failure_source")
+                        )
+                    )
+                    else {}
+                ),
                 "governance": _sanitize_task_governance_provider_source_values_for_export(
                     _normalize_task_governance_payload_or_original(
                         row.get("governance")
