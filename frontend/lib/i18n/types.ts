@@ -371,6 +371,8 @@ export type Messages = {
       fieldApiKeyConfigured: string;
       fieldCode: string;
       fieldMessage: string;
+      fieldFailureHint: string;
+      fieldFailureSource: string;
       fieldPromptLength: string;
       fieldDocumentsIngested: string;
       fieldChunksAdded: string;

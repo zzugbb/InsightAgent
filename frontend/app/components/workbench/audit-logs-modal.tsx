@@ -9,6 +9,11 @@ import { apiJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
+import type { AuditDetailEntry } from "./audit-logs-modal-utils";
+import {
+  formatAuditTaskFailureSummary,
+  resolveAuditReadableDetail,
+} from "./audit-logs-modal-utils";
 import type { AuditLogItem, AuditLogListResponse } from "./types";
 import { resolveAuditTaskDetailHref, shortenId } from "./utils";
 
@@ -36,7 +41,6 @@ type EventFilter =
   | "rag_kb_delete";
 type TimeFilter = "all" | "7d" | "30d";
 type ExportScope = "current" | "all";
-type DetailEntry = { key: string; label: string; value: string };
 
 function buildAuditUrl(params: {
   limit: number;
@@ -280,6 +284,18 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     return scope;
   };
 
+  const auditFailureLabels = {
+    fieldCode: t.sidebar.audit.fieldCode,
+    fieldMessage: t.sidebar.audit.fieldMessage,
+    fieldFailureHint: t.sidebar.audit.fieldFailureHint,
+    fieldFailureSource: t.sidebar.audit.fieldFailureSource,
+    streamErrorByCode: t.stream.streamErrorByCode,
+    taskFailureSourceErrorEvent: t.inspector.taskFailureSourceErrorEvent,
+    taskFailureSourceToolError: t.inspector.taskFailureSourceToolError,
+    taskFailureSourceTraceContent: t.inspector.taskFailureSourceTraceContent,
+    taskFailureSourceLegacyTrace: t.inspector.taskFailureSourceLegacyTrace,
+  };
+
   const resolveSummaryText = (item: AuditLogItem): string => {
     const eventLabel = resolveEventLabel(item.event_type);
     const normalizedEventType = item.event_type.trim().toLowerCase();
@@ -334,6 +350,14 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
       }
     }
     if (normalizedEventType === "task_failed" || normalizedEventType === "task_timeout") {
+      const failureSummary = formatAuditTaskFailureSummary(
+        eventLabel,
+        detail,
+        auditFailureLabels,
+      );
+      if (failureSummary !== eventLabel) {
+        return failureSummary;
+      }
       const code = asString(detail.code);
       return code ? `${eventLabel} · ${code}` : eventLabel;
     }
@@ -352,12 +376,17 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     return eventLabel;
   };
 
-  const resolveReadableDetail = (item: AuditLogItem): DetailEntry[] => {
+  const resolveReadableDetail = (item: AuditLogItem): AuditDetailEntry[] => {
     const detail = asDetailMap(item.event_detail);
     if (!detail) {
       return [];
     }
-    const entries: DetailEntry[] = [];
+    const normalizedEventType = item.event_type.trim().toLowerCase();
+    const entries: AuditDetailEntry[] =
+      normalizedEventType === "task_failed" || normalizedEventType === "task_timeout"
+        ? resolveAuditReadableDetail(detail, auditFailureLabels)
+        : [];
+    const seenKeys = new Set(entries.map((entry) => entry.key));
     const pushIfPresent = (
       key: string,
       label: string,
@@ -371,6 +400,10 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
       if (!finalValue) {
         return;
       }
+      if (seenKeys.has(key)) {
+        return;
+      }
+      seenKeys.add(key);
       entries.push({ key, label, value: finalValue });
     };
 

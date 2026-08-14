@@ -443,6 +443,8 @@ export const en: Messages = {
       fieldApiKeyConfigured: "API key configured",
       fieldCode: "Code",
       fieldMessage: "Message",
+      fieldFailureHint: "Failure hint",
+      fieldFailureSource: "Failure source",
       fieldPromptLength: "Prompt length",
       fieldDocumentsIngested: "Documents ingested",
       fieldChunksAdded: "Chunks added",

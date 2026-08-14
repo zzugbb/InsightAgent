@@ -434,6 +434,8 @@ export const zh: Messages = {
       fieldApiKeyConfigured: "已配置 API Key",
       fieldCode: "错误码",
       fieldMessage: "消息",
+      fieldFailureHint: "失败线索",
+      fieldFailureSource: "失败来源",
       fieldPromptLength: "输入长度",
       fieldDocumentsIngested: "写入文档数",
       fieldChunksAdded: "新增分块数",

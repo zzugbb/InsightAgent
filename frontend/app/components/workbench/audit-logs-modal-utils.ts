@@ -1,0 +1,144 @@
+import type { TaskFailureSource } from "./utils";
+
+export type AuditDetailEntry = { key: string; label: string; value: string };
+
+export type AuditFailureLabels = {
+  fieldCode: string;
+  fieldMessage: string;
+  fieldFailureHint: string;
+  fieldFailureSource: string;
+  streamErrorByCode?: (code: string) => string | null;
+  taskFailureSourceErrorEvent: string;
+  taskFailureSourceToolError: string;
+  taskFailureSourceTraceContent: string;
+  taskFailureSourceLegacyTrace: string;
+};
+
+function asString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function isTaskFailureSource(value: unknown): value is TaskFailureSource {
+  return (
+    value === "error_event" ||
+    value === "tool_error" ||
+    value === "trace_content" ||
+    value === "legacy_trace"
+  );
+}
+
+export function formatAuditFailureSourceLabel(
+  source: unknown,
+  labels: Pick<
+    AuditFailureLabels,
+    | "taskFailureSourceErrorEvent"
+    | "taskFailureSourceToolError"
+    | "taskFailureSourceTraceContent"
+    | "taskFailureSourceLegacyTrace"
+  >,
+): string | null {
+  if (source === "error_event") {
+    return labels.taskFailureSourceErrorEvent;
+  }
+  if (source === "tool_error") {
+    return labels.taskFailureSourceToolError;
+  }
+  if (source === "trace_content") {
+    return labels.taskFailureSourceTraceContent;
+  }
+  if (source === "legacy_trace") {
+    return labels.taskFailureSourceLegacyTrace;
+  }
+  return asString(source);
+}
+
+function resolveFailureHint(
+  detail: Record<string, unknown> | null | undefined,
+  labels: Pick<AuditFailureLabels, "streamErrorByCode">,
+): {
+  hint: string | null;
+  message: string | null;
+  messageUsedAsFallbackHint: boolean;
+} {
+  const message = asString(detail?.message);
+  const explicitFailureHint = asString(detail?.failure_hint);
+  if (explicitFailureHint) {
+    return { hint: explicitFailureHint, message, messageUsedAsFallbackHint: false };
+  }
+  const code = asString(detail?.code);
+  const codeHint =
+    code && labels.streamErrorByCode
+      ? asString(labels.streamErrorByCode(code))
+      : null;
+  if (codeHint && codeHint !== code) {
+    return { hint: codeHint, message, messageUsedAsFallbackHint: false };
+  }
+  return { hint: message, message, messageUsedAsFallbackHint: Boolean(message) };
+}
+
+export function formatAuditTaskFailureSummary(
+  eventLabel: string,
+  detail: Record<string, unknown> | null | undefined,
+  labels: Pick<
+    AuditFailureLabels,
+    | "streamErrorByCode"
+    | "taskFailureSourceErrorEvent"
+    | "taskFailureSourceToolError"
+    | "taskFailureSourceTraceContent"
+    | "taskFailureSourceLegacyTrace"
+  >,
+): string {
+  const { hint: failureHint } = resolveFailureHint(detail, labels);
+  if (!failureHint) {
+    return eventLabel;
+  }
+  const failureSource = isTaskFailureSource(detail?.failure_source)
+    ? formatAuditFailureSourceLabel(detail?.failure_source, labels)
+    : null;
+  return `${eventLabel} · ${failureSource ? `${failureSource}: ` : ""}${failureHint}`;
+}
+
+export function resolveAuditReadableDetail(
+  detail: Record<string, unknown> | null | undefined,
+  labels: AuditFailureLabels,
+): AuditDetailEntry[] {
+  if (!detail) {
+    return [];
+  }
+  const entries: AuditDetailEntry[] = [];
+  const {
+    hint: failureHint,
+    message,
+    messageUsedAsFallbackHint,
+  } = resolveFailureHint(detail, labels);
+  if (failureHint) {
+    entries.push({
+      key: "failure_hint",
+      label: labels.fieldFailureHint,
+      value: failureHint,
+    });
+  }
+  const failureSource = formatAuditFailureSourceLabel(
+    detail.failure_source,
+    labels,
+  );
+  if (failureSource) {
+    entries.push({
+      key: "failure_source",
+      label: labels.fieldFailureSource,
+      value: failureSource,
+    });
+  }
+  const code = asString(detail.code);
+  if (code) {
+    entries.push({ key: "code", label: labels.fieldCode, value: code });
+  }
+  if (message && !messageUsedAsFallbackHint) {
+    entries.push({ key: "message", label: labels.fieldMessage, value: message });
+  }
+  return entries;
+}

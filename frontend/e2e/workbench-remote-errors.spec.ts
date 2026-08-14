@@ -496,6 +496,24 @@ test("remote network failure shows mapped stream error code @smoke", async ({
   await expect(composerHint).toContainText("remote_provider_network_error", {
     timeout: 20_000,
   });
+  const tasksResponse = await request.get(
+    `${API_BASE_URL}/api/tasks?limit=10&offset=0&query=${encodeURIComponent(
+      "trigger remote network error",
+    )}`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.access_token}`,
+      },
+    },
+  );
+  expect(tasksResponse.ok()).toBeTruthy();
+  const tasksPayload = (await tasksResponse.json()) as {
+    items?: Array<{ id?: string; prompt?: string }>;
+  };
+  const failedTaskId = tasksPayload.items
+    ?.find((item) => item.prompt === "trigger remote network error")
+    ?.id?.trim();
+  expect(failedTaskId).toBeTruthy();
 
   await composerInput.fill("after remote error can continue typing");
   await expect(composerSend).toBeEnabled({ timeout: 20_000 });
@@ -521,6 +539,21 @@ test("remote network failure shows mapped stream error code @smoke", async ({
     /Failed status|失败状态/,
   );
   await expect(failedTaskRow).toBeVisible({ timeout: 20_000 });
+
+  await page.getByTestId("task-center-close").click();
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-audit").click();
+  await expect(page.locator(".audit-modal")).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("audit-task-filter").fill(String(failedTaskId));
+  const auditFailureRow = page
+    .locator(".audit-modal-table-row")
+    .filter({ hasText: "Failed to reach remote provider" })
+    .first();
+  await expect(auditFailureRow).toBeVisible({ timeout: 20_000 });
+  await auditFailureRow.locator(".ant-table-row-expand-icon").click();
+  await expect(
+    page.locator(".audit-modal-detail-row").filter({ hasText: "Failure hint" }),
+  ).toContainText("Failed to reach remote provider", { timeout: 20_000 });
 });
 
 test("remote 401 maps to unauthorized stream error code", async ({
