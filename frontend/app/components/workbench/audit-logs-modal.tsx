@@ -9,8 +9,13 @@ import { apiJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
-import type { AuditDetailEntry } from "./audit-logs-modal-utils";
+import type {
+  AuditDetailEntry,
+  AuditEventFilter,
+  AuditTimeFilter,
+} from "./audit-logs-modal-utils";
 import {
+  buildAuditLogsUrl,
   formatAuditTaskFailureSummary,
   resolveAuditReadableDetail,
 } from "./audit-logs-modal-utils";
@@ -25,52 +30,9 @@ type AuditLogsModalProps = {
   onClose: () => void;
 };
 
-type EventFilter =
-  | "all"
-  | "login"
-  | "logout"
-  | "refresh"
-  | "settings_update"
-  | "settings_validate"
-  | "task_create"
-  | "task_cancel"
-  | "task_timeout"
-  | "task_failed"
-  | "rag_ingest"
-  | "rag_kb_clear"
-  | "rag_kb_delete";
-type TimeFilter = "all" | "7d" | "30d";
+type EventFilter = AuditEventFilter;
+type TimeFilter = AuditTimeFilter;
 type ExportScope = "current" | "all";
-
-function buildAuditUrl(params: {
-  limit: number;
-  offset: number;
-  eventType: EventFilter;
-  timeFilter: TimeFilter;
-  sessionId: string;
-  taskId: string;
-}): string {
-  const q = new URLSearchParams();
-  q.set("limit", String(params.limit));
-  q.set("offset", String(params.offset));
-  if (params.eventType !== "all") {
-    q.set("event_type", params.eventType);
-  }
-  if (params.timeFilter !== "all") {
-    const days = params.timeFilter === "7d" ? 7 : 30;
-    q.set(
-      "start_at",
-      new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
-    );
-  }
-  if (params.sessionId.trim()) {
-    q.set("session_id", params.sessionId.trim());
-  }
-  if (params.taskId.trim()) {
-    q.set("task_id", params.taskId.trim());
-  }
-  return `${API_BASE_URL}/api/audit/logs?${q.toString()}`;
-}
 
 function downloadText(filename: string, content: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
@@ -157,13 +119,15 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     enabled: open,
     queryFn: () =>
       apiJson<AuditLogListResponse>(
-        buildAuditUrl({
+        buildAuditLogsUrl({
+          apiBaseUrl: API_BASE_URL,
           limit: pageSize,
           offset,
           eventType: eventFilter,
           timeFilter,
           sessionId: sessionIdFilter,
           taskId: taskIdFilter,
+          keyword,
         }),
       ),
     staleTime: 8_000,
@@ -560,13 +524,15 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     let nextOffset = 0;
     while (true) {
       const page = await apiJson<AuditLogListResponse>(
-        buildAuditUrl({
+        buildAuditLogsUrl({
+          apiBaseUrl: API_BASE_URL,
           limit: 100,
           offset: nextOffset,
           eventType: eventFilter,
           timeFilter,
           sessionId: sessionIdFilter,
           taskId: taskIdFilter,
+          keyword,
         }),
       );
       allRows.push(...page.items);

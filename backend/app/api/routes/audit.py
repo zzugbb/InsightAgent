@@ -101,6 +101,10 @@ def get_audit_logs(
     ),
     session_id: str | None = Query(default=None, description="可选：按会话 ID 过滤"),
     task_id: str | None = Query(default=None, description="可选：按任务 ID 过滤"),
+    keyword: str | None = Query(
+        default=None,
+        description="可选：按事件类型或详情 JSON 关键字过滤",
+    ),
     start_at: str | None = Query(default=None, description="可选：开始时间（ISO8601）"),
     end_at: str | None = Query(default=None, description="可选：结束时间（ISO8601）"),
     current_user: dict = Depends(get_current_user),
@@ -120,6 +124,7 @@ def get_audit_logs(
     end_iso = _validate_iso8601("end_at", end_at)
     if start_iso and end_iso and start_iso > end_iso:
         raise HTTPException(status_code=422, detail="start_at must be <= end_at")
+    normalized_keyword = keyword.strip() if isinstance(keyword, str) and keyword.strip() else None
 
     user_id = str(current_user["id"])
     rows = _coerce_payload_row_list(
@@ -130,6 +135,7 @@ def get_audit_logs(
             event_type=normalized_event_type,
             session_id=session_id,
             task_id=task_id,
+            keyword=normalized_keyword,
             start_at=start_iso,
             end_at=end_iso,
         )
@@ -139,6 +145,7 @@ def get_audit_logs(
         event_type=normalized_event_type,
         session_id=session_id,
         task_id=task_id,
+        keyword=normalized_keyword,
         start_at=start_iso,
         end_at=end_iso,
     )

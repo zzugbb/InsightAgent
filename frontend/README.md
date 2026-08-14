@@ -15,23 +15,23 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `registry-governance` 已封板：provider/source diagnostics、settings/preflight、runtime artifacts、trace/export/audit/SSE 与 task/usage 回放语义已完成脱敏和 alias 对齐，前端可见字段 shape 不变。
 - 后端 `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
 - 后端 `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。前端相关契约已固定：客户端 SSE 断开保留 running 任务供 reload/reconnect/cancel，服务端执行协程取消才落 failed；前端可见删除会话响应、SSE、trace 与 export shape 不变。
-- 当前进入 `observability-experience` 主线，进度约 68%：任务快照会从 trace diagnostics 中提取失败线索并标注来源（SSE error / tool error / trace content / persisted trace），Task Center 支持展示/搜索该线索与来源，并支持按 Needs attention / Failed status / Failure hint / Failure trace 做观测筛选；任务详情页展示同一失败摘要；Usage Dashboard 任务榜会显示失败摘要并可直接打开任务详情回放，Audit Logs 任务列也可进入同一回放页，任务失败/超时审计行会把错误码映射成人类可读 Failure hint，并在展开详情中保留 source/code/raw message；Trace 语义统计已新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹。
+- 当前进入 `observability-experience` 主线，进度约 74%：任务快照会从 trace diagnostics 中提取失败线索并标注来源（SSE error / tool error / trace content / persisted trace），Task Center 支持展示/搜索该线索与来源，并支持按 Needs attention / Failed status / Failure hint / Failure trace 做观测筛选；任务详情页展示同一失败摘要；Usage Dashboard 任务榜会显示失败摘要并可直接打开任务详情回放，Audit Logs 任务列也可进入同一回放页，任务失败/超时审计行会把错误码映射成人类可读 Failure hint，并在展开详情中保留 source/code/raw message；Audit Logs keyword 已进入服务端过滤，分页、total、导出和 e2e 搜索口径一致；Trace 语义统计已新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹。
 
 ## 当前验证基线
 
-- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts app/components/workbench/audit-logs-modal-utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`90/90` 通过
+- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts app/components/workbench/audit-logs-modal-utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`92/92` 通过
 - `cd frontend && npm run lint`：通过
 - `npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts`：通过
 - targeted TS：本轮涉及的 workbench utils、Audit Logs Modal helper、Audit Logs Modal、Task Center、Inspector、任务详情页、Trace types 与 i18n 通过 targeted `tsc`
 - task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1299`，`3/3` 通过，覆盖 Task Center/任务详情 Failure 语义统计
-- remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过，覆盖 Task Center Needs attention / Failed status 观测筛选与 Audit Logs 失败 hint 详情
+- remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过，覆盖 Task Center Needs attention / Failed status 观测筛选、Audit Logs 服务端 keyword 请求与失败 hint 详情
 - usage/audit-to-detail Chromium：`e2e/usage-dashboard.spec.ts:774`，`1/1` 通过
 - frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
 - backend main e2e phase：baseline / main / export consistency / cancel-timeout 通过
 - backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
-- 后端可见契约回归：production reliability `35/35`、queue `66/66`、task `361/361`、settings `216/216`、usage dashboard `40/40`、backend full slice `1941/1941` 通过
+- 后端可见契约回归：production reliability `35/35`、queue `66/66`、task `361/361`、settings `216/216`、usage dashboard `40/40`、backend full slice `1944/1944` 通过
 - frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
 - GitHub checks：`7550120 fix: 保留客户端断流运行任务` 已 `2/2` 通过
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
@@ -41,8 +41,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. 当前主线：`observability-experience` 已推进到约 68%，已完成任务失败线索摘要、来源分类、Task Center 观测筛选、任务中心/任务详情复用、Usage Dashboard / Audit Logs 任务详情回放入口、Usage Dashboard top tasks 失败摘要展示、Audit Logs 失败 hint/source/code/message 可读详情，以及 Trace/Inspector/任务详情失败语义过滤与 Failure 统计。
-3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定，并继续补齐失败诊断聚合、trace 筛选效率、audit 筛选效率和任务回放效率。
+2. 当前主线：`observability-experience` 已推进到约 74%，已完成任务失败线索摘要、来源分类、Task Center 观测筛选、任务中心/任务详情复用、Usage Dashboard / Audit Logs 任务详情回放入口、Usage Dashboard top tasks 失败摘要展示、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及 Trace/Inspector/任务详情失败语义过滤与 Failure 统计。
+3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定，并继续补齐失败诊断聚合、trace 筛选效率和任务回放效率。
 4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。
 
 ## 后续候选主线
@@ -86,7 +86,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `app/components/workbench/trace-flow-view.tsx`：轨迹流程图节点渲染
 - `app/components/workbench/usage-dashboard-modal.tsx`：用量仪表盘
 - `app/components/workbench/model-settings-modal.tsx`：mock/remote 模型设置、校验与保存
-- `app/components/workbench/audit-logs-modal.tsx` / `audit-logs-modal-utils.ts`：审计日志筛选、分页、失败详情可读化、展开与导出
+- `app/components/workbench/audit-logs-modal.tsx` / `audit-logs-modal-utils.ts`：审计日志筛选、服务端 keyword URL、分页、失败详情可读化、展开与导出
 - `app/components/workbench/knowledge-base-governance-modal.tsx`：知识库治理
 - `app/components/workbench/runtime-debug-modal.tsx`：Memory / RAG 调试
 - `app/tasks/[taskId]/page.tsx`：任务详情页与任务导出入口

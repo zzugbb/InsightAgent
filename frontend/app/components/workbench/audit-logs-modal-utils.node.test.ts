@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildAuditLogsUrl,
   formatAuditTaskFailureSummary,
   resolveAuditReadableDetail,
 } from "./audit-logs-modal-utils.ts";
@@ -20,6 +21,43 @@ const labels = {
   taskFailureSourceTraceContent: "Trace content",
   taskFailureSourceLegacyTrace: "Persisted trace",
 };
+
+test("buildAuditLogsUrl sends keyword to server filters", () => {
+  const url = buildAuditLogsUrl({
+    apiBaseUrl: "http://127.0.0.1:8000",
+    limit: 10,
+    offset: 20,
+    eventType: "task_failed",
+    timeFilter: "all",
+    sessionId: "session-audit",
+    taskId: "task-audit",
+    keyword: " remote_provider_network_error ",
+  });
+
+  assert.equal(
+    url,
+    "http://127.0.0.1:8000/api/audit/logs?limit=10&offset=20&event_type=task_failed&session_id=session-audit&task_id=task-audit&keyword=remote_provider_network_error",
+  );
+});
+
+test("buildAuditLogsUrl omits blank keyword and adds range start", () => {
+  const url = buildAuditLogsUrl({
+    apiBaseUrl: "http://127.0.0.1:8000/",
+    limit: 100,
+    offset: 0,
+    eventType: "all",
+    timeFilter: "7d",
+    sessionId: "",
+    taskId: "",
+    keyword: " ",
+    nowMs: Date.UTC(2026, 7, 14, 0, 0, 0),
+  });
+
+  assert.equal(
+    url,
+    "http://127.0.0.1:8000/api/audit/logs?limit=100&offset=0&start_at=2026-08-07T00%3A00%3A00.000Z",
+  );
+});
 
 test("formatAuditTaskFailureSummary prefers readable failure hint and source", () => {
   assert.equal(

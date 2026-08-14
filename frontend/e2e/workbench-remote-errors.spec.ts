@@ -545,6 +545,18 @@ test("remote network failure shows mapped stream error code @smoke", async ({
   await page.getByTestId("settings-menu-audit").click();
   await expect(page.locator(".audit-modal")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("audit-task-filter").fill(String(failedTaskId));
+  const auditKeywordResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === "/api/audit/logs" &&
+      url.searchParams.get("task_id") === failedTaskId &&
+      url.searchParams.get("keyword") === "remote_provider_network_error"
+    );
+  });
+  await page
+    .getByTestId("audit-keyword-filter")
+    .fill("remote_provider_network_error");
+  expect((await auditKeywordResponse).ok()).toBeTruthy();
   const auditFailureRow = page
     .locator(".audit-modal-table-row")
     .filter({ hasText: "Failed to reach remote provider" })

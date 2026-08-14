@@ -1,6 +1,21 @@
 import type { TaskFailureSource } from "./utils";
 
 export type AuditDetailEntry = { key: string; label: string; value: string };
+export type AuditEventFilter =
+  | "all"
+  | "login"
+  | "logout"
+  | "refresh"
+  | "settings_update"
+  | "settings_validate"
+  | "task_create"
+  | "task_cancel"
+  | "task_timeout"
+  | "task_failed"
+  | "rag_ingest"
+  | "rag_kb_clear"
+  | "rag_kb_delete";
+export type AuditTimeFilter = "all" | "7d" | "30d";
 
 export type AuditFailureLabels = {
   fieldCode: string;
@@ -13,6 +28,42 @@ export type AuditFailureLabels = {
   taskFailureSourceTraceContent: string;
   taskFailureSourceLegacyTrace: string;
 };
+
+export function buildAuditLogsUrl(params: {
+  apiBaseUrl: string;
+  limit: number;
+  offset: number;
+  eventType: AuditEventFilter;
+  timeFilter: AuditTimeFilter;
+  sessionId: string;
+  taskId: string;
+  keyword: string;
+  nowMs?: number;
+}): string {
+  const q = new URLSearchParams();
+  q.set("limit", String(params.limit));
+  q.set("offset", String(params.offset));
+  if (params.eventType !== "all") {
+    q.set("event_type", params.eventType);
+  }
+  if (params.timeFilter !== "all") {
+    const days = params.timeFilter === "7d" ? 7 : 30;
+    q.set(
+      "start_at",
+      new Date((params.nowMs ?? Date.now()) - days * 24 * 60 * 60 * 1000).toISOString(),
+    );
+  }
+  if (params.sessionId.trim()) {
+    q.set("session_id", params.sessionId.trim());
+  }
+  if (params.taskId.trim()) {
+    q.set("task_id", params.taskId.trim());
+  }
+  if (params.keyword.trim()) {
+    q.set("keyword", params.keyword.trim());
+  }
+  return `${params.apiBaseUrl.replace(/\/+$/, "")}/api/audit/logs?${q.toString()}`;
+}
 
 function asString(value: unknown): string | null {
   if (typeof value !== "string") {

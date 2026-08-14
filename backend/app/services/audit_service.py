@@ -264,6 +264,7 @@ def list_audit_logs(
     event_type: str | None = None,
     session_id: str | None = None,
     task_id: str | None = None,
+    keyword: str | None = None,
     start_at: str | None = None,
     end_at: str | None = None,
 ) -> list[dict]:
@@ -286,6 +287,17 @@ def list_audit_logs(
         conditions.append("event_detail_json IS NOT NULL")
         conditions.append("(event_detail_json::jsonb ->> 'task_id') = ?")
         params.append(normalized_task_id)
+
+    normalized_keyword = keyword.strip().lower() if isinstance(keyword, str) else ""
+    if normalized_keyword:
+        conditions.append(
+            "("
+            "LOWER(event_type) LIKE ? OR "
+            "LOWER(COALESCE(event_detail_json, '')) LIKE ?"
+            ")"
+        )
+        pattern = f"%{normalized_keyword}%"
+        params.extend([pattern, pattern])
 
     if isinstance(start_at, str) and start_at.strip():
         conditions.append("created_at >= ?")
@@ -315,6 +327,7 @@ def count_audit_logs(
     event_type: str | None = None,
     session_id: str | None = None,
     task_id: str | None = None,
+    keyword: str | None = None,
     start_at: str | None = None,
     end_at: str | None = None,
 ) -> int:
@@ -337,6 +350,17 @@ def count_audit_logs(
         conditions.append("event_detail_json IS NOT NULL")
         conditions.append("(event_detail_json::jsonb ->> 'task_id') = ?")
         params.append(normalized_task_id)
+
+    normalized_keyword = keyword.strip().lower() if isinstance(keyword, str) else ""
+    if normalized_keyword:
+        conditions.append(
+            "("
+            "LOWER(event_type) LIKE ? OR "
+            "LOWER(COALESCE(event_detail_json, '')) LIKE ?"
+            ")"
+        )
+        pattern = f"%{normalized_keyword}%"
+        params.extend([pattern, pattern])
 
     if isinstance(start_at, str) and start_at.strip():
         conditions.append("created_at >= ?")
