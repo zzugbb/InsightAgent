@@ -14,7 +14,7 @@
 - `rag-governance-hardening` 已封板：RAG ingest/query source metadata、嵌套 metadata value、query hit id、知识库标识、版本摘要、reserved alias、route/runtime trace/export/display、错误出口与 shared/private 列表边界均已收口；后端外部响应 shape 保持稳定。
 - `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。后端已收口 waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放与失败自愈。
 - 关键后端契约：客户端 SSE 断开只释放本进程 active slot，并保留 running 任务供 reload/reconnect/cancel；服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属。active slot、204 响应与外部 SSE / trace / export 契约不变。
-- 当前进入 `observability-experience` 主线；本轮首个切口是前端任务失败线索聚合，后端 API / SSE / trace / export shape 保持不变。
+- 当前进入 `observability-experience` 主线；本轮切口是前端任务失败线索聚合与来源分类，后端 API / SSE / trace / export shape 保持不变。
 
 ## 当前验证基线
 
@@ -30,7 +30,7 @@
 - RAG runtime/export targeted：safe version metadata、legacy chunk shape、chunk object metadata alignment、parallel runtime chunk metadata、export knowledge_base_id redaction、result summary/output/preview/observation knowledge_base_id redaction 均通过
 - `backend/.venv/bin/python -m py_compile` 本轮相关 backend route/test 模块：通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
-- frontend node tests：workbench utils / stream store utils / model settings utils，当前 `78/78` 通过
+- frontend node tests：workbench utils / stream store utils / model settings utils，当前 `79/79` 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
 - frontend targeted TS：本轮涉及的 workbench utils、Task Center、任务详情页、i18n 与 trace type 通过 targeted `tsc`
 - backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
@@ -47,7 +47,7 @@
 ## 下一步后端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. 当前主线：`observability-experience` 已启动；第一步完成任务失败线索摘要与任务中心/任务详情复用，后端外部契约不变。
+2. 当前主线：`observability-experience` 已启动；已完成任务失败线索摘要、来源分类与任务中心/任务详情复用，后端外部契约不变。
 3. 下一步继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 4. 后续开发继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增测试/实现优先落到主题文件，必要时先拆新模块。
 

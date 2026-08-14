@@ -33,12 +33,19 @@ export type UsageBreakdown = {
   usageSource: "provider" | "estimated" | "legacy" | null;
 };
 
+export type TaskFailureSource =
+  | "error_event"
+  | "tool_error"
+  | "trace_content"
+  | "legacy_trace";
+
 export type TaskSnapshotSummary = {
   stepCount: number;
   ragHitCount: number;
   ragKnowledgeBaseIds: string[];
   semanticStats: Record<Exclude<TraceStepSemanticFilter, "all">, number>;
   failureHint: string | null;
+  failureSource: TaskFailureSource | null;
   finalAnswer: string | null;
   lastObservation: string | null;
   governance: {
@@ -420,6 +427,11 @@ export function isTaskFailedStatus(status: string): boolean {
   return normalizeTaskStatus(status) === "failed";
 }
 
+type TaskFailureInsight = {
+  hint: string;
+  source: TaskFailureSource;
+};
+
 function truncateTaskDiagnostic(value: string): string {
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length > 96
@@ -427,7 +439,7 @@ function truncateTaskDiagnostic(value: string): string {
     : normalized;
 }
 
-export function extractTaskFailureHint(task: TaskSummary): string | null {
+function extractTaskFailureInsight(task: TaskSummary): TaskFailureInsight | null {
   if (!isTaskFailedStatus(task.status) || !task.trace_json?.trim()) {
     return null;
   }
@@ -443,7 +455,10 @@ export function extractTaskFailureHint(task: TaskSummary): string | null {
       }
       const content = (step as { content?: unknown }).content;
       if (typeof content === "string" && content.trim()) {
-        return truncateTaskDiagnostic(content);
+        return {
+          hint: truncateTaskDiagnostic(content),
+          source: "legacy_trace",
+        };
       }
     }
     return null;
@@ -452,13 +467,17 @@ export function extractTaskFailureHint(task: TaskSummary): string | null {
   }
 }
 
+export function extractTaskFailureHint(task: TaskSummary): string | null {
+  return extractTaskFailureInsight(task)?.hint ?? null;
+}
+
 function normalizeDiagnosticText(value: unknown): string | null {
   return typeof value === "string" && value.trim()
     ? truncateTaskDiagnostic(value)
     : null;
 }
 
-function resolveTraceStepFailureHint(step: TraceStepPayload): string | null {
+function resolveTraceStepFailureInsight(step: TraceStepPayload): TaskFailureInsight | null {
   const meta = step.meta;
   const errorEvent = meta?.error_event;
   if (errorEvent) {
@@ -467,7 +486,10 @@ function resolveTraceStepFailureHint(step: TraceStepPayload): string | null {
       normalizeDiagnosticText(errorEvent.detail) ??
       normalizeDiagnosticText(errorEvent.code);
     if (eventHint) {
-      return eventHint;
+      return {
+        hint: eventHint,
+        source: "error_event",
+      };
     }
   }
 
@@ -475,12 +497,18 @@ function resolveTraceStepFailureHint(step: TraceStepPayload): string | null {
   if (tool) {
     const toolHint = normalizeDiagnosticText(tool.error);
     if (toolHint) {
-      return toolHint;
+      return {
+        hint: toolHint,
+        source: "tool_error",
+      };
     }
     if (tool.status === "error") {
       const content = resolveTraceStepDisplayContent(step);
       if (content) {
-        return truncateTaskDiagnostic(content);
+        return {
+          hint: truncateTaskDiagnostic(content),
+          source: "tool_error",
+        };
       }
     }
   }
@@ -496,26 +524,51 @@ function resolveTraceStepFailureHint(step: TraceStepPayload): string | null {
       lowerContent.includes("cancel")
     )
   ) {
-    return truncateTaskDiagnostic(content);
+    return {
+      hint: truncateTaskDiagnostic(content),
+      source: "trace_content",
+    };
   }
 
   return null;
 }
 
-function resolveTaskFailureHintFromSteps(
+function resolveTaskFailureInsightFromSteps(
   status: string,
   steps: TraceStepPayload[],
-): string | null {
+): TaskFailureInsight | null {
   if (!isTaskFailedStatus(status)) {
     return null;
   }
   for (let i = steps.length - 1; i >= 0; i -= 1) {
-    const hint = resolveTraceStepFailureHint(steps[i]);
-    if (hint) {
-      return hint;
+    const insight = resolveTraceStepFailureInsight(steps[i]);
+    if (insight) {
+      return insight;
     }
   }
   return null;
+}
+
+export function formatTaskFailureSourceLabel(
+  source: TaskFailureSource,
+  labels: Pick<
+    Messages["inspector"],
+    | "taskFailureSourceErrorEvent"
+    | "taskFailureSourceToolError"
+    | "taskFailureSourceTraceContent"
+    | "taskFailureSourceLegacyTrace"
+  >,
+): string {
+  if (source === "error_event") {
+    return labels.taskFailureSourceErrorEvent;
+  }
+  if (source === "tool_error") {
+    return labels.taskFailureSourceToolError;
+  }
+  if (source === "legacy_trace") {
+    return labels.taskFailureSourceLegacyTrace;
+  }
+  return labels.taskFailureSourceTraceContent;
 }
 
 function normalizeTraceContent(value: unknown): string | null {
@@ -1465,9 +1518,9 @@ export function resolveTaskSnapshotSummary(args: {
   }
 
   const semanticStats = resolveTraceStepSemanticStats(steps);
-  const failureHint =
-    resolveTaskFailureHintFromSteps(args.task.status, steps) ??
-    extractTaskFailureHint(args.task);
+  const failureInsight =
+    resolveTaskFailureInsightFromSteps(args.task.status, steps) ??
+    extractTaskFailureInsight(args.task);
   const lastObservation = findLastStepContent(
     steps,
     (step) => normalizeTraceStepKind(step) === "observation",
@@ -1566,7 +1619,8 @@ export function resolveTaskSnapshotSummary(args: {
     ragHitCount,
     ragKnowledgeBaseIds: [...ragKnowledgeBaseIds],
     semanticStats,
-    failureHint,
+    failureHint: failureInsight?.hint ?? null,
+    failureSource: failureInsight?.source ?? null,
     finalAnswer,
     lastObservation,
     governance,

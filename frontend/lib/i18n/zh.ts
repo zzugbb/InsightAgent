@@ -576,6 +576,10 @@ export const zh: Messages = {
     taskPinFailed: "失败置顶",
     taskSearchPlaceholder: "按任务标题、ID 或治理关键词搜索",
     taskFailureHint: "失败提示",
+    taskFailureSourceErrorEvent: "SSE 错误",
+    taskFailureSourceToolError: "工具错误",
+    taskFailureSourceTraceContent: "轨迹内容",
+    taskFailureSourceLegacyTrace: "持久化轨迹",
     taskVisibleCount: (shown: number, total: number) =>
       `显示 ${shown} / ${total}`,
     taskEmpty: "当前筛选条件下暂无任务。",

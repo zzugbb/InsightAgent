@@ -1933,6 +1933,39 @@ test("resolveTaskSnapshotSummary extracts terminal failure hints from trace diag
     summary.failureHint,
     "provider_search exhausted retries",
   );
+  assert.equal(summary.failureSource, "error_event");
+});
+
+test("resolveTaskSnapshotSummary classifies tool failure hints", () => {
+  const summary = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-tool-failure-source",
+      session_id: "session-tool-failure-source",
+      prompt: "Need a tool failure source",
+      status: "failed",
+      trace_json: null,
+      created_at: "2026-07-01T00:00:00Z",
+      updated_at: "2026-07-01T00:00:01Z",
+    },
+    traceSteps: [
+      {
+        id: "step-tool-error",
+        type: "action",
+        content: "Tool error: Provider Search",
+        meta: {
+          tool: {
+            name: "provider_search",
+            label: "Provider Search",
+            status: "error",
+            error: "upstream timed out after 30s",
+          },
+        },
+      },
+    ],
+  });
+
+  assert.equal(summary.failureHint, "upstream timed out after 30s");
+  assert.equal(summary.failureSource, "tool_error");
 });
 
 test("formatTraceStepSemanticStatsSummary renders compact planner retrieval calculator counts", () => {

@@ -15,6 +15,7 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
 import type { SessionSummary, TaskSummary } from "./types";
 import {
+  formatTaskFailureSourceLabel,
   formatTraceStepSemanticStatsSummary,
   formatTimestamp,
   getTaskLabel,
@@ -157,11 +158,16 @@ export function TaskCenter({
                   .map((item) => item.trim().toLowerCase())
                   .filter(Boolean)
               : [];
+            const failureSourceLabel =
+              snapshot?.failureSource
+                ? formatTaskFailureSourceLabel(snapshot.failureSource, t.inspector).toLowerCase()
+                : "";
             return (
               prompt.includes(q)
               || id.includes(q)
               || semanticSummary.includes(q)
               || Boolean(snapshot?.failureHint?.toLowerCase().includes(q))
+              || failureSourceLabel.includes(q)
               || governanceKeywords.some((item) => item.includes(q))
             );
           });
@@ -171,7 +177,15 @@ export function TaskCenter({
       return taskSortOrder === "latest" ? bt - at : at - bt;
     });
     return sorted;
-  }, [scopedTasks, t.taskCenter, taskSearchQuery, taskSnapshots, taskSortOrder, taskStatusFilter]);
+  }, [
+    scopedTasks,
+    t.inspector,
+    t.taskCenter,
+    taskSearchQuery,
+    taskSnapshots,
+    taskSortOrder,
+    taskStatusFilter,
+  ]);
 
   const scopeDisabledSession = !activeSessionId;
 
@@ -193,6 +207,10 @@ export function TaskCenter({
         render: (_value: unknown, task: TaskSummary) => {
           const snapshot = taskSnapshots.get(task.id);
           const failedHint = snapshot?.failureHint ?? null;
+          const failureSourceLabel =
+            snapshot?.failureSource
+              ? formatTaskFailureSourceLabel(snapshot.failureSource, t.inspector)
+              : null;
           const governance = snapshot?.governance;
           const governanceAllowedTools =
             governance && governance.allowedToolLabels.length > 0
@@ -238,7 +256,8 @@ export function TaskCenter({
               ) : null}
               {failedHint ? (
                 <span className="task-summary-failed-hint">
-                  {t.inspector.taskFailureHint}: {failedHint}
+                  {t.inspector.taskFailureHint}
+                  {failureSourceLabel ? ` · ${failureSourceLabel}` : ""}: {failedHint}
                 </span>
               ) : null}
             </div>

@@ -508,6 +508,10 @@ export type Messages = {
     taskPinFailed: string;
     taskSearchPlaceholder: string;
     taskFailureHint: string;
+    taskFailureSourceErrorEvent: string;
+    taskFailureSourceToolError: string;
+    taskFailureSourceTraceContent: string;
+    taskFailureSourceLegacyTrace: string;
     taskVisibleCount: (shown: number, total: number) => string;
     taskEmpty: string;
     taskCancel: string;

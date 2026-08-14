@@ -2,7 +2,7 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening 与 production-reliability-hardening 均已封板。
 current_focus:
-  - 当前主线：observability-experience 已启动；首个切口完成任务失败线索摘要，Task Center 可展示/搜索 trace diagnostics failure hint，任务详情页展示同一失败摘要，外部 SSE / trace / export shape 不变。
+  - 当前主线：observability-experience 已启动；已完成任务失败线索摘要与来源分类，Task Center 可展示/搜索 trace diagnostics failure hint 与来源，任务详情页展示同一失败摘要，外部 SSE / trace / export shape 不变。
   - 最新封板主线：production-reliability-hardening 已 100% 封板，最新 GitHub checks 2/2 通过；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running / 服务端协程取消落 failed 均已收口。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
@@ -26,7 +26,7 @@ validation_baseline:
   backend_rag_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag (78/78)
   backend_rag_route_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route (2/2)
   backend_result_summary_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary (30/30)
-  frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (78/78)
+  frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (79/79)
   frontend_lint: cd frontend && npm run lint
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
   frontend_targeted_ts: targeted tsc for workbench utils, Task Center, task detail page, i18n and trace types
@@ -42,7 +42,7 @@ validation_baseline:
   frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: observability-experience 已启动；本轮完成任务失败线索摘要与 Task Center/任务详情复用，frontend node 78/78、frontend lint、targeted TS、task detail replay Chromium 3/3、backend full slice 1939/1939 均通过；完整 tsc 仍触发既有 node test fixture/config 噪音，未作为本轮基线。
+latest_validation_note: observability-experience 继续推进；本轮完成任务失败线索来源分类与 Task Center/任务详情复用，frontend node 79/79、frontend lint、frontend type contract、targeted TS、backend full slice 1939/1939、task detail replay Chromium 3/3、diff hygiene 与备份计划 diff 检查均通过。
 todos:
   - id: docs-slimming
     status: completed
@@ -79,7 +79,7 @@ todos:
     content: 已 100% 封板；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running 与服务端协程取消落 failed 均已收口；backend/frontend/e2e/CI finalize/GitHub checks/diff 封板验证通过。
   - id: observability-experience
     status: in_progress
-    content: 当前主线；第一步已完成任务失败线索摘要，resolveTaskSnapshotSummary 从 trace diagnostics 提取 failureHint，Task Center 展示/搜索该线索，任务详情页展示同一失败摘要；下一步继续围绕 Trace、Task Center、失败诊断、usage/audit 关联与任务回放效率补红测推进。
+    content: 当前主线；已完成任务失败线索摘要与来源分类，resolveTaskSnapshotSummary 从 trace diagnostics 提取 failureHint/failureSource，Task Center 展示/搜索该线索与来源，任务详情页展示同一失败摘要；下一步继续围绕 Trace、Task Center、失败诊断、usage/audit 关联与任务回放效率补红测推进。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -114,7 +114,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - Backend result summary slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，当前 `30/30`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel、queued SSE safe wait_position、settings diagnostics、typed queue governance checks 与 followup completion 通过。
-- Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `78/78`。
+- Frontend node tests：workbench utils / stream store utils / model settings utils，当前 `79/79`。
 - Frontend lint：`cd frontend && npm run lint` 通过。
 - Frontend type contract：TaskQueueDiagnostics 基础运行态计数、governance 字段必填与 pressure_state/waiting_policy 枚举契约通过。
 - Frontend targeted TS：本轮涉及的 workbench utils、Task Center、任务详情页、i18n 与 trace type 通过 targeted `tsc`。

@@ -589,6 +589,10 @@ export const en: Messages = {
     taskPinFailed: "Failed first",
     taskSearchPlaceholder: "Search by task title, ID, or governance keyword",
     taskFailureHint: "Failure hint",
+    taskFailureSourceErrorEvent: "SSE error",
+    taskFailureSourceToolError: "Tool error",
+    taskFailureSourceTraceContent: "Trace content",
+    taskFailureSourceLegacyTrace: "Persisted trace",
     taskVisibleCount: (shown: number, total: number) =>
       `Showing ${shown} of ${total}`,
     taskEmpty: "No tasks match this filter.",

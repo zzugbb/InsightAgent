@@ -17,6 +17,7 @@ import type { TaskSummary } from "../../components/workbench/types";
 import {
   API_BASE_URL,
   filterTraceSteps,
+  formatTaskFailureSourceLabel,
   formatTimestamp,
   formatTraceStepMetaSubtitle,
   getStepTitle,
@@ -138,6 +139,10 @@ export default function TaskDetailPage() {
   );
 
   const taskUsage = useMemo(() => (task ? resolveTaskUsageFromTask(task) : null), [task]);
+  const failureSourceLabel =
+    taskSnapshot?.failureSource
+      ? formatTaskFailureSourceLabel(taskSnapshot.failureSource, t.inspector)
+      : null;
 
   const filteredTraceSteps = useMemo(() => {
     return filterTraceSteps(traceSteps, {
@@ -293,7 +298,10 @@ export default function TaskDetailPage() {
                 className="inspector-block task-detail-failure-block"
                 data-testid="task-detail-failure-hint"
               >
-                <p className="summary-label">{t.taskDetail.failureHintTitle}</p>
+                <p className="summary-label">
+                  {t.taskDetail.failureHintTitle}
+                  {failureSourceLabel ? ` · ${failureSourceLabel}` : ""}
+                </p>
                 <p className="task-snapshot-failure">{taskSnapshot.failureHint}</p>
               </section>
             ) : null}
