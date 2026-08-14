@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   filterTraceSteps,
+  buildTaskDetailHref,
   formatTraceStepSemanticStatsSummary,
   formatTraceStepMetaSubtitle,
   getStepTitle,
@@ -13,6 +14,13 @@ import {
   resolveTraceStepSemanticStats,
   resolveTraceStepDisplayContent,
 } from "./utils.ts";
+
+test("buildTaskDetailHref encodes task ids for replay links", () => {
+  assert.equal(
+    buildTaskDetailHref("task/with space?x=1"),
+    "/tasks/task%2Fwith%20space%3Fx%3D1",
+  );
+});
 
 test("resolveTraceStepDisplayContent prefers inferred result summary from preview-only action steps", () => {
   const content = resolveTraceStepDisplayContent({

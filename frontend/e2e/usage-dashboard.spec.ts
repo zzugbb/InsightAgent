@@ -946,6 +946,25 @@ test("saved planning suite source propagates through runtime and export governan
   await expect(usageTaskGovernance.first()).toContainText("planning_suite");
   await expect(usageTaskGovernance.first()).toContainText("Task Planner Suite");
 
+  const usageTaskDetailButton = page.getByTestId("usage-task-open-detail").first();
+  await expect(usageTaskDetailButton).toBeVisible({ timeout: 20_000 });
+  await expect(usageTaskDetailButton).toHaveAttribute(
+    "href",
+    `/tasks/${encodeURIComponent(taskId)}`,
+  );
+  const [usageDetailPage] = await Promise.all([
+    page.waitForEvent("popup"),
+    usageTaskDetailButton.click(),
+  ]);
+  await usageDetailPage.waitForLoadState("domcontentloaded");
+  await expect(usageDetailPage.getByTestId("task-detail-page")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(usageDetailPage).toHaveURL(
+    new RegExp(`/tasks/${taskId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+  );
+  await usageDetailPage.close();
+
   await page.keyboard.press("Escape");
 });
 

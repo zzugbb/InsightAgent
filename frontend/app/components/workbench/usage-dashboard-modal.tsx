@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Modal, Segmented, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { RefreshCw } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 
 import { apiJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
@@ -16,7 +16,7 @@ import type {
   UsageDashboardSessionRow,
   UsageDashboardTaskRow,
 } from "./types";
-import { shortenId, API_BASE_URL } from "./utils";
+import { buildTaskDetailHref, shortenId, API_BASE_URL } from "./utils";
 
 type UsageDashboardModalProps = {
   open: boolean;
@@ -349,6 +349,27 @@ export function UsageDashboardModal({
       dataIndex: "updated_at",
       width: 124,
       render: (value: string) => formatDateTime(value, localeTag),
+    },
+    {
+      title: t.sidebar.usage.tableActions,
+      key: "actions",
+      width: 72,
+      align: "left",
+      render: (_value: unknown, row) => (
+        <Tooltip title={t.inspector.taskOpenDetail}>
+          <Button
+            size="small"
+            type="text"
+            className="usage-task-open-detail"
+            data-testid="usage-task-open-detail"
+            aria-label={t.inspector.taskOpenDetail}
+            href={buildTaskDetailHref(row.task_id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            icon={<ExternalLink size={14} aria-hidden />}
+          />
+        </Tooltip>
+      ),
     },
   ];
 

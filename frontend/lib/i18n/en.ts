@@ -322,6 +322,7 @@ export const en: Messages = {
       tableLastTaskAt: "Last update",
       tablePrompt: "Task",
       tableUpdatedAt: "Updated at",
+      tableActions: "Actions",
       tableNoData: "No usage data to display.",
       promptEmpty: "No prompt excerpt",
       governanceProfilesLabel: "Profiles",

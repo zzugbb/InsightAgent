@@ -316,6 +316,7 @@ export const zh: Messages = {
       tableLastTaskAt: "最近更新时间",
       tablePrompt: "任务",
       tableUpdatedAt: "更新时间",
+      tableActions: "操作",
       tableNoData: "暂无可展示用量数据。",
       promptEmpty: "无任务摘要",
       governanceProfilesLabel: "Profiles",

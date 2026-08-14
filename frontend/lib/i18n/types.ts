@@ -258,6 +258,7 @@ export type Messages = {
       tableLastTaskAt: string;
       tablePrompt: string;
       tableUpdatedAt: string;
+      tableActions: string;
       tableNoData: string;
       promptEmpty: string;
     };

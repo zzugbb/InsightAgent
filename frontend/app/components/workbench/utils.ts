@@ -388,6 +388,10 @@ export function shortenId(value: string): string {
   return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }
 
+export function buildTaskDetailHref(taskId: string): string {
+  return `/tasks/${encodeURIComponent(taskId)}`;
+}
+
 export function getSessionLabel(
   session: SessionSummary,
   workbench: Messages["workbench"],
