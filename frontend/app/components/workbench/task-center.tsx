@@ -20,8 +20,10 @@ import {
   formatTimestamp,
   getTaskLabel,
   isTaskFailedStatus,
+  matchesTaskObservabilityFilter,
   resolveTaskSnapshotSummary,
 } from "./utils";
+import type { TaskObservabilityFilter } from "./utils";
 
 type TaskCenterProps = {
   activeSession: SessionSummary | undefined;
@@ -94,6 +96,8 @@ export function TaskCenter({
   const [taskStatusFilter, setTaskStatusFilter] = useState<
     "all" | "running" | "completed" | "failed"
   >("all");
+  const [taskObservabilityFilter, setTaskObservabilityFilter] =
+    useState<TaskObservabilityFilter>("all");
   const [taskSortOrder, setTaskSortOrder] = useState<"latest" | "oldest">(
     "latest",
   );
@@ -133,10 +137,17 @@ export function TaskCenter({
       }
       return status === "failed" || status === "error";
     });
+    const observabilityMatched = statusMatched.filter((task) =>
+      matchesTaskObservabilityFilter(
+        task,
+        taskSnapshots.get(task.id),
+        taskObservabilityFilter,
+      ),
+    );
     const queryMatched =
       q.length === 0
-        ? statusMatched
-        : statusMatched.filter((task) => {
+        ? observabilityMatched
+        : observabilityMatched.filter((task) => {
             const prompt = task.prompt.trim().toLowerCase();
             const id = task.id.toLowerCase();
             const snapshot = taskSnapshots.get(task.id);
@@ -183,6 +194,7 @@ export function TaskCenter({
     t.inspector,
     t.taskCenter,
     taskSearchQuery,
+    taskObservabilityFilter,
     taskSnapshots,
     taskSortOrder,
     taskStatusFilter,
@@ -196,6 +208,7 @@ export function TaskCenter({
     activeSessionId,
     scopeMode,
     taskSearchQuery,
+    taskObservabilityFilter,
     taskSortOrder,
     taskStatusFilter,
   ]);
@@ -397,6 +410,33 @@ export function TaskCenter({
               ]}
               placeholder={t.inspector.taskViewLabel}
             />
+            <Select
+              data-testid="task-center-observability-filter"
+              showSearch
+              optionFilterProp="label"
+              value={taskObservabilityFilter}
+              onChange={(v) => setTaskObservabilityFilter(v as TaskObservabilityFilter)}
+              options={[
+                { label: t.taskCenter.observabilityFilterAll, value: "all" },
+                {
+                  label: t.taskCenter.observabilityFilterAttention,
+                  value: "attention",
+                },
+                {
+                  label: t.taskCenter.observabilityFilterFailedStatus,
+                  value: "failed_status",
+                },
+                {
+                  label: t.taskCenter.observabilityFilterFailureHint,
+                  value: "failure_hint",
+                },
+                {
+                  label: t.taskCenter.observabilityFilterFailureTrace,
+                  value: "failure_trace",
+                },
+              ]}
+              placeholder={t.taskCenter.observabilityFilterAll}
+            />
             <Input
               data-testid="task-center-keyword-filter"
               allowClear
@@ -460,6 +500,7 @@ export function TaskCenter({
               onClick={() => {
                 onScopeModeChange(scopeDisabledSession ? "global" : "session");
                 setTaskStatusFilter("all");
+                setTaskObservabilityFilter("all");
                 setTaskSortOrder("latest");
                 onTaskSearchQueryChange("");
                 onTaskGovernanceProfileFilterChange(allGovernanceFilterValue);

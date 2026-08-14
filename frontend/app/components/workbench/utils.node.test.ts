@@ -8,6 +8,7 @@ import {
   formatTraceStepSemanticStatsSummary,
   formatTraceStepMetaSubtitle,
   getStepTitle,
+  matchesTaskObservabilityFilter,
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
   resolveAuditTaskDetailHref,
@@ -2093,6 +2094,93 @@ test("resolveTaskSnapshotSummary classifies tool failure hints", () => {
 
   assert.equal(summary.failureHint, "upstream timed out after 30s");
   assert.equal(summary.failureSource, "tool_error");
+});
+
+test("matchesTaskObservabilityFilter groups failed status, failure hints and failure traces", () => {
+  const baseTask = {
+    id: "task-observability",
+    session_id: "session-observability",
+    prompt: "Need observability filtering",
+    status: "completed",
+    trace_json: null,
+    created_at: "2026-08-14T00:00:00Z",
+    updated_at: "2026-08-14T00:00:01Z",
+  };
+  const cleanSnapshot = resolveTaskSnapshotSummary({
+    task: baseTask,
+    traceSteps: [
+      {
+        id: "step-final",
+        type: "other",
+        content: "Summary: completed successfully.",
+      },
+    ],
+  });
+  const failedStatusTask = {
+    ...baseTask,
+    id: "task-failed-status",
+    status: "failed",
+  };
+  const failureHintSnapshot = resolveTaskSnapshotSummary({
+    task: {
+      ...baseTask,
+      id: "task-failure-hint-filter",
+      status: "failed",
+    },
+    traceSteps: [
+      {
+        id: "step-error-event",
+        type: "other",
+        content: "Task failed",
+        meta: {
+          error_event: {
+            message: "provider_search exhausted retries",
+          },
+        },
+      },
+    ],
+  });
+  const failureTraceSnapshot = resolveTaskSnapshotSummary({
+    task: {
+      ...baseTask,
+      id: "task-failure-trace-filter",
+      status: "completed",
+    },
+    traceSteps: [
+      {
+        id: "step-tool-error",
+        type: "action",
+        content: "Tool call failed",
+        meta: {
+          tool: {
+            name: "provider_search",
+            status: "error",
+          },
+        },
+      },
+    ],
+  });
+
+  assert.equal(
+    matchesTaskObservabilityFilter(baseTask, cleanSnapshot, "attention"),
+    false,
+  );
+  assert.equal(
+    matchesTaskObservabilityFilter(failedStatusTask, cleanSnapshot, "attention"),
+    true,
+  );
+  assert.equal(
+    matchesTaskObservabilityFilter(baseTask, failureHintSnapshot, "failure_hint"),
+    true,
+  );
+  assert.equal(
+    matchesTaskObservabilityFilter(baseTask, failureTraceSnapshot, "failure_trace"),
+    true,
+  );
+  assert.equal(
+    matchesTaskObservabilityFilter(baseTask, failureTraceSnapshot, "failure_hint"),
+    false,
+  );
 });
 
 test("formatTraceStepSemanticStatsSummary renders compact planner retrieval calculator counts", () => {

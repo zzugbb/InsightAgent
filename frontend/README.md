@@ -15,15 +15,16 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `registry-governance` 已封板：provider/source diagnostics、settings/preflight、runtime artifacts、trace/export/audit/SSE 与 task/usage 回放语义已完成脱敏和 alias 对齐，前端可见字段 shape 不变。
 - 后端 `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
 - 后端 `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。前端相关契约已固定：客户端 SSE 断开保留 running 任务供 reload/reconnect/cancel，服务端执行协程取消才落 failed；前端可见删除会话响应、SSE、trace 与 export shape 不变。
-- 当前进入 `observability-experience` 主线，进度约 48%：任务快照会从 trace diagnostics 中提取失败线索并标注来源（SSE error / tool error / trace content / persisted trace），Task Center 支持展示/搜索该线索与来源，任务详情页展示同一失败摘要；Usage Dashboard 任务榜会显示失败摘要并可直接打开任务详情回放，Audit Logs 任务列也可进入同一回放页；Trace 语义统计已新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹。
+- 当前进入 `observability-experience` 主线，进度约 58%：任务快照会从 trace diagnostics 中提取失败线索并标注来源（SSE error / tool error / trace content / persisted trace），Task Center 支持展示/搜索该线索与来源，并支持按 Needs attention / Failed status / Failure hint / Failure trace 做观测筛选；任务详情页展示同一失败摘要；Usage Dashboard 任务榜会显示失败摘要并可直接打开任务详情回放，Audit Logs 任务列也可进入同一回放页；Trace 语义统计已新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹。
 
 ## 当前验证基线
 
-- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`83/83` 通过
+- `cd frontend && node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`84/84` 通过
 - `cd frontend && npm run lint`：通过
 - `npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts`：通过
 - targeted TS：本轮涉及的 workbench utils、Task Center、Inspector、任务详情页、Trace types 与 i18n 通过 targeted `tsc`
 - task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1299`，`3/3` 通过，覆盖 Task Center/任务详情 Failure 语义统计
+- remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过，覆盖 Task Center Needs attention / Failed status 观测筛选
 - usage/audit-to-detail Chromium：`e2e/usage-dashboard.spec.ts:774`，`1/1` 通过
 - frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
@@ -40,8 +41,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. 当前主线：`observability-experience` 已推进到约 48%，已完成任务失败线索摘要、来源分类、任务中心/任务详情复用、Usage Dashboard / Audit Logs 任务详情回放入口、Usage Dashboard top tasks 失败摘要展示，以及 Trace/Inspector/任务详情失败语义过滤与 Failure 统计。
-3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定，并继续补齐 Task Center 失败定位、失败诊断聚合、audit 可读性和任务回放效率。
+2. 当前主线：`observability-experience` 已推进到约 58%，已完成任务失败线索摘要、来源分类、Task Center 观测筛选、任务中心/任务详情复用、Usage Dashboard / Audit Logs 任务详情回放入口、Usage Dashboard top tasks 失败摘要展示，以及 Trace/Inspector/任务详情失败语义过滤与 Failure 统计。
+3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定，并继续补齐失败诊断聚合、audit 可读性、trace 筛选效率和任务回放效率。
 4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。
 
 ## 后续候选主线
@@ -70,7 +71,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - 实时流、持久化 trace 与导出回放当前共用同一套 `TraceStep` 消费主干，前端优先避免派生本地专用语义。
 - `tool_end.result_summary`、preview/output key、retrieval follow-up 与 registry diagnostics 已进入工作台主展示链，当前重点是继续跟随后端消除 helper fallback 漏洞。
-- 任务失败线索已进入 `resolveTaskSnapshotSummary`，Task Center 和任务详情页共享同一失败摘要与来源分类；Trace Failure 语义过滤复用同一失败判定 helper，避免另起本地分支。
+- 任务失败线索已进入 `resolveTaskSnapshotSummary`，Task Center 和任务详情页共享同一失败摘要与来源分类；Task Center 观测筛选复用同一任务快照语义，Trace Failure 语义过滤复用同一失败判定 helper，避免另起本地分支。
 - Usage Dashboard 任务榜已显示失败摘要并接入任务详情外链，Audit Logs 任务列也可直接进入任务回放页；Task Center 语义摘要和任务详情 KPI 已显示 Failure 计数。
 - running task recovery、remote cancel、model settings diagnostics 与知识库治理 shared 权限是当前最容易回归的前端运行态重点。
 - 当前前端回归重点仍围绕 workbench 主链、remote errors、settings、usage dashboard 与 common tooling。

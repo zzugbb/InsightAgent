@@ -79,6 +79,13 @@ export type TraceStepKindFilter =
   | "rag"
   | "other";
 
+export type TaskObservabilityFilter =
+  | "all"
+  | "attention"
+  | "failed_status"
+  | "failure_hint"
+  | "failure_trace";
+
 export type TaskStreamTerminalReason = "done" | "cancelled" | "timeout" | "error";
 
 export function resolveTaskStreamTerminalReason(args: {
@@ -1692,6 +1699,30 @@ export function resolveTaskSnapshotSummary(args: {
     lastObservation,
     governance,
   };
+}
+
+export function matchesTaskObservabilityFilter(
+  task: Pick<TaskSummary, "status" | "status_normalized">,
+  snapshot: Pick<TaskSnapshotSummary, "failureHint" | "semanticStats"> | null | undefined,
+  filter: TaskObservabilityFilter,
+): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  const status = task.status_normalized?.trim() || task.status;
+  const hasFailedStatus = isTaskFailedStatus(status);
+  const hasFailureHint = Boolean(snapshot?.failureHint?.trim());
+  const hasFailureTrace = (snapshot?.semanticStats.failure ?? 0) > 0;
+  if (filter === "failed_status") {
+    return hasFailedStatus;
+  }
+  if (filter === "failure_hint") {
+    return hasFailureHint;
+  }
+  if (filter === "failure_trace") {
+    return hasFailureTrace;
+  }
+  return hasFailedStatus || hasFailureHint || hasFailureTrace;
 }
 
 export function resolveSessionGovernanceSummary(

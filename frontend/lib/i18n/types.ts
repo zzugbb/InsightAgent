@@ -115,6 +115,11 @@ export type Messages = {
     sessionRequired: string;
     governanceProfileFilterAll: string;
     governanceSourceFilterAll: string;
+    observabilityFilterAll: string;
+    observabilityFilterAttention: string;
+    observabilityFilterFailedStatus: string;
+    observabilityFilterFailureHint: string;
+    observabilityFilterFailureTrace: string;
     tableTask: string;
     tableStatus: string;
     tableUsageSource: string;

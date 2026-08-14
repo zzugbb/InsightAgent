@@ -86,6 +86,20 @@ async function expectToastContains(page: Page, text: string): Promise<void> {
   await expect(toast).toBeVisible({ timeout: 20_000 });
 }
 
+async function selectVisibleOption(
+  page: Page,
+  testId: string,
+  label: RegExp,
+): Promise<void> {
+  await page.getByTestId(testId).click();
+  await page
+    .locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")
+    .locator(".ant-select-item-option")
+    .filter({ hasText: label })
+    .first()
+    .click();
+}
+
 async function setRemoteSettingsWithUnreachableBaseUrl(
   request: APIRequestContext,
   token: string,
@@ -485,6 +499,28 @@ test("remote network failure shows mapped stream error code @smoke", async ({
 
   await composerInput.fill("after remote error can continue typing");
   await expect(composerSend).toBeEnabled({ timeout: 20_000 });
+
+  const openTaskCenter = page.getByTestId("chat-open-task-center");
+  await expect(openTaskCenter).toBeVisible({ timeout: 20_000 });
+  await openTaskCenter.click();
+  await expect(page.getByTestId("task-center-shell")).toBeVisible({
+    timeout: 20_000,
+  });
+  await selectVisibleOption(
+    page,
+    "task-center-observability-filter",
+    /Needs attention|需要关注/,
+  );
+  const failedTaskRow = page
+    .locator(".task-center-table-row")
+    .filter({ hasText: "trigger remote network error" });
+  await expect(failedTaskRow).toBeVisible({ timeout: 20_000 });
+  await selectVisibleOption(
+    page,
+    "task-center-observability-filter",
+    /Failed status|失败状态/,
+  );
+  await expect(failedTaskRow).toBeVisible({ timeout: 20_000 });
 });
 
 test("remote 401 maps to unauthorized stream error code", async ({
