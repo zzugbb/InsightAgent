@@ -2064,6 +2064,93 @@ test("resolveTaskSnapshotSummary extracts terminal failure hints from trace diag
   assert.equal(summary.failureSource, "error_event");
 });
 
+test("resolveTaskSnapshotSummary prefers legacy failure diagnostics over neutral persisted steps", () => {
+  const summary = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-legacy-failure-priority",
+      session_id: "session-legacy-failure-priority",
+      prompt: "trigger remote network error",
+      status: "failed",
+      trace_json: JSON.stringify([
+        {
+          id: "legacy-error-event",
+          type: "other",
+          content: "Task failed",
+          meta: {
+            error_event: {
+              code: "remote_provider_network_error",
+              message: "Failed to reach remote provider",
+            },
+          },
+        },
+        {
+          id: "legacy-tool-done",
+          type: "action",
+          content: "Tool done: Task Planner",
+          meta: {
+            tool: {
+              name: "task_plan",
+              label: "Task Planner",
+              status: "done",
+            },
+          },
+        },
+      ]),
+      created_at: "2026-07-01T00:00:00Z",
+      updated_at: "2026-07-01T00:00:01Z",
+    },
+    traceSteps: [
+      {
+        id: "persisted-tool-done",
+        type: "action",
+        content: "Tool done: Task Planner",
+        meta: {
+          tool: {
+            name: "task_plan",
+            label: "Task Planner",
+            status: "done",
+          },
+        },
+      },
+    ],
+  });
+
+  assert.equal(summary.failureHint, "Failed to reach remote provider");
+  assert.equal(summary.failureSource, "error_event");
+});
+
+test("resolveTaskSnapshotSummary prefers explicit task failure hints over neutral persisted steps", () => {
+  const summary = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-explicit-failure-priority",
+      session_id: "session-explicit-failure-priority",
+      prompt: "trigger remote network error",
+      status: "failed",
+      trace_json: JSON.stringify([
+        {
+          id: "legacy-tool-done",
+          type: "action",
+          content: "Tool done: Task Planner",
+        },
+      ]),
+      failure_hint: "Failed to reach remote provider",
+      failure_source: "error_event",
+      created_at: "2026-07-01T00:00:00Z",
+      updated_at: "2026-07-01T00:00:01Z",
+    },
+    traceSteps: [
+      {
+        id: "persisted-tool-done",
+        type: "action",
+        content: "Tool done: Task Planner",
+      },
+    ],
+  });
+
+  assert.equal(summary.failureHint, "Failed to reach remote provider");
+  assert.equal(summary.failureSource, "error_event");
+});
+
 test("resolveTaskSnapshotSummary classifies tool failure hints", () => {
   const summary = resolveTaskSnapshotSummary({
     task: {

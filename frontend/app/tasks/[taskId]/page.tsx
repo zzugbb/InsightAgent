@@ -29,6 +29,16 @@ import {
   resolveTaskUsageFromTask,
   shortenId,
 } from "../../components/workbench/utils";
+import type {
+  TaskDetailTraceKindFilter,
+  TaskDetailTraceSemanticFilter,
+  TaskDetailTraceView,
+} from "./task-detail-page-utils";
+import {
+  resolveTaskDetailFailureHint,
+  resolveTaskDetailFailureTracePreset,
+  resolveTaskDetailTraceSteps,
+} from "./task-detail-page-utils";
 
 const TRACE_REFRESH_MS = 2200;
 
@@ -81,16 +91,14 @@ export default function TaskDetailPage() {
   const { localeTag, theme } = usePreferences();
   const { message } = App.useApp();
   const params = useParams<{ taskId: string }>();
-  const [traceView, setTraceView] = useState<"list" | "flow">("list");
+  const [traceView, setTraceView] = useState<TaskDetailTraceView>("list");
   const [traceDensity, setTraceDensity] = useState<"comfortable" | "compact">(
     "comfortable",
   );
-  const [traceSemanticFilter, setTraceSemanticFilter] = useState<
-    "all" | "planner" | "retrieval" | "calculator" | "failure"
-  >("all");
-  const [traceKindFilter, setTraceKindFilter] = useState<
-    "all" | "thought" | "action" | "observation" | "tool" | "rag" | "other"
-  >("all");
+  const [traceSemanticFilter, setTraceSemanticFilter] =
+    useState<TaskDetailTraceSemanticFilter>("all");
+  const [traceKindFilter, setTraceKindFilter] =
+    useState<TaskDetailTraceKindFilter>("all");
   const [traceSearchQuery, setTraceSearchQuery] = useState("");
   const [taskExporting, setTaskExporting] = useState<"json" | "markdown" | null>(
     null,
@@ -119,16 +127,25 @@ export default function TaskDetailPage() {
   });
 
   const task = taskQuery.data;
+  const explicitTaskFailureHint = useMemo(
+    () =>
+      resolveTaskDetailFailureHint(
+        task?.failure_hint,
+        t.stream.streamErrorByCode,
+      ),
+    [task?.failure_hint, t.stream.streamErrorByCode],
+  );
 
   const traceSteps = useMemo(() => {
-    if (traceQuery.data?.steps?.length) {
-      return traceQuery.data.steps;
-    }
     if (!task) {
       return [];
     }
-    return parseTaskTraceJson(task.trace_json);
-  }, [task, traceQuery.data?.steps]);
+    return resolveTaskDetailTraceSteps({
+      primarySteps: traceQuery.data?.steps ?? [],
+      fallbackSteps: parseTaskTraceJson(task.trace_json),
+      explicitFailureHint: explicitTaskFailureHint,
+    });
+  }, [explicitTaskFailureHint, task, traceQuery.data?.steps]);
 
   const taskSnapshot = useMemo(
     () =>
@@ -154,6 +171,19 @@ export default function TaskDetailPage() {
       searchQuery: traceSearchQuery,
     });
   }, [traceKindFilter, traceSearchQuery, traceSemanticFilter, traceSteps]);
+
+  const focusFailureTrace = () => {
+    const preset = resolveTaskDetailFailureTracePreset({
+      traceView,
+      traceSemanticFilter,
+      traceKindFilter,
+      traceSearchQuery,
+    });
+    setTraceView(preset.traceView);
+    setTraceSemanticFilter(preset.traceSemanticFilter);
+    setTraceKindFilter(preset.traceKindFilter);
+    setTraceSearchQuery(preset.traceSearchQuery);
+  };
 
   const exportTask = async (format: "json" | "markdown") => {
     const exportTaskId = (task?.id ?? taskId).trim();
@@ -307,6 +337,17 @@ export default function TaskDetailPage() {
                   {failureSourceLabel ? ` · ${failureSourceLabel}` : ""}
                 </p>
                 <p className="task-snapshot-failure">{taskSnapshot.failureHint}</p>
+                {taskSnapshot.semanticStats.failure > 0 ? (
+                  <Button
+                    className="task-detail-failure-action"
+                    data-testid="task-detail-show-failure-traces"
+                    size="small"
+                    type="link"
+                    onClick={focusFailureTrace}
+                  >
+                    {t.taskDetail.viewFailureTrace}
+                  </Button>
+                ) : null}
               </section>
             ) : null}
 
@@ -434,7 +475,7 @@ export default function TaskDetailPage() {
                 <div className="trace-view-toolbar">
                   <Segmented
                     value={traceView}
-                    onChange={(v) => setTraceView(v as "list" | "flow")}
+                    onChange={(v) => setTraceView(v as TaskDetailTraceView)}
                     options={[
                       { label: t.taskDetail.traceViewList, value: "list" },
                       { label: t.taskDetail.traceViewFlow, value: "flow" },
@@ -447,14 +488,7 @@ export default function TaskDetailPage() {
                     size="small"
                     value={traceSemanticFilter}
                     onChange={(v) =>
-                      setTraceSemanticFilter(
-                        v as
-                          | "all"
-                          | "planner"
-                          | "retrieval"
-                          | "calculator"
-                          | "failure",
-                      )
+                      setTraceSemanticFilter(v as TaskDetailTraceSemanticFilter)
                     }
                     options={[
                       { label: t.taskDetail.traceSemanticFilterAll, value: "all" },
@@ -480,16 +514,7 @@ export default function TaskDetailPage() {
                     size="small"
                     value={traceKindFilter}
                     onChange={(v) =>
-                      setTraceKindFilter(
-                        v as
-                          | "all"
-                          | "thought"
-                          | "action"
-                          | "observation"
-                          | "tool"
-                          | "rag"
-                          | "other",
-                      )
+                      setTraceKindFilter(v as TaskDetailTraceKindFilter)
                     }
                     options={[
                       { label: t.taskDetail.traceFilterAll, value: "all" },

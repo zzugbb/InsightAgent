@@ -671,6 +671,7 @@ export type Messages = {
     ragKnowledgeBasesLabel: (ids: string) => string;
     usageLead: string;
     failureHintTitle: string;
+    viewFailureTrace: string;
     traceTitle: string;
     traceViewList: string;
     traceViewFlow: string;

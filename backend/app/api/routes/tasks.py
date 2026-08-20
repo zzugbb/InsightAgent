@@ -682,6 +682,8 @@ class TaskResponse(BaseModel):
     governance: "TaskGovernanceSummary | None" = None
     trace_json: str | None = None
     usage_json: str | None = None
+    failure_hint: str | None = None
+    failure_source: str | None = None
     created_at: str
     updated_at: str
 

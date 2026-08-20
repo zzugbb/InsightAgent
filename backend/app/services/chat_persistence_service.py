@@ -1500,6 +1500,50 @@ def get_task_messages(task_id: str, user_id: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def _resolve_task_failed_audit_insight(
+    connection,
+    *,
+    task_id: str,
+    user_id: str,
+) -> dict[str, str] | None:
+    row = connection.execute(
+        """
+        SELECT event_detail_json
+        FROM audit_logs
+        WHERE user_id = ?
+          AND event_type = 'task_failed'
+          AND event_detail_json IS NOT NULL
+          AND (event_detail_json::jsonb ->> 'task_id') = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (user_id, task_id),
+    ).fetchone()
+    if row is None:
+        return None
+    payload = _coerce_export_payload_block_to_dict(row)
+    raw_detail = payload.get("event_detail_json")
+    if not isinstance(raw_detail, str) or not raw_detail.strip():
+        return None
+    try:
+        detail = json.loads(raw_detail)
+    except Exception:
+        return None
+    if not isinstance(detail, dict):
+        return None
+    hint = (
+        _normalize_task_failure_hint(detail.get("failure_hint"))
+        or _normalize_task_failure_hint(detail.get("code"))
+        or _normalize_task_failure_hint(detail.get("message"))
+    )
+    if not hint:
+        return None
+    return {
+        "failure_hint": hint,
+        "failure_source": "error_event",
+    }
+
+
 def get_task(task_id: str, user_id: str) -> dict | None:
     with get_db_connection() as connection:
         row = connection.execute(
@@ -1522,11 +1566,23 @@ def get_task(task_id: str, user_id: str) -> dict | None:
             """,
             (task_id, user_id),
         ).fetchone()
+        audit_failure = (
+            _resolve_task_failed_audit_insight(
+                connection,
+                task_id=task_id,
+                user_id=user_id,
+            )
+            if row is not None
+            else None
+        )
 
     if row is None:
         return None
 
-    return _with_task_governance(dict(row))
+    task = _with_task_governance(dict(row))
+    if audit_failure:
+        task.update(audit_failure)
+    return task
 
 
 def list_tasks(
@@ -3036,6 +3092,18 @@ def get_task_response_summary_from_task(
 ) -> dict[str, object]:
     task = _coerce_export_payload_block_to_dict(task)
     usage_json = _coerce_trace_string_like_value(task.get("usage_json"))
+    failure_insight = (
+        {
+            "failure_hint": failure_hint,
+            "failure_source": failure_source,
+        }
+        if (failure_hint := _normalize_task_failure_hint(task.get("failure_hint")))
+        and (failure_source := _normalize_task_failure_source(task.get("failure_source")))
+        else _extract_task_failure_insight_from_trace_json(
+            status=task.get("status"),
+            trace_json=task.get("trace_json"),
+        )
+    )
     provider_source_aliases = (
         provider_source_aliases
         if provider_source_aliases is not None
@@ -3055,6 +3123,7 @@ def get_task_response_summary_from_task(
             provider_source_aliases=provider_source_aliases,
         ),
         "usage_json": usage_json,
+        **(failure_insight or {}),
         "created_at": str(task.get("created_at", "")),
         "updated_at": str(task.get("updated_at", "")),
     }

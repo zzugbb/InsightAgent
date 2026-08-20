@@ -761,6 +761,7 @@ export const en: Messages = {
     ragKnowledgeBasesLabel: (ids: string) => `Knowledge bases hit: ${ids}`,
     usageLead: "Usage",
     failureHintTitle: "Failure hint",
+    viewFailureTrace: "View failure traces",
     traceTitle: "Execution trace",
     traceViewList: "Timeline",
     traceViewFlow: "Flow",

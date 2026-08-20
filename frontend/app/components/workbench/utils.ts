@@ -476,28 +476,26 @@ function extractTaskFailureInsight(task: TaskSummary): TaskFailureInsight | null
   if (!isTaskFailedStatus(task.status) || !task.trace_json?.trim()) {
     return null;
   }
-  try {
-    const parsed = JSON.parse(task.trace_json) as unknown;
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return null;
-    }
-    const reversed = [...parsed].reverse();
-    for (const step of reversed) {
-      if (!step || typeof step !== "object" || Array.isArray(step)) {
-        continue;
-      }
-      const content = (step as { content?: unknown }).content;
-      if (typeof content === "string" && content.trim()) {
-        return {
-          hint: truncateTaskDiagnostic(content),
-          source: "legacy_trace",
-        };
-      }
-    }
-    return null;
-  } catch {
+  const steps = parseTaskTraceJson(task.trace_json);
+  if (steps.length === 0) {
     return null;
   }
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const insight = resolveTraceStepFailureInsight(steps[i]);
+    if (insight) {
+      return insight;
+    }
+  }
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    const content = normalizeTraceContent(steps[i].content);
+    if (content) {
+      return {
+        hint: truncateTaskDiagnostic(content),
+        source: "legacy_trace",
+      };
+    }
+  }
+  return null;
 }
 
 export function extractTaskFailureHint(task: TaskSummary): string | null {
@@ -580,6 +578,19 @@ function resolveTaskFailureInsightFromSteps(
     }
   }
   return null;
+}
+
+function resolveExplicitTaskFailureInsight(task: TaskSummary): TaskFailureInsight | null {
+  if (!isTaskFailedStatus(task.status)) {
+    return null;
+  }
+  const hint = normalizeDiagnosticText(task.failure_hint);
+  return hint && isTaskFailureSource(task.failure_source)
+    ? {
+        hint,
+        source: task.failure_source,
+      }
+    : null;
 }
 
 export function formatTaskFailureSourceLabel(
@@ -1594,6 +1605,7 @@ export function resolveTaskSnapshotSummary(args: {
   const semanticStats = resolveTraceStepSemanticStats(steps);
   const failureInsight =
     resolveTaskFailureInsightFromSteps(args.task.status, steps) ??
+    resolveExplicitTaskFailureInsight(args.task) ??
     extractTaskFailureInsight(args.task);
   const lastObservation = findLastStepContent(
     steps,

@@ -159,6 +159,13 @@ export type TaskSummary = {
   trace_json: string | null;
   /** JSON 字符串，与 SSE `done.usage` 同结构（prompt_tokens / completion_tokens / cost_estimate） */
   usage_json?: string | null;
+  failure_hint?: string | null;
+  failure_source?:
+    | "error_event"
+    | "tool_error"
+    | "trace_content"
+    | "legacy_trace"
+    | null;
   created_at: string;
   updated_at: string;
 };

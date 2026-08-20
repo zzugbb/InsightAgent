@@ -566,6 +566,31 @@ test("remote network failure shows mapped stream error code @smoke", async ({
   await expect(
     page.locator(".audit-modal-detail-row").filter({ hasText: "Failure hint" }),
   ).toContainText("Failed to reach remote provider", { timeout: 20_000 });
+
+  await page.goto(`/tasks/${encodeURIComponent(failedTaskId ?? "")}`);
+  await expect(page.getByTestId("task-detail-page")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByTestId("task-detail-failure-hint")).toContainText(
+    "Failed to reach remote provider",
+    { timeout: 20_000 },
+  );
+  const failureSemanticText =
+    (await page.getByTestId("task-detail-semantic-failure").textContent()) ?? "";
+  const failureTraceCount = Number(failureSemanticText.match(/\d+/)?.[0] ?? 0);
+  expect(failureTraceCount).toBeGreaterThan(0);
+  await page.getByTestId("task-detail-show-failure-traces").click();
+  await expect(
+    page
+      .locator(".trace-filter-toolbar .ant-segmented-item-selected")
+      .filter({ hasText: "Failure" }),
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("task-detail-trace-card")).toHaveCount(
+    failureTraceCount,
+  );
+  await expect(page.getByTestId("task-detail-trace-feed")).toContainText(
+    "Failed to reach remote provider",
+  );
 });
 
 test("remote 401 maps to unauthorized stream error code", async ({

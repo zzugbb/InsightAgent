@@ -1,0 +1,118 @@
+import type { TraceStepPayload } from "../../../lib/types/trace";
+
+export type TaskDetailTraceView = "list" | "flow";
+export type TaskDetailTraceSemanticFilter =
+  | "all"
+  | "planner"
+  | "retrieval"
+  | "calculator"
+  | "failure";
+export type TaskDetailTraceKindFilter =
+  | "all"
+  | "thought"
+  | "action"
+  | "observation"
+  | "tool"
+  | "rag"
+  | "other";
+
+export type TaskDetailTraceFilterState = {
+  traceView: TaskDetailTraceView;
+  traceSemanticFilter: TaskDetailTraceSemanticFilter;
+  traceKindFilter: TaskDetailTraceKindFilter;
+  traceSearchQuery: string;
+};
+
+export function resolveTaskDetailFailureTracePreset(
+  current: TaskDetailTraceFilterState,
+): TaskDetailTraceFilterState {
+  void current;
+  return {
+    traceView: "list",
+    traceSemanticFilter: "failure",
+    traceKindFilter: "all",
+    traceSearchQuery: "",
+  };
+}
+
+export function resolveTaskDetailFailureHint(
+  hint: string | null | undefined,
+  streamErrorByCode?: (code: string) => string | null,
+): string | null {
+  const normalized = typeof hint === "string" ? hint.trim() : "";
+  if (!normalized) {
+    return null;
+  }
+  const mapped = streamErrorByCode?.(normalized)?.trim();
+  return mapped && mapped !== normalized ? mapped : normalized;
+}
+
+export function resolveTaskDetailTraceSteps(args: {
+  primarySteps: TraceStepPayload[];
+  fallbackSteps: TraceStepPayload[];
+  explicitFailureHint?: string | null;
+}): TraceStepPayload[] {
+  if (args.primarySteps.length === 0) {
+    if (args.fallbackSteps.length > 0) {
+      return args.fallbackSteps;
+    }
+    return buildExplicitFailureTraceSteps(args.explicitFailureHint);
+  }
+  if (args.primarySteps.some(isFailureTraceStep)) {
+    return args.primarySteps;
+  }
+  const primaryStepIds = new Set(args.primarySteps.map((step) => step.id));
+  const fallbackFailureSteps = args.fallbackSteps.filter(
+    (step) => !primaryStepIds.has(step.id) && isFailureTraceStep(step),
+  );
+  if (fallbackFailureSteps.length > 0) {
+    return [...args.primarySteps, ...fallbackFailureSteps];
+  }
+  return [
+    ...args.primarySteps,
+    ...buildExplicitFailureTraceSteps(args.explicitFailureHint),
+  ];
+}
+
+function isFailureTraceStep(step: TraceStepPayload): boolean {
+  const meta = step.meta;
+  if (meta?.error_event) {
+    return true;
+  }
+  const tool = meta?.tool;
+  if (
+    tool &&
+    (
+      typeof tool.error === "string" && tool.error.trim().length > 0 ||
+      String(tool.status ?? "").trim().toLowerCase() === "error"
+    )
+  ) {
+    return true;
+  }
+  const content = step.content.trim().toLowerCase();
+  return ["error", "failed", "timeout", "cancel"].some((token) =>
+    content.includes(token),
+  );
+}
+
+function buildExplicitFailureTraceSteps(
+  explicitFailureHint: string | null | undefined,
+): TraceStepPayload[] {
+  const hint =
+    typeof explicitFailureHint === "string" ? explicitFailureHint.trim() : "";
+  if (!hint) {
+    return [];
+  }
+  return [
+    {
+      id: "task-detail-failure-summary",
+      type: "other",
+      content: hint,
+      meta: {
+        error_event: {
+          message: hint,
+        },
+      },
+    },
+  ];
+}
