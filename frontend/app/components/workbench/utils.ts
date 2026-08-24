@@ -630,6 +630,7 @@ export function formatTaskFailureSummary(
     failureSource?: unknown;
   },
   labels: Pick<Messages["taskDetail"], "failureHintTitle"> &
+    Partial<Pick<Messages["stream"], "streamErrorByCode">> &
     Pick<
       Messages["inspector"],
       | "taskFailureSourceErrorEvent"
@@ -641,11 +642,26 @@ export function formatTaskFailureSummary(
   if (typeof args.failureHint !== "string" || !args.failureHint.trim()) {
     return null;
   }
-  const hint = truncateTaskDiagnostic(args.failureHint);
+  const hint = resolveTaskFailureHintDisplay(
+    args.failureHint,
+    labels.streamErrorByCode,
+  );
   const sourceLabel = isTaskFailureSource(args.failureSource)
     ? formatTaskFailureSourceLabel(args.failureSource, labels)
     : null;
   return `${labels.failureHintTitle}${sourceLabel ? ` · ${sourceLabel}` : ""}: ${hint}`;
+}
+
+export function resolveTaskFailureHintDisplay(
+  failureHint: unknown,
+  streamErrorByCode?: (code: string) => string | null,
+): string | null {
+  const hint = normalizeDiagnosticText(failureHint);
+  if (!hint) {
+    return null;
+  }
+  const mapped = streamErrorByCode?.(hint)?.trim();
+  return mapped && mapped !== hint ? truncateTaskDiagnostic(mapped) : hint;
 }
 
 function normalizeTraceContent(value: unknown): string | null {

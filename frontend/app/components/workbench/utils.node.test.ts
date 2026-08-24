@@ -5,6 +5,7 @@ import {
   filterTraceSteps,
   buildTaskDetailHref,
   formatTaskFailureSummary,
+  resolveTaskFailureHintDisplay,
   formatTraceStepSemanticStatsSummary,
   formatTraceStepMetaSubtitle,
   getStepTitle,
@@ -76,6 +77,45 @@ test("formatTaskFailureSummary renders safe failure hint and source", () => {
       labels,
     ),
     null,
+  );
+});
+
+test("resolveTaskFailureHintDisplay maps known stream error codes", () => {
+  assert.equal(
+    resolveTaskFailureHintDisplay("remote_provider_network_error", (code) =>
+      code === "remote_provider_network_error"
+        ? "Failed to reach remote provider. Check network or base URL."
+        : null,
+    ),
+    "Failed to reach remote provider. Check network or base URL.",
+  );
+  assert.equal(
+    resolveTaskFailureHintDisplay("custom failure", () => null),
+    "custom failure",
+  );
+});
+
+test("formatTaskFailureSummary maps stream error codes when labels provide a mapper", () => {
+  const labels = {
+    failureHintTitle: "Failure hint",
+    streamErrorByCode: (code: string) =>
+      code === "remote_provider_network_error"
+        ? "Failed to reach remote provider. Check network or base URL."
+        : null,
+    taskFailureSourceErrorEvent: "SSE error",
+    taskFailureSourceToolError: "Tool error",
+    taskFailureSourceTraceContent: "Trace content",
+    taskFailureSourceLegacyTrace: "Persisted trace",
+  };
+  assert.equal(
+    formatTaskFailureSummary(
+      {
+        failureHint: "remote_provider_network_error",
+        failureSource: "error_event",
+      },
+      labels,
+    ),
+    "Failure hint · SSE error: Failed to reach remote provider. Check network or base URL.",
   );
 });
 

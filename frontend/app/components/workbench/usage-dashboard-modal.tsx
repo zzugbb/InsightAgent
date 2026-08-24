@@ -319,6 +319,7 @@ export function UsageDashboardModal({
             taskFailureSourceToolError: t.inspector.taskFailureSourceToolError,
             taskFailureSourceTraceContent: t.inspector.taskFailureSourceTraceContent,
             taskFailureSourceLegacyTrace: t.inspector.taskFailureSourceLegacyTrace,
+            streamErrorByCode: t.stream.streamErrorByCode,
           },
         );
         return (

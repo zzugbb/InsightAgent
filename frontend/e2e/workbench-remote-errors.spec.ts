@@ -539,6 +539,10 @@ test("remote network failure shows mapped stream error code @smoke", async ({
     /Failed status|失败状态/,
   );
   await expect(failedTaskRow).toBeVisible({ timeout: 20_000 });
+  await expect(failedTaskRow).toContainText(
+    /Failed to reach remote provider|无法连接远端提供方/,
+    { timeout: 20_000 },
+  );
 
   await page.getByTestId("task-center-close").click();
   await page.getByTestId("sidebar-settings-trigger").click();

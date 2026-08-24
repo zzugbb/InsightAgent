@@ -1522,7 +1522,14 @@ def _resolve_task_failed_audit_insight(
     if row is None:
         return None
     payload = _coerce_export_payload_block_to_dict(row)
-    raw_detail = payload.get("event_detail_json")
+    return _extract_task_failed_audit_insight_from_detail(
+        payload.get("event_detail_json")
+    )
+
+
+def _extract_task_failed_audit_insight_from_detail(
+    raw_detail: object,
+) -> dict[str, str] | None:
     if not isinstance(raw_detail, str) or not raw_detail.strip():
         return None
     try:
@@ -1542,6 +1549,55 @@ def _resolve_task_failed_audit_insight(
         "failure_hint": hint,
         "failure_source": "error_event",
     }
+
+
+def _resolve_task_failed_audit_insights_for_tasks(
+    connection,
+    *,
+    task_ids: list[str],
+    user_id: str,
+) -> dict[str, dict[str, str]]:
+    normalized_task_ids = [
+        task_id.strip()
+        for task_id in task_ids
+        if isinstance(task_id, str) and task_id.strip()
+    ]
+    if not normalized_task_ids:
+        return {}
+    task_conditions = " OR ".join(
+        ["(event_detail_json::jsonb ->> 'task_id') = ?"] * len(normalized_task_ids)
+    )
+    rows = connection.execute(
+        f"""
+        SELECT event_detail_json
+        FROM audit_logs
+        WHERE user_id = ?
+          AND event_type = 'task_failed'
+          AND event_detail_json IS NOT NULL
+          AND ({task_conditions})
+        ORDER BY created_at DESC
+        """,
+        tuple([user_id, *normalized_task_ids]),
+    ).fetchall()
+    insights: dict[str, dict[str, str]] = {}
+    for row in rows:
+        payload = _coerce_export_payload_block_to_dict(row)
+        raw_detail = payload.get("event_detail_json")
+        if not isinstance(raw_detail, str) or not raw_detail.strip():
+            continue
+        try:
+            detail = json.loads(raw_detail)
+        except Exception:
+            continue
+        if not isinstance(detail, dict):
+            continue
+        detail_task_id = str(detail.get("task_id", "")).strip()
+        if not detail_task_id or detail_task_id in insights:
+            continue
+        insight = _extract_task_failed_audit_insight_from_detail(raw_detail)
+        if insight:
+            insights[detail_task_id] = insight
+    return insights
 
 
 def get_task(task_id: str, user_id: str) -> dict | None:
@@ -1629,8 +1685,23 @@ def list_tasks(
             """,
             tuple(params),
         ).fetchall()
+        tasks = [_with_task_governance(dict(row)) for row in rows]
+        failed_task_ids = [
+            str(task.get("id", "")).strip()
+            for task in tasks
+            if normalize_task_status(str(task.get("status", ""))) == "failed"
+        ]
+        audit_failures = _resolve_task_failed_audit_insights_for_tasks(
+            connection,
+            task_ids=failed_task_ids,
+            user_id=user_id,
+        )
 
-    return [_with_task_governance(dict(row)) for row in rows]
+    for task in tasks:
+        task_id = str(task.get("id", "")).strip()
+        if task_id in audit_failures:
+            task.update(audit_failures[task_id])
+    return tasks
 
 
 def get_session_tasks(session_id: str, user_id: str) -> list[dict]:

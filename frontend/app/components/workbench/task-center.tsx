@@ -21,6 +21,7 @@ import {
   getTaskLabel,
   isTaskFailedStatus,
   matchesTaskObservabilityFilter,
+  resolveTaskFailureHintDisplay,
   resolveTaskSnapshotSummary,
 } from "./utils";
 import type { TaskObservabilityFilter } from "./utils";
@@ -174,11 +175,16 @@ export function TaskCenter({
               snapshot?.failureSource
                 ? formatTaskFailureSourceLabel(snapshot.failureSource, t.inspector).toLowerCase()
                 : "";
+            const failureHintDisplay = resolveTaskFailureHintDisplay(
+              snapshot?.failureHint,
+              t.stream.streamErrorByCode,
+            )?.toLowerCase() ?? "";
             return (
               prompt.includes(q)
               || id.includes(q)
               || semanticSummary.includes(q)
               || Boolean(snapshot?.failureHint?.toLowerCase().includes(q))
+              || failureHintDisplay.includes(q)
               || failureSourceLabel.includes(q)
               || governanceKeywords.some((item) => item.includes(q))
             );
@@ -192,6 +198,7 @@ export function TaskCenter({
   }, [
     scopedTasks,
     t.inspector,
+    t.stream.streamErrorByCode,
     t.taskCenter,
     taskSearchQuery,
     taskObservabilityFilter,
@@ -220,7 +227,10 @@ export function TaskCenter({
         key: "task",
         render: (_value: unknown, task: TaskSummary) => {
           const snapshot = taskSnapshots.get(task.id);
-          const failedHint = snapshot?.failureHint ?? null;
+          const failedHint = resolveTaskFailureHintDisplay(
+            snapshot?.failureHint,
+            t.stream.streamErrorByCode,
+          );
           const failureSourceLabel =
             snapshot?.failureSource
               ? formatTaskFailureSourceLabel(snapshot.failureSource, t.inspector)
@@ -337,6 +347,7 @@ export function TaskCenter({
       t.taskCenter.tableStatus,
       t.taskCenter.tableTask,
       t.taskCenter.tableUpdatedAt,
+      t.stream.streamErrorByCode,
       t.workbench,
     ],
   );
