@@ -465,6 +465,38 @@ type TaskFailureInsight = {
   source: TaskFailureSource;
 };
 
+const FAILURE_DIAGNOSTIC_TOKENS = [
+  "error",
+  "failed",
+  "failure",
+  "timeout",
+  "timed_out",
+  "cancel",
+  "cancelled",
+  "unauthorized",
+  "forbidden",
+  "rate_limited",
+  "rate limit",
+  "permission_denied",
+  "permission denied",
+  "access_denied",
+  "connection_refused",
+  "connection refused",
+  "refused",
+  "unavailable",
+  "quota_exceeded",
+  "quota exceeded",
+  "exhausted",
+  "invalid_json",
+  "empty_response",
+  "interrupted",
+];
+
+function isFailureDiagnosticContent(value: string): boolean {
+  const content = value.trim().toLowerCase();
+  return Boolean(content) && FAILURE_DIAGNOSTIC_TOKENS.some((token) => content.includes(token));
+}
+
 function truncateTaskDiagnostic(value: string): string {
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length > 96
@@ -545,16 +577,7 @@ function resolveTraceStepFailureInsight(step: TraceStepPayload): TaskFailureInsi
   }
 
   const content = resolveTraceStepDisplayContent(step);
-  const lowerContent = content?.toLowerCase() ?? "";
-  if (
-    content &&
-    (
-      lowerContent.includes("error") ||
-      lowerContent.includes("failed") ||
-      lowerContent.includes("timeout") ||
-      lowerContent.includes("cancel")
-    )
-  ) {
+  if (content && isFailureDiagnosticContent(content)) {
     return {
       hint: truncateTaskDiagnostic(content),
       source: "trace_content",

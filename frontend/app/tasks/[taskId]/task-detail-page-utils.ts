@@ -23,6 +23,38 @@ export type TaskDetailTraceFilterState = {
   traceSearchQuery: string;
 };
 
+const FAILURE_DIAGNOSTIC_TOKENS = [
+  "error",
+  "failed",
+  "failure",
+  "timeout",
+  "timed_out",
+  "cancel",
+  "cancelled",
+  "unauthorized",
+  "forbidden",
+  "rate_limited",
+  "rate limit",
+  "permission_denied",
+  "permission denied",
+  "access_denied",
+  "connection_refused",
+  "connection refused",
+  "refused",
+  "unavailable",
+  "quota_exceeded",
+  "quota exceeded",
+  "exhausted",
+  "invalid_json",
+  "empty_response",
+  "interrupted",
+];
+
+function isFailureDiagnosticContent(value: string): boolean {
+  const content = value.trim().toLowerCase();
+  return Boolean(content) && FAILURE_DIAGNOSTIC_TOKENS.some((token) => content.includes(token));
+}
+
 export function resolveTaskDetailFailureTracePreset(
   current: TaskDetailTraceFilterState,
 ): TaskDetailTraceFilterState {
@@ -89,10 +121,7 @@ function isFailureTraceStep(step: TraceStepPayload): boolean {
   ) {
     return true;
   }
-  const content = step.content.trim().toLowerCase();
-  return ["error", "failed", "timeout", "cancel"].some((token) =>
-    content.includes(token),
-  );
+  return isFailureDiagnosticContent(step.content);
 }
 
 function buildExplicitFailureTraceSteps(

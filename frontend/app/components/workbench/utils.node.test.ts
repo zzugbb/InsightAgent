@@ -1287,6 +1287,13 @@ test("filterTraceSteps matches failure semantic hints", () => {
           },
         },
       },
+      {
+        id: "step-rate-limited-code",
+        type: "observation",
+        content: "remote_provider_rate_limited",
+        seq: 4,
+        meta: null,
+      },
     ],
     {
       semanticFilter: "failure",
@@ -1295,7 +1302,7 @@ test("filterTraceSteps matches failure semantic hints", () => {
 
   assert.deepEqual(
     filtered.map((step) => step.id),
-    ["step-error-event", "step-tool-error"],
+    ["step-error-event", "step-tool-error", "step-rate-limited-code"],
   );
   assert.equal(
     matchesTraceStepSemanticFilter(

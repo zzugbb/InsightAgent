@@ -69,9 +69,14 @@ test("resolveTaskDetailTraceSteps keeps fallback failure diagnostics missing fro
           type: "action",
           content: "Tool done: Task Planner",
         },
+        {
+          id: "legacy-unauthorized-code",
+          type: "other",
+          content: "remote_api_key_unauthorized",
+        },
       ],
     }).map((step) => step.id),
-    ["persisted-tool-done", "legacy-error-event"],
+    ["persisted-tool-done", "legacy-error-event", "legacy-unauthorized-code"],
   );
 });
 
