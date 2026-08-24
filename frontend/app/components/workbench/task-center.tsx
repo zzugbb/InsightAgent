@@ -22,12 +22,14 @@ import {
   getTaskLabel,
   isTaskFailedStatus,
   matchesTaskGovernanceFilters,
+  matchesTaskFailureSourceFilter,
   matchesTaskObservabilityFilter,
+  resolveTaskFailureDiagnosticDrilldown,
   resolveTaskFailureDiagnosticGroups,
   resolveTaskFailureHintDisplay,
   resolveTaskSnapshotSummary,
 } from "./utils";
-import type { TaskObservabilityFilter } from "./utils";
+import type { TaskFailureSourceFilter, TaskObservabilityFilter } from "./utils";
 
 type TaskCenterProps = {
   activeSession: SessionSummary | undefined;
@@ -102,6 +104,8 @@ export function TaskCenter({
   >("all");
   const [taskObservabilityFilter, setTaskObservabilityFilter] =
     useState<TaskObservabilityFilter>("all");
+  const [taskFailureSourceFilter, setTaskFailureSourceFilter] =
+    useState<TaskFailureSourceFilter>("all");
   const [taskSortOrder, setTaskSortOrder] = useState<"latest" | "oldest">(
     "latest",
   );
@@ -155,10 +159,16 @@ export function TaskCenter({
         taskObservabilityFilter,
       ),
     );
+    const failureSourceMatched = observabilityMatched.filter((task) =>
+      matchesTaskFailureSourceFilter(
+        taskSnapshots.get(task.id),
+        taskFailureSourceFilter,
+      ),
+    );
     const queryMatched =
       q.length === 0
-        ? observabilityMatched
-        : observabilityMatched.filter((task) => {
+        ? failureSourceMatched
+        : failureSourceMatched.filter((task) => {
             const prompt = task.prompt.trim().toLowerCase();
             const id = task.id.toLowerCase();
             const snapshot = taskSnapshots.get(task.id);
@@ -212,6 +222,7 @@ export function TaskCenter({
     t.taskCenter,
     taskSearchQuery,
     taskObservabilityFilter,
+    taskFailureSourceFilter,
     taskSnapshots,
     taskSortOrder,
     taskStatusFilter,
@@ -236,6 +247,7 @@ export function TaskCenter({
     scopeMode,
     taskSearchQuery,
     taskObservabilityFilter,
+    taskFailureSourceFilter,
     taskSortOrder,
     taskStatusFilter,
     taskGovernanceProfileFilter,
@@ -543,6 +555,7 @@ export function TaskCenter({
                 onScopeModeChange(scopeDisabledSession ? "global" : "session");
                 setTaskStatusFilter("all");
                 setTaskObservabilityFilter("all");
+                setTaskFailureSourceFilter("all");
                 setTaskSortOrder("latest");
                 onTaskSearchQueryChange("");
                 onTaskGovernanceProfileFilterChange(allGovernanceFilterValue);
@@ -578,15 +591,24 @@ export function TaskCenter({
               {t.taskCenter.failureDiagnosticsTitle}
             </span>
             {failureDiagnosticGroups.map((group) => (
-              <span
+              <button
                 key={group.source}
+                type="button"
                 className="task-center-failure-chip"
                 data-testid="task-center-failure-diagnostic-group"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const drilldown = resolveTaskFailureDiagnosticDrilldown(group.source);
+                  setTaskObservabilityFilter(drilldown.observabilityFilter);
+                  setTaskFailureSourceFilter(drilldown.failureSourceFilter);
+                }}
+                aria-pressed={taskFailureSourceFilter === group.source}
               >
                 {formatTaskFailureSourceLabel(group.source, t.inspector)}
                 {" "}
                 {t.taskCenter.failureDiagnosticsCount(group.count)}
-              </span>
+              </button>
             ))}
           </div>
         ) : null}

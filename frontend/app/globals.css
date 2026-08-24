@@ -2391,7 +2391,22 @@ code {
   border-radius: 8px;
   background: rgba(239, 68, 68, 0.08);
   color: var(--text);
+  cursor: pointer;
+  font: inherit;
   line-height: 1.35;
+}
+
+.task-center-failure-chip:hover,
+.task-center-failure-chip:focus-visible {
+  border-color: rgba(239, 68, 68, 0.48);
+  background: rgba(239, 68, 68, 0.13);
+  outline: none;
+}
+
+.task-center-failure-chip[aria-pressed="true"] {
+  border-color: rgba(239, 68, 68, 0.62);
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--danger);
 }
 
 .task-center-table-wrap {

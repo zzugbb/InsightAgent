@@ -68,6 +68,11 @@ export type TaskFailureDiagnosticGroup = {
   count: number;
 };
 
+export type TaskFailureDiagnosticDrilldown = {
+  observabilityFilter: Extract<TaskObservabilityFilter, "failure_hint">;
+  failureSourceFilter: TaskFailureSource;
+};
+
 export type SessionGovernanceSummary = {
   profiles: string[];
   providerSources: string[];
@@ -97,6 +102,7 @@ export type TaskObservabilityFilter =
   | "failed_status"
   | "failure_hint"
   | "failure_trace";
+export type TaskFailureSourceFilter = "all" | TaskFailureSource;
 
 export type TaskStreamTerminalReason = "done" | "cancelled" | "timeout" | "error";
 
@@ -726,6 +732,15 @@ export function resolveTaskFailureDiagnosticGroups(
         TASK_FAILURE_SOURCE_ORDER.indexOf(b.source)
       );
     });
+}
+
+export function resolveTaskFailureDiagnosticDrilldown(
+  source: TaskFailureSource,
+): TaskFailureDiagnosticDrilldown {
+  return {
+    observabilityFilter: "failure_hint",
+    failureSourceFilter: source,
+  };
 }
 
 export function formatTaskFailureSummary(
@@ -1855,6 +1870,13 @@ export function matchesTaskObservabilityFilter(
     return hasFailureTrace;
   }
   return hasFailedStatus || hasFailureHint || hasFailureTrace;
+}
+
+export function matchesTaskFailureSourceFilter(
+  snapshot: Pick<TaskSnapshotSummary, "failureSource"> | null | undefined,
+  filter: TaskFailureSourceFilter,
+): boolean {
+  return filter === "all" || snapshot?.failureSource === filter;
 }
 
 export function matchesTaskGovernanceFilters(

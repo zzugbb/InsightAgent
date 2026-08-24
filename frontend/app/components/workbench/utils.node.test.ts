@@ -10,10 +10,12 @@ import {
   formatTraceStepMetaSubtitle,
   getStepTitle,
   matchesTaskGovernanceFilters,
+  matchesTaskFailureSourceFilter,
   matchesTaskObservabilityFilter,
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
   resolveTaskFailureDiagnosticGroups,
+  resolveTaskFailureDiagnosticDrilldown,
   resolveAuditTaskDetailHref,
   resolveTaskSnapshotSummary,
   resolveTaskStreamTerminalReason,
@@ -165,6 +167,16 @@ test("resolveTaskFailureDiagnosticGroups counts failure hints by source", () => 
     { source: "error_event", count: 2 },
     { source: "tool_error", count: 1 },
   ]);
+});
+
+test("resolveTaskFailureDiagnosticDrilldown builds source drilldown filters", () => {
+  assert.deepEqual(
+    resolveTaskFailureDiagnosticDrilldown("error_event"),
+    {
+      observabilityFilter: "failure_hint",
+      failureSourceFilter: "error_event",
+    },
+  );
 });
 
 test("resolveTraceStepDisplayContent prefers inferred result summary from preview-only action steps", () => {
@@ -2363,6 +2375,27 @@ test("matchesTaskObservabilityFilter groups failed status, failure hints and fai
     matchesTaskObservabilityFilter(baseTask, failureTraceSnapshot, "failure_hint"),
     false,
   );
+});
+
+test("matchesTaskFailureSourceFilter applies local failure source drilldown", () => {
+  const snapshot = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-failure-source-filter",
+      session_id: "session-failure-source-filter",
+      prompt: "Need failure source filtering",
+      status: "failed",
+      failure_hint: "remote_provider_network_error",
+      failure_source: "error_event",
+      trace_json: null,
+      created_at: "2026-08-14T00:00:00Z",
+      updated_at: "2026-08-14T00:00:01Z",
+    },
+  });
+
+  assert.equal(matchesTaskFailureSourceFilter(snapshot, "all"), true);
+  assert.equal(matchesTaskFailureSourceFilter(snapshot, "error_event"), true);
+  assert.equal(matchesTaskFailureSourceFilter(snapshot, "tool_error"), false);
+  assert.equal(matchesTaskFailureSourceFilter(null, "error_event"), false);
 });
 
 test("matchesTaskGovernanceFilters applies profile and provider source together", () => {
