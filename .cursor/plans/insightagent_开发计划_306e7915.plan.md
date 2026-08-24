@@ -1,14 +1,14 @@
 ---
 name: InsightAgent 开发计划
-overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening 与 production-reliability-hardening 均已封板。
+overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening 与 observability-experience 均已封板。
 current_focus:
-  - 当前主线：observability-experience 已推进到约 96%；已完成任务失败线索摘要与来源分类，Task Center 可从任务列表批量回放 task_failed audit failure hint，展示/搜索 trace diagnostics/TaskResponse/audit failure hint 与来源，并把稳定错误码映射成人类可读失败说明；Task Center 支持按 Needs attention / Failed status / Failure hint / Failure trace 做观测筛选，且 registry profile/provider source 筛选已进入本地任务快照过滤，并会按当前可见任务汇总失败来源诊断分组，诊断来源 chip 可本地下钻到 Failure hint + failure source 筛选而不触发服务端 keyword 查询；任务详情页展示同一失败摘要，TaskResponse 可携带 failure_hint/failure_source，任务详情可从 task_failed audit event 恢复远端错误 hint 并快捷定位 Failure 轨迹，Task Center/Usage Dashboard/Audit Logs 失败任务链接可通过 trace_semantic=failure 直达 Failure 轨迹；Trace Failure 语义已覆盖 rate limited、unauthorized、permission denied、connection refused 等稳定失败码文本；任务详情语义统计卡可下钻筛选对应轨迹，Trace 语义统计与 semantic filter 结果保持一致；Usage Dashboard 任务榜会显示失败摘要并可直接打开任务详情回放，Audit Logs 任务列也可进入同一回放页，且任务失败/超时审计行会把错误码映射成人类可读 Failure hint 并在展开详情保留 source/code/raw message；Audit Logs keyword 已进入服务端过滤，分页、total、导出和 e2e 搜索口径一致；Trace 语义统计新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹，外部 SSE / trace / export shape 不变。
+  - 最新封板主线：observability-experience 已 100% 封板；任务失败线索摘要与来源分类、Task Center audit failure hint 批量回放、观测筛选、失败来源诊断分组、本地下钻、registry profile/provider source 本地任务快照过滤、任务详情 failure 轨迹快捷定位、本地 failure 回放节点、跨视图 trace_semantic=failure 直达、稳定失败码可读映射、Usage Dashboard top tasks 失败摘要、Audit Logs 服务端 keyword 过滤与失败详情、Trace Failure 语义统计/过滤一致性均已收口，外部 SSE / trace / export shape 不变。
   - 最新封板主线：production-reliability-hardening 已 100% 封板，最新 GitHub checks 2/2 通过；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running / 服务端协程取消落 failed 均已收口。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
-  - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening。
-  - 最终封板验证：backend full slice、frontend node/lint/type、backend main/queue e2e、frontend full/queue Chromium、frontend diagnostics finalize、CI tooling、GitHub checks 2/2 与 diff hygiene 均通过。
-  - 后续候选方向为 rag-product-experience、provider-tool-expansion、ci-release-engineering；当前优先推进 observability-experience。
+  - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience。
+  - observability-experience 封板验证：backend full slice、frontend node/lint/build/type、targeted TS、backend main/queue e2e、frontend full/queue Chromium、frontend diagnostics finalize、CI tooling、diff hygiene、备份计划 diff 与端口清理检查均通过。
+  - 当前无新主线已开启；后续候选方向为 rag-product-experience、provider-tool-expansion、ci-release-engineering。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
   - 保持先补 failing test 再改实现
@@ -43,10 +43,10 @@ validation_baseline:
   frontend_reload_isolation_chromium: default backend/frontend targeted Chromium passed (reload keeps background session stream detached until that session is active)
   frontend_reload_recovery_chromium: default backend/frontend targeted Chromium passed (running task can recover after reload and be cancelled)
   frontend_chromium_e2e: full Chromium passed, 50 passed / 1 skipped against real backend/frontend services
-  frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
+  frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --summary-file /tmp/frontend-e2e-finalize-summary.md --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: observability-experience 继续推进；本轮新增任务详情语义统计卡下钻，并把 Trace 语义统计收敛为与 semantic filter 结果一致的实际轨迹计数，不改变外部 SSE / trace / export shape；frontend node 107/107、frontend lint、frontend build、targeted TS、backend full slice 1948/1948、task detail replay Chromium 3/3、git diff --check 与备份计划 diff 检查通过。
+latest_validation_note: observability-experience 已 100% 封板；本轮完成全量回归与文档收敛，不改变外部 SSE / trace / export shape。backend full slice 1948/1948、frontend node 107/107、frontend lint/build/type、targeted TS、backend main/queue e2e、frontend full Chromium 50 passed / 1 skipped、frontend queue 1/1、frontend diagnostics finalize、CI tooling、git diff --check、备份计划 diff 检查与 8000/3001/8011 端口清理检查通过。
 todos:
   - id: docs-slimming
     status: completed
@@ -77,13 +77,13 @@ todos:
     content: 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、reserved alias、shared/private 边界、route/runtime trace/export/display、错误出口、前端治理表和 trace 搜索均已完成治理收口并通过完整复验。
   - id: next-mainline-candidates
     status: completed
-    content: production-reliability-hardening 已封板；observability-experience 已选为当前主线，其余候选保留为后续方向。
+    content: production-reliability-hardening 与 observability-experience 已封板；后续候选保留为 rag-product-experience、provider-tool-expansion、ci-release-engineering。
   - id: production-reliability-hardening
     status: completed
     content: 已 100% 封板；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running 与服务端协程取消落 failed 均已收口；backend/frontend/e2e/CI finalize/GitHub checks/diff 封板验证通过。
   - id: observability-experience
-    status: in_progress
-    content: 当前主线，进度约 96%；已完成任务失败线索摘要与来源分类，resolveTaskSnapshotSummary 从 trace diagnostics 与 TaskResponse failure fields 提取 failureHint/failureSource，TaskResponse 与 Task Center 任务列表均可从 task_failed audit event 兜底恢复远端错误 code，Task Center/任务详情/Usage Dashboard 复用稳定错误码可读映射；Task Center 展示/搜索该线索与来源，并支持 needs attention / failed status / failure hint / failure trace 观测筛选，registry profile/provider source 本地筛选已复用任务快照语义生效，当前可见任务失败来源诊断分组已进入 Task Center，诊断来源 chip 可本地下钻到 Failure hint + failure source 筛选；任务详情页展示同一失败摘要并支持失败线索快捷定位 Failure 轨迹，Task Center/Usage Dashboard/Audit Logs 失败任务链接可通过 trace_semantic=failure 直达 Failure 轨迹；Trace Failure 语义已覆盖常见稳定失败码文本，任务详情语义统计卡可下钻筛选对应轨迹，Trace 语义统计与 semantic filter 结果保持一致；Usage Dashboard 任务榜显示失败摘要并可直接打开任务详情回放，Audit Logs 任务列也可进入同一回放页，任务失败/超时审计详情可从 stream error code 映射 Failure hint 并保留 source/code/raw message；Audit Logs keyword 已进入服务端过滤，分页、total、导出和 e2e 搜索口径一致；Trace 语义统计新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹；下一步继续围绕封板前完整回归、文档收敛和少量跨视图回放效率细节补红测推进。
+    status: completed
+    content: 已 100% 封板；任务失败线索摘要与来源分类、resolveTaskSnapshotSummary failureHint/failureSource、TaskResponse 与 task_failed audit event 兜底恢复、Task Center 列表 audit failure hint 批量回放、稳定错误码可读映射、观测筛选、失败来源诊断分组与本地下钻、registry profile/provider source 本地过滤、任务详情 Failure 轨迹快捷定位、本地 failure 回放节点、跨视图 trace_semantic=failure 直达、Usage Dashboard top tasks 失败摘要、Audit Logs 失败详情与服务端 keyword、Trace Failure 语义统计/过滤一致性均已收口；外部 SSE / trace / export shape 不变。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -94,7 +94,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- `queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance` 与 `rag-governance-hardening` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口、registry/provider source 治理、RAG 来源/版本/shared 边界治理与 e2e 基线均已收口。
+- `queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening` 与 `observability-experience` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口、registry/provider source 治理、RAG 来源/版本/shared 边界治理、生产可靠性治理、失败诊断/任务回放/Trace 语义过滤与 e2e 基线均已收口。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 
 ## 已完成能力摘要
@@ -134,7 +134,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - Frontend task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1329`，`3/3` 通过，覆盖 Task Center/任务详情语义统计、统计卡下钻与语义过滤计数一致性。
 - Frontend remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过，覆盖 Task Center audit failure hint 回放、失败来源诊断分组、诊断来源 chip 本地下钻、Failure URL 预设直达与可读失败说明、Needs attention / Failed status 观测筛选、Audit Logs 服务端 keyword 请求、任务详情 audit failure hint 恢复与失败轨迹快捷定位。
 - Frontend usage/audit-to-detail Chromium：`e2e/usage-dashboard.spec.ts:774`，`1/1` 通过。
-- Frontend diagnostics finalize：main push strict `any` 下 error-context counters 为 0，通过。
+- Frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --summary-file /tmp/frontend-e2e-finalize-summary.md --event-name push --ref refs/heads/main` 在 main push strict `any` 下 error-context counters 为 0，通过。
 - GitHub checks：`7550120 fix: 保留客户端断流运行任务` 已 `2/2` 通过。
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过。
 - Diff hygiene：`git diff --check` 通过。
@@ -144,6 +144,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - `registry-governance`：已封板；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口，不改变 settings/preflight/trace/export/audit/SSE 可见字段 shape。
 - `rag-governance-hardening`：已封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口。
 - `production-reliability-hardening`：已封板；任务队列清理、owner/heartbeat、guarded terminal writes、reconnect/断流语义、race 防误复活与最终 GitHub checks 2/2 均已收口。
+- `observability-experience`：已封板；失败线索、来源分类、跨视图 Failure 回放、Task Center 观测筛选、Audit Logs 服务端 keyword、Trace Failure 语义统计与过滤一致性均已收口。
 
 ## Pre-flight Cleanup
 
@@ -154,9 +155,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 后续维护线
 
-- `production-reliability-hardening` 已 100% 封板；后续继续以先红测、再实现、再 targeted/full slice 的方式推进新主线。
-- 当前主线：`observability-experience`，进度约 96%，优先提升 Trace、Task Center、失败诊断、任务回放和 usage/audit 关联体验；本轮已把任务详情语义统计卡下钻纳入任务回放链路，并让 Trace 语义统计与 semantic filter 结果保持一致，继续保持外部 SSE / trace / export shape 稳定。
-- 后续候选主线：`rag-product-experience`、`provider-tool-expansion`、`ci-release-engineering`；正式开启前先确认主线验收边界和首批红测计划。
+- `production-reliability-hardening` 与 `observability-experience` 已 100% 封板；后续继续以先红测、再实现、再 targeted/full slice 的方式推进新主线。
+- 当前无新主线已开启；下一步候选为 `rag-product-experience`、`provider-tool-expansion`、`ci-release-engineering`，正式开启前先确认主线验收边界和首批红测计划。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 维护约定

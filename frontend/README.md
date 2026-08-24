@@ -7,7 +7,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - 前端 W1-W4 与阶段 5 基础产品化已完成：Auth Gate、Workbench、Trace 双视图、Memory/RAG 调试、usage dashboard、任务/会话导出、任务详情页、running task 恢复、审计与知识库治理已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening` 与 `production-reliability-hardening` 均已封板；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening` 与 `observability-experience` 均已封板；前端继续保持与后端 SSE / trace / export 契约稳定对齐，不新增独立本地语义分支。
 - Workbench 已承接 `execution_summary`、`execution_diagnostics`、safe output、result-summary、name-only semantic fallback 与 task/session export 回放语义。
 - 队列 UI 已覆盖 `queued/pending/running` 活跃任务识别、安全 queue snapshot 排队位置、queued/running cancel、跨会话隔离、刷新恢复与 Task Center session/global 多任务隔离。
 - 运行设置会带 active session 请求只读 `task_queue_diagnostics`，展示全局、当前用户、当前会话 active/waiting/available、安全限额触顶、`pressure_state`、fairness 开关、capacity-aware FIFO 等待策略与 poll interval。
@@ -15,7 +15,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `registry-governance` 已封板：provider/source diagnostics、settings/preflight、runtime artifacts、trace/export/audit/SSE 与 task/usage 回放语义已完成脱敏和 alias 对齐，前端可见字段 shape 不变。
 - 后端 `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
 - 后端 `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。前端相关契约已固定：客户端 SSE 断开保留 running 任务供 reload/reconnect/cancel，服务端执行协程取消才落 failed；前端可见删除会话响应、SSE、trace 与 export shape 不变。
-- 当前进入 `observability-experience` 主线，进度约 96%：任务快照会从 trace diagnostics、TaskResponse failure fields 与 task_failed audit event 中提取失败线索并标注来源（SSE error / tool error / trace content / persisted trace），Task Center/任务详情/Usage Dashboard 会统一把稳定错误码映射为可读失败说明；Task Center 支持从任务列表批量回放 audit failure hint，展示/搜索该线索与来源，并支持按 Needs attention / Failed status / Failure hint / Failure trace 做观测筛选，且会按当前筛选后的可见任务汇总失败来源诊断分组，诊断来源 chip 可本地下钻到 Failure hint + failure source 筛选而不触发服务端 keyword 查询；Task Center 的 registry profile/provider source 筛选已进入本地任务快照过滤；任务详情页展示同一失败摘要，可从失败线索快捷定位 Failure 轨迹，并在原始 trace 缺少错误 step 时合成本地 failure 回放节点；Task Center、Usage Dashboard 与 Audit Logs 的失败任务链接可通过 `trace_semantic=failure` 直接打开任务详情 Failure 轨迹；Trace Failure 语义已覆盖 rate limited、unauthorized、permission denied、connection refused 等稳定失败码文本；Trace 语义统计与 semantic filter 结果保持一致，任务详情页语义统计卡可直接下钻筛选对应轨迹；Audit Logs keyword 已进入服务端过滤，分页、total、导出和 e2e 搜索口径一致；Trace 语义统计已新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹。
+- `observability-experience` 已 100% 封板：任务快照会从 trace diagnostics、TaskResponse failure fields 与 task_failed audit event 中提取失败线索并标注来源（SSE error / tool error / trace content / persisted trace），Task Center/任务详情/Usage Dashboard 会统一把稳定错误码映射为可读失败说明；Task Center 支持从任务列表批量回放 audit failure hint，展示/搜索该线索与来源，并支持按 Needs attention / Failed status / Failure hint / Failure trace 做观测筛选，且会按当前筛选后的可见任务汇总失败来源诊断分组，诊断来源 chip 可本地下钻到 Failure hint + failure source 筛选而不触发服务端 keyword 查询；Task Center 的 registry profile/provider source 筛选已进入本地任务快照过滤；任务详情页展示同一失败摘要，可从失败线索快捷定位 Failure 轨迹，并在原始 trace 缺少错误 step 时合成本地 failure 回放节点；Task Center、Usage Dashboard 与 Audit Logs 的失败任务链接可通过 `trace_semantic=failure` 直接打开任务详情 Failure 轨迹；Trace Failure 语义已覆盖 rate limited、unauthorized、permission denied、connection refused 等稳定失败码文本；Trace 语义统计与 semantic filter 结果保持一致，任务详情页语义统计卡可直接下钻筛选对应轨迹；Audit Logs keyword 已进入服务端过滤，分页、total、导出和 e2e 搜索口径一致；Trace 语义统计已新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹。
 
 ## 当前验证基线
 
@@ -34,7 +34,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - backend main e2e phase：baseline / main / export consistency / cancel-timeout 通过
 - backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
 - 后端可见契约回归：production reliability `35/35`、queue `66/66`、task `361/361`、settings `216/216`、usage dashboard `40/40`、backend full slice `1948/1948` 通过
-- frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
+- frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --summary-file /tmp/frontend-e2e-finalize-summary.md --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
 - GitHub checks：`7550120 fix: 保留客户端断流运行任务` 已 `2/2` 通过
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
@@ -42,15 +42,14 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 下一步前端计划
 
-1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. 当前主线：`observability-experience` 已推进到约 96%，已完成任务失败线索摘要、来源分类、Task Center 观测筛选与 registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组与来源 chip 本地下钻、稳定失败码文本纳入 Failure 语义、任务中心/任务详情复用、Usage Dashboard / Audit Logs 任务详情回放入口、TaskResponse/audit failure hint 恢复、Task Center 列表 audit failure hint 批量回放、远端错误码可读映射、任务详情失败轨迹快捷定位、跨视图 Failure URL 预设直达、任务详情语义统计卡下钻、Trace 语义统计与过滤计数一致、Usage Dashboard top tasks 失败摘要展示、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及 Trace/Inspector/任务详情失败语义过滤与 Failure 统计。
-3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定，并继续补齐封板前完整回归、文档收敛和少量跨视图回放效率细节。
+1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`。
+2. 当前无新主线已开启；下一步候选为 `rag-product-experience`、`provider-tool-expansion`、`ci-release-engineering`，正式开启前先确认验收边界和首批红测计划。
+3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定；新增 UI/回放能力继续补 targeted Chromium。
 4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。
 
 ## 后续候选主线
 
 - `rag-product-experience`：知识库版本对比、文档治理操作、检索解释、召回质量呈现与 RAG 调试体验。
-- `observability-experience`：当前主线；优化 Workbench、Task Center、Trace、失败诊断、任务回放和知识库治理的可读性与操作效率。
 - `provider-tool-expansion`：配合后端新增 provider/tool 协议，保持 settings/preflight/runtime/trace/export 显示契约稳定。
 - `ci-release-engineering`：把 frontend node/type/lint、targeted Chromium、queue phase 与 full Chromium 基线沉淀为更明确的发布前门禁。
 

@@ -5,7 +5,7 @@
 ## 当前状态
 
 - 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening` 与 `production-reliability-hardening` 均已封板；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening` 与 `observability-experience` 均已封板；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
 - `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
@@ -14,7 +14,7 @@
 - `rag-governance-hardening` 已封板：RAG ingest/query source metadata、嵌套 metadata value、query hit id、知识库标识、版本摘要、reserved alias、route/runtime trace/export/display、错误出口与 shared/private 列表边界均已收口；后端外部响应 shape 保持稳定。
 - `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。后端已收口 waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放与失败自愈。
 - 关键后端契约：客户端 SSE 断开只释放本进程 active slot，并保留 running 任务供 reload/reconnect/cancel；服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属。active slot、204 响应与外部 SSE / trace / export 契约不变。
-- 当前进入 `observability-experience` 主线，进度约 96%；已完成任务失败线索聚合、来源分类、TaskResponse failure fields、task_failed audit event 兜底恢复、Task Center 任务列表 audit failure hint 批量回放、Task Center registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组与来源 chip 本地下钻、跨视图 Failure URL 预设直达、稳定失败码文本纳入前端 Failure 语义、Usage Dashboard / Audit Logs 到任务详情的回放入口、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure/semantic 语义统计、统计卡下钻与 Task Center 观测筛选；后端 SSE / trace / export shape 保持不变。
+- `observability-experience` 已 100% 封板；已完成任务失败线索聚合、来源分类、TaskResponse failure fields、task_failed audit event 兜底恢复、Task Center 任务列表 audit failure hint 批量回放、Task Center registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组与来源 chip 本地下钻、跨视图 Failure URL 预设直达、稳定失败码文本纳入前端 Failure 语义、Usage Dashboard / Audit Logs 到任务详情的回放入口、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure/semantic 语义统计、统计卡下钻与 Task Center 观测筛选；后端 SSE / trace / export shape 保持不变。
 
 ## 当前验证基线
 
@@ -43,7 +43,7 @@
 - frontend remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过，覆盖 Task Center audit failure hint 回放、失败来源诊断分组、诊断来源 chip 本地下钻、Failure URL 预设直达与可读失败说明、Needs attention / Failed status 观测筛选、Audit Logs 服务端 keyword 请求、任务详情 audit failure hint 恢复与失败轨迹快捷定位
 - frontend usage/audit-to-detail Chromium：`e2e/usage-dashboard.spec.ts:774`，`1/1` 通过
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
-- frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
+- frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --summary-file /tmp/frontend-e2e-finalize-summary.md --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
 - GitHub checks：`7550120 fix: 保留客户端断流运行任务` 已 `2/2` 通过
 - CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
 - `git diff --check`：通过
@@ -51,14 +51,13 @@
 
 ## 下一步后端计划
 
-1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. 当前主线：`observability-experience` 已推进到约 96%；已完成任务失败线索摘要、来源分类、Task Center 观测筛选与 registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组与来源 chip 本地下钻、稳定失败码文本纳入 Failure 语义、任务中心/任务详情复用、Usage Dashboard / Audit Logs 任务详情回放入口、TaskResponse/audit failure hint 恢复、Task Center 列表 audit failure hint 批量回放、远端错误码可读映射、任务详情失败轨迹快捷定位、跨视图 Failure URL 预设直达、任务详情语义统计卡下钻、Trace 语义统计与过滤计数一致、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure 语义统计/过滤，后端 SSE / trace / export 外部契约不变。
-3. 下一步继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增观测体验能力优先补红测，必要时先拆新模块。
+1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`。
+2. 当前无新主线已开启；下一步候选为 `rag-product-experience`、`provider-tool-expansion`、`ci-release-engineering`，正式开启前先确认验收边界和首批红测计划。
+3. 后续继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增能力优先补红测，必要时先拆新模块。
 
 ## 后续候选主线
 
 - `rag-product-experience`：知识库版本对比、文档治理、检索解释、召回质量评估与 RAG 调试接口体验。
-- `observability-experience`：trace 诊断、失败详情、任务回放、usage/audit 关联与后端可观测摘要。
 - `provider-tool-expansion`：新增真实 provider/tool 协议时先补红测，再局部归一化 registry/runtime 输出。
 - `ci-release-engineering`：把 backend slice、targeted RAG、queue phase、full e2e 和 diff hygiene 固化成更清晰的分层门禁。
 
