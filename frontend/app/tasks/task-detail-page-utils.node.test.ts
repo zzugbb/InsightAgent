@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
+  resolveTaskDetailInitialTraceFilterState,
   resolveTaskDetailTraceSteps,
 } from "./[taskId]/task-detail-page-utils.ts";
 
@@ -18,6 +19,27 @@ test("resolveTaskDetailFailureTracePreset focuses failure traces from any trace 
     {
       traceView: "list",
       traceSemanticFilter: "failure",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
+  );
+});
+
+test("resolveTaskDetailInitialTraceFilterState applies failure replay URL preset", () => {
+  assert.deepEqual(
+    resolveTaskDetailInitialTraceFilterState("failure"),
+    {
+      traceView: "list",
+      traceSemanticFilter: "failure",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskDetailInitialTraceFilterState("retrieval"),
+    {
+      traceView: "list",
+      traceSemanticFilter: "all",
       traceKindFilter: "all",
       traceSearchQuery: "",
     },

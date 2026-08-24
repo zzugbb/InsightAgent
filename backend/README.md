@@ -14,7 +14,7 @@
 - `rag-governance-hardening` 已封板：RAG ingest/query source metadata、嵌套 metadata value、query hit id、知识库标识、版本摘要、reserved alias、route/runtime trace/export/display、错误出口与 shared/private 列表边界均已收口；后端外部响应 shape 保持稳定。
 - `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。后端已收口 waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放与失败自愈。
 - 关键后端契约：客户端 SSE 断开只释放本进程 active slot，并保留 running 任务供 reload/reconnect/cancel；服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属。active slot、204 响应与外部 SSE / trace / export 契约不变。
-- 当前进入 `observability-experience` 主线，进度约 90%；已完成任务失败线索聚合、来源分类、TaskResponse failure fields、task_failed audit event 兜底恢复、Task Center 任务列表 audit failure hint 批量回放、Task Center registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组、稳定失败码文本纳入前端 Failure 语义、Usage Dashboard / Audit Logs 到任务详情的回放入口、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure 语义统计/过滤与 Task Center 观测筛选；后端 SSE / trace / export shape 保持不变。
+- 当前进入 `observability-experience` 主线，进度约 92%；已完成任务失败线索聚合、来源分类、TaskResponse failure fields、task_failed audit event 兜底恢复、Task Center 任务列表 audit failure hint 批量回放、Task Center registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组、跨视图 Failure URL 预设直达、稳定失败码文本纳入前端 Failure 语义、Usage Dashboard / Audit Logs 到任务详情的回放入口、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure 语义统计/过滤与 Task Center 观测筛选；后端 SSE / trace / export shape 保持不变。
 
 ## 当前验证基线
 
@@ -31,15 +31,16 @@
 - RAG runtime/export targeted：safe version metadata、legacy chunk shape、chunk object metadata alignment、parallel runtime chunk metadata、export knowledge_base_id redaction、result summary/output/preview/observation knowledge_base_id redaction 均通过
 - `backend/.venv/bin/python -m py_compile` 本轮相关 backend route/test 模块：通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
-- frontend node tests：workbench utils / audit logs modal utils / task detail utils / stream store utils / model settings utils，当前 `102/102` 通过
+- frontend node tests：workbench utils / audit logs modal utils / task detail utils / stream store utils / model settings utils，当前 `103/103` 通过
+- frontend build：`cd frontend && npm run build` 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
-- frontend targeted TS：本轮涉及的 workbench utils、Task Center 与 i18n 文案通过 targeted `tsc`
+- frontend targeted TS：本轮涉及的 workbench utils、Task Center、Usage Dashboard 与任务详情页 URL 预设通过 targeted `tsc`
 - backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
 - frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`50 passed / 1 skipped`；低并发 queued 专项在 full 阶段按预期 skip
 - frontend task center governance Chromium：`e2e/usage-dashboard.spec.ts:372`，`1/1` 通过，覆盖 Task Center registry profile/source 请求与列表可见性过滤
 - frontend task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1323`，`3/3` 通过，覆盖 Task Center/任务详情 Failure 语义统计
-- frontend remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过，覆盖 Task Center audit failure hint 回放、失败来源诊断分组与可读失败说明、Needs attention / Failed status 观测筛选、Audit Logs 服务端 keyword 请求、任务详情 audit failure hint 恢复与失败轨迹快捷定位
+- frontend remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过，覆盖 Task Center audit failure hint 回放、失败来源诊断分组、Failure URL 预设直达与可读失败说明、Needs attention / Failed status 观测筛选、Audit Logs 服务端 keyword 请求、任务详情 audit failure hint 恢复与失败轨迹快捷定位
 - frontend usage/audit-to-detail Chromium：`e2e/usage-dashboard.spec.ts:774`，`1/1` 通过
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
 - frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
@@ -51,7 +52,7 @@
 ## 下一步后端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`。
-2. 当前主线：`observability-experience` 已推进到约 90%；已完成任务失败线索摘要、来源分类、Task Center 观测筛选与 registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组、稳定失败码文本纳入 Failure 语义、任务中心/任务详情复用、Usage Dashboard / Audit Logs 任务详情回放入口、TaskResponse/audit failure hint 恢复、Task Center 列表 audit failure hint 批量回放、远端错误码可读映射、任务详情失败轨迹快捷定位、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure 语义统计/过滤，后端 SSE / trace / export 外部契约不变。
+2. 当前主线：`observability-experience` 已推进到约 92%；已完成任务失败线索摘要、来源分类、Task Center 观测筛选与 registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组、稳定失败码文本纳入 Failure 语义、任务中心/任务详情复用、Usage Dashboard / Audit Logs 任务详情回放入口、TaskResponse/audit failure hint 恢复、Task Center 列表 audit failure hint 批量回放、远端错误码可读映射、任务详情失败轨迹快捷定位、跨视图 Failure URL 预设直达、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure 语义统计/过滤，后端 SSE / trace / export 外部契约不变。
 3. 下一步继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增观测体验能力优先补红测，必要时先拆新模块。
 
 ## 后续候选主线

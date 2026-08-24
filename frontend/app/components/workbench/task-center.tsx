@@ -15,6 +15,7 @@ import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
 import type { SessionSummary, TaskSummary } from "./types";
 import {
+  buildTaskDetailHref,
   formatTaskFailureSourceLabel,
   formatTraceStepSemanticStatsSummary,
   formatTimestamp,
@@ -335,23 +336,32 @@ export function TaskCenter({
         key: "actions",
         width: 110,
         align: "left" as const,
-        render: (_value: unknown, task: TaskSummary) => (
-          <Button
-            size="small"
-            type="default"
-            className="task-summary-open-detail"
-            data-testid="task-center-open-task-detail"
-            aria-label={t.taskCenter.openTaskDetailAria}
-            href={`/tasks/${encodeURIComponent(task.id)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-          >
-            {t.taskCenter.openTaskDetail}
-          </Button>
-        ),
+        render: (_value: unknown, task: TaskSummary) => {
+          const snapshot = taskSnapshots.get(task.id);
+          const failedHint = resolveTaskFailureHintDisplay(
+            snapshot?.failureHint,
+            t.stream.streamErrorByCode,
+          );
+          return (
+            <Button
+              size="small"
+              type="default"
+              className="task-summary-open-detail"
+              data-testid="task-center-open-task-detail"
+              aria-label={t.taskCenter.openTaskDetailAria}
+              href={buildTaskDetailHref(task.id, {
+                traceSemanticFilter: failedHint ? "failure" : null,
+              })}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+            >
+              {t.taskCenter.openTaskDetail}
+            </Button>
+          );
+        },
       },
     ],
     [

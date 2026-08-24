@@ -67,6 +67,25 @@ export function resolveTaskDetailFailureTracePreset(
   };
 }
 
+export function resolveTaskDetailInitialTraceFilterState(
+  traceSemanticPreset: string | null | undefined,
+): TaskDetailTraceFilterState {
+  if (traceSemanticPreset?.trim().toLowerCase() === "failure") {
+    return resolveTaskDetailFailureTracePreset({
+      traceView: "list",
+      traceSemanticFilter: "all",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    });
+  }
+  return {
+    traceView: "list",
+    traceSemanticFilter: "all",
+    traceKindFilter: "all",
+    traceSearchQuery: "",
+  };
+}
+
 export function resolveTaskDetailFailureHint(
   hint: string | null | undefined,
   streamErrorByCode?: (code: string) => string | null,

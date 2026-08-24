@@ -408,18 +408,29 @@ export function shortenId(value: string): string {
   return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }
 
-export function buildTaskDetailHref(taskId: string): string {
-  return `/tasks/${encodeURIComponent(taskId)}`;
+export function buildTaskDetailHref(
+  taskId: string,
+  options?: {
+    traceSemanticFilter?: Exclude<TraceStepSemanticFilter, "all"> | null;
+  },
+): string {
+  const baseHref = `/tasks/${encodeURIComponent(taskId)}`;
+  const traceSemanticFilter = options?.traceSemanticFilter ?? null;
+  return traceSemanticFilter ? `${baseHref}?trace_semantic=${traceSemanticFilter}` : baseHref;
 }
 
 export function resolveAuditTaskDetailHref(item: {
   task_id?: unknown;
+  event_type?: unknown;
   event_detail?: unknown;
 }): string | null {
+  const shouldReplayFailure = isAuditFailureReplayEvent(item);
   const topLevelTaskId =
     typeof item.task_id === "string" ? item.task_id.trim() : "";
   if (topLevelTaskId) {
-    return buildTaskDetailHref(topLevelTaskId);
+    return buildTaskDetailHref(topLevelTaskId, {
+      traceSemanticFilter: shouldReplayFailure ? "failure" : null,
+    });
   }
 
   const detailTaskId =
@@ -430,7 +441,38 @@ export function resolveAuditTaskDetailHref(item: {
       ? (item.event_detail as { task_id: string }).task_id.trim()
       : "";
   const taskId = detailTaskId || null;
-  return taskId ? buildTaskDetailHref(taskId) : null;
+  return taskId
+    ? buildTaskDetailHref(taskId, {
+        traceSemanticFilter: shouldReplayFailure ? "failure" : null,
+      })
+    : null;
+}
+
+function isAuditFailureReplayEvent(item: {
+  event_type?: unknown;
+  event_detail?: unknown;
+}): boolean {
+  const eventType = typeof item.event_type === "string"
+    ? item.event_type.trim().toLowerCase()
+    : "";
+  if (eventType === "task_failed" || eventType === "task_timeout") {
+    return true;
+  }
+  const detail =
+    item.event_detail &&
+    typeof item.event_detail === "object" &&
+    !Array.isArray(item.event_detail)
+      ? item.event_detail as Record<string, unknown>
+      : null;
+  if (!detail) {
+    return false;
+  }
+  return Boolean(
+    normalizeDiagnosticText(detail.failure_hint) ||
+      normalizeDiagnosticText(detail.code) ||
+      normalizeDiagnosticText(detail.message) ||
+      normalizeDiagnosticText(detail.error),
+  );
 }
 
 export function getSessionLabel(

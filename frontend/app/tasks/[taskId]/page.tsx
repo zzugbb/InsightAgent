@@ -4,7 +4,7 @@ import { App, Button, Input, Segmented, Spin } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { ApiError, apiJson } from "../../../lib/api-client";
@@ -37,6 +37,7 @@ import type {
 import {
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
+  resolveTaskDetailInitialTraceFilterState,
   resolveTaskDetailTraceSteps,
 } from "./task-detail-page-utils";
 
@@ -91,15 +92,29 @@ export default function TaskDetailPage() {
   const { localeTag, theme } = usePreferences();
   const { message } = App.useApp();
   const params = useParams<{ taskId: string }>();
-  const [traceView, setTraceView] = useState<TaskDetailTraceView>("list");
+  const searchParams = useSearchParams();
+  const initialTraceFilters = useMemo(
+    () =>
+      resolveTaskDetailInitialTraceFilterState(
+        searchParams.get("trace_semantic"),
+      ),
+    [searchParams],
+  );
+  const [traceView, setTraceView] = useState<TaskDetailTraceView>(
+    initialTraceFilters.traceView,
+  );
   const [traceDensity, setTraceDensity] = useState<"comfortable" | "compact">(
     "comfortable",
   );
   const [traceSemanticFilter, setTraceSemanticFilter] =
-    useState<TaskDetailTraceSemanticFilter>("all");
+    useState<TaskDetailTraceSemanticFilter>(
+      initialTraceFilters.traceSemanticFilter,
+    );
   const [traceKindFilter, setTraceKindFilter] =
-    useState<TaskDetailTraceKindFilter>("all");
-  const [traceSearchQuery, setTraceSearchQuery] = useState("");
+    useState<TaskDetailTraceKindFilter>(initialTraceFilters.traceKindFilter);
+  const [traceSearchQuery, setTraceSearchQuery] = useState(
+    initialTraceFilters.traceSearchQuery,
+  );
   const [taskExporting, setTaskExporting] = useState<"json" | "markdown" | null>(
     null,
   );

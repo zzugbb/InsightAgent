@@ -543,6 +543,12 @@ test("remote network failure shows mapped stream error code @smoke", async ({
     /Failed to reach remote provider|无法连接远端提供方/,
     { timeout: 20_000 },
   );
+  await expect(
+    failedTaskRow.getByTestId("task-center-open-task-detail"),
+  ).toHaveAttribute(
+    "href",
+    `/tasks/${encodeURIComponent(failedTaskId ?? "")}?trace_semantic=failure`,
+  );
   await expect(page.getByTestId("task-center-failure-diagnostic-groups")).toBeVisible({
     timeout: 20_000,
   });
@@ -574,12 +580,18 @@ test("remote network failure shows mapped stream error code @smoke", async ({
     .filter({ hasText: "Failed to reach remote provider" })
     .first();
   await expect(auditFailureRow).toBeVisible({ timeout: 20_000 });
+  await expect(auditFailureRow.getByTestId("audit-task-open-detail")).toHaveAttribute(
+    "href",
+    `/tasks/${encodeURIComponent(failedTaskId ?? "")}?trace_semantic=failure`,
+  );
   await auditFailureRow.locator(".ant-table-row-expand-icon").click();
   await expect(
     page.locator(".audit-modal-detail-row").filter({ hasText: "Failure hint" }),
   ).toContainText("Failed to reach remote provider", { timeout: 20_000 });
 
-  await page.goto(`/tasks/${encodeURIComponent(failedTaskId ?? "")}`);
+  await page.goto(
+    `/tasks/${encodeURIComponent(failedTaskId ?? "")}?trace_semantic=failure`,
+  );
   await expect(page.getByTestId("task-detail-page")).toBeVisible({
     timeout: 20_000,
   });
@@ -591,7 +603,6 @@ test("remote network failure shows mapped stream error code @smoke", async ({
     (await page.getByTestId("task-detail-semantic-failure").textContent()) ?? "";
   const failureTraceCount = Number(failureSemanticText.match(/\d+/)?.[0] ?? 0);
   expect(failureTraceCount).toBeGreaterThan(0);
-  await page.getByTestId("task-detail-show-failure-traces").click();
   await expect(
     page
       .locator(".trace-filter-toolbar .ant-segmented-item-selected")

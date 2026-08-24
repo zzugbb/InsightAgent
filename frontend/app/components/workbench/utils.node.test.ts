@@ -26,6 +26,12 @@ test("buildTaskDetailHref encodes task ids for replay links", () => {
     buildTaskDetailHref("task/with space?x=1"),
     "/tasks/task%2Fwith%20space%3Fx%3D1",
   );
+  assert.equal(
+    buildTaskDetailHref("task/with space?x=1", {
+      traceSemanticFilter: "failure",
+    }),
+    "/tasks/task%2Fwith%20space%3Fx%3D1?trace_semantic=failure",
+  );
 });
 
 test("resolveAuditTaskDetailHref uses top-level or detail task ids", () => {
@@ -49,6 +55,16 @@ test("resolveAuditTaskDetailHref uses top-level or detail task ids", () => {
       event_detail: { task_id: " " },
     }),
     null,
+  );
+  assert.equal(
+    resolveAuditTaskDetailHref({
+      task_id: "task-failed",
+      event_type: "task_failed",
+      event_detail: {
+        failure_hint: "remote_provider_network_error",
+      },
+    }),
+    "/tasks/task-failed?trace_semantic=failure",
   );
 });
 

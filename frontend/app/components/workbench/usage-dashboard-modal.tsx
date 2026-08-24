@@ -390,7 +390,9 @@ export function UsageDashboardModal({
             className="usage-task-open-detail"
             data-testid="usage-task-open-detail"
             aria-label={t.inspector.taskOpenDetail}
-            href={buildTaskDetailHref(row.task_id)}
+            href={buildTaskDetailHref(row.task_id, {
+              traceSemanticFilter: row.failure_hint?.trim() ? "failure" : null,
+            })}
             target="_blank"
             rel="noopener noreferrer"
             icon={<ExternalLink size={14} aria-hidden />}
