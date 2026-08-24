@@ -2367,6 +2367,33 @@ code {
   justify-self: end;
 }
 
+.task-center-failure-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.task-center-failure-groups-title {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.task-center-failure-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--text);
+  line-height: 1.35;
+}
+
 .task-center-table-wrap {
   margin-top: 10px;
   border: 1px solid var(--line);

@@ -39,6 +39,13 @@ export type TaskFailureSource =
   | "trace_content"
   | "legacy_trace";
 
+const TASK_FAILURE_SOURCE_ORDER: TaskFailureSource[] = [
+  "error_event",
+  "tool_error",
+  "trace_content",
+  "legacy_trace",
+];
+
 export type TaskSnapshotSummary = {
   stepCount: number;
   ragHitCount: number;
@@ -54,6 +61,11 @@ export type TaskSnapshotSummary = {
     allowedToolNames: string[];
     allowedToolLabels: string[];
   } | null;
+};
+
+export type TaskFailureDiagnosticGroup = {
+  source: TaskFailureSource;
+  count: number;
 };
 
 export type SessionGovernanceSummary = {
@@ -645,6 +657,33 @@ function isTaskFailureSource(value: unknown): value is TaskFailureSource {
     value === "trace_content" ||
     value === "legacy_trace"
   );
+}
+
+export function resolveTaskFailureDiagnosticGroups(
+  snapshots: Array<
+    Pick<TaskSnapshotSummary, "failureHint" | "failureSource"> | null | undefined
+  >,
+): TaskFailureDiagnosticGroup[] {
+  const counts = new Map<TaskFailureSource, number>();
+  for (const snapshot of snapshots) {
+    const hint = normalizeDiagnosticText(snapshot?.failureHint);
+    if (!hint || !isTaskFailureSource(snapshot?.failureSource)) {
+      continue;
+    }
+    counts.set(snapshot.failureSource, (counts.get(snapshot.failureSource) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([source, count]) => ({ source, count }))
+    .sort((a, b) => {
+      const countDelta = b.count - a.count;
+      if (countDelta !== 0) {
+        return countDelta;
+      }
+      return (
+        TASK_FAILURE_SOURCE_ORDER.indexOf(a.source) -
+        TASK_FAILURE_SOURCE_ORDER.indexOf(b.source)
+      );
+    });
 }
 
 export function formatTaskFailureSummary(

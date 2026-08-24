@@ -22,6 +22,7 @@ import {
   isTaskFailedStatus,
   matchesTaskGovernanceFilters,
   matchesTaskObservabilityFilter,
+  resolveTaskFailureDiagnosticGroups,
   resolveTaskFailureHintDisplay,
   resolveTaskSnapshotSummary,
 } from "./utils";
@@ -218,6 +219,14 @@ export function TaskCenter({
   ]);
 
   const scopeDisabledSession = !activeSessionId;
+
+  const failureDiagnosticGroups = useMemo(
+    () =>
+      resolveTaskFailureDiagnosticGroups(
+        filteredTasks.map((task) => taskSnapshots.get(task.id)),
+      ),
+    [filteredTasks, taskSnapshots],
+  );
 
   useEffect(() => {
     setPage(1);
@@ -547,6 +556,29 @@ export function TaskCenter({
             {" · "}
             {t.chat.updatedAt(formatTimestamp(activeSession.updated_at, localeTag))}
           </p>
+        ) : null}
+
+        {failureDiagnosticGroups.length > 0 ? (
+          <div
+            className="task-center-failure-groups"
+            data-testid="task-center-failure-diagnostic-groups"
+            aria-label={t.taskCenter.failureDiagnosticsTitle}
+          >
+            <span className="task-center-failure-groups-title">
+              {t.taskCenter.failureDiagnosticsTitle}
+            </span>
+            {failureDiagnosticGroups.map((group) => (
+              <span
+                key={group.source}
+                className="task-center-failure-chip"
+                data-testid="task-center-failure-diagnostic-group"
+              >
+                {formatTaskFailureSourceLabel(group.source, t.inspector)}
+                {" "}
+                {t.taskCenter.failureDiagnosticsCount(group.count)}
+              </span>
+            ))}
+          </div>
         ) : null}
 
         {tasksLoading ? (

@@ -13,6 +13,7 @@ import {
   matchesTaskObservabilityFilter,
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
+  resolveTaskFailureDiagnosticGroups,
   resolveAuditTaskDetailHref,
   resolveTaskSnapshotSummary,
   resolveTaskStreamTerminalReason,
@@ -118,6 +119,36 @@ test("formatTaskFailureSummary maps stream error codes when labels provide a map
     ),
     "Failure hint · SSE error: Failed to reach remote provider. Check network or base URL.",
   );
+});
+
+test("resolveTaskFailureDiagnosticGroups counts failure hints by source", () => {
+  const groups = resolveTaskFailureDiagnosticGroups([
+    {
+      failureHint: "remote_provider_network_error",
+      failureSource: "error_event",
+    },
+    {
+      failureHint: "upstream timed out after 30s",
+      failureSource: "tool_error",
+    },
+    {
+      failureHint: "provider exhausted retries",
+      failureSource: "error_event",
+    },
+    {
+      failureHint: "trace mentioned a warning but no source",
+      failureSource: null,
+    },
+    {
+      failureHint: " ",
+      failureSource: "legacy_trace",
+    },
+  ]);
+
+  assert.deepEqual(groups, [
+    { source: "error_event", count: 2 },
+    { source: "tool_error", count: 1 },
+  ]);
 });
 
 test("resolveTraceStepDisplayContent prefers inferred result summary from preview-only action steps", () => {

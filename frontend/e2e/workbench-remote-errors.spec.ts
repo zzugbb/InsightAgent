@@ -543,6 +543,14 @@ test("remote network failure shows mapped stream error code @smoke", async ({
     /Failed to reach remote provider|无法连接远端提供方/,
     { timeout: 20_000 },
   );
+  await expect(page.getByTestId("task-center-failure-diagnostic-groups")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(
+    page
+      .getByTestId("task-center-failure-diagnostic-group")
+      .filter({ hasText: /SSE error|SSE 错误/ }),
+  ).toContainText("1", { timeout: 20_000 });
 
   await page.getByTestId("task-center-close").click();
   await page.getByTestId("sidebar-settings-trigger").click();

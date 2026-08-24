@@ -124,6 +124,8 @@ export const zh: Messages = {
     observabilityFilterFailedStatus: "失败状态",
     observabilityFilterFailureHint: "失败线索",
     observabilityFilterFailureTrace: "失败轨迹",
+    failureDiagnosticsTitle: "失败诊断",
+    failureDiagnosticsCount: (count: number) => `${count}`,
     tableTask: "任务",
     tableStatus: "状态",
     tableUsageSource: "用量来源",

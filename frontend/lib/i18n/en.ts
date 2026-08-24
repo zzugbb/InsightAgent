@@ -127,6 +127,8 @@ export const en: Messages = {
     observabilityFilterFailedStatus: "Failed status",
     observabilityFilterFailureHint: "Failure hint",
     observabilityFilterFailureTrace: "Failure trace",
+    failureDiagnosticsTitle: "Failure diagnostics",
+    failureDiagnosticsCount: (count: number) => `${count}`,
     tableTask: "Task",
     tableStatus: "Status",
     tableUsageSource: "Usage Source",

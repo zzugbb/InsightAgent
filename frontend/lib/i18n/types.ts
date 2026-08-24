@@ -120,6 +120,8 @@ export type Messages = {
     observabilityFilterFailedStatus: string;
     observabilityFilterFailureHint: string;
     observabilityFilterFailureTrace: string;
+    failureDiagnosticsTitle: string;
+    failureDiagnosticsCount: (count: number) => string;
     tableTask: string;
     tableStatus: string;
     tableUsageSource: string;
