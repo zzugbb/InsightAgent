@@ -384,14 +384,34 @@ test("task center governance filters drive backend request params", async ({
   expect(savedPayload.tool_registry_profile).toBe("planning_only");
   expect(savedPayload.tool_registry_provider_source).toBe("planning_suite");
 
+  const planningPrompt =
+    "task center governance filter request contract [kb:task-center] [calc:6+1]";
   await runTaskToDone(
     request,
     auth.access_token,
-    "task center governance filter request contract [kb:task-center] [calc:6+1]",
+    planningPrompt,
+  );
+  const retrievalPayload = await saveToolRegistryProfile(page, "retrieval_only", {
+    source: "retrieval_suite",
+  });
+  expect(retrievalPayload.tool_registry_profile).toBe("retrieval_only");
+  expect(retrievalPayload.tool_registry_provider_source).toBe("retrieval_suite");
+  const retrievalPrompt =
+    "task center governance filtered-out retrieval row [kb:task-center-hidden]";
+  await runTaskToDone(
+    request,
+    auth.access_token,
+    retrievalPrompt,
   );
 
   await page.getByTestId("chat-open-task-center").click();
   await expect(page.getByTestId("task-center-shell")).toBeVisible();
+  const planningRow = page
+    .locator(".task-center-table-row")
+    .filter({ hasText: "task center governance filter request contract" });
+  const retrievalRow = page
+    .locator(".task-center-table-row")
+    .filter({ hasText: "task center governance filtered-out retrieval row" });
 
   const profileResponse = page.waitForResponse((response) => {
     if (!response.url().includes("/api/tasks")) {
@@ -405,6 +425,8 @@ test("task center governance filters drive backend request params", async ({
     value: "planning_only",
   });
   await profileResponse;
+  await expect(planningRow).toBeVisible({ timeout: 20_000 });
+  await expect(retrievalRow).toBeHidden({ timeout: 20_000 });
 
   const sourceResponse = page.waitForResponse((response) => {
     if (!response.url().includes("/api/tasks")) {
@@ -421,6 +443,8 @@ test("task center governance filters drive backend request params", async ({
     value: "planning_suite",
   });
   await sourceResponse;
+  await expect(planningRow).toBeVisible({ timeout: 20_000 });
+  await expect(retrievalRow).toBeHidden({ timeout: 20_000 });
 });
 
 test("settings menu governance entries open expected modals @smoke", async ({

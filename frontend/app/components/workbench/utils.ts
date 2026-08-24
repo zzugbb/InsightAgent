@@ -1753,6 +1753,39 @@ export function matchesTaskObservabilityFilter(
   return hasFailedStatus || hasFailureHint || hasFailureTrace;
 }
 
+export function matchesTaskGovernanceFilters(
+  snapshot: Pick<TaskSnapshotSummary, "governance"> | null | undefined,
+  filters: {
+    profile: string;
+    providerSource: string;
+    allValue: string;
+  },
+): boolean {
+  const selectedProfile = filters.profile.trim();
+  const selectedProviderSource = filters.providerSource.trim();
+  const allValue = filters.allValue.trim();
+  const requiresProfile = selectedProfile.length > 0 && selectedProfile !== allValue;
+  const requiresProviderSource =
+    selectedProviderSource.length > 0 && selectedProviderSource !== allValue;
+  if (!requiresProfile && !requiresProviderSource) {
+    return true;
+  }
+  const governance = snapshot?.governance;
+  if (!governance) {
+    return false;
+  }
+  if (requiresProfile && governance.profile !== selectedProfile) {
+    return false;
+  }
+  if (
+    requiresProviderSource &&
+    governance.providerSource !== selectedProviderSource
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function resolveSessionGovernanceSummary(
   tasks: TaskSummary[],
 ): SessionGovernanceSummary | null {

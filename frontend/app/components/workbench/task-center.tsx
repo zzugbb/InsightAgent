@@ -20,6 +20,7 @@ import {
   formatTimestamp,
   getTaskLabel,
   isTaskFailedStatus,
+  matchesTaskGovernanceFilters,
   matchesTaskObservabilityFilter,
   resolveTaskFailureHintDisplay,
   resolveTaskSnapshotSummary,
@@ -138,7 +139,14 @@ export function TaskCenter({
       }
       return status === "failed" || status === "error";
     });
-    const observabilityMatched = statusMatched.filter((task) =>
+    const governanceMatched = statusMatched.filter((task) =>
+      matchesTaskGovernanceFilters(taskSnapshots.get(task.id), {
+        allValue: allGovernanceFilterValue,
+        profile: taskGovernanceProfileFilter,
+        providerSource: taskGovernanceProviderSourceFilter,
+      }),
+    );
+    const observabilityMatched = governanceMatched.filter((task) =>
       matchesTaskObservabilityFilter(
         task,
         taskSnapshots.get(task.id),
@@ -205,6 +213,8 @@ export function TaskCenter({
     taskSnapshots,
     taskSortOrder,
     taskStatusFilter,
+    taskGovernanceProfileFilter,
+    taskGovernanceProviderSourceFilter,
   ]);
 
   const scopeDisabledSession = !activeSessionId;
@@ -218,6 +228,8 @@ export function TaskCenter({
     taskObservabilityFilter,
     taskSortOrder,
     taskStatusFilter,
+    taskGovernanceProfileFilter,
+    taskGovernanceProviderSourceFilter,
   ]);
 
   const columns = useMemo(

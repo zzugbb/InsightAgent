@@ -9,6 +9,7 @@ import {
   formatTraceStepSemanticStatsSummary,
   formatTraceStepMetaSubtitle,
   getStepTitle,
+  matchesTaskGovernanceFilters,
   matchesTaskObservabilityFilter,
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
@@ -2306,6 +2307,65 @@ test("matchesTaskObservabilityFilter groups failed status, failure hints and fai
   );
   assert.equal(
     matchesTaskObservabilityFilter(baseTask, failureTraceSnapshot, "failure_hint"),
+    false,
+  );
+});
+
+test("matchesTaskGovernanceFilters applies profile and provider source together", () => {
+  const snapshot = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-governance-filter",
+      session_id: "session-governance-filter",
+      prompt: "Need governance filtering",
+      status: "completed",
+      trace_json: JSON.stringify([
+        {
+          id: "step-governance",
+          type: "action",
+          content: "Tool registry profile prod with remote provider",
+          meta: {
+            tool_registry_profile: "prod",
+            tool_registry_provider_source: "remote",
+            allowed_tool_names: ["provider_search"],
+            allowed_tool_labels: ["Provider Search"],
+          },
+        },
+      ]),
+      created_at: "2026-08-14T00:00:00Z",
+      updated_at: "2026-08-14T00:00:01Z",
+    },
+  });
+
+  assert.equal(
+    matchesTaskGovernanceFilters(snapshot, {
+      allValue: "__all__",
+      profile: "__all__",
+      providerSource: "__all__",
+    }),
+    true,
+  );
+  assert.equal(
+    matchesTaskGovernanceFilters(snapshot, {
+      allValue: "__all__",
+      profile: "prod",
+      providerSource: "remote",
+    }),
+    true,
+  );
+  assert.equal(
+    matchesTaskGovernanceFilters(snapshot, {
+      allValue: "__all__",
+      profile: "prod",
+      providerSource: "local",
+    }),
+    false,
+  );
+  assert.equal(
+    matchesTaskGovernanceFilters(null, {
+      allValue: "__all__",
+      profile: "prod",
+      providerSource: "__all__",
+    }),
     false,
   );
 });
