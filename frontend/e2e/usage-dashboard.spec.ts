@@ -1282,6 +1282,8 @@ for (const acceptanceCase of [
       calculator: 0,
       failure: 0,
     },
+    selectedSemanticCard: "task-detail-semantic-planner",
+    selectedSemanticCount: 1,
     expectedTaskCenterSemanticSummary:
       "Planner 1 · Retrieval 0 · Calculator 0 · Failure 0",
   },
@@ -1295,12 +1297,14 @@ for (const acceptanceCase of [
     forbiddenSummaryText: 'Knowledge Retrieval: {"hit_count":',
     expectedSemanticStats: {
       planner: 0,
-      retrieval: 2,
+      retrieval: 1,
       calculator: 0,
       failure: 0,
     },
+    selectedSemanticCard: "task-detail-semantic-retrieval",
+    selectedSemanticCount: 1,
     expectedTaskCenterSemanticSummary:
-      "Planner 0 · Retrieval 2 · Calculator 0 · Failure 0",
+      "Planner 0 · Retrieval 1 · Calculator 0 · Failure 0",
   },
   {
     profile: "calculator_only" as const,
@@ -1316,6 +1320,8 @@ for (const acceptanceCase of [
       calculator: 1,
       failure: 0,
     },
+    selectedSemanticCard: "task-detail-semantic-calculator",
+    selectedSemanticCount: 1,
     expectedTaskCenterSemanticSummary:
       "Planner 0 · Retrieval 0 · Calculator 1 · Failure 0",
   },
@@ -1415,11 +1421,35 @@ for (const acceptanceCase of [
         .first(),
     ).toBeVisible({ timeout: 20_000 });
 
+    const traceSearchInput = detailPage.getByPlaceholder(
+      "Search by step title, content, or model",
+    );
+    await traceSearchInput.fill("remote_provider_network_error");
+    await expect(detailPage.getByText("No steps match the current filters.")).toBeVisible();
+
+    const semanticDrilldownCard = detailPage.getByTestId(
+      acceptanceCase.selectedSemanticCard,
+    );
+    await semanticDrilldownCard.click();
+    await expect(semanticDrilldownCard).toHaveAttribute("aria-pressed", "true");
+    await expect(traceSearchInput).toHaveValue("");
+    await expect(
+      detailPage.getByTestId("task-detail-trace-visible-count"),
+    ).toContainText(`Showing ${acceptanceCase.selectedSemanticCount} of`);
+    await expect(
+      detailPage
+        .getByTestId("task-detail-trace-card")
+        .filter({ hasText: acceptanceCase.expectedTraceCard })
+        .first(),
+    ).toBeVisible({ timeout: 20_000 });
+
     const detailTraceText = await detailPage
       .getByTestId("task-detail-trace-feed")
       .textContent();
     expect(detailTraceText ?? "").toContain(acceptanceCase.expectedTraceCard);
-    expect(detailTraceText ?? "").toContain(acceptanceCase.expectedSummary);
+    expect(detailTraceText ?? "").toContain(
+      acceptanceCase.expectedSummary.replace(/^Summary: /, ""),
+    );
     expect(detailTraceText ?? "").not.toContain(acceptanceCase.forbiddenSummaryText);
     for (const forbidden of acceptanceCase.forbiddenAllowed) {
       expect(detailTraceText ?? "").not.toContain(forbidden);

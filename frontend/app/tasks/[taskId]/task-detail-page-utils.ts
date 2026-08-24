@@ -67,6 +67,19 @@ export function resolveTaskDetailFailureTracePreset(
   };
 }
 
+export function resolveTaskDetailSemanticTracePreset(
+  semanticFilter: Exclude<TaskDetailTraceSemanticFilter, "all">,
+  current: TaskDetailTraceFilterState,
+): TaskDetailTraceFilterState {
+  void current;
+  return {
+    traceView: "list",
+    traceSemanticFilter: semanticFilter,
+    traceKindFilter: "all",
+    traceSearchQuery: "",
+  };
+}
+
 export function resolveTaskDetailInitialTraceFilterState(
   traceSemanticPreset: string | null | undefined,
 ): TaskDetailTraceFilterState {

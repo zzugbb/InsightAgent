@@ -38,6 +38,7 @@ import {
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
+  resolveTaskDetailSemanticTracePreset,
   resolveTaskDetailTraceSteps,
 } from "./task-detail-page-utils";
 
@@ -189,6 +190,20 @@ export default function TaskDetailPage() {
 
   const focusFailureTrace = () => {
     const preset = resolveTaskDetailFailureTracePreset({
+      traceView,
+      traceSemanticFilter,
+      traceKindFilter,
+      traceSearchQuery,
+    });
+    setTraceView(preset.traceView);
+    setTraceSemanticFilter(preset.traceSemanticFilter);
+    setTraceKindFilter(preset.traceKindFilter);
+    setTraceSearchQuery(preset.traceSearchQuery);
+  };
+  const focusSemanticTrace = (
+    semanticFilter: Exclude<TaskDetailTraceSemanticFilter, "all">,
+  ) => {
+    const preset = resolveTaskDetailSemanticTracePreset(semanticFilter, {
       traceView,
       traceSemanticFilter,
       traceKindFilter,
@@ -416,34 +431,46 @@ export default function TaskDetailPage() {
                   </div>
                 </div>
                 <div className="task-detail-kpi-grid">
-                  <div
-                    className="inspector-kpi-item"
+                  <button
+                    type="button"
+                    className="inspector-kpi-item task-detail-semantic-card"
                     data-testid="task-detail-semantic-planner"
+                    aria-pressed={traceSemanticFilter === "planner"}
+                    onClick={() => focusSemanticTrace("planner")}
                   >
                     <span>{t.taskDetail.semanticPlannerLabel}</span>
                     <strong>{taskSnapshot.semanticStats.planner}</strong>
-                  </div>
-                  <div
-                    className="inspector-kpi-item"
+                  </button>
+                  <button
+                    type="button"
+                    className="inspector-kpi-item task-detail-semantic-card"
                     data-testid="task-detail-semantic-retrieval"
+                    aria-pressed={traceSemanticFilter === "retrieval"}
+                    onClick={() => focusSemanticTrace("retrieval")}
                   >
                     <span>{t.taskDetail.semanticRetrievalLabel}</span>
                     <strong>{taskSnapshot.semanticStats.retrieval}</strong>
-                  </div>
-                  <div
-                    className="inspector-kpi-item"
+                  </button>
+                  <button
+                    type="button"
+                    className="inspector-kpi-item task-detail-semantic-card"
                     data-testid="task-detail-semantic-calculator"
+                    aria-pressed={traceSemanticFilter === "calculator"}
+                    onClick={() => focusSemanticTrace("calculator")}
                   >
                     <span>{t.taskDetail.semanticCalculatorLabel}</span>
                     <strong>{taskSnapshot.semanticStats.calculator}</strong>
-                  </div>
-                  <div
-                    className="inspector-kpi-item"
+                  </button>
+                  <button
+                    type="button"
+                    className="inspector-kpi-item task-detail-semantic-card"
                     data-testid="task-detail-semantic-failure"
+                    aria-pressed={traceSemanticFilter === "failure"}
+                    onClick={() => focusSemanticTrace("failure")}
                   >
                     <span>{t.taskDetail.semanticFailureLabel}</span>
                     <strong>{taskSnapshot.semanticStats.failure}</strong>
-                  </div>
+                  </button>
                 </div>
               </section>
             ) : null}
@@ -477,7 +504,7 @@ export default function TaskDetailPage() {
                     <p className="chat-kicker">{t.taskDetail.traceTitle}</p>
                     <h3>{t.taskDetail.traceTitle}</h3>
                   </div>
-                  <span>
+                  <span data-testid="task-detail-trace-visible-count">
                     {traceSteps.length > 0
                       ? t.taskDetail.traceVisibleCount(
                           filteredTraceSteps.length,

@@ -968,20 +968,6 @@ function resolveTraceToolResultSummaryInput(
   return null;
 }
 
-function traceToolImpliesLocalRetrievalObservation(
-  tool: TraceStepMeta["tool"],
-): boolean {
-  if (!tool) {
-    return false;
-  }
-  const semanticKind = normalizeTraceToolSemanticValue(tool.semantic_kind);
-  const runtimeKind = normalizeTraceToolSemanticValue(tool.kind);
-  return semanticKind === "knowledge_retrieval"
-    || runtimeKind === "knowledge_retrieval"
-    || traceToolLabelImpliesLocalKnowledgeRetrieval(tool.label)
-    || traceToolLabelImpliesLocalKnowledgeRetrieval(tool.name);
-}
-
 function inferTraceToolResultSummary(
   tool: TraceStepMeta["tool"],
 ): string | null {
@@ -1408,9 +1394,6 @@ export function resolveTraceStepSemanticStats(
     calculator: 0,
     failure: 0,
   };
-  const hasStandaloneRetrievalFollowup = steps.some(
-    (step) => Boolean(step.meta?.rag) || normalizeTraceStepKind(step) === "rag",
-  );
   for (const step of steps) {
     if (resolveTraceStepFailureInsight(step) !== null) {
       stats.failure += 1;
@@ -1418,13 +1401,6 @@ export function resolveTraceStepSemanticStats(
     const semantic = resolveTraceStepSemanticCategory(step);
     if (semantic && semantic in stats) {
       stats[semantic] += 1;
-    }
-    if (
-      semantic === "retrieval" &&
-      !hasStandaloneRetrievalFollowup &&
-      traceToolImpliesLocalRetrievalObservation(step.meta?.tool)
-    ) {
-      stats.retrieval += 1;
     }
   }
   return stats;

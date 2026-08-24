@@ -1666,6 +1666,30 @@ code {
   word-break: break-word;
 }
 
+.task-detail-semantic-card {
+  appearance: none;
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+.task-detail-semantic-card:hover,
+.task-detail-semantic-card:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  outline: none;
+}
+
+.task-detail-semantic-card[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .inspector-usage-kicker {
   margin: 16px 0 0;
 }

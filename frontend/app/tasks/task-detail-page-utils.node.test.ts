@@ -5,6 +5,7 @@ import {
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
+  resolveTaskDetailSemanticTracePreset,
   resolveTaskDetailTraceSteps,
 } from "./[taskId]/task-detail-page-utils.ts";
 
@@ -40,6 +41,23 @@ test("resolveTaskDetailInitialTraceFilterState applies failure replay URL preset
     {
       traceView: "list",
       traceSemanticFilter: "all",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
+  );
+});
+
+test("resolveTaskDetailSemanticTracePreset focuses semantic traces from any trace state", () => {
+  assert.deepEqual(
+    resolveTaskDetailSemanticTracePreset("retrieval", {
+      traceView: "flow",
+      traceSemanticFilter: "failure",
+      traceKindFilter: "tool",
+      traceSearchQuery: "remote_provider_network_error",
+    }),
+    {
+      traceView: "list",
+      traceSemanticFilter: "retrieval",
       traceKindFilter: "all",
       traceSearchQuery: "",
     },

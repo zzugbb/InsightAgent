@@ -1895,7 +1895,7 @@ test("resolveTraceStepSemanticStats counts name-only real retrieval and calc ste
   });
 });
 
-test("resolveTraceStepSemanticStats counts local retrieval observation when no standalone rag follow-up exists", () => {
+test("resolveTraceStepSemanticStats counts local retrieval steps once without virtual observations", () => {
   const stats = resolveTraceStepSemanticStats([
     {
       id: "step-local-retrieval",
@@ -1920,10 +1920,39 @@ test("resolveTraceStepSemanticStats counts local retrieval observation when no s
 
   assert.deepEqual(stats, {
     planner: 0,
-    retrieval: 2,
+    retrieval: 1,
     calculator: 0,
     failure: 0,
   });
+});
+
+test("resolveTraceStepSemanticStats matches retrieval semantic filter count", () => {
+  const steps = [
+    {
+      id: "step-local-retrieval",
+      type: "action" as const,
+      content: "Tool done: Knowledge Retrieval",
+      meta: {
+        tool: {
+          name: "task_retrieve",
+          label: "Knowledge Retrieval",
+          kind: "knowledge_retrieval",
+          semantic_kind: "knowledge_retrieval",
+          status: "done",
+          effective_result_preview_keys: ["hit_count", "knowledge_base_id"],
+          output_preview: {
+            hit_count: 0,
+            knowledge_base_id: "detail-check",
+          },
+        },
+      },
+    },
+  ];
+
+  assert.equal(
+    resolveTraceStepSemanticStats(steps).retrieval,
+    filterTraceSteps(steps, { semanticFilter: "retrieval" }).length,
+  );
 });
 
 test("resolveTraceStepSemanticStats counts name-only planner steps without semantic hints", () => {
