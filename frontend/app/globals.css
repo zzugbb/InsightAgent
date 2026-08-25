@@ -2306,6 +2306,13 @@ code {
   white-space: nowrap;
 }
 
+.rag-query-insight-guidance {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .rag-hit-attribution {
   display: flex;
   flex-wrap: wrap;

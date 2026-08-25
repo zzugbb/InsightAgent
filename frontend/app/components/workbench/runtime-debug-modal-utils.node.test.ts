@@ -82,6 +82,7 @@ test("resolveRagQueryInsight summarizes best recall and source coverage", () => 
       tone: "strong",
       labelKey: "recallQualityStrong",
     },
+    guidanceKey: "recallGuidanceStrong",
     topSource: "release-notes.md",
     sourceCount: 2,
     documentCount: 2,
@@ -92,4 +93,17 @@ test("resolveRagQueryInsight summarizes best recall and source coverage", () => 
     },
   });
   assert.equal(resolveRagQueryInsight([]), null);
+});
+
+test("resolveRagQueryInsight guides weak recall results", () => {
+  const insight = resolveRagQueryInsight([
+    {
+      distance: 0.81,
+      metadata: {
+        source: "handbook.md",
+      },
+    },
+  ]);
+
+  assert.equal(insight?.guidanceKey, "recallGuidanceWeak");
 });

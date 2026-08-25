@@ -28,6 +28,11 @@ export type RagQueryInsightHit = {
 export type RagQueryInsight = {
   bestDistance: string | null;
   bestQuality: RagRecallQuality | null;
+  guidanceKey:
+    | "recallGuidanceStrong"
+    | "recallGuidanceMedium"
+    | "recallGuidanceWeak"
+    | null;
   topSource: string | null;
   sourceCount: number;
   documentCount: number;
@@ -159,9 +164,20 @@ export function resolveRagQueryInsight(
     }
   }
 
+  const bestQuality = resolveRagRecallQuality(bestDistanceValue);
+  let guidanceKey: RagQueryInsight["guidanceKey"] = null;
+  if (bestQuality?.tone === "strong") {
+    guidanceKey = "recallGuidanceStrong";
+  } else if (bestQuality?.tone === "medium") {
+    guidanceKey = "recallGuidanceMedium";
+  } else if (bestQuality?.tone === "weak") {
+    guidanceKey = "recallGuidanceWeak";
+  }
+
   return {
     bestDistance: formatRagRecallDistance(bestDistanceValue),
-    bestQuality: resolveRagRecallQuality(bestDistanceValue),
+    bestQuality,
+    guidanceKey,
     topSource,
     sourceCount: sources.size,
     documentCount: documents.size,

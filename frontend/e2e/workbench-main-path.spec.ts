@@ -174,6 +174,7 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   const queryResults = page.getByTestId("inspector-rag-query-results");
   const hitDoc = page.locator(".memory-query-hit-doc").first();
   const queryInsight = page.getByTestId("inspector-rag-query-insight").first();
+  const queryGuidance = page.getByTestId("inspector-rag-query-guidance").first();
   const qualityMix = page.getByTestId("inspector-rag-quality-mix").first();
   const hitAttribution = page.getByTestId("inspector-rag-hit-attribution").first();
 
@@ -187,6 +188,9 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
       await expect(queryInsight).toContainText(/Best distance|最佳距离/);
       await expect(queryInsight).toContainText(/Top source|首要来源/);
       await expect(queryInsight).toContainText("playwright-e2e");
+      await expect(queryGuidance).toContainText(
+        /Good retrieval fit|Review the retrieved text|Try a more specific query|召回匹配度较好|使用前建议先核对|可尝试更具体/,
+      );
       await expect(qualityMix).toContainText(/Quality mix|质量分布/);
       await expect(qualityMix).toContainText(
         /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
@@ -211,6 +215,9 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   await expect(queryInsight).toContainText(/Best distance|最佳距离/);
   await expect(queryInsight).toContainText(/Top source|首要来源/);
   await expect(queryInsight).toContainText("playwright-e2e");
+  await expect(queryGuidance).toContainText(
+    /Good retrieval fit|Review the retrieved text|Try a more specific query|召回匹配度较好|使用前建议先核对|可尝试更具体/,
+  );
   await expect(qualityMix).toContainText(/Quality mix|质量分布/);
   await expect(qualityMix).toContainText(
     /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,

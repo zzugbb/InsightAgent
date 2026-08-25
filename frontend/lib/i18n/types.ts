@@ -653,6 +653,9 @@ export type Messages = {
       recallQualityMedium: string;
       recallQualityWeak: string;
       recallDistanceHint: string;
+      recallGuidanceStrong: string;
+      recallGuidanceMedium: string;
+      recallGuidanceWeak: string;
       hitAttributionLabel: string;
       sourceLabel: string;
       documentLabel: string;

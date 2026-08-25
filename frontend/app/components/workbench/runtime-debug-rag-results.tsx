@@ -84,6 +84,14 @@ export function RuntimeDebugRagResults({
                   queryInsight.documentCount,
                 )}
               </span>
+              {queryInsight.guidanceKey ? (
+                <span
+                  className="rag-query-insight-guidance"
+                  data-testid="inspector-rag-query-guidance"
+                >
+                  {t.inspector.rag[queryInsight.guidanceKey]}
+                </span>
+              ) : null}
             </div>
           ) : null}
           <ul className="memory-query-hit-list">
