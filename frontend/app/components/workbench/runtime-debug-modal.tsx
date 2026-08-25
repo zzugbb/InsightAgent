@@ -20,6 +20,7 @@ import { API_BASE_URL } from "./utils";
 import { parseMemoryMetadataJson, shortenId } from "./utils";
 import {
   formatRagRecallDistance,
+  resolveRagHitAttributionItems,
   resolveRagRecallQuality,
 } from "./runtime-debug-modal-utils";
 
@@ -573,9 +574,29 @@ export function RuntimeDebugModal({
                     const metaKeys = Object.keys(hit.metadata || {});
                     const recallDistance = formatRagRecallDistance(hit.distance);
                     const recallQuality = resolveRagRecallQuality(hit.distance);
+                    const attributionItems = resolveRagHitAttributionItems(hit.metadata);
                     return (
                       <li key={hit.id} className="memory-query-hit-item">
                         <pre className="memory-query-hit-doc">{hit.content}</pre>
+                        {attributionItems.length > 0 ? (
+                          <div
+                            className="rag-hit-attribution"
+                            data-testid="inspector-rag-hit-attribution"
+                          >
+                            <span className="rag-hit-attribution-label">
+                              {t.inspector.rag.hitAttributionLabel}
+                            </span>
+                            {attributionItems.map((item) => (
+                              <span
+                                key={`${item.labelKey}:${item.value}`}
+                                className="rag-hit-attribution-chip"
+                              >
+                                <span>{t.inspector.rag[item.labelKey]}</span>
+                                <code>{item.value}</code>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                         {metaKeys.length > 0 ? (
                           <pre className="memory-query-hit-meta">
                             {t.inspector.rag.hitMetadataLabel}:{"\n"}

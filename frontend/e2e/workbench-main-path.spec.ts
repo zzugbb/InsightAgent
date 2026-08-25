@@ -173,6 +173,7 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   const querySubmit = page.getByTestId("inspector-rag-query-submit");
   const queryResults = page.getByTestId("inspector-rag-query-results");
   const hitDoc = page.locator(".memory-query-hit-doc").first();
+  const hitAttribution = page.getByTestId("inspector-rag-hit-attribution").first();
 
   for (let i = 0; i < 5; i += 1) {
     await queryInput.fill(snippet);
@@ -180,6 +181,10 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
     await expect(queryResults).toBeVisible({ timeout: 20_000 });
     if (await hitDoc.isVisible().catch(() => false)) {
       await expect(hitDoc).toContainText(snippet);
+      await expect(hitAttribution).toContainText(/Recall source|召回来源/);
+      await expect(hitAttribution).toContainText("playwright-e2e");
+      await expect(hitAttribution).toContainText(/Source|来源/);
+      await expect(hitAttribution).toContainText(/Chunk|片段/);
       await expect(page.getByTestId("inspector-rag-recall-quality").first()).toContainText(
         /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
       );
@@ -192,6 +197,10 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   }
 
   await expect(hitDoc).toContainText(snippet, { timeout: 20_000 });
+  await expect(hitAttribution).toContainText(/Recall source|召回来源/);
+  await expect(hitAttribution).toContainText("playwright-e2e");
+  await expect(hitAttribution).toContainText(/Source|来源/);
+  await expect(hitAttribution).toContainText(/Chunk|片段/);
   await expect(page.getByTestId("inspector-rag-recall-quality").first()).toContainText(
     /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
   );

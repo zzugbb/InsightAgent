@@ -2270,6 +2270,42 @@ code {
   color: var(--muted);
 }
 
+.rag-hit-attribution {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.rag-hit-attribution-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.rag-hit-attribution-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: color-mix(in srgb, var(--card) 88%, var(--foreground) 4%);
+  font-size: 0.72rem;
+}
+
+.rag-hit-attribution-chip code {
+  overflow: hidden;
+  max-width: min(240px, 55vw);
+  color: var(--foreground);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rag-recall-quality-row {
   display: flex;
   flex-wrap: wrap;

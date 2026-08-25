@@ -648,6 +648,12 @@ export type Messages = {
       recallQualityMedium: string;
       recallQualityWeak: string;
       recallDistanceHint: string;
+      hitAttributionLabel: string;
+      sourceLabel: string;
+      documentLabel: string;
+      versionLabel: string;
+      hashLabel: string;
+      chunkLabel: string;
       hitMetadataLabel: string;
     };
     audit: {

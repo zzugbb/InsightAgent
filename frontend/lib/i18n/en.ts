@@ -741,6 +741,12 @@ export const en: Messages = {
       recallQualityMedium: "Possible match",
       recallQualityWeak: "Weak match",
       recallDistanceHint: "Lower distance means closer semantic match.",
+      hitAttributionLabel: "Recall source",
+      sourceLabel: "Source",
+      documentLabel: "Document",
+      versionLabel: "Version",
+      hashLabel: "Hash",
+      chunkLabel: "Chunk",
       hitMetadataLabel: "Metadata",
     },
     audit: {

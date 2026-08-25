@@ -726,6 +726,12 @@ export const zh: Messages = {
       recallQualityMedium: "可能相关",
       recallQualityWeak: "弱相关",
       recallDistanceHint: "距离越低表示语义越接近。",
+      hitAttributionLabel: "召回来源",
+      sourceLabel: "来源",
+      documentLabel: "文档",
+      versionLabel: "版本",
+      hashLabel: "哈希",
+      chunkLabel: "片段",
       hitMetadataLabel: "元数据",
     },
     audit: {
