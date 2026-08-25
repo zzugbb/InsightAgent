@@ -346,6 +346,8 @@ export const zh: Messages = {
       versionDetailsTitle: "版本明细",
       versionSummary: (versions: number, documents: number, chunks: number) =>
         `${versions} 个版本 · ${documents} 个文档 · ${chunks} 条 chunk`,
+      documentGroupSummary: (versions: number, chunks: number) =>
+        `${versions} 个版本 · ${chunks} 条 chunk`,
       versionSourceLabel: "来源",
       versionDocumentLabel: "文档",
       versionHashLabel: "Hash",

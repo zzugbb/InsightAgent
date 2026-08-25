@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
 } from "./knowledge-base-governance-modal-utils.ts";
@@ -89,5 +90,64 @@ test("summarizeKnowledgeBaseVersions totals documents and chunks", () => {
       documentCount: 2,
       chunkCount: 7,
     },
+  );
+});
+
+test("resolveKnowledgeBaseDocumentGroups groups versions by source document", () => {
+  assert.deepEqual(
+    resolveKnowledgeBaseDocumentGroups([
+      {
+        document_version: "sha256:bbbbbbbbbbbbbbbb",
+        content_hash:
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        source: "api-docs",
+        document_id: "release-notes",
+        chunk_count: 4,
+      },
+      {
+        document_version: "sha256:aaaaaaaaaaaaaaaa",
+        content_hash:
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        source: "api-docs",
+        document_id: "release-notes",
+        chunk_count: 1,
+      },
+      {
+        document_version: "sha256:cccccccccccccccc",
+        content_hash:
+          "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        source: "manual",
+        document_id: "ops-note",
+        chunk_count: 2,
+      },
+    ]).map((group) => ({
+      key: group.key,
+      source: group.source,
+      documentId: group.documentId,
+      versionCount: group.versionCount,
+      chunkCount: group.chunkCount,
+      versionLabels: group.versions.map((version) => version.versionLabel),
+    })),
+    [
+      {
+        key: "api-docs::release-notes",
+        source: "api-docs",
+        documentId: "release-notes",
+        versionCount: 2,
+        chunkCount: 5,
+        versionLabels: [
+          "sha256:aaaaaaaaaaaaaaaa",
+          "sha256:bbbbbbbbbbbbbbbb",
+        ],
+      },
+      {
+        key: "manual::ops-note",
+        source: "manual",
+        documentId: "ops-note",
+        versionCount: 1,
+        chunkCount: 2,
+        versionLabels: ["sha256:cccccccccccccccc"],
+      },
+    ],
   );
 });

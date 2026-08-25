@@ -285,6 +285,7 @@ export type Messages = {
       tableVersions: string;
       versionDetailsTitle: string;
       versionSummary: (versions: number, documents: number, chunks: number) => string;
+      documentGroupSummary: (versions: number, chunks: number) => string;
       versionSourceLabel: string;
       versionDocumentLabel: string;
       versionHashLabel: string;

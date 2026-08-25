@@ -15,6 +15,7 @@ import type {
   RagKnowledgeBaseSummary,
 } from "./types";
 import {
+  resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
 } from "./knowledge-base-governance-modal-utils";
@@ -96,6 +97,7 @@ export function KnowledgeBaseGovernanceModal({
       .toLowerCase() === "admin";
   const renderVersionDetails = (row: RagKnowledgeBaseSummary) => {
     const versionRows = resolveKnowledgeBaseVersionRows(row.document_versions);
+    const documentGroups = resolveKnowledgeBaseDocumentGroups(row.document_versions);
     const summary = summarizeKnowledgeBaseVersions(row.document_versions);
     return (
       <div
@@ -111,6 +113,30 @@ export function KnowledgeBaseGovernanceModal({
               summary.chunkCount,
             )}
           </span>
+        </div>
+        <div className="kb-document-group-list">
+          {documentGroups.map((group) => (
+            <div
+              className="kb-document-group-row"
+              data-testid="kb-document-group-row"
+              key={group.key}
+            >
+              <span>
+                <b>{t.sidebar.knowledgeBase.versionSourceLabel}</b>
+                {group.source}
+              </span>
+              <span>
+                <b>{t.sidebar.knowledgeBase.versionDocumentLabel}</b>
+                {group.documentId}
+              </span>
+              <strong>
+                {t.sidebar.knowledgeBase.documentGroupSummary(
+                  group.versionCount,
+                  group.chunkCount,
+                )}
+              </strong>
+            </div>
+          ))}
         </div>
         <div className="kb-version-detail-list">
           {versionRows.map((version) => (

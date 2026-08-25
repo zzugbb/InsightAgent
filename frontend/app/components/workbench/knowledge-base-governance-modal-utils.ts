@@ -17,6 +17,15 @@ export type KnowledgeBaseVersionSummary = {
   chunkCount: number;
 };
 
+export type KnowledgeBaseDocumentGroup = {
+  key: string;
+  source: string;
+  documentId: string;
+  versionCount: number;
+  chunkCount: number;
+  versions: KnowledgeBaseVersionRow[];
+};
+
 function normalizeVersionText(value: unknown, fallback: string): string {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized || fallback;
@@ -77,4 +86,32 @@ export function summarizeKnowledgeBaseVersions(
     documentCount: documentKeys.size,
     chunkCount: rows.reduce((total, row) => total + row.chunkCount, 0),
   };
+}
+
+export function resolveKnowledgeBaseDocumentGroups(
+  versions: RagDocumentVersionSummary[] | null | undefined,
+): KnowledgeBaseDocumentGroup[] {
+  const rows = resolveKnowledgeBaseVersionRows(versions);
+  const groups = new Map<string, KnowledgeBaseDocumentGroup>();
+
+  for (const row of rows) {
+    const key = `${row.source}::${row.documentId}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.versionCount += 1;
+      existing.chunkCount += row.chunkCount;
+      existing.versions.push(row);
+      continue;
+    }
+    groups.set(key, {
+      key,
+      source: row.source,
+      documentId: row.documentId,
+      versionCount: 1,
+      chunkCount: row.chunkCount,
+      versions: [row],
+    });
+  }
+
+  return [...groups.values()];
 }

@@ -1576,6 +1576,10 @@ test("knowledge governance expands document version details", async ({
   await expect(detailPanel).toContainText("playwright-docs");
   await expect(detailPanel).toContainText("release-notes");
   await expect(detailPanel).toContainText("sha256:");
+  await expect(detailPanel.getByTestId("kb-document-group-row")).toHaveCount(1);
+  await expect(detailPanel.getByTestId("kb-document-group-row")).toContainText(
+    /2 version|2 个版本/,
+  );
   await expect(detailPanel.getByTestId("kb-version-detail-row")).toHaveCount(2);
 });
 

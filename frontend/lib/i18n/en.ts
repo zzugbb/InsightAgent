@@ -352,6 +352,8 @@ export const en: Messages = {
       versionDetailsTitle: "Version details",
       versionSummary: (versions: number, documents: number, chunks: number) =>
         `${versions} version(s) · ${documents} document(s) · ${chunks} chunk(s)`,
+      documentGroupSummary: (versions: number, chunks: number) =>
+        `${versions} version(s) · ${chunks} chunk(s)`,
       versionSourceLabel: "Source",
       versionDocumentLabel: "Document",
       versionHashLabel: "Hash",

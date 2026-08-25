@@ -8,7 +8,7 @@ current_focus:
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience。
   - observability-experience 封板验证：backend full slice、frontend node/lint/build/type、targeted TS、backend main/queue e2e、frontend full/queue Chromium、frontend diagnostics finalize、CI tooling、diff hygiene、备份计划 diff 与端口清理检查均通过。
-  - 当前主线：rag-product-experience 已启动，进度约 8%；首轮完成知识库治理表版本明细展开/对比入口，前端消费现有 document_versions，不改变 RAG route、SSE、trace、export 外部契约。
+  - 当前主线：rag-product-experience 已启动，进度约 12%；已完成知识库治理表版本明细展开与 source/document 文档组摘要，前端消费现有 document_versions，不改变 RAG route、SSE、trace、export 外部契约。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
   - 保持先补 failing test 再改实现
@@ -26,7 +26,7 @@ validation_baseline:
   backend_rag_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag (78/78)
   backend_rag_route_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route (2/2)
   backend_result_summary_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary (30/30)
-  frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts app/components/workbench/utils.node.test.ts app/components/workbench/audit-logs-modal-utils.node.test.ts app/tasks/task-detail-page-utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (109/109)
+  frontend_node_tests: cd frontend && node --test --experimental-strip-types app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts app/components/workbench/utils.node.test.ts app/components/workbench/audit-logs-modal-utils.node.test.ts app/tasks/task-detail-page-utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts (110/110)
   frontend_lint: cd frontend && npm run lint
   frontend_build: cd frontend && npm run build
   frontend_type_contract: npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts
@@ -43,10 +43,11 @@ validation_baseline:
   frontend_reload_isolation_chromium: default backend/frontend targeted Chromium passed (reload keeps background session stream detached until that session is active)
   frontend_reload_recovery_chromium: default backend/frontend targeted Chromium passed (running task can recover after reload and be cancelled)
   frontend_chromium_e2e: full Chromium passed, 51 passed / 1 skipped against real backend/frontend services, including knowledge governance version details
+  frontend_knowledge_governance_chromium: e2e/usage-dashboard.spec.ts:1543 (1/1, knowledge governance version details + source/document groups)
   frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --summary-file /tmp/frontend-e2e-finalize-summary.md --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: rag-product-experience 已启动，进度约 8%；本轮新增知识库治理版本明细展开/对比入口，不改变 RAG route、SSE、trace、export 外部契约。先补 knowledge-base-governance-modal-utils 红测并转绿；backend full slice 1948/1948、frontend node 109/109、frontend lint/build、targeted TS、frontend full Chromium 51 passed / 1 skipped、git diff --check、备份计划 diff 检查与 8000/3001 端口清理检查通过。
+latest_validation_note: rag-product-experience 进度约 12%；本轮新增知识库治理 source/document 文档组摘要，继续消费现有 document_versions，不改变 RAG route、SSE、trace、export 外部契约。先补 knowledge-base-governance-modal-utils 红测并转绿；backend full slice 1948/1948、frontend node 110/110、frontend lint/build、targeted TS、knowledge governance targeted Chromium 1/1、git diff --check、备份计划 diff 检查与 8000/3001 端口清理检查通过。
 todos:
   - id: docs-slimming
     status: completed
@@ -86,7 +87,7 @@ todos:
     content: 已 100% 封板；任务失败线索摘要与来源分类、resolveTaskSnapshotSummary failureHint/failureSource、TaskResponse 与 task_failed audit event 兜底恢复、Task Center 列表 audit failure hint 批量回放、稳定错误码可读映射、观测筛选、失败来源诊断分组与本地下钻、registry profile/provider source 本地过滤、任务详情 Failure 轨迹快捷定位、本地 failure 回放节点、跨视图 trace_semantic=failure 直达、Usage Dashboard top tasks 失败摘要、Audit Logs 失败详情与服务端 keyword、Trace Failure 语义统计/过滤一致性均已收口；外部 SSE / trace / export shape 不变。
   - id: rag-product-experience
     status: in_progress
-    content: 当前主线，进度约 8%；首轮完成知识库治理表版本明细展开/对比入口，按 source/document/version 稳定排序并展示版本数、文档数、chunk 总数、source、document_id、document_version 与 content_hash 摘要；新增派生逻辑拆到 knowledge-base-governance-modal-utils 与独立 node test，前端 full Chromium 已覆盖真实 RAG ingest 后展开明细。
+    content: 当前主线，进度约 12%；已完成知识库治理表版本明细展开与 source/document 文档组摘要，按 source/document/version 稳定排序并展示版本数、文档数、chunk 总数、source、document_id、document_version 与 content_hash 摘要；新增派生逻辑拆到 knowledge-base-governance-modal-utils 与独立 node test，targeted Chromium 已覆盖真实 RAG ingest 后展开明细与文档组摘要。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -98,7 +99,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
 - `queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening` 与 `observability-experience` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口、registry/provider source 治理、RAG 来源/版本/shared 边界治理、生产可靠性治理、失败诊断/任务回放/Trace 语义过滤与 e2e 基线均已收口。
-- 当前进入 `rag-product-experience` 主线，优先提升知识库版本对比、文档治理操作、检索解释与召回质量呈现。
+- 当前进入 `rag-product-experience` 主线，已完成知识库版本明细展开与 source/document 文档组摘要，后续继续提升文档治理操作、检索解释与召回质量呈现。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 
 ## 已完成能力摘要
@@ -123,7 +124,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - Backend usage dashboard slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_dashboard`，当前 `40/40`。
 - Backend e2e main phase：baseline / main / export consistency / cancel-timeout 已通过。
 - Backend e2e queue phase：`TASK_QUEUE_MAX_CONCURRENT=1` backend 上 queued cancel、queued SSE safe wait_position、settings diagnostics、typed queue governance checks 与 followup completion 通过。
-- Frontend node tests：knowledge base governance modal utils / workbench utils / audit logs modal utils / task detail utils / stream store utils / model settings utils，当前 `109/109`。
+- Frontend node tests：knowledge base governance modal utils / workbench utils / audit logs modal utils / task detail utils / stream store utils / model settings utils，当前 `110/110`。
 - Frontend lint：`cd frontend && npm run lint` 通过。
 - Frontend build：`cd frontend && npm run build` 通过。
 - Frontend type contract：TaskQueueDiagnostics 基础运行态计数、governance 字段必填与 pressure_state/waiting_policy 枚举契约通过。
@@ -135,6 +136,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - Frontend reload isolation Chromium：默认 backend/frontend 下刷新后后台会话 stream 不误恢复、切回原会话恢复并可取消通过。
 - Frontend reload recovery Chromium：默认 backend/frontend 下 running task reload 后恢复并可取消通过。
 - Frontend Chromium e2e：最终本地 backend/frontend 服务下 full 基线 `51 passed / 1 skipped`；覆盖新增知识库版本明细展开，低并发 queued 专项在 full 阶段按预期 skip，已由 frontend queue phase 单独覆盖。
+- Frontend knowledge governance Chromium：`e2e/usage-dashboard.spec.ts:1543`，`1/1` 通过，覆盖真实 RAG ingest 后展开版本明细与 source/document 文档组摘要。
 - Frontend task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1329`，`3/3` 通过，覆盖 Task Center/任务详情语义统计、统计卡下钻与语义过滤计数一致性。
 - Frontend remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过，覆盖 Task Center audit failure hint 回放、失败来源诊断分组、诊断来源 chip 本地下钻、Failure URL 预设直达与可读失败说明、Needs attention / Failed status 观测筛选、Audit Logs 服务端 keyword 请求、任务详情 audit failure hint 恢复与失败轨迹快捷定位。
 - Frontend usage/audit-to-detail Chromium：`e2e/usage-dashboard.spec.ts:774`，`1/1` 通过。
@@ -160,7 +162,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 ## 后续维护线
 
 - `production-reliability-hardening` 与 `observability-experience` 已 100% 封板；后续继续以先红测、再实现、再 targeted/full slice 的方式推进新主线。
-- 当前主线：`rag-product-experience`，进度约 8%，首轮完成知识库版本明细展开/对比入口；下一步继续围绕文档治理操作、检索解释与召回质量呈现补红测。
+- 当前主线：`rag-product-experience`，进度约 12%，已完成知识库版本明细展开与 source/document 文档组摘要；下一步继续围绕文档治理操作、检索解释与召回质量呈现补红测。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 维护约定
