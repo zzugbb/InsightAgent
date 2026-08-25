@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Input, Modal, Space, Tag, Typography } from "antd";
+import { App, Button, Input, Modal, Space, Typography } from "antd";
 import { useEffect, useState } from "react";
 
 import { apiJson, apiPostJson } from "../../../lib/api-client";
@@ -16,13 +16,9 @@ import type {
   RagStatus,
   SessionMemoryStatus,
 } from "./types";
+import { RuntimeDebugRagResults } from "./runtime-debug-rag-results";
 import { API_BASE_URL } from "./utils";
 import { parseMemoryMetadataJson, shortenId } from "./utils";
-import {
-  formatRagRecallDistance,
-  resolveRagHitAttributionItems,
-  resolveRagRecallQuality,
-} from "./runtime-debug-modal-utils";
 
 const { TextArea } = Input;
 
@@ -558,77 +554,11 @@ export function RuntimeDebugModal({
             </p>
           ) : null}
           {ragQueryMutation.isSuccess && ragQueryMutation.data ? (
-            <div
-              className="memory-query-results"
-              aria-live="polite"
-              data-testid="inspector-rag-query-results"
-            >
-              <p className="memory-query-hits-label">
-                {t.inspector.rag.queryHits(ragQueryMutation.data.hit_count)}
-              </p>
-              {ragQueryMutation.data.hit_count <= 0 ? (
-                <p className="panel-note panel-note--muted">{t.inspector.rag.queryEmpty}</p>
-              ) : (
-                <ul className="memory-query-hit-list">
-                  {ragQueryMutation.data.hits.map((hit) => {
-                    const metaKeys = Object.keys(hit.metadata || {});
-                    const recallDistance = formatRagRecallDistance(hit.distance);
-                    const recallQuality = resolveRagRecallQuality(hit.distance);
-                    const attributionItems = resolveRagHitAttributionItems(hit.metadata);
-                    return (
-                      <li key={hit.id} className="memory-query-hit-item">
-                        <pre className="memory-query-hit-doc">{hit.content}</pre>
-                        {attributionItems.length > 0 ? (
-                          <div
-                            className="rag-hit-attribution"
-                            data-testid="inspector-rag-hit-attribution"
-                          >
-                            <span className="rag-hit-attribution-label">
-                              {t.inspector.rag.hitAttributionLabel}
-                            </span>
-                            {attributionItems.map((item) => (
-                              <span
-                                key={`${item.labelKey}:${item.value}`}
-                                className="rag-hit-attribution-chip"
-                              >
-                                <span>{t.inspector.rag[item.labelKey]}</span>
-                                <code>{item.value}</code>
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                        {metaKeys.length > 0 ? (
-                          <pre className="memory-query-hit-meta">
-                            {t.inspector.rag.hitMetadataLabel}:{"\n"}
-                            {JSON.stringify(hit.metadata, null, 2)}
-                          </pre>
-                        ) : null}
-                        {recallDistance ? (
-                          <div
-                            className="rag-recall-quality-row"
-                            data-testid="inspector-rag-recall-quality"
-                          >
-                            <span className="memory-query-hit-dist">
-                              {t.inspector.rag.distanceLabel}: {recallDistance}
-                            </span>
-                            {recallQuality ? (
-                              <Tag
-                                className={`rag-recall-quality-tag rag-recall-quality-tag--${recallQuality.tone}`}
-                              >
-                                {t.inspector.rag[recallQuality.labelKey]}
-                              </Tag>
-                            ) : null}
-                            <span className="rag-recall-quality-hint">
-                              {t.inspector.rag.recallDistanceHint}
-                            </span>
-                          </div>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+            <RuntimeDebugRagResults
+              hitCount={ragQueryMutation.data.hit_count}
+              hits={ragQueryMutation.data.hits}
+              t={t}
+            />
           ) : null}
         </div>
       </div>

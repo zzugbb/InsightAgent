@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   formatRagRecallDistance,
   resolveRagHitAttributionItems,
+  resolveRagQueryInsight,
   resolveRagRecallQuality,
 } from "./runtime-debug-modal-utils.ts";
 
@@ -48,4 +49,42 @@ test("resolveRagHitAttributionItems summarizes safe recall metadata", () => {
     { labelKey: "chunkLabel", value: "2/5" },
   ]);
   assert.deepEqual(resolveRagHitAttributionItems(null), []);
+});
+
+test("resolveRagQueryInsight summarizes best recall and source coverage", () => {
+  const insight = resolveRagQueryInsight([
+    {
+      distance: 0.52,
+      metadata: {
+        source: "handbook.md",
+        document_id: "manual",
+      },
+    },
+    {
+      distance: 0.18,
+      metadata: {
+        source: "release-notes.md",
+        document_id: "release-2026",
+      },
+    },
+    {
+      distance: null,
+      metadata: {
+        source: "release-notes.md",
+        document_id: "release-2026",
+      },
+    },
+  ]);
+
+  assert.deepEqual(insight, {
+    bestDistance: "0.1800",
+    bestQuality: {
+      tone: "strong",
+      labelKey: "recallQualityStrong",
+    },
+    topSource: "release-notes.md",
+    sourceCount: 2,
+    documentCount: 2,
+  });
+  assert.equal(resolveRagQueryInsight([]), null);
 });

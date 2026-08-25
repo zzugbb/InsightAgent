@@ -638,6 +638,10 @@ export type Messages = {
       queryEmptyInput: string;
       queryEmpty: string;
       queryHits: (n: number) => string;
+      queryInsightLabel: string;
+      bestDistanceLabel: string;
+      topSourceLabel: string;
+      sourceCoverageLabel: (sourceCount: number, documentCount: number) => string;
       docCount: (n: number) => string;
       collectionExists: string;
       collectionMissing: string;

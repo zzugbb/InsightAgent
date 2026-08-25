@@ -2270,6 +2270,42 @@ code {
   color: var(--muted);
 }
 
+.rag-query-insight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+}
+
+.rag-query-insight-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.rag-query-insight-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--muted-strong);
+  font-size: 0.72rem;
+}
+
+.rag-query-insight-chip code {
+  overflow: hidden;
+  max-width: min(220px, 52vw);
+  color: var(--foreground);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rag-hit-attribution {
   display: flex;
   flex-wrap: wrap;

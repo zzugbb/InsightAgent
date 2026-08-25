@@ -716,6 +716,11 @@ export const zh: Messages = {
       queryEmptyInput: "请先输入检索内容。",
       queryEmpty: "当前知识库暂无命中片段。",
       queryHits: (n: number) => `命中 ${n} 条`,
+      queryInsightLabel: "召回摘要",
+      bestDistanceLabel: "最佳距离",
+      topSourceLabel: "首要来源",
+      sourceCoverageLabel: (sourceCount: number, documentCount: number) =>
+        `${sourceCount} 个来源 · ${documentCount} 个文档`,
       docCount: (n: number) => `知识库条数：${n}`,
       collectionExists: "collection 已存在",
       collectionMissing: "尚无 collection（未写入）",

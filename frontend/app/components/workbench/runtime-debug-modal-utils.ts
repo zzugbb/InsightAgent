@@ -20,6 +20,19 @@ export type RagHitAttributionItem = {
   value: string;
 };
 
+export type RagQueryInsightHit = {
+  distance?: number | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type RagQueryInsight = {
+  bestDistance: string | null;
+  bestQuality: RagRecallQuality | null;
+  topSource: string | null;
+  sourceCount: number;
+  documentCount: number;
+};
+
 function cleanText(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -101,4 +114,46 @@ export function resolveRagHitAttributionItems(
   }
 
   return items;
+}
+
+export function resolveRagQueryInsight(
+  hits: RagQueryInsightHit[],
+): RagQueryInsight | null {
+  if (!Array.isArray(hits) || hits.length === 0) {
+    return null;
+  }
+
+  const sources = new Set<string>();
+  const documents = new Set<string>();
+  let bestDistanceValue: number | null = null;
+  let topSource: string | null = null;
+
+  for (const hit of hits) {
+    const metadata = hit.metadata || {};
+    const source = cleanText(metadata.source);
+    const documentId = cleanText(metadata.document_id);
+    if (source) {
+      sources.add(source);
+    }
+    if (documentId) {
+      documents.add(documentId);
+    }
+
+    const distance = hit.distance;
+    if (typeof distance !== "number" || !Number.isFinite(distance)) {
+      continue;
+    }
+    if (bestDistanceValue === null || distance < bestDistanceValue) {
+      bestDistanceValue = distance;
+      topSource = source;
+    }
+  }
+
+  return {
+    bestDistance: formatRagRecallDistance(bestDistanceValue),
+    bestQuality: resolveRagRecallQuality(bestDistanceValue),
+    topSource,
+    sourceCount: sources.size,
+    documentCount: documents.size,
+  };
 }

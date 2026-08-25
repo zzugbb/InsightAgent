@@ -731,6 +731,11 @@ export const en: Messages = {
       queryEmptyInput: "Enter a query before searching.",
       queryEmpty: "No hits in this knowledge base yet.",
       queryHits: (n: number) => `${n} hit(s)`,
+      queryInsightLabel: "Recall summary",
+      bestDistanceLabel: "Best distance",
+      topSourceLabel: "Top source",
+      sourceCoverageLabel: (sourceCount: number, documentCount: number) =>
+        `${sourceCount} source(s) · ${documentCount} document(s)`,
       docCount: (n: number) => `Knowledge chunks: ${n}`,
       collectionExists: "Collection exists",
       collectionMissing: "No collection yet",
