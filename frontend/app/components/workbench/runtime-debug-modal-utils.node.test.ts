@@ -85,6 +85,11 @@ test("resolveRagQueryInsight summarizes best recall and source coverage", () => 
     topSource: "release-notes.md",
     sourceCount: 2,
     documentCount: 2,
+    qualityCounts: {
+      strong: 1,
+      medium: 1,
+      weak: 0,
+    },
   });
   assert.equal(resolveRagQueryInsight([]), null);
 });

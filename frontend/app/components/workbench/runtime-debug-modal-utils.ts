@@ -31,6 +31,7 @@ export type RagQueryInsight = {
   topSource: string | null;
   sourceCount: number;
   documentCount: number;
+  qualityCounts: Record<RagRecallQualityTone, number>;
 };
 
 function cleanText(value: unknown): string | null {
@@ -125,6 +126,11 @@ export function resolveRagQueryInsight(
 
   const sources = new Set<string>();
   const documents = new Set<string>();
+  const qualityCounts: Record<RagRecallQualityTone, number> = {
+    strong: 0,
+    medium: 0,
+    weak: 0,
+  };
   let bestDistanceValue: number | null = null;
   let topSource: string | null = null;
 
@@ -143,6 +149,10 @@ export function resolveRagQueryInsight(
     if (typeof distance !== "number" || !Number.isFinite(distance)) {
       continue;
     }
+    const quality = resolveRagRecallQuality(distance);
+    if (quality) {
+      qualityCounts[quality.tone] += 1;
+    }
     if (bestDistanceValue === null || distance < bestDistanceValue) {
       bestDistanceValue = distance;
       topSource = source;
@@ -155,5 +165,6 @@ export function resolveRagQueryInsight(
     topSource,
     sourceCount: sources.size,
     documentCount: documents.size,
+    qualityCounts,
   };
 }

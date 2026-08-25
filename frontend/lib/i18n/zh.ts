@@ -719,6 +719,7 @@ export const zh: Messages = {
       queryInsightLabel: "召回摘要",
       bestDistanceLabel: "最佳距离",
       topSourceLabel: "首要来源",
+      qualityMixLabel: "质量分布",
       sourceCoverageLabel: (sourceCount: number, documentCount: number) =>
         `${sourceCount} 个来源 · ${documentCount} 个文档`,
       docCount: (n: number) => `知识库条数：${n}`,

@@ -641,6 +641,7 @@ export type Messages = {
       queryInsightLabel: string;
       bestDistanceLabel: string;
       topSourceLabel: string;
+      qualityMixLabel: string;
       sourceCoverageLabel: (sourceCount: number, documentCount: number) => string;
       docCount: (n: number) => string;
       collectionExists: string;

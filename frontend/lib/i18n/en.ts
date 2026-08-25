@@ -734,6 +734,7 @@ export const en: Messages = {
       queryInsightLabel: "Recall summary",
       bestDistanceLabel: "Best distance",
       topSourceLabel: "Top source",
+      qualityMixLabel: "Quality mix",
       sourceCoverageLabel: (sourceCount: number, documentCount: number) =>
         `${sourceCount} source(s) · ${documentCount} document(s)`,
       docCount: (n: number) => `Knowledge chunks: ${n}`,

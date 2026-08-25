@@ -65,6 +65,19 @@ export function RuntimeDebugRagResults({
                   <code>{queryInsight.topSource}</code>
                 </span>
               ) : null}
+              <span
+                className="rag-query-insight-chip"
+                data-testid="inspector-rag-quality-mix"
+              >
+                {t.inspector.rag.qualityMixLabel}
+                <code>
+                  {[
+                    `${t.inspector.rag.recallQualityStrong} ${queryInsight.qualityCounts.strong}`,
+                    `${t.inspector.rag.recallQualityMedium} ${queryInsight.qualityCounts.medium}`,
+                    `${t.inspector.rag.recallQualityWeak} ${queryInsight.qualityCounts.weak}`,
+                  ].join(" · ")}
+                </code>
+              </span>
               <span className="rag-query-insight-chip">
                 {t.inspector.rag.sourceCoverageLabel(
                   queryInsight.sourceCount,
