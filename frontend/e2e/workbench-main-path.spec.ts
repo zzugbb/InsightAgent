@@ -180,12 +180,24 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
     await expect(queryResults).toBeVisible({ timeout: 20_000 });
     if (await hitDoc.isVisible().catch(() => false)) {
       await expect(hitDoc).toContainText(snippet);
+      await expect(page.getByTestId("inspector-rag-recall-quality").first()).toContainText(
+        /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
+      );
+      await expect(page.getByTestId("inspector-rag-recall-quality").first()).toContainText(
+        /Lower distance|距离越低/,
+      );
       return;
     }
     await page.waitForTimeout(450);
   }
 
   await expect(hitDoc).toContainText(snippet, { timeout: 20_000 });
+  await expect(page.getByTestId("inspector-rag-recall-quality").first()).toContainText(
+    /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
+  );
+  await expect(page.getByTestId("inspector-rag-recall-quality").first()).toContainText(
+    /Lower distance|距离越低/,
+  );
 }
 
 async function openTaskCenterAndDetail(page: Page): Promise<Page> {
@@ -343,7 +355,8 @@ test("workbench main path covers trace, rag and task/session export", async ({
 
   const detailPage = await openTaskCenterAndDetail(page);
   const taskDetailUrl = new URL(detailPage.url());
-  const taskId = taskDetailUrl.pathname.split("/").filter(Boolean).at(-1) ?? "";
+  const taskPathParts = taskDetailUrl.pathname.split("/").filter(Boolean);
+  const taskId = taskPathParts[taskPathParts.length - 1] ?? "";
   expect(taskId).not.toBe("");
 
   await triggerDownloadAndAssertHeaders({

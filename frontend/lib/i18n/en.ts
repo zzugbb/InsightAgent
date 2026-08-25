@@ -737,6 +737,10 @@ export const en: Messages = {
       chromaConnected: "Connected",
       chromaDisconnected: "Unreachable",
       distanceLabel: "Distance",
+      recallQualityStrong: "Strong match",
+      recallQualityMedium: "Possible match",
+      recallQualityWeak: "Weak match",
+      recallDistanceHint: "Lower distance means closer semantic match.",
       hitMetadataLabel: "Metadata",
     },
     audit: {

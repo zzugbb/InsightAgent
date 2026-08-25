@@ -644,6 +644,10 @@ export type Messages = {
       chromaConnected: string;
       chromaDisconnected: string;
       distanceLabel: string;
+      recallQualityStrong: string;
+      recallQualityMedium: string;
+      recallQualityWeak: string;
+      recallDistanceHint: string;
       hitMetadataLabel: string;
     };
     audit: {

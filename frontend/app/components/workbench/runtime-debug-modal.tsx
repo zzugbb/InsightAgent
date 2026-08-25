@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Input, Modal, Space, Typography } from "antd";
+import { App, Button, Input, Modal, Space, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 
 import { apiJson, apiPostJson } from "../../../lib/api-client";
@@ -18,6 +18,10 @@ import type {
 } from "./types";
 import { API_BASE_URL } from "./utils";
 import { parseMemoryMetadataJson, shortenId } from "./utils";
+import {
+  formatRagRecallDistance,
+  resolveRagRecallQuality,
+} from "./runtime-debug-modal-utils";
 
 const { TextArea } = Input;
 
@@ -567,6 +571,8 @@ export function RuntimeDebugModal({
                 <ul className="memory-query-hit-list">
                   {ragQueryMutation.data.hits.map((hit) => {
                     const metaKeys = Object.keys(hit.metadata || {});
+                    const recallDistance = formatRagRecallDistance(hit.distance);
+                    const recallQuality = resolveRagRecallQuality(hit.distance);
                     return (
                       <li key={hit.id} className="memory-query-hit-item">
                         <pre className="memory-query-hit-doc">{hit.content}</pre>
@@ -576,10 +582,25 @@ export function RuntimeDebugModal({
                             {JSON.stringify(hit.metadata, null, 2)}
                           </pre>
                         ) : null}
-                        {typeof hit.distance === "number" && Number.isFinite(hit.distance) ? (
-                          <span className="memory-query-hit-dist">
-                            {t.inspector.rag.distanceLabel}: {hit.distance.toFixed(4)}
-                          </span>
+                        {recallDistance ? (
+                          <div
+                            className="rag-recall-quality-row"
+                            data-testid="inspector-rag-recall-quality"
+                          >
+                            <span className="memory-query-hit-dist">
+                              {t.inspector.rag.distanceLabel}: {recallDistance}
+                            </span>
+                            {recallQuality ? (
+                              <Tag
+                                className={`rag-recall-quality-tag rag-recall-quality-tag--${recallQuality.tone}`}
+                              >
+                                {t.inspector.rag[recallQuality.labelKey]}
+                              </Tag>
+                            ) : null}
+                            <span className="rag-recall-quality-hint">
+                              {t.inspector.rag.recallDistanceHint}
+                            </span>
+                          </div>
                         ) : null}
                       </li>
                     );

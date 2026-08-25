@@ -2270,6 +2270,45 @@ code {
   color: var(--muted);
 }
 
+.rag-recall-quality-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.rag-recall-quality-row .memory-query-hit-dist {
+  margin-top: 0;
+}
+
+.rag-recall-quality-tag {
+  margin-inline-end: 0;
+}
+
+.rag-recall-quality-tag--strong {
+  color: #0f5132;
+  border-color: #badbcc;
+  background: #d1e7dd;
+}
+
+.rag-recall-quality-tag--medium {
+  color: #664d03;
+  border-color: #ffecb5;
+  background: #fff3cd;
+}
+
+.rag-recall-quality-tag--weak {
+  color: #842029;
+  border-color: #f5c2c7;
+  background: #f8d7da;
+}
+
+.rag-recall-quality-hint {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .task-summary-list {
   display: flex;
   flex-direction: column;

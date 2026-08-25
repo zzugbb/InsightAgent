@@ -722,6 +722,10 @@ export const zh: Messages = {
       chromaConnected: "已连接",
       chromaDisconnected: "未连接",
       distanceLabel: "距离",
+      recallQualityStrong: "强相关",
+      recallQualityMedium: "可能相关",
+      recallQualityWeak: "弱相关",
+      recallDistanceHint: "距离越低表示语义越接近。",
       hitMetadataLabel: "元数据",
     },
     audit: {
