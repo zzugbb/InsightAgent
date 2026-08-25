@@ -181,6 +181,7 @@ export async function ingestKnowledgeSnippet(
     knowledgeBaseId: string;
     snippet: string;
     source: string;
+    documentId?: string;
   },
 ): Promise<void> {
   const ingestResponse = await request.post(`${API_BASE_URL}/api/rag/ingest`, {
@@ -193,7 +194,9 @@ export async function ingestKnowledgeSnippet(
         {
           text: args.snippet,
           source: args.source,
-          document_id: `doc-${Date.now()}-${Math.floor(Math.random() * 10_000)}`,
+          document_id:
+            args.documentId ??
+            `doc-${Date.now()}-${Math.floor(Math.random() * 10_000)}`,
         },
       ],
     },

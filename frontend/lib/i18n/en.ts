@@ -349,6 +349,13 @@ export const en: Messages = {
       tableCollection: "Collection",
       tableDocuments: "Chunks",
       tableVersions: "Versions",
+      versionDetailsTitle: "Version details",
+      versionSummary: (versions: number, documents: number, chunks: number) =>
+        `${versions} version(s) · ${documents} document(s) · ${chunks} chunk(s)`,
+      versionSourceLabel: "Source",
+      versionDocumentLabel: "Document",
+      versionHashLabel: "Hash",
+      versionChunksLabel: "Chunks",
       tableActions: "Actions",
       actionClear: "Clear",
       actionDelete: "Delete",

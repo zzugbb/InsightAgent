@@ -1456,7 +1456,8 @@ for (const acceptanceCase of [
     }
 
     const taskDetailUrl = new URL(detailPage.url());
-    const detailTaskId = taskDetailUrl.pathname.split("/").filter(Boolean).at(-1) ?? "";
+    const detailPathParts = taskDetailUrl.pathname.split("/").filter(Boolean);
+    const detailTaskId = detailPathParts[detailPathParts.length - 1] ?? "";
     expect(detailTaskId).not.toBe("");
     expect(detailTaskId).toBe(taskId);
 
@@ -1537,6 +1538,45 @@ test("knowledge governance action buttons keep text style without borders", asyn
   );
   expect(clearBorderTop).toBe("0px");
   expect(deleteBorderTop).toBe("0px");
+});
+
+test("knowledge governance expands document version details", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  const kbId = `kb-versions-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
+  await ingestKnowledgeSnippet(request, auth.access_token, {
+    knowledgeBaseId: kbId,
+    snippet: `version one ${Date.now()}`,
+    source: "playwright-docs",
+    documentId: "release-notes",
+  });
+  await ingestKnowledgeSnippet(request, auth.access_token, {
+    knowledgeBaseId: kbId,
+    snippet: `version two ${Date.now()} changed`,
+    source: "playwright-docs",
+    documentId: "release-notes",
+  });
+  await seedBrowserAuth(page, auth);
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-knowledge-base").click();
+
+  await expect(page.locator(".knowledge-base-governance-ant-modal")).toBeVisible();
+  const kbRow = page.locator(".ant-table-row").filter({ hasText: kbId }).first();
+  await expect(kbRow).toBeVisible({ timeout: 20_000 });
+  await kbRow.locator(".ant-table-row-expand-icon").click();
+
+  const detailPanel = page.getByTestId("kb-version-detail-panel");
+  await expect(detailPanel).toBeVisible({ timeout: 20_000 });
+  await expect(detailPanel).toContainText(/2 version|2 个版本/);
+  await expect(detailPanel).toContainText("playwright-docs");
+  await expect(detailPanel).toContainText("release-notes");
+  await expect(detailPanel).toContainText("sha256:");
+  await expect(detailPanel.getByTestId("kb-version-detail-row")).toHaveCount(2);
 });
 
 test("non-admin sees shared kb actions disabled in governance modal", async ({

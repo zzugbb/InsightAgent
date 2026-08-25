@@ -283,6 +283,12 @@ export type Messages = {
       tableCollection: string;
       tableDocuments: string;
       tableVersions: string;
+      versionDetailsTitle: string;
+      versionSummary: (versions: number, documents: number, chunks: number) => string;
+      versionSourceLabel: string;
+      versionDocumentLabel: string;
+      versionHashLabel: string;
+      versionChunksLabel: string;
       tableActions: string;
       actionClear: string;
       actionDelete: string;

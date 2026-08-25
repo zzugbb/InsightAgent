@@ -14,6 +14,10 @@ import type {
   RagKnowledgeBaseMutateResponse,
   RagKnowledgeBaseSummary,
 } from "./types";
+import {
+  resolveKnowledgeBaseVersionRows,
+  summarizeKnowledgeBaseVersions,
+} from "./knowledge-base-governance-modal-utils";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -90,6 +94,56 @@ export function KnowledgeBaseGovernanceModal({
     String(currentUser?.role ?? "")
       .trim()
       .toLowerCase() === "admin";
+  const renderVersionDetails = (row: RagKnowledgeBaseSummary) => {
+    const versionRows = resolveKnowledgeBaseVersionRows(row.document_versions);
+    const summary = summarizeKnowledgeBaseVersions(row.document_versions);
+    return (
+      <div
+        className="kb-version-details"
+        data-testid="kb-version-detail-panel"
+      >
+        <div className="kb-version-details-header">
+          <strong>{t.sidebar.knowledgeBase.versionDetailsTitle}</strong>
+          <span>
+            {t.sidebar.knowledgeBase.versionSummary(
+              summary.versionCount,
+              summary.documentCount,
+              summary.chunkCount,
+            )}
+          </span>
+        </div>
+        <div className="kb-version-detail-list">
+          {versionRows.map((version) => (
+            <div
+              className="kb-version-detail-row"
+              data-testid="kb-version-detail-row"
+              key={version.key}
+            >
+              <span>
+                <b>{t.sidebar.knowledgeBase.versionSourceLabel}</b>
+                {version.source}
+              </span>
+              <span>
+                <b>{t.sidebar.knowledgeBase.versionDocumentLabel}</b>
+                {version.documentId}
+              </span>
+              <code title={version.version}>{version.versionLabel}</code>
+              <span>
+                <b>{t.sidebar.knowledgeBase.versionHashLabel}</b>
+                <code title={version.contentHash}>
+                  {version.contentHashLabel}
+                </code>
+              </span>
+              <span>
+                <b>{t.sidebar.knowledgeBase.versionChunksLabel}</b>
+                {version.chunkCount.toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const columns: ColumnsType<RagKnowledgeBaseSummary> = [
     {
@@ -256,6 +310,11 @@ export function KnowledgeBaseGovernanceModal({
           columns={columns}
           dataSource={rows}
           loading={listQuery.isLoading}
+          expandable={{
+            expandedRowRender: renderVersionDetails,
+            rowExpandable: (row) =>
+              resolveKnowledgeBaseVersionRows(row.document_versions).length > 0,
+          }}
           pagination={false}
           locale={{ emptyText: t.sidebar.knowledgeBase.noKnowledgeBases }}
           scroll={{ x: 560 }}

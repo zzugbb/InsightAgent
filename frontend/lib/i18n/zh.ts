@@ -343,6 +343,13 @@ export const zh: Messages = {
       tableCollection: "Collection",
       tableDocuments: "条数",
       tableVersions: "版本",
+      versionDetailsTitle: "版本明细",
+      versionSummary: (versions: number, documents: number, chunks: number) =>
+        `${versions} 个版本 · ${documents} 个文档 · ${chunks} 条 chunk`,
+      versionSourceLabel: "来源",
+      versionDocumentLabel: "文档",
+      versionHashLabel: "Hash",
+      versionChunksLabel: "Chunks",
       tableActions: "操作",
       actionClear: "清空",
       actionDelete: "删除",

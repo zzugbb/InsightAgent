@@ -3268,6 +3268,62 @@ code {
   font-size: 0.75rem;
 }
 
+.kb-version-details {
+  display: grid;
+  gap: 8px;
+  padding: 4px 6px 8px;
+}
+
+.kb-version-details-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.kb-version-details-header strong {
+  color: var(--text);
+}
+
+.kb-version-detail-list {
+  display: grid;
+  gap: 6px;
+}
+
+.kb-version-detail-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(100px, 1fr) minmax(150px, 1.2fr) minmax(120px, 1fr) minmax(70px, auto);
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  font-size: 0.78rem;
+}
+
+.kb-version-detail-row span,
+.kb-version-detail-row code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-version-detail-row b {
+  margin-right: 4px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .kb-version-detail-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .kb-row-actions {
   display: inline-flex;
   flex-direction: row;
