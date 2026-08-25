@@ -2313,6 +2313,20 @@ code {
   line-height: 1.45;
 }
 
+.rag-quality-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 4px 0 9px;
+}
+
+.rag-quality-filter-label,
+.rag-quality-filter-count {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .rag-hit-attribution {
   display: flex;
   flex-wrap: wrap;

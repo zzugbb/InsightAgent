@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  filterRagHitsByRecallQuality,
   formatRagRecallDistance,
   resolveRagHitAttributionItems,
   resolveRagQueryInsight,
@@ -106,4 +107,30 @@ test("resolveRagQueryInsight guides weak recall results", () => {
   ]);
 
   assert.equal(insight?.guidanceKey, "recallGuidanceWeak");
+});
+
+test("filterRagHitsByRecallQuality narrows hits by recall quality", () => {
+  const hits = [
+    { id: "strong", distance: 0.12, metadata: { source: "a.md" } },
+    { id: "medium", distance: 0.4, metadata: { source: "b.md" } },
+    { id: "weak", distance: 0.82, metadata: { source: "c.md" } },
+    { id: "unknown", distance: null, metadata: { source: "d.md" } },
+  ];
+
+  assert.deepEqual(
+    filterRagHitsByRecallQuality(hits, "all").map((hit) => hit.id),
+    ["strong", "medium", "weak", "unknown"],
+  );
+  assert.deepEqual(
+    filterRagHitsByRecallQuality(hits, "strong").map((hit) => hit.id),
+    ["strong"],
+  );
+  assert.deepEqual(
+    filterRagHitsByRecallQuality(hits, "medium").map((hit) => hit.id),
+    ["medium"],
+  );
+  assert.deepEqual(
+    filterRagHitsByRecallQuality(hits, "weak").map((hit) => hit.id),
+    ["weak"],
+  );
 });

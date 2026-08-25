@@ -656,6 +656,10 @@ export type Messages = {
       recallGuidanceStrong: string;
       recallGuidanceMedium: string;
       recallGuidanceWeak: string;
+      qualityFilterLabel: string;
+      qualityFilterAll: string;
+      qualityFilterShowing: (visible: number, total: number) => string;
+      qualityFilterEmpty: string;
       hitAttributionLabel: string;
       sourceLabel: string;
       documentLabel: string;

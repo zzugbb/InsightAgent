@@ -176,6 +176,10 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   const queryInsight = page.getByTestId("inspector-rag-query-insight").first();
   const queryGuidance = page.getByTestId("inspector-rag-query-guidance").first();
   const qualityMix = page.getByTestId("inspector-rag-quality-mix").first();
+  const qualityFilter = page.getByTestId("inspector-rag-quality-filter").first();
+  const qualityFilterCount = page
+    .getByTestId("inspector-rag-quality-filter-count")
+    .first();
   const hitAttribution = page.getByTestId("inspector-rag-hit-attribution").first();
 
   for (let i = 0; i < 5; i += 1) {
@@ -195,6 +199,12 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
       await expect(qualityMix).toContainText(
         /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
       );
+      await expect(qualityFilter).toContainText(/Recall quality|召回质量/);
+      await expect(qualityFilter).toContainText(/All|全部/);
+      await expect(qualityFilter).toContainText(
+        /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
+      );
+      await expect(qualityFilterCount).toContainText(/Showing|显示/);
       await expect(hitAttribution).toContainText(/Recall source|召回来源/);
       await expect(hitAttribution).toContainText("playwright-e2e");
       await expect(hitAttribution).toContainText(/Source|来源/);
@@ -222,6 +232,12 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   await expect(qualityMix).toContainText(
     /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
   );
+  await expect(qualityFilter).toContainText(/Recall quality|召回质量/);
+  await expect(qualityFilter).toContainText(/All|全部/);
+  await expect(qualityFilter).toContainText(
+    /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
+  );
+  await expect(qualityFilterCount).toContainText(/Showing|显示/);
   await expect(hitAttribution).toContainText(/Recall source|召回来源/);
   await expect(hitAttribution).toContainText("playwright-e2e");
   await expect(hitAttribution).toContainText(/Source|来源/);

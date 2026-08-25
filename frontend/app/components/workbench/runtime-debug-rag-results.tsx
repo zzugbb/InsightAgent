@@ -1,10 +1,13 @@
-import { Tag } from "antd";
+import { Segmented, Tag } from "antd";
+import { useState } from "react";
 
 import type { Messages } from "../../../lib/i18n/types";
 
 import type { RagHit } from "./types";
 import {
+  filterRagHitsByRecallQuality,
   formatRagRecallDistance,
+  type RagRecallQualityFilter,
   resolveRagHitAttributionItems,
   resolveRagQueryInsight,
   resolveRagRecallQuality,
@@ -21,7 +24,10 @@ export function RuntimeDebugRagResults({
   hits,
   t,
 }: RuntimeDebugRagResultsProps) {
+  const [qualityFilter, setQualityFilter] =
+    useState<RagRecallQualityFilter>("all");
   const queryInsight = resolveRagQueryInsight(hits);
+  const visibleHits = filterRagHitsByRecallQuality(hits, qualityFilter);
 
   return (
     <div
@@ -94,65 +100,118 @@ export function RuntimeDebugRagResults({
               ) : null}
             </div>
           ) : null}
-          <ul className="memory-query-hit-list">
-            {hits.map((hit) => {
-              const metaKeys = Object.keys(hit.metadata || {});
-              const recallDistance = formatRagRecallDistance(hit.distance);
-              const recallQuality = resolveRagRecallQuality(hit.distance);
-              const attributionItems = resolveRagHitAttributionItems(hit.metadata);
+          {queryInsight ? (
+            <div
+              className="rag-quality-filter"
+              data-testid="inspector-rag-quality-filter"
+            >
+              <span className="rag-quality-filter-label">
+                {t.inspector.rag.qualityFilterLabel}
+              </span>
+              <Segmented
+                size="small"
+                value={qualityFilter}
+                aria-label={t.inspector.rag.qualityFilterLabel}
+                onChange={(value) =>
+                  setQualityFilter(value as RagRecallQualityFilter)
+                }
+                options={[
+                  {
+                    label: t.inspector.rag.qualityFilterAll,
+                    value: "all",
+                  },
+                  {
+                    label: `${t.inspector.rag.recallQualityStrong} ${queryInsight.qualityCounts.strong}`,
+                    value: "strong",
+                  },
+                  {
+                    label: `${t.inspector.rag.recallQualityMedium} ${queryInsight.qualityCounts.medium}`,
+                    value: "medium",
+                  },
+                  {
+                    label: `${t.inspector.rag.recallQualityWeak} ${queryInsight.qualityCounts.weak}`,
+                    value: "weak",
+                  },
+                ]}
+              />
+              <span
+                className="rag-quality-filter-count"
+                data-testid="inspector-rag-quality-filter-count"
+              >
+                {t.inspector.rag.qualityFilterShowing(
+                  visibleHits.length,
+                  hits.length,
+                )}
+              </span>
+            </div>
+          ) : null}
+          {visibleHits.length === 0 ? (
+            <p className="panel-note panel-note--muted">
+              {t.inspector.rag.qualityFilterEmpty}
+            </p>
+          ) : (
+            <ul className="memory-query-hit-list">
+              {visibleHits.map((hit) => {
+                const metaKeys = Object.keys(hit.metadata || {});
+                const recallDistance = formatRagRecallDistance(hit.distance);
+                const recallQuality = resolveRagRecallQuality(hit.distance);
+                const attributionItems = resolveRagHitAttributionItems(
+                  hit.metadata,
+                );
 
-              return (
-                <li key={hit.id} className="memory-query-hit-item">
-                  <pre className="memory-query-hit-doc">{hit.content}</pre>
-                  {attributionItems.length > 0 ? (
-                    <div
-                      className="rag-hit-attribution"
-                      data-testid="inspector-rag-hit-attribution"
-                    >
-                      <span className="rag-hit-attribution-label">
-                        {t.inspector.rag.hitAttributionLabel}
-                      </span>
-                      {attributionItems.map((item) => (
-                        <span
-                          key={`${item.labelKey}:${item.value}`}
-                          className="rag-hit-attribution-chip"
-                        >
-                          <span>{t.inspector.rag[item.labelKey]}</span>
-                          <code>{item.value}</code>
+                return (
+                  <li key={hit.id} className="memory-query-hit-item">
+                    <pre className="memory-query-hit-doc">{hit.content}</pre>
+                    {attributionItems.length > 0 ? (
+                      <div
+                        className="rag-hit-attribution"
+                        data-testid="inspector-rag-hit-attribution"
+                      >
+                        <span className="rag-hit-attribution-label">
+                          {t.inspector.rag.hitAttributionLabel}
                         </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {metaKeys.length > 0 ? (
-                    <pre className="memory-query-hit-meta">
-                      {t.inspector.rag.hitMetadataLabel}:{"\n"}
-                      {JSON.stringify(hit.metadata, null, 2)}
-                    </pre>
-                  ) : null}
-                  {recallDistance ? (
-                    <div
-                      className="rag-recall-quality-row"
-                      data-testid="inspector-rag-recall-quality"
-                    >
-                      <span className="memory-query-hit-dist">
-                        {t.inspector.rag.distanceLabel}: {recallDistance}
-                      </span>
-                      {recallQuality ? (
-                        <Tag
-                          className={`rag-recall-quality-tag rag-recall-quality-tag--${recallQuality.tone}`}
-                        >
-                          {t.inspector.rag[recallQuality.labelKey]}
-                        </Tag>
-                      ) : null}
-                      <span className="rag-recall-quality-hint">
-                        {t.inspector.rag.recallDistanceHint}
-                      </span>
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+                        {attributionItems.map((item) => (
+                          <span
+                            key={`${item.labelKey}:${item.value}`}
+                            className="rag-hit-attribution-chip"
+                          >
+                            <span>{t.inspector.rag[item.labelKey]}</span>
+                            <code>{item.value}</code>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {metaKeys.length > 0 ? (
+                      <pre className="memory-query-hit-meta">
+                        {t.inspector.rag.hitMetadataLabel}:{"\n"}
+                        {JSON.stringify(hit.metadata, null, 2)}
+                      </pre>
+                    ) : null}
+                    {recallDistance ? (
+                      <div
+                        className="rag-recall-quality-row"
+                        data-testid="inspector-rag-recall-quality"
+                      >
+                        <span className="memory-query-hit-dist">
+                          {t.inspector.rag.distanceLabel}: {recallDistance}
+                        </span>
+                        {recallQuality ? (
+                          <Tag
+                            className={`rag-recall-quality-tag rag-recall-quality-tag--${recallQuality.tone}`}
+                          >
+                            {t.inspector.rag[recallQuality.labelKey]}
+                          </Tag>
+                        ) : null}
+                        <span className="rag-recall-quality-hint">
+                          {t.inspector.rag.recallDistanceHint}
+                        </span>
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </>
       )}
     </div>

@@ -1,4 +1,5 @@
 export type RagRecallQualityTone = "strong" | "medium" | "weak";
+export type RagRecallQualityFilter = "all" | RagRecallQualityTone;
 
 export type RagRecallQuality = {
   tone: RagRecallQualityTone;
@@ -84,6 +85,16 @@ export function resolveRagRecallQuality(value: unknown): RagRecallQuality | null
     tone: "weak",
     labelKey: "recallQualityWeak",
   };
+}
+
+export function filterRagHitsByRecallQuality<T extends RagQueryInsightHit>(
+  hits: T[],
+  filter: RagRecallQualityFilter,
+): T[] {
+  if (filter === "all") {
+    return hits;
+  }
+  return hits.filter((hit) => resolveRagRecallQuality(hit.distance)?.tone === filter);
 }
 
 export function resolveRagHitAttributionItems(
