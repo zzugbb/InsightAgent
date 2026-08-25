@@ -10,11 +10,13 @@ import { toUserFacingError } from "../../../lib/errors";
 import { useMessages } from "../../../lib/preferences-context";
 
 import type {
+  RagKnowledgeBaseDocumentMutateResponse,
   RagKnowledgeBaseListResponse,
   RagKnowledgeBaseMutateResponse,
   RagKnowledgeBaseSummary,
 } from "./types";
 import {
+  buildKnowledgeBaseDocumentDeleteUrl,
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
@@ -32,6 +34,13 @@ type KnowledgeBaseGovernanceModalProps = {
     display_name?: string | null;
     role?: string;
   } | null;
+};
+
+type DocumentDeleteArgs = {
+  key: string;
+  knowledgeBaseId: string;
+  source: string;
+  documentId: string;
 };
 
 export function KnowledgeBaseGovernanceModal({
@@ -90,6 +99,33 @@ export function KnowledgeBaseGovernanceModal({
     },
   });
 
+  const documentDeleteMutation = useMutation({
+    mutationFn: (args: DocumentDeleteArgs) =>
+      apiDeleteJson<RagKnowledgeBaseDocumentMutateResponse>(
+        buildKnowledgeBaseDocumentDeleteUrl(
+          API_BASE_URL,
+          args.knowledgeBaseId,
+          args.source,
+          args.documentId,
+        ),
+      ),
+    onSuccess: (data) => {
+      message.success(
+        t.sidebar.knowledgeBase.deleteDocumentDone(
+          data.knowledge_base_id,
+          data.document_id,
+          data.deleted_chunks,
+        ),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["rag-kb-governance"] });
+      void queryClient.invalidateQueries({ queryKey: ["rag-status"] });
+    },
+    onError: (error) => {
+      const u = toUserFacingError(error, t.errors);
+      message.error(`${t.sidebar.knowledgeBase.opFailed}: ${u.banner}`);
+    },
+  });
+
   const rows = listQuery.data?.knowledge_bases ?? [];
   const isAdmin =
     String(currentUser?.role ?? "")
@@ -99,6 +135,7 @@ export function KnowledgeBaseGovernanceModal({
     const versionRows = resolveKnowledgeBaseVersionRows(row.document_versions);
     const documentGroups = resolveKnowledgeBaseDocumentGroups(row.document_versions);
     const summary = summarizeKnowledgeBaseVersions(row.document_versions);
+    const roleRestricted = row.knowledge_base_id.startsWith("shared-") && !isAdmin;
     return (
       <div
         className="kb-version-details"
@@ -135,6 +172,40 @@ export function KnowledgeBaseGovernanceModal({
                   group.chunkCount,
                 )}
               </strong>
+              <Popconfirm
+                title={t.sidebar.knowledgeBase.deleteDocumentConfirmTitle(
+                  group.documentId,
+                )}
+                description={t.sidebar.knowledgeBase.deleteDocumentConfirmDescription}
+                okText={t.sidebar.knowledgeBase.actionDelete}
+                cancelText={t.sidebar.deleteSessionCancel}
+                okButtonProps={{ danger: true }}
+                placement="left"
+                onConfirm={() =>
+                  documentDeleteMutation.mutate({
+                    key: group.key,
+                    knowledgeBaseId: row.knowledge_base_id,
+                    source: group.source,
+                    documentId: group.documentId,
+                  })
+                }
+              >
+                <Button
+                  size="small"
+                  danger
+                  type="text"
+                  className="kb-action-btn"
+                  loading={
+                    documentDeleteMutation.isPending &&
+                    documentDeleteMutation.variables?.key === group.key
+                  }
+                  disabled={roleRestricted || documentDeleteMutation.isPending}
+                  title={roleRestricted ? t.errors.auth : undefined}
+                  data-testid="kb-document-group-delete"
+                >
+                  {t.sidebar.knowledgeBase.actionDeleteDocument}
+                </Button>
+              </Popconfirm>
             </div>
           ))}
         </div>

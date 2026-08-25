@@ -26,6 +26,7 @@ SUPPORTED_AUDIT_EVENT_TYPES = frozenset(
         "rag_ingest",
         "rag_kb_clear",
         "rag_kb_delete",
+        "rag_document_delete",
     }
 )
 

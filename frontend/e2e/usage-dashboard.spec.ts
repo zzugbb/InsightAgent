@@ -1581,6 +1581,27 @@ test("knowledge governance expands document version details", async ({
     /2 version|2 个版本/,
   );
   await expect(detailPanel.getByTestId("kb-version-detail-row")).toHaveCount(2);
+
+  await detailPanel.getByTestId("kb-document-group-delete").click();
+  await page
+    .locator(".ant-popconfirm")
+    .getByRole("button", { name: /Delete|删除/ })
+    .click();
+  await expect(page.locator(".ant-message")).toContainText(/Deleted|已从/);
+  await expect
+    .poll(async () => {
+      const response = await request.get(
+        `${API_BASE_URL}/api/rag/status?knowledge_base_id=${encodeURIComponent(kbId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${auth.access_token}`,
+          },
+        },
+      );
+      const payload = await response.json();
+      return payload.document_count;
+    })
+    .toBe(0);
 });
 
 test("non-admin sees shared kb actions disabled in governance modal", async ({

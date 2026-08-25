@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildKnowledgeBaseDocumentDeleteUrl,
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
@@ -54,6 +55,30 @@ test("resolveKnowledgeBaseVersionRows returns stable sorted display rows", () =>
         chunkCount: 3,
       },
     ],
+  );
+});
+
+test("buildKnowledgeBaseDocumentDeleteUrl encodes document selectors", () => {
+  assert.equal(
+    buildKnowledgeBaseDocumentDeleteUrl(
+      "http://127.0.0.1:8000",
+      "kb with/slash",
+      "api docs",
+      "release/notes?draft=1",
+    ),
+    "http://127.0.0.1:8000/api/rag/knowledge-bases/kb%20with%2Fslash/documents?source=api+docs&document_id=release%2Fnotes%3Fdraft%3D1",
+  );
+});
+
+test("buildKnowledgeBaseDocumentDeleteUrl normalizes trailing API slash", () => {
+  assert.equal(
+    buildKnowledgeBaseDocumentDeleteUrl(
+      "http://127.0.0.1:8000/",
+      "kb",
+      "manual",
+      "doc-1",
+    ),
+    "http://127.0.0.1:8000/api/rag/knowledge-bases/kb/documents?source=manual&document_id=doc-1",
   );
 });
 

@@ -9,6 +9,7 @@ class RagRouteGovernanceMixin:
         original_query = rag_routes_module.query_knowledge_base
         original_clear = rag_routes_module.clear_knowledge_base
         original_delete = rag_routes_module.delete_knowledge_base
+        original_document_delete = rag_routes_module.delete_knowledge_base_document
 
         def fail_with_sensitive_value_error(**_kwargs: object) -> object:
             raise ValueError(
@@ -19,6 +20,7 @@ class RagRouteGovernanceMixin:
         rag_routes_module.query_knowledge_base = fail_with_sensitive_value_error  # type: ignore[attr-defined]
         rag_routes_module.clear_knowledge_base = fail_with_sensitive_value_error  # type: ignore[attr-defined]
         rag_routes_module.delete_knowledge_base = fail_with_sensitive_value_error  # type: ignore[attr-defined]
+        rag_routes_module.delete_knowledge_base_document = fail_with_sensitive_value_error  # type: ignore[attr-defined]
         try:
             route_calls = [
                 lambda: rag_routes_module.post_rag_ingest(
@@ -45,6 +47,12 @@ class RagRouteGovernanceMixin:
                     knowledge_base_id="kb-route-value-error",
                     current_user={"id": "user-rag-route-value-error"},
                 ),
+                lambda: rag_routes_module.delete_rag_knowledge_base_document(
+                    knowledge_base_id="kb-route-value-error",
+                    source="api-docs",
+                    document_id="release-notes",
+                    current_user={"id": "user-rag-route-value-error"},
+                ),
             ]
             details: list[str] = []
             for call in route_calls:
@@ -57,6 +65,7 @@ class RagRouteGovernanceMixin:
             rag_routes_module.query_knowledge_base = original_query  # type: ignore[attr-defined]
             rag_routes_module.clear_knowledge_base = original_clear  # type: ignore[attr-defined]
             rag_routes_module.delete_knowledge_base = original_delete  # type: ignore[attr-defined]
+            rag_routes_module.delete_knowledge_base_document = original_document_delete  # type: ignore[attr-defined]
 
         serialized = json.dumps(details, ensure_ascii=False)
         self.assertIn("[redacted]", serialized)
@@ -110,6 +119,58 @@ class RagRouteGovernanceMixin:
         audit_detail = audit_calls[0]["detail"]
         self.assertEqual(audit_detail["knowledge_base_id"], "team-redacted")
         self.assertEqual(audit_detail["collection"], "kb_abc123_team-redacted")
+        serialized = json.dumps(
+            {"payload": payload.model_dump(), "audit": audit_calls},
+            ensure_ascii=False,
+        )
+        self.assertIn("redacted", serialized)
+        self.assertNotIn("raw-secret", serialized)
+        self.assertNotIn("raw-token", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("token=", serialized)
+
+    def test_delete_rag_knowledge_base_document_audits_safe_source_document(
+        self,
+    ) -> None:
+        original_document_delete = rag_routes_module.delete_knowledge_base_document
+        original_audit = rag_routes_module.safe_record_audit_event
+        audit_calls: list[dict[str, object]] = []
+
+        try:
+            rag_routes_module.delete_knowledge_base_document = (  # type: ignore[attr-defined]
+                lambda **_kwargs: {
+                    "knowledge_base_id": "team-api_key-raw-secret-token-raw-token",
+                    "collection": "kb_abc123_team-api_key-raw-secret-token-raw-token",
+                    "source": "handbook.md?api_key=raw-secret",
+                    "document_id": "doc-1 token=raw-token",
+                    "existed": True,
+                    "deleted_chunks": 2,
+                    "document_count": 1,
+                }
+            )
+            rag_routes_module.safe_record_audit_event = (  # type: ignore[assignment]
+                lambda **kwargs: audit_calls.append(kwargs)
+            )
+            payload = rag_routes_module.delete_rag_knowledge_base_document(
+                knowledge_base_id="team-safe",
+                source="handbook.md",
+                document_id="doc-1",
+                current_user={"id": "user-rag-document-delete"},
+            )
+        finally:
+            rag_routes_module.delete_knowledge_base_document = original_document_delete  # type: ignore[attr-defined]
+            rag_routes_module.safe_record_audit_event = original_audit  # type: ignore[assignment]
+
+        self.assertEqual(payload.knowledge_base_id, "team-redacted")
+        self.assertEqual(payload.collection, "kb_abc123_team-redacted")
+        self.assertEqual(payload.source, "handbook.md?[redacted]")
+        self.assertEqual(payload.document_id, "doc-1 [redacted]")
+        self.assertEqual(payload.deleted_chunks, 2)
+        self.assertEqual(len(audit_calls), 1)
+        self.assertEqual(audit_calls[0]["event_type"], "rag_document_delete")
+        audit_detail = audit_calls[0]["detail"]
+        self.assertEqual(audit_detail["source"], "handbook.md?[redacted]")
+        self.assertEqual(audit_detail["document_id"], "doc-1 [redacted]")
         serialized = json.dumps(
             {"payload": payload.model_dump(), "audit": audit_calls},
             ensure_ascii=False,

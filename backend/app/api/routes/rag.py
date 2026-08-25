@@ -9,6 +9,7 @@ from app.services.chroma_rag_service import (
     SHARED_RAG_SCOPE_USER_ID,
     clear_knowledge_base,
     delete_knowledge_base,
+    delete_knowledge_base_document,
     get_knowledge_base_status,
     ingest_knowledge_documents,
     is_shared_knowledge_base_id,
@@ -207,6 +208,11 @@ class RagKnowledgeBaseMutateResponse(BaseModel):
     document_count: int | None = None
 
 
+class RagKnowledgeBaseDocumentMutateResponse(RagKnowledgeBaseMutateResponse):
+    source: str
+    document_id: str
+
+
 @router.get("/status", response_model=RagStatusResponse)
 def get_rag_status(
     knowledge_base_id: str = Query(default="default", max_length=64),
@@ -280,6 +286,54 @@ def post_rag_clear_knowledge_base(
         },
     )
     return RagKnowledgeBaseMutateResponse(**raw)
+
+
+@router.delete(
+    "/knowledge-bases/{knowledge_base_id}/documents",
+    response_model=RagKnowledgeBaseDocumentMutateResponse,
+)
+def delete_rag_knowledge_base_document(
+    knowledge_base_id: str,
+    source: str = Query(..., min_length=1, max_length=240),
+    document_id: str = Query(..., min_length=1, max_length=128),
+    current_user: dict = Depends(get_current_user),
+) -> RagKnowledgeBaseDocumentMutateResponse:
+    user_id = str(current_user["id"])
+    owner_user_id = _resolve_rag_owner_user_id(
+        current_user=current_user,
+        knowledge_base_id=knowledge_base_id,
+        mutate=True,
+    )
+    try:
+        raw = _coerce_safe_payload_mapping(
+            delete_knowledge_base_document(
+                user_id=owner_user_id,
+                knowledge_base_id=knowledge_base_id,
+                source=source,
+                document_id=document_id,
+            )
+        )
+    except ValueError as exc:
+        _raise_rag_bad_request(exc)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503,
+            detail=sanitize_rag_error_message(exc),
+        ) from exc
+    safe_record_audit_event(
+        user_id=user_id,
+        event_type="rag_document_delete",
+        detail={
+            "knowledge_base_id": raw.get("knowledge_base_id"),
+            "collection": raw.get("collection"),
+            "source": raw.get("source"),
+            "document_id": raw.get("document_id"),
+            "deleted_chunks": raw.get("deleted_chunks"),
+            "existed": raw.get("existed"),
+            "scope": "shared" if owner_user_id == SHARED_RAG_SCOPE_USER_ID else "private",
+        },
+    )
+    return RagKnowledgeBaseDocumentMutateResponse(**raw)
 
 
 @router.delete(

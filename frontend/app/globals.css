@@ -3299,7 +3299,7 @@ code {
 
 .kb-document-group-row {
   display: grid;
-  grid-template-columns: minmax(110px, 1fr) minmax(130px, 1.2fr) minmax(120px, auto);
+  grid-template-columns: minmax(110px, 1fr) minmax(130px, 1.2fr) minmax(120px, auto) minmax(96px, auto);
   gap: 8px;
   align-items: center;
   padding: 6px 8px;

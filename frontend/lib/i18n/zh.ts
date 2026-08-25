@@ -348,6 +348,16 @@ export const zh: Messages = {
         `${versions} 个版本 · ${documents} 个文档 · ${chunks} 条 chunk`,
       documentGroupSummary: (versions: number, chunks: number) =>
         `${versions} 个版本 · ${chunks} 条 chunk`,
+      deleteDocumentConfirmTitle: (documentId: string) =>
+        `删除文档 ${documentId}？`,
+      deleteDocumentConfirmDescription:
+        "将删除该来源和文档下的所有 chunk。",
+      deleteDocumentDone: (
+        knowledgeBaseId: string,
+        documentId: string,
+        deletedChunks: number,
+      ) =>
+        `已从 ${knowledgeBaseId} 删除 ${documentId} 的 ${deletedChunks} 条 chunk。`,
       versionSourceLabel: "来源",
       versionDocumentLabel: "文档",
       versionHashLabel: "Hash",
@@ -355,6 +365,7 @@ export const zh: Messages = {
       tableActions: "操作",
       actionClear: "清空",
       actionDelete: "删除",
+      actionDeleteDocument: "删除文档",
       actioning: "处理中…",
       clearConfirmTitle: (kbId: string) => `清空知识库「${kbId}」？`,
       clearConfirmDescription: "会删除该知识库内全部 chunk，但保留知识库本身。",

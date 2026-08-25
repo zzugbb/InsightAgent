@@ -329,6 +329,12 @@ export type RagKnowledgeBaseMutateResponse = {
   document_count?: number | null;
 };
 
+export type RagKnowledgeBaseDocumentMutateResponse =
+  RagKnowledgeBaseMutateResponse & {
+    source: string;
+    document_id: string;
+  };
+
 export type RagHit = {
   id: string;
   content: string;

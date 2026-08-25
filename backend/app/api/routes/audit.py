@@ -96,7 +96,7 @@ def get_audit_logs(
         description=(
             "可选：按事件类型过滤（login/logout/refresh/settings_update/"
             "settings_validate/task_create/task_cancel/task_timeout/task_failed/"
-            "rag_ingest/rag_kb_clear/rag_kb_delete）"
+            "rag_ingest/rag_kb_clear/rag_kb_delete/rag_document_delete）"
         ),
     ),
     session_id: str | None = Query(default=None, description="可选：按会话 ID 过滤"),

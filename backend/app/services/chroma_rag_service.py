@@ -781,6 +781,56 @@ def clear_knowledge_base(*, user_id: str, knowledge_base_id: str) -> dict[str, o
     }
 
 
+def delete_knowledge_base_document(
+    *,
+    user_id: str,
+    knowledge_base_id: str,
+    source: str,
+    document_id: str,
+) -> dict[str, object]:
+    kb_id = normalize_knowledge_base_id(knowledge_base_id)
+    safe_source = _sanitize_rag_metadata_text(source, limit=240).strip()
+    safe_document_id = _sanitize_rag_metadata_text(document_id, limit=128).strip()
+    if not safe_source:
+        raise ValueError("source is required")
+    if not safe_document_id:
+        raise ValueError("document_id is required")
+
+    collection_name = rag_collection_name(user_id, kb_id)
+    client = _http_client()
+    existed = False
+    deleted_chunks = 0
+    document_count = 0
+    try:
+        collection = client.get_collection(name=collection_name)
+        existed = True
+        before_count = int(collection.count())
+    except Exception:
+        before_count = 0
+        collection = None
+
+    if existed and collection is not None:
+        where = {
+            "$and": [
+                {"source": {"$eq": safe_source}},
+                {"document_id": {"$eq": safe_document_id}},
+            ]
+        }
+        collection.delete(where=where)
+        document_count = int(collection.count())
+        deleted_chunks = max(0, before_count - document_count)
+
+    return {
+        "knowledge_base_id": kb_id,
+        "collection": collection_name,
+        "source": safe_source,
+        "document_id": safe_document_id,
+        "existed": existed,
+        "deleted_chunks": deleted_chunks,
+        "document_count": document_count,
+    }
+
+
 def delete_knowledge_base(*, user_id: str, knowledge_base_id: str) -> dict[str, object]:
     kb_id = normalize_knowledge_base_id(knowledge_base_id)
     collection_name = rag_collection_name(user_id, kb_id)

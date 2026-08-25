@@ -286,6 +286,13 @@ export type Messages = {
       versionDetailsTitle: string;
       versionSummary: (versions: number, documents: number, chunks: number) => string;
       documentGroupSummary: (versions: number, chunks: number) => string;
+      deleteDocumentConfirmTitle: (documentId: string) => string;
+      deleteDocumentConfirmDescription: string;
+      deleteDocumentDone: (
+        knowledgeBaseId: string,
+        documentId: string,
+        deletedChunks: number,
+      ) => string;
       versionSourceLabel: string;
       versionDocumentLabel: string;
       versionHashLabel: string;
@@ -293,6 +300,7 @@ export type Messages = {
       tableActions: string;
       actionClear: string;
       actionDelete: string;
+      actionDeleteDocument: string;
       actioning: string;
       clearConfirmTitle: (kbId: string) => string;
       clearConfirmDescription: string;

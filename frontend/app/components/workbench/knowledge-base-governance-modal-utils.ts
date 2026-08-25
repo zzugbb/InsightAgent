@@ -26,6 +26,20 @@ export type KnowledgeBaseDocumentGroup = {
   versions: KnowledgeBaseVersionRow[];
 };
 
+export function buildKnowledgeBaseDocumentDeleteUrl(
+  apiBaseUrl: string,
+  knowledgeBaseId: string,
+  source: string,
+  documentId: string,
+): string {
+  const baseUrl = apiBaseUrl.replace(/\/+$/, "");
+  const params = new URLSearchParams({
+    source,
+    document_id: documentId,
+  });
+  return `${baseUrl}/api/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents?${params.toString()}`;
+}
+
 function normalizeVersionText(value: unknown, fallback: string): string {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized || fallback;

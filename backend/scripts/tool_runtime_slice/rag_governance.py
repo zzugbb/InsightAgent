@@ -243,6 +243,75 @@ class RagGovernanceMixin:
         self.assertNotIn("raw-secret", serialized)
         self.assertNotIn("api_key", serialized)
 
+    def test_delete_knowledge_base_document_removes_only_matching_source_document(
+        self,
+    ) -> None:
+        test_case = self
+        collection_name = chroma_rag_module.rag_collection_name(
+            "user-rag-document-delete",
+            "kb-rag-document-delete",
+        )
+
+        class FakeCollection:
+            def __init__(self) -> None:
+                self.rows = [
+                    {"source": "api-docs", "document_id": "release-notes"},
+                    {"source": "api-docs", "document_id": "release-notes"},
+                    {"source": "api-docs", "document_id": "setup-guide"},
+                ]
+                self.delete_where: object | None = None
+
+            def count(self) -> int:
+                return len(self.rows)
+
+            def delete(self, *, where: object) -> None:
+                self.delete_where = where
+                self.rows = [
+                    row
+                    for row in self.rows
+                    if not (
+                        row.get("source") == "api-docs"
+                        and row.get("document_id") == "release-notes"
+                    )
+                ]
+
+        fake_collection = FakeCollection()
+
+        class FakeClient:
+            def heartbeat(self) -> None:
+                return None
+
+            def get_collection(self, *, name: str) -> FakeCollection:
+                test_case.assertEqual(name, collection_name)
+                return fake_collection
+
+        original_http_client = chroma_rag_module._http_client
+        chroma_rag_module._http_client = lambda: FakeClient()  # type: ignore[assignment]
+        try:
+            result = chroma_rag_module.delete_knowledge_base_document(
+                user_id="user-rag-document-delete",
+                knowledge_base_id="kb-rag-document-delete",
+                source="api-docs",
+                document_id="release-notes",
+            )
+        finally:
+            chroma_rag_module._http_client = original_http_client  # type: ignore[assignment]
+
+        self.assertTrue(result["existed"])
+        self.assertEqual(result["deleted_chunks"], 2)
+        self.assertEqual(result["document_count"], 1)
+        self.assertEqual(result["source"], "api-docs")
+        self.assertEqual(result["document_id"], "release-notes")
+        self.assertEqual(
+            fake_collection.delete_where,
+            {
+                "$and": [
+                    {"source": {"$eq": "api-docs"}},
+                    {"document_id": {"$eq": "release-notes"}},
+                ]
+            },
+        )
+
     def test_list_knowledge_bases_redacts_sensitive_chroma_error(self) -> None:
         original_http_client = chroma_rag_module._http_client
 

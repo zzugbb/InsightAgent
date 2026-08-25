@@ -354,6 +354,16 @@ export const en: Messages = {
         `${versions} version(s) · ${documents} document(s) · ${chunks} chunk(s)`,
       documentGroupSummary: (versions: number, chunks: number) =>
         `${versions} version(s) · ${chunks} chunk(s)`,
+      deleteDocumentConfirmTitle: (documentId: string) =>
+        `Delete document ${documentId}?`,
+      deleteDocumentConfirmDescription:
+        "All chunks for this source and document will be removed.",
+      deleteDocumentDone: (
+        knowledgeBaseId: string,
+        documentId: string,
+        deletedChunks: number,
+      ) =>
+        `Deleted ${deletedChunks} chunk(s) for ${documentId} in ${knowledgeBaseId}.`,
       versionSourceLabel: "Source",
       versionDocumentLabel: "Document",
       versionHashLabel: "Hash",
@@ -361,6 +371,7 @@ export const en: Messages = {
       tableActions: "Actions",
       actionClear: "Clear",
       actionDelete: "Delete",
+      actionDeleteDocument: "Delete document",
       actioning: "Processing…",
       clearConfirmTitle: (kbId: string) => `Clear knowledge base "${kbId}"?`,
       clearConfirmDescription:
