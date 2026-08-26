@@ -261,10 +261,13 @@ _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
     "output",
     "content",
     "choices",
+    "candidates",
+    "parts",
     "message",
     "delta",
     "tool_calls",
     "function_call",
+    "functionCall",
     "function",
     "name",
     "tool",
@@ -331,6 +334,9 @@ def _extract_provider_tool_plan_items_from_payload(
     function_call = _coerce_tool_registry_spec_payload(payload.get("function_call"))
     if isinstance(function_call, Mapping):
         return [function_call]
+    function_call = _coerce_tool_registry_spec_payload(payload.get("functionCall"))
+    if isinstance(function_call, Mapping):
+        return [function_call]
     output_items = _coerce_tool_registry_spec_payload(payload.get("output"))
     if _is_non_text_sequence(output_items):
         extracted_output_items: list[object] = []
@@ -391,9 +397,31 @@ def _extract_provider_tool_plan_items_from_payload(
         if extracted_content_items:
             return extracted_content_items
     elif content is not None:
-        content_items = _extract_provider_tool_plan_items(content)
+        content_items = (
+            _extract_provider_tool_plan_items_from_payload(content)
+            if isinstance(content, Mapping)
+            else _extract_provider_tool_plan_items(content)
+        )
         if content_items is not None:
             return content_items
+    parts = _coerce_tool_registry_spec_payload(payload.get("parts"))
+    if _is_non_text_sequence(parts):
+        extracted_part_items: list[object] = []
+        for raw_part in parts:
+            part = _coerce_provider_tool_plan_payload(raw_part)
+            part_items = _extract_provider_tool_plan_items_from_payload(part)
+            if part_items is not None:
+                extracted_part_items.extend(part_items)
+                continue
+            if not isinstance(part, Mapping):
+                continue
+            for text_key in ("text", "output_text"):
+                text_items = _extract_provider_tool_plan_items(part.get(text_key))
+                if text_items is not None:
+                    extracted_part_items.extend(text_items)
+                    break
+        if extracted_part_items:
+            return extracted_part_items
     choices = _coerce_tool_registry_spec_payload(payload.get("choices"))
     if _is_non_text_sequence(choices):
         for raw_choice in choices:
@@ -412,6 +440,13 @@ def _extract_provider_tool_plan_items_from_payload(
                 )
                 if content_items is not None:
                     return content_items
+    candidates = _coerce_tool_registry_spec_payload(payload.get("candidates"))
+    if _is_non_text_sequence(candidates):
+        for raw_candidate in candidates:
+            candidate = _coerce_provider_tool_plan_payload(raw_candidate)
+            candidate_items = _extract_provider_tool_plan_items_from_payload(candidate)
+            if candidate_items is not None:
+                return candidate_items
     raw_name = payload.get(
         "name",
         payload.get(
@@ -566,7 +601,7 @@ def _normalize_provider_tool_plan_item(
             raw_item.get("arguments")
         )
     if not isinstance(tool_input, Mapping):
-        tool_input = _coerce_provider_tool_plan_payload(raw_item.get("args"))
+        tool_input = _coerce_provider_tool_plan_input_mapping(raw_item.get("args"))
     if not isinstance(tool_input, Mapping):
         tool_input = _coerce_provider_tool_plan_input_mapping(
             raw_item.get("parameters")

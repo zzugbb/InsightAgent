@@ -880,6 +880,91 @@ class PlanningProviderMixin:
             {"expression": "21/3"},
         )
 
+    def test_build_tool_plan_provider_accepts_gemini_function_call_parts(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "gemini"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "candidates": [
+                        {
+                            "content": {
+                                "parts": [
+                                    {
+                                        "functionCall": {
+                                            "name": "calc_eval",
+                                            "args": {"expression": "27/3"},
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "27/3"},
+        )
+
+    def test_build_tool_plan_provider_accepts_gemini_function_call_string_args(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "gemini"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "candidates": [
+                        {
+                            "content": {
+                                "parts": [
+                                    {
+                                        "functionCall": {
+                                            "name": "calc_eval",
+                                            "args": json.dumps(
+                                                {"expression": "45/5"},
+                                                ensure_ascii=False,
+                                            ),
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "45/5"},
+        )
+
     def test_build_tool_plan_provider_accepts_flattened_task_retrieve_fields(self) -> None:
         class FakeProvider:
             provider = "openai"
