@@ -2313,7 +2313,8 @@ code {
   line-height: 1.45;
 }
 
-.rag-quality-filter {
+.rag-quality-filter,
+.rag-source-filter {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2322,9 +2323,14 @@ code {
 }
 
 .rag-quality-filter-label,
-.rag-quality-filter-count {
+.rag-quality-filter-count,
+.rag-source-filter-label {
   color: var(--muted);
   font-size: 0.72rem;
+}
+
+.rag-source-filter-select {
+  min-width: min(220px, 100%);
 }
 
 .rag-hit-attribution {

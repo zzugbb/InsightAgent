@@ -21,6 +21,11 @@ export type RagHitAttributionItem = {
   value: string;
 };
 
+export type RagSourceFilterOption = {
+  source: string;
+  count: number;
+};
+
 export type RagQueryInsightHit = {
   distance?: number | null;
   metadata?: Record<string, unknown> | null;
@@ -94,7 +99,35 @@ export function filterRagHitsByRecallQuality<T extends RagQueryInsightHit>(
   if (filter === "all") {
     return hits;
   }
-  return hits.filter((hit) => resolveRagRecallQuality(hit.distance)?.tone === filter);
+  return hits.filter(
+    (hit) => resolveRagRecallQuality(hit.distance)?.tone === filter,
+  );
+}
+
+export function resolveRagSourceFilterOptions(
+  hits: RagQueryInsightHit[],
+): RagSourceFilterOption[] {
+  const counts = new Map<string, number>();
+  for (const hit of hits) {
+    const source = cleanText(hit.metadata?.source);
+    if (!source) {
+      continue;
+    }
+    counts.set(source, (counts.get(source) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([source, count]) => ({ source, count }));
+}
+
+export function filterRagHitsBySource<T extends RagQueryInsightHit>(
+  hits: T[],
+  sourceFilter: string,
+): T[] {
+  if (sourceFilter === "all") {
+    return hits;
+  }
+  return hits.filter((hit) => cleanText(hit.metadata?.source) === sourceFilter);
 }
 
 export function resolveRagHitAttributionItems(

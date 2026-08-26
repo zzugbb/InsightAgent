@@ -1,16 +1,18 @@
-import { Segmented, Tag } from "antd";
+import { Segmented, Select, Tag } from "antd";
 import { useState } from "react";
 
 import type { Messages } from "../../../lib/i18n/types";
 
 import type { RagHit } from "./types";
 import {
+  filterRagHitsBySource,
   filterRagHitsByRecallQuality,
   formatRagRecallDistance,
   type RagRecallQualityFilter,
   resolveRagHitAttributionItems,
   resolveRagQueryInsight,
   resolveRagRecallQuality,
+  resolveRagSourceFilterOptions,
 } from "./runtime-debug-modal-utils";
 
 type RuntimeDebugRagResultsProps = {
@@ -26,8 +28,19 @@ export function RuntimeDebugRagResults({
 }: RuntimeDebugRagResultsProps) {
   const [qualityFilter, setQualityFilter] =
     useState<RagRecallQualityFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const queryInsight = resolveRagQueryInsight(hits);
-  const visibleHits = filterRagHitsByRecallQuality(hits, qualityFilter);
+  const sourceOptions = resolveRagSourceFilterOptions(hits);
+  const activeSourceFilter =
+    sourceFilter === "all" ||
+    sourceOptions.some((option) => option.source === sourceFilter)
+      ? sourceFilter
+      : "all";
+  const qualityFilteredHits = filterRagHitsByRecallQuality(hits, qualityFilter);
+  const visibleHits = filterRagHitsBySource(
+    qualityFilteredHits,
+    activeSourceFilter,
+  );
 
   return (
     <div
@@ -143,6 +156,36 @@ export function RuntimeDebugRagResults({
                   hits.length,
                 )}
               </span>
+            </div>
+          ) : null}
+          {queryInsight && sourceOptions.length > 0 ? (
+            <div
+              className="rag-source-filter"
+              data-testid="inspector-rag-source-filter"
+            >
+              <span className="rag-source-filter-label">
+                {t.inspector.rag.sourceFilterLabel}
+              </span>
+              <Select
+                size="small"
+                value={activeSourceFilter}
+                aria-label={t.inspector.rag.sourceFilterLabel}
+                className="rag-source-filter-select"
+                onChange={setSourceFilter}
+                options={[
+                  {
+                    label: t.inspector.rag.sourceFilterAll,
+                    value: "all",
+                  },
+                  ...sourceOptions.map((option) => ({
+                    label: t.inspector.rag.sourceFilterOption(
+                      option.source,
+                      option.count,
+                    ),
+                    value: option.source,
+                  })),
+                ]}
+              />
             </div>
           ) : null}
           {visibleHits.length === 0 ? (

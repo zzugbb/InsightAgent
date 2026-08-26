@@ -180,6 +180,7 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
   const qualityFilterCount = page
     .getByTestId("inspector-rag-quality-filter-count")
     .first();
+  const sourceFilter = page.getByTestId("inspector-rag-source-filter").first();
   const hitAttribution = page.getByTestId("inspector-rag-hit-attribution").first();
 
   for (let i = 0; i < 5; i += 1) {
@@ -205,6 +206,10 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
         /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
       );
       await expect(qualityFilterCount).toContainText(/Showing|显示/);
+      await expect(sourceFilter).toContainText(/Source|来源/);
+      await sourceFilter.locator(".ant-select").click();
+      await expect(page.getByText(/playwright-e2e/).first()).toBeVisible();
+      await page.keyboard.press("Escape");
       await expect(hitAttribution).toContainText(/Recall source|召回来源/);
       await expect(hitAttribution).toContainText("playwright-e2e");
       await expect(hitAttribution).toContainText(/Source|来源/);
@@ -238,6 +243,10 @@ async function queryRagUntilHit(page: Page, snippet: string): Promise<void> {
     /Strong match|Possible match|Weak match|强相关|可能相关|弱相关/,
   );
   await expect(qualityFilterCount).toContainText(/Showing|显示/);
+  await expect(sourceFilter).toContainText(/Source|来源/);
+  await sourceFilter.locator(".ant-select").click();
+  await expect(page.getByText(/playwright-e2e/).first()).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(hitAttribution).toContainText(/Recall source|召回来源/);
   await expect(hitAttribution).toContainText("playwright-e2e");
   await expect(hitAttribution).toContainText(/Source|来源/);

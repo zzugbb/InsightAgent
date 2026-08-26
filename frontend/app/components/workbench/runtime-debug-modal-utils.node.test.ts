@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   filterRagHitsByRecallQuality,
+  filterRagHitsBySource,
   formatRagRecallDistance,
   resolveRagHitAttributionItems,
+  resolveRagSourceFilterOptions,
   resolveRagQueryInsight,
   resolveRagRecallQuality,
 } from "./runtime-debug-modal-utils.ts";
@@ -132,5 +134,36 @@ test("filterRagHitsByRecallQuality narrows hits by recall quality", () => {
   assert.deepEqual(
     filterRagHitsByRecallQuality(hits, "weak").map((hit) => hit.id),
     ["weak"],
+  );
+});
+
+test("resolveRagSourceFilterOptions summarizes stable source counts", () => {
+  const hits = [
+    { id: "one", metadata: { source: "beta.md" } },
+    { id: "two", metadata: { source: "alpha.md" } },
+    { id: "three", metadata: { source: "beta.md" } },
+    { id: "blank", metadata: { source: " " } },
+  ];
+
+  assert.deepEqual(resolveRagSourceFilterOptions(hits), [
+    { source: "alpha.md", count: 1 },
+    { source: "beta.md", count: 2 },
+  ]);
+});
+
+test("filterRagHitsBySource narrows hits by safe source metadata", () => {
+  const hits = [
+    { id: "alpha", metadata: { source: "alpha.md" } },
+    { id: "beta", metadata: { source: "beta.md" } },
+    { id: "unknown", metadata: {} },
+  ];
+
+  assert.deepEqual(
+    filterRagHitsBySource(hits, "all").map((hit) => hit.id),
+    ["alpha", "beta", "unknown"],
+  );
+  assert.deepEqual(
+    filterRagHitsBySource(hits, "beta.md").map((hit) => hit.id),
+    ["beta"],
   );
 });
