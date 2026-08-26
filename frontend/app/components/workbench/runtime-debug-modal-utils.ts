@@ -1,5 +1,7 @@
 export type RagRecallQualityTone = "strong" | "medium" | "weak";
 export type RagRecallQualityFilter = "all" | RagRecallQualityTone;
+export const RAG_UNATTRIBUTED_SOURCE_FILTER_VALUE =
+  "__insightagent_unattributed_source__";
 export type RagFilterEmptyMessageKey =
   | "qualityFilterEmpty"
   | "sourceFilterEmpty"
@@ -27,7 +29,8 @@ export type RagHitAttributionItem = {
 };
 
 export type RagSourceFilterOption = {
-  source: string;
+  value: string;
+  source: string | null;
   count: number;
 };
 
@@ -113,16 +116,26 @@ export function resolveRagSourceFilterOptions(
   hits: RagQueryInsightHit[],
 ): RagSourceFilterOption[] {
   const counts = new Map<string, number>();
+  let unattributedCount = 0;
   for (const hit of hits) {
     const source = cleanText(hit.metadata?.source);
     if (!source) {
+      unattributedCount += 1;
       continue;
     }
     counts.set(source, (counts.get(source) ?? 0) + 1);
   }
-  return [...counts.entries()]
+  const sourceOptions: RagSourceFilterOption[] = [...counts.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([source, count]) => ({ source, count }));
+    .map(([source, count]) => ({ value: source, source, count }));
+  if (unattributedCount > 0) {
+    sourceOptions.push({
+      value: RAG_UNATTRIBUTED_SOURCE_FILTER_VALUE,
+      source: null,
+      count: unattributedCount,
+    });
+  }
+  return sourceOptions;
 }
 
 export function filterRagHitsBySource<T extends RagQueryInsightHit>(
@@ -131,6 +144,9 @@ export function filterRagHitsBySource<T extends RagQueryInsightHit>(
 ): T[] {
   if (sourceFilter === "all") {
     return hits;
+  }
+  if (sourceFilter === RAG_UNATTRIBUTED_SOURCE_FILTER_VALUE) {
+    return hits.filter((hit) => !cleanText(hit.metadata?.source));
   }
   return hits.filter((hit) => cleanText(hit.metadata?.source) === sourceFilter);
 }

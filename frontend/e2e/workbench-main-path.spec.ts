@@ -454,7 +454,7 @@ test("runtime debug rag filters explain combined empty results", async ({
       body: JSON.stringify({
         knowledge_base_id: "default",
         collection: "rag_default",
-        hit_count: 2,
+        hit_count: 3,
         hits: [
           {
             id: "strong-alpha",
@@ -463,6 +463,16 @@ test("runtime debug rag filters explain combined empty results", async ({
             metadata: {
               source: "alpha.md",
               document_id: "alpha",
+              chunk_index: 1,
+              chunk_total: 1,
+            },
+          },
+          {
+            id: "unattributed",
+            content: "Unattributed recall hit",
+            distance: null,
+            metadata: {
+              document_id: "orphan",
               chunk_index: 1,
               chunk_total: 1,
             },
@@ -494,6 +504,7 @@ test("runtime debug rag filters explain combined empty results", async ({
   });
   await expect(page.getByText("Alpha strong recall hit")).toBeVisible();
   await expect(page.getByText("Beta weak recall hit")).toBeVisible();
+  await expect(page.getByText("Unattributed recall hit")).toBeVisible();
 
   const qualityFilter = page.getByTestId("inspector-rag-quality-filter").first();
   await qualityFilter.getByText(/Possible match 0|可能相关 0/).click();
@@ -507,6 +518,13 @@ test("runtime debug rag filters explain combined empty results", async ({
       /No hits match this recall quality and source|没有同时匹配该召回质量和来源/,
     ),
   ).toBeVisible();
+
+  await qualityFilter.getByText(/All|全部/).click();
+  await sourceFilter.locator(".ant-select").click();
+  await page.getByText(/Unknown source|未知来源/).last().click();
+  await expect(page.getByText("Unattributed recall hit")).toBeVisible();
+  await expect(page.getByText("Alpha strong recall hit")).toBeHidden();
+  await expect(page.getByText("Beta weak recall hit")).toBeHidden();
 });
 
 test("workbench main path keeps shared kb actions disabled for non-admin", async ({

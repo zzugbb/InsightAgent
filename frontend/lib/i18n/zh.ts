@@ -745,6 +745,7 @@ export const zh: Messages = {
       sourceFilterLabel: "来源",
       sourceFilterAll: "全部来源",
       sourceFilterOption: (source, count) => `${source}（${count}）`,
+      sourceFilterUnknown: (count) => `未知来源（${count}）`,
       hitAttributionLabel: "召回来源",
       sourceLabel: "来源",
       documentLabel: "文档",

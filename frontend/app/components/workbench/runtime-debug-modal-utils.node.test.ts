@@ -5,6 +5,7 @@ import {
   filterRagHitsByRecallQuality,
   filterRagHitsBySource,
   formatRagRecallDistance,
+  RAG_UNATTRIBUTED_SOURCE_FILTER_VALUE,
   resolveRagFilterEmptyMessageKey,
   resolveRagHitAttributionItems,
   resolveRagSourceFilterOptions,
@@ -144,11 +145,17 @@ test("resolveRagSourceFilterOptions summarizes stable source counts", () => {
     { id: "two", metadata: { source: "alpha.md" } },
     { id: "three", metadata: { source: "beta.md" } },
     { id: "blank", metadata: { source: " " } },
+    { id: "missing", metadata: {} },
   ];
 
   assert.deepEqual(resolveRagSourceFilterOptions(hits), [
-    { source: "alpha.md", count: 1 },
-    { source: "beta.md", count: 2 },
+    { value: "alpha.md", source: "alpha.md", count: 1 },
+    { value: "beta.md", source: "beta.md", count: 2 },
+    {
+      value: RAG_UNATTRIBUTED_SOURCE_FILTER_VALUE,
+      source: null,
+      count: 2,
+    },
   ]);
 });
 
@@ -156,16 +163,23 @@ test("filterRagHitsBySource narrows hits by safe source metadata", () => {
   const hits = [
     { id: "alpha", metadata: { source: "alpha.md" } },
     { id: "beta", metadata: { source: "beta.md" } },
+    { id: "blank", metadata: { source: " " } },
     { id: "unknown", metadata: {} },
   ];
 
   assert.deepEqual(
     filterRagHitsBySource(hits, "all").map((hit) => hit.id),
-    ["alpha", "beta", "unknown"],
+    ["alpha", "beta", "blank", "unknown"],
   );
   assert.deepEqual(
     filterRagHitsBySource(hits, "beta.md").map((hit) => hit.id),
     ["beta"],
+  );
+  assert.deepEqual(
+    filterRagHitsBySource(hits, RAG_UNATTRIBUTED_SOURCE_FILTER_VALUE).map(
+      (hit) => hit.id,
+    ),
+    ["blank", "unknown"],
   );
 });
 

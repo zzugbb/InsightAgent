@@ -666,6 +666,7 @@ export type Messages = {
       sourceFilterLabel: string;
       sourceFilterAll: string;
       sourceFilterOption: (source: string, count: number) => string;
+      sourceFilterUnknown: (count: number) => string;
       hitAttributionLabel: string;
       sourceLabel: string;
       documentLabel: string;

@@ -34,7 +34,7 @@ export function RuntimeDebugRagResults({
   const sourceOptions = resolveRagSourceFilterOptions(hits);
   const activeSourceFilter =
     sourceFilter === "all" ||
-    sourceOptions.some((option) => option.source === sourceFilter)
+    sourceOptions.some((option) => option.value === sourceFilter)
       ? sourceFilter
       : "all";
   const qualityFilteredHits = filterRagHitsByRecallQuality(hits, qualityFilter);
@@ -183,11 +183,14 @@ export function RuntimeDebugRagResults({
                     value: "all",
                   },
                   ...sourceOptions.map((option) => ({
-                    label: t.inspector.rag.sourceFilterOption(
-                      option.source,
-                      option.count,
-                    ),
-                    value: option.source,
+                    label:
+                      option.source === null
+                        ? t.inspector.rag.sourceFilterUnknown(option.count)
+                        : t.inspector.rag.sourceFilterOption(
+                            option.source,
+                            option.count,
+                          ),
+                    value: option.value,
                   })),
                 ]}
               />

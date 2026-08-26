@@ -760,6 +760,7 @@ export const en: Messages = {
       sourceFilterLabel: "Source",
       sourceFilterAll: "All sources",
       sourceFilterOption: (source, count) => `${source} (${count})`,
+      sourceFilterUnknown: (count) => `Unknown source (${count})`,
       hitAttributionLabel: "Recall source",
       sourceLabel: "Source",
       documentLabel: "Document",
