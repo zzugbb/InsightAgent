@@ -5,6 +5,7 @@ import {
   filterRagHitsByRecallQuality,
   filterRagHitsBySource,
   formatRagRecallDistance,
+  resolveRagFilterEmptyMessageKey,
   resolveRagHitAttributionItems,
   resolveRagSourceFilterOptions,
   resolveRagQueryInsight,
@@ -165,5 +166,24 @@ test("filterRagHitsBySource narrows hits by safe source metadata", () => {
   assert.deepEqual(
     filterRagHitsBySource(hits, "beta.md").map((hit) => hit.id),
     ["beta"],
+  );
+});
+
+test("resolveRagFilterEmptyMessageKey explains active filters", () => {
+  assert.equal(
+    resolveRagFilterEmptyMessageKey("weak", "all"),
+    "qualityFilterEmpty",
+  );
+  assert.equal(
+    resolveRagFilterEmptyMessageKey("all", "release-notes.md"),
+    "sourceFilterEmpty",
+  );
+  assert.equal(
+    resolveRagFilterEmptyMessageKey("medium", "release-notes.md"),
+    "combinedFilterEmpty",
+  );
+  assert.equal(
+    resolveRagFilterEmptyMessageKey("all", "all"),
+    "filterEmptyGeneric",
   );
 });

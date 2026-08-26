@@ -1,5 +1,10 @@
 export type RagRecallQualityTone = "strong" | "medium" | "weak";
 export type RagRecallQualityFilter = "all" | RagRecallQualityTone;
+export type RagFilterEmptyMessageKey =
+  | "qualityFilterEmpty"
+  | "sourceFilterEmpty"
+  | "combinedFilterEmpty"
+  | "filterEmptyGeneric";
 
 export type RagRecallQuality = {
   tone: RagRecallQualityTone;
@@ -128,6 +133,24 @@ export function filterRagHitsBySource<T extends RagQueryInsightHit>(
     return hits;
   }
   return hits.filter((hit) => cleanText(hit.metadata?.source) === sourceFilter);
+}
+
+export function resolveRagFilterEmptyMessageKey(
+  qualityFilter: RagRecallQualityFilter,
+  sourceFilter: string,
+): RagFilterEmptyMessageKey {
+  const hasQualityFilter = qualityFilter !== "all";
+  const hasSourceFilter = sourceFilter !== "all";
+  if (hasQualityFilter && hasSourceFilter) {
+    return "combinedFilterEmpty";
+  }
+  if (hasSourceFilter) {
+    return "sourceFilterEmpty";
+  }
+  if (hasQualityFilter) {
+    return "qualityFilterEmpty";
+  }
+  return "filterEmptyGeneric";
 }
 
 export function resolveRagHitAttributionItems(

@@ -9,6 +9,7 @@ import {
   filterRagHitsByRecallQuality,
   formatRagRecallDistance,
   type RagRecallQualityFilter,
+  resolveRagFilterEmptyMessageKey,
   resolveRagHitAttributionItems,
   resolveRagQueryInsight,
   resolveRagRecallQuality,
@@ -39,6 +40,10 @@ export function RuntimeDebugRagResults({
   const qualityFilteredHits = filterRagHitsByRecallQuality(hits, qualityFilter);
   const visibleHits = filterRagHitsBySource(
     qualityFilteredHits,
+    activeSourceFilter,
+  );
+  const filterEmptyMessageKey = resolveRagFilterEmptyMessageKey(
+    qualityFilter,
     activeSourceFilter,
   );
 
@@ -190,7 +195,7 @@ export function RuntimeDebugRagResults({
           ) : null}
           {visibleHits.length === 0 ? (
             <p className="panel-note panel-note--muted">
-              {t.inspector.rag.qualityFilterEmpty}
+              {t.inspector.rag[filterEmptyMessageKey]}
             </p>
           ) : (
             <ul className="memory-query-hit-list">

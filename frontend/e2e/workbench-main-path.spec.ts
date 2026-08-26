@@ -440,6 +440,75 @@ test("workbench main path covers trace, rag and task/session export", async ({
   });
 });
 
+test("runtime debug rag filters explain combined empty results", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.route("**/api/rag/query", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_base_id: "default",
+        collection: "rag_default",
+        hit_count: 2,
+        hits: [
+          {
+            id: "strong-alpha",
+            content: "Alpha strong recall hit",
+            distance: 0.12,
+            metadata: {
+              source: "alpha.md",
+              document_id: "alpha",
+              chunk_index: 1,
+              chunk_total: 1,
+            },
+          },
+          {
+            id: "weak-beta",
+            content: "Beta weak recall hit",
+            distance: 0.82,
+            metadata: {
+              source: "beta.md",
+              document_id: "beta",
+              chunk_index: 1,
+              chunk_total: 1,
+            },
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await openRuntimeDebugModal(page);
+
+  await page.getByTestId("inspector-rag-query-input").fill("filter explanation");
+  await page.getByTestId("inspector-rag-query-submit").click();
+  await expect(page.getByTestId("inspector-rag-query-results")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByText("Alpha strong recall hit")).toBeVisible();
+  await expect(page.getByText("Beta weak recall hit")).toBeVisible();
+
+  const qualityFilter = page.getByTestId("inspector-rag-quality-filter").first();
+  await qualityFilter.getByText(/Possible match 0|可能相关 0/).click();
+  await expect(page.getByText(/No hits match this recall quality|没有匹配该召回质量/)).toBeVisible();
+
+  const sourceFilter = page.getByTestId("inspector-rag-source-filter").first();
+  await sourceFilter.locator(".ant-select").click();
+  await page.getByText(/beta\.md/).last().click();
+  await expect(
+    page.getByText(
+      /No hits match this recall quality and source|没有同时匹配该召回质量和来源/,
+    ),
+  ).toBeVisible();
+});
+
 test("workbench main path keeps shared kb actions disabled for non-admin", async ({
   page,
   request,

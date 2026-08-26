@@ -16,11 +16,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 后端 `rag-governance-hardening` 已封板：RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口；知识库治理表继续展示唯一文档版本数与首个版本号，trace 搜索可命中安全 source/document/version/hash。
 - 后端 `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。前端相关契约已固定：客户端 SSE 断开保留 running 任务供 reload/reconnect/cancel，服务端执行协程取消才落 failed；前端可见删除会话响应、SSE、trace 与 export shape 不变。
 - `observability-experience` 已 100% 封板：任务快照会从 trace diagnostics、TaskResponse failure fields 与 task_failed audit event 中提取失败线索并标注来源（SSE error / tool error / trace content / persisted trace），Task Center/任务详情/Usage Dashboard 会统一把稳定错误码映射为可读失败说明；Task Center 支持从任务列表批量回放 audit failure hint，展示/搜索该线索与来源，并支持按 Needs attention / Failed status / Failure hint / Failure trace 做观测筛选，且会按当前筛选后的可见任务汇总失败来源诊断分组，诊断来源 chip 可本地下钻到 Failure hint + failure source 筛选而不触发服务端 keyword 查询；Task Center 的 registry profile/provider source 筛选已进入本地任务快照过滤；任务详情页展示同一失败摘要，可从失败线索快捷定位 Failure 轨迹，并在原始 trace 缺少错误 step 时合成本地 failure 回放节点；Task Center、Usage Dashboard 与 Audit Logs 的失败任务链接可通过 `trace_semantic=failure` 直接打开任务详情 Failure 轨迹；Trace Failure 语义已覆盖 rate limited、unauthorized、permission denied、connection refused 等稳定失败码文本；Trace 语义统计与 semantic filter 结果保持一致，任务详情页语义统计卡可直接下钻筛选对应轨迹；Audit Logs keyword 已进入服务端过滤，分页、total、导出和 e2e 搜索口径一致；Trace 语义统计已新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹。
-- 当前主线已进入 `rag-product-experience`，进度约 82%：知识库治理表可展开查看版本明细，并按 source/document 汇总文档组摘要，展示每个文档组的版本数与 chunk 总数；文档组支持删除该 source/document 下全部 chunks，删除后刷新治理表与 RAG status；Runtime Debug 的 RAG 查询结果会基于 metadata/distance 展示查询级召回摘要、质量分布、召回使用建议、召回质量本地筛选、召回来源本地筛选、source/document/version/hash/chunk 命中来源摘要、强/中/弱召回质量标签和“距离越低语义越接近”的解释；派生逻辑落在独立 utils/test 文件，前端只消费现有 RAG 响应字段。
+- 当前主线已进入 `rag-product-experience`，进度约 88%：知识库治理表可展开查看版本明细，并按 source/document 汇总文档组摘要，展示每个文档组的版本数与 chunk 总数；文档组支持删除该 source/document 下全部 chunks，删除后刷新治理表与 RAG status；Runtime Debug 的 RAG 查询结果会基于 metadata/distance 展示查询级召回摘要、质量分布、召回使用建议、召回质量本地筛选、召回来源本地筛选、组合筛选空结果提示、source/document/version/hash/chunk 命中来源摘要、强/中/弱召回质量标签和“距离越低语义越接近”的解释；派生逻辑落在独立 utils/test 文件，前端只消费现有 RAG 响应字段。
 
 ## 当前验证基线
 
-- `cd frontend && node --test --experimental-strip-types app/components/workbench/runtime-debug-modal-utils.node.test.ts app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts app/components/workbench/utils.node.test.ts app/components/workbench/audit-logs-modal-utils.node.test.ts app/tasks/task-detail-page-utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`120/120` 通过
+- `cd frontend && node --test --experimental-strip-types app/components/workbench/runtime-debug-modal-utils.node.test.ts app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts app/components/workbench/utils.node.test.ts app/components/workbench/audit-logs-modal-utils.node.test.ts app/tasks/task-detail-page-utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts`：`121/121` 通过
 - `cd frontend && npm run lint`：通过
 - `cd frontend && npm run build`：通过
 - `npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts`：通过
@@ -32,7 +32,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`51 passed / 1 skipped`；覆盖新增知识库版本明细展开，低并发 queued 专项在 full 阶段按预期 skip
 - knowledge governance targeted Chromium：`e2e/usage-dashboard.spec.ts:1543`，`1/1` 通过，覆盖真实 RAG ingest 后展开版本明细、source/document 文档组摘要、文档组删除与状态归零
-- RAG main path Chromium：`e2e/workbench-main-path.spec.ts:352`，`1/1` 通过，覆盖真实 RAG ingest/query 后的查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、命中来源摘要、召回质量标签与 distance 解释
+- RAG Chromium：`e2e/workbench-main-path.spec.ts:352` 与 `e2e/workbench-main-path.spec.ts:443`，`2/2` 通过，覆盖真实 RAG ingest/query 后的查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、组合筛选空结果提示、命中来源摘要、召回质量标签与 distance 解释
 - frontend queue phase：低并发 `8011/3001` 通过，`1/1`
 - backend main e2e phase：baseline / main / export consistency / cancel-timeout 通过
 - backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
@@ -46,7 +46,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`。
-2. 当前主线：`rag-product-experience` 已启动，进度约 82%；已完成知识库版本明细展开、source/document 文档组摘要、文档组删除治理、RAG query 查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、命中来源摘要与召回质量标签，下一步继续围绕检索解释和召回质量呈现补红测。
+2. 当前主线：`rag-product-experience` 已启动，进度约 88%；已完成知识库版本明细展开、source/document 文档组摘要、文档组删除治理、RAG query 查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签，下一步继续围绕检索解释和召回质量呈现补红测。
 3. 后续体验维护继续保持 Workbench composer queued/running/cancel 细节、任务详情页 queued/running/terminal 回放、导出与 trace 契约稳定；新增 UI/回放能力继续补 targeted/full Chromium。
 4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。
 
@@ -65,7 +65,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - running task 恢复：刷新页面或切回会话时自动接管 `queued/pending/running` 任务流
 - 导出：任务与会话 JSON / Markdown 导出
 - 模型设置：`mock / remote` 模式切换、校验、保存、错误码友好提示、provider/source diagnostics 与 task queue diagnostics 限额/全局与当前用户计数/可用槽位/压力状态/等待策略说明
-- RAG / Memory 调试：设置中的运行调试子页，RAG 查询结果展示查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、命中来源摘要、distance 与召回质量解释
+- RAG / Memory 调试：设置中的运行调试子页，RAG 查询结果展示查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、组合筛选空结果提示、命中来源摘要、distance 与召回质量解释
 - 知识库治理：列表、版本明细展开、文档组摘要、文档组删除、来源采样、shared 权限显隐、清空/删除
 - 审计日志：筛选、分页、详情、导出
 - usage dashboard：趋势、会话榜、任务榜与来源分布

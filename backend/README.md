@@ -15,7 +15,7 @@
 - `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。后端已收口 waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放与失败自愈。
 - 关键后端契约：客户端 SSE 断开只释放本进程 active slot，并保留 running 任务供 reload/reconnect/cancel；服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属。active slot、204 响应与外部 SSE / trace / export 契约不变。
 - `observability-experience` 已 100% 封板；已完成任务失败线索聚合、来源分类、TaskResponse failure fields、task_failed audit event 兜底恢复、Task Center 任务列表 audit failure hint 批量回放、Task Center registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组与来源 chip 本地下钻、跨视图 Failure URL 预设直达、稳定失败码文本纳入前端 Failure 语义、Usage Dashboard / Audit Logs 到任务详情的回放入口、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure/semantic 语义统计、统计卡下钻与 Task Center 观测筛选；后端 SSE / trace / export shape 保持不变。
-- 当前主线已进入 `rag-product-experience`，进度约 82%；前端知识库治理表消费现有 `document_versions` 展开版本明细并派生 source/document 文档组摘要；后端新增 `DELETE /api/rag/knowledge-bases/{knowledge_base_id}/documents` 按 source/document 删除文档组，并记录 `rag_document_delete` 审计事件；Runtime Debug 基于现有 RAG query metadata/distance 展示查询级召回摘要、质量分布、召回使用建议、召回质量本地筛选、召回来源本地筛选、命中来源摘要与召回质量标签；RAG status/list、ingest/query、SSE、trace 与 export 外部响应 shape 保持不变。
+- 当前主线已进入 `rag-product-experience`，进度约 88%；前端知识库治理表消费现有 `document_versions` 展开版本明细并派生 source/document 文档组摘要；后端新增 `DELETE /api/rag/knowledge-bases/{knowledge_base_id}/documents` 按 source/document 删除文档组，并记录 `rag_document_delete` 审计事件；Runtime Debug 基于现有 RAG query metadata/distance 展示查询级召回摘要、质量分布、召回使用建议、召回质量本地筛选、召回来源本地筛选、组合筛选空结果提示、命中来源摘要与召回质量标签；RAG status/list、ingest/query、SSE、trace 与 export 外部响应 shape 保持不变。
 
 ## 当前验证基线
 
@@ -32,7 +32,7 @@
 - RAG runtime/export targeted：safe version metadata、legacy chunk shape、chunk object metadata alignment、parallel runtime chunk metadata、export knowledge_base_id redaction、result summary/output/preview/observation knowledge_base_id redaction 均通过
 - `backend/.venv/bin/python -m py_compile` 本轮相关 backend route/test 模块：通过
 - backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
-- frontend node tests：runtime debug modal utils / knowledge base governance modal utils / workbench utils / audit logs modal utils / task detail utils / stream store utils / model settings utils，当前 `120/120` 通过
+- frontend node tests：runtime debug modal utils / knowledge base governance modal utils / workbench utils / audit logs modal utils / task detail utils / stream store utils / model settings utils，当前 `121/121` 通过
 - frontend build：`cd frontend && npm run build` 通过
 - frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
 - frontend targeted TS：本轮涉及的 runtime debug modal/rag results/utils、knowledge base governance modal/utils、i18n、workbench main path e2e 与 usage dashboard e2e 通过 targeted `tsc`
@@ -40,7 +40,7 @@
 - frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
 - frontend full Chromium：默认 `8000/3001` 通过，`51 passed / 1 skipped`；覆盖新增知识库版本明细展开，低并发 queued 专项在 full 阶段按预期 skip
 - frontend targeted Chromium：`e2e/usage-dashboard.spec.ts:1543`，`1/1` 通过，覆盖真实 RAG ingest 后展开知识库版本明细、source/document 文档组摘要、文档组删除与状态归零
-- frontend main path Chromium：`e2e/workbench-main-path.spec.ts:352`，`1/1` 通过，覆盖真实 RAG ingest/query 后的查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、命中来源摘要、召回质量标签与 distance 解释
+- frontend RAG Chromium：`e2e/workbench-main-path.spec.ts:352` 与 `e2e/workbench-main-path.spec.ts:443`，`2/2` 通过，覆盖真实 RAG ingest/query 后的查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、组合筛选空结果提示、命中来源摘要、召回质量标签与 distance 解释
 - frontend task center governance Chromium：`e2e/usage-dashboard.spec.ts:372`，`1/1` 通过，覆盖 Task Center registry profile/source 请求与列表可见性过滤
 - frontend task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1329`，`3/3` 通过，覆盖 Task Center/任务详情语义统计、统计卡下钻与语义过滤计数一致性
 - frontend remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过，覆盖 Task Center audit failure hint 回放、失败来源诊断分组、诊断来源 chip 本地下钻、Failure URL 预设直达与可读失败说明、Needs attention / Failed status 观测筛选、Audit Logs 服务端 keyword 请求、任务详情 audit failure hint 恢复与失败轨迹快捷定位
@@ -55,7 +55,7 @@
 ## 下一步后端计划
 
 1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`。
-2. 当前主线：`rag-product-experience` 已启动，进度约 82%；已完成知识库版本明细展开、source/document 文档组摘要、文档组删除治理、RAG query 查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、命中来源摘要与召回质量标签，后端外部 RAG 契约保持稳定。
+2. 当前主线：`rag-product-experience` 已启动，进度约 88%；已完成知识库版本明细展开、source/document 文档组摘要、文档组删除治理、RAG query 查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签，后端外部 RAG 契约保持稳定。
 3. 后续继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定；新增能力优先补红测，必要时先拆新模块。
 
 ## 后续候选主线

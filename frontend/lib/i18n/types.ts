@@ -660,6 +660,9 @@ export type Messages = {
       qualityFilterAll: string;
       qualityFilterShowing: (visible: number, total: number) => string;
       qualityFilterEmpty: string;
+      sourceFilterEmpty: string;
+      combinedFilterEmpty: string;
+      filterEmptyGeneric: string;
       sourceFilterLabel: string;
       sourceFilterAll: string;
       sourceFilterOption: (source: string, count: number) => string;
