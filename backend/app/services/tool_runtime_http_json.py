@@ -1737,68 +1737,94 @@ def _render_http_json_result_fields(
     return rendered_result_fields
 
 
-def _is_supported_tool_execution_response_path_segment(segment: str) -> bool:
-    if not segment:
-        return False
+def _parse_tool_execution_response_path_quoted_key(raw_value: str) -> str | None:
+    raw_value = raw_value.strip()
+    if len(raw_value) < 2 or raw_value[0] not in ("'", '"'):
+        return None
+    quote = raw_value[0]
+    if raw_value[-1] != quote:
+        return None
+    if quote == '"':
+        try:
+            parsed_value = json.loads(raw_value)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed_value, str):
+            return None
+        key = parsed_value
+    else:
+        key = raw_value[1:-1]
+        if "\\" in key:
+            return None
+    if not key or any(ord(char) < 32 or ord(char) == 127 for char in key):
+        return None
+    return key
+
+
+def _parse_tool_execution_response_path_tokens(raw_value: object) -> list[object] | None:
+    if not isinstance(raw_value, str):
+        return None
+    normalized = raw_value.strip()
+    if normalized == "$":
+        return []
+    if normalized.startswith("$"):
+        normalized = normalized[1:]
+    if normalized.startswith("."):
+        normalized = normalized[1:]
+    if not normalized:
+        return None
+    parts: list[object] = []
     index = 0
-    if segment[index] != "[":
-        while index < len(segment) and segment[index] not in "[]":
+    expect_token = True
+    while index < len(normalized):
+        char = normalized[index]
+        if char == ".":
+            if expect_token:
+                return None
+            expect_token = True
             index += 1
-    while index < len(segment):
-        if segment[index] != "[":
-            return False
-        closing_index = segment.find("]", index + 1)
-        if closing_index == -1:
-            return False
-        raw_index = segment[index + 1 : closing_index]
-        if not raw_index.isdigit():
-            return False
-        index = closing_index + 1
-    return True
+            if index >= len(normalized):
+                return None
+            continue
+        if char == "[":
+            closing_index = normalized.find("]", index + 1)
+            if closing_index == -1:
+                return None
+            raw_segment = normalized[index + 1 : closing_index]
+            if raw_segment.isdigit():
+                parts.append(int(raw_segment))
+            else:
+                key = _parse_tool_execution_response_path_quoted_key(raw_segment)
+                if key is None:
+                    return None
+                parts.append(key)
+            expect_token = False
+            index = closing_index + 1
+            continue
+        start_index = index
+        while index < len(normalized) and normalized[index] not in ".[]":
+            index += 1
+        if start_index == index:
+            return None
+        parts.append(normalized[start_index:index])
+        expect_token = False
+    if expect_token:
+        return None
+    return parts
+
+
+def _is_supported_tool_execution_response_path_segment(segment: str) -> bool:
+    if not isinstance(segment, str) or not segment:
+        return False
+    return _parse_tool_execution_response_path_tokens(segment) is not None
 
 
 def _is_supported_tool_execution_response_path(raw_value: object) -> bool:
-    if not isinstance(raw_value, str):
-        return False
-    normalized = raw_value.strip()
-    if normalized == "$":
-        return True
-    if normalized.startswith("$"):
-        normalized = normalized[1:]
-    if normalized.startswith("."):
-        normalized = normalized[1:]
-    if not normalized:
-        return False
-    segments = normalized.split(".")
-    return all(
-        _is_supported_tool_execution_response_path_segment(segment)
-        for segment in segments
-    )
+    return _parse_tool_execution_response_path_tokens(raw_value) is not None
 
 
 def _normalize_tool_execution_response_path(raw_value: object) -> list[object]:
-    if not isinstance(raw_value, str):
-        return []
-    normalized = raw_value.strip()
-    if normalized.startswith("$"):
-        normalized = normalized[1:]
-    if normalized.startswith("."):
-        normalized = normalized[1:]
-    if not normalized:
-        return []
-    parts: list[object] = []
-    for segment in normalized.split("."):
-        if not segment:
-            continue
-        token_match = re.finditer(r"([^\[\]]+)|\[(\d+)\]", segment)
-        for match in token_match:
-            key = match.group(1)
-            index = match.group(2)
-            if key:
-                parts.append(key)
-            elif index is not None:
-                parts.append(int(index))
-    return parts
+    return _parse_tool_execution_response_path_tokens(raw_value) or []
 
 
 def _extract_tool_execution_response_value(
