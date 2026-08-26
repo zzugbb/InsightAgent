@@ -2033,6 +2033,44 @@ def _extract_http_json_retrieval_count_from_container(raw_value: object) -> int 
     return len(nested_list)
 
 
+def _extract_http_json_retrieval_count_from_nested_containers(
+    raw_value: object,
+    *,
+    depth: int = 0,
+    visited: set[int] | None = None,
+) -> int | None:
+    if depth > 4 or not isinstance(raw_value, Mapping):
+        return None
+    if visited is None:
+        visited = set()
+    value_id = id(raw_value)
+    if value_id in visited:
+        return None
+    visited.add(value_id)
+    has_direct_list_container = any(
+        isinstance(raw_value.get(field_name), (list, tuple))
+        for field_name in _HTTP_JSON_RETRIEVAL_LIST_CONTAINER_FIELDS
+    )
+    if has_direct_list_container:
+        nested_count = _extract_http_json_retrieval_count_from_container(raw_value)
+        if nested_count is not None:
+            return nested_count
+    for nested_value in raw_value.values():
+        if not isinstance(nested_value, Mapping):
+            continue
+        nested_count = _extract_http_json_retrieval_count_from_nested_containers(
+            nested_value,
+            depth=depth + 1,
+            visited=visited,
+        )
+        if nested_count is not None:
+            return nested_count
+    nested_count = _extract_http_json_retrieval_count_from_container(raw_value)
+    if nested_count is not None:
+        return nested_count
+    return None
+
+
 def _extract_http_json_retrieval_count_alias_from_mapping(
     raw_value: Mapping,
 ) -> int | None:
@@ -2086,6 +2124,11 @@ def _http_json_output_implies_retrieval_count(output: dict[str, object]) -> bool
             "results",
             "matches",
         )
+    ) or any(
+        isinstance(output.get(key), Mapping)
+        and _extract_http_json_retrieval_list_from_container(output.get(key))
+        is not None
+        for key in ("data", "result", "response")
     )
 
 
@@ -2195,6 +2238,12 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
                 normalized_output["documents_total"] = len(
                     _flatten_http_json_retrieval_sequence(alias_value)
                 )
+                break
+            nested_count = _extract_http_json_retrieval_count_from_nested_containers(
+                alias_value
+            )
+            if nested_count is not None:
+                normalized_output["documents_total"] = nested_count
                 break
             connection_count = _extract_http_json_retrieval_count_from_container(
                 alias_value
