@@ -1,14 +1,15 @@
 ---
 name: InsightAgent 开发计划
-overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening 与 observability-experience 均已封板。
+overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience 与 rag-product-experience 均已封板。
 current_focus:
+  - 最新封板主线：rag-product-experience 已 100% 封板；知识库治理表版本明细、source/document 文档组摘要、文档组删除闭环、Runtime Debug RAG query 查询级召回摘要、质量分布、召回使用建议、质量/来源/未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签均已收口，RAG status/list、ingest/query、SSE、trace、export 外部契约保持稳定。
   - 最新封板主线：observability-experience 已 100% 封板；任务失败线索摘要与来源分类、Task Center audit failure hint 批量回放、观测筛选、失败来源诊断分组、本地下钻、registry profile/provider source 本地任务快照过滤、任务详情 failure 轨迹快捷定位、本地 failure 回放节点、跨视图 trace_semantic=failure 直达、稳定失败码可读映射、Usage Dashboard top tasks 失败摘要、Audit Logs 服务端 keyword 过滤与失败详情、Trace Failure 语义统计/过滤一致性均已收口，外部 SSE / trace / export shape 不变。
   - 最新封板主线：production-reliability-hardening 已 100% 封板，最新 GitHub checks 2/2 通过；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running / 服务端协程取消落 failed 均已收口。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
-  - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience。
-  - observability-experience 封板验证：backend full slice、frontend node/lint/build/type、targeted TS、backend main/queue e2e、frontend full/queue Chromium、frontend diagnostics finalize、CI tooling、diff hygiene、备份计划 diff 与端口清理检查均通过。
-  - 当前主线：rag-product-experience 已启动，进度约 92%；已完成知识库治理表版本明细展开、source/document 文档组摘要、文档组删除治理、Runtime Debug RAG query 查询级召回摘要、质量分布、召回使用建议、召回质量本地筛选、召回来源本地筛选、未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签，RAG status/list、ingest/query、SSE、trace、export 外部契约保持稳定。
+  - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience、rag-product-experience。
+  - rag-product-experience 封板验证：backend full slice、frontend node/lint/build、targeted TS、RAG/知识库治理 targeted Chromium、diff hygiene、备份计划 diff 与端口清理检查均通过。
+  - 下一主线候选：provider-tool-expansion 或 ci-release-engineering。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
   - 保持先补 failing test 再改实现
@@ -48,7 +49,7 @@ validation_baseline:
   frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --summary-file /tmp/frontend-e2e-finalize-summary.md --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: rag-product-experience 进度约 92%；本轮新增 Runtime Debug RAG query 未知来源筛选，可将缺少 metadata.source 的命中单独定位，继续消费现有 RAG query hits metadata/distance，不改变 RAG status/list、ingest/query、SSE、trace、export 外部契约。先补 runtime-debug-modal-utils 红测并转绿；backend full slice 1950/1950、frontend node 121/121、frontend lint/build、targeted TS、RAG Chromium 2/2、git diff --check、备份计划 diff 检查与 8000/3001 端口清理检查通过。
+latest_validation_note: rag-product-experience 已 100% 封板；最终封板验证包括 backend full slice 1950/1950、frontend node 121/121、frontend lint/build、targeted TS、RAG Chromium 2/2、知识库治理 Chromium 1/1、git diff --check、备份计划 diff 检查与 8000/3001 端口清理检查通过；RAG status/list、ingest/query、SSE、trace、export 外部契约保持稳定。
 todos:
   - id: docs-slimming
     status: completed
@@ -78,8 +79,8 @@ todos:
     status: completed
     content: 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、reserved alias、shared/private 边界、route/runtime trace/export/display、错误出口、前端治理表和 trace 搜索均已完成治理收口并通过完整复验。
   - id: next-mainline-candidates
-    status: completed
-    content: production-reliability-hardening 与 observability-experience 已封板；当前进入 rag-product-experience，后续候选保留 provider-tool-expansion、ci-release-engineering。
+    status: in_progress
+    content: rag-product-experience 已封板；下一主线候选为 provider-tool-expansion 或 ci-release-engineering。
   - id: production-reliability-hardening
     status: completed
     content: 已 100% 封板；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running 与服务端协程取消落 failed 均已收口；backend/frontend/e2e/CI finalize/GitHub checks/diff 封板验证通过。
@@ -87,8 +88,8 @@ todos:
     status: completed
     content: 已 100% 封板；任务失败线索摘要与来源分类、resolveTaskSnapshotSummary failureHint/failureSource、TaskResponse 与 task_failed audit event 兜底恢复、Task Center 列表 audit failure hint 批量回放、稳定错误码可读映射、观测筛选、失败来源诊断分组与本地下钻、registry profile/provider source 本地过滤、任务详情 Failure 轨迹快捷定位、本地 failure 回放节点、跨视图 trace_semantic=failure 直达、Usage Dashboard top tasks 失败摘要、Audit Logs 失败详情与服务端 keyword、Trace Failure 语义统计/过滤一致性均已收口；外部 SSE / trace / export shape 不变。
   - id: rag-product-experience
-    status: in_progress
-    content: 当前主线，进度约 92%；已完成知识库治理表版本明细展开、source/document 文档组摘要、文档组删除治理、Runtime Debug RAG query 查询级召回摘要、质量分布、召回使用建议、召回质量本地筛选、召回来源本地筛选、未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签，按 source/document/version 稳定排序并展示版本数、文档数、chunk 总数、source、document_id、document_version 与 content_hash 摘要；新增文档组删除 route 与 rag_document_delete 审计事件；RAG query 结果基于 hits metadata/distance 显示 best distance、top source、source/document 覆盖数、强/中/弱质量分布、强/中/弱使用建议、本地质量筛选、本地来源筛选、未知来源筛选、组合筛选空结果提示、source/document/version/hash/chunk 命中来源与单条质量标签，targeted Chromium 已覆盖真实 RAG ingest/query 与文档组删除闭环。
+    status: completed
+    content: 已 100% 封板；知识库治理表版本明细、source/document 文档组摘要、文档组删除治理、Runtime Debug RAG query 查询级召回摘要、质量分布、召回使用建议、质量/来源/未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签均已收口；RAG status/list、ingest/query、SSE、trace、export 外部契约保持稳定。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -99,8 +100,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- `queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening` 与 `observability-experience` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口、registry/provider source 治理、RAG 来源/版本/shared 边界治理、生产可靠性治理、失败诊断/任务回放/Trace 语义过滤与 e2e 基线均已收口。
-- 当前进入 `rag-product-experience` 主线，已完成知识库版本明细展开、source/document 文档组摘要、文档组删除治理、Runtime Debug RAG query 查询级召回摘要、质量分布、召回使用建议、召回质量本地筛选、召回来源本地筛选、未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签，后续继续提升检索解释与召回质量呈现。
+- `queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口、registry/provider source 治理、RAG 来源/版本/shared 边界治理、生产可靠性治理、失败诊断/任务回放/Trace 语义过滤、RAG 产品化检索解释与 e2e 基线均已收口。
+- 下一主线候选为 `provider-tool-expansion` 或 `ci-release-engineering`。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 
 ## 已完成能力摘要
@@ -163,8 +164,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 后续维护线
 
-- `production-reliability-hardening` 与 `observability-experience` 已 100% 封板；后续继续以先红测、再实现、再 targeted/full slice 的方式推进新主线。
-- 当前主线：`rag-product-experience`，进度约 92%，已完成知识库版本明细展开、source/document 文档组摘要、文档组删除治理、RAG query 查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签；下一步继续围绕检索解释与召回质量呈现补红测。
+- `production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 已 100% 封板；后续继续以先红测、再实现、再 targeted/full slice 的方式推进新主线。
+- 下一主线候选：`provider-tool-expansion` 或 `ci-release-engineering`。
 - 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 维护约定

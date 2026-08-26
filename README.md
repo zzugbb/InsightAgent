@@ -5,7 +5,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前状态
 
 - 阶段 5 基础产品化已完成：会话/任务/消息持久化、SSE、Trace、Memory、RAG、鉴权、PostgreSQL、任务取消/超时、running task 恢复、usage dashboard、审计与任务/会话导出已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening` 与 `observability-experience` 均已封板。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 均已封板。
 - 当前队列基线：任务默认 `queued`，拿到进程内执行槽位后切 `running`；全局并发默认 `TASK_QUEUE_MAX_CONCURRENT=32`，可选 per-user/per-session 限额默认 `0` 关闭；等待队列保持 capacity-aware oldest eligible FIFO，queued cancel 会移出等待队列。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，覆盖全局、当前用户与可选当前会话 active/waiting/available 计数、限额触顶、`pressure_state`、fairness 开关、等待策略与 poll interval；前后端 typed contract 已固定 required governance 字段、optional scope 字段和枚举值。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
@@ -14,7 +14,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。主线收口了 waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放与失败自愈。
 - 关键可靠性契约：客户端 SSE 断开只释放本进程 active slot，并保留 running 任务供 reload/reconnect/cancel；服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属。active slot、DELETE 204、SSE / trace / export shape 保持不变。
 - `observability-experience` 已 100% 封板：任务快照会从 trace diagnostics、TaskResponse failure fields 与 task_failed audit event 中提取失败线索并标注来源（SSE error / tool error / trace content / persisted trace），Task Center/任务详情/Usage Dashboard 会统一把稳定错误码映射为可读失败说明；Task Center 可从任务列表批量回放 audit failure hint，展示/搜索该线索与来源，并支持按 Needs attention / Failed status / Failure hint / Failure trace 做观测筛选，且会按当前筛选后的可见任务汇总失败来源诊断分组，诊断来源 chip 可本地下钻到 Failure hint + failure source 筛选而不触发服务端 keyword 查询；Task Center 的 registry profile/provider source 筛选已进入本地任务快照过滤；任务详情页会展示同一失败摘要，可从失败线索快捷定位 Failure 轨迹，并在原始 trace 缺少错误 step 时合成本地 failure 回放节点；Task Center、Usage Dashboard 与 Audit Logs 的失败任务链接可通过 `trace_semantic=failure` 直接打开任务详情 Failure 轨迹；Trace Failure 语义已覆盖 rate limited、unauthorized、permission denied、connection refused 等稳定失败码文本；Trace 语义统计与 semantic filter 结果保持一致，任务详情页语义统计卡可直接下钻筛选对应轨迹；Audit Logs keyword 已进入服务端过滤，分页、total、导出与 e2e 搜索口径一致；Trace 语义统计已新增 Failure 维度，Inspector 与任务详情页可按失败语义过滤轨迹。
-- 当前主线已进入 `rag-product-experience`，进度约 92%：知识库治理表可展开查看同一知识库下的版本明细，并按 source/document 汇总文档组摘要，展示每个文档组的版本数与 chunk 总数；文档组支持删除该 source/document 下全部 chunks，后端新增 `rag_document_delete` 审计事件；Runtime Debug 的 RAG 查询结果会基于 metadata/distance 展示查询级召回摘要、质量分布、召回使用建议、召回质量本地筛选、召回来源本地筛选、未知来源筛选、组合筛选空结果提示、source/document/version/hash/chunk 命中来源摘要、强/中/弱召回质量标签和“距离越低语义越接近”的解释；RAG ingest/query/status/list、外部 SSE / trace / export / e2e 契约保持稳定。
+- `rag-product-experience` 已 100% 封板：知识库治理表支持版本明细、source/document 文档组摘要和文档组删除闭环，后端记录 `rag_document_delete` 审计事件；Runtime Debug 的 RAG 查询结果展示查询级召回摘要、质量分布、召回使用建议、召回质量筛选、来源筛选、未知来源筛选、组合筛选空结果提示、命中来源摘要、强/中/弱召回质量标签和 distance 解释；RAG ingest/query/status/list、外部 SSE / trace / export / e2e 契约保持稳定。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
 ## 当前验证基线
@@ -54,9 +54,9 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 ## 当前开发计划
 
-1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`。
-2. 当前主线：`rag-product-experience` 已启动，进度约 92%；已完成知识库版本明细展开、source/document 文档组摘要、文档组删除治理、RAG query 查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签，下一步继续围绕检索解释和召回质量呈现补红测。
-3. 本轮验证来源为 backend full slice、frontend node/lint/build、targeted TS、targeted Chromium、diff hygiene、备份计划 diff 与端口清理检查。
+1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`、`rag-product-experience`。
+2. 本轮封板验证来源为 backend full slice、frontend node/lint/build、targeted TS、RAG/知识库治理 targeted Chromium、diff hygiene、备份计划 diff 与端口清理检查。
+3. 下一主线候选：`provider-tool-expansion` 或 `ci-release-engineering`。
 4. 继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。
 
 ## 后续候选主线
