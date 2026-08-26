@@ -1888,6 +1888,9 @@ _HTTP_JSON_RETRIEVAL_COUNT_CONTAINER_FIELDS = (
     "meta",
     "pageInfo",
     "page_info",
+    "page",
+    "pagination",
+    "paging",
 )
 _HTTP_JSON_RETRIEVAL_LIST_CONTAINER_FIELDS = (
     "edges",
@@ -2132,16 +2135,26 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
             if alias_name in normalized_output:
                 normalized_output["result"] = normalized_output[alias_name]
                 break
-    documents_total = _normalize_nonnegative_int_count_value(
-        normalized_output.get("documents_total")
-    )
+    raw_documents_total = normalized_output.get("documents_total")
+    had_documents_total = "documents_total" in normalized_output
+    documents_total = _normalize_nonnegative_int_count_value(raw_documents_total)
     if documents_total is not None:
         normalized_output["documents_total"] = documents_total
     else:
+        if had_documents_total:
+            normalized_output.pop("documents_total", None)
+        if _http_json_output_implies_retrieval_count(normalized_output):
+            root_count = _extract_http_json_retrieval_count_alias_from_mapping(
+                normalized_output
+            )
+            if root_count is not None:
+                normalized_output["documents_total"] = root_count
         list_alias_names = ("documents", "items")
         if _http_json_output_implies_retrieval_count(normalized_output):
             list_alias_names = (*list_alias_names, "data", "records")
         for alias_name in list_alias_names:
+            if "documents_total" in normalized_output:
+                break
             alias_value = normalized_output.get(alias_name)
             if isinstance(alias_value, (list, tuple)):
                 normalized_output["documents_total"] = len(
@@ -2165,6 +2178,8 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
                 if alias_count is not None:
                     normalized_output["documents_total"] = alias_count
                     break
+        if "documents_total" not in normalized_output and had_documents_total:
+            normalized_output["documents_total"] = raw_documents_total
     hit_count = _normalize_nonnegative_int_count_value(
         normalized_output.get("hit_count")
     )

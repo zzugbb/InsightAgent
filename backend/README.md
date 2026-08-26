@@ -5,7 +5,7 @@
 ## 当前状态
 
 - 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 均已封板；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 均已封板；当前主线进入 `provider-tool-expansion`，进度约 10%；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
 - `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
@@ -16,6 +16,7 @@
 - 关键后端契约：客户端 SSE 断开只释放本进程 active slot，并保留 running 任务供 reload/reconnect/cancel；服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属。active slot、204 响应与外部 SSE / trace / export 契约不变。
 - `observability-experience` 已 100% 封板；已完成任务失败线索聚合、来源分类、TaskResponse failure fields、task_failed audit event 兜底恢复、Task Center 任务列表 audit failure hint 批量回放、Task Center registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组与来源 chip 本地下钻、跨视图 Failure URL 预设直达、稳定失败码文本纳入前端 Failure 语义、Usage Dashboard / Audit Logs 到任务详情的回放入口、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure/semantic 语义统计、统计卡下钻与 Task Center 观测筛选；后端 SSE / trace / export shape 保持不变。
 - `rag-product-experience` 已 100% 封板；前端知识库治理表消费现有 `document_versions` 展开版本明细并派生 source/document 文档组摘要；后端 `DELETE /api/rag/knowledge-bases/{knowledge_base_id}/documents` 支持按 source/document 删除文档组，并记录 `rag_document_delete` 审计事件；Runtime Debug 基于现有 RAG query metadata/distance 展示查询级召回摘要、质量分布、召回使用建议、质量/来源/未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签；RAG status/list、ingest/query、SSE、trace 与 export 外部响应 shape 保持不变。
+- `provider-tool-expansion` 已启动：HTTP JSON provider search 输出归一化支持分页型 `data`/`records` 当前页结果配合 `meta.page.total` / `pagination.total` / `paging.total` 等显式总量元数据；`documents_total` 优先取服务端总量，`hit_count` 保持当前页命中数，无效 `documents_total` 仍按既有列表 fallback 修正，trace/export/display 输出 shape 不变。
 
 ## 当前验证基线
 
@@ -23,7 +24,8 @@
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`：`66/66` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`：`361/361` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings`：`216/216` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1950/1950` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1951/1951` 通过
+- provider-tool targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k paginated`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k http_json`，`522/522` 通过
 - usage observability targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_dashboard`，`40/40` 通过
 - RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`79/79` 通过
 - RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
@@ -54,13 +56,12 @@
 
 ## 下一步后端计划
 
-1. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`、`rag-product-experience`。
-2. 本轮封板验证来源为 backend full slice、frontend node/lint/build、targeted TS、RAG/知识库治理 targeted Chromium、diff hygiene、备份计划 diff 与端口清理检查。
-3. 下一主线候选：`provider-tool-expansion` 或 `ci-release-engineering`；继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
+1. 当前主线：`provider-tool-expansion`，进度约 10%；本轮已完成分页型 provider search 总量归一化，下一步继续按小红测补真实 provider/tool 协议输出差异。
+2. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`、`rag-product-experience`。
+3. 后续候选主线：`ci-release-engineering`；继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
 
-- `provider-tool-expansion`：新增真实 provider/tool 协议时先补红测，再局部归一化 registry/runtime 输出。
 - `ci-release-engineering`：把 backend slice、targeted RAG、queue phase、full e2e 和 diff hygiene 固化成更清晰的分层门禁。
 
 ## 当前已有内容
