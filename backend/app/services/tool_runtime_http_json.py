@@ -1837,6 +1837,15 @@ def _normalize_nonnegative_int_count_value(value: object) -> int | None:
         normalized_value = value.strip()
         if normalized_value.isdigit():
             return int(normalized_value)
+        if "," in normalized_value:
+            parts = normalized_value.split(",")
+            if (
+                parts
+                and parts[0].isdigit()
+                and 1 <= len(parts[0]) <= 3
+                and all(len(part) == 3 and part.isdigit() for part in parts[1:])
+            ):
+                return int("".join(parts))
         if "." in normalized_value:
             whole_part, fractional_part = normalized_value.split(".", 1)
             if (

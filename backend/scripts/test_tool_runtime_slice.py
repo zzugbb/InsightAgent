@@ -256,6 +256,7 @@ from tool_runtime_slice.http_json_response_protocol import HttpJsonResponseProto
 from tool_runtime_slice.http_json_template_validation import HttpJsonTemplateValidationMixin
 from tool_runtime_slice.model_dump_routes import ModelDumpRoutesMixin
 from tool_runtime_slice.planning_provider import PlanningProviderMixin
+from tool_runtime_slice.provider_tool_expansion import ProviderToolExpansionMixin
 from tool_runtime_slice.provider_source_http_json import ProviderSourceHttpJsonMixin
 from tool_runtime_slice.provider_streaming import ProviderStreamingMixin
 from tool_runtime_slice.registry_file_diagnostics import RegistryFileDiagnosticsMixin
@@ -309,6 +310,7 @@ from tool_runtime_slice.production_reliability_startup import ProductionReliabil
 
 class ToolRuntimeSliceTests(
     ProviderSourceHttpJsonMixin,
+    ProviderToolExpansionMixin,
     PlanningProviderMixin,
     SettingsRegistryMixin,
     HttpJsonMappingMixin,
