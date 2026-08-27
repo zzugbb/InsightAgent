@@ -920,6 +920,49 @@ class PlanningProviderMixin:
             {"expression": "32/4"},
         )
 
+    def test_build_tool_plan_provider_accepts_serialized_tool_calls_field(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "gateway"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "message": {
+                        "tool_calls": json.dumps(
+                            [
+                                {
+                                    "function": {
+                                        "name": "calc_eval",
+                                        "arguments": json.dumps(
+                                            {"expression": "54/9"},
+                                            ensure_ascii=False,
+                                        ),
+                                    }
+                                }
+                            ],
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "54/9"},
+        )
+
     def test_build_tool_plan_provider_accepts_camel_case_message_tool_calls(
         self,
     ) -> None:

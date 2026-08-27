@@ -5,7 +5,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 ## 当前状态
 
 - 阶段 5 基础产品化已完成：会话/任务/消息持久化、SSE、Trace、Memory、RAG、鉴权、PostgreSQL、任务取消/超时、running task 恢复、usage dashboard、审计与任务/会话导出已具备可演示闭环。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 均已封板；当前主线进入 `provider-tool-expansion`，进度约 90%。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 均已封板；当前主线进入 `provider-tool-expansion`，进度约 91%。
 - 当前队列基线：任务默认 `queued`，拿到进程内执行槽位后切 `running`；全局并发默认 `TASK_QUEUE_MAX_CONCURRENT=32`，可选 per-user/per-session 限额默认 `0` 关闭；等待队列保持 capacity-aware oldest eligible FIFO，queued cancel 会移出等待队列。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，覆盖全局、当前用户与可选当前会话 active/waiting/available 计数、限额触顶、`pressure_state`、fairness 开关、等待策略与 poll interval；前后端 typed contract 已固定 required governance 字段、optional scope 字段和枚举值。
 - `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
@@ -17,6 +17,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `rag-product-experience` 已 100% 封板：知识库治理表支持版本明细、source/document 文档组摘要和文档组删除闭环，后端记录 `rag_document_delete` 审计事件；Runtime Debug 的 RAG 查询结果展示查询级召回摘要、质量分布、召回使用建议、召回质量筛选、来源筛选、未知来源筛选、组合筛选空结果提示、命中来源摘要、强/中/弱召回质量标签和 distance 解释；RAG ingest/query/status/list、外部 SSE / trace / export / e2e 契约保持稳定。
 - `provider-tool-expansion` 已启动：HTTP JSON provider search 归一化已支持分页型 `data`/`records` 当前页结果配合 `meta.page.total` / `pagination.total` / `paging.total` 等显式总量元数据，也支持 GraphQL connection 的 `data.search.pageInfo.totalCount + edges[]`、Meilisearch/Algolia 风格 `estimatedTotalHits` / `nbHits`、Brave 风格 `web.results` 嵌套结果容器、Bing 风格 `webPages.totalEstimatedMatches + value[]` 服务端总量、SearXNG/元搜索风格 `number_of_results + results[]` 总量、Crossref/学术检索风格 `message.total-results + items[]` 总量与当前页命中、PubMed/NCBI ESearch 风格 `esearchresult.count + idlist[]` 总量与当前页命中、Europe PMC 风格 `hitCount + resultList.result[]` 服务端总量与当前页命中、Google Custom Search 风格 `queries.request[].totalResults + items[]` 服务端总量与当前页命中、Serper/Google Search 风格 `searchInformation.totalResults + organic[]` 服务端总量与当前页命中、引用型 answer-search 的 `citations` / `search_results` 命中列表与 `totalResults: "1,234"` 这类安全千分位总量字符串；显式 `result_fields` 支持 `$['@odata.count']` / `$["@odata.count"]` 这类 bracket quoted 特殊字段键；`documents_total` 优先表示服务端总量，`hit_count` 保持当前页命中数；provider planner 已支持 Gemini/Vertex 风格 `candidates[].content.parts[].functionCall{name,args}`，且 `args` 可为对象或 JSON 字符串，也支持 Bedrock/Claude Converse 风格 `content[].toolUse{name,input}`、顶层 `message.tool_calls[]` / `delta.tool_calls[]` wrapper，以及 AI SDK 风格 camelCase `message.toolCalls[]` 容器和 `toolCall` / `toolName` / `functionName` 工具名别名，且 `input`/`arguments` 可为对象或 JSON 字符串；旧 trace/export 回放输出契约保持稳定。
 - 默认运行策略保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- 本轮 provider planner 新增整体序列化 JSON 字符串 `tool_calls`/`toolCalls` 容器解析，旧 trace/export 回放输出契约保持稳定。
 
 ## 当前验证基线
 
@@ -24,9 +25,9 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`：`66/66` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`：`361/361` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings`：`216/216` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1972/1972` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1973/1973` 通过
 - provider-tool targeted slice：`... -k serper_organic`、`... -k custom_search_total`、`... -k result_list_hit_count` 等各 `1/1` 通过；`... -k provider_search`，`13/13` 通过；`... -k http_json`，`531/531` 通过
-- provider planner targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_tool_name`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_function_name`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_message_tool_calls`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k top_level_message_tool_calls`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_use`，`2/2` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k gemini`，`2/2` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_plan_provider`，`49/49` 通过
+- provider planner targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_tool_name`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_function_name`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_message_tool_calls`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k top_level_message_tool_calls`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k serialized_tool_calls_field`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_use`，`2/2` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k gemini`，`2/2` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_plan_provider`，`50/50` 通过
 - usage observability targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_dashboard`，`40/40` 通过
 - RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`79/79` 通过
 - RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
@@ -57,7 +58,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 ## 当前开发计划
 
-1. 当前主线：`provider-tool-expansion`，进度约 90%；本轮完成 provider planner camelCase `message.toolCalls[]` 下 `toolName` / `functionName` 工具名别名解析，继续兼容 Gemini/Vertex、Bedrock/Claude Converse、OpenAI-style tool calls 与顶层 message/delta wrapper；下一步继续围绕真实 provider/tool 协议输出差异找小红测。
+1. 当前主线：`provider-tool-expansion`，进度约 91%；本轮完成 provider planner 对整体序列化 JSON 字符串 `tool_calls`/`toolCalls` 容器的解析，并回归既有 Gemini/Vertex、Bedrock/Claude Converse、OpenAI-style tool calls 与顶层 message/delta wrapper；下一步继续围绕真实 provider/tool 协议输出差异找小红测。
 2. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`、`rag-product-experience`。
 3. 后续候选主线：`ci-release-engineering`。
 4. 继续保持外部 SSE / trace / export / e2e 契约稳定，按“小红测 -> 实现 -> targeted/full slice”推进。

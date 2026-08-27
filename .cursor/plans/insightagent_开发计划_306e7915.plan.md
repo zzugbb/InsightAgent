@@ -2,14 +2,14 @@
 name: InsightAgent 开发计划
 overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience 与 rag-product-experience 均已封板；当前主线为 provider-tool-expansion。
 current_focus:
-  - 当前主线：provider-tool-expansion 已启动，进度约 90%；HTTP JSON provider search 输出归一化已支持分页型 data/records 当前页结果配合 meta.page.total / pagination.total / paging.total 等显式总量元数据、GraphQL connection data.search.pageInfo.totalCount + edges[]、Meilisearch/Algolia estimatedTotalHits / nbHits、Brave web.results 嵌套结果容器、Bing webPages.totalEstimatedMatches + value[] 服务端总量、SearXNG/元搜索风格 number_of_results + results[] 总量、Crossref/学术检索风格 message.total-results + items[] 总量与当前页命中、PubMed/NCBI ESearch 风格 esearchresult.count + idlist[] 总量与当前页命中、Europe PMC 风格 hitCount + resultList.result[] 服务端总量与当前页命中、Google Custom Search 风格 queries.request[].totalResults + items[] 服务端总量与当前页命中、Serper/Google Search 风格 searchInformation.totalResults + organic[] 服务端总量与当前页命中、引用型 answer-search citations / search_results 命中列表，也支持 totalResults: "1,234" 这类安全千分位总量字符串；显式 result_fields 支持 $['@odata.count'] / $["@odata.count"] 这类 bracket quoted 特殊字段键；documents_total 优先表示服务端总量，hit_count 保持当前页命中数；provider planner 已支持 Gemini/Vertex 风格 candidates[].content.parts[].functionCall{name,args}、Bedrock/Claude Converse 风格 content[].toolUse{name,input}、顶层 message.tool_calls[] / delta.tool_calls[] wrapper，以及 AI SDK 风格 camelCase message.toolCalls[] 容器和 toolCall/toolName/functionName 工具名别名，args/input/arguments 可为对象或 JSON 字符串；旧 trace/export/display 输出 shape 保持稳定。
+  - 当前主线：provider-tool-expansion 已启动，进度约 91%；HTTP JSON provider search 输出归一化已支持分页型 data/records 当前页结果配合 meta.page.total / pagination.total / paging.total 等显式总量元数据、GraphQL connection data.search.pageInfo.totalCount + edges[]、Meilisearch/Algolia estimatedTotalHits / nbHits、Brave web.results 嵌套结果容器、Bing webPages.totalEstimatedMatches + value[] 服务端总量、SearXNG/元搜索风格 number_of_results + results[] 总量、Crossref/学术检索风格 message.total-results + items[] 总量与当前页命中、PubMed/NCBI ESearch 风格 esearchresult.count + idlist[] 总量与当前页命中、Europe PMC 风格 hitCount + resultList.result[] 服务端总量与当前页命中、Google Custom Search 风格 queries.request[].totalResults + items[] 服务端总量与当前页命中、Serper/Google Search 风格 searchInformation.totalResults + organic[] 服务端总量与当前页命中、引用型 answer-search citations / search_results 命中列表，也支持 totalResults: "1,234" 这类安全千分位总量字符串；显式 result_fields 支持 $['@odata.count'] / $["@odata.count"] 这类 bracket quoted 特殊字段键；documents_total 优先表示服务端总量，hit_count 保持当前页命中数；provider planner 已支持 Gemini/Vertex 风格 candidates[].content.parts[].functionCall{name,args}、Bedrock/Claude Converse 风格 content[].toolUse{name,input}、顶层 message.tool_calls[] / delta.tool_calls[] wrapper，以及 AI SDK 风格 camelCase message.toolCalls[] 容器和 toolCall/toolName/functionName 工具名别名，args/input/arguments 可为对象或 JSON 字符串，且整体序列化 JSON 字符串的 tool_calls/toolCalls 容器可解析；旧 trace/export/display 输出 shape 保持稳定。
   - 最新封板主线：rag-product-experience 已 100% 封板；知识库治理表版本明细、source/document 文档组摘要、文档组删除闭环、Runtime Debug RAG query 查询级召回摘要、质量分布、召回使用建议、质量/来源/未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签均已收口，RAG status/list、ingest/query、SSE、trace、export 外部契约保持稳定。
   - 最新封板主线：observability-experience 已 100% 封板；任务失败线索摘要与来源分类、Task Center audit failure hint 批量回放、观测筛选、失败来源诊断分组、本地下钻、registry profile/provider source 本地任务快照过滤、任务详情 failure 轨迹快捷定位、本地 failure 回放节点、跨视图 trace_semantic=failure 直达、稳定失败码可读映射、Usage Dashboard top tasks 失败摘要、Audit Logs 服务端 keyword 过滤与失败详情、Trace Failure 语义统计/过滤一致性均已收口，外部 SSE / trace / export shape 不变。
   - 最新封板主线：production-reliability-hardening 已 100% 封板，最新 GitHub checks 2/2 通过；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running / 服务端协程取消落 failed 均已收口。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
   - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience、rag-product-experience。
-  - provider-tool-expansion 当前验证：paginated 红测、formatted_total 红测、bracket_quoted 红测、graphql_connection_total 红测、estimated_total_hits_alias 红测、nested_web_results 红测、bing_total_estimated_matches 红测、citations_as_hits 红测、number_of_results_total 红测、hyphenated_total_results 红测、esearchresult_count_and_idlist 红测、result_list_hit_count 红测、custom_search_total 红测、serper_organic 红测、top_level_message_tool_calls 红测、camel_case_message_tool_calls 红测、camel_case_tool_name 红测、camel_case_function_name 红测、Bedrock toolUse 与 toolUse string input 红测、provider_search 主题 slice、HTTP JSON 主题 slice、Gemini planner 红测、tool plan provider 主题 slice、backend full slice、frontend node/lint/build、diff hygiene 与备份计划 diff 检查均通过。
+  - provider-tool-expansion 当前验证：paginated 红测、formatted_total 红测、bracket_quoted 红测、graphql_connection_total 红测、estimated_total_hits_alias 红测、nested_web_results 红测、bing_total_estimated_matches 红测、citations_as_hits 红测、number_of_results_total 红测、hyphenated_total_results 红测、esearchresult_count_and_idlist 红测、result_list_hit_count 红测、custom_search_total 红测、serper_organic 红测、top_level_message_tool_calls 红测、camel_case_message_tool_calls 红测、camel_case_tool_name 红测、camel_case_function_name 红测、serialized_tool_calls_field 红测、Bedrock toolUse 与 toolUse string input 红测、provider_search 主题 slice、HTTP JSON 主题 slice、Gemini planner 红测、tool plan provider 主题 slice、backend full slice、frontend node/lint/build、diff hygiene 与备份计划 diff 检查均通过。
   - 后续候选主线：ci-release-engineering。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
@@ -20,7 +20,7 @@ constraints:
   - 测试/e2e/启动/提交先按 docs/development-runbook.md 使用固定依赖与提权边界，避免重复用失败探测环境
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
-  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1972/1972)
+  backend_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1973/1973)
   backend_provider_tool_paginated_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k paginated (1/1)
   backend_provider_tool_formatted_total_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k formatted_total (1/1)
   backend_provider_tool_bracket_quoted_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k bracket_quoted (1/1)
@@ -44,7 +44,8 @@ validation_baseline:
   backend_provider_tool_camel_case_function_name_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_function_name (1/1)
   backend_provider_tool_camel_case_message_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_message_tool_calls (1/1)
   backend_provider_tool_top_level_message_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k top_level_message_tool_calls (1/1)
-  backend_tool_plan_provider_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_plan_provider (49/49)
+  backend_provider_tool_serialized_tool_calls_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k serialized_tool_calls_field (1/1)
+  backend_tool_plan_provider_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_plan_provider (50/50)
   backend_production_reliability_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability (35/35)
   backend_queue_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue (66/66)
   backend_task_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task (361/361)
@@ -74,7 +75,7 @@ validation_baseline:
   frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --summary-file /tmp/frontend-e2e-finalize-summary.md --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: provider-tool-expansion 当前进度约 90%；本轮完成 provider planner camelCase message.toolCalls[] 下 toolName/functionName 工具名别名解析；验证包括 camel_case_tool_name 1/1、camel_case_function_name 1/1、camel_case_message_tool_calls 1/1、top_level_message_tool_calls 1/1、tool_use 2/2、gemini 2/2、tool_plan_provider 49/49、backend full slice 1972/1972、frontend node 121/121、frontend lint/build、py_compile、git diff --check 与备份计划 diff 检查通过；外部 SSE、trace、export、display shape 保持稳定。
+latest_validation_note: provider-tool-expansion 当前进度约 91%；本轮完成 provider planner 对整体序列化 JSON 字符串 tool_calls/toolCalls 容器的解析；验证包括 serialized_tool_calls_field 1/1、camel_case_tool_name 1/1、camel_case_function_name 1/1、camel_case_message_tool_calls 1/1、top_level_message_tool_calls 1/1、tool_use 2/2、gemini 2/2、tool_plan_provider 50/50、backend full slice 1973/1973、frontend node 121/121、frontend lint/build、py_compile、git diff --check 与备份计划 diff 检查通过；外部 SSE、trace、export、display shape 保持稳定。
 todos:
   - id: docs-slimming
     status: completed
@@ -117,7 +118,7 @@ todos:
     content: 已 100% 封板；知识库治理表版本明细、source/document 文档组摘要、文档组删除治理、Runtime Debug RAG query 查询级召回摘要、质量分布、召回使用建议、质量/来源/未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签均已收口；RAG status/list、ingest/query、SSE、trace、export 外部契约保持稳定。
   - id: provider-tool-expansion
     status: in_progress
-    content: 当前进度约 90%；已完成分页型 provider search 显式总量归一化、GraphQL connection 服务端总量归一化、Meilisearch/Algolia 服务端总量别名归一化、Brave web.results 嵌套搜索结果归一化、Bing webPages.totalEstimatedMatches + value[] 服务端总量归一化、SearXNG/元搜索风格 number_of_results + results[] 总量归一化、Crossref/学术检索风格 message.total-results + items[] 总量与命中归一化、PubMed/NCBI ESearch 风格 esearchresult.count + idlist[] 总量与命中归一化、Europe PMC 风格 hitCount + resultList.result[] 服务端总量与当前页命中归一化、Google Custom Search 风格 queries.request[].totalResults + items[] 服务端总量与当前页命中归一化、Serper/Google Search 风格 searchInformation.totalResults + organic[] 服务端总量与当前页命中归一化、引用型 answer-search citations / search_results 命中列表归一化、搜索 provider 千分位总量字符串归一化、显式 result_fields bracket quoted 特殊字段键解析，以及 Gemini/Vertex functionCall、Bedrock/Claude Converse toolUse、顶层 message.tool_calls / delta.tool_calls wrapper、camelCase toolCalls 容器与 toolCall/toolName/functionName 工具名别名解析，并兼容 input/arguments JSON 字符串参数；下一步继续按小红测补真实 provider/tool 协议输出差异。
+    content: 当前进度约 91%；已完成分页型 provider search 显式总量归一化、GraphQL connection 服务端总量归一化、Meilisearch/Algolia 服务端总量别名归一化、Brave web.results 嵌套搜索结果归一化、Bing webPages.totalEstimatedMatches + value[] 服务端总量归一化、SearXNG/元搜索风格 number_of_results + results[] 总量归一化、Crossref/学术检索风格 message.total-results + items[] 总量与命中归一化、PubMed/NCBI ESearch 风格 esearchresult.count + idlist[] 总量与命中归一化、Europe PMC 风格 hitCount + resultList.result[] 服务端总量与当前页命中归一化、Google Custom Search 风格 queries.request[].totalResults + items[] 服务端总量与当前页命中归一化、Serper/Google Search 风格 searchInformation.totalResults + organic[] 服务端总量与当前页命中归一化、引用型 answer-search citations / search_results 命中列表归一化、搜索 provider 千分位总量字符串归一化、显式 result_fields bracket quoted 特殊字段键解析，以及 Gemini/Vertex functionCall、Bedrock/Claude Converse toolUse、顶层 message.tool_calls / delta.tool_calls wrapper、camelCase toolCalls 容器与 toolCall/toolName/functionName 工具名别名解析，并兼容 input/arguments JSON 字符串参数和整体序列化 JSON 字符串的 tool_calls/toolCalls 容器；下一步继续按小红测补真实 provider/tool 协议输出差异。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -129,7 +130,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
 - `queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口、registry/provider source 治理、RAG 来源/版本/shared 边界治理、生产可靠性治理、失败诊断/任务回放/Trace 语义过滤、RAG 产品化检索解释与 e2e 基线均已收口。
-- 当前主线为 `provider-tool-expansion`，进度约 90%；后续候选为 `ci-release-engineering`。
+- 当前主线为 `provider-tool-expansion`，进度约 91%；后续候选为 `ci-release-engineering`。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 
 ## 已完成能力摘要
@@ -143,7 +144,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1972/1972`。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1973/1973`。
 - Backend provider-tool paginated slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k paginated`，当前 `1/1`。
 - Backend provider-tool formatted total slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k formatted_total`，当前 `1/1`。
 - Backend provider-tool bracket quoted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k bracket_quoted`，当前 `1/1`。
@@ -167,7 +168,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - Backend provider-tool camelCase function name slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_function_name`，当前 `1/1`。
 - Backend provider-tool camelCase message slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k camel_case_message_tool_calls`，当前 `1/1`。
 - Backend provider-tool top-level message slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k top_level_message_tool_calls`，当前 `1/1`。
-- Backend tool plan provider slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_plan_provider`，当前 `49/49`。
+- Backend provider-tool serialized tool calls slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k serialized_tool_calls_field`，当前 `1/1`。
+- Backend tool plan provider slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_plan_provider`，当前 `50/50`。
 - Backend production reliability slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`，当前 `35/35`。
 - Backend queue slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`，当前 `66/66`。
 - Backend task slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`，当前 `361/361`。

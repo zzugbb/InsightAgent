@@ -314,6 +314,17 @@ def _coerce_provider_tool_plan_payload(raw_value: object) -> object:
     return attrs or raw_value
 
 
+def _coerce_provider_tool_plan_structured_value(raw_value: object) -> object:
+    raw_value = _coerce_tool_registry_spec_payload(raw_value)
+    if not isinstance(raw_value, str):
+        return raw_value
+    try:
+        parsed_value = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return raw_value
+    return _coerce_tool_registry_spec_payload(parsed_value)
+
+
 def _extract_provider_tool_plan_items_from_payload(
     payload: object,
 ) -> list[object] | None:
@@ -336,7 +347,7 @@ def _extract_provider_tool_plan_items_from_payload(
     tools = _coerce_tool_registry_spec_payload(tools)
     if _is_non_text_sequence(tools):
         return list(tools)
-    tool_calls = _coerce_tool_registry_spec_payload(
+    tool_calls = _coerce_provider_tool_plan_structured_value(
         payload.get("tool_calls", payload.get("toolCalls"))
     )
     if _is_non_text_sequence(tool_calls):
