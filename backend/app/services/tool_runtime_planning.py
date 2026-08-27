@@ -604,7 +604,7 @@ def _normalize_provider_tool_plan_item(
     )
     if not tool_name:
         return None
-    tool_input = _coerce_provider_tool_plan_payload(raw_item.get("input"))
+    tool_input = _coerce_provider_tool_plan_input_mapping(raw_item.get("input"))
     if not isinstance(tool_input, Mapping):
         tool_input = _coerce_provider_tool_plan_input_mapping(
             raw_item.get("arguments")

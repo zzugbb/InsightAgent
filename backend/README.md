@@ -5,7 +5,7 @@
 ## 当前状态
 
 - 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 均已封板；当前主线进入 `provider-tool-expansion`，进度约 52%；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
+- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 均已封板；当前主线进入 `provider-tool-expansion`，进度约 58%；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 - `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
 - `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
 - `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
@@ -24,9 +24,9 @@
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`：`66/66` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`：`361/361` 通过
 - `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings`：`216/216` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1958/1958` 通过
+- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1959/1959` 通过
 - provider-tool targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k paginated`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k formatted_total`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k bracket_quoted`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k graphql_connection_total`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k estimated_total_hits_alias`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k provider_search`，`4/4` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k http_json`，`522/522` 通过
-- provider planner targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k bedrock_tool_use_content`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k gemini`，`2/2` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_plan_provider`，`44/44` 通过
+- provider planner targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_use_string_input`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k bedrock`，`1/1` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k gemini`，`2/2` 通过；`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_plan_provider`，`45/45` 通过
 - usage observability targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_dashboard`，`40/40` 通过
 - RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`79/79` 通过
 - RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
@@ -57,7 +57,7 @@
 
 ## 下一步后端计划
 
-1. 当前主线：`provider-tool-expansion`，进度约 52%；本轮完成 Bedrock/Claude Converse 风格 `content[].toolUse{name,input}` planner 协议解析；下一步继续按小红测补真实 provider/tool 协议输出差异。
+1. 当前主线：`provider-tool-expansion`，进度约 58%；本轮完成 Bedrock/Claude Converse 风格 `toolUse.input` JSON 字符串参数解析；下一步继续按小红测补真实 provider/tool 协议输出差异。
 2. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`、`rag-product-experience`。
 3. 后续候选主线：`ci-release-engineering`；继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 

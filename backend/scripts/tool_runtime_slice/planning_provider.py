@@ -1003,6 +1003,45 @@ class PlanningProviderMixin:
             {"expression": "64/8"},
         )
 
+    def test_build_tool_plan_provider_accepts_tool_use_string_input(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "bedrock"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": "toolu_calc_2",
+                                "name": "calc_eval",
+                                "input": json.dumps(
+                                    {"expression": "72/9"},
+                                    ensure_ascii=False,
+                                ),
+                            }
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "72/9"},
+        )
+
     def test_build_tool_plan_provider_accepts_flattened_task_retrieve_fields(self) -> None:
         class FakeProvider:
             provider = "openai"
