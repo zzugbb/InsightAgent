@@ -266,6 +266,10 @@ _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
     "message",
     "delta",
     "tool_calls",
+    "toolUse",
+    "tool_use",
+    "toolUseId",
+    "tool_use_id",
     "function_call",
     "functionCall",
     "function",
@@ -331,6 +335,11 @@ def _extract_provider_tool_plan_items_from_payload(
     tool_calls = _coerce_tool_registry_spec_payload(payload.get("tool_calls"))
     if _is_non_text_sequence(tool_calls):
         return list(tool_calls)
+    tool_use = _coerce_tool_registry_spec_payload(
+        payload.get("toolUse", payload.get("tool_use"))
+    )
+    if isinstance(tool_use, Mapping):
+        return [tool_use]
     function_call = _coerce_tool_registry_spec_payload(payload.get("function_call"))
     if isinstance(function_call, Mapping):
         return [function_call]
