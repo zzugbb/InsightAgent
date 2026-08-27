@@ -920,6 +920,46 @@ class PlanningProviderMixin:
             {"expression": "32/4"},
         )
 
+    def test_build_tool_plan_provider_accepts_camel_case_message_tool_calls(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "ai-sdk"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "message": {
+                        "toolCalls": [
+                            {
+                                "function": {
+                                    "name": "calc_eval",
+                                    "arguments": json.dumps(
+                                        {"expression": "36/6"},
+                                        ensure_ascii=False,
+                                    ),
+                                }
+                            }
+                        ]
+                    }
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "36/6"},
+        )
+
     def test_build_tool_plan_provider_accepts_gemini_function_call_parts(
         self,
     ) -> None:
