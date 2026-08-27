@@ -2145,6 +2145,7 @@ from app.services.tool_runtime_http_json import (
     _flatten_http_json_retrieval_sequence,
     _extract_http_json_retrieval_list_from_container,
     _extract_http_json_retrieval_count_from_container,
+    _extract_http_json_retrieval_count_from_nested_containers,
     _extract_http_json_retrieval_count_alias_from_mapping,
     _HTTP_JSON_RETRIEVAL_COUNT_ALIAS_FIELDS,
     _http_json_output_implies_retrieval_count,
@@ -3344,11 +3345,17 @@ def normalize_tool_output_for_registration(
                 {"tool_kind": desired_tool_kind_text}
             )
         ):
-            root_count = _extract_http_json_retrieval_count_from_container(
+            nested_count = _extract_http_json_retrieval_count_from_nested_containers(
                 normalized_output
             )
-            if root_count is not None:
-                normalized_output["documents_total"] = root_count
+            if nested_count is not None:
+                normalized_output["documents_total"] = nested_count
+            if "documents_total" not in normalized_output:
+                root_count = _extract_http_json_retrieval_count_from_container(
+                    normalized_output
+                )
+                if root_count is not None:
+                    normalized_output["documents_total"] = root_count
             list_alias_names = (
                 "documents",
                 "items",
