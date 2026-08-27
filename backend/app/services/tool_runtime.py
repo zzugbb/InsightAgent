@@ -3416,6 +3416,24 @@ def normalize_tool_output_for_registration(
                 if nested_list is not None:
                     normalized_output["hit_count"] = len(nested_list)
                     break
+            has_top_level_hit_container = any(
+                alias_name in normalized_output
+                for alias_name in (
+                    "documents",
+                    "items",
+                    "results",
+                    "hits",
+                    "matches",
+                    "data",
+                    "records",
+                )
+            )
+            if "hit_count" not in normalized_output and not has_top_level_hit_container:
+                nested_list = _extract_http_json_retrieval_list_from_container(
+                    normalized_output
+                )
+                if nested_list is not None:
+                    normalized_output["hit_count"] = len(nested_list)
         if (
             desired_tool_kind_text
             and "result" not in normalized_output

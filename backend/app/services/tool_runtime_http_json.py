@@ -1955,6 +1955,7 @@ _HTTP_JSON_RETRIEVAL_NESTED_CONTAINER_FIELDS = (
     "payload",
     "result",
     "response",
+    "web",
     "Get",
     "get",
 )
