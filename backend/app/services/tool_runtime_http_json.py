@@ -1949,6 +1949,7 @@ _HTTP_JSON_RETRIEVAL_LIST_CONTAINER_FIELDS = (
     "results",
     "hits",
     "matches",
+    "organic",
     "organic_results",
     "organicResults",
     "search_results",
@@ -1978,6 +1979,7 @@ _HTTP_JSON_RETRIEVAL_NESTED_CONTAINER_FIELDS = (
     "web",
     "webPages",
     "web_pages",
+    "queries",
     "Get",
     "get",
 )
@@ -2102,7 +2104,18 @@ def _extract_http_json_retrieval_count_from_nested_containers(
 
 def _extract_http_json_retrieval_count_alias_from_mapping(
     raw_value: Mapping,
+    *,
+    depth: int = 0,
+    visited: set[int] | None = None,
 ) -> int | None:
+    if depth > 4:
+        return None
+    if visited is None:
+        visited = set()
+    value_id = id(raw_value)
+    if value_id in visited:
+        return None
+    visited.add(value_id)
     for alias_name in _HTTP_JSON_RETRIEVAL_COUNT_ALIAS_FIELDS:
         alias_value = raw_value.get(alias_name)
         alias_count = _normalize_nonnegative_int_count_value(alias_value)
@@ -2117,13 +2130,62 @@ def _extract_http_json_retrieval_count_alias_from_mapping(
             return alias_count
     for container_name in _HTTP_JSON_RETRIEVAL_COUNT_CONTAINER_FIELDS:
         nested_container = raw_value.get(container_name)
+        if isinstance(nested_container, Mapping):
+            alias_count = _extract_http_json_retrieval_count_alias_from_mapping(
+                nested_container,
+                depth=depth + 1,
+                visited=visited,
+            )
+        elif isinstance(nested_container, (list, tuple)):
+            alias_count = None
+            for nested_item in nested_container:
+                if not isinstance(nested_item, Mapping):
+                    continue
+                alias_count = _extract_http_json_retrieval_count_alias_from_mapping(
+                    nested_item,
+                    depth=depth + 1,
+                    visited=visited,
+                )
+                if alias_count is not None:
+                    break
+        else:
+            alias_count = None
+        if alias_count is not None:
+            return alias_count
+    for container_name in _HTTP_JSON_RETRIEVAL_NESTED_CONTAINER_FIELDS:
+        nested_container = raw_value.get(container_name)
         if not isinstance(nested_container, Mapping):
             continue
         alias_count = _extract_http_json_retrieval_count_alias_from_mapping(
-            nested_container
+            nested_container,
+            depth=depth + 1,
+            visited=visited,
         )
         if alias_count is not None:
             return alias_count
+        for nested_value in nested_container.values():
+            if isinstance(nested_value, Mapping):
+                alias_count = _extract_http_json_retrieval_count_alias_from_mapping(
+                    nested_value,
+                    depth=depth + 1,
+                    visited=visited,
+                )
+            elif isinstance(nested_value, (list, tuple)):
+                alias_count = None
+                for nested_item in nested_value:
+                    if not isinstance(nested_item, Mapping):
+                        continue
+                    alias_count = _extract_http_json_retrieval_count_alias_from_mapping(
+                        nested_item,
+                        depth=depth + 1,
+                        visited=visited,
+                    )
+                    if alias_count is not None:
+                        break
+            else:
+                alias_count = None
+            if alias_count is not None:
+                return alias_count
     return None
 
 
@@ -2152,6 +2214,7 @@ def _http_json_output_implies_retrieval_count(output: dict[str, object]) -> bool
             "hits",
             "results",
             "matches",
+            "organic",
             "resultList",
             "result_list",
         )
@@ -2307,6 +2370,7 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
                 *hit_list_alias_names,
                 "data",
                 "records",
+                "organic",
                 "resultList",
                 "result_list",
             )

@@ -1806,6 +1806,154 @@ class ProviderSourceHttpJsonMixin:
         self.assertEqual(output["hit_count"], 2)
         self.assertEqual(output["tool_kind"], "provider_search")
 
+    def test_http_json_provider_search_uses_custom_search_total_results(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="",
+                tool_registry_provider_sources_json=json.dumps({}),
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/google-custom-search",
+                                "method": "GET",
+                                "query_params": {"q": "$query"},
+                            },
+                            "runtime_semantic_kind": "provider_search",
+                        }
+                    }
+                ),
+            )
+        )
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "kind": "customsearch#search",
+                        "queries": {
+                            "request": [
+                                {"title": "Search", "totalResults": "123"}
+                            ]
+                        },
+                        "items": [
+                            {"title": "Alpha"},
+                            {"title": "Beta"},
+                        ],
+                    }
+                ).encode("utf-8")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = (  # type: ignore[attr-defined]
+                lambda request, timeout=0: FakeHttpResponse()
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "custom search total"},
+                prompt="search",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 123)
+        self.assertEqual(output["hit_count"], 2)
+        self.assertEqual(output["tool_kind"], "provider_search")
+
+    def test_http_json_provider_search_uses_serper_organic_hits(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="",
+                tool_registry_provider_sources_json=json.dumps({}),
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/serper/search",
+                                "method": "POST",
+                                "body": {"q": "$query"},
+                            },
+                            "runtime_semantic_kind": "provider_search",
+                        }
+                    }
+                ),
+            )
+        )
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "searchInformation": {
+                            "totalResults": "456",
+                            "timeTaken": 0.21,
+                        },
+                        "organic": [
+                            {"title": "Alpha", "link": "https://example.test/a"},
+                            {"title": "Beta", "link": "https://example.test/b"},
+                        ],
+                    }
+                ).encode("utf-8")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = (  # type: ignore[attr-defined]
+                lambda request, timeout=0: FakeHttpResponse()
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "serper organic results"},
+                prompt="search",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 456)
+        self.assertEqual(output["hit_count"], 2)
+        self.assertEqual(output["tool_kind"], "provider_search")
+
     def test_named_loader_file_backed_source_uses_selected_source_profile_in_http_json_request(
         self,
     ) -> None:
