@@ -1915,6 +1915,8 @@ _HTTP_JSON_RETRIEVAL_COUNT_ALIAS_FIELDS = (
     "totalHits",
     "total_records",
     "totalRecords",
+    "hit_count",
+    "hitCount",
     "total_count",
     "totalCount",
     "number_of_results",
@@ -1943,6 +1945,7 @@ _HTTP_JSON_RETRIEVAL_LIST_CONTAINER_FIELDS = (
     "nodes",
     "documents",
     "items",
+    "result",
     "results",
     "hits",
     "matches",
@@ -1970,6 +1973,8 @@ _HTTP_JSON_RETRIEVAL_NESTED_CONTAINER_FIELDS = (
     "message",
     "esearchresult",
     "eSearchResult",
+    "resultList",
+    "result_list",
     "web",
     "webPages",
     "web_pages",
@@ -2147,12 +2152,14 @@ def _http_json_output_implies_retrieval_count(output: dict[str, object]) -> bool
             "hits",
             "results",
             "matches",
+            "resultList",
+            "result_list",
         )
     ) or any(
         isinstance(output.get(key), Mapping)
         and _extract_http_json_retrieval_list_from_container(output.get(key))
         is not None
-        for key in ("data", "result", "response")
+        for key in ("data", "result", "resultList", "result_list", "response")
     )
 
 
@@ -2296,7 +2303,13 @@ def _normalize_http_json_output_shape(output: dict[str, object]) -> dict[str, ob
     else:
         hit_list_alias_names = ("hits", "results", "matches")
         if _http_json_output_implies_retrieval_count(normalized_output):
-            hit_list_alias_names = (*hit_list_alias_names, "data", "records")
+            hit_list_alias_names = (
+                *hit_list_alias_names,
+                "data",
+                "records",
+                "resultList",
+                "result_list",
+            )
         for alias_name in hit_list_alias_names:
             alias_value = normalized_output.get(alias_name)
             if isinstance(alias_value, (list, tuple)):
