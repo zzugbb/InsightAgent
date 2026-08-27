@@ -1959,6 +1959,8 @@ _HTTP_JSON_RETRIEVAL_LIST_CONTAINER_FIELDS = (
     "data",
     "records",
     "value",
+    "idlist",
+    "idList",
 )
 _HTTP_JSON_RETRIEVAL_NESTED_CONTAINER_FIELDS = (
     "data",
@@ -1966,6 +1968,8 @@ _HTTP_JSON_RETRIEVAL_NESTED_CONTAINER_FIELDS = (
     "result",
     "response",
     "message",
+    "esearchresult",
+    "eSearchResult",
     "web",
     "webPages",
     "web_pages",
