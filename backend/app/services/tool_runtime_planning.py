@@ -278,7 +278,9 @@ _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
     "name",
     "tool",
     "tool_name",
+    "toolName",
     "function_name",
+    "functionName",
     "input",
     "arguments",
     "args",
@@ -469,7 +471,13 @@ def _extract_provider_tool_plan_items_from_payload(
             "tool",
             payload.get(
                 "tool_name",
-                payload.get("function_name", payload.get("function")),
+                payload.get(
+                    "toolName",
+                    payload.get(
+                        "function_name",
+                        payload.get("functionName", payload.get("function")),
+                    ),
+                ),
             ),
         ),
     )
@@ -524,7 +532,9 @@ def _extract_provider_response_content(response: object) -> object:
                 "function_call",
                 "choices",
                 "tool_name",
+                "toolName",
                 "function_name",
+                "functionName",
                 "function",
                 "message",
                 "delta",
@@ -603,7 +613,13 @@ def _normalize_provider_tool_plan_item(
             "tool",
             raw_item.get(
                 "tool_name",
-                raw_item.get("function_name", raw_item.get("function", "")),
+                raw_item.get(
+                    "toolName",
+                    raw_item.get(
+                        "function_name",
+                        raw_item.get("functionName", raw_item.get("function", "")),
+                    ),
+                ),
             ),
         ),
     )
@@ -633,7 +649,9 @@ def _normalize_provider_tool_plan_item(
                 "name",
                 "tool",
                 "tool_name",
+                "toolName",
                 "function_name",
+                "functionName",
                 "function",
                 "input",
                 "arguments",

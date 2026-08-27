@@ -960,6 +960,80 @@ class PlanningProviderMixin:
             {"expression": "36/6"},
         )
 
+    def test_build_tool_plan_provider_accepts_camel_case_tool_name(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "ai-sdk"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "message": {
+                        "toolCalls": [
+                            {
+                                "toolName": "calc_eval",
+                                "args": {
+                                    "expression": "40/8",
+                                },
+                            }
+                        ]
+                    }
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "40/8"},
+        )
+
+    def test_build_tool_plan_provider_accepts_camel_case_function_name(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "ai-sdk"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "message": {
+                        "toolCalls": [
+                            {
+                                "functionName": "calc_eval",
+                                "args": {
+                                    "expression": "45/9",
+                                },
+                            }
+                        ]
+                    }
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "45/9"},
+        )
+
     def test_build_tool_plan_provider_accepts_gemini_function_call_parts(
         self,
     ) -> None:
