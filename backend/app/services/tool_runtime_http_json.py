@@ -1917,6 +1917,8 @@ _HTTP_JSON_RETRIEVAL_COUNT_ALIAS_FIELDS = (
     "totalRecords",
     "total_count",
     "totalCount",
+    "number_of_results",
+    "numberOfResults",
     "total_estimated_matches",
     "totalEstimatedMatches",
     "total_results",
