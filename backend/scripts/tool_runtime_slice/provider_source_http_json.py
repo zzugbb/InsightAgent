@@ -1588,6 +1588,79 @@ class ProviderSourceHttpJsonMixin:
         self.assertEqual(output["hit_count"], 2)
         self.assertEqual(output["tool_kind"], "provider_search")
 
+    def test_http_json_provider_search_uses_hyphenated_total_results(
+        self,
+    ) -> None:
+        registry_provider = get_configured_tool_registry_provider(
+            settings=SimpleNamespace(
+                tool_registry_profile="default",
+                tool_registry_provider_source="",
+                tool_registry_provider_sources_json=json.dumps({}),
+                tool_registry_overrides_json=None,
+                tool_registry_extra_tools_json=json.dumps(
+                    {
+                        "provider_search": {
+                            "template": "task_retrieve",
+                            "label": "Provider Search",
+                            "kind": "provider_retrieval",
+                            "execution": {
+                                "kind": "http_json",
+                                "url": "https://provider.example/crossref",
+                                "method": "GET",
+                                "query_params": {"query": "$query"},
+                            },
+                            "runtime_semantic_kind": "provider_search",
+                        }
+                    }
+                ),
+            )
+        )
+
+        class FakeHttpResponse:
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "status": "ok",
+                        "message": {
+                            "total-results": 57,
+                            "items": [
+                                {"title": ["Alpha"]},
+                                {"title": ["Beta"]},
+                            ],
+                        },
+                    }
+                ).encode("utf-8")
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = (  # type: ignore[attr-defined]
+                lambda request, timeout=0: FakeHttpResponse()
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "crossref total"},
+                prompt="search",
+                user_id="user-1",
+                attempt=0,
+                registry_provider=registry_provider,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        self.assertEqual(output["documents_total"], 57)
+        self.assertEqual(output["hit_count"], 2)
+        self.assertEqual(output["tool_kind"], "provider_search")
+
     def test_named_loader_file_backed_source_uses_selected_source_profile_in_http_json_request(
         self,
     ) -> None:

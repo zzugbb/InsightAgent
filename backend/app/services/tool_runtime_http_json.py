@@ -1923,6 +1923,7 @@ _HTTP_JSON_RETRIEVAL_COUNT_ALIAS_FIELDS = (
     "totalEstimatedMatches",
     "total_results",
     "totalResults",
+    "total-results",
     "total",
     "count",
 )
@@ -1964,6 +1965,7 @@ _HTTP_JSON_RETRIEVAL_NESTED_CONTAINER_FIELDS = (
     "payload",
     "result",
     "response",
+    "message",
     "web",
     "webPages",
     "web_pages",
