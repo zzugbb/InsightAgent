@@ -469,7 +469,7 @@ def _extract_provider_tool_plan_items_from_payload(
     raw_name = _coerce_tool_execution_string_like_value(raw_name)
     if isinstance(raw_name, str) and raw_name.strip():
         return [payload]
-    for wrapper_key in ("response", "data", "result"):
+    for wrapper_key in ("message", "delta", "response", "data", "result"):
         wrapped_payload = _coerce_tool_registry_spec_payload(payload.get(wrapper_key))
         wrapped_items = _extract_provider_tool_plan_items_from_payload(wrapped_payload)
         if wrapped_items is not None:
@@ -519,6 +519,8 @@ def _extract_provider_response_content(response: object) -> object:
                 "tool_name",
                 "function_name",
                 "function",
+                "message",
+                "delta",
             )
         ):
             return response
