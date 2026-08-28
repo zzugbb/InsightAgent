@@ -269,6 +269,7 @@ _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
     "toolCalls",
     "tool_invocations",
     "toolInvocations",
+    "tool_call",
     "toolCall",
     "toolUse",
     "tool_use",
@@ -276,6 +277,8 @@ _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
     "tool_use_id",
     "function_call",
     "functionCall",
+    "function_calls",
+    "functionCalls",
     "function",
     "name",
     "tool",
@@ -370,11 +373,14 @@ def _content_contains_structured_provider_tool_plan(raw_value: object) -> bool:
                 "toolCalls",
                 "tool_invocations",
                 "toolInvocations",
+                "tool_call",
                 "toolCall",
                 "toolUse",
                 "tool_use",
                 "function_call",
                 "functionCall",
+                "function_calls",
+                "functionCalls",
             )
         )
     if _is_non_text_sequence(raw_value):
@@ -417,7 +423,14 @@ def _extract_provider_tool_plan_items_from_payload(
     )
     if tool_invocations is not None:
         return tool_invocations
-    tool_call = _coerce_tool_registry_spec_payload(payload.get("toolCall"))
+    function_calls = _extract_provider_tool_plan_items_from_plural_container(
+        payload.get("function_calls", payload.get("functionCalls"))
+    )
+    if function_calls is not None:
+        return function_calls
+    tool_call = _coerce_tool_registry_spec_payload(
+        payload.get("tool_call", payload.get("toolCall"))
+    )
     if isinstance(tool_call, Mapping):
         return [tool_call]
     tool_use = _coerce_tool_registry_spec_payload(
@@ -608,7 +621,10 @@ def _extract_provider_response_content(response: object) -> object:
                 "toolCalls",
                 "tool_invocations",
                 "toolInvocations",
+                "tool_call",
                 "function_call",
+                "function_calls",
+                "functionCalls",
                 "choices",
                 "tool_name",
                 "toolName",
@@ -683,6 +699,12 @@ def _normalize_provider_tool_plan_item(
     if not isinstance(raw_item, Mapping):
         return None
     raw_function = _coerce_provider_tool_plan_payload(raw_item.get("function"))
+    if not isinstance(raw_function, Mapping):
+        raw_function = _coerce_provider_tool_plan_payload(raw_item.get("tool"))
+    if not isinstance(raw_function, Mapping):
+        raw_function = _coerce_provider_tool_plan_payload(
+            raw_item.get("tool_call", raw_item.get("toolCall"))
+        )
     if isinstance(raw_function, Mapping):
         merged_item = dict(raw_item)
         for key, value in raw_function.items():

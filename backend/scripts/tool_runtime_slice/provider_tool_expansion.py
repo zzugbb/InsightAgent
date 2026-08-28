@@ -117,6 +117,114 @@ class ProviderToolExpansionMixin:
             {"expression": "100/25"},
         )
 
+    def test_build_tool_plan_provider_accepts_singular_tool_call_container(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "gateway"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "message": {
+                        "tool_call": {
+                            "name": "calc_eval",
+                            "arguments": json.dumps(
+                                {"expression": "144/12"},
+                                ensure_ascii=False,
+                            ),
+                        }
+                    }
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "144/12"},
+        )
+
+    def test_build_tool_plan_provider_accepts_nested_tool_object(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "sdk-wrapper"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "tools": [
+                        {
+                            "tool": {
+                                "name": "calc_eval",
+                                "input": {
+                                    "expression": "225/15",
+                                },
+                            }
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "225/15"},
+        )
+
+    def test_build_tool_plan_provider_accepts_function_calls_container(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "gemini-sdk"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "function_calls": [
+                        {
+                            "name": "calc_eval",
+                            "args": {
+                                "expression": "169/13",
+                            },
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "169/13"},
+        )
+
     def test_provider_search_normalizes_estimated_total_hits_alias(self) -> None:
         settings = SimpleNamespace(
             tool_registry_extra_tools_json=json.dumps(
