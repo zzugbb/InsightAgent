@@ -267,6 +267,8 @@ _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
     "delta",
     "tool_calls",
     "toolCalls",
+    "tool_invocations",
+    "toolInvocations",
     "toolCall",
     "toolUse",
     "tool_use",
@@ -288,6 +290,15 @@ _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
     "type",
     "text",
     "output_text",
+)
+_PROVIDER_TOOL_PLAN_ITEM_NAME_KEYS = (
+    "name",
+    "tool",
+    "tool_name",
+    "toolName",
+    "function_name",
+    "functionName",
+    "function",
 )
 
 
@@ -325,6 +336,19 @@ def _coerce_provider_tool_plan_structured_value(raw_value: object) -> object:
     return _coerce_tool_registry_spec_payload(parsed_value)
 
 
+def _extract_provider_tool_plan_items_from_plural_container(
+    raw_value: object,
+) -> list[object] | None:
+    raw_value = _coerce_provider_tool_plan_structured_value(raw_value)
+    if _is_non_text_sequence(raw_value):
+        return list(raw_value)
+    if isinstance(raw_value, Mapping):
+        if any(key in raw_value for key in _PROVIDER_TOOL_PLAN_ITEM_NAME_KEYS):
+            return [raw_value]
+        return list(raw_value.values())
+    return None
+
+
 def _content_contains_structured_provider_tool_plan(raw_value: object) -> bool:
     raw_value = _coerce_provider_tool_plan_payload(raw_value)
     if isinstance(raw_value, Mapping):
@@ -342,6 +366,8 @@ def _content_contains_structured_provider_tool_plan(raw_value: object) -> bool:
             for key in (
                 "tool_calls",
                 "toolCalls",
+                "tool_invocations",
+                "toolInvocations",
                 "toolCall",
                 "toolUse",
                 "tool_use",
@@ -379,11 +405,16 @@ def _extract_provider_tool_plan_items_from_payload(
     tools = _coerce_tool_registry_spec_payload(tools)
     if _is_non_text_sequence(tools):
         return list(tools)
-    tool_calls = _coerce_provider_tool_plan_structured_value(
+    tool_calls = _extract_provider_tool_plan_items_from_plural_container(
         payload.get("tool_calls", payload.get("toolCalls"))
     )
-    if _is_non_text_sequence(tool_calls):
-        return list(tool_calls)
+    if tool_calls is not None:
+        return tool_calls
+    tool_invocations = _extract_provider_tool_plan_items_from_plural_container(
+        payload.get("tool_invocations", payload.get("toolInvocations"))
+    )
+    if tool_invocations is not None:
+        return tool_invocations
     tool_call = _coerce_tool_registry_spec_payload(payload.get("toolCall"))
     if isinstance(tool_call, Mapping):
         return [tool_call]
@@ -572,6 +603,9 @@ def _extract_provider_response_content(response: object) -> object:
                 "name",
                 "tool",
                 "tool_calls",
+                "toolCalls",
+                "tool_invocations",
+                "toolInvocations",
                 "function_call",
                 "choices",
                 "tool_name",

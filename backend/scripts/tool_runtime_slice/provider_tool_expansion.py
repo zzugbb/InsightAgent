@@ -4,6 +4,84 @@ from .context import *
 
 
 class ProviderToolExpansionMixin:
+    def test_build_tool_plan_provider_accepts_tool_calls_mapping_container(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "gateway"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "message": {
+                        "tool_calls": {
+                            "call_calc_1": {
+                                "function": {
+                                    "name": "calc_eval",
+                                    "arguments": json.dumps(
+                                        {"expression": "96/12"},
+                                        ensure_ascii=False,
+                                    ),
+                                }
+                            }
+                        }
+                    }
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "96/12"},
+        )
+
+    def test_build_tool_plan_provider_accepts_tool_invocations_container(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "ai-sdk"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "message": {
+                        "toolInvocations": [
+                            {
+                                "toolName": "calc_eval",
+                                "args": {
+                                    "expression": "99/11",
+                                },
+                                "state": "call",
+                            }
+                        ]
+                    }
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "99/11"},
+        )
+
     def test_provider_search_normalizes_estimated_total_hits_alias(self) -> None:
         settings = SimpleNamespace(
             tool_registry_extra_tools_json=json.dumps(
