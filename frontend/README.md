@@ -18,7 +18,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Frontend node tests：`121/121` 通过。
 - Frontend quality gates：`npm run lint` 与 `npm run build` 通过。
 - Frontend e2e：full Chromium `52 passed / 1 skipped`；queue phase 低并发专项 `1/1` 通过。
-- Backend 契约基线：full slice `1983/1983`、provider_search `15/15`、tool_plan_provider `57/57`、backend main e2e 通过。
+- Backend 契约基线：full slice `1983/1983`、tool_registry `494/494`、http_json `531/531`、facade `4/4`、provider_search `15/15`、tool_plan_provider `57/57`、backend main e2e 通过。
 - Hygiene：diff checks、备份计划 diff 检查与端口清理通过。
 
 ## 下一步前端计划
@@ -151,4 +151,5 @@ npm run test:e2e:smoke:matrix
 
 - 当前前端优先保持与后端 SSE / trace / export 契约稳定对齐，不主动发散出新的本地语义分支。
 - registry-governance 已封板，settings/preflight/runtime trace/display/export 一致性保持稳定，不优先继续扩张旧 payload fallback。
+- 本轮后端仅做 runtime 大文件主题拆分，前端消费契约不变；node/lint/build 作为无回归确认。
 - 文档只保留当前能力、封板主线、关键实现位置和最近校验基线，不继续累积长串历史同步记录。

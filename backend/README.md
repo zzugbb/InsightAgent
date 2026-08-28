@@ -8,13 +8,13 @@
 - 已封板主线：`real-tool-execution`、队列/并发治理、registry/RAG 治理、生产可靠性、可观测体验、RAG 产品体验、`provider-tool-expansion`。
 - 当前封板结论：provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数解析与 reconnect 稳定错误码复原已收口。
 - 稳定契约：默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`；SSE / trace / export / display shape 不变。
-- 结构治理：`test_tool_runtime_slice.py` 是兼容入口；planner、execution、HTTP JSON、registry 已从 `tool_runtime.py` 拆出 facade 模块。
+- 结构治理：`test_tool_runtime_slice.py` 是兼容入口；planner、execution、HTTP JSON、registry 已从 `tool_runtime.py` 拆出 facade 模块；本轮将 registry 公开 wrapper 安装器与 HTTP JSON 响应/诊断工具继续拆到独立主题模块。
 - 后续候选主线：`ci-release-engineering`。
 
 ## 当前验证基线
 
 - Backend full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1983/1983` 通过。
-- Provider-tool targeted：`provider_search 15/15`、`http_json 531/531`、`tool_plan_provider 57/57`、`failed_task_error_event_hint 1/1` 通过。
+- Provider-tool targeted：`tool_registry 494/494`、`http_json 531/531`、`facade 4/4`、`provider_search 15/15`、`tool_plan_provider 57/57`、`failed_task_error_event_hint 1/1` 通过。
 - Backend e2e：main phase 通过；queue phase 保留为低并发专项基线。
 - Frontend 回归：node tests `121/121`、lint、build、full Chromium `52 passed / 1 skipped` 通过。
 - Hygiene：`py_compile`、diff checks、备份计划 diff 检查通过。
@@ -41,8 +41,8 @@
 - `app/services/tool_runtime.py`：tool registry / provider / source、tool runtime helper、preflight、diagnostics、result preview/output/summary 语义
 - `app/services/tool_runtime_planning.py`：tool planner / provider planner / planner payload normalization，作为 `tool_runtime.py` 的 facade 拆分模块
 - `app/services/tool_runtime_execution.py`：tool runtime context、result preview/output/summary、attempt loop、trace event、rag follow-up 与 plan-item service execution，作为 `tool_runtime.py` 的 facade 拆分模块
-- `app/services/tool_runtime_http_json.py`：HTTP JSON request/template/response/mapping、execution diagnostics 与敏感信息脱敏，作为 `tool_runtime.py` 的 facade 拆分模块
-- `app/services/tool_runtime_registry.py`：registry/file-backed/provider-source、settings/preflight diagnostics、runtime artifacts 与 service action 模型，作为 `tool_runtime.py` 的 facade 拆分模块
+- `app/services/tool_runtime_http_json.py`：HTTP JSON request/template/mapping、execution diagnostics 与 runner facade；响应读取、错误格式化和敏感信息脱敏已拆到 `tool_runtime_http_json_response.py`
+- `app/services/tool_runtime_registry.py`：registry/file-backed/provider-source、settings/preflight diagnostics、runtime artifacts 与 service action 模型 facade；公开 wrapper 安装器已拆到 `tool_runtime_registry_public.py`
 - `scripts/tool_runtime_slice/`：slice 测试主题包；原入口命令保持不变，当前最大主题模块约 4.7k 行
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
 - `app/services/chroma_rag_service.py`：RAG ingest/query/status、knowledge base list/clear/delete 与 shared/private 语义

@@ -4,8 +4,9 @@ overview: provider-tool-expansion 已 100% 封板；九条主线均已完成，�
 current_focus:
   - 当前状态：provider-tool-expansion 已 100% 封板；已封板主线扩展到 real-tool-execution、队列/并发治理、registry/RAG 治理、生产可靠性、可观测体验与 RAG 产品体验。
   - Provider 收口：provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数解析与 reconnect 稳定错误码复原均已完成。
+  - 结构治理：本轮拆分 `tool_runtime_registry.py` 与 `tool_runtime_http_json.py` 两个超大文件，新增 registry wrapper 安装器与 HTTP JSON response/diagnostics 主题模块，原导出路径保持兼容。
   - 稳定契约：默认 remote/mock、SSE、trace、export、display 与 e2e shape 保持稳定。
-  - 当前验证：backend full slice 1983/1983，provider_search 15/15，http_json 531/531，tool_plan_provider 57/57，frontend node 121/121，lint/build/e2e/diff hygiene 通过。
+  - 当前验证：backend full slice 1983/1983，tool_registry 494/494，http_json 531/531，facade 4/4，frontend node 121/121，lint/build 通过；e2e/diff hygiene 保持基线。
   - 后续候选：ci-release-engineering。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
@@ -17,11 +18,11 @@ constraints:
   - 控制单文件规模，新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆新文件/新模块，沿用 test_tool_runtime_slice 与 tool_runtime facade 拆分经验
 validation_baseline:
   backend_full_slice: backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py (1983/1983)
-  backend_provider_tool: provider_search 15/15; http_json 531/531; tool_plan_provider 57/57; failed_task_error_event_hint 1/1
+  backend_provider_tool: tool_registry 494/494; http_json 531/531; facade 4/4; provider_search 15/15; tool_plan_provider 57/57; failed_task_error_event_hint 1/1
   frontend_quality: node tests 121/121; npm run lint; npm run build
   e2e: backend main passed; frontend full Chromium 52 passed / 1 skipped
   hygiene: py_compile; git diff --check; git diff --cached --check; backup plan diff clean; ports 8000/3001 clean
-latest_validation_note: provider-tool-expansion 已 100% 封板；四份活跃文档已压缩到当前状态、聚合验证基线、后续候选主线与稳定契约。
+latest_validation_note: provider-tool-expansion 已 100% 封板；本轮完成 runtime 大文件拆分，backend/frontend 新鲜回归通过，四份活跃文档继续保持压缩摘要。
 todos:
   - id: docs-slimming
     status: completed
@@ -43,7 +44,7 @@ todos:
     content: 新增 docs/development-runbook.md 并同步 AGENTS/README/backend/frontend/实时计划，固化 backend venv、frontend npm、本机端口/e2e 提权与 .git/index.lock 提交流程。
   - id: single-file-size-governance
     status: completed
-    content: 新增单文件规模治理规则；后续不把历史大文件作为默认追加点，测试/实现优先进入主题文件，必要时先拆新主题文件或新模块。
+    content: 已拆分 `tool_runtime_registry.py` 与 `tool_runtime_http_json.py` 两个超大文件；后续不把历史大文件作为默认追加点，测试/实现优先进入主题文件，必要时先拆新主题文件或新模块。
   - id: registry-governance
     status: completed
     content: 已封板；provider/source 脱敏、冲突 alias 与跨 settings/runtime/trace/export/audit/SSE 的安全摘要已收口。
@@ -82,12 +83,12 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 - 默认运行策略：provider/model/api_key 完整时走 `remote`，否则回退 canonical `mock`。
 - Provider 工具：search 总量/命中归一化、planner 多协议工具调用解析、JSON 字符串参数与 reconnect 错误码复原已封板。
-- Runtime 结构：`tool_runtime.py` 保留 facade；planner、execution、HTTP JSON、registry 分模块维护。
+- Runtime 结构：`tool_runtime.py` 保留 facade；planner、execution、HTTP JSON、registry 分模块维护；registry wrapper 安装器与 HTTP JSON response/diagnostics 已继续拆分。
 - Trace/export/display：result-summary、safe output、observation、settings diagnostics 与前端回放共享同一语义主干。
 
 ## 当前验证基线
 
-- Backend：full slice `1983/1983`；provider_search `15/15`；http_json `531/531`；tool_plan_provider `57/57`。
+- Backend：full slice `1983/1983`；tool_registry `494/494`；http_json `531/531`；facade `4/4`；provider_search `15/15`；tool_plan_provider `57/57`。
 - Frontend：node tests `121/121`；lint/build 通过。
 - E2E：backend main phase 通过；frontend full Chromium `52 passed / 1 skipped`。
 - Hygiene：`py_compile`、diff checks、备份计划 diff 检查与端口清理通过。

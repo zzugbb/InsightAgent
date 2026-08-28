@@ -8,13 +8,13 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 - 已封板主线：从 `real-tool-execution` 到 `provider-tool-expansion` 的九条主线均已封板。
 - 当前封板结论：`provider-tool-expansion` 100% 完成；HTTP JSON provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数解析与 reconnect 稳定错误码复原均已收口。
 - 稳定契约：默认 remote/mock 判定、queued/running/cancel 语义、SSE / trace / export / display shape 保持不变。
-- 结构治理：backend slice 已按主题拆分，`tool_runtime.py` 保留 facade，planner/execution/HTTP JSON/registry 已拆模块。
+- 结构治理：backend slice 已按主题拆分，`tool_runtime.py` 保留 facade；本轮继续拆分超大模块，`tool_runtime_http_json.py` 收敛到 3741 行，`tool_runtime_registry.py` 收敛到 5000 行，原导出路径保持兼容。
 - 后续候选主线：`ci-release-engineering`。
 
 ## 当前验证基线
 
 - Backend：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1983/1983` 通过。
-- Provider-tool targeted：`provider_search 15/15`、`http_json 531/531`、`tool_plan_provider 57/57`、`failed_task_error_event_hint 1/1` 通过。
+- Provider-tool targeted：`tool_registry 494/494`、`http_json 531/531`、`facade 4/4`、`provider_search 15/15`、`tool_plan_provider 57/57`、`failed_task_error_event_hint 1/1` 通过。
 - Frontend：node tests `121/121`，`npm run lint` 通过，`npm run build` 通过。
 - E2E：backend main phase 通过；frontend full Chromium `52 passed / 1 skipped`。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过；端口 8000/3001 无残留监听。
@@ -34,7 +34,7 @@ InsightAgent 是一个可观测 AI Agent 平台，目标是把「会话 -> 任�
 
 - 外部 SSE / trace / export / e2e 契约保持稳定，优先做内部 runtime/helper/display 收口。
 - 新增 provider/source 协议继续按 `real-tool-execution` 已完成验收基线补小红测，不再作为封板主线阻塞项。
-- 单文件规模纳入治理：新增测试/实现优先使用主题文件；主题文件明显膨胀时先拆分到新文件/新模块，沿用既有 slice 主题包与 facade 拆分方式。
+- 单文件规模纳入治理：新增测试/实现优先使用主题文件；已新增 `tool_runtime_registry_public.py` 与 `tool_runtime_http_json_response.py` 承接拆分出的 wrapper/response 主题代码。
 - `data/insightagent.plan.back.md` 是只读备份计划，不参与活跃开发同步。
 
 ## 阶段 5 已完成基线
