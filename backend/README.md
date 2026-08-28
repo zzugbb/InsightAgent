@@ -4,61 +4,25 @@
 
 ## 当前状态
 
-- 后端 W1-W4 与阶段 5 基础产品化已完成：JWT + refresh、用户级设置与密钥加密、PostgreSQL、`RBAC-lite`、`rag-rbac-lite`、任务取消/超时、running task 恢复、导出、usage dashboard 与审计事件扩展已落地。
-- `real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`、`rag-product-experience` 与 `provider-tool-expansion` 均已 100% 封板；后续候选主线为 `ci-release-engineering`；默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
-- `http_json` 真实执行器覆盖请求模板、鉴权/header/query/body、response_path/result_fields、常见搜索/计算/GraphQL/Elastic/OData/向量/RAG SDK 风格输出、preview/output/result-summary、trace/export/SSE/audit/settings diagnostics。
-- `app/services/task_queue_service.py` 负责单进程执行槽位、queued 安全等待快照、capacity-aware oldest eligible FIFO、queued cancel 等待项移除，以及可选 per-user/per-session 并发治理。
-- `GET /api/settings` 暴露只读 `task_queue_diagnostics`，typed 契约固定基础运行态、governance、pressure/waiting policy 与 optional current user/session scope 字段；不改变 SSE / trace / export payload，不暴露内部 task ids。
-- `backend/scripts/test_tool_runtime_slice.py` 已拆到 `backend/scripts/tool_runtime_slice/`；`app/services/tool_runtime.py` 已拆出 planner、execution、HTTP JSON、registry 四个 facade 模块，外部 import 保持稳定。
-- `tool_runtime_registry.py` 与 settings/route/audit/SSE/trace 边界已完成 provider/source 脱敏、冲突 alias、跨结构共享 alias map、runtime artifacts/service actions、模型输出层、export/task/usage/audit/SSE/trace 安全摘要。
-- `rag-governance-hardening` 已封板：RAG ingest/query source metadata、嵌套 metadata value、query hit id、知识库标识、版本摘要、reserved alias、route/runtime trace/export/display、错误出口与 shared/private 列表边界均已收口；后端外部响应 shape 保持稳定。
-- `production-reliability-hardening` 已 100% 封板，且最新 GitHub checks `2/2` 通过。后端已收口 waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放与失败自愈。
-- 关键后端契约：客户端 SSE 断开只释放本进程 active slot，并保留 running 任务供 reload/reconnect/cancel；服务端执行协程 `CancelledError` 才 owner-guarded 标记 failed 并清理归属。active slot、204 响应与外部 SSE / trace / export 契约不变。
-- `observability-experience` 已 100% 封板；已完成任务失败线索聚合、来源分类、TaskResponse failure fields、task_failed audit event 兜底恢复、Task Center 任务列表 audit failure hint 批量回放、Task Center registry profile/provider source 本地筛选生效、Task Center 当前可见任务失败来源诊断分组与来源 chip 本地下钻、跨视图 Failure URL 预设直达、稳定失败码文本纳入前端 Failure 语义、Usage Dashboard / Audit Logs 到任务详情的回放入口、Usage Dashboard top tasks 失败摘要派生、Audit Logs 失败 hint/source/code/message 可读详情、Audit Logs 服务端 keyword 过滤，以及前端共享 Trace Failure/semantic 语义统计、统计卡下钻与 Task Center 观测筛选；后端 SSE / trace / export shape 保持不变。
-- `rag-product-experience` 已 100% 封板；前端知识库治理表消费现有 `document_versions` 展开版本明细并派生 source/document 文档组摘要；后端 `DELETE /api/rag/knowledge-bases/{knowledge_base_id}/documents` 支持按 source/document 删除文档组，并记录 `rag_document_delete` 审计事件；Runtime Debug 基于现有 RAG query metadata/distance 展示查询级召回摘要、质量分布、召回使用建议、质量/来源/未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签；RAG status/list、ingest/query、SSE、trace 与 export 外部响应 shape 保持不变。
-- `provider-tool-expansion` 已 100% 封板：HTTP JSON provider search 输出归一化支持分页型 `data`/`records` + 显式总量元数据、GraphQL connection、Meilisearch/Algolia、Brave、Bing、SearXNG、Crossref、PubMed/NCBI ESearch、Europe PMC、Google Custom Search、Serper、引用型 answer-search 与千分位总量字符串；显式 `result_fields` 支持 bracket quoted 特殊字段键；provider planner 支持 OpenAI Chat/Responses、Gemini/Vertex、Bedrock/Claude Converse、Anthropic Messages mixed text/tool_use、顶层 message/delta wrapper、`tool_call` 单数容器、`tool_calls` / `toolCalls` 映射容器、`function_calls` / `functionCalls` 列表、嵌套 `tool{name,input}` 对象、AI SDK camelCase `toolCalls` / `toolInvocations` 与 `toolCall` / `toolName` / `functionName` 别名；`args`/`input`/`tool_input`/`toolInput`/`arguments` 支持对象或 JSON 字符串；failed terminal reconnect stream 会复原稳定错误码；SSE/trace/export/display 输出 shape 不变。
+- 后端阶段 5 已具备完整演示闭环：Auth、PostgreSQL、任务流、Trace、Memory、RAG、队列、导出、usage dashboard 与审计均已落地。
+- 已封板主线：`real-tool-execution`、队列/并发治理、registry/RAG 治理、生产可靠性、可观测体验、RAG 产品体验、`provider-tool-expansion`。
+- 当前封板结论：provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数解析与 reconnect 稳定错误码复原已收口。
+- 稳定契约：默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`；SSE / trace / export / display shape 不变。
+- 结构治理：`test_tool_runtime_slice.py` 是兼容入口；planner、execution、HTTP JSON、registry 已从 `tool_runtime.py` 拆出 facade 模块。
+- 后续候选主线：`ci-release-engineering`。
 
 ## 当前验证基线
 
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k production_reliability`：`35/35` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue`：`66/66` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task`：`361/361` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k settings`：`216/216` 通过
-- `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`：`1983/1983` 通过
-- provider-tool targeted slice：`... -k tool_input_alias`、`... -k serper_organic`、`... -k custom_search_total`、`... -k result_list_hit_count` 等各 `1/1` 通过；`... -k provider_search`，`15/15` 通过；`... -k http_json`，`531/531` 通过
-- provider planner targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k singular_tool_call_container`、`... -k nested_tool_object`、`... -k function_calls_container`、`... -k tool_input_alias`、`... -k tool_calls_mapping_container`、`... -k tool_invocations_container` 等各 `1/1` 通过；`... -k tool_use`，`3/3` 通过；`... -k gemini`，`2/2` 通过；`... -k tool_plan_provider`，`57/57` 通过
-- usage observability targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k usage_dashboard`，`40/40` 通过
-- RAG targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag`，`79/79` 通过
-- RAG route targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_route`，`2/2` 通过
-- Result summary targeted slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k result_summary`，`30/30` 通过
-- RAG source/version/shared/route/runtime/error targeted：sensitive knowledge_base_id redaction、nested metadata value redaction、query hit id redaction、runtime helper output redaction、runtime shared retrieve scope、runtime knowledge_base_id redaction、route service identifier redaction、route document_versions source/document_id redaction、legacy sensitive collection suffix redaction、invalid version metadata filtering、version alias canonicalization、reserved metadata override、private `shared-*` shadow 隔离、status/list/400/503 error redaction 均通过
-- RAG runtime/export targeted：safe version metadata、legacy chunk shape、chunk object metadata alignment、parallel runtime chunk metadata、export knowledge_base_id redaction、result summary/output/preview/observation knowledge_base_id redaction 均通过
-- `backend/.venv/bin/python -m py_compile` 本轮相关 backend route/test 模块：通过
-- backend e2e main phase：baseline / main / export consistency / cancel-timeout 通过
-- frontend node tests：runtime debug modal utils / knowledge base governance modal utils / workbench utils / audit logs modal utils / task detail utils / stream store utils / model settings utils，当前 `121/121` 通过
-- frontend build：`cd frontend && npm run build` 通过
-- frontend type contract：`npx tsc --noEmit --strict --module esnext --moduleResolution bundler --target ES2020 --skipLibCheck app/components/workbench/task-queue-diagnostics-contract.type.test.ts` 通过
-- frontend targeted TS：本轮涉及的 runtime debug modal/rag results/utils、knowledge base governance modal/utils、i18n、workbench main path e2e 与 usage dashboard e2e 通过 targeted `tsc`
-- backend queue e2e phase：低并发 `8011` 覆盖 queued cancel、safe queue snapshot、settings diagnostics 与 followup completion
-- frontend targeted Chromium：`workbench-edge-cases.spec.ts:824` 与 `workbench-main-path.spec.ts:436` 均通过，覆盖 GitHub frontend-e2e 暴露的 reload/background session stream 与 reload recovery cancel 回归
-- frontend full Chromium：默认 `8000/3001` 通过，`52 passed / 1 skipped`；覆盖 remote error reconnect、知识库版本明细展开，低并发 queued 专项在 full 阶段按预期 skip
-- frontend targeted Chromium：`e2e/usage-dashboard.spec.ts:1543`，`1/1` 通过，覆盖真实 RAG ingest 后展开知识库版本明细、source/document 文档组摘要、文档组删除与状态归零
-- frontend RAG Chromium：`e2e/workbench-main-path.spec.ts:352` 与 `e2e/workbench-main-path.spec.ts:443`，`2/2` 通过，覆盖真实 RAG ingest/query 后的查询级召回摘要、质量分布、召回使用建议、召回质量筛选、召回来源筛选、未知来源筛选、组合筛选空结果提示、命中来源摘要、召回质量标签与 distance 解释
-- frontend task center governance Chromium：`e2e/usage-dashboard.spec.ts:372`，`1/1` 通过，覆盖 Task Center registry profile/source 请求与列表可见性过滤
-- frontend task detail replay Chromium：`e2e/usage-dashboard.spec.ts:1329`，`3/3` 通过，覆盖 Task Center/任务详情语义统计、统计卡下钻与语义过滤计数一致性
-- frontend remote error observability Chromium：`e2e/workbench-remote-errors.spec.ts:479`，`1/1` 通过；`e2e/workbench-edge-cases.spec.ts:1008`、`e2e/workbench-remote-errors.spec.ts:479`、`e2e/workbench-remote-errors.spec.ts:713` targeted `3/3` 通过，覆盖 failed reconnect 错误码复原、Task Center audit failure hint 回放、失败来源诊断分组、诊断来源 chip 本地下钻、Failure URL 预设直达与可读失败说明、Needs attention / Failed status 观测筛选、Audit Logs 服务端 keyword 请求、任务详情 audit failure hint 恢复与失败轨迹快捷定位
-- frontend usage/audit-to-detail Chromium：`e2e/usage-dashboard.spec.ts:774`，`1/1` 通过
-- frontend queue phase：低并发 `8011/3001` 通过，`1/1`
-- frontend diagnostics finalize：`scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --summary-file /tmp/frontend-e2e-finalize-summary.md --event-name push --ref refs/heads/main` 在 `strict_level=any` 下通过，error-context counters 为 0
-- GitHub checks：`7550120 fix: 保留客户端断流运行任务` 已 `2/2` 通过
-- CI tooling：`bash scripts/test_ci_e2e_tooling.sh all` 通过
-- `git diff --check`：通过
-- 后续运行 backend slice、启动 backend、跑 backend e2e 和提交时，先按 `../docs/development-runbook.md` 使用固定 venv 与提权边界，避免重复触发本机端口 / `.git/index.lock` 权限错误。
+- Backend full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1983/1983` 通过。
+- Provider-tool targeted：`provider_search 15/15`、`http_json 531/531`、`tool_plan_provider 57/57`、`failed_task_error_event_hint 1/1` 通过。
+- Backend e2e：main phase 通过；queue phase 保留为低并发专项基线。
+- Frontend 回归：node tests `121/121`、lint、build、full Chromium `52 passed / 1 skipped` 通过。
+- Hygiene：`py_compile`、diff checks、备份计划 diff 检查通过。
 
 ## 下一步后端计划
 
 1. 当前主线：`provider-tool-expansion` 已 100% 封板；四份活跃文档已收敛到当前状态、验证基线、候选主线与稳定契约。
-2. 已封板主线：`real-tool-execution`、`queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`、`rag-product-experience`、`provider-tool-expansion`。
+2. 已封板主线：从 `real-tool-execution` 到 `provider-tool-expansion` 的九条主线均已封板。
 3. 后续候选主线：`ci-release-engineering`；继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
@@ -79,7 +43,7 @@
 - `app/services/tool_runtime_execution.py`：tool runtime context、result preview/output/summary、attempt loop、trace event、rag follow-up 与 plan-item service execution，作为 `tool_runtime.py` 的 facade 拆分模块
 - `app/services/tool_runtime_http_json.py`：HTTP JSON request/template/response/mapping、execution diagnostics 与敏感信息脱敏，作为 `tool_runtime.py` 的 facade 拆分模块
 - `app/services/tool_runtime_registry.py`：registry/file-backed/provider-source、settings/preflight diagnostics、runtime artifacts 与 service action 模型，作为 `tool_runtime.py` 的 facade 拆分模块
-- `scripts/tool_runtime_slice/`：`test_tool_runtime_slice.py` 的主题 mixin 包，承接 provider/source、provider-tool expansion、planner、settings/registry、http_json、task/export/governance、trace provider source、runtime/result/rag 等 slice 测试；当前最大主题模块约 4.7k 行
+- `scripts/tool_runtime_slice/`：slice 测试主题包；原入口命令保持不变，当前最大主题模块约 4.7k 行
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
 - `app/services/chroma_rag_service.py`：RAG ingest/query/status、knowledge base list/clear/delete 与 shared/private 语义
 - `app/services/settings_service.py`：用户级模型设置读取/保存与 `api_key` 加密解密
@@ -103,7 +67,9 @@
 - `PUT /api/settings`
 - `POST /api/settings/validate`
 
-`GET /api/settings` 的响应包含只读 `task_queue_diagnostics`，用于观察当前单进程队列的 `max_concurrent`、`active_count`、`waiting_count`、`available_slots`、`current_user_active_count`、`current_user_waiting_count`、`current_user_available_slots`、`current_user_limit_reached`、可选 `session_id` 查询参数下的 `current_session_active_count`、`current_session_waiting_count`、`current_session_available_slots`、`current_session_limit_reached`、`has_waiting_tasks`、`saturated`、`pressure_state`、可选 per-user/per-session 上限、fairness 开关、`waiting_policy`、capacity-aware FIFO 标记与 poll interval；`SettingsSummaryResponse` 与 `_build_task_queue_diagnostics()` 使用 `TaskQueueDiagnosticsSummary` typed 契约固定基础与 governance 字段为 required，current-user/current-session 字段保持 optional，且 `pressure_state` 仅允许精确的 `idle` / `active` / `saturated` / `scope_limited`，`waiting_policy` 仅允许 `capacity_aware_oldest_eligible_fifo`；`max_concurrent`、计数与限额字段保持整数，poll interval 保持数值，状态与治理开关保持布尔。`current_user_available_slots` 是全局空槽与 per-user 剩余额度共同收敛后的有效可用槽位，`current_session_available_slots` 是全局空槽与 per-session 剩余额度共同收敛后的有效可用槽位。该字段不参与用户设置保存，也不改变 SSE / trace / export payload，不暴露内部 task ids。
+`GET /api/settings` 的响应包含只读 `task_queue_diagnostics`，用于观察全局、当前用户和可选当前会话的 active/waiting/available 计数、限额状态、压力状态与等待策略。
+
+该字段不参与用户设置保存，不暴露内部 task ids，也不改变 SSE / trace / export payload。
 - `POST /api/sessions`
 - `GET /api/sessions?limit=&offset=`
 - `PATCH /api/sessions/{session_id}`
