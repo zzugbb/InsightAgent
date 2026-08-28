@@ -1,15 +1,15 @@
 ---
 name: InsightAgent 开发计划
-overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience 与 rag-product-experience 均已封板；当前主线为 provider-tool-expansion。
+overview: real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience、rag-product-experience 与 provider-tool-expansion 均已 100% 封板；后续候选主线为 ci-release-engineering。
 current_focus:
-  - 当前主线：provider-tool-expansion 已启动，进度约 98%；HTTP JSON provider search 输出归一化已支持分页型 data/records 当前页结果配合 meta.page.total / pagination.total / paging.total 等显式总量元数据、GraphQL connection data.search.pageInfo.totalCount + edges[]、Meilisearch/Algolia estimatedTotalHits / nbHits、Brave web.results 嵌套结果容器、Bing webPages.totalEstimatedMatches + value[] 服务端总量、SearXNG/元搜索风格 number_of_results + results[] 总量、Crossref/学术检索风格 message.total-results + items[] 总量与当前页命中、PubMed/NCBI ESearch 风格 esearchresult.count + idlist[] 总量与当前页命中、Europe PMC 风格 hitCount + resultList.result[] 服务端总量与当前页命中、Google Custom Search 风格 queries.request[].totalResults + items[] 服务端总量与当前页命中、Serper/Google Search 风格 searchInformation.totalResults + organic[] 服务端总量与当前页命中、引用型 answer-search citations / search_results 命中列表，也支持 totalResults: "1,234" 这类安全千分位总量字符串；显式 result_fields 支持 $['@odata.count'] / $["@odata.count"] 这类 bracket quoted 特殊字段键；documents_total 优先表示服务端总量，hit_count 保持当前页命中数；provider planner 已支持 Gemini/Vertex 风格 candidates[].content.parts[].functionCall{name,args}、Bedrock/Claude Converse 风格 content[].toolUse{name,input}、Anthropic Messages 风格混合 text + content[].type=tool_use{name,input}、顶层 message.tool_calls[] / delta.tool_calls[] wrapper、tool_call 单数容器、tool_calls/toolCalls 映射容器、function_calls/functionCalls 列表、嵌套 tool{name,input} 对象，以及 AI SDK 风格 camelCase message.toolCalls[] / toolInvocations[] 容器和 toolCall/toolName/functionName 工具名别名，args/input/tool_input/toolInput/arguments 可为对象或 JSON 字符串，且整体序列化 JSON 字符串的 tool_calls/toolCalls 容器可解析；failed terminal reconnect stream 会从 error_event 来源 failure_hint 复原稳定错误码；旧 SSE/trace/export/display 输出 shape 保持稳定。
+  - 最新封板主线：provider-tool-expansion 已 100% 封板；HTTP JSON provider search 输出归一化已支持分页型 data/records + 显式总量元数据、GraphQL connection、Meilisearch/Algolia、Brave、Bing、SearXNG、Crossref、PubMed/NCBI ESearch、Europe PMC、Google Custom Search、Serper、引用型 answer-search、千分位 totalResults 字符串与显式 result_fields bracket quoted 特殊字段键；documents_total 优先表示服务端总量，hit_count 保持当前页命中数；provider planner 已支持 OpenAI Chat/Responses、Gemini/Vertex functionCall、Bedrock/Claude Converse toolUse、Anthropic Messages mixed text/tool_use、顶层 message/delta wrapper、tool_call 单数容器、tool_calls/toolCalls 映射容器、function_calls/functionCalls 列表、嵌套 tool{name,input} 对象、AI SDK camelCase toolCalls/toolInvocations 与 toolCall/toolName/functionName 别名，args/input/tool_input/toolInput/arguments 可为对象或 JSON 字符串；failed terminal reconnect stream 会从 error_event.failure_hint 复原稳定错误码；旧 SSE/trace/export/display 输出 shape 保持稳定。
   - 最新封板主线：rag-product-experience 已 100% 封板；知识库治理表版本明细、source/document 文档组摘要、文档组删除闭环、Runtime Debug RAG query 查询级召回摘要、质量分布、召回使用建议、质量/来源/未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签均已收口，RAG status/list、ingest/query、SSE、trace、export 外部契约保持稳定。
   - 最新封板主线：observability-experience 已 100% 封板；任务失败线索摘要与来源分类、Task Center audit failure hint 批量回放、观测筛选、失败来源诊断分组、本地下钻、registry profile/provider source 本地任务快照过滤、任务详情 failure 轨迹快捷定位、本地 failure 回放节点、跨视图 trace_semantic=failure 直达、稳定失败码可读映射、Usage Dashboard top tasks 失败摘要、Audit Logs 服务端 keyword 过滤与失败详情、Trace Failure 语义统计/过滤一致性均已收口，外部 SSE / trace / export shape 不变。
   - 最新封板主线：production-reliability-hardening 已 100% 封板，最新 GitHub checks 2/2 通过；waiting cleanup、execution owner/heartbeat、guarded running/terminal writes、duplicate active 防双执行、stale heartbeat 可选接管、terminal race 防误复活、reconnect SSE 终态回放、失败自愈、客户端断流保留 running / 服务端协程取消落 failed 均已收口。
   - 最近封板主线：rag-governance-hardening 已 100% 封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
   - 最近封板主线：registry-governance；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
-  - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience、rag-product-experience。
-  - provider-tool-expansion 当前验证：paginated 红测、formatted_total 红测、bracket_quoted 红测、graphql_connection_total 红测、estimated_total_hits_alias 红测、nested_web_results 红测、bing_total_estimated_matches 红测、citations_as_hits 红测、number_of_results_total 红测、hyphenated_total_results 红测、esearchresult_count_and_idlist 红测、result_list_hit_count 红测、custom_search_total 红测、serper_organic 红测、tool_input_alias 红测、singular_tool_call_container 红测、nested_tool_object 红测、function_calls_container 红测、top_level_message_tool_calls 红测、camel_case_message_tool_calls 红测、camel_case_tool_name 红测、camel_case_function_name 红测、serialized_tool_calls_field 红测、tool_calls_mapping_container 红测、tool_invocations_container 红测、Bedrock toolUse、Anthropic mixed content tool_use 与 toolUse string input 红测、failed reconnect error_event hint 红测、provider_search 主题 slice、HTTP JSON 主题 slice、Gemini planner 红测、tool plan provider 主题 slice、backend full slice、backend main e2e、frontend node/lint/build/full Chromium、diff hygiene 与备份计划 diff 检查均通过。
+  - 已封板主线：real-tool-execution、queue-and-concurrency-lite、concurrency-fairness-policy、registry-governance、rag-governance-hardening、production-reliability-hardening、observability-experience、rag-product-experience、provider-tool-expansion。
+  - provider-tool-expansion 封板验证：provider_search 15/15、HTTP JSON 531/531、tool_plan_provider 57/57、backend full slice 1983/1983、backend main e2e、frontend node 121/121、frontend lint/build、frontend full Chromium 52 passed / 1 skipped、py_compile、diff hygiene 与备份计划 diff 检查均通过。
   - 后续候选主线：ci-release-engineering。
 constraints:
   - 永远不要修改 data/insightagent.plan.back.md
@@ -83,7 +83,7 @@ validation_baseline:
   frontend_diagnostics_finalize: scripts/ci_finalize_e2e_for_workflow.sh --scope frontend --summary-file /tmp/frontend-e2e-finalize-summary.md --event-name push --ref refs/heads/main passed with strict_level=any and 0 error-context alerts
   ci_e2e_tooling: bash scripts/test_ci_e2e_tooling.sh all
   diff_check: git diff --check
-latest_validation_note: provider-tool-expansion 当前进度约 98%；本轮完成 provider planner 对 tool_call 单数容器、嵌套 tool 对象与 function_calls/functionCalls 列表的解析；验证包括 singular_tool_call_container 1/1、nested_tool_object 1/1、function_calls_container 1/1、tool_plan_provider 57/57、backend full slice 1983/1983、backend main e2e、frontend node 121/121、frontend lint/build、frontend full Chromium 52 passed / 1 skipped、py_compile、git diff --check 与备份计划 diff 检查通过；外部 SSE、trace、export、display shape 保持稳定。
+latest_validation_note: provider-tool-expansion 已 100% 封板；本轮完成主线审计与四份活跃文档收敛，验证以 provider_search 15/15、HTTP JSON 531/531、tool_plan_provider 57/57、backend full slice 1983/1983、backend main e2e、frontend node 121/121、frontend lint/build、frontend full Chromium 52 passed / 1 skipped、py_compile、git diff --check 与备份计划 diff 检查为基线；外部 SSE、trace、export、display shape 保持稳定。
 todos:
   - id: docs-slimming
     status: completed
@@ -125,8 +125,8 @@ todos:
     status: completed
     content: 已 100% 封板；知识库治理表版本明细、source/document 文档组摘要、文档组删除治理、Runtime Debug RAG query 查询级召回摘要、质量分布、召回使用建议、质量/来源/未知来源筛选、组合筛选空结果提示、命中来源摘要与召回质量标签均已收口；RAG status/list、ingest/query、SSE、trace、export 外部契约保持稳定。
   - id: provider-tool-expansion
-    status: in_progress
-    content: 当前进度约 98%；已完成分页型 provider search 显式总量归一化、GraphQL connection 服务端总量归一化、Meilisearch/Algolia 服务端总量别名归一化、Brave web.results 嵌套搜索结果归一化、Bing webPages.totalEstimatedMatches + value[] 服务端总量归一化、SearXNG/元搜索风格 number_of_results + results[] 总量归一化、Crossref/学术检索风格 message.total-results + items[] 总量与命中归一化、PubMed/NCBI ESearch 风格 esearchresult.count + idlist[] 总量与命中归一化、Europe PMC 风格 hitCount + resultList.result[] 服务端总量与当前页命中归一化、Google Custom Search 风格 queries.request[].totalResults + items[] 服务端总量与当前页命中归一化、Serper/Google Search 风格 searchInformation.totalResults + organic[] 服务端总量与当前页命中归一化、引用型 answer-search citations / search_results 命中列表归一化、搜索 provider 千分位总量字符串归一化、显式 result_fields bracket quoted 特殊字段键解析，以及 Gemini/Vertex functionCall、Bedrock/Claude Converse toolUse、Anthropic Messages 混合 text + tool_use 内容块、顶层 message.tool_calls / delta.tool_calls wrapper、tool_call 单数容器、tool_calls/toolCalls 映射容器、function_calls/functionCalls 列表、嵌套 tool{name,input} 对象、AI SDK toolInvocations、camelCase toolCalls 容器与 toolCall/toolName/functionName 工具名别名解析，并兼容 input/tool_input/toolInput/arguments JSON 字符串参数和整体序列化 JSON 字符串的 tool_calls/toolCalls 容器；failed terminal reconnect stream 错误码复原已补齐；下一步做主线完成审计与四文档封板收敛。
+    status: completed
+    content: 已 100% 封板；已完成分页型 provider search 显式总量归一化、GraphQL connection、Meilisearch/Algolia、Brave、Bing、SearXNG、Crossref、PubMed/NCBI ESearch、Europe PMC、Google Custom Search、Serper、引用型 answer-search、千分位总量字符串、显式 result_fields bracket quoted 特殊字段键、OpenAI Chat/Responses、Gemini/Vertex、Bedrock/Claude Converse、Anthropic Messages、顶层 message/delta wrapper、tool_call 单数容器、tool_calls/toolCalls 映射容器、function_calls/functionCalls 列表、嵌套 tool{name,input} 对象、AI SDK camelCase toolCalls/toolInvocations/toolName/functionName 与 JSON 字符串参数解析；failed reconnect 错误码复原已补齐；四份活跃文档已完成封板收敛。
 logging_rule: 本计划文件只保存当前作战地图和少量高信号里程碑，不再保存按天流水账。
 ---
 
@@ -137,8 +137,8 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `tool-runtime-productionization` 已归档；当前活跃判断以代码、三份 README 与本计划文件为准。
 - `real-tool-execution` 当前验收基线已完成：provider/source/settings/file-backed 组合中的 real search / real calc 已稳定贯通真实上游协议、preview/output/result-summary、trace/observation/export 与 e2e 回归。
-- `queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 已封板：queued 状态、进程内执行槽位、capacity-aware FIFO、可选 per-user/per-session 限额、settings diagnostics、前端可观测入口、registry/provider source 治理、RAG 来源/版本/shared 边界治理、生产可靠性治理、失败诊断/任务回放/Trace 语义过滤、RAG 产品化检索解释与 e2e 基线均已收口。
-- 当前主线为 `provider-tool-expansion`，进度约 98%；后续候选为 `ci-release-engineering`。
+- `queue-and-concurrency-lite`、`concurrency-fairness-policy`、`registry-governance`、`rag-governance-hardening`、`production-reliability-hardening`、`observability-experience`、`rag-product-experience` 与 `provider-tool-expansion` 已 100% 封板：queued 状态、并发治理、registry/provider source 治理、RAG 来源/版本/shared 边界治理、生产可靠性治理、失败诊断/任务回放/Trace 语义过滤、RAG 产品化检索解释、provider search 总量/命中归一化与 provider planner 多协议工具调用解析均已收口。
+- 当前主线 `provider-tool-expansion` 已 100% 封板；后续候选为 `ci-release-engineering`。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 
 ## 已完成能力摘要
@@ -215,6 +215,7 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 最近封板主线
 
+- `provider-tool-expansion`：已 100% 封板；provider search 总量/命中归一化、显式 result_fields 特殊键、provider planner 多协议工具调用容器/别名/JSON 字符串参数解析与 failed reconnect 稳定错误码复原均已收口，旧 SSE/trace/export/display shape 不变。
 - `registry-governance`：已封板；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口，不改变 settings/preflight/trace/export/audit/SSE 可见字段 shape。
 - `rag-governance-hardening`：已封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口已完成治理收口。
 - `production-reliability-hardening`：已封板；任务队列清理、owner/heartbeat、guarded terminal writes、reconnect/断流语义、race 防误复活与最终 GitHub checks 2/2 均已收口。
@@ -229,9 +230,9 @@ logging_rule: 本计划文件只保存当前作战地图和少量高信号里程
 
 ## 后续维护线
 
-- `production-reliability-hardening`、`observability-experience` 与 `rag-product-experience` 已 100% 封板；当前 `provider-tool-expansion` 进度约 98%，按先红测、再实现、再 targeted/full slice 的方式推进。
+- `production-reliability-hardening`、`observability-experience`、`rag-product-experience` 与 `provider-tool-expansion` 已 100% 封板；后续增量继续按先红测、再实现、再 targeted/full slice 的方式推进。
 - 后续候选：`ci-release-engineering`。
-- 新 provider/source 协议：按 `real-tool-execution` 已完成验收基线增量补红测和局部归一化，不扩大外部契约；下一步继续寻找真实 provider/tool 输出差异的小缺口。
+- 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约，不再作为当前封板阻塞项。
 
 ## 维护约定
 
