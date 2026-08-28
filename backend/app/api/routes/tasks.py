@@ -471,6 +471,26 @@ def _parse_last_event_id(value: str | None) -> int | None:
     return parsed if parsed >= 0 else None
 
 
+def _resolve_reconnect_failed_error(task: dict[str, Any]) -> tuple[str, str]:
+    failure_hint = str(task.get("failure_hint") or "").strip()
+    failure_source = str(task.get("failure_source") or "").strip().lower()
+    if (
+        failure_source == "error_event"
+        and re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+", failure_hint)
+    ):
+        messages_by_code = {
+            "remote_provider_network_error": "Remote provider stream network error.",
+        }
+        return (
+            failure_hint,
+            messages_by_code.get(
+                failure_hint,
+                f"Task ended with failed status ({failure_hint}).",
+            ),
+        )
+    return "task_failed", "Task ended with failed status."
+
+
 def _resolve_tool_registry_provider_source_filter_alias(
     tool_registry_provider_source: str | None,
 ) -> str | None:
@@ -585,14 +605,15 @@ async def stream_running_task_reconnect(
                 state_event = emit_state("error")
                 if state_event is not None:
                     yield state_event
+                error_code, error_message = _resolve_reconnect_failed_error(task)
                 yield sse_event(
                     "error",
                     {
                         **sse_error_payload(
                             task_id=task_id,
                             step_id=last_emitted_step_id,
-                            message="Task ended with failed status.",
-                            code="task_failed",
+                            message=error_message,
+                            code=error_code,
                             fatal=True,
                             retry_count=0,
                         ),

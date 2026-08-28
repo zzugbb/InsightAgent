@@ -284,6 +284,8 @@ _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
     "function_name",
     "functionName",
     "input",
+    "tool_input",
+    "toolInput",
     "arguments",
     "args",
     "parameters",
@@ -711,6 +713,14 @@ def _normalize_provider_tool_plan_item(
     tool_input = _coerce_provider_tool_plan_input_mapping(raw_item.get("input"))
     if not isinstance(tool_input, Mapping):
         tool_input = _coerce_provider_tool_plan_input_mapping(
+            raw_item.get("tool_input")
+        )
+    if not isinstance(tool_input, Mapping):
+        tool_input = _coerce_provider_tool_plan_input_mapping(
+            raw_item.get("toolInput")
+        )
+    if not isinstance(tool_input, Mapping):
+        tool_input = _coerce_provider_tool_plan_input_mapping(
             raw_item.get("arguments")
         )
     if not isinstance(tool_input, Mapping):
@@ -733,6 +743,8 @@ def _normalize_provider_tool_plan_item(
                 "functionName",
                 "function",
                 "input",
+                "tool_input",
+                "toolInput",
                 "arguments",
                 "args",
                 "parameters",

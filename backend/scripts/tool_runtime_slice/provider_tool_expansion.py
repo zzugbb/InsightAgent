@@ -82,6 +82,41 @@ class ProviderToolExpansionMixin:
             {"expression": "99/11"},
         )
 
+    def test_build_tool_plan_provider_accepts_tool_input_alias(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "langchain"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "tools": [
+                        {
+                            "tool": "calc_eval",
+                            "tool_input": {
+                                "expression": "100/25",
+                            },
+                        }
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "100/25"},
+        )
+
     def test_provider_search_normalizes_estimated_total_hits_alias(self) -> None:
         settings = SimpleNamespace(
             tool_registry_extra_tools_json=json.dumps(
@@ -171,6 +206,185 @@ class ProviderToolExpansionMixin:
                 "documents_total": 84,
                 "hit_count": 2,
                 "request_id": "req-estimated-total-hits-1",
+            },
+        )
+
+    def test_provider_search_uses_results_list_count_when_total_is_absent(self) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "POST",
+                            "json_body": {
+                                "query": "$query",
+                                "max_results": 3,
+                            },
+                        },
+                        "result_preview_keys": ["documents_total", "hit_count"],
+                        "result_output_keys": [
+                            "documents_total",
+                            "hit_count",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "requestId": "req-results-list-total-1",
+                    "results": [
+                        {"url": "https://example.test/a", "content": "alpha"},
+                        {"url": "https://example.test/b", "content": "beta"},
+                        {"url": "https://example.test/c", "content": "gamma"},
+                    ],
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident timeline"},
+                prompt="search incident timeline",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["documents_total"], 3)
+        self.assertEqual(output["hit_count"], 3)
+        self.assertEqual(output["request_id"], "req-results-list-total-1")
+        self.assertEqual(
+            build_tool_result_preview(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 3,
+                "hit_count": 3,
+            },
+        )
+
+    def test_provider_search_uses_organic_results_count_when_total_is_absent(
+        self,
+    ) -> None:
+        settings = SimpleNamespace(
+            tool_registry_extra_tools_json=json.dumps(
+                {
+                    "provider_search": {
+                        "template": "task_retrieve",
+                        "label": "Provider Search",
+                        "kind": "provider_retrieval",
+                        "runtime_semantic_kind": "provider_search",
+                        "execution": {
+                            "kind": "http_json",
+                            "url": "https://provider.example/search",
+                            "method": "GET",
+                            "query_params": {
+                                "q": "$query",
+                            },
+                        },
+                        "result_preview_keys": ["documents_total", "hit_count"],
+                        "result_output_keys": [
+                            "documents_total",
+                            "hit_count",
+                            "request_id",
+                        ],
+                    }
+                }
+            )
+        )
+
+        extra_tools = build_tool_registry_extra_tools_from_settings(settings=settings)
+
+        class FakeHttpResponse:
+            def __init__(self, payload: object) -> None:
+                self._payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self._payload
+
+            def __enter__(self) -> "FakeHttpResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        original_urlopen = getattr(tool_runtime_module, "urlopen", None)
+        try:
+            tool_runtime_module.urlopen = lambda request, timeout=0: FakeHttpResponse(  # type: ignore[attr-defined]
+                {
+                    "search_metadata": {
+                        "id": "req-organic-count-1",
+                    },
+                    "organic_results": [
+                        {"title": "alpha", "snippet": "alpha snippet"},
+                        {"title": "beta", "snippet": "beta snippet"},
+                    ],
+                }
+            )
+
+            output = run_tool(
+                name="provider_search",
+                tool_input={"query": "incident timeline"},
+                prompt="search incident timeline",
+                user_id="user-1",
+                attempt=0,
+                registry=extra_tools,
+            )
+        finally:
+            if original_urlopen is None:
+                delattr(tool_runtime_module, "urlopen")
+            else:
+                tool_runtime_module.urlopen = original_urlopen  # type: ignore[attr-defined]
+
+        registration = extra_tools["provider_search"]
+        self.assertEqual(output["documents_total"], 2)
+        self.assertEqual(output["hit_count"], 2)
+        self.assertEqual(output["request_id"], "req-organic-count-1")
+        self.assertEqual(
+            build_tool_result_output(
+                name="provider_search",
+                output=output,
+                registry=extra_tools,
+                registration=registration,
+            ),
+            {
+                "documents_total": 2,
+                "hit_count": 2,
+                "request_id": "req-organic-count-1",
             },
         )
 

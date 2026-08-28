@@ -290,6 +290,7 @@ from tool_runtime_slice.runtime_result_semantics import RuntimeResultSemanticsMi
 from tool_runtime_slice.runtime_service_execution_semantics import RuntimeServiceExecutionSemanticsMixin
 from tool_runtime_slice.settings_registry import SettingsRegistryMixin
 from tool_runtime_slice.task_routes_usage_governance import TaskRoutesUsageGovernanceMixin
+from tool_runtime_slice.task_stream_reconnect import TaskStreamReconnectMixin
 from tool_runtime_slice.task_trace_response_summaries import TaskTraceResponseSummariesMixin
 from tool_runtime_slice.task_usage_dashboard import TaskUsageDashboardMixin
 from tool_runtime_slice.task_usage_observability import TaskUsageObservabilityMixin
@@ -323,6 +324,7 @@ class ToolRuntimeSliceTests(
     ModelDumpRoutesMixin,
     TaskTraceExportGovernanceMixin,
     TaskRoutesUsageGovernanceMixin,
+    TaskStreamReconnectMixin,
     TaskTraceResponseSummariesMixin,
     TaskUsageDashboardMixin,
     TaskUsageObservabilityMixin,
