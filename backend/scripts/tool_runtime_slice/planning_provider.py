@@ -1200,6 +1200,47 @@ class PlanningProviderMixin:
             {"expression": "64/8"},
         )
 
+    def test_build_tool_plan_provider_accepts_anthropic_tool_use_with_text_content(
+        self,
+    ) -> None:
+        class FakeProvider:
+            provider = "anthropic"
+
+            def generate(self, prompt: str) -> dict[str, object]:
+                del prompt
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "I will calculate that now.",
+                        },
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_calc_3",
+                            "name": "calc_eval",
+                            "input": {
+                                "expression": "88/11",
+                            },
+                        },
+                    ]
+                }
+
+        artifacts = build_tool_plan_artifacts(
+            "普通问答，不包含显式计算标记",
+            provider=FakeProvider(),
+        )
+
+        self.assertTrue(artifacts.planning_provider_attempted)
+        self.assertTrue(artifacts.planning_provider_used)
+        self.assertEqual(
+            [item["name"] for item in artifacts.tool_plan],
+            ["task_plan", "calc_eval"],
+        )
+        self.assertEqual(
+            artifacts.tool_plan[1]["input"],
+            {"expression": "88/11"},
+        )
+
     def test_build_tool_plan_provider_accepts_tool_use_string_input(
         self,
     ) -> None:

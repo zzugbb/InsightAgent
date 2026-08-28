@@ -325,6 +325,38 @@ def _coerce_provider_tool_plan_structured_value(raw_value: object) -> object:
     return _coerce_tool_registry_spec_payload(parsed_value)
 
 
+def _content_contains_structured_provider_tool_plan(raw_value: object) -> bool:
+    raw_value = _coerce_provider_tool_plan_payload(raw_value)
+    if isinstance(raw_value, Mapping):
+        content_type = _coerce_tool_execution_string_like_value(
+            raw_value.get("type", "")
+        )
+        if isinstance(content_type, str) and content_type.strip().lower() in {
+            "tool_call",
+            "tool_use",
+            "function_call",
+        }:
+            return True
+        return any(
+            key in raw_value
+            for key in (
+                "tool_calls",
+                "toolCalls",
+                "toolCall",
+                "toolUse",
+                "tool_use",
+                "function_call",
+                "functionCall",
+            )
+        )
+    if _is_non_text_sequence(raw_value):
+        return any(
+            _content_contains_structured_provider_tool_plan(item)
+            for item in raw_value
+        )
+    return False
+
+
 def _extract_provider_tool_plan_items_from_payload(
     payload: object,
 ) -> list[object] | None:
@@ -554,6 +586,8 @@ def _extract_provider_response_content(response: object) -> object:
             return response
         if "content" in response:
             content = response.get("content")
+            if _content_contains_structured_provider_tool_plan(content):
+                return content
             normalized_text = normalize_response_text(content)
             if normalized_text:
                 return normalized_text
