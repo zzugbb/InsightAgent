@@ -4,12 +4,13 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前状态
 
-- `provider-tool-expansion` 已 100% 封板，当前主线为 `ci-release-engineering`，进度约 65%。
+- `provider-tool-expansion` 已 100% 封板，当前主线为 `ci-release-engineering`，进度约 78%。
 - 第一轮 CI/release 工程新增不启动服务的 release gate，后端侧统一使用 `backend/.venv/bin/python` 跑 full slice、module boundary 与 compileall。
 - release gate 已支持 PR diff 自动分层；后端变更跑 backend/tooling/hygiene，CI 脚本或 workflow 变更保守升级到全量。
 - release gate 已输出 Markdown/JSON 摘要，便于 CI 页面和 artifact 排查失败阶段。
 - 发布就绪矩阵与 backend e2e workflow 已覆盖 release gate、main/timeout/queue service-backed e2e 与 artifact-stage guard；release gate 仍不启动服务、不替代 e2e。
 - 后端失败诊断支持多个 secondary health URL，CI 可同时采集 timeout 与 queue 实例健康状态。
+- main push 的 artifact-stage guard 严格度已升级为 `fail-on-missing`，PR 仍使用 `fail-on-empty`。
 - HTTP JSON provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数和 reconnect 稳定错误码已完成。
 - runtime 与测试结构治理完成：`backend/app` 与 `backend/scripts` 所有 Python 文件均低于 3000 行，当前最大文件为 `scripts/tool_runtime_slice/planning_provider.py` 2923 行。
 - 项目级源码体积边界已扩展到前端源文件；生成锁文件不纳入拆分目标，`frontend/app/globals.css` 已拆为主题样式模块。

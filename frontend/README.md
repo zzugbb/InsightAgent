@@ -5,8 +5,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - `provider-tool-expansion` 已 100% 封板；兼容逻辑由后端承接，前端继续消费既有 preview/output/result-summary、trace/export 字段。
-- 当前主线为 `ci-release-engineering`，进度约 65%；release gate 已纳入前端 node/lint/build、PR diff 自动分层、CI workflow、summary artifact 与 release readiness matrix。
+- 当前主线为 `ci-release-engineering`，进度约 78%；release gate 已纳入前端 node/lint/build、PR diff 自动分层、CI workflow、summary artifact 与 release readiness matrix。
 - 前端 e2e workflow 已覆盖 smoke/full 以及低并发 queue recovery 阶段；queue 阶段使用独立 `:8011` backend，避免影响默认全量 UI 基线。
+- main push 的 Playwright artifact-stage guard 严格度已升级为 `fail-on-missing`，PR 仍使用 `fail-on-empty`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard、知识库治理均已落地。
 - 全局样式拆分已完成：`app/globals.css` 仅保留有序 import，实际样式按主题拆入 `app/styles/`。
 - 前端源码体积边界已纳入 node 测试；`package-lock.json` 属于生成锁文件，不作为拆分对象。

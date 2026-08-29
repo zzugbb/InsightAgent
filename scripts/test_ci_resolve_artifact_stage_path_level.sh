@@ -45,11 +45,16 @@ TXT
   assert_contains "$out" "strict_level=warn"
   assert_contains "$out" "policy_source=default"
 
+  out=$(bash "$SCRIPT" --scope backend --changed-files "${tmp}/changed.txt" --event-name push --ref refs/heads/main --fallback-level warn --main-push-level fail-on-missing --path-regex '^(backend/|compose\.full\.yml$|\.github/workflows/backend-e2e\.yml$)')
+  assert_contains "$out" "strict_level=fail-on-missing"
+  assert_contains "$out" "policy_source=main_push"
+
   out=$(bash "$SCRIPT" --scope backend --changed-files "${tmp}/changed.txt" --event-name workflow_dispatch --ref refs/heads/main --fallback-level warn --path-regex '^(backend/|compose\.full\.yml$|\.github/workflows/backend-e2e\.yml$)' --dispatch-override fail-on-empty)
   assert_contains "$out" "strict_level=fail-on-empty"
   assert_contains "$out" "policy_source=workflow_dispatch_input"
 
   expect_fail bash "$SCRIPT" --scope backend --changed-files "${tmp}/changed.txt" --fallback-level bad
+  expect_fail bash "$SCRIPT" --scope backend --changed-files "${tmp}/changed.txt" --fallback-level warn --main-push-level bad
 
   echo "ci_resolve_artifact_stage_path_level tests passed"
 }

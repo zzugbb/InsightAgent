@@ -9,6 +9,7 @@ base_sha=""
 head_sha="${GITHUB_SHA:-HEAD}"
 dispatch_override="auto"
 fallback_level=""
+main_push_level=""
 pr_level=""
 included_count=""
 missing_count=""
@@ -31,6 +32,7 @@ Usage:
     --head-sha <sha> \
     --dispatch-override <auto|none|warn|fail-on-empty|fail-on-missing> \
     --fallback-level <none|warn|fail-on-empty|fail-on-missing> \
+    [--main-push-level <none|warn|fail-on-empty|fail-on-missing>] \
     --pr-level <none|warn|fail-on-empty|fail-on-missing> \
     --included-count <n> \
     --missing-count <n> \
@@ -64,6 +66,7 @@ while [ "$#" -gt 0 ]; do
     --head-sha) head_sha="${2:-}"; shift 2 ;;
     --dispatch-override) dispatch_override="${2:-}"; shift 2 ;;
     --fallback-level) fallback_level="${2:-}"; shift 2 ;;
+    --main-push-level) main_push_level="${2:-}"; shift 2 ;;
     --pr-level) pr_level="${2:-}"; shift 2 ;;
     --included-count) included_count="${2:-}"; shift 2 ;;
     --missing-count) missing_count="${2:-}"; shift 2 ;;
@@ -88,6 +91,10 @@ if [ -z "${scope}" ] || [ -z "${repo_root}" ] || [ -z "${fallback_level}" ] || [
   echo "missing required arguments" >&2
   usage >&2
   exit 2
+fi
+
+if [ -z "${main_push_level}" ]; then
+  main_push_level="${fallback_level}"
 fi
 
 scope_config_file="$(mktemp)"
@@ -125,6 +132,7 @@ artifact_level_out="$(
     --event-name "${event_name}" \
     --ref "${ref_name}" \
     --fallback-level "${fallback_level}" \
+    --main-push-level "${main_push_level}" \
     --pr-level "${pr_level}" \
     --pr-ref-regex "${ARTIFACT_PR_REF_REGEX}" \
     --path-regex "${ARTIFACT_PATH_REGEX}" \
@@ -162,7 +170,7 @@ bash "${script_repo_root}/scripts/ci_assert_artifact_stage_health.sh" \
 if [ -n "${summary_file}" ]; then
   {
     echo "${ARTIFACT_SUMMARY_HEADING}"
-    echo "- policy: default=${fallback_level}, pr=${pr_level}"
+    echo "- policy: default=${fallback_level}, pr=${pr_level}, main_push=${main_push_level}"
     echo "- dispatch_override: ${dispatch_override}"
     echo "- policy_source: ${artifact_policy_source}"
     echo "- selected_strict_level: ${artifact_strict_level}"

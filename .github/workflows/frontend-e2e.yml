@@ -48,7 +48,7 @@ env:
   FRONTEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT: "p0"
   FRONTEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH: "any"
   FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT: "warn"
-  FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "warn"
+  FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "fail-on-missing"
   FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_PR: "fail-on-empty"
   FRONTEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT: "2"
 
@@ -218,6 +218,7 @@ jobs:
             --ref "${GITHUB_REF}" \
             --dispatch-override "${artifact_dispatch_override:-auto}" \
             --fallback-level "${FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}" \
+            --main-push-level "${FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH}" \
             --pr-level "${FRONTEND_ARTIFACT_STAGE_STRICT_LEVEL_PR}" \
             --included-count "${{ steps.finalize_frontend.outputs.artifact_included_count }}" \
             --missing-count "${{ steps.finalize_frontend.outputs.artifact_missing_count }}" \

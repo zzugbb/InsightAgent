@@ -10,13 +10,14 @@ Usage:
     --changed-files <path> \
     [--dispatch-override <auto|none|warn|fail-on-empty|fail-on-missing>] \
     [--pr-level <none|warn|fail-on-empty|fail-on-missing>] \
+    [--main-push-level <none|warn|fail-on-empty|fail-on-missing>] \
     [--pr-ref-regex <regex>] \
     [--path-regex <regex>] \
     [--fallback-level <none|warn|fail-on-empty|fail-on-missing>]
 
 Output:
   - strict_level=<value>
-  - policy_source=<default|pull_request|path_match|path_miss>
+  - policy_source=<default|main_push|pull_request|path_match|path_miss>
   - path_match=<yes|no>
 USAGE
 }
@@ -25,6 +26,7 @@ scope=""
 changed_files=""
 dispatch_override="auto"
 pr_level=""
+main_push_level=""
 pr_ref_regex=""
 path_regex=""
 fallback_level="warn"
@@ -44,6 +46,7 @@ while [ "$#" -gt 0 ]; do
     --changed-files) changed_files="${2:-}"; shift 2 ;;
     --dispatch-override) dispatch_override="${2:-}"; shift 2 ;;
     --pr-level) pr_level="${2:-}"; shift 2 ;;
+    --main-push-level) main_push_level="${2:-}"; shift 2 ;;
     --pr-ref-regex) pr_ref_regex="${2:-}"; shift 2 ;;
     --path-regex) path_regex="${2:-}"; shift 2 ;;
     --fallback-level) fallback_level="${2:-}"; shift 2 ;;
@@ -62,6 +65,10 @@ fi
 
 if [ -n "${pr_level}" ] && ! is_valid_level "${pr_level}"; then
   echo "invalid --pr-level: ${pr_level}" >&2
+  exit 2
+fi
+if [ -n "${main_push_level}" ] && ! is_valid_level "${main_push_level}"; then
+  echo "invalid --main-push-level: ${main_push_level}" >&2
   exit 2
 fi
 if ! is_valid_level "${fallback_level}"; then
@@ -90,6 +97,11 @@ if [ "${event_name}" = "pull_request" ] && [ -n "${pr_level}" ]; then
       policy_source="path_miss"
     fi
   fi
+fi
+
+if [ "${event_name}" = "push" ] && [ "${ref_name}" = "refs/heads/main" ] && [ -n "${main_push_level}" ]; then
+  strict_level="${main_push_level}"
+  policy_source="main_push"
 fi
 
 if [ -n "${dispatch_override}" ] && [ "${dispatch_override}" != "auto" ]; then

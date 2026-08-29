@@ -33,6 +33,7 @@ git diff -- data/insightagent.plan.back.md
 
 `scripts/ci_release_readiness_matrix.sh` 只生成发布候选检查矩阵，支持 `--format markdown|json` 与 `--output <path>`。矩阵明确区分不需要服务的静态 release gate、需要已启动服务的 backend/frontend e2e，以及 e2e 后置 artifact-stage guard；它不启动服务，也不替代下方 service-backed e2e 命令。
 GitHub backend/frontend e2e workflow 已按矩阵覆盖低并发 queue 阶段；backend 失败诊断可重复传 `--secondary-health-url`，用于同时采集 timeout 与 queue 实例。
+artifact-stage guard 的 main push 严格度为 `fail-on-missing`，PR 严格度为 `fail-on-empty`；手动 `workflow_dispatch` 可用 `artifact_stage_strict_level` 覆盖。
 
 前端检查：
 

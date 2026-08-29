@@ -43,6 +43,7 @@ main() {
       --head-sha abc123 \
       --dispatch-override auto \
       --fallback-level warn \
+      --main-push-level fail-on-missing \
       --pr-level fail-on-empty \
       --included-count 2 \
       --missing-count 0 \
@@ -72,6 +73,7 @@ main() {
       --head-sha def456 \
       --dispatch-override auto \
       --fallback-level warn \
+      --main-push-level fail-on-missing \
       --pr-level fail-on-empty \
       --included-count 2 \
       --missing-count 0 \
@@ -102,6 +104,7 @@ main() {
       --head-sha beadfeed \
       --dispatch-override auto \
       --fallback-level warn \
+      --main-push-level fail-on-missing \
       --pr-level fail-on-empty \
       --included-count 2 \
       --missing-count 0 \
@@ -114,6 +117,32 @@ main() {
   assert_contains "artifact_strict_level=fail-on-empty" "${TMP_DIR}/other-cwd-stdout.txt"
   assert_contains "changed_files_path=${TMP_DIR}/repo/.github/frontend-e2e-changed-files.txt" "${TMP_DIR}/other-cwd-stdout.txt"
   assert_contains "### frontend-e2e artifact strict policy" "${other_cwd_summary_file}"
+
+  main_push_summary_file="${TMP_DIR}/main-push-summary.md"
+  expect_pass env \
+    GITHUB_EVENT_NAME=push \
+    GITHUB_REF=refs/heads/main \
+    GITHUB_SHA=beef123 \
+    bash "${SCRIPT}" \
+      --scope backend \
+      --repo-root "${TMP_DIR}/repo" \
+      --base-sha face123 \
+      --head-sha beef123 \
+      --dispatch-override auto \
+      --fallback-level warn \
+      --main-push-level fail-on-missing \
+      --pr-level fail-on-empty \
+      --included-count 2 \
+      --missing-count 0 \
+      --min-included-count 2 \
+      --stage-dir "${TMP_DIR}/main-push-stage" \
+      --manifest "${TMP_DIR}/main-push-manifest.txt" \
+      --summary-file "${main_push_summary_file}" \
+      > "${TMP_DIR}/main-push-stdout.txt"
+
+  assert_contains "artifact_strict_level=fail-on-missing" "${TMP_DIR}/main-push-stdout.txt"
+  assert_contains "artifact_policy_source=main_push" "${TMP_DIR}/main-push-stdout.txt"
+  assert_contains "- policy: default=warn, pr=fail-on-empty, main_push=fail-on-missing" "${main_push_summary_file}"
 
   echo "ci_run_artifact_stage_guard tests passed"
 }

@@ -41,7 +41,7 @@ env:
   BACKEND_EXPORT_DIAG_STRICT_LEVEL_DEFAULT: "p0"
   BACKEND_EXPORT_DIAG_STRICT_LEVEL_MAIN_PUSH: "any"
   BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT: "warn"
-  BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "warn"
+  BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH: "fail-on-missing"
   BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_PR: "fail-on-empty"
   BACKEND_ARTIFACT_STAGE_MIN_INCLUDED_COUNT: "2"
 
@@ -175,6 +175,7 @@ jobs:
             --ref "${GITHUB_REF}" \
             --dispatch-override "${artifact_dispatch_override:-auto}" \
             --fallback-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_DEFAULT}" \
+            --main-push-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_MAIN_PUSH}" \
             --pr-level "${BACKEND_ARTIFACT_STAGE_STRICT_LEVEL_PR}" \
             --included-count "${{ steps.finalize_backend.outputs.artifact_included_count }}" \
             --missing-count "${{ steps.finalize_backend.outputs.artifact_missing_count }}" \
