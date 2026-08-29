@@ -14,6 +14,38 @@ from .context import (
 
 
 class ProductionReliabilityFailurePathsMixin:
+    def test_production_reliability_sse_error_payload_includes_safe_diagnostic_summary(
+        self,
+    ) -> None:
+        payload = chat_execution_module.sse_error_payload(
+            task_id="task-runtime-diagnostic",
+            message="Remote provider upstream error (HTTP 503).",
+            code="remote_provider_upstream_error",
+            fatal=False,
+            retry_count=2,
+            detail="upstream request failed with Authorization Bearer secret-token",
+            status_code=503,
+        )
+
+        self.assertEqual(payload["task_id"], "task-runtime-diagnostic")
+        self.assertEqual(payload["code"], "remote_provider_upstream_error")
+        self.assertEqual(payload["fatal"], False)
+        self.assertEqual(payload["retryable"], True)
+        self.assertEqual(payload["retryCount"], 2)
+        self.assertEqual(payload["status_code"], 503)
+        self.assertEqual(
+            payload["diagnostic"],
+            {
+                "category": "remote_provider",
+                "recoverability": "retryable",
+                "http_status_family": "5xx",
+                "has_detail": True,
+            },
+        )
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("secret-token", serialized)
+
     def test_production_reliability_tool_terminal_return_lost_race_emits_cancelled(
         self,
     ) -> None:

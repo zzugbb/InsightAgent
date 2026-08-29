@@ -5,20 +5,21 @@
 ## 当前状态
 
 - `provider-tool-expansion` 已 100% 封板。
-- `ci-release-engineering` 已 100% 封板：release gate 支持 PR diff 自动分层、手动阶段选择、Markdown/JSON 摘要、GitHub Actions summary artifact、release readiness matrix、backend/frontend queue e2e workflow 覆盖与 main push artifact `fail-on-missing` 严格度。
-- 后续开发继续保持 SSE / trace / export / e2e 外部契约稳定，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
+- `ci-release-engineering` 已 100% 封板。
+- 当前主线为 `production-runtime-hardening`，进度约 15%；SSE `error` payload 已追加低敏 `diagnostic` 摘要，不改变旧字段。
+- 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过；非 PR 环境保守解析为 backend/frontend/tooling/hygiene 全量。
-- Backend：full slice `1983/1983`；module boundary `4/4`；targeted registry/http_json/provider/runtime/trace/export/usage 均通过。
+- Backend：full slice `1984/1984`；module boundary `4/4`；targeted production_reliability `36/36`、reconnect `8/8` 通过。
 - Frontend：node tests `122/122`、`npm run lint`、`npm run build` 通过。
 - E2E 基线：backend main 通过；frontend full Chromium `52 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 稳定契约
 
-- SSE 事件、`TraceStep`、result summary、safe output、JSON/Markdown export shape 保持稳定。
+- SSE 事件、`TraceStep`、result summary、safe output、JSON/Markdown export shape 保持稳定；`error.diagnostic` 只包含低敏分类、recoverability、HTTP 状态族与 detail 存在性。
 - 默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`。
 - queued/running/cancel/reconnect 与 task recovery 语义保持稳定。
 - `data/insightagent.plan.back.md` 是只读备份计划，永远不参与同步或修改。
@@ -34,7 +35,6 @@ bash scripts/ci_release_readiness_matrix.sh --format markdown
 
 详细测试、e2e、启动和提交流程以 [`docs/development-runbook.md`](docs/development-runbook.md) 为准。
 
-## 下一候选主线
+## 下一步
 
-- `production-runtime-hardening`：运行态失败诊断、provider registry 体验、远端 provider 可观测性与发布后回归策略。
 - `product-ux-polish`：Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。

@@ -117,6 +117,26 @@ def _sanitize_sse_provider_source_text(
     return _SSE_PROVIDER_SOURCE_TEXT_RE.sub(redact, text)
 
 
+def _classify_sse_error_category(code: str) -> str:
+    if code.startswith("remote_provider_") or code.startswith("remote_api_key_"):
+        return "remote_provider"
+    if code.startswith("task_queue_"):
+        return "task_queue"
+    if code in {"task_cancelled", "task_timeout", "task_not_found"}:
+        return "task_lifecycle"
+    if code.startswith("task_stream_"):
+        return "task_stream"
+    if code.startswith("tool_"):
+        return "tool_runtime"
+    return "unknown"
+
+
+def _classify_http_status_family(status_code: int | None) -> str | None:
+    if not isinstance(status_code, int) or status_code < 100:
+        return None
+    return f"{status_code // 100}xx"
+
+
 def sse_error_payload(
     *,
     task_id: str,
@@ -150,6 +170,12 @@ def sse_error_payload(
         "fatal": fatal,
         "retryable": not fatal,
         "retryCount": retry_count,
+        "diagnostic": {
+            "category": _classify_sse_error_category(code),
+            "recoverability": "fatal" if fatal else "retryable",
+            "http_status_family": _classify_http_status_family(status_code),
+            "has_detail": bool(safe_detail_text),
+        },
     }
     if step_id:
         payload["step_id"] = step_id
