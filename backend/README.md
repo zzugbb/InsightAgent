@@ -26,6 +26,15 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - remote provider 错误在 SSE `error` 中保持结构化 `code / fatal / retryable / detail / status_code`，并追加低敏 `diagnostic`。
 - Memory/RAG collection 命名、Chroma 503 降级、shared knowledge base 权限语义保持稳定。
 
+## HTTP 接口范围
+
+- Auth：`POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/refresh`、`POST /api/auth/logout`、`POST /api/auth/logout-all`、`GET /api/auth/sessions`、`DELETE /api/auth/sessions/{session_id}`、`GET /api/auth/me`、`GET /api/auth/users`（admin only）。
+- Settings：`GET /api/settings`、`PUT /api/settings`、`POST /api/settings/validate`；settings 响应包含只读 `task_queue_diagnostics`，不参与保存、不暴露内部 task ids。
+- Sessions：`POST /api/sessions`、`GET /api/sessions?limit=&offset=`、`PATCH /api/sessions/{session_id}`、`DELETE /api/sessions/{session_id}`、`GET /api/sessions/{session_id}/messages`、session JSON/Markdown export、memory status/add/query、usage summary。
+- Tasks：`POST /api/tasks`、`GET /api/tasks?limit=&offset=&session_id=&query=`、`GET /api/tasks/{task_id}`、cancel、stream、trace、trace delta、task JSON/Markdown export、usage summary/dashboard。
+- RAG：`GET /api/rag/status`、`POST /api/rag/ingest`、`POST /api/rag/query`、knowledge base list/clear/delete。
+- 除 `/health` 与 `/api/auth/*` 外，业务接口均需 `Authorization: Bearer <token>`；task 列表类响应保留 `status_normalized/status_label/status_rank`。
+
 ## 关键入口
 
 - `app/services/tool_runtime.py`：tool runtime 兼容 facade。
@@ -41,5 +50,12 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 cd backend
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+常用运行参数：
+
+- `TRACE_PERSIST_MIN_INTERVAL_SEC`：trace 增量持久化最小间隔。
+- `STREAM_RECONNECT_POLL_FAST_SEC`、`STREAM_RECONNECT_POLL_MAX_SEC`、`STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC`：running reconnect 轮询与 heartbeat。
+- `TASK_TIMEOUT_SEC`、`TASK_QUEUE_MAX_CONCURRENT`、`TASK_QUEUE_POLL_INTERVAL_SEC`：任务超时、并发槽位与 queued 等待刷新。
+- `TASK_EXECUTION_OWNER_ID`、`TASK_EXECUTION_HEARTBEAT_INTERVAL_SEC`、`TASK_EXECUTION_STALE_AFTER_SEC`：多实例 owner、running heartbeat 与 stale 接管。
 
 测试、e2e、服务启动、端口和提交权限以 [`docs/development-runbook.md`](../docs/development-runbook.md) 为准。

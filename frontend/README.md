@@ -26,6 +26,14 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Workbench 使用 `trace/delta` 做静默增量刷新，流结束后补拉最终快照。
 - result summary、safe output、failure hint 与 diagnostics 使用后端统一语义。
 
+## 能力索引
+
+- Workbench：会话、消息、任务中心、Trace/Context Inspector 与 running task recovery。
+- 任务回放：任务详情页、Trace 时间线/流程图、Failure 入口、任务和会话 JSON/Markdown 导出。
+- 设置与治理：模型设置、provider/source diagnostics、task queue diagnostics、审计日志、usage dashboard、知识库治理。
+- Memory/RAG 调试：会话级 `memory_{session_id}` 调试入口、知识库 `kb_{user_hash}_{knowledge_base_id}` 状态/写入/检索入口。
+- 前端不新增 provider 专用显示分支，继续消费后端统一 preview/output/result-summary 与 trace/export 字段。
+
 ## 关键入口
 
 - `app/components/workbench/index.tsx`：工作台编排。

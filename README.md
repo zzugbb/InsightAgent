@@ -24,6 +24,14 @@
 - queued/running/cancel/reconnect 与 task recovery 语义保持稳定。
 - `data/insightagent.plan.back.md` 是只读备份计划，永远不参与同步或修改。
 
+## 核心边界
+
+- `PostgreSQL` 保存用户、会话、消息、任务、trace、usage、设置与审计，是完整历史和回放账本。
+- `Chroma Memory` 使用会话级 collection `memory_{session_id}`，服务当前对话的语义记忆。
+- `Chroma RAG` 使用知识库 collection `kb_{user_hash}_{knowledge_base_id}`，服务跨会话复用资料。
+- Chroma 默认连接 `127.0.0.1:8001`；不可达时 Memory/RAG 接口返回 503，任务后的 memory 摘要写入保持 best-effort。
+- 仓库主目录为 `backend/`、`frontend/`、`data/`；完整启动和门禁细节以 runbook 为准。
+
 ## 运行与门禁
 
 ```bash
