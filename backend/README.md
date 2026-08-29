@@ -7,6 +7,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `provider-tool-expansion` 已 100% 封板，当前进入维护收口；后续候选主线为 `ci-release-engineering`。
 - HTTP JSON provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数和 reconnect 稳定错误码已完成。
 - runtime 与测试结构治理完成：`backend/app` 与 `backend/scripts` 所有 Python 文件均低于 3000 行，当前最大文件为 `scripts/tool_runtime_slice/planning_provider.py` 2923 行。
+- 项目级源码体积边界已扩展到前端源文件；生成锁文件不纳入拆分目标，`frontend/app/globals.css` 已拆为主题样式模块。
 - 外部 SSE / trace / export / display shape、queued/running/cancel/reconnect 语义保持稳定。
 
 ## 当前验证基线
@@ -14,8 +15,9 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1983/1983` 通过。
 - Targeted：`registry 534/534`、`http_json 531/531`、`provider 538/538`、`runtime 163/163`、`trace 188/188`、`export 184/184`、`usage 63/63` 通过。
 - Module boundary：`PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行文件规模边界。
+- Frontend contract checks：node tests `122/122`、`npm run lint`、`npm run build` 通过。
+- E2E：backend main 既有基线通过；本轮 targeted Chromium `workbench-main-path` `5/5` 通过。
 - `py_compile`、`git diff --check` 通过；`data/insightagent.plan.back.md` 无 diff。
-- 已有 e2e 基线：backend main 通过；本轮为内部拆分，未重复启动服务。
 
 ## Runtime 模块索引
 

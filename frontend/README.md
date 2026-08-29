@@ -6,15 +6,16 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - `provider-tool-expansion` 已 100% 封板；兼容逻辑由后端承接，前端继续消费既有 preview/output/result-summary、trace/export 字段。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard、知识库治理均已落地。
-- 本轮仅完成后端 runtime/persistence 与测试 slice 大文件拆分，前端无功能改动；后续候选主线为 `ci-release-engineering`。
+- 本轮完成全局样式拆分：`app/globals.css` 仅保留有序 import，实际样式按主题拆入 `app/styles/`。
+- 前端源码体积边界已纳入 node 测试；`package-lock.json` 属于生成锁文件，不作为拆分对象。
 - SSE / trace / export、queued/running/cancel/reload recovery 与任务回放语义保持稳定。
 
 ## 当前验证基线
 
-- Node tests：7 个测试文件，`121/121` 通过。
+- Node tests：8 个测试文件，`122/122` 通过，包含 frontend source size boundary。
 - `npm run lint` 通过。
 - `npm run build` 通过。
-- 已有 e2e 基线：full Chromium `52 passed / 1 skipped`；低并发 queue phase `1/1`；本轮未改 UI，未重复启动服务。
+- E2E：full Chromium 既有基线 `52 passed / 1 skipped`；低并发 queue phase 既有基线 `1/1`；本轮 targeted Chromium `workbench-main-path` `5/5` 通过。
 - Backend 契约基线：full slice `1983/1983`；`registry 534/534`、`http_json 531/531`、`provider 538/538`、`runtime 163/163`、`trace 188/188`、`export 184/184`、`usage 63/63`；module boundary `4/4`。
 
 ## 能力索引
@@ -35,6 +36,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `app/components/workbench/runtime-debug-modal.tsx`：Memory/RAG 调试。
 - `app/components/workbench/knowledge-base-governance-modal.tsx`：知识库治理。
 - `app/tasks/[taskId]/page.tsx`：任务详情与导出。
+- `app/globals.css` 与 `app/styles/`：全局样式 facade 与主题样式模块。
 - `lib/stores/chat-stream-store.ts`：SSE 分发与 Trace 状态。
 - `lib/stores/chat-stream-store-utils.ts`：tool meta、preview/output/result-summary 归一化。
 - `lib/api-client.ts`：Bearer、refresh token 与 REST 请求。

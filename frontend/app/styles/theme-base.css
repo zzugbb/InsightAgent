@@ -1,0 +1,198 @@
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101418;
+  --bg-soft: #151b22;
+  --bg-elevated: #1a212b;
+  --panel: rgba(20, 26, 34, 0.92);
+  --panel-soft: rgba(25, 32, 42, 0.88);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text: #eef2f6;
+  --muted: #95a1b2;
+  --muted-strong: #cfd8e3;
+  /** --accent 由脚本写入 html style，此处为无脚本时的回退 */
+  --accent: #22c55e;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-strong: color-mix(in srgb, var(--accent) 48%, #ffffff);
+  --warning: #f59e0b;
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --link: #7dd3fc;
+  --link-hover: #bae6fd;
+  --code-bg: rgba(0, 0, 0, 0.35);
+  --blockquote-bg: rgba(255, 255, 255, 0.04);
+  --kbd-bg: rgba(255, 255, 255, 0.06);
+  --body-gradient-mid: color-mix(in srgb, var(--accent) 10%, transparent);
+  --body-gradient-end-a: #0f1318;
+  --body-gradient-end-b: #101418;
+  --hljs-bg: transparent;
+  --hljs-comment: #8b949e;
+  --hljs-keyword: #ff7b72;
+  --hljs-string: #a5d6ff;
+  --hljs-number: #79c0ff;
+  --hljs-title: #d2a8ff;
+  --hljs-attr: #79c0ff;
+  --hljs-built_in: #ffa657;
+  --hljs-function: #d2a8ff;
+  --hljs-meta: #8b949e;
+  --hljs-variable: #ffa657;
+  --hljs-addition: #aff5b4;
+  --hljs-deletion: #ffdcd7;
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --surface-muted: rgba(255, 255, 255, 0.04);
+  --surface-active: rgba(255, 255, 255, 0.09);
+  --sidebar-bg: rgba(11, 15, 20, 0.92);
+  --inspector-bg: rgba(13, 17, 23, 0.92);
+  --popover-bg: rgba(26, 32, 42, 0.98);
+  --chat-top-shine: rgba(255, 255, 255, 0.012);
+  --badge-bg: rgba(255, 255, 255, 0.05);
+  --accent-on-badge: color-mix(in srgb, var(--accent) 72%, #f8fafc);
+  --skeleton-a: rgba(255, 255, 255, 0.05);
+  --skeleton-b: rgba(255, 255, 255, 0.1);
+  --banner-fg: #fecaca;
+  --banner-bg: rgba(248, 113, 113, 0.12);
+  --banner-border: rgba(248, 113, 113, 0.35);
+  --modal-scrim: rgba(0, 0, 0, 0.55);
+  /** 主按钮填充为 --text 时的前景色（深色底用浅色字，浅色底用深色字） */
+  --btn-primary-fg: #11161c;
+  --composer-bar-bg: rgba(14, 18, 24, 0.95);
+  --input-surface: rgba(255, 255, 255, 0.04);
+  --fab-surface: rgba(22, 28, 36, 0.96);
+  --fab-surface-hover: rgba(30, 38, 48, 0.98);
+  --avatar-assistant-fg: color-mix(in srgb, var(--accent) 58%, #ecfdf5);
+  --msg-card-bg: rgba(255, 255, 255, 0.03);
+  --msg-card-user-bg: rgba(255, 255, 255, 0.045);
+  --msg-live-border: color-mix(in srgb, var(--accent) 22%, transparent);
+  --msg-live-bg: color-mix(in srgb, var(--accent) 8%, transparent);
+  --tab-pill-active: rgba(255, 255, 255, 0.08);
+  --nested-panel-bg: rgba(255, 255, 255, 0.025);
+  --table-header-bg: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f9;
+  --bg-soft: #eef1f6;
+  --bg-elevated: #ffffff;
+  --panel: rgba(255, 255, 255, 0.94);
+  --panel-soft: rgba(248, 250, 252, 0.96);
+  --line: rgba(15, 23, 42, 0.1);
+  --line-strong: rgba(15, 23, 42, 0.16);
+  --text: #0f172a;
+  --muted: #64748b;
+  --muted-strong: #334155;
+  /** 浅色下 --accent 仍用全局同一主色（由 html 注入），不覆盖 */
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-strong: color-mix(in srgb, var(--accent) 82%, #0f172a);
+  --warning: #d97706;
+  --shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.1);
+  --link: #0369a1;
+  --link-hover: #0284c7;
+  --code-bg: rgba(15, 23, 42, 0.06);
+  --blockquote-bg: rgba(15, 23, 42, 0.04);
+  --kbd-bg: rgba(15, 23, 42, 0.06);
+  --body-gradient-mid: color-mix(in srgb, var(--accent) 8%, transparent);
+  --body-gradient-end-a: #f8fafc;
+  --body-gradient-end-b: #f1f5f9;
+  --hljs-bg: transparent;
+  --hljs-comment: #6e7781;
+  --hljs-keyword: #cf222e;
+  --hljs-string: #0a3069;
+  --hljs-number: #0550ae;
+  --hljs-title: #8250df;
+  --hljs-attr: #0550ae;
+  --hljs-built_in: #953800;
+  --hljs-function: #8250df;
+  --hljs-meta: #6e7781;
+  --hljs-variable: #953800;
+  --hljs-addition: #116329;
+  --hljs-deletion: #82071e;
+  --surface-hover: rgba(15, 23, 42, 0.06);
+  --surface-muted: rgba(15, 23, 42, 0.045);
+  --surface-active: rgba(15, 23, 42, 0.1);
+  --sidebar-bg: rgba(255, 255, 255, 0.94);
+  --inspector-bg: rgba(255, 255, 255, 0.94);
+  --popover-bg: #ffffff;
+  --chat-top-shine: rgba(15, 23, 42, 0.04);
+  --badge-bg: rgba(15, 23, 42, 0.06);
+  --accent-on-badge: color-mix(in srgb, var(--accent) 88%, #052e16);
+  --skeleton-a: rgba(15, 23, 42, 0.06);
+  --skeleton-b: rgba(15, 23, 42, 0.12);
+  --banner-fg: #b91c1c;
+  --banner-bg: rgba(220, 38, 38, 0.08);
+  --banner-border: rgba(220, 38, 38, 0.28);
+  --modal-scrim: rgba(15, 23, 42, 0.45);
+  --btn-primary-fg: #f8fafc;
+  --composer-bar-bg: rgba(255, 255, 255, 0.88);
+  /** 浅色下与白底区分，避免与 --popover-bg 融成一片 */
+  --input-surface: rgba(15, 23, 42, 0.06);
+  --fab-surface: #ffffff;
+  --fab-surface-hover: #f1f5f9;
+  --avatar-assistant-fg: color-mix(in srgb, var(--accent) 38%, #14532d);
+  --msg-card-bg: rgba(15, 23, 42, 0.04);
+  --msg-card-user-bg: rgba(15, 23, 42, 0.07);
+  --msg-live-border: color-mix(in srgb, var(--accent) 32%, transparent);
+  --msg-live-bg: color-mix(in srgb, var(--accent) 10%, transparent);
+  --tab-pill-active: rgba(15, 23, 42, 0.08);
+  --nested-panel-bg: rgba(15, 23, 42, 0.04);
+  --table-header-bg: rgba(15, 23, 42, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family:
+    "Avenir Next",
+    "SF Pro Display",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Noto Sans SC",
+    sans-serif;
+  background:
+    radial-gradient(circle at top, var(--body-gradient-mid), transparent 24%),
+    linear-gradient(
+      180deg,
+      var(--body-gradient-end-a) 0%,
+      var(--body-gradient-end-b) 100%
+    );
+  color: var(--text);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+code {
+  padding: 0.08rem 0.38rem;
+  border-radius: 0.45rem;
+  background: var(--kbd-bg);
+  color: var(--muted-strong);
+}

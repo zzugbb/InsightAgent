@@ -1,0 +1,456 @@
+.settings-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+  min-height: 100vh;
+}
+
+.settings-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.settings-page-header h1 {
+  margin: 10px 0 8px;
+  font-size: 1.75rem;
+}
+
+.settings-page-lead {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 48ch;
+}
+
+.settings-back-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-page-panel {
+  padding: 24px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+}
+
+.settings-appearance-panel {
+  margin-bottom: 20px;
+}
+
+.settings-subsection-title {
+  margin: 0 0 16px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.settings-appearance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 520px) {
+  .settings-appearance-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings-page-banner {
+  margin-bottom: 18px;
+}
+
+.settings-page-loading {
+  color: var(--muted);
+  margin: 0;
+}
+
+.settings-page-meta {
+  margin-top: 20px;
+}
+
+.sidebar-virtual-inner {
+  min-height: 120px;
+}
+
+.sidebar-settings-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.sidebar-settings-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.sidebar-settings-trigger:hover {
+  background: var(--surface-hover);
+}
+
+.settings-menu-popover {
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--popover-bg);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  max-width: min(100vw - 16px, 320px);
+  /* 子级 ColorPicker 面板挂在容器内时勿裁剪 */
+  overflow: visible;
+}
+
+.settings-menu-popover--accordion {
+  max-width: min(100vw - 16px, 360px);
+}
+
+.settings-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-accordion-item {
+  border-radius: 12px;
+  background: transparent;
+}
+
+.settings-accordion-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.settings-accordion-trigger:hover {
+  background: var(--surface-hover);
+}
+
+.settings-accordion-trigger-label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.settings-accordion-chevron {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+
+.settings-accordion-chevron.is-expanded {
+  transform: rotate(-180deg);
+}
+
+.settings-accordion-panel {
+  padding: 0 10px 12px 40px;
+}
+
+.settings-accordion-panel--accent {
+  padding-top: 4px;
+}
+
+.settings-menu-row--footer {
+  margin-top: 2px;
+}
+
+.settings-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.settings-menu-row:hover {
+  background: var(--surface-hover);
+}
+
+.settings-menu-row--identity {
+  cursor: default;
+}
+
+.settings-menu-row--identity:hover {
+  background: transparent;
+}
+
+.settings-menu-row-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-menu-row-value {
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-menu-chevron {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.settings-menu-divider {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--line);
+  border: 0;
+}
+
+.settings-menu-subview {
+  padding: 4px;
+  min-width: 200px;
+}
+
+.settings-menu-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+
+.settings-menu-subtitle {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.settings-menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-menu-option {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--surface-muted);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-menu-option:hover {
+  background: var(--surface-hover);
+}
+
+.settings-menu-option.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.settings-menu-row-value--mono {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  max-width: 11em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-menu-row-value--identity {
+  max-width: 56%;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.settings-menu-subview--accent {
+  min-width: 280px;
+}
+
+.settings-accent-swatches {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.settings-accent-swatch {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.settings-accent-swatch:hover {
+  transform: scale(1.04);
+}
+
+.settings-accent-swatch.is-active {
+  border-color: var(--text);
+}
+
+.settings-accent-swatch-check {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: #fff;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+
+.settings-accent-custom-label {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.settings-accent-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-accent-picker-row .ant-color-picker-trigger {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-settings-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 520;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: none;
+}
+
+.model-settings-modal-scrim {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--modal-scrim);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.model-settings-modal-panel {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  width: 100%;
+  max-width: 520px;
+  max-height: min(90vh, 800px);
+  overflow: auto;
+  padding: 24px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--popover-bg);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.model-settings-modal-panel .field input,
+.model-settings-modal-panel .field select {
+  background-color: var(--input-surface);
+  color: var(--text);
+}
+
+.model-settings-modal-panel .field select option {
+  background-color: var(--popover-bg);
+  color: var(--text);
+}
+
+.model-settings-modal-panel .api-banner {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.model-settings-modal-panel .context-grid strong {
+  color: var(--text);
+}
+
+.model-settings-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.model-settings-modal-head h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.model-settings-modal-lead {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.model-settings-modal-close {
+  flex-shrink: 0;
+  padding: 8px;
+}
+
+.model-settings-banner {
+  margin: 0 0 14px;
+}
+
+.model-settings-form {
+  margin-top: 8px;
+}
+
+.model-settings-meta {
+  margin-top: 16px;
+}
