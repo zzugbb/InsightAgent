@@ -1,223 +1,78 @@
-# Backend
+# InsightAgent Backend
 
-基于 FastAPI 的 Agent 后端，当前以 `mock` 模式作为默认演示路径，同时支持 OpenAI-compatible `remote` 模式；覆盖任务流、轨迹、PostgreSQL 会话持久化、用户级鉴权、Memory 与 RAG。
+FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory、RAG、导出、usage 与审计能力；默认演示路径为 canonical `mock`，也支持 OpenAI-compatible `remote`。
 
 ## 当前状态
 
-- 后端阶段 5 已具备完整演示闭环：Auth、PostgreSQL、任务流、Trace、Memory、RAG、队列、导出、usage dashboard 与审计均已落地。
-- 已封板主线：`real-tool-execution`、队列/并发治理、registry/RAG 治理、生产可靠性、可观测体验、RAG 产品体验、`provider-tool-expansion`。
-- 当前封板结论：provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数解析与 reconnect 稳定错误码复原已收口。
-- 稳定契约：默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`；SSE / trace / export / display shape 不变。
-- 结构治理：`test_tool_runtime_slice.py` 是兼容入口；planner、execution、HTTP JSON、registry 已从 `tool_runtime.py` 拆出 facade 模块；本轮将 registry 公开 wrapper 安装器与 HTTP JSON 响应/诊断工具继续拆到独立主题模块。
-- 后续候选主线：`ci-release-engineering`。
+- `provider-tool-expansion` 已 100% 封板，当前进入维护收口；后续候选主线为 `ci-release-engineering`。
+- HTTP JSON provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数和 reconnect 稳定错误码已完成。
+- runtime 与测试结构治理完成：`backend/app` 与 `backend/scripts` 所有 Python 文件均低于 3000 行，当前最大文件为 `scripts/tool_runtime_slice/planning_provider.py` 2923 行。
+- 外部 SSE / trace / export / display shape、queued/running/cancel/reconnect 语义保持稳定。
 
 ## 当前验证基线
 
-- Backend full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1983/1983` 通过。
-- Provider-tool targeted：`tool_registry 494/494`、`http_json 531/531`、`facade 4/4`、`provider_search 15/15`、`tool_plan_provider 57/57`、`failed_task_error_event_hint 1/1` 通过。
-- Backend e2e：main phase 通过；queue phase 保留为低并发专项基线。
-- Frontend 回归：node tests `121/121`、lint、build、full Chromium `52 passed / 1 skipped` 通过。
-- Hygiene：`py_compile`、diff checks、备份计划 diff 检查通过。
+- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1983/1983` 通过。
+- Targeted：`registry 534/534`、`http_json 531/531`、`provider 538/538`、`runtime 163/163`、`trace 188/188`、`export 184/184`、`usage 63/63` 通过。
+- Module boundary：`PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行文件规模边界。
+- `py_compile`、`git diff --check` 通过；`data/insightagent.plan.back.md` 无 diff。
+- 已有 e2e 基线：backend main 通过；本轮为内部拆分，未重复启动服务。
 
-## 下一步后端计划
+## Runtime 模块索引
 
-1. 当前主线：`provider-tool-expansion` 已 100% 封板；四份活跃文档已收敛到当前状态、验证基线、候选主线与稳定契约。
-2. 已封板主线：从 `real-tool-execution` 到 `provider-tool-expansion` 的九条主线均已封板。
-3. 后续候选主线：`ci-release-engineering`；继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
+- `app/services/module_export_utils.py`：拆分模块函数 rebinding 工具，保持原 facade monkeypatch 与 helper 查找语义。
+- `app/services/tool_runtime.py`：稳定 facade，汇总旧导出路径，2547 行。
+- `app/services/tool_runtime_planning.py`：planner、provider planner 与 payload normalization。
+- `app/services/tool_runtime_display.py`：tool 显示名、语义分类、输出归一化与 `run_tool` 旧导出实现。
+- `app/services/tool_runtime_execution.py`：runtime context、attempt 与前半段执行语义，2864 行。
+- `app/services/tool_runtime_execution_flow.py`：trace event、RAG follow-up、iteration 与 service effects。
+- `app/services/tool_runtime_http_json.py`：HTTP JSON request/template/mapping 核心，2522 行。
+- `app/services/tool_runtime_http_json_execution.py`：HTTP JSON runner、execution spec、summary、diagnostics，1270 行。
+- `app/services/tool_runtime_http_json_response.py`：响应读取、解码、错误格式化和敏感信息脱敏，1750 行。
+- `app/services/tool_runtime_registry.py`：registry/file/provider-source facade，2768 行。
+- `app/services/tool_runtime_registry_settings.py`：settings override、provider artifacts 与 diagnostics 实现。
+- `app/services/tool_runtime_registry_runtime.py`：registry service action、preflight、runtime artifacts 实现，1781 行。
+- `app/services/tool_runtime_registry_public.py`：兼容 wrapper 安装器，190 行。
+- `app/services/chat_persistence_service.py`：会话/任务持久化与治理列处理，1755 行。
+- `app/services/chat_persistence_trace_export.py`：Trace 展示、响应摘要与任务 export。
+- `app/services/chat_persistence_usage.py`：usage summary/dashboard 与 session export response summary。
+- `scripts/tool_runtime_slice/`：按主题组织的测试包；`test_tool_runtime_slice.py` 保留兼容入口。
 
-## 后续候选主线
+## HTTP 接口范围
 
-- `ci-release-engineering`：把 backend slice、targeted RAG、queue phase、full e2e 和 diff hygiene 固化成更清晰的分层门禁。
+- Auth：`/api/auth/register`、`login`、`refresh`、`logout`、`me`、`sessions`。
+- Settings：`GET/PUT /api/settings`、`POST /api/settings/validate`。
+- Sessions：会话 CRUD、消息、Memory、usage 与 JSON/Markdown export。
+- Tasks：创建、查询、详情、取消、SSE stream、trace/delta、usage 与 JSON/Markdown export。
+- RAG：status、ingest、query、knowledge-bases、clear、delete。
+- 其他：`GET /health`、审计日志接口。
 
-## 当前已有内容
+除 `/health` 与 `/api/auth/*` 外，业务接口需要 `Authorization: Bearer <token>`。
 
-- `app/config.py`：统一配置读取
-- `app/schemas/trace.py`：`TraceStep` / `TraceStepMeta` 与解析校验
-- `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`settings`、`rag`、`audit`
-- `app/db.py`：PostgreSQL 连接、初始化与索引
-- `app/providers/`：provider 抽象、mock provider、OpenAI-compatible remote provider
-- `app/services/chat_execution_service.py`：任务流编排与 SSE 主链
-- `app/services/task_queue_service.py`：单进程任务执行槽位、capacity-aware oldest eligible FIFO 等待调度、安全等待快照、等待项移除与测试重置入口
-- `app/services/tool_runtime.py`：tool registry / provider / source、tool runtime helper、preflight、diagnostics、result preview/output/summary 语义
-- `app/services/tool_runtime_planning.py`：tool planner / provider planner / planner payload normalization，作为 `tool_runtime.py` 的 facade 拆分模块
-- `app/services/tool_runtime_execution.py`：tool runtime context、result preview/output/summary、attempt loop、trace event、rag follow-up 与 plan-item service execution，作为 `tool_runtime.py` 的 facade 拆分模块
-- `app/services/tool_runtime_http_json.py`：HTTP JSON request/template/mapping、execution diagnostics 与 runner facade；响应读取、错误格式化和敏感信息脱敏已拆到 `tool_runtime_http_json_response.py`
-- `app/services/tool_runtime_registry.py`：registry/file-backed/provider-source、settings/preflight diagnostics、runtime artifacts 与 service action 模型 facade；公开 wrapper 安装器已拆到 `tool_runtime_registry_public.py`
-- `scripts/tool_runtime_slice/`：slice 测试主题包；原入口命令保持不变，当前最大主题模块约 4.7k 行
-- `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
-- `app/services/chroma_rag_service.py`：RAG ingest/query/status、knowledge base list/clear/delete 与 shared/private 语义
-- `app/services/settings_service.py`：用户级模型设置读取/保存与 `api_key` 加密解密
-- `app/services/auth_service.py` / `auth_session_service.py`：用户认证、access token、refresh token 轮换与会话撤销
-- `app/services/audit_service.py`：审计事件写入、分页查询与筛选
-- `tasks.usage_json`：任务完成时持久化 usage，供任务列表、导出与 dashboard 复用
+## SSE / Trace 契约
 
-## HTTP 接口（摘要）
+- 事件：`start`、`state`、`trace`、`tool_start`、`tool_end`、`heartbeat`、`token`、`cancelled`、`timeout`、`done`、`error`。
+- `event: trace` 的 `data.step` 与 REST `TraceStep` 同构；action 的 `tool_start/tool_end` 与 trace 通过 `step_id` 对齐。
+- remote provider 错误在 SSE `error` 中保持结构化 `code / fatal / retryable / detail / status_code`。
+- `TraceStep`、result summary、safe output 由实时流、REST、export 与前端回放共享。
 
-- `GET /health`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/refresh`
-- `POST /api/auth/logout`
-- `POST /api/auth/logout-all`
-- `GET /api/auth/sessions`
-- `DELETE /api/auth/sessions/{session_id}`
-- `GET /api/auth/users`（admin only）
-- `GET /api/auth/me`
-- `GET /api/settings`
-- `PUT /api/settings`
-- `POST /api/settings/validate`
+## Memory / RAG 边界
 
-`GET /api/settings` 的响应包含只读 `task_queue_diagnostics`，用于观察全局、当前用户和可选当前会话的 active/waiting/available 计数、限额状态、压力状态与等待策略。
+- Memory collection：`memory_{session_id}`；RAG collection：`kb_{user_hash}_{knowledge_base_id}`。
+- Chroma 连接：`CHROMA_HOST`、`CHROMA_PORT`、`CHROMA_PROBE`；默认 `127.0.0.1:8001`。
+- Chroma 不可达时 Memory/RAG 操作返回 503，任务结束后的 Memory 摘要写入为 best-effort。
+- `shared-*` 知识库：admin 可写，普通用户只读。
 
-该字段不参与用户设置保存，不暴露内部 task ids，也不改变 SSE / trace / export payload。
-- `POST /api/sessions`
-- `GET /api/sessions?limit=&offset=`
-- `PATCH /api/sessions/{session_id}`
-- `DELETE /api/sessions/{session_id}`
-- `GET /api/sessions/{session_id}/messages`
-- `GET /api/sessions/{session_id}/export/json`
-- `GET /api/sessions/{session_id}/export/markdown`
-- `GET /api/sessions/{session_id}/memory/status`
-- `GET /api/sessions/{session_id}/usage/summary`
-- `POST /api/sessions/{session_id}/memory/add`
-- `POST /api/sessions/{session_id}/memory/query`
-- `POST /api/tasks`
-- `GET /api/tasks?limit=&offset=&session_id=&query=`
-- `GET /api/tasks/{task_id}`
-- `POST /api/tasks/{task_id}/cancel`
-- `GET /api/tasks/{task_id}/export/json`
-- `GET /api/tasks/{task_id}/export/markdown`
-- `GET /api/tasks/{task_id}/stream`
-- `GET /api/tasks/{task_id}/trace`
-- `GET /api/tasks/{task_id}/trace/delta?after_seq=&limit=`
-- `GET /api/tasks/usage/summary`
-- `GET /api/tasks/usage/dashboard`
-- `GET /api/rag/status`
-- `POST /api/rag/ingest`
-- `POST /api/rag/query`
-- `GET /api/rag/knowledge-bases`
-- `POST /api/rag/knowledge-bases/{knowledge_base_id}/clear`
-- `DELETE /api/rag/knowledge-bases/{knowledge_base_id}`
-
-补充约定：
-
-- 除 `/health` 与 `/api/auth/*` 外，其余业务接口均需 `Authorization: Bearer <token>`。
-- `GET /api/tasks*` 相关响应包含 `status_normalized`、`status_label`、`status_rank`。
-- usage 接口支持来源维度统计：`provider / estimated / mixed / legacy`。
-- `shared-*` 知识库走共享命名空间；admin 可写，普通用户只读。
-
-## SSE 与 TraceStep 契约
-
-`GET /api/tasks/{task_id}/stream` 当前事件：
-
-- `start`
-- `state`
-- `trace`
-- `tool_start`
-- `tool_end`
-- `heartbeat`
-- `token`
-- `cancelled`
-- `timeout`
-- `done`
-- `error`
-
-对齐说明：
-
-- `event: trace` 的 `data.step` 与 REST `TraceStep` 同构（`id/type/content/meta/seq?`）。
-- `tool_start/tool_end` 使用与 action 节点一致的 `step_id`，与 trace 节点一一对齐。
-- `trace/delta?after_seq=` 可在任务流式进行中拉取阶段性 `observation` 刷新内容。
-- remote provider 异常会被归一成结构化错误码，并在 SSE `error` 中透传稳定的 `code / fatal / retryable / detail / status_code`。
-
-## 当前实现边界
-
-- `trace/delta` 支持 `limit` 参数控制单次增量返回量；当前默认 `200`，最大 `500`。
-- `GET /api/tasks/usage/summary` 与 `GET /api/tasks/usage/dashboard` 都已支持 usage 来源统计；当前来源语义是 `provider / estimated / mixed / legacy`。
-- 任务相关对外读取已优先走 task row 上的规范化治理摘要与 parsed trace 主干，不再鼓励在 route 层继续做 sibling fallback。
-- 默认 settings 语义是：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`；remote `base_url/api_key` 继承链已打通到 get/save/validate。
-- shared RAG 语义当前保持 `shared-*` 命名空间约定：admin 可写共享库，普通用户对共享库只读。
-- 当前后端主线优先补真实工具执行与 registry-aware helper 语义，不优先继续扩写 archived runtime spec。
-- 当前 registry extra tool / override 的真实执行器入口先以 `execution.kind=http_json` 为主；请求模板、响应字段映射与既有 runtime semantic/preview/export 主链保持同一契约，不额外发散独立 route。
-- 显式给 tool 配了 `execution` 时，当前语义是“宁可报配置错，也不回退 stub”；这样 provider/source 治理不会把 real tool 假阳性地跑成本地模板行为。
-- provider/source/global settings 侧当前也会把静态可判定的 `execution` 坏配置归一成 registry diagnostics；下一步优先继续补更细粒度的模板/映射诊断，而不是改外层接口。
-
-## Memory / Chroma / Embedding
-
-- collection 命名：`memory_{session_id}`
-- RAG collection 命名：`kb_{user_hash}_{knowledge_base_id}`
-- 连接方式：`chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)`
-- 默认配置：`CHROMA_HOST=127.0.0.1`、`CHROMA_PORT=8001`、`CHROMA_PROBE=true`
-- 当前 embedding 边界：应用层未显式传自定义 embedding function，依赖 Chroma Server 默认策略
-- Chroma 不可达时：
-  - `memory/add`、`memory/query` 返回 503
-  - `rag/ingest`、`rag/query` 返回 503
-  - 任务后的摘要写入为 best-effort
-
-### 通俗分工（后端视角）
-
-- `PostgreSQL`：业务主存储，保存用户、会话、消息、任务、trace、usage、设置、审计。
-- `Chroma Memory`：会话级语义记忆，服务当前对话上下文。
-- `Chroma RAG`：知识库级文档检索，服务跨会话复用的资料。
-
-## 本地启动
-
-推荐使用 **Python 3.14**（与 `compose.full.yml`、根目录 `.python-version`、CI 保持一致）。
+## 本地运行
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+backend/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-可复制 `.env.example` 为 `.env` 覆盖默认配置。
-
-如需一键拉起依赖并启动前后端，可在仓库根目录执行：
+从仓库根目录执行测试：
 
 ```bash
-./start_insightagent.command
+backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py
 ```
 
-如需将历史 SQLite 数据迁移到 PostgreSQL，可执行：
-
-```bash
-python scripts/migrate_sqlite_to_postgres.py \
-  --sqlite-path ../data/sqlite.db \
-  --database-url postgresql://insight:insight@127.0.0.1:5432/insightagent
-```
-
-常用校验：
-
-```bash
-python scripts/e2e_baseline.py --base-url http://127.0.0.1:8000
-python scripts/e2e_main_path.py --base-url http://127.0.0.1:8000
-python scripts/e2e_export_consistency.py --base-url http://127.0.0.1:8000
-python scripts/e2e_task_cancel_timeout.py --base-url http://127.0.0.1:8000 --skip-timeout
-python scripts/e2e_queue_concurrency.py --base-url http://127.0.0.1:8011
-backend/.venv/bin/python scripts/test_tool_runtime_slice.py
-```
-
-如需 Memory / RAG 能力，在仓库根目录执行：
-
-```bash
-docker compose up -d chroma
-```
-
-当前常用运行参数：
-
-- `TRACE_PERSIST_MIN_INTERVAL_SEC`：trace 增量持久化最小间隔
-- `STREAM_RECONNECT_POLL_FAST_SEC`：running reconnect 快轮询间隔
-- `STREAM_RECONNECT_POLL_MAX_SEC`：running reconnect 慢轮询上限
-- `STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC`：reconnect heartbeat 间隔
-- `TASK_TIMEOUT_SEC`：任务超时秒数
-- `TASK_QUEUE_MAX_CONCURRENT`：单 backend 进程内同时执行的流式任务数，默认 `32`
-- `TASK_QUEUE_POLL_INTERVAL_SEC`：queued 任务等待执行槽位时的 SSE 状态刷新间隔，默认 `0.25`
-- `TASK_EXECUTION_OWNER_ID`：当前 backend 执行实例 ID，多实例部署时应为每个实例设置唯一稳定值
-- `TASK_EXECUTION_HEARTBEAT_INTERVAL_SEC`：running 任务刷新 DB heartbeat 的最小间隔，默认 `2.0`
-- `TASK_EXECUTION_STALE_AFTER_SEC`：启动恢复时接管其他实例 stale running 任务的阈值，默认 `0` 关闭
-
-## 当前约束
-
-- 当前外部 SSE / trace / export / e2e 契约尽量保持稳定，优先做内部 runtime/helper 收口。
-- registry 治理语义已封板，不优先继续扩大旧 fallback 兼容面，也不继续维护已归档的 runtime spec 历史文档。
-- 文档只保留高信号当前状态，不继续累积按天流水账。
+测试、e2e、服务启动、端口和提交权限以 [`docs/development-runbook.md`](../docs/development-runbook.md) 为准。
