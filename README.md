@@ -5,13 +5,15 @@
 ## 当前状态
 
 - `provider-tool-expansion` 已 100% 封板；provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数与 reconnect 稳定错误码均已收口。
+- 当前主线切换到 `ci-release-engineering`，进度约 10%；第一轮新增 release gate 聚合入口与 GitHub Actions workflow。
 - 阶段 5 基础产品化闭环保持可演示：Auth、PostgreSQL、SSE、Trace、Memory、RAG、任务恢复、导出、usage dashboard、审计。
-- 本轮继续完成前端全局样式治理：`frontend/app/globals.css` 已拆为 `frontend/app/styles/` 主题模块，原文件仅保留有序 `@import` facade。
+- 前端全局样式治理已完成：`frontend/app/globals.css` 已拆为 `frontend/app/styles/` 主题模块，原文件仅保留有序 `@import` facade。
 - 当前可维护源码体积边界覆盖 backend/app、backend/scripts 与 frontend 源码；排除生成锁文件后所有源码均低于 3000 行，当前最大文件为 `planning_provider.py` 2923 行。
-- 后续候选主线：`ci-release-engineering`。当前不改变 SSE / trace / export / e2e 外部契约。
+- 当前不改变 SSE / trace / export / e2e 外部契约。
 
 ## 当前验证基线
 
+- Release gate：`bash scripts/ci_run_release_gate.sh --phase all` 通过，覆盖 backend slice、module boundary、frontend node/lint/build、CI tooling self-tests 与 hygiene。
 - Backend full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1983/1983` 通过。
 - Backend targeted：`registry 534/534`、`http_json 531/531`、`provider 538/538`、`runtime 163/163`、`trace 188/188`、`export 184/184`、`usage 63/63` 通过。
 - Module boundary：`backend/scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行文件规模边界。
@@ -42,6 +44,11 @@ docker compose up -d chroma
 ```
 
 详细测试、e2e、启动和提交流程以 [`docs/development-runbook.md`](docs/development-runbook.md) 为准。
+不启动服务的发布前门禁可运行：
+
+```bash
+bash scripts/ci_run_release_gate.sh --phase all
+```
 
 ## 活跃文档
 

@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_WORKFLOW="${ROOT_DIR}/.github/workflows/backend-e2e.yml"
 FRONTEND_WORKFLOW="${ROOT_DIR}/.github/workflows/frontend-e2e.yml"
+RELEASE_GATE_WORKFLOW="${ROOT_DIR}/.github/workflows/release-gate.yml"
 
 assert_contains() {
   local expected="$1"
@@ -53,6 +54,13 @@ main() {
   assert_contains "run: cd frontend && npx playwright install-deps chromium firefox webkit" "${FRONTEND_WORKFLOW}"
   assert_contains "run: cd frontend && npx playwright install chromium firefox webkit" "${FRONTEND_WORKFLOW}"
   assert_not_contains "run: cd frontend && npx playwright install --with-deps chromium firefox webkit" "${FRONTEND_WORKFLOW}"
+  assert_contains "name: release-gate" "${RELEASE_GATE_WORKFLOW}"
+  assert_contains "python-version: \"3.14\"" "${RELEASE_GATE_WORKFLOW}"
+  assert_contains "node-version: \"24\"" "${RELEASE_GATE_WORKFLOW}"
+  assert_contains "npm --prefix frontend ci" "${RELEASE_GATE_WORKFLOW}"
+  assert_contains "bash scripts/ci_run_release_gate.sh --phase all" "${RELEASE_GATE_WORKFLOW}"
+  assert_not_contains "ci_run_backend_e2e.sh" "${RELEASE_GATE_WORKFLOW}"
+  assert_not_contains "ci_run_frontend_e2e.sh" "${RELEASE_GATE_WORKFLOW}"
 
   echo "ci_workflow_guards tests passed"
 }
