@@ -5,7 +5,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - `provider-tool-expansion` 已 100% 封板；兼容逻辑由后端承接，前端继续消费既有 preview/output/result-summary、trace/export 字段。
-- 当前主线为 `ci-release-engineering`，进度约 35%；release gate 已纳入前端 node/lint/build、PR diff 自动分层、CI workflow 与 summary artifact。
+- 当前主线为 `ci-release-engineering`，进度约 50%；release gate 已纳入前端 node/lint/build、PR diff 自动分层、CI workflow、summary artifact 与 release readiness matrix。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard、知识库治理均已落地。
 - 全局样式拆分已完成：`app/globals.css` 仅保留有序 import，实际样式按主题拆入 `app/styles/`。
 - 前端源码体积边界已纳入 node 测试；`package-lock.json` 属于生成锁文件，不作为拆分对象。
@@ -13,7 +13,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
-- Release gate：`bash scripts/ci_run_release_gate.sh --phase auto` 通过，Markdown/JSON summary 输出通过。
+- Release gate：`bash scripts/ci_run_release_gate.sh --phase auto` 通过，Markdown/JSON summary 与 release readiness matrix 输出通过。
 - Node tests：8 个测试文件，`122/122` 通过，包含 frontend source size boundary。
 - `npm run lint` 通过。
 - `npm run build` 通过。
@@ -59,4 +59,4 @@ npm run dev
 ```
 
 默认监听 `127.0.0.1:3001`，可用 `NEXT_PUBLIC_API_BASE_URL` 指向后端。详细 e2e 与提权流程以 [`docs/development-runbook.md`](../docs/development-runbook.md) 为准。
-不启动服务的前端门禁可从仓库根目录运行 `bash scripts/ci_run_release_gate.sh --phase frontend`；PR/CI 默认使用 `--phase auto` 按改动范围选择阶段。
+不启动服务的前端门禁可从仓库根目录运行 `bash scripts/ci_run_release_gate.sh --phase frontend`；PR/CI 默认使用 `--phase auto` 按改动范围选择阶段。发布候选的 service-backed smoke/full e2e 范围以 `bash scripts/ci_release_readiness_matrix.sh --format markdown` 为准。

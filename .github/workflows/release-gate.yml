@@ -73,6 +73,12 @@ jobs:
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
 
+      - name: Write release readiness matrix
+        run: |
+          bash scripts/ci_release_readiness_matrix.sh --format markdown --output /tmp/release-readiness.md
+          bash scripts/ci_release_readiness_matrix.sh --format json --output /tmp/release-readiness.json
+          cat /tmp/release-readiness.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run release gate
         run: |
           bash scripts/ci_run_release_gate.sh --phase "${RELEASE_GATE_PHASE}" \
@@ -90,4 +96,14 @@ jobs:
         with:
           name: release-gate-summary
           path: /tmp/release-gate-summary.json
+          if-no-files-found: ignore
+
+      - name: Upload release readiness matrix
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-readiness-matrix
+          path: |
+            /tmp/release-readiness.md
+            /tmp/release-readiness.json
           if-no-files-found: ignore

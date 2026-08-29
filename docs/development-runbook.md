@@ -23,12 +23,15 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task
 python3 -m py_compile backend/app/config.py backend/app/services/chat_execution_service.py backend/app/services/task_queue_service.py
 bash scripts/ci_run_release_gate.sh --phase auto
+bash scripts/ci_release_readiness_matrix.sh --format markdown
 git diff --check
 git diff --cached --check
 git diff -- data/insightagent.plan.back.md
 ```
 
 `scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`auto` 在 PR 中按 changed files 选择 backend/frontend 阶段，并始终跑 tooling 与 hygiene；非 PR 或 diff 不可解析时保守跑全量。`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace 与备份计划 diff；可用 `--dry-run` 查看命令清单，可用 `--summary-file` / `--json-summary-file` 输出 CI 摘要。
+
+`scripts/ci_release_readiness_matrix.sh` 只生成发布候选检查矩阵，支持 `--format markdown|json` 与 `--output <path>`。矩阵明确区分不需要服务的静态 release gate、需要已启动服务的 backend/frontend e2e，以及 e2e 后置 artifact-stage guard；它不启动服务，也不替代下方 service-backed e2e 命令。
 
 前端检查：
 
