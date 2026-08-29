@@ -22,13 +22,13 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task
 python3 -m py_compile backend/app/config.py backend/app/services/chat_execution_service.py backend/app/services/task_queue_service.py
-bash scripts/ci_run_release_gate.sh --phase all
+bash scripts/ci_run_release_gate.sh --phase auto
 git diff --check
 git diff --cached --check
 git diff -- data/insightagent.plan.back.md
 ```
 
-`scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace 与备份计划 diff；可用 `--dry-run` 查看命令清单，可用 `--summary-file` / `--json-summary-file` 输出 CI 摘要。
+`scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`auto` 在 PR 中按 changed files 选择 backend/frontend 阶段，并始终跑 tooling 与 hygiene；非 PR 或 diff 不可解析时保守跑全量。`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace 与备份计划 diff；可用 `--dry-run` 查看命令清单，可用 `--summary-file` / `--json-summary-file` 输出 CI 摘要。
 
 前端检查：
 

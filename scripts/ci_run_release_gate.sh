@@ -9,6 +9,15 @@ dry_run="0"
 summary_file=""
 json_summary_file=""
 overall_result="PASS"
+repo_root="${ROOT_DIR}"
+event_name="${GITHUB_EVENT_NAME:-}"
+base_sha=""
+head_sha="${GITHUB_SHA:-HEAD}"
+ref_name="${GITHUB_REF:-}"
+changed_files_path=""
+changed_files_resolve_source=""
+changed_files_count=""
+resolved_phase_csv=""
 
 FRONTEND_NODE_TESTS=(
   "lib/stores/chat-stream-store-utils.node.test.ts"
@@ -24,8 +33,10 @@ FRONTEND_NODE_TESTS=(
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/ci_run_release_gate.sh [--phase <all|backend|frontend|tooling|hygiene>] [--dry-run]
+  scripts/ci_run_release_gate.sh [--phase <auto|all|backend|frontend|tooling|hygiene>] [--dry-run]
     [--summary-file <path>] [--json-summary-file <path>]
+    [--repo-root <path>] [--event-name <name>] [--base-sha <sha>]
+    [--head-sha <sha>] [--ref <ref>]
 
 Phases:
   backend   Run backend full slice and module boundary checks.
@@ -33,6 +44,8 @@ Phases:
   tooling   Run CI/e2e tooling self-tests without starting services.
   hygiene   Run compileall, diff whitespace, and backup-plan diff checks.
   all       Run every phase above.
+  auto      Use PR changed files to choose backend/frontend phases, then always
+            run tooling and hygiene. CI/workflow/script changes run all phases.
 
 This gate intentionally avoids local service startup and e2e execution. Use the
 runbook e2e commands for backend/frontend service-backed validation.
@@ -81,6 +94,13 @@ write_summaries() {
     {
       echo "### release gate"
       echo "- phase: ${phase}"
+      if [ -n "${resolved_phase_csv}" ]; then
+        echo "- resolved_phases: ${resolved_phase_csv}"
+      fi
+      if [ -n "${changed_files_resolve_source}" ]; then
+        echo "- changed_files_source: ${changed_files_resolve_source}"
+        echo "- changed_files_count: ${changed_files_count}"
+      fi
       echo "- result: ${result}"
       echo "- dry_run: ${dry_run}"
       echo
@@ -97,6 +117,9 @@ write_summaries() {
     {
       printf '{\n'
       printf '  "phase": %s,\n' "$(json_string "${phase}")"
+      printf '  "resolved_phases": %s,\n' "$(json_string "${resolved_phase_csv}")"
+      printf '  "changed_files_source": %s,\n' "$(json_string "${changed_files_resolve_source}")"
+      printf '  "changed_files_count": %s,\n' "$(json_string "${changed_files_count}")"
       printf '  "result": %s,\n' "$(json_string "${result}")"
       printf '  "dry_run": %s,\n' "$(json_string "${dry_run}")"
       printf '  "steps": [\n'
@@ -193,12 +216,92 @@ run_hygiene() {
     git diff -- data/insightagent.plan.back.md
 }
 
+join_resolved_phases() {
+  local joined=""
+  local item
+  for item in "${RESOLVED_PHASES[@]}"; do
+    if [ -n "${joined}" ]; then
+      joined+=","
+    fi
+    joined+="${item}"
+  done
+  printf '%s\n' "${joined}"
+}
+
+resolve_auto_phases() {
+  local collect_output
+  changed_files_path="$(mktemp)"
+  collect_output="$(
+    bash "${ROOT_DIR}/scripts/ci_collect_changed_files.sh" \
+      --repo-root "${repo_root}" \
+      --event-name "${event_name}" \
+      --base-sha "${base_sha}" \
+      --head-sha "${head_sha}" \
+      --output-file "${changed_files_path}" \
+      --fallback-path backend/ \
+      --fallback-path frontend/ \
+      --fallback-path scripts/ \
+      --fallback-path .github/workflows/release-gate.yml \
+      --fallback-path .github/workflows/backend-e2e.yml \
+      --fallback-path .github/workflows/frontend-e2e.yml \
+      --fallback-path docs/development-runbook.md \
+      --fallback-path compose.full.yml
+  )"
+  printf '%s\n' "${collect_output}"
+  changed_files_resolve_source="$(printf '%s\n' "${collect_output}" | awk -F= '$1=="resolve_source"{print $2}')"
+  changed_files_count="$(printf '%s\n' "${collect_output}" | awk -F= '$1=="changed_count"{print $2}')"
+  echo "changed_files_path=${changed_files_path}"
+
+  RESOLVED_PHASES=()
+  if [ "${changed_files_resolve_source}" != "git_diff" ]; then
+    RESOLVED_PHASES=(backend frontend tooling hygiene)
+    resolved_phase_csv="$(join_resolved_phases)"
+    echo "resolved_phases=${resolved_phase_csv}"
+    return 0
+  fi
+
+  if grep -Eq '^(scripts/|\.github/workflows/|docs/development-runbook\.md$|compose\.full\.yml$)' "${changed_files_path}"; then
+    RESOLVED_PHASES=(backend frontend tooling hygiene)
+    resolved_phase_csv="$(join_resolved_phases)"
+    echo "resolved_phases=${resolved_phase_csv}"
+    return 0
+  fi
+
+  if grep -Eq '^backend/' "${changed_files_path}"; then
+    RESOLVED_PHASES+=(backend)
+  fi
+  if grep -Eq '^frontend/' "${changed_files_path}"; then
+    RESOLVED_PHASES+=(frontend)
+  fi
+  RESOLVED_PHASES+=(tooling hygiene)
+  resolved_phase_csv="$(join_resolved_phases)"
+  echo "resolved_phases=${resolved_phase_csv}"
+}
+
+run_phase_name() {
+  case "$1" in
+    backend) run_backend ;;
+    frontend) run_frontend ;;
+    tooling) run_tooling ;;
+    hygiene) run_hygiene ;;
+    *)
+      echo "internal error: unknown resolved phase $1" >&2
+      exit 2
+      ;;
+  esac
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --phase) phase="${2:-}"; shift 2 ;;
     --dry-run) dry_run="1"; shift ;;
     --summary-file) summary_file="${2:-}"; shift 2 ;;
     --json-summary-file) json_summary_file="${2:-}"; shift 2 ;;
+    --repo-root) repo_root="${2:-}"; shift 2 ;;
+    --event-name) event_name="${2:-}"; shift 2 ;;
+    --base-sha) base_sha="${2:-}"; shift 2 ;;
+    --head-sha) head_sha="${2:-}"; shift 2 ;;
+    --ref) ref_name="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *)
       echo "unknown argument: $1" >&2
@@ -209,9 +312,9 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "${phase}" in
-  all|backend|frontend|tooling|hygiene) ;;
+  auto|all|backend|frontend|tooling|hygiene) ;;
   *)
-    echo "unknown phase: ${phase} (expected: all|backend|frontend|tooling|hygiene)" >&2
+    echo "unknown phase: ${phase} (expected: auto|all|backend|frontend|tooling|hygiene)" >&2
     exit 2
     ;;
 esac
@@ -220,22 +323,33 @@ echo "[release-gate] phase=${phase}"
 echo "[release-gate] dry_run=${dry_run}"
 
 case "${phase}" in
+  auto)
+    resolve_auto_phases
+    for resolved_phase in "${RESOLVED_PHASES[@]}"; do
+      run_phase_name "${resolved_phase}"
+    done
+    ;;
   all)
+    resolved_phase_csv="backend,frontend,tooling,hygiene"
     run_backend
     run_frontend
     run_tooling
     run_hygiene
     ;;
   backend)
+    resolved_phase_csv="backend"
     run_backend
     ;;
   frontend)
+    resolved_phase_csv="frontend"
     run_frontend
     ;;
   tooling)
+    resolved_phase_csv="tooling"
     run_tooling
     ;;
   hygiene)
+    resolved_phase_csv="hygiene"
     run_hygiene
     ;;
 esac

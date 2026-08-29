@@ -33,6 +33,14 @@ expect_fail() {
   fi
 }
 
+setup_git_repo() {
+  local repo_dir="$1"
+  mkdir -p "${repo_dir}"
+  git init "${repo_dir}" >/dev/null
+  git -C "${repo_dir}" config user.name "CI Test"
+  git -C "${repo_dir}" config user.email "ci@example.com"
+}
+
 main() {
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "${TMP_DIR:-}"' EXIT
@@ -73,6 +81,75 @@ main() {
   assert_contains "node --test --experimental-strip-types" "${TMP_DIR}/frontend.txt"
   assert_contains "npm run build" "${TMP_DIR}/frontend.txt"
   assert_not_contains "test_tool_runtime_slice.py" "${TMP_DIR}/frontend.txt"
+
+  setup_git_repo "${TMP_DIR}/repo"
+  mkdir -p "${TMP_DIR}/repo/frontend" "${TMP_DIR}/repo/backend"
+  printf 'base\n' > "${TMP_DIR}/repo/frontend/app.tsx"
+  printf 'base\n' > "${TMP_DIR}/repo/backend/app.py"
+  git -C "${TMP_DIR}/repo" add frontend/app.tsx backend/app.py
+  git -C "${TMP_DIR}/repo" commit -m "base" >/dev/null
+  base_sha="$(git -C "${TMP_DIR}/repo" rev-parse HEAD)"
+  printf 'head\n' > "${TMP_DIR}/repo/frontend/app.tsx"
+  git -C "${TMP_DIR}/repo" add frontend/app.tsx
+  git -C "${TMP_DIR}/repo" commit -m "frontend" >/dev/null
+  frontend_sha="$(git -C "${TMP_DIR}/repo" rev-parse HEAD)"
+
+  bash "${SCRIPT}" \
+    --dry-run \
+    --phase auto \
+    --repo-root "${TMP_DIR}/repo" \
+    --event-name pull_request \
+    --base-sha "${base_sha}" \
+    --head-sha "${frontend_sha}" \
+    --ref refs/pull/42/merge \
+    --summary-file "${TMP_DIR}/auto-frontend.md" \
+    > "${TMP_DIR}/auto-frontend.txt"
+  assert_contains "phase=auto" "${TMP_DIR}/auto-frontend.txt"
+  assert_contains "resolved_phases=frontend,tooling,hygiene" "${TMP_DIR}/auto-frontend.txt"
+  assert_contains "resolve_source=git_diff" "${TMP_DIR}/auto-frontend.txt"
+  assert_contains "frontend node tests" "${TMP_DIR}/auto-frontend.txt"
+  assert_contains "ci tooling self-tests" "${TMP_DIR}/auto-frontend.txt"
+  assert_contains "backup plan remains untouched" "${TMP_DIR}/auto-frontend.txt"
+  assert_not_contains "backend full slice" "${TMP_DIR}/auto-frontend.txt"
+  assert_contains "- resolved_phases: frontend,tooling,hygiene" "${TMP_DIR}/auto-frontend.md"
+
+  printf 'head\n' > "${TMP_DIR}/repo/backend/app.py"
+  git -C "${TMP_DIR}/repo" add backend/app.py
+  git -C "${TMP_DIR}/repo" commit -m "backend" >/dev/null
+  backend_sha="$(git -C "${TMP_DIR}/repo" rev-parse HEAD)"
+
+  bash "${SCRIPT}" \
+    --dry-run \
+    --phase auto \
+    --repo-root "${TMP_DIR}/repo" \
+    --event-name pull_request \
+    --base-sha "${frontend_sha}" \
+    --head-sha "${backend_sha}" \
+    --ref refs/pull/44/merge \
+    > "${TMP_DIR}/auto-backend.txt"
+  assert_contains "resolved_phases=backend,tooling,hygiene" "${TMP_DIR}/auto-backend.txt"
+  assert_contains "backend full slice" "${TMP_DIR}/auto-backend.txt"
+  assert_not_contains "frontend node tests" "${TMP_DIR}/auto-backend.txt"
+
+  printf 'workflow\n' > "${TMP_DIR}/repo/.github-workflow-placeholder"
+  mkdir -p "${TMP_DIR}/repo/.github/workflows"
+  printf 'name: release\n' > "${TMP_DIR}/repo/.github/workflows/release-gate.yml"
+  git -C "${TMP_DIR}/repo" add .github/workflows/release-gate.yml
+  git -C "${TMP_DIR}/repo" commit -m "workflow" >/dev/null
+  workflow_sha="$(git -C "${TMP_DIR}/repo" rev-parse HEAD)"
+
+  bash "${SCRIPT}" \
+    --dry-run \
+    --phase auto \
+    --repo-root "${TMP_DIR}/repo" \
+    --event-name pull_request \
+    --base-sha "${backend_sha}" \
+    --head-sha "${workflow_sha}" \
+    --ref refs/pull/43/merge \
+    > "${TMP_DIR}/auto-workflow.txt"
+  assert_contains "resolved_phases=backend,frontend,tooling,hygiene" "${TMP_DIR}/auto-workflow.txt"
+  assert_contains "backend full slice" "${TMP_DIR}/auto-workflow.txt"
+  assert_contains "frontend node tests" "${TMP_DIR}/auto-workflow.txt"
 
   expect_fail bash "${SCRIPT}" --phase unknown --dry-run
 

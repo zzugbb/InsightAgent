@@ -2,6 +2,19 @@ name: release-gate
 
 on:
   workflow_dispatch:
+    inputs:
+      release_gate_phase:
+        description: "Release gate phase (auto/all/backend/frontend/tooling/hygiene)"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - all
+          - backend
+          - frontend
+          - tooling
+          - hygiene
   pull_request:
     paths:
       - "backend/**"
@@ -27,6 +40,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  RELEASE_GATE_PHASE: ${{ github.event.inputs.release_gate_phase || 'auto' }}
 
 jobs:
   static:
@@ -61,7 +75,12 @@ jobs:
 
       - name: Run release gate
         run: |
-          bash scripts/ci_run_release_gate.sh --phase all \
+          bash scripts/ci_run_release_gate.sh --phase "${RELEASE_GATE_PHASE}" \
+            --repo-root "${{ github.workspace }}" \
+            --event-name "${GITHUB_EVENT_NAME}" \
+            --base-sha "${{ github.event.pull_request.base.sha || '' }}" \
+            --head-sha "${{ github.sha }}" \
+            --ref "${GITHUB_REF}" \
             --summary-file "$GITHUB_STEP_SUMMARY" \
             --json-summary-file /tmp/release-gate-summary.json
 
