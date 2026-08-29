@@ -4,7 +4,7 @@ set -euo pipefail
 
 output_file=""
 primary_health_url="http://127.0.0.1:8000/health"
-secondary_health_url="http://127.0.0.1:8010/health"
+secondary_health_urls=()
 export_log_file="/tmp/e2e-export-consistency-8000.log"
 export_log_tail_lines="80"
 process_pattern="python|uvicorn"
@@ -16,7 +16,7 @@ Usage:
 
 Options:
   --primary-health-url <url>      Default: http://127.0.0.1:8000/health
-  --secondary-health-url <url>    Default: http://127.0.0.1:8010/health
+  --secondary-health-url <url>    Repeatable. Default: http://127.0.0.1:8010/health
   --export-log-file <path>        Default: /tmp/e2e-export-consistency-8000.log
   --export-log-tail-lines <n>     Default: 80
   --process-pattern <regex>       Default: python|uvicorn
@@ -27,7 +27,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --output-file) output_file="${2:-}"; shift 2 ;;
     --primary-health-url) primary_health_url="${2:-}"; shift 2 ;;
-    --secondary-health-url) secondary_health_url="${2:-}"; shift 2 ;;
+    --secondary-health-url) secondary_health_urls+=("${2:-}"); shift 2 ;;
     --export-log-file) export_log_file="${2:-}"; shift 2 ;;
     --export-log-tail-lines) export_log_tail_lines="${2:-}"; shift 2 ;;
     --process-pattern) process_pattern="${2:-}"; shift 2 ;;
@@ -46,9 +46,14 @@ if [ -z "${output_file}" ]; then
   exit 2
 fi
 
+if [ "${#secondary_health_urls[@]}" -eq 0 ]; then
+  secondary_health_urls=("http://127.0.0.1:8010/health")
+fi
+
 mkdir -p "$(dirname "${output_file}")"
 
 {
+  secondary_index=1
   echo "===== date ====="
   date -u
   echo ""
@@ -58,9 +63,12 @@ mkdir -p "$(dirname "${output_file}")"
   echo "===== health primary ====="
   curl -s -i -m 5 "${primary_health_url}" 2>&1 || true
   echo ""
-  echo "===== health secondary ====="
-  curl -s -i -m 5 "${secondary_health_url}" 2>&1 || true
-  echo ""
+  for secondary_health_url in "${secondary_health_urls[@]}"; do
+    echo "===== health secondary ${secondary_index}: ${secondary_health_url} ====="
+    curl -s -i -m 5 "${secondary_health_url}" 2>&1 || true
+    echo ""
+    secondary_index=$((secondary_index + 1))
+  done
   echo "===== export consistency tail ====="
   tail -n "${export_log_tail_lines}" "${export_log_file}" || true
 } > "${output_file}"

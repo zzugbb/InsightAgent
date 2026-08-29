@@ -1,11 +1,11 @@
 ---
 name: InsightAgent 开发计划
-overview: provider-tool-expansion 已 100% 封板；当前推进 ci-release-engineering，发布前静态门禁已具备 PR diff 自动分层、CI 摘要输出与发布就绪矩阵。
+overview: provider-tool-expansion 已 100% 封板；当前推进 ci-release-engineering，发布前静态门禁、发布就绪矩阵与 service-backed e2e workflow 分层正在收敛。
 current_focus:
   mainline: ci-release-engineering
-  status: 50% 开发中
+  status: 65% 开发中
   next_candidate: release/e2e 分层编排、失败诊断收敛、发布前检查文档化
-  latest_change: 新增 release readiness matrix，明确发布候选必须覆盖静态 release gate、service-backed backend/frontend e2e 与 artifact-stage guard；workflow 上传 Markdown/JSON 矩阵
+  latest_change: backend/frontend e2e workflow 已按 release readiness matrix 纳入低并发 queue 阶段；后端失败诊断支持多个 secondary health URL
   file_size_baseline:
     scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
     boundary: 可维护源码文件 <= 3000 行
@@ -21,7 +21,7 @@ constraints:
   - 测试、e2e、启动、提交先参考 docs/development-runbook.md
   - backend 使用 backend/.venv/bin/python
 validation_baseline:
-  release_gate: scripts/ci_run_release_gate.sh --phase auto passed，summary markdown/json 与 release readiness matrix passed
+  release_gate: scripts/ci_run_release_gate.sh --phase auto passed，summary markdown/json、release readiness matrix、workflow queue guard passed
   backend_full_slice: backend/scripts/test_tool_runtime_slice.py 1983/1983
   backend_targeted: registry 534/534; http_json 531/531; provider 538/538; runtime 163/163; trace 188/188; export 184/184; usage 63/63
   module_boundaries: backend/scripts/test_tool_runtime_module_boundaries.py 4/4，含后端 3000 行规模边界
@@ -40,8 +40,9 @@ completed:
   - release gate diagnostics：Markdown/JSON summary 输出与 workflow artifact
   - release gate auto routing：PR diff 自动选择 backend/frontend 阶段，CI/workflow/script 变更保守升级到全量
   - release readiness matrix：Markdown/JSON 发布候选门禁矩阵，区分 static gate、service-backed e2e 与 artifact guard
+  - e2e workflow queue coverage：backend/frontend workflow 已纳入低并发 queue 阶段，失败诊断覆盖多个 backend health URL
 next_steps:
-  - 继续收敛 release/e2e 分层：把发布就绪矩阵与 backend/frontend e2e workflow 的 strict level、artifact diagnostics 和 main push 策略对齐
+  - 继续收敛 release/e2e 分层：对齐 strict level、artifact diagnostics、main push 策略与最终发布候选判定
   - 新 CI 变更继续先红测，再跑 release gate 与必要 e2e；不扩大 SSE / trace / export 外部契约
 logging_rule: 本文件只保存当前状态、验证基线、稳定契约与少量下一步，不记录轮次流水账。
 ---

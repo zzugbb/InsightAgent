@@ -5,7 +5,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - `provider-tool-expansion` 已 100% 封板；兼容逻辑由后端承接，前端继续消费既有 preview/output/result-summary、trace/export 字段。
-- 当前主线为 `ci-release-engineering`，进度约 50%；release gate 已纳入前端 node/lint/build、PR diff 自动分层、CI workflow、summary artifact 与 release readiness matrix。
+- 当前主线为 `ci-release-engineering`，进度约 65%；release gate 已纳入前端 node/lint/build、PR diff 自动分层、CI workflow、summary artifact 与 release readiness matrix。
+- 前端 e2e workflow 已覆盖 smoke/full 以及低并发 queue recovery 阶段；queue 阶段使用独立 `:8011` backend，避免影响默认全量 UI 基线。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard、知识库治理均已落地。
 - 全局样式拆分已完成：`app/globals.css` 仅保留有序 import，实际样式按主题拆入 `app/styles/`。
 - 前端源码体积边界已纳入 node 测试；`package-lock.json` 属于生成锁文件，不作为拆分对象。
@@ -17,7 +18,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Node tests：8 个测试文件，`122/122` 通过，包含 frontend source size boundary。
 - `npm run lint` 通过。
 - `npm run build` 通过。
-- E2E：full Chromium 既有基线 `52 passed / 1 skipped`；低并发 queue phase 既有基线 `1/1`；本轮 targeted Chromium `workbench-main-path` `5/5` 通过。
+- E2E：full Chromium 既有基线 `52 passed / 1 skipped`；低并发 queue phase 既有基线 `1/1` 且已纳入 CI workflow；本轮 targeted Chromium `workbench-main-path` `5/5` 通过。
 - Backend 契约基线：full slice `1983/1983`；`registry 534/534`、`http_json 531/531`、`provider 538/538`、`runtime 163/163`、`trace 188/188`、`export 184/184`、`usage 63/63`；module boundary `4/4`。
 
 ## 能力索引

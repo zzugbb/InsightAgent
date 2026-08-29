@@ -5,7 +5,7 @@
 ## 当前状态
 
 - `provider-tool-expansion` 已 100% 封板；provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数与 reconnect 稳定错误码均已收口。
-- 当前主线为 `ci-release-engineering`，进度约 50%；release gate 已支持 PR diff 自动分层、手动阶段选择、Markdown/JSON 摘要和 GitHub Actions summary artifact，并新增 release readiness matrix 明确发布候选必须覆盖的静态门禁、service-backed e2e 与 artifact guard。
+- 当前主线为 `ci-release-engineering`，进度约 65%；release gate 已支持 PR diff 自动分层、手动阶段选择、Markdown/JSON 摘要和 GitHub Actions summary artifact；release readiness matrix 与 backend/frontend e2e workflow 已覆盖静态门禁、service-backed main/timeout/queue、smoke/full/queue 与 artifact guard。
 - 阶段 5 基础产品化闭环保持可演示：Auth、PostgreSQL、SSE、Trace、Memory、RAG、任务恢复、导出、usage dashboard、审计。
 - 前端全局样式治理已完成：`frontend/app/globals.css` 已拆为 `frontend/app/styles/` 主题模块，原文件仅保留有序 `@import` facade。
 - 当前可维护源码体积边界覆盖 backend/app、backend/scripts 与 frontend 源码；排除生成锁文件后所有源码均低于 3000 行，当前最大文件为 `planning_provider.py` 2923 行。
@@ -18,7 +18,7 @@
 - Backend targeted：`registry 534/534`、`http_json 531/531`、`provider 538/538`、`runtime 163/163`、`trace 188/188`、`export 184/184`、`usage 63/63` 通过。
 - Module boundary：`backend/scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行文件规模边界。
 - Frontend：node tests `122/122`，`npm run lint`、`npm run build` 通过；新增 frontend source size boundary 测试。
-- E2E：backend main 既有基线通过；full Chromium 既有基线 `52 passed / 1 skipped`；本轮 targeted Chromium `workbench-main-path` `5/5` 通过。
+- E2E：backend main 既有基线通过；backend/frontend queue 已纳入 CI workflow 编排；full Chromium 既有基线 `52 passed / 1 skipped`；本轮 targeted Chromium `workbench-main-path` `5/5` 通过。
 - Hygiene：`py_compile`、`git diff --check`、备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 稳定契约

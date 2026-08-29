@@ -45,6 +45,7 @@ run_tests() {
     --output-file "${output_file}" \
     --primary-health-url "http://127.0.0.1:65530/health" \
     --secondary-health-url "http://127.0.0.1:65531/health" \
+    --secondary-health-url "http://127.0.0.1:65532/health" \
     --export-log-file "${export_log}" \
     --export-log-tail-lines 1 \
     --process-pattern "definitely-no-match-process" > "${TMP_DIR}/stdout.txt"
@@ -53,7 +54,8 @@ run_tests() {
   assert_contains "===== date =====" "${output_file}"
   assert_contains "===== ps -ef (definitely-no-match-process) =====" "${output_file}"
   assert_contains "===== health primary =====" "${output_file}"
-  assert_contains "===== health secondary =====" "${output_file}"
+  assert_contains "===== health secondary 1: http://127.0.0.1:65531/health =====" "${output_file}"
+  assert_contains "===== health secondary 2: http://127.0.0.1:65532/health =====" "${output_file}"
   assert_contains "===== export consistency tail =====" "${output_file}"
   assert_contains "line-2" "${output_file}"
 

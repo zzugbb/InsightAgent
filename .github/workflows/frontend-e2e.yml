@@ -142,6 +142,27 @@ jobs:
             --api-base-url http://127.0.0.1:8000 \
             --frontend-base-url http://127.0.0.1:3001
 
+      - name: Start backend on :8011 for frontend queue e2e
+        env:
+          INSIGHT_AGENT_DATABASE_URL: postgresql://insight:insight@127.0.0.1:5432/insightagent
+          CHROMA_HOST: 127.0.0.1
+          CHROMA_PORT: "8001"
+          TASK_QUEUE_MAX_CONCURRENT: "1"
+          TASK_QUEUE_POLL_INTERVAL_SEC: "0.1"
+        run: |
+          bash scripts/ci_boot_backend_instance.sh \
+            --port 8011 \
+            --log-file /tmp/frontend-e2e-backend-8011.log \
+            --pid-file /tmp/frontend-e2e-backend-8011.pid \
+            --failure-message "backend :8011 failed to become healthy for frontend queue e2e"
+
+      - name: Run frontend queue e2e
+        run: |
+          bash scripts/ci_run_frontend_e2e.sh \
+            --phase queue \
+            --api-base-url http://127.0.0.1:8011 \
+            --frontend-base-url http://127.0.0.1:3001
+
       - name: Rerun failed chromium tests for diagnostics
         if: failure()
         continue-on-error: true
@@ -156,7 +177,8 @@ jobs:
         run: |
           bash scripts/ci_print_log_files.sh \
             --title "frontend e2e backend logs" \
-            --file /tmp/frontend-e2e-backend.log
+            --file /tmp/frontend-e2e-backend.log \
+            --file /tmp/frontend-e2e-backend-8011.log
 
       - name: Build Playwright failure index
         if: always()
