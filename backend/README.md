@@ -1,88 +1,44 @@
 # InsightAgent Backend
 
-FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory、RAG、导出、usage 与审计能力；默认演示路径为 canonical `mock`，也支持 OpenAI-compatible `remote`。
+FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory、RAG、导出、usage、审计与 tool runtime 能力；默认演示路径为 canonical `mock`，也支持 OpenAI-compatible `remote`。
 
 ## 当前状态
 
-- `provider-tool-expansion` 已 100% 封板，当前主线为 `ci-release-engineering`，进度约 78%。
-- 第一轮 CI/release 工程新增不启动服务的 release gate，后端侧统一使用 `backend/.venv/bin/python` 跑 full slice、module boundary 与 compileall。
-- release gate 已支持 PR diff 自动分层；后端变更跑 backend/tooling/hygiene，CI 脚本或 workflow 变更保守升级到全量。
-- release gate 已输出 Markdown/JSON 摘要，便于 CI 页面和 artifact 排查失败阶段。
-- 发布就绪矩阵与 backend e2e workflow 已覆盖 release gate、main/timeout/queue service-backed e2e 与 artifact-stage guard；release gate 仍不启动服务、不替代 e2e。
-- 后端失败诊断支持多个 secondary health URL，CI 可同时采集 timeout 与 queue 实例健康状态。
-- main push 的 artifact-stage guard 严格度已升级为 `fail-on-missing`，PR 仍使用 `fail-on-empty`。
-- HTTP JSON provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数和 reconnect 稳定错误码已完成。
-- runtime 与测试结构治理完成：`backend/app` 与 `backend/scripts` 所有 Python 文件均低于 3000 行，当前最大文件为 `scripts/tool_runtime_slice/planning_provider.py` 2923 行。
-- 项目级源码体积边界已扩展到前端源文件；生成锁文件不纳入拆分目标，`frontend/app/globals.css` 已拆为主题样式模块。
-- 外部 SSE / trace / export / display shape、queued/running/cancel/reconnect 语义保持稳定。
+- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板。
+- Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
+- CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
+- `backend/app` 与 `backend/scripts` 所有 Python 源码均低于 3000 行；`tool_runtime.py` 与 `test_tool_runtime_slice.py` 保持兼容入口，新增实现继续落到主题模块。
 
 ## 当前验证基线
 
-- Release gate：`bash scripts/ci_run_release_gate.sh --phase auto` 通过，summary 输出与 release readiness matrix 通过。
+- Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过。
 - Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1983/1983` 通过。
 - Targeted：`registry 534/534`、`http_json 531/531`、`provider 538/538`、`runtime 163/163`、`trace 188/188`、`export 184/184`、`usage 63/63` 通过。
-- Module boundary：`PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行文件规模边界。
-- Frontend contract checks：node tests `122/122`、`npm run lint`、`npm run build` 通过。
-- E2E：backend main 既有基线通过；backend e2e workflow 已纳入 timeout 与低并发 queue 阶段；本轮 targeted Chromium `workbench-main-path` `5/5` 通过。
-- `py_compile`、`git diff --check` 通过；`data/insightagent.plan.back.md` 无 diff。
+- Module boundary：`PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行规模边界。
+- E2E 基线：backend main 通过；timeout/queue 已纳入 backend CI workflow。
+- Hygiene：`py_compile`、`git diff --check`、备份计划 diff 检查通过。
 
-## Runtime 模块索引
+## 稳定契约
 
-- `app/services/module_export_utils.py`：拆分模块函数 rebinding 工具，保持原 facade monkeypatch 与 helper 查找语义。
-- `app/services/tool_runtime.py`：稳定 facade，汇总旧导出路径，2547 行。
-- `app/services/tool_runtime_planning.py`：planner、provider planner 与 payload normalization。
-- `app/services/tool_runtime_display.py`：tool 显示名、语义分类、输出归一化与 `run_tool` 旧导出实现。
-- `app/services/tool_runtime_execution.py`：runtime context、attempt 与前半段执行语义，2864 行。
-- `app/services/tool_runtime_execution_flow.py`：trace event、RAG follow-up、iteration 与 service effects。
-- `app/services/tool_runtime_http_json.py`：HTTP JSON request/template/mapping 核心，2522 行。
-- `app/services/tool_runtime_http_json_execution.py`：HTTP JSON runner、execution spec、summary、diagnostics，1270 行。
-- `app/services/tool_runtime_http_json_response.py`：响应读取、解码、错误格式化和敏感信息脱敏，1750 行。
-- `app/services/tool_runtime_registry.py`：registry/file/provider-source facade，2768 行。
-- `app/services/tool_runtime_registry_settings.py`：settings override、provider artifacts 与 diagnostics 实现。
-- `app/services/tool_runtime_registry_runtime.py`：registry service action、preflight、runtime artifacts 实现，1781 行。
-- `app/services/tool_runtime_registry_public.py`：兼容 wrapper 安装器，190 行。
-- `app/services/chat_persistence_service.py`：会话/任务持久化与治理列处理，1755 行。
-- `app/services/chat_persistence_trace_export.py`：Trace 展示、响应摘要与任务 export。
-- `app/services/chat_persistence_usage.py`：usage summary/dashboard 与 session export response summary。
-- `scripts/tool_runtime_slice/`：按主题组织的测试包；`test_tool_runtime_slice.py` 保留兼容入口。
-
-## HTTP 接口范围
-
-- Auth：`/api/auth/register`、`login`、`refresh`、`logout`、`me`、`sessions`。
-- Settings：`GET/PUT /api/settings`、`POST /api/settings/validate`。
-- Sessions：会话 CRUD、消息、Memory、usage 与 JSON/Markdown export。
-- Tasks：创建、查询、详情、取消、SSE stream、trace/delta、usage 与 JSON/Markdown export。
-- RAG：status、ingest、query、knowledge-bases、clear、delete。
-- 其他：`GET /health`、审计日志接口。
-
-除 `/health` 与 `/api/auth/*` 外，业务接口需要 `Authorization: Bearer <token>`。
-
-## SSE / Trace 契约
-
-- 事件：`start`、`state`、`trace`、`tool_start`、`tool_end`、`heartbeat`、`token`、`cancelled`、`timeout`、`done`、`error`。
-- `event: trace` 的 `data.step` 与 REST `TraceStep` 同构；action 的 `tool_start/tool_end` 与 trace 通过 `step_id` 对齐。
+- SSE 事件、REST `TraceStep`、result summary、safe output 与 JSON/Markdown export shape 保持稳定。
+- `tool_start/tool_end` 与 trace action 节点通过 `step_id` 对齐。
 - remote provider 错误在 SSE `error` 中保持结构化 `code / fatal / retryable / detail / status_code`。
-- `TraceStep`、result summary、safe output 由实时流、REST、export 与前端回放共享。
+- Memory/RAG collection 命名、Chroma 503 降级、shared knowledge base 权限语义保持稳定。
 
-## Memory / RAG 边界
+## 关键入口
 
-- Memory collection：`memory_{session_id}`；RAG collection：`kb_{user_hash}_{knowledge_base_id}`。
-- Chroma 连接：`CHROMA_HOST`、`CHROMA_PORT`、`CHROMA_PROBE`；默认 `127.0.0.1:8001`。
-- Chroma 不可达时 Memory/RAG 操作返回 503，任务结束后的 Memory 摘要写入为 best-effort。
-- `shared-*` 知识库：admin 可写，普通用户只读。
+- `app/services/tool_runtime.py`：tool runtime 兼容 facade。
+- `app/services/tool_runtime_planning.py`：planner/provider planner 与 payload normalization。
+- `app/services/tool_runtime_http_json.py`、`tool_runtime_http_json_execution.py`、`tool_runtime_http_json_response.py`：HTTP JSON provider 执行与响应归一化。
+- `app/services/tool_runtime_registry.py` 与 registry 子模块：tool registry、provider source、runtime artifacts 与 diagnostics。
+- `app/services/chat_persistence_service.py` 与 chat persistence 子模块：会话/任务持久化、trace 展示、usage 与 export。
+- `scripts/tool_runtime_slice/`：后端 slice 测试主题包；`backend/scripts/test_tool_runtime_slice.py` 是兼容入口。
 
 ## 本地运行
 
 ```bash
 cd backend
-backend/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-从仓库根目录执行测试：
-
-```bash
-backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py
-bash scripts/ci_run_release_gate.sh --phase backend
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 测试、e2e、服务启动、端口和提交权限以 [`docs/development-runbook.md`](../docs/development-runbook.md) 为准。

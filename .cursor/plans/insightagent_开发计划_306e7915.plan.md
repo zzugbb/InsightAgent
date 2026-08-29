@@ -1,49 +1,32 @@
 ---
 name: InsightAgent 开发计划
-overview: provider-tool-expansion 已 100% 封板；当前推进 ci-release-engineering，发布前静态门禁、发布就绪矩阵与 service-backed e2e workflow 分层正在收敛。
+overview: provider-tool-expansion 与 ci-release-engineering 已 100% 封板；当前代码、文档和静态门禁基线通过。
 current_focus:
   mainline: ci-release-engineering
-  status: 78% 开发中
-  next_candidate: release/e2e 分层编排、失败诊断收敛、发布前检查文档化
-  latest_change: artifact-stage guard 支持 main-push-level，backend/frontend e2e workflow 的 main push artifact 严格度升级为 fail-on-missing
-  file_size_baseline:
-    scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
-    boundary: 可维护源码文件 <= 3000 行
-    largest_source: backend/scripts/tool_runtime_slice/planning_provider.py 2923 行
-    key_facades: tool_runtime_execution.py 2864、tool_runtime_registry.py 2768、tool_runtime.py 2547、tool_runtime_http_json.py 2522、frontend/app/globals.css 7
-    extracted_modules: chat_persistence_trace_export、chat_persistence_usage、tool_runtime_display、tool_runtime_execution_flow、tool_runtime_registry_settings、registry_runtime、http_json_response、http_json_execution、registry_public
-    frontend_styles: theme-base、workbench-shell、messages-composer、inspector-trace、tasks-governance、responsive-markdown、settings-model
-constraints:
-  - 永远不修改 data/insightagent.plan.back.md
-  - 先补 failing test，再改实现
-  - 保持 SSE / trace / export / e2e 契约稳定
-  - 单文件明显膨胀时先拆主题文件/模块
-  - 测试、e2e、启动、提交先参考 docs/development-runbook.md
-  - backend 使用 backend/.venv/bin/python
-validation_baseline:
-  release_gate: scripts/ci_run_release_gate.sh --phase auto passed，summary markdown/json、release readiness matrix、workflow queue/main-push guard passed
-  backend_full_slice: backend/scripts/test_tool_runtime_slice.py 1983/1983
-  backend_targeted: registry 534/534; http_json 531/531; provider 538/538; runtime 163/163; trace 188/188; export 184/184; usage 63/63
-  module_boundaries: backend/scripts/test_tool_runtime_module_boundaries.py 4/4，含后端 3000 行规模边界
-  frontend: node tests 122/122; npm run lint; npm run build; source-file-size boundary
-  e2e_baseline: backend main passed; frontend full Chromium 52 passed / 1 skipped; targeted Chromium workbench-main-path 5/5
-  hygiene: py_compile; git diff --check; backup plan diff clean
+  status: 100% 封板
+  latest_change: release gate、release readiness matrix、backend/frontend e2e workflow queue 覆盖、artifact diagnostics 与 main push strictness 已闭环
+file_size_baseline:
+  scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
+  boundary: 可维护源码文件 <= 3000 行
+  largest_source: backend/scripts/tool_runtime_slice/planning_provider.py 2923 行
+  key_facades: tool_runtime_execution.py 2864、tool_runtime_registry.py 2768、tool_runtime.py 2547、tool_runtime_http_json.py 2522、frontend/app/globals.css 7
 stable_contracts:
   - 默认 settings 根据 provider/model/api_key 自动选择 remote 或 canonical mock
   - SSE 事件、TraceStep、result summary、safe output、JSON/Markdown export shape 保持稳定
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
-completed:
+  - data/insightagent.plan.back.md 是只读备份计划，永远不修改
+validation_baseline:
+  release_gate: bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json passed，非 PR 保守跑 backend/frontend/tooling/hygiene 全量
+  backend: full slice 1983/1983；module boundary 4/4；registry/http_json/provider/runtime/trace/export/usage targeted passed
+  frontend: node tests 122/122；npm run lint passed；npm run build passed
+  e2e: backend main passed；frontend full Chromium 52 passed / 1 skipped；backend/frontend queue 已纳入 CI workflow
+  hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
+completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
-  - runtime split：tool_runtime facade、planner、execution、registry、HTTP JSON、chat persistence 与测试 slice 已按主题分模块
-  - frontend style split：globals.css 保持 import facade，主题样式迁移到 frontend/app/styles
-  - ci-release-engineering kickoff：release gate 脚本与 GitHub Actions workflow，默认不启动服务、不替代 service-backed e2e
-  - release gate diagnostics：Markdown/JSON summary 输出与 workflow artifact
-  - release gate auto routing：PR diff 自动选择 backend/frontend 阶段，CI/workflow/script 变更保守升级到全量
-  - release readiness matrix：Markdown/JSON 发布候选门禁矩阵，区分 static gate、service-backed e2e 与 artifact guard
-  - e2e workflow queue coverage：backend/frontend workflow 已纳入低并发 queue 阶段，失败诊断覆盖多个 backend health URL
-  - artifact main-push strictness：artifact-stage guard 支持 main-push-level，main push 缺失 artifact 失败
-next_steps:
-  - 继续收敛 release/e2e 分层：补齐最终发布候选判定与文档封板
-  - 新 CI 变更继续先红测，再跑 release gate 与必要 e2e；不扩大 SSE / trace / export 外部契约
-logging_rule: 本文件只保存当前状态、验证基线、稳定契约与少量下一步，不记录轮次流水账。
+  - source-size-maintenance：tool runtime/test slice、chat persistence 与 frontend globals.css 已拆分并纳入规模边界
+  - ci-release-engineering：静态 release gate、PR auto routing、summary artifact、readiness matrix、service-backed e2e workflow queue、artifact strict policy
+next_candidate_mainlines:
+  - production-runtime-hardening：运行态失败诊断、provider registry 体验、远端 provider 可观测性与发布后回归策略
+  - product-ux-polish：Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率
+logging_rule: 本文件只保存当前状态、验证基线、稳定契约与候选主线，不记录轮次流水账。
 ---
