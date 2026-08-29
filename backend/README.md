@@ -4,8 +4,9 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前状态
 
-- `provider-tool-expansion` 已 100% 封板，当前主线切换到 `ci-release-engineering`，进度约 10%。
+- `provider-tool-expansion` 已 100% 封板，当前主线为 `ci-release-engineering`，进度约 20%。
 - 第一轮 CI/release 工程新增不启动服务的 release gate，后端侧统一使用 `backend/.venv/bin/python` 跑 full slice、module boundary 与 compileall。
+- release gate 已输出 Markdown/JSON 摘要，便于 CI 页面和 artifact 排查失败阶段。
 - HTTP JSON provider search 总量/命中归一化、provider planner 多协议工具调用解析、JSON 字符串参数和 reconnect 稳定错误码已完成。
 - runtime 与测试结构治理完成：`backend/app` 与 `backend/scripts` 所有 Python 文件均低于 3000 行，当前最大文件为 `scripts/tool_runtime_slice/planning_provider.py` 2923 行。
 - 项目级源码体积边界已扩展到前端源文件；生成锁文件不纳入拆分目标，`frontend/app/globals.css` 已拆为主题样式模块。
@@ -13,7 +14,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前验证基线
 
-- Release gate：`bash scripts/ci_run_release_gate.sh --phase all` 通过。
+- Release gate：`bash scripts/ci_run_release_gate.sh --phase all` 通过，summary 输出通过。
 - Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1983/1983` 通过。
 - Targeted：`registry 534/534`、`http_json 531/531`、`provider 538/538`、`runtime 163/163`、`trace 188/188`、`export 184/184`、`usage 63/63` 通过。
 - Module boundary：`PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行文件规模边界。

@@ -52,6 +52,22 @@ main() {
   assert_not_contains "ci_run_backend_e2e.sh" "${TMP_DIR}/all.txt"
   assert_not_contains "ci_run_frontend_e2e.sh" "${TMP_DIR}/all.txt"
 
+  bash "${SCRIPT}" \
+    --dry-run \
+    --phase frontend \
+    --summary-file "${TMP_DIR}/summary.md" \
+    --json-summary-file "${TMP_DIR}/summary.json" \
+    > "${TMP_DIR}/summary-stdout.txt"
+  assert_contains "release_gate_summary=${TMP_DIR}/summary.md" "${TMP_DIR}/summary-stdout.txt"
+  assert_contains "release_gate_json_summary=${TMP_DIR}/summary.json" "${TMP_DIR}/summary-stdout.txt"
+  assert_contains "### release gate" "${TMP_DIR}/summary.md"
+  assert_contains "- phase: frontend" "${TMP_DIR}/summary.md"
+  assert_contains "- result: DRY-RUN" "${TMP_DIR}/summary.md"
+  assert_contains "| frontend node tests | DRY-RUN |" "${TMP_DIR}/summary.md"
+  assert_contains '"phase": "frontend"' "${TMP_DIR}/summary.json"
+  assert_contains '"result": "DRY-RUN"' "${TMP_DIR}/summary.json"
+  assert_contains '"label": "frontend build"' "${TMP_DIR}/summary.json"
+
   bash "${SCRIPT}" --dry-run --phase frontend > "${TMP_DIR}/frontend.txt"
   assert_contains "phase=frontend" "${TMP_DIR}/frontend.txt"
   assert_contains "node --test --experimental-strip-types" "${TMP_DIR}/frontend.txt"

@@ -28,7 +28,7 @@ git diff --cached --check
 git diff -- data/insightagent.plan.back.md
 ```
 
-`scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace 与备份计划 diff；可用 `--dry-run` 查看命令清单。
+`scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace 与备份计划 diff；可用 `--dry-run` 查看命令清单，可用 `--summary-file` / `--json-summary-file` 输出 CI 摘要。
 
 前端检查：
 

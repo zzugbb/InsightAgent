@@ -60,4 +60,15 @@ jobs:
         run: npm --prefix frontend ci
 
       - name: Run release gate
-        run: bash scripts/ci_run_release_gate.sh --phase all
+        run: |
+          bash scripts/ci_run_release_gate.sh --phase all \
+            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --json-summary-file /tmp/release-gate-summary.json
+
+      - name: Upload release gate summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-gate-summary
+          path: /tmp/release-gate-summary.json
+          if-no-files-found: ignore

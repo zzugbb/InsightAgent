@@ -58,7 +58,11 @@ main() {
   assert_contains "python-version: \"3.14\"" "${RELEASE_GATE_WORKFLOW}"
   assert_contains "node-version: \"24\"" "${RELEASE_GATE_WORKFLOW}"
   assert_contains "npm --prefix frontend ci" "${RELEASE_GATE_WORKFLOW}"
-  assert_contains "bash scripts/ci_run_release_gate.sh --phase all" "${RELEASE_GATE_WORKFLOW}"
+  assert_contains "bash scripts/ci_run_release_gate.sh --phase all \\" "${RELEASE_GATE_WORKFLOW}"
+  assert_contains '--summary-file "$GITHUB_STEP_SUMMARY" \' "${RELEASE_GATE_WORKFLOW}"
+  assert_contains "--json-summary-file /tmp/release-gate-summary.json" "${RELEASE_GATE_WORKFLOW}"
+  assert_contains "name: release-gate-summary" "${RELEASE_GATE_WORKFLOW}"
+  assert_contains "path: /tmp/release-gate-summary.json" "${RELEASE_GATE_WORKFLOW}"
   assert_not_contains "ci_run_backend_e2e.sh" "${RELEASE_GATE_WORKFLOW}"
   assert_not_contains "ci_run_frontend_e2e.sh" "${RELEASE_GATE_WORKFLOW}"
 

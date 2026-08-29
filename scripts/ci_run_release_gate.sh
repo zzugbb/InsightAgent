@@ -3,8 +3,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RELEASE_GATE_PYTHON="${RELEASE_GATE_PYTHON:-${ROOT_DIR}/backend/.venv/bin/python}"
 phase="all"
 dry_run="0"
+summary_file=""
+json_summary_file=""
+overall_result="PASS"
 
 FRONTEND_NODE_TESTS=(
   "lib/stores/chat-stream-store-utils.node.test.ts"
@@ -21,6 +25,7 @@ usage() {
   cat <<'USAGE'
 Usage:
   scripts/ci_run_release_gate.sh [--phase <all|backend|frontend|tooling|hygiene>] [--dry-run]
+    [--summary-file <path>] [--json-summary-file <path>]
 
 Phases:
   backend   Run backend full slice and module boundary checks.
@@ -33,6 +38,12 @@ This gate intentionally avoids local service startup and e2e execution. Use the
 runbook e2e commands for backend/frontend service-backed validation.
 USAGE
 }
+
+STEP_LABELS=()
+STEP_WORKDIRS=()
+STEP_COMMANDS=()
+STEP_RESULTS=()
+STEP_EXIT_CODES=()
 
 shell_quote() {
   printf '%q' "$1"
@@ -50,6 +61,63 @@ format_command() {
   printf '%s\n' "${rendered}"
 }
 
+json_string() {
+  "${RELEASE_GATE_PYTHON}" -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$1"
+}
+
+record_step() {
+  STEP_LABELS+=("$1")
+  STEP_WORKDIRS+=("$2")
+  STEP_COMMANDS+=("$3")
+  STEP_RESULTS+=("$4")
+  STEP_EXIT_CODES+=("$5")
+}
+
+write_summaries() {
+  local result="$1"
+  local i
+  if [ -n "${summary_file}" ]; then
+    mkdir -p "$(dirname "${summary_file}")"
+    {
+      echo "### release gate"
+      echo "- phase: ${phase}"
+      echo "- result: ${result}"
+      echo "- dry_run: ${dry_run}"
+      echo
+      echo "| step | result | exit_code | workdir | command |"
+      echo "| --- | --- | --- | --- | --- |"
+      for i in "${!STEP_LABELS[@]}"; do
+        echo "| ${STEP_LABELS[$i]} | ${STEP_RESULTS[$i]} | ${STEP_EXIT_CODES[$i]} | ${STEP_WORKDIRS[$i]} | \`${STEP_COMMANDS[$i]}\` |"
+      done
+    } > "${summary_file}"
+    echo "release_gate_summary=${summary_file}"
+  fi
+  if [ -n "${json_summary_file}" ]; then
+    mkdir -p "$(dirname "${json_summary_file}")"
+    {
+      printf '{\n'
+      printf '  "phase": %s,\n' "$(json_string "${phase}")"
+      printf '  "result": %s,\n' "$(json_string "${result}")"
+      printf '  "dry_run": %s,\n' "$(json_string "${dry_run}")"
+      printf '  "steps": [\n'
+      for i in "${!STEP_LABELS[@]}"; do
+        if [ "${i}" -gt 0 ]; then
+          printf ',\n'
+        fi
+        printf '    {"label": %s, "result": %s, "exit_code": %s, "workdir": %s, "command": %s}' \
+          "$(json_string "${STEP_LABELS[$i]}")" \
+          "$(json_string "${STEP_RESULTS[$i]}")" \
+          "${STEP_EXIT_CODES[$i]}" \
+          "$(json_string "${STEP_WORKDIRS[$i]}")" \
+          "$(json_string "${STEP_COMMANDS[$i]}")"
+      done
+      printf '\n  ]\n'
+      printf '}\n'
+    } > "${json_summary_file}"
+    echo "release_gate_json_summary=${json_summary_file}"
+  fi
+}
+
 run_step() {
   local label="$1"
   local workdir="$2"
@@ -60,9 +128,21 @@ run_step() {
   echo "[release-gate] workdir=${workdir}"
   if [ "${dry_run}" = "1" ]; then
     echo "[release-gate] would run: ${display}"
+    record_step "${label}" "${workdir}" "${display}" "DRY-RUN" "0"
     return 0
   fi
+  set +e
   (cd "${workdir}" && "$@")
+  local exit_code=$?
+  set -e
+  if [ "${exit_code}" -eq 0 ]; then
+    record_step "${label}" "${workdir}" "${display}" "PASS" "0"
+    return 0
+  fi
+  overall_result="FAIL"
+  record_step "${label}" "${workdir}" "${display}" "FAIL" "${exit_code}"
+  write_summaries "${overall_result}"
+  exit "${exit_code}"
 }
 
 run_backend() {
@@ -117,6 +197,8 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --phase) phase="${2:-}"; shift 2 ;;
     --dry-run) dry_run="1"; shift ;;
+    --summary-file) summary_file="${2:-}"; shift 2 ;;
+    --json-summary-file) json_summary_file="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *)
       echo "unknown argument: $1" >&2
@@ -158,4 +240,9 @@ case "${phase}" in
     ;;
 esac
 
+if [ "${dry_run}" = "1" ]; then
+  overall_result="DRY-RUN"
+fi
+
 echo "[release-gate] completed phase=${phase}"
+write_summaries "${overall_result}"

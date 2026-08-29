@@ -5,7 +5,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - `provider-tool-expansion` 已 100% 封板；兼容逻辑由后端承接，前端继续消费既有 preview/output/result-summary、trace/export 字段。
-- 当前主线切换到 `ci-release-engineering`，进度约 10%；release gate 已纳入前端 node/lint/build 和 CI workflow。
+- 当前主线为 `ci-release-engineering`，进度约 20%；release gate 已纳入前端 node/lint/build、CI workflow 与 summary artifact。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard、知识库治理均已落地。
 - 全局样式拆分已完成：`app/globals.css` 仅保留有序 import，实际样式按主题拆入 `app/styles/`。
 - 前端源码体积边界已纳入 node 测试；`package-lock.json` 属于生成锁文件，不作为拆分对象。
@@ -13,7 +13,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
-- Release gate：`bash scripts/ci_run_release_gate.sh --phase all` 通过。
+- Release gate：`bash scripts/ci_run_release_gate.sh --phase all` 通过，Markdown/JSON summary 输出通过。
 - Node tests：8 个测试文件，`122/122` 通过，包含 frontend source size boundary。
 - `npm run lint` 通过。
 - `npm run build` 通过。
