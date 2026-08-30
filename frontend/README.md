@@ -4,10 +4,10 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前状态
 
-- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板；当前主线为 `production-runtime-hardening`，进度约 25%。
+- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板；当前主线为 `production-runtime-hardening`，进度约 35%。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地。
 - 前端继续消费后端统一的 preview/output/result-summary、trace/export 字段，不新增 provider 专用显示分支。
-- SSE `error.diagnostic.reason` 是后端追加的低敏兼容字段；前端现有错误提示继续使用 `code/message/detail/status_code`。
+- SSE `error.diagnostic.reason` 与 provider failure audit diagnostic 是后端追加的低敏兼容字段；前端现有错误提示继续使用 `code/message/detail/status_code`。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 - 前端 e2e workflow 覆盖 smoke/full/queue，queue 阶段使用独立 `:8011` backend；main push Playwright artifact-stage guard 使用 `fail-on-missing`。
 
@@ -17,11 +17,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Node tests：8 个测试文件，`122/122` 通过，包含 frontend source size boundary。
 - `npm run lint` 与 `npm run build` 通过。
 - E2E 基线：full Chromium `52 passed / 1 skipped`；低并发 queue phase `1/1` 且已纳入 CI workflow。
-- Backend 契约基线：full slice `1985/1985`；module boundary `4/4`。
+- Backend 契约基线：full slice `1986/1986`；module boundary `4/4`。
 
 ## 下一步前端计划
 
-1. 当前主线：`production-runtime-hardening`，前端暂不新增 provider 专用展示分支，只消费后端兼容字段；新增 `error.diagnostic.reason` 保持向后兼容。
+1. 当前主线：`production-runtime-hardening`，前端暂不新增 provider 专用展示分支，只消费后端兼容字段；新增 `error.diagnostic.reason` 与 provider failure audit diagnostic 保持向后兼容。
 2. 已封板主线：`provider-tool-expansion`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
 3. 下一候选主线：`product-ux-polish`，聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
 4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。

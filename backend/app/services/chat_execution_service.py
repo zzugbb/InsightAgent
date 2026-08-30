@@ -171,6 +171,22 @@ def _classify_sse_error_reason(code: str, status_code: int | None = None) -> str
     return "unknown"
 
 
+def _build_sse_error_diagnostic(
+    *,
+    code: str,
+    fatal: bool,
+    has_detail: bool,
+    status_code: int | None = None,
+) -> dict[str, object]:
+    return {
+        "category": _classify_sse_error_category(code),
+        "reason": _classify_sse_error_reason(code, status_code),
+        "recoverability": "fatal" if fatal else "retryable",
+        "http_status_family": _classify_http_status_family(status_code),
+        "has_detail": has_detail,
+    }
+
+
 def sse_error_payload(
     *,
     task_id: str,
@@ -204,13 +220,12 @@ def sse_error_payload(
         "fatal": fatal,
         "retryable": not fatal,
         "retryCount": retry_count,
-        "diagnostic": {
-            "category": _classify_sse_error_category(code),
-            "reason": _classify_sse_error_reason(code, status_code),
-            "recoverability": "fatal" if fatal else "retryable",
-            "http_status_family": _classify_http_status_family(status_code),
-            "has_detail": bool(safe_detail_text),
-        },
+        "diagnostic": _build_sse_error_diagnostic(
+            code=code,
+            fatal=fatal,
+            status_code=status_code,
+            has_detail=bool(safe_detail_text),
+        ),
     }
     if step_id:
         payload["step_id"] = step_id
@@ -1139,6 +1154,12 @@ def stream_task_execution(
             detail={
                 "status_code": exc.status_code,
                 "retryable": exc.retryable,
+                "diagnostic": _build_sse_error_diagnostic(
+                    code=exc.code,
+                    fatal=not exc.retryable,
+                    status_code=exc.status_code,
+                    has_detail=bool(exc.detail),
+                ),
             },
         )
         yield sse_event("state", {"task_id": task_id, "phase": "error"})
