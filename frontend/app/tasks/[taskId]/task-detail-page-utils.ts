@@ -50,6 +50,13 @@ const FAILURE_DIAGNOSTIC_TOKENS = [
   "interrupted",
 ];
 
+const TRACE_SEMANTIC_PRESETS: readonly Exclude<TaskDetailTraceSemanticFilter, "all">[] = [
+  "planner",
+  "retrieval",
+  "calculator",
+  "failure",
+];
+
 function isFailureDiagnosticContent(value: string): boolean {
   const content = value.trim().toLowerCase();
   return Boolean(content) && FAILURE_DIAGNOSTIC_TOKENS.some((token) => content.includes(token));
@@ -83,8 +90,12 @@ export function resolveTaskDetailSemanticTracePreset(
 export function resolveTaskDetailInitialTraceFilterState(
   traceSemanticPreset: string | null | undefined,
 ): TaskDetailTraceFilterState {
-  if (traceSemanticPreset?.trim().toLowerCase() === "failure") {
-    return resolveTaskDetailFailureTracePreset({
+  const normalizedPreset = traceSemanticPreset?.trim().toLowerCase();
+  const semanticPreset = TRACE_SEMANTIC_PRESETS.find(
+    (preset) => preset === normalizedPreset,
+  );
+  if (semanticPreset) {
+    return resolveTaskDetailSemanticTracePreset(semanticPreset, {
       traceView: "list",
       traceSemanticFilter: "all",
       traceKindFilter: "all",

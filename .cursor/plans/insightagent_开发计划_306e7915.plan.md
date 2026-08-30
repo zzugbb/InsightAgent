@@ -1,10 +1,10 @@
 ---
 name: InsightAgent 开发计划
-overview: provider-tool-expansion、ci-release-engineering 与 production-runtime-hardening 已 100% 封板；下一候选 product-ux-polish。
+overview: provider-tool-expansion、ci-release-engineering 与 production-runtime-hardening 已 100% 封板；product-ux-polish 已进入开发。
 current_focus:
-  mainline: production-runtime-hardening
-  status: 100% 已封板
-  latest_change: SSE/failure audit diagnostic、前端审计详情与 reconnect provider 错误消息映射已收口，保留旧字段
+  mainline: product-ux-polish
+  status: 约 10% 开发中
+  latest_change: 任务详情页 trace_semantic replay URL 支持 planner/retrieval/calculator/failure 语义预设，未知值回退全量 Trace
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -14,12 +14,13 @@ stable_contracts:
   - 默认 settings 根据 provider/model/api_key 自动选择 remote 或 canonical mock
   - SSE 事件、TraceStep、result summary、safe output、JSON/Markdown export shape 保持稳定
   - SSE error.diagnostic 与 failure audit diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性
+  - 任务详情页 trace_semantic URL 参数兼容支持 planner/retrieval/calculator/failure，未知值回退 all
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
   release_gate: bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json passed，非 PR 保守跑 backend/frontend/tooling/hygiene 全量
   backend: full slice 1988/1988；module boundary 4/4；production_reliability 39/39；reconnect 9/9
-  frontend: node tests 123/123；npm run lint passed；npm run build passed
+  frontend: task detail targeted 6/6；node tests 123/123；npm run lint passed；npm run build passed
   e2e: backend main passed；frontend full Chromium 52 passed / 1 skipped；backend/frontend queue 已纳入 CI workflow
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
@@ -30,7 +31,7 @@ completed_mainlines:
 next_candidate_mainlines:
   - product-ux-polish：Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率
 next_steps:
-  - 候选进入 product-ux-polish，聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率
+  - 继续推进 product-ux-polish，优先 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -39,8 +40,9 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 ## 当前仓库状态
 
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
-- `provider-tool-expansion`、`ci-release-engineering` 与 `production-runtime-hardening` 均已 100% 封板，可进入下一候选主线。
+- `provider-tool-expansion`、`ci-release-engineering` 与 `production-runtime-hardening` 均已 100% 封板；`product-ux-polish` 已进入开发，当前约 10%。
 - 生产运行态封板摘要：SSE `error.diagnostic` 与 failure audit detail 默认对齐低敏 `reason` 枚举，前端审计详情可展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段不变。
+- 产品体验当前切口：任务详情页 `trace_semantic` replay URL 支持 `planner/retrieval/calculator/failure`，可从任务中心、审计或外部链接直达对应语义 Trace 视图，未知值继续回退全量 Trace。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 - 代码规模治理已纳入常规边界：`backend/app`、`backend/scripts` 与 `frontend` 源码保持单文件 <= 3000 行；`frontend/package-lock.json` 等生成锁文件不作为拆分对象。
 
@@ -59,7 +61,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1988/1988`。
 - Backend targeted：`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，当前 `4/4`，包含 3000 行规模边界。
-- Frontend node tests：当前 `123/123`，包含 frontend source size boundary。
+- Frontend node tests：task detail targeted `6/6`；当前 `123/123`，包含 frontend source size boundary。
 - Frontend lint/build：`cd frontend && npm run lint`、`cd frontend && npm run build` 通过。
 - E2E：backend main 通过；frontend full Chromium `52 passed / 1 skipped`；backend/frontend queue 阶段已纳入 CI workflow。
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过；非 PR 环境保守跑 backend/frontend/tooling/hygiene 全量。
@@ -79,8 +81,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 后续维护线
 
-- 当前状态：`production-runtime-hardening` 已封板，后续按先红测、再实现、再 targeted/full slice 的方式进入下一主线。
-- 后续候选：`product-ux-polish`，聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
+- 当前状态：`product-ux-polish` 约 10%，后续继续按先红测、再实现、再 targeted/full slice 的方式推进。
+- 后续重点：Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 文档收敛边界

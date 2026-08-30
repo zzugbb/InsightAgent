@@ -26,7 +26,7 @@ test("resolveTaskDetailFailureTracePreset focuses failure traces from any trace 
   );
 });
 
-test("resolveTaskDetailInitialTraceFilterState applies failure replay URL preset", () => {
+test("resolveTaskDetailInitialTraceFilterState applies semantic replay URL presets", () => {
   assert.deepEqual(
     resolveTaskDetailInitialTraceFilterState("failure"),
     {
@@ -37,7 +37,34 @@ test("resolveTaskDetailInitialTraceFilterState applies failure replay URL preset
     },
   );
   assert.deepEqual(
-    resolveTaskDetailInitialTraceFilterState("retrieval"),
+    resolveTaskDetailInitialTraceFilterState(" retrieval "),
+    {
+      traceView: "list",
+      traceSemanticFilter: "retrieval",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskDetailInitialTraceFilterState("PLANNER"),
+    {
+      traceView: "list",
+      traceSemanticFilter: "planner",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskDetailInitialTraceFilterState("calculator"),
+    {
+      traceView: "list",
+      traceSemanticFilter: "calculator",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskDetailInitialTraceFilterState("unknown"),
     {
       traceView: "list",
       traceSemanticFilter: "all",
