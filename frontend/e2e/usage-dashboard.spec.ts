@@ -733,6 +733,18 @@ test("saved retrieval-only profile executes retrieval without planner or calcula
   expect(traceFeedText ?? "").not.toContain("Task Planner");
   expect(traceFeedText ?? "").not.toContain("calc_eval");
 
+  const traceSearchInput = page.getByTestId("inspector-trace-search");
+  await traceSearchInput.fill("remote_provider_network_error");
+  await expect(page.getByText("No trace steps match the current filters.")).toBeVisible();
+  await page
+    .getByTestId("inspector-trace-semantic-filter")
+    .getByText(/Retrieval/)
+    .click();
+  await expect(traceSearchInput).toHaveValue("");
+  await expect(
+    page.getByTestId("trace-card").filter({ hasText: "Knowledge Retrieval" }).first(),
+  ).toBeVisible({ timeout: 20_000 });
+
   await assertInspectorSessionGovernance(page, {
     profile: "retrieval_only",
     source: "default",

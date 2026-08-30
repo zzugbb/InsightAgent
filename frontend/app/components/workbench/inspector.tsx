@@ -26,6 +26,7 @@ import {
   formatTraceStepMetaSubtitle,
   getStepTitle,
   getTaskLabel,
+  resolveInspectorTraceSemanticFilterChange,
   resolveTraceStepSemanticStats,
   normalizeTraceStepKind,
   resolveTraceStepDisplayContent,
@@ -166,6 +167,21 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       searchQuery: traceSearchQuery,
     });
   }, [sseTraceSteps, traceKindFilter, traceSemanticFilter, traceSearchQuery]);
+
+  const applyTraceSemanticFilter = (
+    semanticFilter: "all" | "planner" | "retrieval" | "calculator" | "failure",
+  ) => {
+    const nextFilters = resolveInspectorTraceSemanticFilterChange(semanticFilter, {
+      traceView,
+      traceSemanticFilter,
+      traceKindFilter,
+      traceSearchQuery,
+    });
+    setTraceView(nextFilters.traceView);
+    setTraceSemanticFilter(nextFilters.traceSemanticFilter);
+    setTraceKindFilter(nextFilters.traceKindFilter);
+    setTraceSearchQuery(nextFilters.traceSearchQuery);
+  };
 
   const { visibleSteps, hiddenCount } = useMemo(() => {
     const steps = filteredTraceSteps;
@@ -315,12 +331,13 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
       <div className="trace-filter-toolbar">
         <Segmented
           size="small"
+          data-testid="inspector-trace-semantic-filter"
           value={traceSemanticFilter}
-          onChange={(v) =>
-            setTraceSemanticFilter(
+          onChange={(v) => {
+            applyTraceSemanticFilter(
               v as "all" | "planner" | "retrieval" | "calculator" | "failure",
-            )
-          }
+            );
+          }}
           options={[
             { label: t.inspector.traceSemanticFilterAll, value: "all" },
             { label: t.inspector.traceSemanticFilterPlanner, value: "planner" },
@@ -331,6 +348,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         />
         <Segmented
           size="small"
+          data-testid="inspector-trace-kind-filter"
           value={traceKindFilter}
           onChange={(v) =>
             setTraceKindFilter(
@@ -350,6 +368,7 @@ export const Inspector = forwardRef<HTMLElement, InspectorProps>(function Inspec
         <Input
           size="small"
           allowClear
+          data-testid="inspector-trace-search"
           value={traceSearchQuery}
           onChange={(e) => setTraceSearchQuery(e.target.value)}
           placeholder={t.inspector.traceSearchPlaceholder}

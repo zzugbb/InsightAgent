@@ -106,6 +106,14 @@ export type TraceStepKindFilter =
   | "rag"
   | "other";
 
+export type InspectorTraceView = "list" | "flow";
+export type InspectorTraceFilterState = {
+  traceView: InspectorTraceView;
+  traceSemanticFilter: TraceStepSemanticFilter;
+  traceKindFilter: TraceStepKindFilter;
+  traceSearchQuery: string;
+};
+
 export type TaskObservabilityFilter =
   | "all"
   | "attention"
@@ -152,6 +160,18 @@ export function resolveTaskStreamTerminalReason(args: {
     return "error";
   }
   return "done";
+}
+
+export function resolveInspectorTraceSemanticFilterChange(
+  semanticFilter: TraceStepSemanticFilter,
+  current: InspectorTraceFilterState,
+): InspectorTraceFilterState {
+  return {
+    traceView: current.traceView,
+    traceSemanticFilter: semanticFilter,
+    traceKindFilter: "all",
+    traceSearchQuery: "",
+  };
 }
 
 function parseUsageNumber(v: unknown): number | null {

@@ -19,6 +19,7 @@ import {
   resolveTaskFailureDiagnosticChipClick,
   resolveTaskFailureDiagnosticDrilldown,
   resolveTaskDetailHrefTraceSemanticFilter,
+  resolveInspectorTraceSemanticFilterChange,
   resolveTaskObservabilityFilterChange,
   resolveAuditTaskDetailHref,
   resolveTaskSnapshotSummary,
@@ -116,6 +117,37 @@ test("resolveTaskFailureHintDisplay maps known stream error codes", () => {
   assert.equal(
     resolveTaskFailureHintDisplay("custom failure", () => null),
     "custom failure",
+  );
+});
+
+test("resolveInspectorTraceSemanticFilterChange clears stale kind and search filters", () => {
+  assert.deepEqual(
+    resolveInspectorTraceSemanticFilterChange("retrieval", {
+      traceView: "flow",
+      traceSemanticFilter: "planner",
+      traceKindFilter: "tool",
+      traceSearchQuery: "remote_provider_network_error",
+    }),
+    {
+      traceView: "flow",
+      traceSemanticFilter: "retrieval",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
+  );
+  assert.deepEqual(
+    resolveInspectorTraceSemanticFilterChange("all", {
+      traceView: "list",
+      traceSemanticFilter: "failure",
+      traceKindFilter: "action",
+      traceSearchQuery: "timeout",
+    }),
+    {
+      traceView: "list",
+      traceSemanticFilter: "all",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
   );
 });
 
