@@ -10,7 +10,8 @@
 - 访问本机 Docker、监听本机端口、访问本机 e2e 服务、写 `.git/index` 通常需要提权。
 - `data/insightagent.plan.back.md` 永远不要修改。
 - `.cursor/plans/insightagent_开发计划_306e7915.plan.md` 虽在 `.gitignore` 范围内，但当前是 tracked 文件，文档同步和提交必须包含它。
-- 每个主线确认封板后，整理 `README.md`、`backend/README.md`、`frontend/README.md` 与实时计划文件：保留当前状态、当前验证基线、下一步计划/候选主线与稳定契约，删除或收缩按轮流水账、旧失败过程和重复验证清单。
+- 每个主线确认封板后，整理 `README.md`、`backend/README.md`、`frontend/README.md` 与实时计划文件：仅收敛“进度/封板状态相关块”，保留当前状态、当前验证基线、下一步计划/候选主线、稳定契约与少量高信号摘要；删除或收缩按轮流水账、旧失败过程和重复验证清单。
+- 文档收敛不是把整份 README 改成短状态页；接口范围、运行方式、关键实现位置、SSE/Trace 契约、Memory/RAG 说明、文档维护约定等长期参考章节应保留，除非对应功能真的被删除或迁移。
 - 控制单文件规模：新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆出新主题文件或新模块，再继续追加。历史上的 `backend/scripts/test_tool_runtime_slice.py` 和 `app/services/tool_runtime.py` 已按该规则拆成 slice 主题包与 facade 模块。
 
 ## 不需要提权的常用命令

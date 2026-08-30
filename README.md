@@ -135,7 +135,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- 当前不推进新功能；继续保持 `production-runtime-hardening` 主线状态，后续开发按 runbook 与先红测流程推进。
+- 继续保持 `production-runtime-hardening` 主线状态，后续开发按 runbook 与先红测流程推进。
 
 ## 文档维护约定
 
