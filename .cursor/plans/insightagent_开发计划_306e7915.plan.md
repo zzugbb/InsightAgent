@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: provider-tool-expansion 与 ci-release-engineering 已 100% 封板；当前推进 production-runtime-hardening。
 current_focus:
   mainline: production-runtime-hardening
-  status: 45% 开发中
-  latest_change: SSE error.diagnostic 与 provider call/selection task_failed audit detail 对齐低敏 reason 枚举，保留旧字段
+  status: 55% 开发中
+  latest_change: SSE error.diagnostic 与 failure audit detail 默认对齐低敏 reason 枚举，保留旧字段
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -13,7 +13,7 @@ file_size_baseline:
 stable_contracts:
   - 默认 settings 根据 provider/model/api_key 自动选择 remote 或 canonical mock
   - SSE 事件、TraceStep、result summary、safe output、JSON/Markdown export shape 保持稳定
-  - SSE error.diagnostic 与 provider failure audit diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性
+  - SSE error.diagnostic 与 failure audit diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
@@ -38,8 +38,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 ## 当前仓库状态
 
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
-- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板；当前推进 `production-runtime-hardening`，进度约 45%。
-- 当前生产运行态重点：SSE `error.diagnostic` 与 provider call/selection `task_failed` 审计 detail 已对齐低敏 `reason` 枚举，保留旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段；后续继续收敛 provider registry 运行态诊断、远端 provider 失败可观测性与发布后回归策略。
+- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板；当前推进 `production-runtime-hardening`，进度约 55%。
+- 当前生产运行态重点：SSE `error.diagnostic` 与 failure audit detail 已默认对齐低敏 `reason` 枚举，保留旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段；后续继续收敛 provider registry 运行态诊断、远端 provider 失败可观测性与发布后回归策略。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 - 代码规模治理已纳入常规边界：`backend/app`、`backend/scripts` 与 `frontend` 源码保持单文件 <= 3000 行；`frontend/package-lock.json` 等生成锁文件不作为拆分对象。
 

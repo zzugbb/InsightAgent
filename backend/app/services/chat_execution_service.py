@@ -486,11 +486,25 @@ def stream_task_execution(
         message: str,
         detail: dict[str, object] | None = None,
     ) -> None:
+        safe_detail = dict(detail or {})
+        if "diagnostic" not in safe_detail:
+            status_code_value = safe_detail.get("status_code")
+            status_code = (
+                status_code_value if isinstance(status_code_value, int) else None
+            )
+            retryable_value = safe_detail.get("retryable")
+            fatal = not retryable_value if isinstance(retryable_value, bool) else True
+            safe_detail["diagnostic"] = _build_sse_error_diagnostic(
+                code=code,
+                fatal=fatal,
+                status_code=status_code,
+                has_detail=False,
+            )
         record_audit_event(
             event_type=event_type,
             code=code,
             message=message,
-            detail=detail,
+            detail=safe_detail,
         )
 
     def persist_trace(*, force: bool = False) -> None:

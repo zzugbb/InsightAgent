@@ -6,7 +6,7 @@
 
 - `provider-tool-expansion` 已 100% 封板。
 - `ci-release-engineering` 已 100% 封板。
-- 当前主线为 `production-runtime-hardening`，进度约 45%；SSE `error.diagnostic` 与 provider call/selection `task_failed` 审计 detail 已对齐低敏 `reason` 枚举，不改变旧字段。
+- 当前主线为 `production-runtime-hardening`，进度约 55%；SSE `error.diagnostic` 与失败审计 detail 已对齐低敏 `reason` 枚举，不改变旧字段。
 - 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
 ## 当前验证基线
@@ -19,14 +19,14 @@
 
 ## 当前开发计划
 
-1. 当前主线：`production-runtime-hardening`，继续收敛 provider registry 运行态诊断、远端 provider 失败可观测性与发布后回归策略；当前已补齐 SSE error、provider call failure audit 与 provider selection failure audit 的低敏分类和 reason 枚举。
+1. 当前主线：`production-runtime-hardening`，继续收敛 provider registry 运行态诊断、远端 provider 失败可观测性与发布后回归策略；当前已补齐 SSE error、provider call/selection failure audit 与默认 failure audit 的低敏分类和 reason 枚举。
 2. 已封板主线：`provider-tool-expansion`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
 3. 下一候选主线：`product-ux-polish`，聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
 4. 继续保持“小红测 -> 实现 -> targeted/full slice -> 文档同步 -> 提交”的节奏。
 
 ## 稳定契约
 
-- SSE 事件、`TraceStep`、result summary、safe output、JSON/Markdown export shape 保持稳定；`error.diagnostic` 与 provider failure audit diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性。
+- SSE 事件、`TraceStep`、result summary、safe output、JSON/Markdown export shape 保持稳定；`error.diagnostic` 与 failure audit diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性。
 - 默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`。
 - queued/running/cancel/reconnect 与 task recovery 语义保持稳定。
 - `data/insightagent.plan.back.md` 是只读备份计划，永远不参与同步或修改。

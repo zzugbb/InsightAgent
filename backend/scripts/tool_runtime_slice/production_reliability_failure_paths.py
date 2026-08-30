@@ -983,6 +983,16 @@ class ProductionReliabilityFailurePathsMixin:
         )
         self.assertEqual([audit["event_type"] for audit in audits], ["task_failed"])
         self.assertEqual(audits[-1]["detail"]["code"], "task_stream_interrupted")
+        self.assertEqual(
+            audits[-1]["detail"]["diagnostic"],
+            {
+                "category": "task_stream",
+                "reason": "stream",
+                "recoverability": "fatal",
+                "http_status_family": None,
+                "has_detail": False,
+            },
+        )
 
     def test_production_reliability_stream_close_before_running_does_not_mark_failed(
         self,
