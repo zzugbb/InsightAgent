@@ -480,6 +480,10 @@ def _resolve_reconnect_failed_error(task: dict[str, Any]) -> tuple[str, str]:
     ):
         messages_by_code = {
             "remote_provider_network_error": "Remote provider stream network error.",
+            "remote_provider_http_error": "Remote provider HTTP error.",
+            "remote_provider_rate_limited": "Remote provider rate limited the request.",
+            "remote_api_key_required": "Remote provider API key is missing.",
+            "remote_base_url_required": "Remote provider base URL is missing.",
         }
         return (
             failure_hint,

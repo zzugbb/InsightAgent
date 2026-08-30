@@ -4,6 +4,20 @@ from .context import asyncio, SimpleNamespace, task_routes_module
 
 
 class TaskStreamReconnectMixin:
+    def test_resolve_reconnect_failed_error_maps_provider_http_error_hint(
+        self,
+    ) -> None:
+        code, message = task_routes_module._resolve_reconnect_failed_error(
+            {
+                "status": "failed",
+                "failure_hint": "remote_provider_http_error",
+                "failure_source": "error_event",
+            }
+        )
+
+        self.assertEqual(code, "remote_provider_http_error")
+        self.assertEqual(message, "Remote provider HTTP error.")
+
     def test_stream_running_task_reconnect_uses_failed_task_error_event_hint(
         self,
     ) -> None:
