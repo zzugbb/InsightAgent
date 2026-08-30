@@ -73,6 +73,11 @@ export type TaskFailureDiagnosticDrilldown = {
   failureSourceFilter: TaskFailureSource;
 };
 
+type TaskFailureDiagnosticGroupSnapshot = Pick<
+  TaskSnapshotSummary,
+  "failureHint" | "failureSource"
+> | null | undefined;
+
 export type SessionGovernanceSummary = {
   profiles: string[];
   providerSources: string[];
@@ -724,9 +729,7 @@ function isTaskFailureSource(value: unknown): value is TaskFailureSource {
 }
 
 export function resolveTaskFailureDiagnosticGroups(
-  snapshots: Array<
-    Pick<TaskSnapshotSummary, "failureHint" | "failureSource"> | null | undefined
-  >,
+  snapshots: TaskFailureDiagnosticGroupSnapshot[],
 ): TaskFailureDiagnosticGroup[] {
   const counts = new Map<TaskFailureSource, number>();
   for (const snapshot of snapshots) {
@@ -748,6 +751,18 @@ export function resolveTaskFailureDiagnosticGroups(
         TASK_FAILURE_SOURCE_ORDER.indexOf(b.source)
       );
     });
+}
+
+export function resolveTaskFailureDiagnosticGroupsForTaskCenter(args: {
+  drilldownScopeSnapshots: TaskFailureDiagnosticGroupSnapshot[];
+  visibleSnapshots: TaskFailureDiagnosticGroupSnapshot[];
+  activeFailureSourceFilter: TaskFailureSourceFilter;
+}): TaskFailureDiagnosticGroup[] {
+  return resolveTaskFailureDiagnosticGroups(
+    args.activeFailureSourceFilter === "all"
+      ? args.visibleSnapshots
+      : args.drilldownScopeSnapshots,
+  );
 }
 
 export function resolveTaskFailureDiagnosticDrilldown(

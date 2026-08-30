@@ -15,6 +15,7 @@ import {
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
   resolveTaskFailureDiagnosticGroups,
+  resolveTaskFailureDiagnosticGroupsForTaskCenter,
   resolveTaskFailureDiagnosticDrilldown,
   resolveTaskDetailHrefTraceSemanticFilter,
   resolveAuditTaskDetailHref,
@@ -168,6 +169,42 @@ test("resolveTaskFailureDiagnosticGroups counts failure hints by source", () => 
     { source: "error_event", count: 2 },
     { source: "tool_error", count: 1 },
   ]);
+});
+
+test("resolveTaskFailureDiagnosticGroupsForTaskCenter keeps sibling source chips during drilldown", () => {
+  const drilldownScopeSnapshots = [
+    {
+      failureHint: "remote_provider_network_error",
+      failureSource: "error_event",
+    },
+    {
+      failureHint: "provider_search execution failed",
+      failureSource: "tool_error",
+    },
+  ];
+  const visibleSnapshots = drilldownScopeSnapshots.filter(
+    (snapshot) => snapshot.failureSource === "tool_error",
+  );
+
+  assert.deepEqual(
+    resolveTaskFailureDiagnosticGroupsForTaskCenter({
+      drilldownScopeSnapshots,
+      visibleSnapshots,
+      activeFailureSourceFilter: "tool_error",
+    }),
+    [
+      { source: "error_event", count: 1 },
+      { source: "tool_error", count: 1 },
+    ],
+  );
+  assert.deepEqual(
+    resolveTaskFailureDiagnosticGroupsForTaskCenter({
+      drilldownScopeSnapshots,
+      visibleSnapshots,
+      activeFailureSourceFilter: "all",
+    }),
+    [{ source: "tool_error", count: 1 }],
+  );
 });
 
 test("resolveTaskFailureDiagnosticDrilldown builds source drilldown filters", () => {

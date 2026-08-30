@@ -9,7 +9,7 @@ import {
   Table,
 } from "antd";
 import type { RefObject } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
@@ -25,7 +25,7 @@ import {
   matchesTaskFailureSourceFilter,
   matchesTaskObservabilityFilter,
   resolveTaskFailureDiagnosticDrilldown,
-  resolveTaskFailureDiagnosticGroups,
+  resolveTaskFailureDiagnosticGroupsForTaskCenter,
   resolveTaskFailureHintDisplay,
   resolveTaskDetailHrefTraceSemanticFilter,
   resolveTaskSnapshotSummary,
@@ -131,8 +131,53 @@ export function TaskCenter({
     return next;
   }, [scopedTasks]);
 
-  const filteredTasks = useMemo(() => {
+  const taskMatchesKeyword = useCallback((task: TaskSummary) => {
     const q = taskSearchQuery.trim().toLowerCase();
+    if (q.length === 0) {
+      return true;
+    }
+    const prompt = task.prompt.trim().toLowerCase();
+    const id = task.id.toLowerCase();
+    const snapshot = taskSnapshots.get(task.id);
+    const governance = snapshot?.governance;
+    const semanticSummary = snapshot
+      ? formatTraceStepSemanticStatsSummary(snapshot.semanticStats, {
+          planner: t.taskCenter.semanticPlannerLabel,
+          retrieval: t.taskCenter.semanticRetrievalLabel,
+          calculator: t.taskCenter.semanticCalculatorLabel,
+          failure: t.taskCenter.semanticFailureLabel,
+        }).toLowerCase()
+      : "";
+    const governanceKeywords = governance
+      ? [
+          governance.profile ?? "",
+          governance.providerSource ?? "",
+          ...governance.allowedToolNames,
+          ...governance.allowedToolLabels,
+        ]
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean)
+      : [];
+    const failureSourceLabel =
+      snapshot?.failureSource
+        ? formatTaskFailureSourceLabel(snapshot.failureSource, t.inspector).toLowerCase()
+        : "";
+    const failureHintDisplay = resolveTaskFailureHintDisplay(
+      snapshot?.failureHint,
+      t.stream.streamErrorByCode,
+    )?.toLowerCase() ?? "";
+    return (
+      prompt.includes(q)
+      || id.includes(q)
+      || semanticSummary.includes(q)
+      || Boolean(snapshot?.failureHint?.toLowerCase().includes(q))
+      || failureHintDisplay.includes(q)
+      || failureSourceLabel.includes(q)
+      || governanceKeywords.some((item) => item.includes(q))
+    );
+  }, [t.inspector, t.stream.streamErrorByCode, t.taskCenter, taskSearchQuery, taskSnapshots]);
+
+  const taskFilterBase = useMemo(() => {
     const statusMatched = scopedTasks.filter((task) => {
       if (taskStatusFilter === "all") {
         return true;
@@ -160,56 +205,30 @@ export function TaskCenter({
         taskObservabilityFilter,
       ),
     );
-    const failureSourceMatched = observabilityMatched.filter((task) =>
+    return observabilityMatched;
+  }, [
+    allGovernanceFilterValue,
+    scopedTasks,
+    taskGovernanceProfileFilter,
+    taskGovernanceProviderSourceFilter,
+    taskObservabilityFilter,
+    taskSnapshots,
+    taskStatusFilter,
+  ]);
+
+  const failureDiagnosticGroupTasks = useMemo(
+    () => taskFilterBase.filter(taskMatchesKeyword),
+    [taskFilterBase, taskMatchesKeyword],
+  );
+
+  const filteredTasks = useMemo(() => {
+    const failureSourceMatched = taskFilterBase.filter((task) =>
       matchesTaskFailureSourceFilter(
         taskSnapshots.get(task.id),
         taskFailureSourceFilter,
       ),
     );
-    const queryMatched =
-      q.length === 0
-        ? failureSourceMatched
-        : failureSourceMatched.filter((task) => {
-            const prompt = task.prompt.trim().toLowerCase();
-            const id = task.id.toLowerCase();
-            const snapshot = taskSnapshots.get(task.id);
-            const governance = snapshot?.governance;
-            const semanticSummary = snapshot
-              ? formatTraceStepSemanticStatsSummary(snapshot.semanticStats, {
-                  planner: t.taskCenter.semanticPlannerLabel,
-                  retrieval: t.taskCenter.semanticRetrievalLabel,
-                  calculator: t.taskCenter.semanticCalculatorLabel,
-                  failure: t.taskCenter.semanticFailureLabel,
-                }).toLowerCase()
-              : "";
-            const governanceKeywords = governance
-              ? [
-                  governance.profile ?? "",
-                  governance.providerSource ?? "",
-                  ...governance.allowedToolNames,
-                  ...governance.allowedToolLabels,
-                ]
-                  .map((item) => item.trim().toLowerCase())
-                  .filter(Boolean)
-              : [];
-            const failureSourceLabel =
-              snapshot?.failureSource
-                ? formatTaskFailureSourceLabel(snapshot.failureSource, t.inspector).toLowerCase()
-                : "";
-            const failureHintDisplay = resolveTaskFailureHintDisplay(
-              snapshot?.failureHint,
-              t.stream.streamErrorByCode,
-            )?.toLowerCase() ?? "";
-            return (
-              prompt.includes(q)
-              || id.includes(q)
-              || semanticSummary.includes(q)
-              || Boolean(snapshot?.failureHint?.toLowerCase().includes(q))
-              || failureHintDisplay.includes(q)
-              || failureSourceLabel.includes(q)
-              || governanceKeywords.some((item) => item.includes(q))
-            );
-          });
+    const queryMatched = failureSourceMatched.filter(taskMatchesKeyword);
     const sorted = [...queryMatched].sort((a, b) => {
       const at = new Date(a.updated_at).getTime();
       const bt = new Date(b.updated_at).getTime();
@@ -217,28 +236,32 @@ export function TaskCenter({
     });
     return sorted;
   }, [
-    scopedTasks,
-    t.inspector,
-    t.stream.streamErrorByCode,
-    t.taskCenter,
-    taskSearchQuery,
-    taskObservabilityFilter,
+    taskFilterBase,
     taskFailureSourceFilter,
     taskSnapshots,
+    taskMatchesKeyword,
     taskSortOrder,
-    taskStatusFilter,
-    taskGovernanceProfileFilter,
-    taskGovernanceProviderSourceFilter,
   ]);
 
   const scopeDisabledSession = !activeSessionId;
 
   const failureDiagnosticGroups = useMemo(
     () =>
-      resolveTaskFailureDiagnosticGroups(
-        filteredTasks.map((task) => taskSnapshots.get(task.id)),
-      ),
-    [filteredTasks, taskSnapshots],
+      resolveTaskFailureDiagnosticGroupsForTaskCenter({
+        drilldownScopeSnapshots: failureDiagnosticGroupTasks.map((task) =>
+          taskSnapshots.get(task.id),
+        ),
+        visibleSnapshots: filteredTasks.map((task) =>
+          taskSnapshots.get(task.id),
+        ),
+        activeFailureSourceFilter: taskFailureSourceFilter,
+      }),
+    [
+      failureDiagnosticGroupTasks,
+      filteredTasks,
+      taskFailureSourceFilter,
+      taskSnapshots,
+    ],
   );
 
   useEffect(() => {
