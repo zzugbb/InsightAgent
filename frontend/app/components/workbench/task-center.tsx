@@ -27,6 +27,7 @@ import {
   resolveTaskFailureDiagnosticDrilldown,
   resolveTaskFailureDiagnosticGroups,
   resolveTaskFailureHintDisplay,
+  resolveTaskDetailHrefTraceSemanticFilter,
   resolveTaskSnapshotSummary,
 } from "./utils";
 import type { TaskFailureSourceFilter, TaskObservabilityFilter } from "./utils";
@@ -350,10 +351,6 @@ export function TaskCenter({
         align: "left" as const,
         render: (_value: unknown, task: TaskSummary) => {
           const snapshot = taskSnapshots.get(task.id);
-          const failedHint = resolveTaskFailureHintDisplay(
-            snapshot?.failureHint,
-            t.stream.streamErrorByCode,
-          );
           return (
             <Button
               size="small"
@@ -362,7 +359,10 @@ export function TaskCenter({
               data-testid="task-center-open-task-detail"
               aria-label={t.taskCenter.openTaskDetailAria}
               href={buildTaskDetailHref(task.id, {
-                traceSemanticFilter: failedHint ? "failure" : null,
+                traceSemanticFilter: resolveTaskDetailHrefTraceSemanticFilter(
+                  snapshot,
+                  taskObservabilityFilter,
+                ),
               })}
               target="_blank"
               rel="noopener noreferrer"
@@ -379,6 +379,7 @@ export function TaskCenter({
     [
       localeTag,
       taskSnapshots,
+      taskObservabilityFilter,
       t.inspector,
       t.taskCenter.semanticCalculatorLabel,
       t.taskCenter.semanticFailureLabel,

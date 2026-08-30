@@ -16,6 +16,7 @@ import {
   matchesTraceStepSemanticFilter,
   resolveTaskFailureDiagnosticGroups,
   resolveTaskFailureDiagnosticDrilldown,
+  resolveTaskDetailHrefTraceSemanticFilter,
   resolveAuditTaskDetailHref,
   resolveTaskSnapshotSummary,
   resolveTaskStreamTerminalReason,
@@ -2403,6 +2404,65 @@ test("matchesTaskObservabilityFilter groups failed status, failure hints and fai
   assert.equal(
     matchesTaskObservabilityFilter(baseTask, failureTraceSnapshot, "failure_hint"),
     false,
+  );
+});
+
+test("resolveTaskDetailHrefTraceSemanticFilter keeps failure trace drilldown focus", () => {
+  const failureTraceSnapshot = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-failure-trace-link",
+      session_id: "session-failure-trace-link",
+      prompt: "Need failure trace detail link",
+      status: "completed",
+      trace_json: null,
+      created_at: "2026-08-14T00:00:00Z",
+      updated_at: "2026-08-14T00:00:01Z",
+    },
+    traceSteps: [
+      {
+        id: "step-tool-error-link",
+        type: "action",
+        content: "Provider search failed",
+        meta: {
+          tool: {
+            name: "provider_search",
+            status: "error",
+          },
+        },
+      },
+    ],
+  });
+
+  assert.equal(failureTraceSnapshot.failureHint, null);
+  assert.equal(
+    resolveTaskDetailHrefTraceSemanticFilter(
+      failureTraceSnapshot,
+      "failure_trace",
+    ),
+    "failure",
+  );
+  assert.equal(
+    resolveTaskDetailHrefTraceSemanticFilter(failureTraceSnapshot, "all"),
+    null,
+  );
+
+  const failureHintSnapshot = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-failure-hint-link",
+      session_id: "session-failure-hint-link",
+      prompt: "Need failure hint detail link",
+      status: "failed",
+      failure_hint: "remote_provider_network_error",
+      failure_source: "error_event",
+      trace_json: null,
+      created_at: "2026-08-14T00:00:00Z",
+      updated_at: "2026-08-14T00:00:01Z",
+    },
+  });
+
+  assert.equal(
+    resolveTaskDetailHrefTraceSemanticFilter(failureHintSnapshot, "all"),
+    "failure",
   );
 });
 

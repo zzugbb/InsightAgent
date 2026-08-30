@@ -425,6 +425,22 @@ export function buildTaskDetailHref(
   return traceSemanticFilter ? `${baseHref}?trace_semantic=${traceSemanticFilter}` : baseHref;
 }
 
+export function resolveTaskDetailHrefTraceSemanticFilter(
+  snapshot: Pick<TaskSnapshotSummary, "failureHint" | "semanticStats"> | null | undefined,
+  observabilityFilter: TaskObservabilityFilter,
+): Exclude<TraceStepSemanticFilter, "all"> | null {
+  if (snapshot?.failureHint?.trim()) {
+    return "failure";
+  }
+  if (
+    observabilityFilter === "failure_trace" &&
+    (snapshot?.semanticStats.failure ?? 0) > 0
+  ) {
+    return "failure";
+  }
+  return null;
+}
+
 export function resolveAuditTaskDetailHref(item: {
   task_id?: unknown;
   event_type?: unknown;
