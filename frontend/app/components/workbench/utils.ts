@@ -779,6 +779,17 @@ export function resolveTaskFailureDiagnosticDrilldown(
   };
 }
 
+export function resolveTaskFailureDiagnosticChipClick(args: {
+  source: TaskFailureSource;
+  currentFailureSourceFilter: TaskFailureSourceFilter;
+}): TaskObservabilityFilterChange {
+  return {
+    observabilityFilter: "failure_hint",
+    failureSourceFilter:
+      args.currentFailureSourceFilter === args.source ? "all" : args.source,
+  };
+}
+
 export function resolveTaskObservabilityFilterChange(args: {
   observabilityFilter: TaskObservabilityFilter;
   currentFailureSourceFilter: TaskFailureSourceFilter;

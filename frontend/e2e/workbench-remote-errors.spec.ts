@@ -577,6 +577,20 @@ test("remote network failure shows mapped stream error code @smoke", async ({
     "",
   );
   await expect(failedTaskRow).toBeVisible({ timeout: 20_000 });
+  await page
+    .getByTestId("task-center-failure-diagnostic-group")
+    .filter({ hasText: /SSE error|SSE 错误/ })
+    .click();
+  await expect(page.getByTestId("task-center-observability-filter")).toContainText(
+    /Failure hint|失败线索/,
+    { timeout: 20_000 },
+  );
+  await expect(
+    page
+      .getByTestId("task-center-failure-diagnostic-group")
+      .filter({ hasText: /SSE error|SSE 错误/ }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await expect(failedTaskRow).toBeVisible({ timeout: 20_000 });
 
   await page.getByTestId("task-center-close").click();
   await page.getByTestId("sidebar-settings-trigger").click();

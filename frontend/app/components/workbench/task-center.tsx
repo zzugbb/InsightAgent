@@ -24,7 +24,7 @@ import {
   matchesTaskGovernanceFilters,
   matchesTaskFailureSourceFilter,
   matchesTaskObservabilityFilter,
-  resolveTaskFailureDiagnosticDrilldown,
+  resolveTaskFailureDiagnosticChipClick,
   resolveTaskFailureDiagnosticGroupsForTaskCenter,
   resolveTaskFailureHintDisplay,
   resolveTaskDetailHrefTraceSemanticFilter,
@@ -631,7 +631,10 @@ export function TaskCenter({
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  const drilldown = resolveTaskFailureDiagnosticDrilldown(group.source);
+                  const drilldown = resolveTaskFailureDiagnosticChipClick({
+                    source: group.source,
+                    currentFailureSourceFilter: taskFailureSourceFilter,
+                  });
                   setTaskObservabilityFilter(drilldown.observabilityFilter);
                   setTaskFailureSourceFilter(drilldown.failureSourceFilter);
                 }}

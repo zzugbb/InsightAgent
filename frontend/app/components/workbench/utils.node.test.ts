@@ -16,6 +16,7 @@ import {
   matchesTraceStepSemanticFilter,
   resolveTaskFailureDiagnosticGroups,
   resolveTaskFailureDiagnosticGroupsForTaskCenter,
+  resolveTaskFailureDiagnosticChipClick,
   resolveTaskFailureDiagnosticDrilldown,
   resolveTaskDetailHrefTraceSemanticFilter,
   resolveTaskObservabilityFilterChange,
@@ -214,6 +215,39 @@ test("resolveTaskFailureDiagnosticDrilldown builds source drilldown filters", ()
     {
       observabilityFilter: "failure_hint",
       failureSourceFilter: "error_event",
+    },
+  );
+});
+
+test("resolveTaskFailureDiagnosticChipClick toggles the active source drilldown", () => {
+  assert.deepEqual(
+    resolveTaskFailureDiagnosticChipClick({
+      source: "tool_error",
+      currentFailureSourceFilter: "all",
+    }),
+    {
+      observabilityFilter: "failure_hint",
+      failureSourceFilter: "tool_error",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskFailureDiagnosticChipClick({
+      source: "tool_error",
+      currentFailureSourceFilter: "error_event",
+    }),
+    {
+      observabilityFilter: "failure_hint",
+      failureSourceFilter: "tool_error",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskFailureDiagnosticChipClick({
+      source: "tool_error",
+      currentFailureSourceFilter: "tool_error",
+    }),
+    {
+      observabilityFilter: "failure_hint",
+      failureSourceFilter: "all",
     },
   );
 });
