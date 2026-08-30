@@ -37,6 +37,7 @@ class ProductionReliabilityFailurePathsMixin:
             payload["diagnostic"],
             {
                 "category": "remote_provider",
+                "reason": "upstream",
                 "recoverability": "retryable",
                 "http_status_family": "5xx",
                 "has_detail": True,
@@ -45,6 +46,64 @@ class ProductionReliabilityFailurePathsMixin:
         serialized = json.dumps(payload, ensure_ascii=False)
         self.assertNotIn("Bearer", serialized)
         self.assertNotIn("secret-token", serialized)
+
+    def test_production_reliability_sse_error_payload_classifies_safe_reason(
+        self,
+    ) -> None:
+        cases = [
+            (
+                "remote_provider_network_error",
+                False,
+                None,
+                "network",
+            ),
+            (
+                "remote_api_key_unauthorized",
+                True,
+                401,
+                "auth",
+            ),
+            (
+                "remote_provider_rate_limited",
+                False,
+                429,
+                "rate_limit",
+            ),
+            (
+                "remote_provider_upstream_error",
+                False,
+                503,
+                "upstream",
+            ),
+            (
+                "task_timeout",
+                True,
+                None,
+                "timeout",
+            ),
+            (
+                "task_cancelled",
+                True,
+                None,
+                "cancelled",
+            ),
+        ]
+
+        for code, fatal, status_code, expected_reason in cases:
+            with self.subTest(code=code):
+                payload = chat_execution_module.sse_error_payload(
+                    task_id=f"task-{code}",
+                    message="safe message",
+                    code=code,
+                    fatal=fatal,
+                    detail="safe detail",
+                    status_code=status_code,
+                )
+
+                self.assertEqual(
+                    payload["diagnostic"]["reason"],  # type: ignore[index]
+                    expected_reason,
+                )
 
     def test_production_reliability_tool_terminal_return_lost_race_emits_cancelled(
         self,

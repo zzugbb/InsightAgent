@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: provider-tool-expansion 与 ci-release-engineering 已 100% 封板；当前推进 production-runtime-hardening。
 current_focus:
   mainline: production-runtime-hardening
-  status: 15% 开发中
-  latest_change: SSE error payload 追加低敏 diagnostic 摘要，保留旧 code/fatal/retryable/detail/status_code 字段
+  status: 25% 开发中
+  latest_change: SSE error.diagnostic 追加低敏 reason 枚举，保留旧 code/fatal/retryable/detail/status_code 字段
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -13,12 +13,12 @@ file_size_baseline:
 stable_contracts:
   - 默认 settings 根据 provider/model/api_key 自动选择 remote 或 canonical mock
   - SSE 事件、TraceStep、result summary、safe output、JSON/Markdown export shape 保持稳定
-  - SSE error.diagnostic 只包含低敏分类、recoverability、HTTP 状态族与 detail 存在性
+  - SSE error.diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
   release_gate: bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json passed，非 PR 保守跑 backend/frontend/tooling/hygiene 全量
-  backend: full slice 1984/1984；module boundary 4/4；production_reliability 36/36；reconnect 8/8
+  backend: full slice 1985/1985；module boundary 4/4；production_reliability 37/37；reconnect 8/8
   frontend: node tests 122/122；npm run lint passed；npm run build passed
   e2e: backend main passed；frontend full Chromium 52 passed / 1 skipped；backend/frontend queue 已纳入 CI workflow
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
@@ -38,8 +38,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 ## 当前仓库状态
 
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
-- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板；当前推进 `production-runtime-hardening`，进度约 15%。
-- 当前生产运行态重点：SSE `error` payload 已追加低敏 `diagnostic` 摘要，保留旧 `code/fatal/retryable/detail/status_code` 字段；后续继续收敛 provider registry 运行态诊断、远端 provider 失败可观测性与发布后回归策略。
+- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板；当前推进 `production-runtime-hardening`，进度约 25%。
+- 当前生产运行态重点：SSE `error.diagnostic` 已追加低敏 `reason` 枚举，保留旧 `code/fatal/retryable/detail/status_code` 字段；后续继续收敛 provider registry 运行态诊断、远端 provider 失败可观测性与发布后回归策略。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 - 代码规模治理已纳入常规边界：`backend/app`、`backend/scripts` 与 `frontend` 源码保持单文件 <= 3000 行；`frontend/package-lock.json` 等生成锁文件不作为拆分对象。
 
@@ -55,8 +55,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1984/1984`。
-- Backend targeted：`production_reliability 36/36`、`reconnect 8/8`、registry/http_json/provider/runtime/trace/export/usage 通过。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1985/1985`。
+- Backend targeted：`production_reliability 37/37`、`reconnect 8/8`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，当前 `4/4`，包含 3000 行规模边界。
 - Frontend node tests：当前 `122/122`，包含 frontend source size boundary。
 - Frontend lint/build：`cd frontend && npm run lint`、`cd frontend && npm run build` 通过。

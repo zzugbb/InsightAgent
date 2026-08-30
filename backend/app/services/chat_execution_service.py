@@ -137,6 +137,40 @@ def _classify_http_status_family(status_code: int | None) -> str | None:
     return f"{status_code // 100}xx"
 
 
+def _classify_sse_error_reason(code: str, status_code: int | None = None) -> str:
+    reason_by_code = {
+        "remote_provider_network_error": "network",
+        "remote_provider_stream_interrupted": "network",
+        "remote_api_key_unauthorized": "auth",
+        "remote_provider_rate_limited": "rate_limit",
+        "remote_provider_upstream_error": "upstream",
+        "remote_provider_invalid_json": "invalid_response",
+        "remote_provider_stream_invalid_json": "invalid_response",
+        "remote_provider_empty_response": "empty_response",
+        "task_cancelled": "cancelled",
+        "task_timeout": "timeout",
+        "task_not_found": "not_found",
+    }
+    reason = reason_by_code.get(code)
+    if reason:
+        return reason
+    if code == "remote_provider_http_error":
+        if status_code in {401, 403}:
+            return "auth"
+        if status_code == 429:
+            return "rate_limit"
+        if isinstance(status_code, int) and 500 <= status_code <= 599:
+            return "upstream"
+        return "http_error"
+    if code.startswith("task_queue_"):
+        return "queue"
+    if code.startswith("tool_"):
+        return "tool"
+    if code.startswith("task_stream_"):
+        return "stream"
+    return "unknown"
+
+
 def sse_error_payload(
     *,
     task_id: str,
@@ -172,6 +206,7 @@ def sse_error_payload(
         "retryCount": retry_count,
         "diagnostic": {
             "category": _classify_sse_error_category(code),
+            "reason": _classify_sse_error_reason(code, status_code),
             "recoverability": "fatal" if fatal else "retryable",
             "http_status_family": _classify_http_status_family(status_code),
             "has_detail": bool(safe_detail_text),
