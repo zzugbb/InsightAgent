@@ -6,6 +6,7 @@ import {
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
+  resolveTaskDetailSemanticFilterChange,
   resolveTaskDetailSemanticTracePreset,
   resolveTaskDetailTraceSteps,
 } from "./[taskId]/task-detail-page-utils.ts";
@@ -102,6 +103,37 @@ test("resolveTaskDetailSemanticTracePreset focuses semantic traces from any trac
     {
       traceView: "list",
       traceSemanticFilter: "retrieval",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
+  );
+});
+
+test("resolveTaskDetailSemanticFilterChange clears stale kind and search filters", () => {
+  assert.deepEqual(
+    resolveTaskDetailSemanticFilterChange("retrieval", {
+      traceView: "flow",
+      traceSemanticFilter: "planner",
+      traceKindFilter: "tool",
+      traceSearchQuery: "remote_provider_network_error",
+    }),
+    {
+      traceView: "flow",
+      traceSemanticFilter: "retrieval",
+      traceKindFilter: "all",
+      traceSearchQuery: "",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskDetailSemanticFilterChange("all", {
+      traceView: "list",
+      traceSemanticFilter: "failure",
+      traceKindFilter: "action",
+      traceSearchQuery: "timeout",
+    }),
+    {
+      traceView: "list",
+      traceSemanticFilter: "all",
       traceKindFilter: "all",
       traceSearchQuery: "",
     },

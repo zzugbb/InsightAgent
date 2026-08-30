@@ -39,6 +39,7 @@ import {
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
+  resolveTaskDetailSemanticFilterChange,
   resolveTaskDetailSemanticTracePreset,
   resolveTaskDetailTraceSteps,
 } from "./task-detail-page-utils";
@@ -220,6 +221,21 @@ export default function TaskDetailPage() {
     semanticFilter: Exclude<TaskDetailTraceSemanticFilter, "all">,
   ) => {
     const preset = resolveTaskDetailSemanticTracePreset(semanticFilter, {
+      traceView,
+      traceSemanticFilter,
+      traceKindFilter,
+      traceSearchQuery,
+    });
+    setTraceView(preset.traceView);
+    setTraceSemanticFilter(preset.traceSemanticFilter);
+    setTraceKindFilter(preset.traceKindFilter);
+    setTraceSearchQuery(preset.traceSearchQuery);
+    updateTraceSemanticUrl(preset.traceSemanticFilter);
+  };
+  const applyTraceSemanticFilter = (
+    semanticFilter: TaskDetailTraceSemanticFilter,
+  ) => {
+    const preset = resolveTaskDetailSemanticFilterChange(semanticFilter, {
       traceView,
       traceSemanticFilter,
       traceKindFilter,
@@ -545,11 +561,10 @@ export default function TaskDetailPage() {
                 <div className="trace-filter-toolbar">
                   <Segmented
                     size="small"
+                    data-testid="task-detail-trace-semantic-filter"
                     value={traceSemanticFilter}
                     onChange={(v) => {
-                      const semanticFilter = v as TaskDetailTraceSemanticFilter;
-                      setTraceSemanticFilter(semanticFilter);
-                      updateTraceSemanticUrl(semanticFilter);
+                      applyTraceSemanticFilter(v as TaskDetailTraceSemanticFilter);
                     }}
                     options={[
                       { label: t.taskDetail.traceSemanticFilterAll, value: "all" },

@@ -101,6 +101,18 @@ export function resolveTaskDetailSemanticTracePreset(
   };
 }
 
+export function resolveTaskDetailSemanticFilterChange(
+  semanticFilter: TaskDetailTraceSemanticFilter,
+  current: TaskDetailTraceFilterState,
+): TaskDetailTraceFilterState {
+  return {
+    traceView: current.traceView,
+    traceSemanticFilter: semanticFilter,
+    traceKindFilter: "all",
+    traceSearchQuery: "",
+  };
+}
+
 export function resolveTaskDetailInitialTraceFilterState(
   traceSemanticPreset: string | null | undefined,
 ): TaskDetailTraceFilterState {

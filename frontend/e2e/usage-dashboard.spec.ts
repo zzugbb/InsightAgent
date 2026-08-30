@@ -1451,6 +1451,23 @@ for (const acceptanceCase of [
         .first(),
     ).toBeVisible({ timeout: 20_000 });
 
+    await traceSearchInput.fill("remote_provider_network_error");
+    await expect(detailPage.getByText("No steps match the current filters.")).toBeVisible();
+    await detailPage
+      .getByTestId("task-detail-trace-semantic-filter")
+      .getByText(/All semantics|全部语义/)
+      .click();
+    await expect(detailPage).toHaveURL(
+      new RegExp(`/tasks/${taskId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+    );
+    await expect(traceSearchInput).toHaveValue("");
+    await expect(
+      detailPage
+        .getByTestId("task-detail-trace-card")
+        .filter({ hasText: acceptanceCase.expectedTraceCard })
+        .first(),
+    ).toBeVisible({ timeout: 20_000 });
+
     const detailTraceText = await detailPage
       .getByTestId("task-detail-trace-feed")
       .textContent();
