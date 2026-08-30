@@ -120,6 +120,7 @@ export type TaskObservabilityFilter =
   | "failed_status"
   | "failure_hint"
   | "failure_trace";
+export type TaskStatusFilter = "all" | "running" | "completed" | "failed";
 export type TaskFailureSourceFilter = "all" | TaskFailureSource;
 
 export type TaskStreamTerminalReason = "done" | "cancelled" | "timeout" | "error";
@@ -564,6 +565,17 @@ function normalizeTaskStatus(status: string): "running" | "completed" | "failed"
 
 export function isTaskFailedStatus(status: string): boolean {
   return normalizeTaskStatus(status) === "failed";
+}
+
+export function matchesTaskStatusFilter(
+  task: Pick<TaskSummary, "status" | "status_normalized">,
+  filter: TaskStatusFilter,
+): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  const status = task.status_normalized?.trim() || task.status;
+  return normalizeTaskStatus(status) === filter;
 }
 
 type TaskFailureInsight = {

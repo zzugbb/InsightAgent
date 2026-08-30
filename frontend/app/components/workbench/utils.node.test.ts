@@ -12,6 +12,7 @@ import {
   matchesTaskGovernanceFilters,
   matchesTaskFailureSourceFilter,
   matchesTaskObservabilityFilter,
+  matchesTaskStatusFilter,
   matchesTraceStepSearchQuery,
   matchesTraceStepSemanticFilter,
   resolveTaskFailureDiagnosticGroups,
@@ -2542,6 +2543,17 @@ test("matchesTaskObservabilityFilter groups failed status, failure hints and fai
     matchesTaskObservabilityFilter(baseTask, failureTraceSnapshot, "failure_hint"),
     false,
   );
+});
+
+test("matchesTaskStatusFilter prefers normalized task status for Task Center filters", () => {
+  const task = {
+    status: "completed",
+    status_normalized: "failed",
+  };
+
+  assert.equal(matchesTaskStatusFilter(task, "all"), true);
+  assert.equal(matchesTaskStatusFilter(task, "failed"), true);
+  assert.equal(matchesTaskStatusFilter(task, "completed"), false);
 });
 
 test("resolveTaskDetailHrefTraceSemanticFilter keeps failure trace drilldown focus", () => {

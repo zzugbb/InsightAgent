@@ -447,6 +447,67 @@ test("task center governance filters drive backend request params", async ({
   await expect(retrievalRow).toBeHidden({ timeout: 20_000 });
 });
 
+test("task center status filter honors normalized task status", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  const prompt = "task center normalized failed status filter contract";
+  const created = await runTaskToDone(request, auth.access_token, prompt);
+
+  await page.route("**/api/tasks?*", async (route) => {
+    const response = await route.fetch();
+    const payload = (await response.json()) as {
+      items?: Array<Record<string, unknown>>;
+    };
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    await route.fulfill({
+      response,
+      json: {
+        ...payload,
+        items: items.map((item) =>
+          item.prompt === prompt
+            ? {
+                ...item,
+                status: "completed",
+                status_label: "Completed",
+                status_normalized: "failed",
+              }
+            : item,
+        ),
+      },
+    });
+  });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("chat-open-task-center").click();
+  await expect(page.getByTestId("task-center-shell")).toBeVisible();
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "task-center-scope-filter",
+    value: "All tasks",
+  });
+  const taskRow = page.locator(
+    `.task-center-table-row:has(a[href="/tasks/${created.task_id}"])`,
+  );
+  await expect(taskRow).toBeVisible({ timeout: 20_000 });
+  await expect(taskRow).toHaveClass(/task-summary-item--failed/);
+
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "task-center-status-filter",
+    value: "Failed",
+  });
+  await expect(taskRow).toBeVisible({ timeout: 20_000 });
+
+  await selectVisibleAntdOption(page, {
+    triggerTestId: "task-center-status-filter",
+    value: "Done",
+  });
+  await expect(taskRow).toBeHidden({ timeout: 20_000 });
+});
+
 test("settings menu governance entries open expected modals @smoke", async ({
   page,
   request,

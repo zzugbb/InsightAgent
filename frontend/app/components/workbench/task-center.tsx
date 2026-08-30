@@ -20,10 +20,10 @@ import {
   formatTraceStepSemanticStatsSummary,
   formatTimestamp,
   getTaskLabel,
-  isTaskFailedStatus,
   matchesTaskGovernanceFilters,
   matchesTaskFailureSourceFilter,
   matchesTaskObservabilityFilter,
+  matchesTaskStatusFilter,
   resolveTaskFailureDiagnosticChipClick,
   resolveTaskFailureDiagnosticGroupsForTaskCenter,
   resolveTaskFailureHintDisplay,
@@ -31,7 +31,11 @@ import {
   resolveTaskObservabilityFilterChange,
   resolveTaskSnapshotSummary,
 } from "./utils";
-import type { TaskFailureSourceFilter, TaskObservabilityFilter } from "./utils";
+import type {
+  TaskFailureSourceFilter,
+  TaskObservabilityFilter,
+  TaskStatusFilter,
+} from "./utils";
 
 type TaskCenterProps = {
   activeSession: SessionSummary | undefined;
@@ -101,9 +105,8 @@ export function TaskCenter({
   const t = useMessages();
   const { localeTag } = usePreferences();
   const allGovernanceFilterValue = "__all__";
-  const [taskStatusFilter, setTaskStatusFilter] = useState<
-    "all" | "running" | "completed" | "failed"
-  >("all");
+  const [taskStatusFilter, setTaskStatusFilter] =
+    useState<TaskStatusFilter>("all");
   const [taskObservabilityFilter, setTaskObservabilityFilter] =
     useState<TaskObservabilityFilter>("all");
   const [taskFailureSourceFilter, setTaskFailureSourceFilter] =
@@ -179,19 +182,9 @@ export function TaskCenter({
   }, [t.inspector, t.stream.streamErrorByCode, t.taskCenter, taskSearchQuery, taskSnapshots]);
 
   const taskFilterBase = useMemo(() => {
-    const statusMatched = scopedTasks.filter((task) => {
-      if (taskStatusFilter === "all") {
-        return true;
-      }
-      const status = task.status.trim().toLowerCase();
-      if (taskStatusFilter === "running") {
-        return status === "queued" || status === "running" || status === "pending";
-      }
-      if (taskStatusFilter === "completed") {
-        return status === "completed" || status === "done" || status === "success";
-      }
-      return status === "failed" || status === "error";
-    });
+    const statusMatched = scopedTasks.filter((task) =>
+      matchesTaskStatusFilter(task, taskStatusFilter),
+    );
     const governanceMatched = statusMatched.filter((task) =>
       matchesTaskGovernanceFilters(taskSnapshots.get(task.id), {
         allValue: allGovernanceFilterValue,
@@ -478,9 +471,7 @@ export function TaskCenter({
               showSearch
               optionFilterProp="label"
               value={taskStatusFilter}
-              onChange={(v) =>
-                setTaskStatusFilter(v as "all" | "running" | "completed" | "failed")
-              }
+              onChange={(v) => setTaskStatusFilter(v as TaskStatusFilter)}
               options={[
                 { label: t.inspector.taskFilterAll, value: "all" },
                 { label: t.inspector.taskFilterRunning, value: "running" },
@@ -665,7 +656,7 @@ export function TaskCenter({
               columns={columns}
               locale={{ emptyText: t.inspector.taskEmpty }}
               rowClassName={(record) =>
-                `task-center-table-row${record.id === activeTaskId ? " is-active" : ""}${isTaskFailedStatus(record.status) ? " task-summary-item--failed" : ""}`
+                `task-center-table-row${record.id === activeTaskId ? " is-active" : ""}${matchesTaskStatusFilter(record, "failed") ? " task-summary-item--failed" : ""}`
               }
               onRow={(record) => ({
                 onClick: () => onSelectTask(record),

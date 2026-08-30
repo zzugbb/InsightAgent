@@ -7,20 +7,20 @@
 - `provider-tool-expansion` 已 100% 封板。
 - `ci-release-engineering` 已 100% 封板。
 - `production-runtime-hardening` 已 100% 封板：SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- `product-ux-polish` 已进入开发，当前约 54%：任务详情页 `trace_semantic` replay URL 已支持 `planner/retrieval/calculator/failure`，详情页与 Workbench Inspector 语义筛选会清理旧搜索/kind 干扰；Task Center failure source chips 支持横向切换、重复点击取消 drilldown，并在切换观测维度时清理隐藏来源筛选。
+- `product-ux-polish` 已进入开发，当前约 59%：任务详情页 `trace_semantic` replay URL 已支持 `planner/retrieval/calculator/failure`，详情页与 Workbench Inspector 语义筛选会清理旧搜索/kind 干扰；Task Center failure source chips 与状态筛选已对齐 normalized 任务语义，避免隐藏可诊断任务。
 - 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过；非 PR 环境保守解析为 backend/frontend/tooling/hygiene 全量。
 - Backend：full slice `1988/1988`；module boundary `4/4`；targeted production_reliability `39/39`、reconnect `9/9` 通过。
-- Frontend：workbench utils targeted `73/73`、task detail targeted `8/8`；node tests `130/130`、`npm run lint`、`npm run build` 通过。
-- E2E 基线：targeted Chromium semantic URL/filter replay `1/1`、Workbench Inspector semantic filter replay `1/1`、Task Center failure diagnostic replay `1/1`、remote failure replay `1/1` 通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
+- Frontend：workbench utils targeted `74/74`、task detail targeted `8/8`；node tests `131/131`、`npm run lint`、`npm run build` 通过。
+- E2E 基线：targeted Chromium semantic URL/filter replay `1/1`、Workbench Inspector semantic filter replay `1/1`、Task Center normalized status replay `1/1`、Task Center failure diagnostic replay `1/1`、remote failure replay `1/1` 通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前状态：`product-ux-polish` 约 54%，trace 语义 replay URL、详情页语义筛选 URL 同步/清旧筛选、Workbench Inspector 语义筛选清旧筛选、Task Center failure trace 详情焦点、failure source chips 横向切换/重复点击取消与观测维度切换清隐藏筛选已补齐。
+1. 当前状态：`product-ux-polish` 约 59%，trace 语义 replay URL、详情页语义筛选 URL 同步/清旧筛选、Workbench Inspector 语义筛选清旧筛选、Task Center failure trace 详情焦点、failure source chips 横向切换/重复点击取消、观测维度切换清隐藏筛选与 normalized 状态筛选已补齐。
 2. 已封板主线：`provider-tool-expansion`、`production-runtime-hardening`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
 3. 本主线继续聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
 4. 继续保持“小红测 -> 实现 -> targeted/full slice -> 文档同步 -> 提交”的节奏。
@@ -30,7 +30,7 @@
 - SSE 事件、`TraceStep`、result summary、safe output、JSON/Markdown export shape 保持稳定；`error.diagnostic` 与 failure audit diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性。
 - 任务详情页 `trace_semantic` URL 参数保持兼容扩展：支持 `planner/retrieval/calculator/failure`，未知值回退 `all`；详情页语义切换仅同步 URL 并清理本地筛选状态，不改变 trace/export payload。
 - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
-- Task Center failure source 诊断 chips 只调整前端本地筛选状态；来源分组不被当前来源 drilldown 自过滤，重复点击已选来源会取消来源 drilldown，切换到非 failure-hint 观测维度会清理隐藏来源筛选，不改变任务列表 API 与 trace/export payload。
+- Task Center failure source 诊断 chips 与状态筛选只调整前端本地筛选状态；来源分组不被当前来源 drilldown 自过滤，重复点击已选来源会取消来源 drilldown，切换到非 failure-hint 观测维度会清理隐藏来源筛选，状态筛选优先使用 `status_normalized`，不改变任务列表 API 与 trace/export payload。
 - 默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`。
 - queued/running/cancel/reconnect 与 task recovery 语义保持稳定。
 - `data/insightagent.plan.back.md` 是只读备份计划，永远不参与同步或修改。
