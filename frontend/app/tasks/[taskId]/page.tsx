@@ -4,8 +4,8 @@ import { App, Button, Input, Segmented, Spin } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 
 import { ApiError, apiJson } from "../../../lib/api-client";
 import { downloadAuthenticatedExport } from "../../../lib/export-download";
@@ -35,6 +35,7 @@ import type {
   TaskDetailTraceView,
 } from "./task-detail-page-utils";
 import {
+  buildTaskDetailTraceSemanticHref,
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
@@ -92,6 +93,7 @@ export default function TaskDetailPage() {
   const t = useMessages();
   const { localeTag, theme } = usePreferences();
   const { message } = App.useApp();
+  const router = useRouter();
   const params = useParams<{ taskId: string }>();
   const searchParams = useSearchParams();
   const initialTraceFilters = useMemo(
@@ -121,6 +123,19 @@ export default function TaskDetailPage() {
   );
 
   const taskId = decodeURIComponent(params.taskId ?? "").trim();
+
+  const updateTraceSemanticUrl = useCallback(
+    (semanticFilter: TaskDetailTraceSemanticFilter) => {
+      if (!taskId) {
+        return;
+      }
+      router.replace(
+        buildTaskDetailTraceSemanticHref(taskId, semanticFilter),
+        { scroll: false },
+      );
+    },
+    [router, taskId],
+  );
 
   const taskQuery = useQuery({
     queryKey: ["task-detail", taskId],
@@ -199,6 +214,7 @@ export default function TaskDetailPage() {
     setTraceSemanticFilter(preset.traceSemanticFilter);
     setTraceKindFilter(preset.traceKindFilter);
     setTraceSearchQuery(preset.traceSearchQuery);
+    updateTraceSemanticUrl(preset.traceSemanticFilter);
   };
   const focusSemanticTrace = (
     semanticFilter: Exclude<TaskDetailTraceSemanticFilter, "all">,
@@ -213,6 +229,7 @@ export default function TaskDetailPage() {
     setTraceSemanticFilter(preset.traceSemanticFilter);
     setTraceKindFilter(preset.traceKindFilter);
     setTraceSearchQuery(preset.traceSearchQuery);
+    updateTraceSemanticUrl(preset.traceSemanticFilter);
   };
 
   const exportTask = async (format: "json" | "markdown") => {
@@ -529,9 +546,11 @@ export default function TaskDetailPage() {
                   <Segmented
                     size="small"
                     value={traceSemanticFilter}
-                    onChange={(v) =>
-                      setTraceSemanticFilter(v as TaskDetailTraceSemanticFilter)
-                    }
+                    onChange={(v) => {
+                      const semanticFilter = v as TaskDetailTraceSemanticFilter;
+                      setTraceSemanticFilter(semanticFilter);
+                      updateTraceSemanticUrl(semanticFilter);
+                    }}
                     options={[
                       { label: t.taskDetail.traceSemanticFilterAll, value: "all" },
                       {

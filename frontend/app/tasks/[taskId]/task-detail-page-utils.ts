@@ -62,6 +62,20 @@ function isFailureDiagnosticContent(value: string): boolean {
   return Boolean(content) && FAILURE_DIAGNOSTIC_TOKENS.some((token) => content.includes(token));
 }
 
+export function buildTaskDetailTraceSemanticHref(
+  taskId: string,
+  semanticFilter: TaskDetailTraceSemanticFilter,
+): string {
+  const normalizedTaskId = taskId.trim();
+  const baseHref = `/tasks/${encodeURIComponent(normalizedTaskId)}`;
+  if (!normalizedTaskId) {
+    return baseHref;
+  }
+  return semanticFilter === "all"
+    ? baseHref
+    : `${baseHref}?trace_semantic=${semanticFilter}`;
+}
+
 export function resolveTaskDetailFailureTracePreset(
   current: TaskDetailTraceFilterState,
 ): TaskDetailTraceFilterState {

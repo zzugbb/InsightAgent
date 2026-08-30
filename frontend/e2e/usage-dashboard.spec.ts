@@ -1283,6 +1283,7 @@ for (const acceptanceCase of [
       failure: 0,
     },
     selectedSemanticCard: "task-detail-semantic-planner",
+    expectedTraceSemanticQuery: "planner",
     selectedSemanticCount: 1,
     expectedTaskCenterSemanticSummary:
       "Planner 1 · Retrieval 0 · Calculator 0 · Failure 0",
@@ -1302,6 +1303,7 @@ for (const acceptanceCase of [
       failure: 0,
     },
     selectedSemanticCard: "task-detail-semantic-retrieval",
+    expectedTraceSemanticQuery: "retrieval",
     selectedSemanticCount: 1,
     expectedTaskCenterSemanticSummary:
       "Planner 0 · Retrieval 1 · Calculator 0 · Failure 0",
@@ -1321,6 +1323,7 @@ for (const acceptanceCase of [
       failure: 0,
     },
     selectedSemanticCard: "task-detail-semantic-calculator",
+    expectedTraceSemanticQuery: "calculator",
     selectedSemanticCount: 1,
     expectedTaskCenterSemanticSummary:
       "Planner 0 · Retrieval 0 · Calculator 1 · Failure 0",
@@ -1432,6 +1435,11 @@ for (const acceptanceCase of [
     );
     await semanticDrilldownCard.click();
     await expect(semanticDrilldownCard).toHaveAttribute("aria-pressed", "true");
+    await expect(detailPage).toHaveURL(
+      new RegExp(
+        `/tasks/${taskId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?trace_semantic=${acceptanceCase.expectedTraceSemanticQuery}$`,
+      ),
+    );
     await expect(traceSearchInput).toHaveValue("");
     await expect(
       detailPage.getByTestId("task-detail-trace-visible-count"),

@@ -2,12 +2,29 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildTaskDetailTraceSemanticHref,
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
   resolveTaskDetailSemanticTracePreset,
   resolveTaskDetailTraceSteps,
 } from "./[taskId]/task-detail-page-utils.ts";
+
+test("buildTaskDetailTraceSemanticHref preserves shareable semantic trace focus", () => {
+  assert.equal(
+    buildTaskDetailTraceSemanticHref("task/with space?x=1", "retrieval"),
+    "/tasks/task%2Fwith%20space%3Fx%3D1?trace_semantic=retrieval",
+  );
+  assert.equal(
+    buildTaskDetailTraceSemanticHref("task/with space?x=1", "failure"),
+    "/tasks/task%2Fwith%20space%3Fx%3D1?trace_semantic=failure",
+  );
+  assert.equal(
+    buildTaskDetailTraceSemanticHref("task/with space?x=1", "all"),
+    "/tasks/task%2Fwith%20space%3Fx%3D1",
+  );
+  assert.equal(buildTaskDetailTraceSemanticHref("", "planner"), "/tasks/");
+});
 
 test("resolveTaskDetailFailureTracePreset focuses failure traces from any trace state", () => {
   assert.deepEqual(
