@@ -458,6 +458,7 @@ export const zh: Messages = {
       fieldMessage: "消息",
       fieldFailureHint: "失败线索",
       fieldFailureSource: "失败来源",
+      fieldDiagnosticReason: "诊断原因",
       fieldPromptLength: "输入长度",
       fieldDocumentsIngested: "写入文档数",
       fieldChunksAdded: "新增分块数",

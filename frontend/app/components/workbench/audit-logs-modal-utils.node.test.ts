@@ -12,6 +12,7 @@ const labels = {
   fieldMessage: "Message",
   fieldFailureHint: "Failure hint",
   fieldFailureSource: "Failure source",
+  fieldDiagnosticReason: "Diagnostic reason",
   streamErrorByCode: (code: string) =>
     code === "remote_provider_network_error"
       ? "Failed to reach remote provider. Check network or base URL."
@@ -165,5 +166,24 @@ test("resolveAuditReadableDetail keeps raw message after mapped stream code hint
       value:
         "Remote provider stream network error: <urlopen error [Errno 61] Connection refused>",
     },
+  ]);
+});
+
+test("resolveAuditReadableDetail exposes low-sensitivity diagnostic reason", () => {
+  const entries = resolveAuditReadableDetail(
+    {
+      code: "remote_provider_http_error",
+      diagnostic: {
+        category: "remote_provider",
+        reason: "rate_limit",
+        recoverability: "retryable",
+      },
+    },
+    labels,
+  );
+
+  assert.deepEqual(entries, [
+    { key: "diagnostic_reason", label: "Diagnostic reason", value: "rate_limit" },
+    { key: "code", label: "Code", value: "remote_provider_http_error" },
   ]);
 });

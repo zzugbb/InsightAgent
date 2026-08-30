@@ -253,6 +253,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     fieldMessage: t.sidebar.audit.fieldMessage,
     fieldFailureHint: t.sidebar.audit.fieldFailureHint,
     fieldFailureSource: t.sidebar.audit.fieldFailureSource,
+    fieldDiagnosticReason: t.sidebar.audit.fieldDiagnosticReason,
     streamErrorByCode: t.stream.streamErrorByCode,
     taskFailureSourceErrorEvent: t.inspector.taskFailureSourceErrorEvent,
     taskFailureSourceToolError: t.inspector.taskFailureSourceToolError,

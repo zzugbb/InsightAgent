@@ -467,6 +467,7 @@ export const en: Messages = {
       fieldMessage: "Message",
       fieldFailureHint: "Failure hint",
       fieldFailureSource: "Failure source",
+      fieldDiagnosticReason: "Diagnostic reason",
       fieldPromptLength: "Prompt length",
       fieldDocumentsIngested: "Documents ingested",
       fieldChunksAdded: "Chunks added",

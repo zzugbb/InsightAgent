@@ -390,6 +390,7 @@ export type Messages = {
       fieldMessage: string;
       fieldFailureHint: string;
       fieldFailureSource: string;
+      fieldDiagnosticReason: string;
       fieldPromptLength: string;
       fieldDocumentsIngested: string;
       fieldChunksAdded: string;

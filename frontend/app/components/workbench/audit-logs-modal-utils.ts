@@ -22,6 +22,7 @@ export type AuditFailureLabels = {
   fieldMessage: string;
   fieldFailureHint: string;
   fieldFailureSource: string;
+  fieldDiagnosticReason: string;
   streamErrorByCode?: (code: string) => string | null;
   taskFailureSourceErrorEvent: string;
   taskFailureSourceToolError: string;
@@ -80,6 +81,13 @@ function isTaskFailureSource(value: unknown): value is TaskFailureSource {
     value === "trace_content" ||
     value === "legacy_trace"
   );
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
 }
 
 export function formatAuditFailureSourceLabel(
@@ -182,6 +190,14 @@ export function resolveAuditReadableDetail(
       key: "failure_source",
       label: labels.fieldFailureSource,
       value: failureSource,
+    });
+  }
+  const diagnosticReason = asString(asRecord(detail.diagnostic)?.reason);
+  if (diagnosticReason) {
+    entries.push({
+      key: "diagnostic_reason",
+      label: labels.fieldDiagnosticReason,
+      value: diagnosticReason,
     });
   }
   const code = asString(detail.code);
