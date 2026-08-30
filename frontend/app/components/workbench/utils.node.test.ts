@@ -18,6 +18,7 @@ import {
   resolveTaskFailureDiagnosticGroupsForTaskCenter,
   resolveTaskFailureDiagnosticDrilldown,
   resolveTaskDetailHrefTraceSemanticFilter,
+  resolveTaskObservabilityFilterChange,
   resolveAuditTaskDetailHref,
   resolveTaskSnapshotSummary,
   resolveTaskStreamTerminalReason,
@@ -213,6 +214,39 @@ test("resolveTaskFailureDiagnosticDrilldown builds source drilldown filters", ()
     {
       observabilityFilter: "failure_hint",
       failureSourceFilter: "error_event",
+    },
+  );
+});
+
+test("resolveTaskObservabilityFilterChange clears hidden failure source outside failure hints", () => {
+  assert.deepEqual(
+    resolveTaskObservabilityFilterChange({
+      observabilityFilter: "all",
+      currentFailureSourceFilter: "tool_error",
+    }),
+    {
+      observabilityFilter: "all",
+      failureSourceFilter: "all",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskObservabilityFilterChange({
+      observabilityFilter: "failure_trace",
+      currentFailureSourceFilter: "error_event",
+    }),
+    {
+      observabilityFilter: "failure_trace",
+      failureSourceFilter: "all",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskObservabilityFilterChange({
+      observabilityFilter: "failure_hint",
+      currentFailureSourceFilter: "legacy_trace",
+    }),
+    {
+      observabilityFilter: "failure_hint",
+      failureSourceFilter: "legacy_trace",
     },
   );
 });

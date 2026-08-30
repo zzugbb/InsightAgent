@@ -73,6 +73,11 @@ export type TaskFailureDiagnosticDrilldown = {
   failureSourceFilter: TaskFailureSource;
 };
 
+export type TaskObservabilityFilterChange = {
+  observabilityFilter: TaskObservabilityFilter;
+  failureSourceFilter: TaskFailureSourceFilter;
+};
+
 type TaskFailureDiagnosticGroupSnapshot = Pick<
   TaskSnapshotSummary,
   "failureHint" | "failureSource"
@@ -771,6 +776,19 @@ export function resolveTaskFailureDiagnosticDrilldown(
   return {
     observabilityFilter: "failure_hint",
     failureSourceFilter: source,
+  };
+}
+
+export function resolveTaskObservabilityFilterChange(args: {
+  observabilityFilter: TaskObservabilityFilter;
+  currentFailureSourceFilter: TaskFailureSourceFilter;
+}): TaskObservabilityFilterChange {
+  return {
+    observabilityFilter: args.observabilityFilter,
+    failureSourceFilter:
+      args.observabilityFilter === "failure_hint"
+        ? args.currentFailureSourceFilter
+        : "all",
   };
 }
 

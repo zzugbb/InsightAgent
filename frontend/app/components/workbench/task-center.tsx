@@ -28,6 +28,7 @@ import {
   resolveTaskFailureDiagnosticGroupsForTaskCenter,
   resolveTaskFailureHintDisplay,
   resolveTaskDetailHrefTraceSemanticFilter,
+  resolveTaskObservabilityFilterChange,
   resolveTaskSnapshotSummary,
 } from "./utils";
 import type { TaskFailureSourceFilter, TaskObservabilityFilter } from "./utils";
@@ -493,7 +494,14 @@ export function TaskCenter({
               showSearch
               optionFilterProp="label"
               value={taskObservabilityFilter}
-              onChange={(v) => setTaskObservabilityFilter(v as TaskObservabilityFilter)}
+              onChange={(v) => {
+                const nextFilters = resolveTaskObservabilityFilterChange({
+                  observabilityFilter: v as TaskObservabilityFilter,
+                  currentFailureSourceFilter: taskFailureSourceFilter,
+                });
+                setTaskObservabilityFilter(nextFilters.observabilityFilter);
+                setTaskFailureSourceFilter(nextFilters.failureSourceFilter);
+              }}
               options={[
                 { label: t.taskCenter.observabilityFilterAll, value: "all" },
                 {
