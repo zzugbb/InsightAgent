@@ -4,7 +4,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前状态
 
-- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板；当前主线为 `production-runtime-hardening`，进度约 75%。
+- `provider-tool-expansion`、`ci-release-engineering` 与 `production-runtime-hardening` 均已 100% 封板；可进入下一候选主线。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地。
 - 前端继续消费后端统一的 preview/output/result-summary、trace/export 字段，不新增 provider 专用显示分支。
 - SSE `error.diagnostic.reason` 与 failure audit diagnostic 是后端追加的低敏兼容字段；前端现有错误提示继续使用 `code/message/detail/status_code`，审计详情可展示低敏 diagnostic reason，reconnect 继续依赖后端稳定 code/message。
@@ -21,8 +21,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 下一步前端计划
 
-1. 当前主线：`production-runtime-hardening`，前端暂不新增 provider 专用展示分支，只消费后端兼容字段；审计详情低敏 diagnostic reason 展示保持向后兼容。
-2. 已封板主线：`provider-tool-expansion`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
+1. 当前状态：`production-runtime-hardening` 已封板，前端审计详情低敏 diagnostic reason 展示保持向后兼容。
+2. 已封板主线：`provider-tool-expansion`、`production-runtime-hardening`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
 3. 下一候选主线：`product-ux-polish`，聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
 4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。
 

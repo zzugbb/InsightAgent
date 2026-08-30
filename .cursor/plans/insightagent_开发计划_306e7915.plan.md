@@ -1,10 +1,10 @@
 ---
 name: InsightAgent 开发计划
-overview: provider-tool-expansion 与 ci-release-engineering 已 100% 封板；当前推进 production-runtime-hardening。
+overview: provider-tool-expansion、ci-release-engineering 与 production-runtime-hardening 已 100% 封板；下一候选 product-ux-polish。
 current_focus:
   mainline: production-runtime-hardening
-  status: 75% 开发中
-  latest_change: SSE/failure audit diagnostic、前端审计详情与 reconnect provider 错误消息映射完成，保留旧字段
+  status: 100% 已封板
+  latest_change: SSE/failure audit diagnostic、前端审计详情与 reconnect provider 错误消息映射已收口，保留旧字段
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -24,12 +24,13 @@ validation_baseline:
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
+  - production-runtime-hardening：SSE/failure audit diagnostic、前端审计详情 reason、reconnect provider 错误消息映射
   - source-size-maintenance：tool runtime/test slice、chat persistence 与 frontend globals.css 已拆分并纳入规模边界
   - ci-release-engineering：静态 release gate、PR auto routing、summary artifact、readiness matrix、service-backed e2e workflow queue、artifact strict policy
 next_candidate_mainlines:
   - product-ux-polish：Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率
 next_steps:
-  - 继续收敛 provider registry 运行态诊断、远端 provider 失败可观测性与发布后回归策略
+  - 候选进入 product-ux-polish，聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -38,8 +39,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 ## 当前仓库状态
 
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
-- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板；当前推进 `production-runtime-hardening`，进度约 75%。
-- 当前生产运行态重点：SSE `error.diagnostic` 与 failure audit detail 已默认对齐低敏 `reason` 枚举，前端审计详情可展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段不变。
+- `provider-tool-expansion`、`ci-release-engineering` 与 `production-runtime-hardening` 均已 100% 封板，可进入下一候选主线。
+- 生产运行态封板摘要：SSE `error.diagnostic` 与 failure audit detail 默认对齐低敏 `reason` 枚举，前端审计详情可展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段不变。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 - 代码规模治理已纳入常规边界：`backend/app`、`backend/scripts` 与 `frontend` 源码保持单文件 <= 3000 行；`frontend/package-lock.json` 等生成锁文件不作为拆分对象。
 
@@ -66,6 +67,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 最近封板主线
 
+- `production-runtime-hardening`：已 100% 封板；SSE/failure audit diagnostic 统一、provider call/selection failure 低敏 reason、前端审计详情 reason 展示与 reconnect provider 错误消息映射已收口，旧 SSE/trace/export/e2e 契约保持稳定。
 - `ci-release-engineering`：已 100% 封板；release gate、release readiness matrix、backend/frontend queue workflow、artifact diagnostics、main push `fail-on-missing` 与多 health URL 失败诊断均已收口。
 - `source-size-maintenance`：已封板；tool runtime/test slice、chat persistence 与 frontend globals.css 已拆分并纳入规模边界。
 - `provider-tool-expansion`：已 100% 封板；provider search 总量/命中归一化、显式 result_fields 特殊键、provider planner 多协议工具调用容器/别名/JSON 字符串参数解析与 failed reconnect 稳定错误码复原均已收口，旧 SSE/trace/export/display shape 不变。
@@ -77,7 +79,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 后续维护线
 
-- 当前主线：`production-runtime-hardening`，继续按先红测、再实现、再 targeted/full slice 的方式推进。
+- 当前状态：`production-runtime-hardening` 已封板，后续按先红测、再实现、再 targeted/full slice 的方式进入下一主线。
 - 后续候选：`product-ux-polish`，聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 

@@ -4,10 +4,10 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前状态
 
-- `provider-tool-expansion` 与 `ci-release-engineering` 均已 100% 封板；当前主线为 `production-runtime-hardening`，进度约 75%。
+- `provider-tool-expansion`、`ci-release-engineering` 与 `production-runtime-hardening` 均已 100% 封板；可进入下一候选主线。
 - Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
 - CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
-- SSE `error.diagnostic` 与失败审计 detail 已对齐低敏 `reason` 枚举，前端审计详情可读展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。
+- SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
 - `backend/app` 与 `backend/scripts` 所有 Python 源码均低于 3000 行；`tool_runtime.py` 与 `test_tool_runtime_slice.py` 保持兼容入口，新增实现继续落到主题模块。
 
 ## 当前验证基线
@@ -21,8 +21,8 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 下一步后端计划
 
-1. 当前主线：`production-runtime-hardening`，继续收敛 provider registry 运行态诊断、远端 provider 失败可观测性与发布后回归策略；当前已补齐 SSE error、failure audit 默认 diagnostic、审计详情低敏 reason 展示与 reconnect provider 错误消息映射。
-2. 已封板主线：`provider-tool-expansion`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
+1. 当前状态：`production-runtime-hardening` 已封板，可进入下一主线。
+2. 已封板主线：`provider-tool-expansion`、`production-runtime-hardening`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
 3. 下一候选主线：`product-ux-polish`；后端侧重点是稳定诊断语义、可回放错误摘要和治理查询效率。
 4. 继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
