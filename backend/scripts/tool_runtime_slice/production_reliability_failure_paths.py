@@ -105,9 +105,19 @@ class ProductionReliabilityFailurePathsMixin:
                     expected_reason,
                 )
 
-    def test_production_reliability_provider_failure_audit_includes_safe_reason(
+    def _exercise_provider_start_failure(
         self,
-    ) -> None:
+        error: BaseException,
+        *,
+        task_id: str,
+        session_id: str,
+        user_id: str,
+    ) -> tuple[
+        list[dict[str, object]],
+        list[dict[str, object]],
+        list[str],
+        list[dict[str, object]],
+    ]:
         complete_calls: list[dict[str, object]] = []
         audits: list[dict[str, object]] = []
         released_slots: list[str] = []
@@ -118,16 +128,7 @@ class ProductionReliabilityFailurePathsMixin:
 
             def stream_generate(self, prompt: str):
                 del prompt
-                raise ProviderCallError(
-                    code="remote_provider_http_error",
-                    user_message="Remote provider rate limited the request.",
-                    detail=(
-                        "HTTP 429 from provider_source='primary-search' "
-                        "with Authorization Bearer secret-token"
-                    ),
-                    status_code=429,
-                    retryable=True,
-                )
+                raise error
                 yield ""
 
         class FakeSlot:
@@ -166,7 +167,12 @@ class ProductionReliabilityFailurePathsMixin:
                 usage_completion_token_price_per_1k=0.0,
             )
             chat_execution_module.get_stored_settings = lambda _user_id: None
-            chat_execution_module.get_llm_provider = lambda _user_id: FailingProvider()
+            def fake_get_llm_provider(_user_id: str):
+                if isinstance(error, chat_execution_module.ProviderSelectionError):
+                    raise error
+                return FailingProvider()
+
+            chat_execution_module.get_llm_provider = fake_get_llm_provider
             chat_execution_module.get_configured_tool_registry_provider = (
                 lambda **_kwargs: SimpleNamespace()
             )
@@ -196,8 +202,8 @@ class ProductionReliabilityFailurePathsMixin:
             )
             chat_execution_module.get_task = (
                 lambda *args, **kwargs: {
-                    "id": "task-provider-audit-diagnostic",
-                    "session_id": "session-provider-audit-diagnostic",
+                    "id": task_id,
+                    "session_id": session_id,
                     "status": "running",
                 }
             )
@@ -211,9 +217,9 @@ class ProductionReliabilityFailurePathsMixin:
 
             events = list(
                 chat_execution_module.stream_task_execution(
-                    task_id="task-provider-audit-diagnostic",
-                    session_id="session-provider-audit-diagnostic",
-                    user_id="user-provider-audit-diagnostic",
+                    task_id=task_id,
+                    session_id=session_id,
+                    user_id=user_id,
                     prompt="provider failure should be diagnosed",
                 )
             )
@@ -243,6 +249,28 @@ class ProductionReliabilityFailurePathsMixin:
             for event in events
             if event.startswith("event: error\n")
         ]
+        return complete_calls, audits, released_slots, error_payloads
+
+    def test_production_reliability_provider_failure_audit_includes_safe_reason(
+        self,
+    ) -> None:
+        complete_calls, audits, released_slots, error_payloads = (
+            self._exercise_provider_start_failure(
+                ProviderCallError(
+                    code="remote_provider_http_error",
+                    user_message="Remote provider rate limited the request.",
+                    detail=(
+                        "HTTP 429 from provider_source='primary-search' "
+                        "with Authorization Bearer secret-token"
+                    ),
+                    status_code=429,
+                    retryable=True,
+                ),
+                task_id="task-provider-audit-diagnostic",
+                session_id="session-provider-audit-diagnostic",
+                user_id="user-provider-audit-diagnostic",
+            )
+        )
         expected_diagnostic = {
             "category": "remote_provider",
             "reason": "rate_limit",
@@ -265,6 +293,37 @@ class ProductionReliabilityFailurePathsMixin:
         serialized_audit = json.dumps(audit_detail, ensure_ascii=False)
         self.assertNotIn("Bearer", serialized_audit)
         self.assertNotIn("secret-token", serialized_audit)
+
+    def test_production_reliability_provider_selection_audit_includes_safe_reason(
+        self,
+    ) -> None:
+        complete_calls, audits, released_slots, error_payloads = (
+            self._exercise_provider_start_failure(
+                chat_execution_module.ProviderSelectionError(
+                    code="remote_api_key_required",
+                    user_message="Remote mode requires an API key.",
+                ),
+                task_id="task-provider-selection-diagnostic",
+                session_id="session-provider-selection-diagnostic",
+                user_id="user-provider-selection-diagnostic",
+            )
+        )
+        expected_diagnostic = {
+            "category": "remote_provider",
+            "reason": "auth",
+            "recoverability": "fatal",
+            "http_status_family": None,
+            "has_detail": False,
+        }
+        self.assertEqual(
+            [call.get("status", "completed") for call in complete_calls],
+            ["failed"],
+        )
+        self.assertEqual(released_slots, ["released"])
+        self.assertEqual([audit["event_type"] for audit in audits], ["task_failed"])
+        audit_detail = audits[-1]["detail"]
+        self.assertEqual(audit_detail["diagnostic"], expected_diagnostic)
+        self.assertEqual(error_payloads[-1]["diagnostic"], expected_diagnostic)
 
     def test_production_reliability_tool_terminal_return_lost_race_emits_cancelled(
         self,

@@ -118,6 +118,8 @@ def _sanitize_sse_provider_source_text(
 
 
 def _classify_sse_error_category(code: str) -> str:
+    if code in {"remote_api_key_required", "remote_base_url_required"}:
+        return "remote_provider"
     if code.startswith("remote_provider_") or code.startswith("remote_api_key_"):
         return "remote_provider"
     if code.startswith("task_queue_"):
@@ -147,6 +149,9 @@ def _classify_sse_error_reason(code: str, status_code: int | None = None) -> str
         "remote_provider_invalid_json": "invalid_response",
         "remote_provider_stream_invalid_json": "invalid_response",
         "remote_provider_empty_response": "empty_response",
+        "remote_api_key_required": "auth",
+        "remote_base_url_required": "config",
+        "invalid_runtime_mode": "config",
         "task_cancelled": "cancelled",
         "task_timeout": "timeout",
         "task_not_found": "not_found",
@@ -1121,6 +1126,13 @@ def stream_task_execution(
             event_type="task_failed",
             code=exc.code,
             message=exc.user_message,
+            detail={
+                "diagnostic": _build_sse_error_diagnostic(
+                    code=exc.code,
+                    fatal=True,
+                    has_detail=False,
+                ),
+            },
         )
         yield sse_event("state", {"task_id": task_id, "phase": "error"})
         yield sse_event(
