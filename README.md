@@ -7,20 +7,20 @@
 - `provider-tool-expansion` 已 100% 封板。
 - `ci-release-engineering` 已 100% 封板。
 - `production-runtime-hardening` 已 100% 封板：SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- `product-ux-polish` 已进入开发，当前约 76%：任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center 和任务详情统一 normalized 状态、失败诊断与详情轮询语义。
+- `product-ux-polish` 已进入开发，当前约 84%：任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center 和任务详情统一 normalized 状态、失败诊断与详情轮询语义；知识库治理补齐加载错误、陈旧数据保留与原位重试。
 - 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过；非 PR 环境保守解析为 backend/frontend/tooling/hygiene 全量。
 - Backend：full slice `1988/1988`；module boundary `4/4`；targeted production_reliability `39/39`、reconnect `9/9` 通过。
-- Frontend：workbench utils targeted `76/76`、task detail targeted `10/10`；node tests `135/135`、`npm run lint`、`npm run build` 通过。
-- E2E 基线：targeted Chromium semantic URL/filter replay `1/1`、Workbench Inspector semantic filter replay `1/1`、Task Center/任务详情 normalized status/diagnostic/polling replay `1/1`、Task Center failure diagnostic replay `1/1`、remote failure replay `1/1` 通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
+- Frontend：workbench utils targeted `76/76`、task detail targeted `10/10`、knowledge governance targeted `6/6`；node tests `136/136`、`npm run lint`、`npm run build` 通过。
+- E2E 基线：targeted Chromium semantic URL/filter replay `1/1`、Workbench Inspector semantic filter replay `1/1`、Task Center/任务详情 normalized status/diagnostic/polling replay `1/1`、Task Center failure diagnostic replay `1/1`、知识库治理加载失败/重试 `1/1`、remote failure replay `1/1` 通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前状态：`product-ux-polish` 约 76%，Trace 语义 replay、Task Center failure drilldown 与列表/详情 normalized 状态、失败诊断及轮询控制已补齐。
+1. 当前状态：`product-ux-polish` 约 84%，Trace 语义 replay、Task Center normalized 状态/失败诊断/轮询控制与知识库治理加载恢复已补齐。
 2. 已封板主线：`provider-tool-expansion`、`production-runtime-hardening`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
 3. 本主线继续聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
 4. 继续保持“小红测 -> 实现 -> targeted/full slice -> 文档同步 -> 提交”的节奏。
@@ -31,6 +31,7 @@
 - 任务详情页 `trace_semantic` URL 参数保持兼容扩展；语义切换仅同步 URL 并清理本地筛选，状态文字/色调与轮询控制优先使用 `status_normalized`，均不改变任务、trace 或 export payload。
 - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地筛选/展示状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
+- 知识库治理列表的加载错误、陈旧数据保留与原位重试只调整前端 query/presentation 状态，不改变 RAG API 请求或响应 shape。
 - 默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`。
 - queued/running/cancel/reconnect 与 task recovery 语义保持稳定。
 - `data/insightagent.plan.back.md` 是只读备份计划，永远不参与同步或修改。
@@ -139,7 +140,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- 继续在 `product-ux-polish` 下寻找可红测证明的高频 UX 小切口，优先 Task Center 快捷操作与任务详情回放可读性。
+- 继续完成 `product-ux-polish` 的全局 UX 审计，优先治理与观测列表的错误恢复、空态一致性和高频操作反馈，再进入封板验证。
 
 ## 文档维护约定
 

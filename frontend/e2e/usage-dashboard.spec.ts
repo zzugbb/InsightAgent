@@ -1684,6 +1684,53 @@ test("knowledge governance action buttons keep text style without borders", asyn
   expect(deleteBorderTop).toBe("0px");
 });
 
+test("knowledge governance load failure offers in-place retry", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  let allowSuccess = false;
+  let requestCount = 0;
+  await page.route("**/api/rag/knowledge-bases", async (route) => {
+    requestCount += 1;
+    if (!allowSuccess) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        json: { detail: "Knowledge base governance is temporarily unavailable" },
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      json: {
+        chroma_reachable: true,
+        knowledge_base_count: 0,
+        knowledge_bases: [],
+      },
+    });
+  });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-knowledge-base").click();
+
+  const loadError = page.getByTestId("kb-governance-load-error");
+  await expect(loadError).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("kb-governance-table-wrap")).toBeHidden();
+
+  const failedRequestCount = requestCount;
+  allowSuccess = true;
+  await page.getByTestId("kb-governance-load-retry").click();
+  await expect.poll(() => requestCount).toBeGreaterThan(failedRequestCount);
+  await expect(loadError).toBeHidden({ timeout: 20_000 });
+  await expect(page.getByTestId("kb-governance-table-wrap")).toBeVisible();
+});
+
 test("knowledge governance expands document version details", async ({
   page,
   request,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Alert, App, Button, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { RefreshCw } from "lucide-react";
 
@@ -18,6 +18,7 @@ import type {
 import {
   buildKnowledgeBaseDocumentDeleteUrl,
   resolveKnowledgeBaseDocumentGroups,
+  resolveKnowledgeBaseGovernanceListState,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
 } from "./knowledge-base-governance-modal-utils";
@@ -127,6 +128,14 @@ export function KnowledgeBaseGovernanceModal({
   });
 
   const rows = listQuery.data?.knowledge_bases ?? [];
+  const listState = resolveKnowledgeBaseGovernanceListState({
+    isLoading: listQuery.isLoading,
+    isError: listQuery.isError,
+    rowCount: rows.length,
+  });
+  const listError = listQuery.isError
+    ? toUserFacingError(listQuery.error, t.errors)
+    : null;
   const isAdmin =
     String(currentUser?.role ?? "")
       .trim()
@@ -400,23 +409,52 @@ export function KnowledgeBaseGovernanceModal({
         </Tooltip>
       </div>
 
-      <div className="kb-governance-table-wrap" data-testid="kb-governance-table-wrap">
-        <Table<RagKnowledgeBaseSummary>
-          size="small"
-          rowKey={(row) => row.collection}
-          columns={columns}
-          dataSource={rows}
-          loading={listQuery.isLoading}
-          expandable={{
-            expandedRowRender: renderVersionDetails,
-            rowExpandable: (row) =>
-              resolveKnowledgeBaseVersionRows(row.document_versions).length > 0,
-          }}
-          pagination={false}
-          locale={{ emptyText: t.sidebar.knowledgeBase.noKnowledgeBases }}
-          scroll={{ x: 560 }}
+      {listError ? (
+        <Alert
+          type="error"
+          showIcon
+          className="kb-governance-load-error"
+          data-testid="kb-governance-load-error"
+          title={t.sidebar.knowledgeBase.loadFailed}
+          description={
+            listError.hint
+              ? `${listError.banner} ${listError.hint}`
+              : listError.banner
+          }
+          action={
+            <Button
+              size="small"
+              data-testid="kb-governance-load-retry"
+              loading={listQuery.isFetching}
+              onClick={() => {
+                void listQuery.refetch();
+              }}
+            >
+              {t.sidebar.knowledgeBase.refresh}
+            </Button>
+          }
         />
-      </div>
+      ) : null}
+
+      {listState !== "error" ? (
+        <div className="kb-governance-table-wrap" data-testid="kb-governance-table-wrap">
+          <Table<RagKnowledgeBaseSummary>
+            size="small"
+            rowKey={(row) => row.collection}
+            columns={columns}
+            dataSource={rows}
+            loading={listQuery.isLoading}
+            expandable={{
+              expandedRowRender: renderVersionDetails,
+              rowExpandable: (row) =>
+                resolveKnowledgeBaseVersionRows(row.document_versions).length > 0,
+            }}
+            pagination={false}
+            locale={{ emptyText: t.sidebar.knowledgeBase.noKnowledgeBases }}
+            scroll={{ x: 560 }}
+          />
+        </div>
+      ) : null}
     </Modal>
   );
 }

@@ -338,6 +338,7 @@ export const zh: Messages = {
       kbCount: (n: number) => `知识库 ${n} 个`,
       refresh: "刷新",
       refreshAria: "刷新知识库列表",
+      loadFailed: "知识库列表加载失败",
       noKnowledgeBases: "当前账号暂无知识库。",
       tableKbId: "知识库 ID",
       tableCollection: "Collection",

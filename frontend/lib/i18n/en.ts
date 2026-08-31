@@ -344,6 +344,7 @@ export const en: Messages = {
       kbCount: (n: number) => `${n} knowledge base(s)`,
       refresh: "Refresh",
       refreshAria: "Refresh knowledge base list",
+      loadFailed: "Failed to load knowledge bases",
       noKnowledgeBases: "No knowledge bases for this account yet.",
       tableKbId: "Knowledge base ID",
       tableCollection: "Collection",

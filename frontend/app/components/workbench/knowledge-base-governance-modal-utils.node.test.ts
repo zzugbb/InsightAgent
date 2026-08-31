@@ -4,9 +4,37 @@ import assert from "node:assert/strict";
 import {
   buildKnowledgeBaseDocumentDeleteUrl,
   resolveKnowledgeBaseDocumentGroups,
+  resolveKnowledgeBaseGovernanceListState,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
 } from "./knowledge-base-governance-modal-utils.ts";
+
+test("resolveKnowledgeBaseGovernanceListState distinguishes load and stale-data errors", () => {
+  assert.equal(
+    resolveKnowledgeBaseGovernanceListState({
+      isLoading: false,
+      isError: true,
+      rowCount: 0,
+    }),
+    "error",
+  );
+  assert.equal(
+    resolveKnowledgeBaseGovernanceListState({
+      isLoading: false,
+      isError: true,
+      rowCount: 2,
+    }),
+    "stale_error",
+  );
+  assert.equal(
+    resolveKnowledgeBaseGovernanceListState({
+      isLoading: false,
+      isError: false,
+      rowCount: 0,
+    }),
+    "empty",
+  );
+});
 
 test("resolveKnowledgeBaseVersionRows returns stable sorted display rows", () => {
   const rows = resolveKnowledgeBaseVersionRows([

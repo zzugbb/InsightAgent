@@ -26,6 +26,27 @@ export type KnowledgeBaseDocumentGroup = {
   versions: KnowledgeBaseVersionRow[];
 };
 
+export type KnowledgeBaseGovernanceListState =
+  | "loading"
+  | "error"
+  | "stale_error"
+  | "empty"
+  | "ready";
+
+export function resolveKnowledgeBaseGovernanceListState(args: {
+  isLoading: boolean;
+  isError: boolean;
+  rowCount: number;
+}): KnowledgeBaseGovernanceListState {
+  if (args.isError) {
+    return args.rowCount > 0 ? "stale_error" : "error";
+  }
+  if (args.isLoading) {
+    return "loading";
+  }
+  return args.rowCount > 0 ? "ready" : "empty";
+}
+
 export function buildKnowledgeBaseDocumentDeleteUrl(
   apiBaseUrl: string,
   knowledgeBaseId: string,

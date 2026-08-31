@@ -278,6 +278,7 @@ export type Messages = {
       kbCount: (n: number) => string;
       refresh: string;
       refreshAria: string;
+      loadFailed: string;
       noKnowledgeBases: string;
       tableKbId: string;
       tableCollection: string;
