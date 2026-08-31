@@ -7,6 +7,16 @@ SCRIPT="${ROOT_DIR}/scripts/ci_release_readiness_matrix.sh"
 WORKFLOW="${ROOT_DIR}/.github/workflows/release-gate.yml"
 TMP_DIR=""
 
+json_tool_python() {
+  if [ -n "${CI_JSON_TOOL_PYTHON:-}" ]; then
+    printf '%s\n' "${CI_JSON_TOOL_PYTHON}"
+  elif [ -x "${ROOT_DIR}/backend/.venv/bin/python" ]; then
+    printf '%s\n' "${ROOT_DIR}/backend/.venv/bin/python"
+  else
+    printf '%s\n' "python3"
+  fi
+}
+
 assert_contains() {
   local expected="$1"
   local file="$2"
@@ -43,7 +53,7 @@ main() {
   assert_contains "| artifact-stage-guard | yes | no |" "${TMP_DIR}/readiness.md"
 
   bash "${SCRIPT}" --format json --output "${TMP_DIR}/readiness.json"
-  "${ROOT_DIR}/backend/.venv/bin/python" -m json.tool "${TMP_DIR}/readiness.json" >/dev/null
+  "$(json_tool_python)" -m json.tool "${TMP_DIR}/readiness.json" >/dev/null
   assert_contains '"gate_id": "release-gate"' "${TMP_DIR}/readiness.json"
   assert_contains '"required_for_release": true' "${TMP_DIR}/readiness.json"
   assert_contains '"service_required": false' "${TMP_DIR}/readiness.json"

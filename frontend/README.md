@@ -18,7 +18,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；8 个测试文件 `140/140` 通过，包含 frontend source size boundary。
 - `npm run lint` 与 `npm run build` 通过。
 - E2E 基线：targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center 加载失败与原位重试、知识库治理加载失败/重试均通过；full Chromium `56 passed / 1 skipped`；低并发 queue phase `1/1` 且已纳入 CI workflow。
-- Backend 契约基线：full slice `1988/1988`；module boundary `4/4`；backend main/timeout/queue e2e 与 main push artifact-stage guard 通过。
+- Backend 契约基线：full slice `1988/1988`；module boundary `4/4`；backend main/timeout/queue e2e 与 main push artifact-stage guard 通过；GitHub backend-e2e 红点定位为后置 tooling fixture 无 venv JSON 校验，已补 fallback 并本地复验 backend tooling scope。
 
 ## 下一步前端计划
 

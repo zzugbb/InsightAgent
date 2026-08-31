@@ -6,6 +6,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${ROOT_DIR}/scripts/ci_run_release_gate.sh"
 TMP_DIR=""
 
+json_tool_python() {
+  if [ -n "${CI_JSON_TOOL_PYTHON:-}" ]; then
+    printf '%s\n' "${CI_JSON_TOOL_PYTHON}"
+  elif [ -x "${ROOT_DIR}/backend/.venv/bin/python" ]; then
+    printf '%s\n' "${ROOT_DIR}/backend/.venv/bin/python"
+  else
+    printf '%s\n' "python3"
+  fi
+}
+
 assert_contains() {
   local expected="$1"
   local file="$2"
@@ -81,7 +91,7 @@ main() {
     --phase frontend \
     --json-summary-file "${TMP_DIR}/invalid-python-summary.json" \
     > "${TMP_DIR}/invalid-python-summary-stdout.txt"
-  "${ROOT_DIR}/backend/.venv/bin/python" -m json.tool "${TMP_DIR}/invalid-python-summary.json" >/dev/null
+  "$(json_tool_python)" -m json.tool "${TMP_DIR}/invalid-python-summary.json" >/dev/null
   assert_contains '"phase": "frontend"' "${TMP_DIR}/invalid-python-summary.json"
   assert_contains '"label": "frontend build"' "${TMP_DIR}/invalid-python-summary.json"
 
