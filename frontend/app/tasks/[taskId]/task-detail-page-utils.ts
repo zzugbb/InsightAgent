@@ -23,6 +23,18 @@ export type TaskDetailTraceFilterState = {
   traceSearchQuery: string;
 };
 
+export type TaskDetailStatusTone =
+  | "running"
+  | "completed"
+  | "failed"
+  | "other";
+
+type TaskDetailStatusInput = {
+  status: string;
+  status_normalized?: string;
+  status_label?: string;
+};
+
 const FAILURE_DIAGNOSTIC_TOKENS = [
   "error",
   "failed",
@@ -60,6 +72,39 @@ const TRACE_SEMANTIC_PRESETS: readonly Exclude<TaskDetailTraceSemanticFilter, "a
 function isFailureDiagnosticContent(value: string): boolean {
   const content = value.trim().toLowerCase();
   return Boolean(content) && FAILURE_DIAGNOSTIC_TOKENS.some((token) => content.includes(token));
+}
+
+function resolveTaskDetailStatusTone(status: string): TaskDetailStatusTone {
+  const normalized = status.trim().toLowerCase();
+  if (
+    normalized === "queued" ||
+    normalized === "running" ||
+    normalized === "pending"
+  ) {
+    return "running";
+  }
+  if (
+    normalized === "completed" ||
+    normalized === "done" ||
+    normalized === "success"
+  ) {
+    return "completed";
+  }
+  if (normalized === "failed" || normalized === "error") {
+    return "failed";
+  }
+  return "other";
+}
+
+export function resolveTaskDetailStatusDisplay(
+  task: TaskDetailStatusInput,
+): { label: string; tone: TaskDetailStatusTone } {
+  const normalized = task.status_normalized?.trim() ?? "";
+  const raw = task.status.trim();
+  return {
+    label: normalized || task.status_label?.trim() || raw || "unknown",
+    tone: resolveTaskDetailStatusTone(normalized || raw),
+  };
 }
 
 export function buildTaskDetailTraceSemanticHref(

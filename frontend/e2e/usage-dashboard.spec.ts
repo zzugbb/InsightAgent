@@ -498,6 +498,35 @@ test("task center status filter honors normalized task status", async ({
     "failed",
   );
 
+  await page.context().route(
+    new RegExp(`/api/tasks/${created.task_id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
+    async (route) => {
+      const response = await route.fetch();
+      const payload = (await response.json()) as Record<string, unknown>;
+      await route.fulfill({
+        response,
+        json: {
+          ...payload,
+          status: "completed",
+          status_label: "Completed",
+          status_normalized: "failed",
+        },
+      });
+    },
+  );
+  const [detailPage] = await Promise.all([
+    page.waitForEvent("popup"),
+    taskRow.getByTestId("task-center-open-task-detail").click(),
+  ]);
+  await detailPage.waitForLoadState("domcontentloaded");
+  await expect(detailPage.getByTestId("task-detail-page")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(detailPage.getByTestId("task-detail-status-badge")).toHaveText(
+    "failed",
+  );
+  await detailPage.close();
+
   await selectVisibleAntdOption(page, {
     triggerTestId: "task-center-status-filter",
     value: "Failed",

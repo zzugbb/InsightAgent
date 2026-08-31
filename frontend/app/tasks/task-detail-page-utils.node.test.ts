@@ -8,8 +8,33 @@ import {
   resolveTaskDetailInitialTraceFilterState,
   resolveTaskDetailSemanticFilterChange,
   resolveTaskDetailSemanticTracePreset,
+  resolveTaskDetailStatusDisplay,
   resolveTaskDetailTraceSteps,
 } from "./[taskId]/task-detail-page-utils.ts";
+
+test("resolveTaskDetailStatusDisplay prioritizes normalized task status", () => {
+  assert.deepEqual(
+    resolveTaskDetailStatusDisplay({
+      status: "completed",
+      status_label: "Completed",
+      status_normalized: "failed",
+    }),
+    {
+      label: "failed",
+      tone: "failed",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskDetailStatusDisplay({
+      status: "pending",
+      status_label: "Queued for execution",
+    }),
+    {
+      label: "Queued for execution",
+      tone: "running",
+    },
+  );
+});
 
 test("buildTaskDetailTraceSemanticHref preserves shareable semantic trace focus", () => {
   assert.equal(

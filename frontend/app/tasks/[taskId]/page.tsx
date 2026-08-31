@@ -41,6 +41,7 @@ import {
   resolveTaskDetailInitialTraceFilterState,
   resolveTaskDetailSemanticFilterChange,
   resolveTaskDetailSemanticTracePreset,
+  resolveTaskDetailStatusDisplay,
   resolveTaskDetailTraceSteps,
 } from "./task-detail-page-utils";
 
@@ -64,30 +65,6 @@ function isRunningLike(status: string | null | undefined): boolean {
     normalized === "running" ||
     normalized === "pending"
   );
-}
-
-function resolveTaskStatusTone(
-  status: string,
-): "running" | "completed" | "failed" | "other" {
-  const normalized = status.trim().toLowerCase();
-  if (
-    normalized === "queued" ||
-    normalized === "running" ||
-    normalized === "pending"
-  ) {
-    return "running";
-  }
-  if (
-    normalized === "completed" ||
-    normalized === "done" ||
-    normalized === "success"
-  ) {
-    return "completed";
-  }
-  if (normalized === "failed" || normalized === "error") {
-    return "failed";
-  }
-  return "other";
 }
 
 export default function TaskDetailPage() {
@@ -159,6 +136,7 @@ export default function TaskDetailPage() {
   });
 
   const task = taskQuery.data;
+  const taskStatusDisplay = task ? resolveTaskDetailStatusDisplay(task) : null;
   const explicitTaskFailureHint = useMemo(
     () =>
       resolveTaskDetailFailureHint(
@@ -351,9 +329,10 @@ export default function TaskDetailPage() {
                 <span>{t.taskDetail.statusLabel}</span>
                 <strong>
                   <span
-                    className={`task-status-badge task-status-badge--${resolveTaskStatusTone(task.status)}`}
+                    className={`task-status-badge task-status-badge--${taskStatusDisplay?.tone ?? "other"}`}
+                    data-testid="task-detail-status-badge"
                   >
-                    {task.status}
+                    {taskStatusDisplay?.label ?? "unknown"}
                   </span>
                 </strong>
               </div>
