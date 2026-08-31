@@ -633,10 +633,22 @@ test("remote network failure shows mapped stream error code @smoke", async ({
     "Failed to reach remote provider",
     { timeout: 20_000 },
   );
-  const failureSemanticText =
-    (await page.getByTestId("task-detail-semantic-failure").textContent()) ?? "";
-  const failureTraceCount = Number(failureSemanticText.match(/\d+/)?.[0] ?? 0);
-  expect(failureTraceCount).toBeGreaterThan(0);
+  const failureSemanticCounter = page
+    .getByTestId("task-detail-semantic-failure")
+    .locator("strong");
+  await expect
+    .poll(
+      async () =>
+        Number(
+          ((await failureSemanticCounter.textContent()) ?? "").match(/\d+/)?.[0] ??
+            0,
+        ),
+      { timeout: 20_000, intervals: [200, 400, 800, 1200] },
+    )
+    .toBeGreaterThan(0);
+  const failureTraceCount = Number(
+    ((await failureSemanticCounter.textContent()) ?? "").match(/\d+/)?.[0] ?? 0,
+  );
   await expect(
     page
       .locator(".trace-filter-toolbar .ant-segmented-item-selected")
@@ -857,15 +869,15 @@ test("remote cancel enters cooldown and recovers send", async ({
     expect(firstSendRequestCount).toBeGreaterThan(0);
     await cancelButton.click();
 
-    await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
-      timeout: 4_000,
-    });
     await expect(composerSend).toBeDisabled({ timeout: 4_000 });
 
     await composerInput.fill("blocked during cooldown");
     await composerInput.press("Enter");
     await page.waitForTimeout(350);
     expect(mockProvider.getRequestCount()).toBe(firstSendRequestCount);
+    await expect(composerSend).not.toHaveClass(/ant-btn-loading/, {
+      timeout: 4_000,
+    });
 
     await expect(composerSend).toBeEnabled({ timeout: 12_000 });
     await composerInput.fill("after cooldown send works");

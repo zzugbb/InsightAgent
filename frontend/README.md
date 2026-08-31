@@ -8,21 +8,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地。
 - 前端继续消费后端统一的 preview/output/result-summary、trace/export 字段，不新增 provider 专用显示分支。
 - SSE `error.diagnostic.reason` 与 failure audit diagnostic 是后端追加的低敏兼容字段；前端现有错误提示继续使用 `code/message/detail/status_code`，审计详情可展示低敏 diagnostic reason，reconnect 继续依赖后端稳定 code/message。
-- 任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center/任务详情 normalized 状态、失败诊断及轮询控制已对齐；Task Center、Audit Logs 与知识库治理均可区分初始/陈旧数据错误并原位重试。
+- 任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center/任务详情 normalized 状态、失败诊断及轮询控制已对齐；Task Center、Audit Logs 与知识库治理均可区分初始/陈旧数据错误并原位重试；任务详情 failure hint code 映射与 SSE close 后失败摘要兜底已补齐。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 - 前端 e2e workflow 覆盖 smoke/full/queue，queue 阶段使用独立 `:8011` backend；main push Playwright artifact-stage guard 使用 `fail-on-missing`。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto` 通过，Markdown/JSON summary 与 release readiness matrix 输出通过。
-- Node tests：workbench utils targeted `77/77`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；8 个测试文件 `138/138` 通过，包含 frontend source size boundary。
+- Node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；8 个测试文件 `140/140` 通过，包含 frontend source size boundary。
 - `npm run lint` 与 `npm run build` 通过。
-- E2E 基线：targeted Chromium 审计日志/Task Center 加载失败与原位重试 `2/2`、知识库治理加载失败/重试 `1/1`、语义 Trace 与 normalized status/diagnostic/polling 回放均通过；full Chromium `52 passed / 1 skipped`；低并发 queue phase `1/1` 且已纳入 CI workflow。
+- E2E 基线：targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center 加载失败与原位重试、知识库治理加载失败/重试均通过；full Chromium `56 passed / 1 skipped`；低并发 queue phase `1/1` 且已纳入 CI workflow。
 - Backend 契约基线：full slice `1988/1988`；module boundary `4/4`。
 
 ## 下一步前端计划
 
-1. 当前状态：`product-ux-polish` 已 100% 封板，代码、targeted Chromium、静态 release gate 与文档均已收口。
+1. 当前状态：`product-ux-polish` 已 100% 封板，前端 full Chromium 并发 e2e、targeted Chromium、静态 release gate 与文档均已收口。
 2. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认前端与运维界面范围。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
@@ -41,6 +41,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Workbench Inspector 语义筛选只调整本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
 - Task Center、Audit Logs 与知识库治理的初始错误、陈旧数据错误与原位重试只调整 TanStack Query/presentation 状态，不改变任务、审计或 RAG API shape；初始失败不再误显示空态，陈旧数据仍可查看。
+- SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload。
 - queued/running/cancel/reconnect 与 task recovery 前端语义保持稳定。
 
 ## 能力索引
@@ -72,6 +73,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 实时流、持久化 trace 与导出回放当前共用同一套 `TraceStep` 消费主干，前端优先避免派生本地专用语义。
 - `tool_end.result_summary`、preview/output key、retrieval follow-up 与 registry diagnostics 已进入工作台主展示链，当前重点是继续跟随后端保持 helper/runtime 语义一致。
 - 任务失败线索已进入共享快照语义；Task Center、任务详情、Usage Dashboard 与 Audit Logs 复用同一失败摘要、来源分类、可读错误码和 Failure 轨迹入口。
+- 远端错误/取消 e2e 的并发等待已对齐真实 UI 状态：任务详情 failure 计数等待稳定，trace retry ETA 限定可见 Context 面板，remote cancel 先验证冷却阻塞再等待恢复。
 - Usage Dashboard、Audit Logs、Task Center 与任务详情页已统一失败回放入口和 Failure 计数。
 - running task recovery、remote cancel、model settings diagnostics 与知识库治理 shared 权限是当前最容易回归的前端运行态重点。
 - 当前前端回归重点仍围绕 workbench 主链、remote errors、settings、usage dashboard 与 common tooling。

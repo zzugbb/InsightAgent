@@ -153,9 +153,10 @@ export default function TaskDetailPage() {
         ? resolveTaskSnapshotSummary({
             task,
             traceSteps,
+            explicitFailureHint: explicitTaskFailureHint,
           })
         : null,
-    [task, traceSteps],
+    [explicitTaskFailureHint, task, traceSteps],
   );
 
   const taskUsage = useMemo(() => (task ? resolveTaskUsageFromTask(task) : null), [task]);

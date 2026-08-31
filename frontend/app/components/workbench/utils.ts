@@ -760,11 +760,16 @@ function resolveTaskFailureInsightFromSteps(
   return null;
 }
 
-function resolveExplicitTaskFailureInsight(task: TaskSummary): TaskFailureInsight | null {
+function resolveExplicitTaskFailureInsight(
+  task: TaskSummary,
+  explicitFailureHint?: string | null,
+): TaskFailureInsight | null {
   if (!isTaskFailedStatus(resolveTaskEffectiveStatus(task))) {
     return null;
   }
-  const hint = normalizeDiagnosticText(task.failure_hint);
+  const hint =
+    normalizeDiagnosticText(explicitFailureHint) ??
+    normalizeDiagnosticText(task.failure_hint);
   return hint && isTaskFailureSource(task.failure_source)
     ? {
         hint,
@@ -1820,6 +1825,7 @@ function findLastStepContent(
 export function resolveTaskSnapshotSummary(args: {
   task: TaskSummary;
   traceSteps?: TraceStepPayload[];
+  explicitFailureHint?: string | null;
 }): TaskSnapshotSummary {
   const steps =
     args.traceSteps && args.traceSteps.length > 0
@@ -1846,7 +1852,7 @@ export function resolveTaskSnapshotSummary(args: {
 
   const semanticStats = resolveTraceStepSemanticStats(steps);
   const failureInsight =
-    resolveExplicitTaskFailureInsight(args.task) ??
+    resolveExplicitTaskFailureInsight(args.task, args.explicitFailureHint) ??
     resolveTaskFailureInsightFromSteps(resolveTaskEffectiveStatus(args.task), steps) ??
     extractTaskFailureInsight(args.task);
   const lastObservation = findLastStepContent(

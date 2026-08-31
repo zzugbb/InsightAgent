@@ -7,20 +7,20 @@
 - `provider-tool-expansion` 已 100% 封板。
 - `ci-release-engineering` 已 100% 封板。
 - `production-runtime-hardening` 已 100% 封板：SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- `product-ux-polish` 已 100% 封板：语义 Trace 回放、Task Center/任务详情 normalized 状态与失败诊断、列表加载错误/陈旧数据保留/原位重试均已收口。
+- `product-ux-polish` 已 100% 封板：语义 Trace 回放、Task Center/任务详情 normalized 状态与失败诊断、列表加载错误/陈旧数据保留/原位重试均已收口；本轮补齐任务详情 failure hint code 映射与 SSE close 后失败摘要兜底，full Chromium 并发 e2e 已复绿。
 - 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过；非 PR 环境保守解析为 backend/frontend/tooling/hygiene 全量。
 - Backend：full slice `1988/1988`；module boundary `4/4`；targeted production_reliability `39/39`、reconnect `9/9` 通过。
-- Frontend：workbench utils targeted `77/77`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；node tests `138/138`、`npm run lint`、`npm run build` 通过。
-- E2E 基线：targeted Chromium 审计日志/Task Center 加载失败与原位重试 `2/2`、知识库治理加载失败/重试 `1/1`、语义 Trace 与 normalized status/diagnostic/polling 回放均通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
+- Frontend：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；node tests `140/140`、`npm run lint`、`npm run build` 通过。
+- E2E 基线：targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center 加载失败与原位重试、知识库治理加载失败/重试均通过；backend main 通过；frontend full Chromium `56 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前状态：`product-ux-polish` 已 100% 封板，代码、targeted Chromium、静态 release gate 与文档均已收口，可进入下一主线。
+1. 当前状态：`product-ux-polish` 已 100% 封板，前后端 e2e 复核、full Chromium 并发回归、静态 release gate 与文档均已收口，可进入下一主线。
 2. 已封板主线新增 `product-ux-polish`；既有 provider/tool、生产运行态、源码规模、CI/release、RAG、可观测性、可靠性、治理与并发主线保持完成。
 3. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认范围。
 
@@ -31,6 +31,7 @@
 - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地筛选/展示状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
 - Task Center、Audit Logs 与知识库治理的加载错误、陈旧数据保留与原位重试只调整前端 query/presentation 状态，不改变任务、审计或 RAG API shape。
+- SSE close 后失败摘要兜底只在流结束但前端尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload。
 - 默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`。
 - queued/running/cancel/reconnect 与 task recovery 语义保持稳定。
 - `data/insightagent.plan.back.md` 是只读备份计划，永远不参与同步或修改。

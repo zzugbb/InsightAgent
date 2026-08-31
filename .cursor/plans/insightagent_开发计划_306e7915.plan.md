@@ -4,7 +4,7 @@ overview: provider-tool-expansion、ci-release-engineering、production-runtime-
 current_focus:
   mainline: product-ux-polish
   status: 100% 已封板
-  latest_change: Task Center、Audit Logs 与知识库治理统一初始/陈旧数据错误语义和原位重试，伪空态已消除
+  latest_change: 前后端 e2e 复核完成；任务详情 failure hint code 映射、SSE close 后失败摘要兜底与 full Chromium 并发等待稳定性已补齐
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -18,13 +18,14 @@ stable_contracts:
   - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态；保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload
   - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 status_normalized，显式 failure_hint/failure_source 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload
   - Task Center、Audit Logs 与知识库治理加载错误、陈旧数据保留及原位重试只调整前端 query/presentation 状态，不改变任务、审计或 RAG API shape
+  - SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
   release_gate: bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json passed，非 PR 保守跑 backend/frontend/tooling/hygiene 全量
   backend: full slice 1988/1988；module boundary 4/4；production_reliability 39/39；reconnect 9/9
-  frontend: workbench utils targeted 77/77；task detail targeted 10/10；audit targeted 10/10；knowledge governance targeted 6/6；node tests 138/138；npm run lint passed；npm run build passed
-  e2e: targeted Chromium Audit Logs/Task Center 加载失败与原位重试 2/2 passed；知识库治理加载失败/重试 1/1 passed；语义 Trace 与 normalized status/diagnostic/polling 回放 passed；backend main passed；frontend full Chromium 52 passed / 1 skipped；backend/frontend queue 已纳入 CI workflow
+  frontend: workbench utils targeted 78/78；store utils targeted 16/16；task detail targeted 10/10；audit targeted 10/10；knowledge governance targeted 6/6；node tests 140/140；npm run lint passed；npm run build passed
+  e2e: targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center 加载失败与原位重试、知识库治理加载失败/重试 passed；backend main passed；frontend full Chromium 56 passed / 1 skipped；backend/frontend queue 已纳入 CI workflow
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -47,7 +48,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
 - 生产运行态封板摘要：SSE `error.diagnostic` 与 failure audit detail 默认对齐低敏 `reason` 枚举，前端审计详情可展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段不变。
-- 产品体验封板摘要：语义 Trace、Task Center/任务详情 normalized 状态与失败诊断、Task Center/Audit Logs/知识库治理加载恢复及伪空态治理已收口。
+- 产品体验封板摘要：语义 Trace、Task Center/任务详情 normalized 状态与失败诊断、Task Center/Audit Logs/知识库治理加载恢复、伪空态治理、任务详情 failure hint code 映射与 SSE close 后失败摘要兜底已收口。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 - 代码规模治理已纳入常规边界：`backend/app`、`backend/scripts` 与 `frontend` 源码保持单文件 <= 3000 行；`frontend/package-lock.json` 等生成锁文件不作为拆分对象。
 
@@ -66,9 +67,9 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1988/1988`。
 - Backend targeted：`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，当前 `4/4`，包含 3000 行规模边界。
-- Frontend node tests：workbench utils targeted `77/77`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；当前 `138/138`，包含 frontend source size boundary。
+- Frontend node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；当前 `140/140`，包含 frontend source size boundary。
 - Frontend lint/build：`cd frontend && npm run lint`、`cd frontend && npm run build` 通过。
-- E2E：targeted Chromium Audit Logs/Task Center 加载失败与原位重试 `2/2`、知识库治理加载失败/重试 `1/1`、语义 Trace 与 normalized status/diagnostic/polling 回放通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；backend/frontend queue 阶段已纳入 CI workflow。
+- E2E：targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center 加载失败与原位重试、知识库治理加载失败/重试通过；backend main 通过；frontend full Chromium `56 passed / 1 skipped`；backend/frontend queue 阶段已纳入 CI workflow。
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过；非 PR 环境保守跑 backend/frontend/tooling/hygiene 全量。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过。
 

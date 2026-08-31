@@ -1,3 +1,5 @@
+import type { Messages } from "../i18n";
+
 export type LiveToolEndPayload = {
   status: string;
   retry_count?: number;
@@ -113,6 +115,119 @@ export function resolveSseQueueForPhase(
   queue: SseQueuePayload | null,
 ): SseQueuePayload | null {
   return phase === "queued" ? queue : null;
+}
+
+function normalizeString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function normalizeFailedStatus(value: unknown): string | null {
+  const status = normalizeString(value)?.toLowerCase();
+  if (!status) {
+    return null;
+  }
+  return status === "failed" || status === "error" ? "failed" : null;
+}
+
+function isDiagnosticCode(value: string): boolean {
+  return /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(value);
+}
+
+function readObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function resolveTraceErrorDiagnostic(
+  traceSteps: unknown,
+): {
+  code: string | null;
+  message: string | null;
+  detail: string | null;
+  statusCode: number | null;
+  fatal: boolean | null;
+  retryCount: number | null;
+} | null {
+  if (!Array.isArray(traceSteps)) {
+    return null;
+  }
+  for (let index = traceSteps.length - 1; index >= 0; index -= 1) {
+    const step = readObject(traceSteps[index]);
+    const meta = readObject(step?.meta);
+    const errorEvent = readObject(meta?.error_event);
+    if (!errorEvent) {
+      continue;
+    }
+    const code = normalizeString(errorEvent.code);
+    const message = normalizeString(errorEvent.message);
+    const detail = normalizeString(errorEvent.detail);
+    const statusCode =
+      typeof errorEvent.status_code === "number" &&
+      Number.isFinite(errorEvent.status_code)
+        ? Math.trunc(errorEvent.status_code)
+        : null;
+    const fatal =
+      typeof errorEvent.fatal === "boolean" ? errorEvent.fatal : null;
+    const retryCount =
+      typeof errorEvent.retryCount === "number" &&
+      Number.isFinite(errorEvent.retryCount)
+        ? Math.trunc(errorEvent.retryCount)
+        : typeof errorEvent.retry_count === "number" &&
+            Number.isFinite(errorEvent.retry_count)
+          ? Math.trunc(errorEvent.retry_count)
+          : null;
+    if (code || message || detail || statusCode !== null) {
+      return { code, message, detail, statusCode, fatal, retryCount };
+    }
+  }
+  return null;
+}
+
+export function resolveStreamClosedFailureMessage(args: {
+  status?: unknown;
+  statusNormalized?: unknown;
+  taskFailureHint?: unknown;
+  traceSteps?: unknown;
+  messages: Pick<
+    Messages["stream"],
+    "streamErrorFallback" | "streamErrorByCode" | "streamErrorMessage"
+  >;
+}): string | null {
+  if (
+    !normalizeFailedStatus(args.statusNormalized) &&
+    !normalizeFailedStatus(args.status)
+  ) {
+    return null;
+  }
+
+  const diagnostic = resolveTraceErrorDiagnostic(args.traceSteps);
+  const rawTaskHint = normalizeString(args.taskFailureHint);
+  const code =
+    diagnostic?.code ??
+    (rawTaskHint && isDiagnosticCode(rawTaskHint) ? rawTaskHint : null);
+  const backendMessage =
+    diagnostic?.message ??
+    (rawTaskHint && !isDiagnosticCode(rawTaskHint) ? rawTaskHint : null) ??
+    args.messages.streamErrorFallback;
+  const mappedMessage = code ? args.messages.streamErrorByCode(code) : null;
+  const baseMessage = mappedMessage ?? backendMessage;
+  const withStatus =
+    diagnostic?.statusCode !== null && diagnostic?.statusCode !== undefined
+      ? `${baseMessage} (HTTP ${diagnostic.statusCode})`
+      : baseMessage;
+  const withDetail =
+    diagnostic?.detail && mappedMessage
+      ? `${withStatus} [${diagnostic.detail}]`
+      : withStatus;
+  const message = code ? `[${code}] ${withDetail}` : withDetail;
+  return args.messages.streamErrorMessage(
+    message,
+    diagnostic?.fatal ?? null,
+    diagnostic?.retryCount ?? null,
+  );
 }
 
 export function resolveStreamRecoveryInitialPhase(rawStatus: unknown): string | null {

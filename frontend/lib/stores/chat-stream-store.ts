@@ -8,6 +8,7 @@ import {
   mergeToolEndToolMeta,
   mergeToolStartToolMeta,
   normalizeSseQueuePayload,
+  resolveStreamClosedFailureMessage,
   resolveStreamRecoveryInitialPhase,
   resolveSseQueueForPhase,
   type SseQueuePayload,
@@ -198,6 +199,44 @@ function clearActiveStreamController(controller: AbortController): void {
   }
   activeStreamController = null;
   activeStreamControllerTaskId = null;
+}
+
+function isTerminalStreamPhase(phase: string | null): boolean {
+  return (
+    phase === "done" ||
+    phase === "cancelled" ||
+    phase === "timeout" ||
+    phase === "error"
+  );
+}
+
+async function resolveClosedStreamFailureFallback(
+  apiBaseUrl: string,
+  taskId: string,
+  messages: Messages["stream"],
+): Promise<string | null> {
+  try {
+    const taskResponse = await authFetch(`${apiBaseUrl}/api/tasks/${taskId}`);
+    if (!taskResponse.ok) {
+      return null;
+    }
+    const task = (await taskResponse.json()) as Record<string, unknown>;
+    let traceSteps: unknown = null;
+    const traceResponse = await authFetch(`${apiBaseUrl}/api/tasks/${taskId}/trace`);
+    if (traceResponse.ok) {
+      const tracePayload = (await traceResponse.json()) as Record<string, unknown>;
+      traceSteps = tracePayload.steps;
+    }
+    return resolveStreamClosedFailureMessage({
+      status: task.status,
+      statusNormalized: task.status_normalized,
+      taskFailureHint: task.failure_hint,
+      traceSteps,
+      messages,
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function consumeSseStream(
@@ -906,14 +945,21 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         options.onSessionResolved,
       );
 
+      const fallbackMessage = isTerminalStreamPhase(get().ssePhase)
+        ? null
+        : await resolveClosedStreamFailureFallback(
+            options.apiBaseUrl,
+            taskId,
+            sm,
+          );
       set((state) => ({
-        sseMessage:
-          state.ssePhase === "done" ||
-          state.ssePhase === "cancelled" ||
-          state.ssePhase === "timeout" ||
-          state.ssePhase === "error"
-            ? state.sseMessage
-            : sm.streamClosed,
+        ssePhase:
+          !isTerminalStreamPhase(state.ssePhase) && fallbackMessage
+            ? "error"
+            : state.ssePhase,
+        sseMessage: isTerminalStreamPhase(state.ssePhase)
+          ? state.sseMessage
+          : fallbackMessage ?? sm.streamClosed,
       }));
       return true;
     } catch (error) {
@@ -1015,14 +1061,21 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
         onSessionResolved,
       );
 
+      const fallbackMessage = isTerminalStreamPhase(get().ssePhase)
+        ? null
+        : await resolveClosedStreamFailureFallback(
+            options.apiBaseUrl,
+            createdTask.task_id,
+            sm,
+          );
       set((state) => ({
-        sseMessage:
-          state.ssePhase === "done" ||
-          state.ssePhase === "cancelled" ||
-          state.ssePhase === "timeout" ||
-          state.ssePhase === "error"
-            ? state.sseMessage
-            : sm.streamClosed,
+        ssePhase:
+          !isTerminalStreamPhase(state.ssePhase) && fallbackMessage
+            ? "error"
+            : state.ssePhase,
+        sseMessage: isTerminalStreamPhase(state.ssePhase)
+          ? state.sseMessage
+          : fallbackMessage ?? sm.streamClosed,
       }));
     } catch (error) {
       if (isAbortLikeError(error)) {

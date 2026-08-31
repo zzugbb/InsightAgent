@@ -2455,6 +2455,42 @@ test("resolveTaskSnapshotSummary prefers explicit task failure hints over neutra
   assert.equal(summary.failureSource, "error_event");
 });
 
+test("resolveTaskSnapshotSummary can use a mapped explicit task failure hint", () => {
+  const summary = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-explicit-failure-code-priority",
+      session_id: "session-explicit-failure-code-priority",
+      prompt: "trigger remote network error",
+      status: "failed",
+      trace_json: JSON.stringify([
+        {
+          id: "persisted-summary",
+          type: "other",
+          content: "Failed to reach remote provider. Check network or base URL.",
+        },
+      ]),
+      failure_hint: "remote_provider_network_error",
+      failure_source: "error_event",
+      created_at: "2026-07-01T00:00:00Z",
+      updated_at: "2026-07-01T00:00:01Z",
+    },
+    traceSteps: [
+      {
+        id: "persisted-summary",
+        type: "other",
+        content: "Failed to reach remote provider. Check network or base URL.",
+      },
+    ],
+    explicitFailureHint: "Failed to reach remote provider. Check network or base URL.",
+  });
+
+  assert.equal(
+    summary.failureHint,
+    "Failed to reach remote provider. Check network or base URL.",
+  );
+  assert.equal(summary.failureSource, "error_event");
+});
+
 test("resolveTaskSnapshotSummary keeps failure diagnostics for normalized failed status", () => {
   const summary = resolveTaskSnapshotSummary({
     task: {

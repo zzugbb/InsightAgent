@@ -1252,7 +1252,12 @@ test("trace delta sync retries, pauses in background, and resumes when foregroun
       intervals: [400, 800, 1200],
     })
     .toMatch(/重试|Retry/i);
-  await expect(page.getByTestId("inspector-trace-sync-retry-eta")).toBeVisible();
+  await openInspectorContextTab(page);
+  await expect(
+    page
+      .locator("#inspector-panel-context")
+      .getByTestId("inspector-trace-sync-retry-eta"),
+  ).toBeVisible({ timeout: 10_000 });
 
   await expect
     .poll(async () => (await traceSyncStatus.textContent()) ?? "", {

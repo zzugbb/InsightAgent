@@ -6,6 +6,7 @@ import {
   mergeToolEndToolMeta,
   mergeToolStartToolMeta,
   normalizeSseQueuePayload,
+  resolveStreamClosedFailureMessage,
   resolveStreamRecoveryInitialPhase,
   resolveSseQueueForPhase,
 } from "./chat-stream-store-utils.ts";
@@ -51,6 +52,39 @@ test("resolveSseQueueForPhase clears queue snapshot outside queued phase", () =>
   assert.equal(resolveSseQueueForPhase("timeout", queue), null);
   assert.equal(resolveSseQueueForPhase("done", queue), null);
   assert.equal(resolveSseQueueForPhase("running", queue), null);
+});
+
+test("resolveStreamClosedFailureMessage maps failed task trace diagnostics", () => {
+  const message = resolveStreamClosedFailureMessage({
+    status: "failed",
+    statusNormalized: "failed",
+    taskFailureHint: "remote_api_key_unauthorized",
+    traceSteps: [
+      {
+        meta: {
+          error_event: {
+            code: "remote_api_key_unauthorized",
+            message: "Remote provider authorization failed",
+            status_code: 401,
+          },
+        },
+      },
+    ],
+    messages: {
+      streamErrorFallback: "Stream failed.",
+      streamErrorByCode: (code) =>
+        code === "remote_api_key_unauthorized"
+          ? "Remote provider authorization failed. Check API key and base URL."
+          : null,
+      streamErrorMessage: (msg, fatal, retryCount) =>
+        `Stream error: ${msg}; fatal=${String(fatal)}; retry=${String(retryCount)}`,
+    },
+  });
+
+  assert.equal(
+    message,
+    "Stream error: [remote_api_key_unauthorized] Remote provider authorization failed. Check API key and base URL. (HTTP 401); fatal=null; retry=null",
+  );
 });
 
 test("buildLiveToolEndPayload keeps result summary from raw tool_end event payload", () => {

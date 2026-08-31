@@ -8,7 +8,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
 - CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
 - SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- 本轮无后端运行时变更；Task Center、Audit Logs 与知识库治理加载恢复均为前端 query/presentation 语义，任务/审计/RAG API、SSE、trace 与 export shape 不变。
+- 本轮无后端运行时变更；前端补齐任务详情 failure hint 映射、SSE close 后失败摘要兜底与 Chromium 并发 e2e 等待稳定性，任务/审计/RAG API、SSE、trace 与 export shape 不变。
 - `backend/app` 与 `backend/scripts` 所有 Python 源码均低于 3000 行；`tool_runtime.py` 与 `test_tool_runtime_slice.py` 保持兼容入口，新增实现继续落到主题模块。
 
 ## 当前验证基线
@@ -17,12 +17,12 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1988/1988` 通过。
 - Targeted：`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行规模边界。
-- E2E 基线：backend main 通过；timeout/queue 已纳入 backend CI workflow。
+- E2E 基线：backend main 通过；frontend full Chromium `56 passed / 1 skipped`；timeout/queue 已纳入 backend/frontend CI workflow。
 - Hygiene：`py_compile`、`git diff --check`、备份计划 diff 检查通过。
 
 ## 下一步后端计划
 
-1. 当前状态：`product-ux-polish` 已 100% 封板，后端契约保持稳定，可进入下一主线。
+1. 当前状态：`product-ux-polish` 已 100% 封板，前后端 e2e 复核与 release gate 均已通过，后端契约保持稳定，可进入下一主线。
 2. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认后端范围。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
@@ -40,6 +40,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - Workbench Inspector 语义筛选清理旧 search/kind 干扰属于前端本地状态变更，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure drilldown、normalized 状态/失败摘要与显式 `failure_hint` 优先级均为前端本地语义，不改变任务列表 API、后端 trace 或 export shape。
 - Task Center、Audit Logs 与知识库治理列表的错误恢复/陈旧数据保留不改变任务、审计或 RAG API shape。
+- 前端 SSE close 后失败摘要兜底只补拉既有任务/trace 并映射低敏 failure hint，不改变后端 SSE、任务、trace 或 export payload。
 - Memory/RAG collection 命名、Chroma 503 降级、shared knowledge base 权限语义保持稳定。
 - 默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 
