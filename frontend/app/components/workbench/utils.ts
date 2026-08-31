@@ -564,6 +564,12 @@ function normalizeTaskStatus(status: string): TaskStatusTone {
   return "other";
 }
 
+function resolveTaskEffectiveStatus(
+  task: Pick<TaskSummary, "status" | "status_normalized">,
+): string {
+  return task.status_normalized?.trim() || task.status;
+}
+
 export function isTaskFailedStatus(status: string): boolean {
   return normalizeTaskStatus(status) === "failed";
 }
@@ -575,8 +581,7 @@ export function matchesTaskStatusFilter(
   if (filter === "all") {
     return true;
   }
-  const status = task.status_normalized?.trim() || task.status;
-  return normalizeTaskStatus(status) === filter;
+  return normalizeTaskStatus(resolveTaskEffectiveStatus(task)) === filter;
 }
 
 export function resolveTaskStatusDisplay(
@@ -587,7 +592,7 @@ export function resolveTaskStatusDisplay(
   const displaySource = normalized || task.status_label?.trim() || raw || "unknown";
   return {
     label: displaySource,
-    tone: normalizeTaskStatus(normalized || raw),
+    tone: normalizeTaskStatus(resolveTaskEffectiveStatus(task)),
   };
 }
 
@@ -636,7 +641,7 @@ function truncateTaskDiagnostic(value: string): string {
 }
 
 function extractTaskFailureInsight(task: TaskSummary): TaskFailureInsight | null {
-  if (!isTaskFailedStatus(task.status) || !task.trace_json?.trim()) {
+  if (!isTaskFailedStatus(resolveTaskEffectiveStatus(task)) || !task.trace_json?.trim()) {
     return null;
   }
   const steps = parseTaskTraceJson(task.trace_json);
@@ -735,7 +740,7 @@ function resolveTaskFailureInsightFromSteps(
 }
 
 function resolveExplicitTaskFailureInsight(task: TaskSummary): TaskFailureInsight | null {
-  if (!isTaskFailedStatus(task.status)) {
+  if (!isTaskFailedStatus(resolveTaskEffectiveStatus(task))) {
     return null;
   }
   const hint = normalizeDiagnosticText(task.failure_hint);
@@ -1820,8 +1825,8 @@ export function resolveTaskSnapshotSummary(args: {
 
   const semanticStats = resolveTraceStepSemanticStats(steps);
   const failureInsight =
-    resolveTaskFailureInsightFromSteps(args.task.status, steps) ??
     resolveExplicitTaskFailureInsight(args.task) ??
+    resolveTaskFailureInsightFromSteps(resolveTaskEffectiveStatus(args.task), steps) ??
     extractTaskFailureInsight(args.task);
   const lastObservation = findLastStepContent(
     steps,
@@ -1937,8 +1942,7 @@ export function matchesTaskObservabilityFilter(
   if (filter === "all") {
     return true;
   }
-  const status = task.status_normalized?.trim() || task.status;
-  const hasFailedStatus = isTaskFailedStatus(status);
+  const hasFailedStatus = isTaskFailedStatus(resolveTaskEffectiveStatus(task));
   const hasFailureHint = Boolean(snapshot?.failureHint?.trim());
   const hasFailureTrace = (snapshot?.semanticStats.failure ?? 0) > 0;
   if (filter === "failed_status") {

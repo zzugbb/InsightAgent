@@ -2427,6 +2427,34 @@ test("resolveTaskSnapshotSummary prefers explicit task failure hints over neutra
   assert.equal(summary.failureSource, "error_event");
 });
 
+test("resolveTaskSnapshotSummary keeps failure diagnostics for normalized failed status", () => {
+  const summary = resolveTaskSnapshotSummary({
+    task: {
+      id: "task-normalized-failure-hint",
+      session_id: "session-normalized-failure-hint",
+      prompt: "trigger normalized remote network error",
+      status: "completed",
+      status_normalized: "failed",
+      status_label: "Failed",
+      trace_json: null,
+      failure_hint: "Failed to reach remote provider",
+      failure_source: "error_event",
+      created_at: "2026-07-01T00:00:00Z",
+      updated_at: "2026-07-01T00:00:01Z",
+    },
+    traceSteps: [
+      {
+        id: "step-generic-failure-content",
+        type: "other",
+        content: "Task failed after replaying the original prompt",
+      },
+    ],
+  });
+
+  assert.equal(summary.failureHint, "Failed to reach remote provider");
+  assert.equal(summary.failureSource, "error_event");
+});
+
 test("resolveTaskSnapshotSummary classifies tool failure hints", () => {
   const summary = resolveTaskSnapshotSummary({
     task: {

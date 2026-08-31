@@ -474,6 +474,8 @@ test("task center status filter honors normalized task status", async ({
                 status: "completed",
                 status_label: "Completed",
                 status_normalized: "failed",
+                failure_hint: "Normalized status failure diagnostic",
+                failure_source: "error_event",
               }
             : item,
         ),
@@ -490,12 +492,15 @@ test("task center status filter honors normalized task status", async ({
     value: "All tasks",
   });
   const taskRow = page.locator(
-    `.task-center-table-row:has(a[href="/tasks/${created.task_id}"])`,
+    `.task-center-table-row:has(a[href^="/tasks/${created.task_id}"])`,
   );
   await expect(taskRow).toBeVisible({ timeout: 20_000 });
   await expect(taskRow).toHaveClass(/task-summary-item--failed/);
   await expect(taskRow.getByTestId("task-center-status-badge")).toHaveText(
     "failed",
+  );
+  await expect(taskRow.locator(".task-summary-failed-hint")).toContainText(
+    "Normalized status failure diagnostic",
   );
 
   await page.context().route(
@@ -510,6 +515,8 @@ test("task center status filter honors normalized task status", async ({
           status: "completed",
           status_label: "Completed",
           status_normalized: "failed",
+          failure_hint: "Normalized status failure diagnostic",
+          failure_source: "error_event",
         },
       });
     },
@@ -524,6 +531,9 @@ test("task center status filter honors normalized task status", async ({
   });
   await expect(detailPage.getByTestId("task-detail-status-badge")).toHaveText(
     "failed",
+  );
+  await expect(detailPage.getByTestId("task-detail-failure-hint")).toContainText(
+    "Normalized status failure diagnostic",
   );
   await detailPage.close();
 
