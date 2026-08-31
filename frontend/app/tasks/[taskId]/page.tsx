@@ -36,6 +36,7 @@ import type {
 } from "./task-detail-page-utils";
 import {
   buildTaskDetailTraceSemanticHref,
+  isTaskDetailRunningLike,
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
@@ -55,17 +56,6 @@ type TaskTraceResponse = {
   status_label: string;
   status_rank: number;
 };
-
-function isRunningLike(status: string | null | undefined): boolean {
-  const normalized = String(status ?? "")
-    .trim()
-    .toLowerCase();
-  return (
-    normalized === "queued" ||
-    normalized === "running" ||
-    normalized === "pending"
-  );
-}
 
 export default function TaskDetailPage() {
   const t = useMessages();
@@ -121,7 +111,7 @@ export default function TaskDetailPage() {
     queryFn: () =>
       apiJson<TaskSummary>(`${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}`),
     refetchInterval: (query) =>
-      isRunningLike(query.state.data?.status) ? TRACE_REFRESH_MS : false,
+      isTaskDetailRunningLike(query.state.data) ? TRACE_REFRESH_MS : false,
   });
 
   const traceQuery = useQuery({
@@ -132,7 +122,7 @@ export default function TaskDetailPage() {
         `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/trace`,
       ),
     refetchInterval: () =>
-      isRunningLike(taskQuery.data?.status) ? TRACE_REFRESH_MS : false,
+      isTaskDetailRunningLike(taskQuery.data) ? TRACE_REFRESH_MS : false,
   });
 
   const task = taskQuery.data;

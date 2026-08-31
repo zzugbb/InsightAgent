@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: provider-tool-expansion、ci-release-engineering 与 production-runtime-hardening 已 100% 封板；product-ux-polish 已进入开发。
 current_focus:
   mainline: product-ux-polish
-  status: 约 71% 开发中
-  latest_change: Task Center 与任务详情统一 normalized 状态和失败诊断语义，显式 failure_hint 不再被 raw 状态或普通 trace 文本覆盖
+  status: 约 76% 开发中
+  latest_change: 任务详情状态展示、失败诊断和轮询控制统一优先使用 status_normalized，normalized 终态不再被 raw running 持续轮询
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -14,7 +14,7 @@ stable_contracts:
   - 默认 settings 根据 provider/model/api_key 自动选择 remote 或 canonical mock
   - SSE 事件、TraceStep、result summary、safe output、JSON/Markdown export shape 保持稳定
   - SSE error.diagnostic 与 failure audit diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性
-  - 任务详情页 trace_semantic URL 参数兼容支持 planner/retrieval/calculator/failure，未知值回退 all；语义切换仅同步 URL 并清理本地筛选，状态文字/色调优先使用 status_normalized，均不改变任务、trace 或 export payload
+  - 任务详情页 trace_semantic URL 参数兼容支持 planner/retrieval/calculator/failure，未知值回退 all；语义切换仅同步 URL 并清理本地筛选，状态文字/色调与轮询控制优先使用 status_normalized，均不改变任务、trace 或 export payload
   - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态；保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload
   - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 status_normalized，显式 failure_hint/failure_source 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
@@ -22,8 +22,8 @@ stable_contracts:
 validation_baseline:
   release_gate: bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json passed，非 PR 保守跑 backend/frontend/tooling/hygiene 全量
   backend: full slice 1988/1988；module boundary 4/4；production_reliability 39/39；reconnect 9/9
-  frontend: workbench utils targeted 76/76；task detail targeted 9/9；node tests 134/134；npm run lint passed；npm run build passed
-  e2e: targeted Chromium semantic URL replay 1/1 passed；Workbench Inspector semantic filter replay 1/1 passed；Task Center/任务详情 normalized status/diagnostic replay 1/1 passed；Task Center failure diagnostic replay 1/1 passed；targeted Chromium remote failure replay 1/1 passed；backend main passed；frontend full Chromium 52 passed / 1 skipped；backend/frontend queue 已纳入 CI workflow
+  frontend: workbench utils targeted 76/76；task detail targeted 10/10；node tests 135/135；npm run lint passed；npm run build passed
+  e2e: targeted Chromium semantic URL replay 1/1 passed；Workbench Inspector semantic filter replay 1/1 passed；Task Center/任务详情 normalized status/diagnostic/polling replay 1/1 passed；Task Center failure diagnostic replay 1/1 passed；targeted Chromium remote failure replay 1/1 passed；backend main passed；frontend full Chromium 52 passed / 1 skipped；backend/frontend queue 已纳入 CI workflow
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -42,9 +42,9 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 ## 当前仓库状态
 
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
-- `provider-tool-expansion`、`ci-release-engineering` 与 `production-runtime-hardening` 均已 100% 封板；`product-ux-polish` 已进入开发，当前约 71%。
+- `provider-tool-expansion`、`ci-release-engineering` 与 `production-runtime-hardening` 均已 100% 封板；`product-ux-polish` 已进入开发，当前约 76%。
 - 生产运行态封板摘要：SSE `error.diagnostic` 与 failure audit detail 默认对齐低敏 `reason` 枚举，前端审计详情可展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段不变。
-- 产品体验当前切口：任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center failure drilldown 和列表/详情 normalized 状态及失败诊断已对齐，显式 failure_hint 优先于普通 trace 文本推断。
+- 产品体验当前切口：任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center failure drilldown 和列表/详情 normalized 状态、失败诊断及轮询控制已对齐。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 - 代码规模治理已纳入常规边界：`backend/app`、`backend/scripts` 与 `frontend` 源码保持单文件 <= 3000 行；`frontend/package-lock.json` 等生成锁文件不作为拆分对象。
 
@@ -63,9 +63,9 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1988/1988`。
 - Backend targeted：`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，当前 `4/4`，包含 3000 行规模边界。
-- Frontend node tests：workbench utils targeted `76/76`、task detail targeted `9/9`；当前 `134/134`，包含 frontend source size boundary。
+- Frontend node tests：workbench utils targeted `76/76`、task detail targeted `10/10`；当前 `135/135`，包含 frontend source size boundary。
 - Frontend lint/build：`cd frontend && npm run lint`、`cd frontend && npm run build` 通过。
-- E2E：targeted Chromium semantic URL replay `1/1`、Workbench Inspector semantic filter replay `1/1`、Task Center/任务详情 normalized status/diagnostic replay `1/1`、Task Center failure diagnostic replay `1/1`、remote failure replay `1/1` 通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；backend/frontend queue 阶段已纳入 CI workflow。
+- E2E：targeted Chromium semantic URL replay `1/1`、Workbench Inspector semantic filter replay `1/1`、Task Center/任务详情 normalized status/diagnostic/polling replay `1/1`、Task Center failure diagnostic replay `1/1`、remote failure replay `1/1` 通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；backend/frontend queue 阶段已纳入 CI workflow。
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过；非 PR 环境保守跑 backend/frontend/tooling/hygiene 全量。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过。
 
@@ -83,7 +83,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 后续维护线
 
-- 当前状态：`product-ux-polish` 约 71%，后续继续按先红测、再实现、再 targeted/full slice 的方式推进。
+- 当前状态：`product-ux-polish` 约 76%，后续继续按先红测、再实现、再 targeted/full slice 的方式推进。
 - 后续重点：Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 

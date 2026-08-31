@@ -503,17 +503,19 @@ test("task center status filter honors normalized task status", async ({
     "Normalized status failure diagnostic",
   );
 
+  let detailRequestCount = 0;
   await page.context().route(
     new RegExp(`/api/tasks/${created.task_id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
     async (route) => {
+      detailRequestCount += 1;
       const response = await route.fetch();
       const payload = (await response.json()) as Record<string, unknown>;
       await route.fulfill({
         response,
         json: {
           ...payload,
-          status: "completed",
-          status_label: "Completed",
+          status: "running",
+          status_label: "Running",
           status_normalized: "failed",
           failure_hint: "Normalized status failure diagnostic",
           failure_source: "error_event",
@@ -535,6 +537,8 @@ test("task center status filter honors normalized task status", async ({
   await expect(detailPage.getByTestId("task-detail-failure-hint")).toContainText(
     "Normalized status failure diagnostic",
   );
+  await detailPage.waitForTimeout(2_600);
+  expect(detailRequestCount).toBe(1);
   await detailPage.close();
 
   await selectVisibleAntdOption(page, {

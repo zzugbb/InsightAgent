@@ -74,6 +74,15 @@ function isFailureDiagnosticContent(value: string): boolean {
   return Boolean(content) && FAILURE_DIAGNOSTIC_TOKENS.some((token) => content.includes(token));
 }
 
+export function isTaskDetailRunningLike(
+  task: TaskDetailStatusInput | null | undefined,
+): boolean {
+  const status = (task?.status_normalized?.trim() || task?.status || "")
+    .trim()
+    .toLowerCase();
+  return status === "queued" || status === "running" || status === "pending";
+}
+
 function resolveTaskDetailStatusTone(status: string): TaskDetailStatusTone {
   const normalized = status.trim().toLowerCase();
   if (

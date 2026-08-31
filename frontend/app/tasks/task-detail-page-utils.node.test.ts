@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildTaskDetailTraceSemanticHref,
+  isTaskDetailRunningLike,
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
@@ -11,6 +12,24 @@ import {
   resolveTaskDetailStatusDisplay,
   resolveTaskDetailTraceSteps,
 } from "./[taskId]/task-detail-page-utils.ts";
+
+test("isTaskDetailRunningLike prioritizes normalized task status", () => {
+  assert.equal(
+    isTaskDetailRunningLike({
+      status: "running",
+      status_normalized: "failed",
+    }),
+    false,
+  );
+  assert.equal(
+    isTaskDetailRunningLike({
+      status: "completed",
+      status_normalized: "running",
+    }),
+    true,
+  );
+  assert.equal(isTaskDetailRunningLike({ status: "pending" }), true);
+});
 
 test("resolveTaskDetailStatusDisplay prioritizes normalized task status", () => {
   assert.deepEqual(
