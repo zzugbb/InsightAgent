@@ -54,6 +54,17 @@ content-disposition: attachment;
 CTX
 }
 
+setup_fixture_non_export_edge_case() {
+  local root="$1"
+
+  mkdir -p "${root}/workbench-edge-cases-queue-018a4-sition-and-can-be-cancelled-chromium"
+  cat > "${root}/workbench-edge-cases-queue-018a4-sition-and-can-be-cancelled-chromium/error-context.md" <<'CTX'
+Timeout waiting for queued phase
+response headers:
+content-type: application/json; charset=utf-8
+CTX
+}
+
 main() {
   TMP_ROOT="$(mktemp -d)"
   root_results_marker_dir="${ROOT_DIR}/frontend/test-results/codex-export-diagnostics-cwd-test"
@@ -73,6 +84,19 @@ main() {
   assert_contains "${ok_out}" "- shared_scope: workbench-main-path-shared-kb contexts=1, shared_permission_semantic_ok=3 (expected: >=1 (when shared-kb error-context files exist))"
   assert_contains "${ok_json}" "\"total\": 0"
   assert_contains "${ok_json}" "\"shared_permission_semantic_ok\": 3"
+
+  # scenario 1b: non-export edge-case failures should not trip export diagnostics
+  local queue_dir="${TMP_ROOT}/queue-results"
+  mkdir -p "${queue_dir}"
+  setup_fixture_non_export_edge_case "${queue_dir}"
+
+  local queue_out="${TMP_ROOT}/queue.out"
+  local queue_json="${TMP_ROOT}/queue.json"
+  bash "${DIAG_SCRIPT}" "${queue_dir}" "${queue_json}" > "${queue_out}"
+
+  assert_contains "${queue_out}" "No workbench-edge-cases export error-context files found."
+  assert_contains "${queue_out}" "- total_alerts: 0 (all counters within expected range)"
+  assert_contains "${queue_json}" "\"context_files_detected\": 0"
 
   # scenario 2: missing API hint in main-path, expect P0/P1 alerts
   local bad_dir="${TMP_ROOT}/bad-results"

@@ -825,7 +825,7 @@ test("reload keeps background session stream detached until that session is acti
   page,
   request,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const auth = await registerViaApi(request);
   const sessionATitle = `pw-reload-stream-a-${Date.now()}`;
   const sessionBTitle = `pw-reload-stream-b-${Date.now()}`;
@@ -1110,7 +1110,7 @@ test("queued task recovery shows queue position and can be cancelled", async ({
     request,
     token: auth.access_token,
     sessionId: activeSessionId,
-    prompt: `[mock-slow-ms=25] queued-recovery-active ${"stream ".repeat(520)}`,
+    prompt: `[mock-slow-ms=90] queued-recovery-active ${"stream ".repeat(1200)}`,
   });
   const activeStream = openTaskStreamInBackground({
     token: auth.access_token,

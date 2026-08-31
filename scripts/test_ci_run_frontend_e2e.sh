@@ -38,12 +38,14 @@ run_tests() {
   expect_fail bash "${SCRIPT_PATH}" --phase unknown --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001
 
   expect_pass bash "${SCRIPT_PATH}" --phase smoke --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001 --dry-run > "${TMP_DIR}/smoke.out"
+  assert_contains "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000" "${TMP_DIR}/smoke.out"
   assert_contains "npm run test:e2e:smoke:matrix" "${TMP_DIR}/smoke.out"
 
   expect_pass bash "${SCRIPT_PATH}" --phase full --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001 --dry-run > "${TMP_DIR}/full.out"
   assert_contains "npm run test:e2e" "${TMP_DIR}/full.out"
 
   expect_pass bash "${SCRIPT_PATH}" --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001 --dry-run > "${TMP_DIR}/queue.out"
+  assert_contains "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8011" "${TMP_DIR}/queue.out"
   assert_contains "PLAYWRIGHT_QUEUE_LOW_CONCURRENCY=1" "${TMP_DIR}/queue.out"
   assert_contains "queued task recovery shows queue position" "${TMP_DIR}/queue.out"
 
@@ -55,6 +57,7 @@ run_tests() {
   expect_pass bash "${SCRIPT_PATH}" --phase full --frontend-dir "${space_frontend_dir}" --api-base-url "http://127.0.0.1:8000/api?token=a b&mode=test" --frontend-base-url "http://127.0.0.1:3001/app path" --dry-run > "${TMP_DIR}/quoted.out"
   assert_contains "cd ${quoted_space_frontend_dir}" "${TMP_DIR}/quoted.out"
   assert_contains "PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000/api\\?token=a\\ b\\&mode=test" "${TMP_DIR}/quoted.out"
+  assert_contains "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000/api\\?token=a\\ b\\&mode=test" "${TMP_DIR}/quoted.out"
   assert_contains "PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001/app\\ path" "${TMP_DIR}/quoted.out"
 
   expect_pass bash "${SCRIPT_PATH}" --phase rerun-last-failed --api-base-url http://127.0.0.1:8000 --frontend-base-url http://127.0.0.1:3001 --dry-run > "${TMP_DIR}/rerun.out"

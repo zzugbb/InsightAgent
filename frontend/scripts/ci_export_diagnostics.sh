@@ -133,7 +133,7 @@ EDGE_SEMANTIC_REGEX='404|not found|task not found|session not found|cross-user|o
 SHARED_SEMANTIC_REGEX='shared-|kb-governance-action-clear|kb-governance-action-delete|non-admin|toBeDisabled'
 
 MAIN_CONTEXT_PATH_REGEX='workbench-main-path'
-EDGE_CONTEXT_PATH_REGEX='workbench-edge-cases'
+EDGE_CONTEXT_PATH_REGEX='workbench-edge-cases.*export'
 SHARED_CONTEXT_PATH_REGEX='workbench-main-path.*(shared-kb-actions-disabled|shared.*kb.*disabled)'
 
 MAIN_KEY_LINES_REGEX="download|suggestedfilename|content-type|content-disposition|application/json|text/markdown|${API_EXPORT_REGEX}"
@@ -243,9 +243,9 @@ if [ ${#all_error_contexts[@]} -gt 0 ]; then
 fi
 echo "## workbench-edge-cases"
 if [ ${#edge_contexts[@]} -eq 0 ]; then
-  echo "No workbench-edge-cases error-context files found."
+  echo "No workbench-edge-cases export error-context files found."
 else
-  print_matched_files "workbench-edge-cases" "${edge_contexts[@]}"
+  print_matched_files "workbench-edge-cases export" "${edge_contexts[@]}"
   echo
 
   edge_context_count=${#edge_contexts[@]}
