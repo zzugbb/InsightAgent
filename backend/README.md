@@ -4,11 +4,11 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前状态
 
-- `provider-tool-expansion`、`ci-release-engineering` 与 `production-runtime-hardening` 均已 100% 封板；`product-ux-polish` 已进入开发，当前约 84%。
+- `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
 - Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
 - CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
 - SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- 本轮无后端运行时变更；知识库治理加载错误、陈旧数据保留与原位重试均为前端 query/presentation 语义，RAG API、任务 API、SSE、trace 与 export shape 不变。
+- 本轮无后端运行时变更；Task Center、Audit Logs 与知识库治理加载恢复均为前端 query/presentation 语义，任务/审计/RAG API、SSE、trace 与 export shape 不变。
 - `backend/app` 与 `backend/scripts` 所有 Python 源码均低于 3000 行；`tool_runtime.py` 与 `test_tool_runtime_slice.py` 保持兼容入口，新增实现继续落到主题模块。
 
 ## 当前验证基线
@@ -22,14 +22,14 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 下一步后端计划
 
-1. 当前状态：`product-ux-polish` 约 84%，后端侧保持契约稳定，配合前端治理/观测列表错误恢复与主线封板审计。
-2. 已封板主线：`provider-tool-expansion`、`production-runtime-hardening`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
-3. 本主线后端侧重点是稳定诊断语义、可回放错误摘要和治理查询效率。
-4. 继续保持 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py` 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
+1. 当前状态：`product-ux-polish` 已 100% 封板，后端契约保持稳定，可进入下一主线。
+2. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认后端范围。
+3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
 
-- `product-ux-polish`：后端侧重点是稳定诊断语义、可回放错误摘要、任务/审计/usage 查询效率与 trace 回放数据完整性。
+- `production-operations-readiness`：部署配置校验、健康/SLO、备份恢复演练与运维 runbook。
+- `security-hardening`：鉴权会话、密钥/安全头、限流与依赖安全审计。
 
 ## 稳定契约
 
@@ -39,7 +39,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 任务详情页可通过兼容 URL 参数 `trace_semantic` 回放语义 Trace；前端语义切换与 normalized 状态/轮询控制均不改变后端任务、trace 或 export payload。
 - Workbench Inspector 语义筛选清理旧 search/kind 干扰属于前端本地状态变更，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure drilldown、normalized 状态/失败摘要与显式 `failure_hint` 优先级均为前端本地语义，不改变任务列表 API、后端 trace 或 export shape。
-- 知识库治理列表的错误恢复与陈旧数据保留不改变 `GET /api/rag/knowledge-bases` 请求或响应 shape。
+- Task Center、Audit Logs 与知识库治理列表的错误恢复/陈旧数据保留不改变任务、审计或 RAG API shape。
 - Memory/RAG collection 命名、Chroma 503 降级、shared knowledge base 权限语义保持稳定。
 - 默认 settings 语义保持不变：provider/model/api_key 完整时自动走 `remote`，否则回退 canonical `mock`。
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Input, Modal, Segmented, Select, Space, Table, Tag, Tooltip } from "antd";
+import { Alert, App, Button, Input, Modal, Segmented, Select, Space, Table, Tag, Tooltip } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -17,6 +17,7 @@ import type {
 import {
   buildAuditLogsUrl,
   formatAuditTaskFailureSummary,
+  resolveAuditLogsListState,
   resolveAuditReadableDetail,
 } from "./audit-logs-modal-utils";
 import type { AuditLogItem, AuditLogListResponse } from "./types";
@@ -504,6 +505,11 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
 
   const rows = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
+  const listState = resolveAuditLogsListState({
+    isLoading: query.isLoading,
+    isError: query.isError,
+    rowCount: rows.length,
+  });
   const normalizedKeyword = keyword.trim().toLowerCase();
   const filteredRows = !normalizedKeyword
     ? rows
@@ -791,12 +797,34 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
         </Space>
       </div>
 
-      {query.isLoading && offset === 0 ? (
+      {listState === "loading" && offset === 0 ? (
         <p className="audit-modal-note">{t.sidebar.audit.loading}</p>
       ) : null}
-      {errorText ? <p className="audit-modal-note">{`${t.sidebar.audit.error} ${errorText}`}</p> : null}
-      {!query.isLoading && !errorText && filteredRows.length === 0 ? (
-        <p className="audit-modal-note">{t.sidebar.audit.empty}</p>
+      {errorText ? (
+        <Alert
+          type="error"
+          showIcon
+          data-testid="audit-load-error"
+          title={t.sidebar.audit.error}
+          description={errorText}
+          action={
+            <Button
+              size="small"
+              data-testid="audit-load-retry"
+              loading={query.isFetching}
+              onClick={() => {
+                void query.refetch();
+              }}
+            >
+              {t.sidebar.audit.retry}
+            </Button>
+          }
+        />
+      ) : null}
+      {listState === "empty" && filteredRows.length === 0 ? (
+        <p className="audit-modal-note" data-testid="audit-empty-state">
+          {t.sidebar.audit.empty}
+        </p>
       ) : null}
 
       {filteredRows.length > 0 ? (

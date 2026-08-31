@@ -325,6 +325,15 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const tasksHasNextPage = Boolean(tasksQuery.hasNextPage);
   const tasksFetchingNextPage = tasksQuery.isFetchingNextPage;
   const fetchNextTasksPage = tasksQuery.fetchNextPage;
+  const tasksErrorText = useMemo(() => {
+    if (!tasksQuery.isError || tasksQuery.error == null) {
+      return null;
+    }
+    const userFacing = toUserFacingError(tasksQuery.error, t.errors);
+    return userFacing.hint
+      ? `${userFacing.banner} ${userFacing.hint}`
+      : userFacing.banner;
+  }, [tasksQuery.error, tasksQuery.isError, t.errors]);
 
   useEffect(() => {
     if (!tasksHasNextPage || tasksFetchingNextPage) {
@@ -1618,6 +1627,11 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             settingsQuery.data?.available_tool_registry_provider_sources ?? []
           }
           tasksLoading={tasksQuery.isLoading}
+          tasksFetching={tasksQuery.isFetching}
+          tasksError={tasksErrorText}
+          onRetryTasks={() => {
+            void tasksQuery.refetch();
+          }}
           onSelectTask={handleSelectTask}
           onClose={() => setTaskCenterDrawerOpen(false)}
           scopeMode={taskCenterScope}

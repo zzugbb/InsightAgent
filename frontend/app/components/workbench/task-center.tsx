@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Alert,
   Button,
   Flex,
   Input,
@@ -31,6 +32,7 @@ import {
   resolveTaskObservabilityFilterChange,
   resolveTaskSnapshotSummary,
   resolveTaskStatusDisplay,
+  resolveTaskCenterListState,
 } from "./utils";
 import type {
   TaskFailureSourceFilter,
@@ -52,6 +54,9 @@ type TaskCenterProps = {
   availableToolRegistryProfiles: string[];
   availableToolRegistryProviderSources: string[];
   tasksLoading: boolean;
+  tasksFetching: boolean;
+  tasksError: string | null;
+  onRetryTasks: () => void;
   onSelectTask: (task: TaskSummary) => void;
   onClose: () => void;
   closeButtonRef?: RefObject<HTMLButtonElement | null>;
@@ -73,6 +78,9 @@ export function TaskCenter({
   availableToolRegistryProfiles,
   availableToolRegistryProviderSources,
   tasksLoading,
+  tasksFetching,
+  tasksError,
+  onRetryTasks,
   onSelectTask,
   onClose,
   closeButtonRef,
@@ -103,6 +111,11 @@ export function TaskCenter({
     }
     return recentTasks.filter((task) => task.session_id === activeSessionId);
   }, [activeSessionId, recentTasks, scopeMode]);
+  const taskListState = resolveTaskCenterListState({
+    isLoading: tasksLoading,
+    isError: Boolean(tasksError),
+    rowCount: recentTasks.length,
+  });
 
   const taskSnapshots = useMemo(() => {
     const next = new Map<string, ReturnType<typeof resolveTaskSnapshotSummary>>();
@@ -585,6 +598,26 @@ export function TaskCenter({
           </p>
         ) : null}
 
+        {tasksError ? (
+          <Alert
+            type="error"
+            showIcon
+            data-testid="task-center-load-error"
+            title={t.taskCenter.loadFailed}
+            description={tasksError}
+            action={
+              <Button
+                size="small"
+                data-testid="task-center-load-retry"
+                loading={tasksFetching}
+                onClick={onRetryTasks}
+              >
+                {t.taskCenter.retry}
+              </Button>
+            }
+          />
+        ) : null}
+
         {failureDiagnosticGroups.length > 0 ? (
           <div
             className="task-center-failure-groups"
@@ -627,7 +660,7 @@ export function TaskCenter({
           </div>
         ) : null}
 
-        {!tasksLoading ? (
+        {!tasksLoading && taskListState !== "error" ? (
           <div className="task-center-table-wrap">
             <Table<TaskSummary>
               size="small"

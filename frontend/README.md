@@ -4,32 +4,32 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前状态
 
-- `provider-tool-expansion`、`ci-release-engineering` 与 `production-runtime-hardening` 均已 100% 封板；`product-ux-polish` 已进入开发，当前约 84%。
+- `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地。
 - 前端继续消费后端统一的 preview/output/result-summary、trace/export 字段，不新增 provider 专用显示分支。
 - SSE `error.diagnostic.reason` 与 failure audit diagnostic 是后端追加的低敏兼容字段；前端现有错误提示继续使用 `code/message/detail/status_code`，审计详情可展示低敏 diagnostic reason，reconnect 继续依赖后端稳定 code/message。
-- 任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center failure drilldown 和列表/详情 normalized 状态、失败诊断及轮询控制已对齐；知识库治理可区分初始加载错误与陈旧数据错误，并提供原位重试。
+- 任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center/任务详情 normalized 状态、失败诊断及轮询控制已对齐；Task Center、Audit Logs 与知识库治理均可区分初始/陈旧数据错误并原位重试。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 - 前端 e2e workflow 覆盖 smoke/full/queue，queue 阶段使用独立 `:8011` backend；main push Playwright artifact-stage guard 使用 `fail-on-missing`。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto` 通过，Markdown/JSON summary 与 release readiness matrix 输出通过。
-- Node tests：workbench utils targeted `76/76`、task detail targeted `10/10`、knowledge governance targeted `6/6`；8 个测试文件 `136/136` 通过，包含 frontend source size boundary。
+- Node tests：workbench utils targeted `77/77`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；8 个测试文件 `138/138` 通过，包含 frontend source size boundary。
 - `npm run lint` 与 `npm run build` 通过。
-- E2E 基线：targeted Chromium semantic URL replay `1/1`、Workbench Inspector semantic filter replay `1/1`、Task Center/任务详情 normalized status/diagnostic/polling replay `1/1`、Task Center failure diagnostic replay `1/1`、知识库治理加载失败/重试 `1/1`、remote failure replay `1/1` 通过；full Chromium `52 passed / 1 skipped`；低并发 queue phase `1/1` 且已纳入 CI workflow。
+- E2E 基线：targeted Chromium 审计日志/Task Center 加载失败与原位重试 `2/2`、知识库治理加载失败/重试 `1/1`、语义 Trace 与 normalized status/diagnostic/polling 回放均通过；full Chromium `52 passed / 1 skipped`；低并发 queue phase `1/1` 且已纳入 CI workflow。
 - Backend 契约基线：full slice `1988/1988`；module boundary `4/4`。
 
 ## 下一步前端计划
 
-1. 当前状态：`product-ux-polish` 约 84%，已补齐 Trace 语义 replay、Task Center normalized 状态/失败诊断/轮询控制与知识库治理加载恢复。
-2. 已封板主线：`provider-tool-expansion`、`production-runtime-hardening`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
-3. 本主线继续聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
-4. 后续前端回归门继续以 frontend node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准；涉及 UI 时再补 fresh frontend/e2e。
+1. 当前状态：`product-ux-polish` 已 100% 封板，代码、targeted Chromium、静态 release gate 与文档均已收口。
+2. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认前端与运维界面范围。
+3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 后续候选主线
 
-- `product-ux-polish`：Workbench/Task Center 高频操作、trace 回放可读性、治理页面效率与失败诊断入口可发现性。
+- `production-operations-readiness`：运行健康、发布/回滚可见性与运维入口。
+- `security-hardening`：会话安全、敏感配置提示与安全错误反馈。
 
 ## 稳定契约
 
@@ -40,7 +40,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `trace_semantic` URL 参数兼容支持 `planner/retrieval/calculator/failure`；详情页语义切换仅同步 URL 并清理本地筛选，状态文字/色调与轮询控制优先使用 `status_normalized`，均不改变任务、trace 或 export payload。
 - Workbench Inspector 语义筛选只调整本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
-- 知识库治理列表的初始错误、陈旧数据错误与原位重试只调整 TanStack Query/presentation 状态，不改变 RAG API shape；初始失败不再误显示为空知识库，陈旧数据仍可查看。
+- Task Center、Audit Logs 与知识库治理的初始错误、陈旧数据错误与原位重试只调整 TanStack Query/presentation 状态，不改变任务、审计或 RAG API shape；初始失败不再误显示空态，陈旧数据仍可查看。
 - queued/running/cancel/reconnect 与 task recovery 前端语义保持稳定。
 
 ## 能力索引

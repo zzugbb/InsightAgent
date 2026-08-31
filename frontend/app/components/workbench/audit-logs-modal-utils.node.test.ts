@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildAuditLogsUrl,
   formatAuditTaskFailureSummary,
+  resolveAuditLogsListState,
   resolveAuditReadableDetail,
 } from "./audit-logs-modal-utils.ts";
 
@@ -22,6 +23,33 @@ const labels = {
   taskFailureSourceTraceContent: "Trace content",
   taskFailureSourceLegacyTrace: "Persisted trace",
 };
+
+test("resolveAuditLogsListState distinguishes initial and stale-data errors", () => {
+  assert.equal(
+    resolveAuditLogsListState({
+      isLoading: false,
+      isError: true,
+      rowCount: 0,
+    }),
+    "error",
+  );
+  assert.equal(
+    resolveAuditLogsListState({
+      isLoading: false,
+      isError: true,
+      rowCount: 3,
+    }),
+    "stale_error",
+  );
+  assert.equal(
+    resolveAuditLogsListState({
+      isLoading: false,
+      isError: false,
+      rowCount: 0,
+    }),
+    "empty",
+  );
+});
 
 test("buildAuditLogsUrl sends keyword to server filters", () => {
   const url = buildAuditLogsUrl({

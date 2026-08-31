@@ -122,6 +122,8 @@ export type Messages = {
     observabilityFilterFailureTrace: string;
     failureDiagnosticsTitle: string;
     failureDiagnosticsCount: (count: number) => string;
+    loadFailed: string;
+    retry: string;
     tableTask: string;
     tableStatus: string;
     tableUsageSource: string;
@@ -340,6 +342,7 @@ export type Messages = {
       searchPlaceholder: string;
       loading: string;
       error: string;
+      retry: string;
       empty: string;
       loadMore: string;
       exportJson: string;

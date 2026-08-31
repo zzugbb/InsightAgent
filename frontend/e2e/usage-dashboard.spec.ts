@@ -1731,6 +1731,91 @@ test("knowledge governance load failure offers in-place retry", async ({
   await expect(page.getByTestId("kb-governance-table-wrap")).toBeVisible();
 });
 
+test("audit logs load failure offers in-place retry without false empty state", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  let allowSuccess = false;
+  let requestCount = 0;
+  await page.route("**/api/audit/logs**", async (route) => {
+    requestCount += 1;
+    if (!allowSuccess) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        json: { detail: "Audit storage is temporarily unavailable" },
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      json: { items: [], total: 0, limit: 10, offset: 0 },
+    });
+  });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await openSettingsMenu(page);
+  await page.getByTestId("settings-menu-audit").click();
+
+  const loadError = page.getByTestId("audit-load-error");
+  await expect(loadError).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("audit-empty-state")).toBeHidden();
+
+  const failedRequestCount = requestCount;
+  allowSuccess = true;
+  await page.getByTestId("audit-load-retry").click();
+  await expect.poll(() => requestCount).toBeGreaterThan(failedRequestCount);
+  await expect(loadError).toBeHidden({ timeout: 20_000 });
+  await expect(page.getByTestId("audit-empty-state")).toBeVisible();
+});
+
+test("task center load failure offers in-place retry without false empty state", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  let allowSuccess = false;
+  let requestCount = 0;
+  await page.route("**/api/tasks?**", async (route) => {
+    requestCount += 1;
+    if (!allowSuccess) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        json: { detail: "Task storage is temporarily unavailable" },
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      json: { items: [], total: 0, limit: 50, offset: 0, has_more: false },
+    });
+  });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("chat-open-task-center").click();
+
+  const loadError = page.getByTestId("task-center-load-error");
+  await expect(loadError).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(".task-center-table-wrap")).toBeHidden();
+
+  const failedRequestCount = requestCount;
+  allowSuccess = true;
+  await page.getByTestId("task-center-load-retry").click();
+  await expect.poll(() => requestCount).toBeGreaterThan(failedRequestCount);
+  await expect(loadError).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator(".task-center-table-wrap")).toBeVisible();
+});
+
 test("knowledge governance expands document version details", async ({
   page,
   request,

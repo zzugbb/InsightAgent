@@ -7,23 +7,22 @@
 - `provider-tool-expansion` 已 100% 封板。
 - `ci-release-engineering` 已 100% 封板。
 - `production-runtime-hardening` 已 100% 封板：SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- `product-ux-polish` 已进入开发，当前约 84%：任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center 和任务详情统一 normalized 状态、失败诊断与详情轮询语义；知识库治理补齐加载错误、陈旧数据保留与原位重试。
+- `product-ux-polish` 已 100% 封板：语义 Trace 回放、Task Center/任务详情 normalized 状态与失败诊断、列表加载错误/陈旧数据保留/原位重试均已收口。
 - 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过；非 PR 环境保守解析为 backend/frontend/tooling/hygiene 全量。
 - Backend：full slice `1988/1988`；module boundary `4/4`；targeted production_reliability `39/39`、reconnect `9/9` 通过。
-- Frontend：workbench utils targeted `76/76`、task detail targeted `10/10`、knowledge governance targeted `6/6`；node tests `136/136`、`npm run lint`、`npm run build` 通过。
-- E2E 基线：targeted Chromium semantic URL/filter replay `1/1`、Workbench Inspector semantic filter replay `1/1`、Task Center/任务详情 normalized status/diagnostic/polling replay `1/1`、Task Center failure diagnostic replay `1/1`、知识库治理加载失败/重试 `1/1`、remote failure replay `1/1` 通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
+- Frontend：workbench utils targeted `77/77`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；node tests `138/138`、`npm run lint`、`npm run build` 通过。
+- E2E 基线：targeted Chromium 审计日志/Task Center 加载失败与原位重试 `2/2`、知识库治理加载失败/重试 `1/1`、语义 Trace 与 normalized status/diagnostic/polling 回放均通过；backend main 通过；frontend full Chromium `52 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前状态：`product-ux-polish` 约 84%，Trace 语义 replay、Task Center normalized 状态/失败诊断/轮询控制与知识库治理加载恢复已补齐。
-2. 已封板主线：`provider-tool-expansion`、`production-runtime-hardening`、`source-size-maintenance`、`ci-release-engineering`、`rag-product-experience`、`observability-experience`、`production-reliability-hardening`、`rag-governance-hardening`、`registry-governance`、`concurrency-fairness-policy`、`queue-and-concurrency-lite`、`real-tool-execution`。
-3. 本主线继续聚焦 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
-4. 继续保持“小红测 -> 实现 -> targeted/full slice -> 文档同步 -> 提交”的节奏。
+1. 当前状态：`product-ux-polish` 已 100% 封板，代码、targeted Chromium、静态 release gate 与文档均已收口，可进入下一主线。
+2. 已封板主线新增 `product-ux-polish`；既有 provider/tool、生产运行态、源码规模、CI/release、RAG、可观测性、可靠性、治理与并发主线保持完成。
+3. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认范围。
 
 ## 稳定契约
 
@@ -31,7 +30,7 @@
 - 任务详情页 `trace_semantic` URL 参数保持兼容扩展；语义切换仅同步 URL 并清理本地筛选，状态文字/色调与轮询控制优先使用 `status_normalized`，均不改变任务、trace 或 export payload。
 - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地筛选/展示状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
-- 知识库治理列表的加载错误、陈旧数据保留与原位重试只调整前端 query/presentation 状态，不改变 RAG API 请求或响应 shape。
+- Task Center、Audit Logs 与知识库治理的加载错误、陈旧数据保留与原位重试只调整前端 query/presentation 状态，不改变任务、审计或 RAG API shape。
 - 默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`。
 - queued/running/cancel/reconnect 与 task recovery 语义保持稳定。
 - `data/insightagent.plan.back.md` 是只读备份计划，永远不参与同步或修改。
@@ -136,11 +135,12 @@ docker compose -f compose.full.yml up -d
 
 ## 后续候选主线
 
-- `product-ux-polish`：继续推进 Workbench/Task Center 高频操作、trace 回放可读性与治理页面效率。
+- `production-operations-readiness`：部署配置校验、健康/SLO、备份恢复演练与运维 runbook。
+- `security-hardening`：鉴权会话、密钥/安全头、限流与依赖安全审计。
 
 ## 下一步
 
-- 继续完成 `product-ux-polish` 的全局 UX 审计，优先治理与观测列表的错误恢复、空态一致性和高频操作反馈，再进入封板验证。
+- `product-ux-polish` 已封板；确认候选主线范围后再启动下一轮红测与实现。
 
 ## 文档维护约定
 

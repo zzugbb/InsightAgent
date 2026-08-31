@@ -39,6 +39,27 @@ export type TaskFailureSource =
   | "trace_content"
   | "legacy_trace";
 
+export type TaskCenterListState =
+  | "loading"
+  | "error"
+  | "stale_error"
+  | "empty"
+  | "ready";
+
+export function resolveTaskCenterListState(args: {
+  isLoading: boolean;
+  isError: boolean;
+  rowCount: number;
+}): TaskCenterListState {
+  if (args.isError) {
+    return args.rowCount > 0 ? "stale_error" : "error";
+  }
+  if (args.isLoading) {
+    return "loading";
+  }
+  return args.rowCount > 0 ? "ready" : "empty";
+}
+
 const TASK_FAILURE_SOURCE_ORDER: TaskFailureSource[] = [
   "error_event",
   "tool_error",

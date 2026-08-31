@@ -19,6 +19,7 @@ import {
   resolveTaskFailureDiagnosticGroupsForTaskCenter,
   resolveTaskFailureDiagnosticChipClick,
   resolveTaskFailureDiagnosticDrilldown,
+  resolveTaskCenterListState,
   resolveTaskDetailHrefTraceSemanticFilter,
   resolveInspectorTraceSemanticFilterChange,
   resolveTaskStatusDisplay,
@@ -29,6 +30,33 @@ import {
   resolveTraceStepSemanticStats,
   resolveTraceStepDisplayContent,
 } from "./utils.ts";
+
+test("resolveTaskCenterListState distinguishes initial and stale-data errors", () => {
+  assert.equal(
+    resolveTaskCenterListState({
+      isLoading: false,
+      isError: true,
+      rowCount: 0,
+    }),
+    "error",
+  );
+  assert.equal(
+    resolveTaskCenterListState({
+      isLoading: false,
+      isError: true,
+      rowCount: 2,
+    }),
+    "stale_error",
+  );
+  assert.equal(
+    resolveTaskCenterListState({
+      isLoading: false,
+      isError: false,
+      rowCount: 0,
+    }),
+    "empty",
+  );
+});
 
 test("buildTaskDetailHref encodes task ids for replay links", () => {
   assert.equal(

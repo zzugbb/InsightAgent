@@ -16,6 +16,12 @@ export type AuditEventFilter =
   | "rag_kb_clear"
   | "rag_kb_delete";
 export type AuditTimeFilter = "all" | "7d" | "30d";
+export type AuditLogsListState =
+  | "loading"
+  | "error"
+  | "stale_error"
+  | "empty"
+  | "ready";
 
 export type AuditFailureLabels = {
   fieldCode: string;
@@ -29,6 +35,20 @@ export type AuditFailureLabels = {
   taskFailureSourceTraceContent: string;
   taskFailureSourceLegacyTrace: string;
 };
+
+export function resolveAuditLogsListState(args: {
+  isLoading: boolean;
+  isError: boolean;
+  rowCount: number;
+}): AuditLogsListState {
+  if (args.isError) {
+    return args.rowCount > 0 ? "stale_error" : "error";
+  }
+  if (args.isLoading) {
+    return "loading";
+  }
+  return args.rowCount > 0 ? "ready" : "empty";
+}
 
 export function buildAuditLogsUrl(params: {
   apiBaseUrl: string;
