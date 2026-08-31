@@ -30,6 +30,7 @@ import {
   resolveTaskDetailHrefTraceSemanticFilter,
   resolveTaskObservabilityFilterChange,
   resolveTaskSnapshotSummary,
+  resolveTaskStatusDisplay,
 } from "./utils";
 import type {
   TaskFailureSourceFilter,
@@ -57,30 +58,6 @@ type TaskCenterProps = {
   scopeMode: "session" | "global";
   onScopeModeChange: (mode: "session" | "global") => void;
 };
-
-function resolveTaskStatusTone(
-  status: string,
-): "running" | "completed" | "failed" | "other" {
-  const normalized = status.trim().toLowerCase();
-  if (
-    normalized === "queued" ||
-    normalized === "running" ||
-    normalized === "pending"
-  ) {
-    return "running";
-  }
-  if (
-    normalized === "completed" ||
-    normalized === "done" ||
-    normalized === "success"
-  ) {
-    return "completed";
-  }
-  if (normalized === "failed" || normalized === "error") {
-    return "failed";
-  }
-  return "other";
-}
 
 export function TaskCenter({
   activeSession,
@@ -346,13 +323,17 @@ export function TaskCenter({
         dataIndex: "status",
         key: "status",
         width: 120,
-        render: (value: string) => (
-          <span
-            className={`task-status-badge task-status-badge--${resolveTaskStatusTone(value)}`}
-          >
-            {value}
-          </span>
-        ),
+        render: (_value: string, task: TaskSummary) => {
+          const statusDisplay = resolveTaskStatusDisplay(task);
+          return (
+            <span
+              className={`task-status-badge task-status-badge--${statusDisplay.tone}`}
+              data-testid="task-center-status-badge"
+            >
+              {statusDisplay.label}
+            </span>
+          );
+        },
       },
       {
         title: t.taskCenter.tableUpdatedAt,
@@ -655,9 +636,10 @@ export function TaskCenter({
               className="task-center-table"
               columns={columns}
               locale={{ emptyText: t.inspector.taskEmpty }}
-              rowClassName={(record) =>
-                `task-center-table-row${record.id === activeTaskId ? " is-active" : ""}${matchesTaskStatusFilter(record, "failed") ? " task-summary-item--failed" : ""}`
-              }
+              rowClassName={(record) => {
+                const statusDisplay = resolveTaskStatusDisplay(record);
+                return `task-center-table-row${record.id === activeTaskId ? " is-active" : ""}${statusDisplay.tone === "failed" ? " task-summary-item--failed" : ""}`;
+              }}
               onRow={(record) => ({
                 onClick: () => onSelectTask(record),
               })}

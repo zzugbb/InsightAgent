@@ -121,6 +121,7 @@ export type TaskObservabilityFilter =
   | "failure_hint"
   | "failure_trace";
 export type TaskStatusFilter = "all" | "running" | "completed" | "failed";
+export type TaskStatusTone = "running" | "completed" | "failed" | "other";
 export type TaskFailureSourceFilter = "all" | TaskFailureSource;
 
 export type TaskStreamTerminalReason = "done" | "cancelled" | "timeout" | "error";
@@ -549,7 +550,7 @@ export function getTaskLabel(
   return prompt.length > 48 ? `${prompt.slice(0, 48)}...` : prompt;
 }
 
-function normalizeTaskStatus(status: string): "running" | "completed" | "failed" | "other" {
+function normalizeTaskStatus(status: string): TaskStatusTone {
   const s = status.trim().toLowerCase();
   if (s === "queued" || s === "running" || s === "pending") {
     return "running";
@@ -576,6 +577,18 @@ export function matchesTaskStatusFilter(
   }
   const status = task.status_normalized?.trim() || task.status;
   return normalizeTaskStatus(status) === filter;
+}
+
+export function resolveTaskStatusDisplay(
+  task: Pick<TaskSummary, "status" | "status_label" | "status_normalized">,
+): { label: string; tone: TaskStatusTone } {
+  const normalized = task.status_normalized?.trim() ?? "";
+  const raw = task.status.trim();
+  const displaySource = normalized || task.status_label?.trim() || raw || "unknown";
+  return {
+    label: displaySource,
+    tone: normalizeTaskStatus(normalized || raw),
+  };
 }
 
 type TaskFailureInsight = {

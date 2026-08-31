@@ -494,6 +494,9 @@ test("task center status filter honors normalized task status", async ({
   );
   await expect(taskRow).toBeVisible({ timeout: 20_000 });
   await expect(taskRow).toHaveClass(/task-summary-item--failed/);
+  await expect(taskRow.getByTestId("task-center-status-badge")).toHaveText(
+    "failed",
+  );
 
   await selectVisibleAntdOption(page, {
     triggerTestId: "task-center-status-filter",

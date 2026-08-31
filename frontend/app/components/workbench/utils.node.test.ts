@@ -21,6 +21,7 @@ import {
   resolveTaskFailureDiagnosticDrilldown,
   resolveTaskDetailHrefTraceSemanticFilter,
   resolveInspectorTraceSemanticFilterChange,
+  resolveTaskStatusDisplay,
   resolveTaskObservabilityFilterChange,
   resolveAuditTaskDetailHref,
   resolveTaskSnapshotSummary,
@@ -2554,6 +2555,30 @@ test("matchesTaskStatusFilter prefers normalized task status for Task Center fil
   assert.equal(matchesTaskStatusFilter(task, "all"), true);
   assert.equal(matchesTaskStatusFilter(task, "failed"), true);
   assert.equal(matchesTaskStatusFilter(task, "completed"), false);
+});
+
+test("resolveTaskStatusDisplay keeps Task Center status text and tone on normalized status", () => {
+  assert.deepEqual(
+    resolveTaskStatusDisplay({
+      status: "completed",
+      status_label: "Completed",
+      status_normalized: "failed",
+    }),
+    {
+      label: "failed",
+      tone: "failed",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskStatusDisplay({
+      status: "pending",
+      status_label: "Queued for execution",
+    }),
+    {
+      label: "Queued for execution",
+      tone: "running",
+    },
+  );
 });
 
 test("resolveTaskDetailHrefTraceSemanticFilter keeps failure trace drilldown focus", () => {
