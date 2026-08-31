@@ -76,6 +76,15 @@ main() {
   assert_contains '"result": "DRY-RUN"' "${TMP_DIR}/summary.json"
   assert_contains '"label": "frontend build"' "${TMP_DIR}/summary.json"
 
+  env RELEASE_GATE_PYTHON=/no/such/python bash "${SCRIPT}" \
+    --dry-run \
+    --phase frontend \
+    --json-summary-file "${TMP_DIR}/invalid-python-summary.json" \
+    > "${TMP_DIR}/invalid-python-summary-stdout.txt"
+  "${ROOT_DIR}/backend/.venv/bin/python" -m json.tool "${TMP_DIR}/invalid-python-summary.json" >/dev/null
+  assert_contains '"phase": "frontend"' "${TMP_DIR}/invalid-python-summary.json"
+  assert_contains '"label": "frontend build"' "${TMP_DIR}/invalid-python-summary.json"
+
   bash "${SCRIPT}" --dry-run --phase frontend > "${TMP_DIR}/frontend.txt"
   assert_contains "phase=frontend" "${TMP_DIR}/frontend.txt"
   assert_contains "node --test --experimental-strip-types" "${TMP_DIR}/frontend.txt"

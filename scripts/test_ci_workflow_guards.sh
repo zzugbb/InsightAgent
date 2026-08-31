@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_WORKFLOW="${ROOT_DIR}/.github/workflows/backend-e2e.yml"
 FRONTEND_WORKFLOW="${ROOT_DIR}/.github/workflows/frontend-e2e.yml"
 RELEASE_GATE_WORKFLOW="${ROOT_DIR}/.github/workflows/release-gate.yml"
+BACKEND_ARTIFACTS_LIST="${ROOT_DIR}/scripts/ci_artifacts_backend.txt"
 
 assert_contains() {
   local expected="$1"
@@ -49,6 +50,10 @@ main() {
   assert_contains "bash scripts/ci_run_backend_e2e.sh \\" "${BACKEND_WORKFLOW}"
   assert_contains "--phase queue \\" "${BACKEND_WORKFLOW}"
   assert_contains "--base-url http://127.0.0.1:8011 \\" "${BACKEND_WORKFLOW}"
+  assert_contains "/tmp/backend-8011.log" "${BACKEND_ARTIFACTS_LIST}"
+  assert_contains "/tmp/health-8011.json" "${BACKEND_ARTIFACTS_LIST}"
+  assert_contains "/tmp/e2e-queue-8011.log" "${BACKEND_ARTIFACTS_LIST}"
+  assert_not_contains "/tmp/backend-e2e-diagnostics.txt" "${BACKEND_ARTIFACTS_LIST}"
   assert_contains "TASK_QUEUE_MAX_CONCURRENT: \"1\"" "${FRONTEND_WORKFLOW}"
   assert_contains "TASK_QUEUE_POLL_INTERVAL_SEC: \"0.1\"" "${FRONTEND_WORKFLOW}"
   assert_contains "Start backend on :8011 for frontend queue e2e" "${FRONTEND_WORKFLOW}"

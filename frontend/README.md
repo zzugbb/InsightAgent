@@ -18,11 +18,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；8 个测试文件 `140/140` 通过，包含 frontend source size boundary。
 - `npm run lint` 与 `npm run build` 通过。
 - E2E 基线：targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center 加载失败与原位重试、知识库治理加载失败/重试均通过；full Chromium `56 passed / 1 skipped`；低并发 queue phase `1/1` 且已纳入 CI workflow。
-- Backend 契约基线：full slice `1988/1988`；module boundary `4/4`。
+- Backend 契约基线：full slice `1988/1988`；module boundary `4/4`；backend main/timeout/queue e2e 与 main push artifact-stage guard 通过。
 
 ## 下一步前端计划
 
-1. 当前状态：`product-ux-polish` 已 100% 封板，前端 full Chromium 并发 e2e、targeted Chromium、静态 release gate 与文档均已收口。
+1. 当前状态：`product-ux-polish` 已 100% 封板；前端 full Chromium 并发 e2e、targeted Chromium、静态 release gate 与后端 e2e 后置门禁均已收口。
 2. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认前端与运维界面范围。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 

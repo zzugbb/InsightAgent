@@ -8,19 +8,20 @@
 - `ci-release-engineering` 已 100% 封板。
 - `production-runtime-hardening` 已 100% 封板：SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
 - `product-ux-polish` 已 100% 封板：语义 Trace 回放、Task Center/任务详情 normalized 状态与失败诊断、列表加载错误/陈旧数据保留/原位重试均已收口；本轮补齐任务详情 failure hint code 映射与 SSE close 后失败摘要兜底，full Chromium 并发 e2e 已复绿。
+- 本轮修复后端 e2e 后置 CI 稳定性：release-gate JSON summary 不再依赖 Python 子进程转义，backend artifact 清单补齐 8011 queue 产物并移除 finalize 后才生成的 failure diagnostics，backend 启动 wrapper 本地优先使用 `backend/.venv/bin/python -m uvicorn`。
 - 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过；非 PR 环境保守解析为 backend/frontend/tooling/hygiene 全量。
+- Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 已用 `json.tool` 复核。
 - Backend：full slice `1988/1988`；module boundary `4/4`；targeted production_reliability `39/39`、reconnect `9/9` 通过。
 - Frontend：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；node tests `140/140`、`npm run lint`、`npm run build` 通过。
-- E2E 基线：targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center 加载失败与原位重试、知识库治理加载失败/重试均通过；backend main 通过；frontend full Chromium `56 passed / 1 skipped`；queue 阶段已纳入 backend/frontend CI workflow。
+- E2E 基线：backend main、timeout、queue 三段通过；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`，targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center/知识库治理错误恢复均通过。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前状态：`product-ux-polish` 已 100% 封板，前后端 e2e 复核、full Chromium 并发回归、静态 release gate 与文档均已收口，可进入下一主线。
+1. 当前状态：`product-ux-polish` 已 100% 封板；本轮后端 e2e 后置 artifact/release-gate 稳定性已修复并复验，可进入下一主线。
 2. 已封板主线新增 `product-ux-polish`；既有 provider/tool、生产运行态、源码规模、CI/release、RAG、可观测性、可靠性、治理与并发主线保持完成。
 3. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认范围。
 

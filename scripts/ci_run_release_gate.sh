@@ -3,7 +3,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RELEASE_GATE_PYTHON="${RELEASE_GATE_PYTHON:-${ROOT_DIR}/backend/.venv/bin/python}"
 phase="all"
 dry_run="0"
 summary_file=""
@@ -75,7 +74,15 @@ format_command() {
 }
 
 json_string() {
-  "${RELEASE_GATE_PYTHON}" -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$1"
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  value="${value//$'\b'/\\b}"
+  value="${value//$'\f'/\\f}"
+  printf '"%s"\n' "${value}"
 }
 
 record_step() {

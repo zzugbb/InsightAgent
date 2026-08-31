@@ -14,6 +14,7 @@ interval_sec="1"
 failure_message=""
 app_dir="backend"
 app_target="app.main:app"
+backend_python="${BACKEND_BOOT_PYTHON:-}"
 dry_run="0"
 
 usage() {
@@ -30,6 +31,7 @@ Options:
   --failure-message <text>       Optional; default uses host/port
   --app-dir <path>               Default: backend
   --app-target <module:app>      Default: app.main:app
+  BACKEND_BOOT_PYTHON            Optional Python executable; defaults to backend/.venv/bin/python when present
   --dry-run                      Print commands only
 USAGE
 }
@@ -75,6 +77,13 @@ fi
 if [ "${app_dir#/}" = "${app_dir}" ]; then
   app_dir="${repo_root}/${app_dir}"
 fi
+if [ -z "${backend_python}" ]; then
+  if [ -x "${repo_root}/backend/.venv/bin/python" ]; then
+    backend_python="${repo_root}/backend/.venv/bin/python"
+  else
+    backend_python="python3"
+  fi
+fi
 
 health_url="http://${host}:${port}${health_path}"
 health_output="/tmp/health-${port}.json"
@@ -83,7 +92,7 @@ start_cmd=(bash "${repo_root}/scripts/ci_start_bg_process.sh" --log-file "${log_
 if [ -n "${pid_file}" ]; then
   start_cmd+=(--pid-file "${pid_file}")
 fi
-start_cmd+=(-- uvicorn "${app_target}" --app-dir "${app_dir}" --host "${host}" --port "${port}")
+start_cmd+=(-- "${backend_python}" -m uvicorn "${app_target}" --app-dir "${app_dir}" --host "${host}" --port "${port}")
 
 wait_cmd=(
   bash "${repo_root}/scripts/ci_wait_http_status.sh"

@@ -1,7 +1,9 @@
 /tmp/backend-8000.log
 /tmp/backend-8010.log
+/tmp/backend-8011.log
 /tmp/health-8000.json
 /tmp/health-8010.json
+/tmp/health-8011.json
 /tmp/e2e-main-path-8000.log
 /tmp/e2e-baseline-8000.log
 /tmp/e2e-export-consistency-8000.log
@@ -15,4 +17,4 @@
 /tmp/backend-e2e-artifact-guard-summary.json
 /tmp/e2e-cancel-8000.log
 /tmp/e2e-timeout-8010.log
-/tmp/backend-e2e-diagnostics.txt
+/tmp/e2e-queue-8011.log

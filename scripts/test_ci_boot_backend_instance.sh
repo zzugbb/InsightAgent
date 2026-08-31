@@ -33,6 +33,14 @@ assert_contains() {
 run_tests() {
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf "${TMP_DIR}"' EXIT
+  expected_backend_python="${BACKEND_BOOT_PYTHON:-}"
+  if [ -z "${expected_backend_python}" ]; then
+    if [ -x "${ROOT_DIR}/backend/.venv/bin/python" ]; then
+      expected_backend_python="${ROOT_DIR}/backend/.venv/bin/python"
+    else
+      expected_backend_python="python3"
+    fi
+  fi
 
   expect_fail bash "${SCRIPT_PATH}"
   expect_fail bash "${SCRIPT_PATH}" --port 8000
@@ -44,7 +52,7 @@ run_tests() {
     --failure-message "custom-fail-message" \
     --dry-run > "${TMP_DIR}/dry-run.out"
 
-  assert_contains "ci_start_bg_process.sh --log-file ${TMP_DIR}/backend.log --pid-file ${TMP_DIR}/backend.pid" "${TMP_DIR}/dry-run.out"
+  assert_contains "ci_start_bg_process.sh --log-file ${TMP_DIR}/backend.log --pid-file ${TMP_DIR}/backend.pid -- ${expected_backend_python} -m uvicorn app.main:app" "${TMP_DIR}/dry-run.out"
   assert_contains "ci_wait_http_status.sh --url http://127.0.0.1:8000/health --output-file /tmp/health-8000.json" "${TMP_DIR}/dry-run.out"
   assert_contains "--failure-message custom-fail-message" "${TMP_DIR}/dry-run.out"
 
@@ -60,7 +68,7 @@ run_tests() {
   assert_contains "backend 127.0.0.1:8010 failed to become healthy" "${TMP_DIR}/dry-run-2.out"
 
   expect_pass bash -c "cd '${TMP_DIR}' && bash '${SCRIPT_PATH}' --port 8020 --log-file backend.log --pid-file backend.pid --dry-run" > "${TMP_DIR}/dry-run-from-other-cwd.out"
-  assert_contains "bash ${ROOT_DIR}/scripts/ci_start_bg_process.sh --log-file ${TMP_DIR}/backend.log --pid-file ${TMP_DIR}/backend.pid" "${TMP_DIR}/dry-run-from-other-cwd.out"
+  assert_contains "bash ${ROOT_DIR}/scripts/ci_start_bg_process.sh --log-file ${TMP_DIR}/backend.log --pid-file ${TMP_DIR}/backend.pid -- ${expected_backend_python} -m uvicorn app.main:app" "${TMP_DIR}/dry-run-from-other-cwd.out"
   assert_contains "--app-dir ${ROOT_DIR}/backend --host 127.0.0.1 --port 8020" "${TMP_DIR}/dry-run-from-other-cwd.out"
   assert_contains "bash ${ROOT_DIR}/scripts/ci_wait_http_status.sh --url http://127.0.0.1:8020/health" "${TMP_DIR}/dry-run-from-other-cwd.out"
 

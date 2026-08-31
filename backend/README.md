@@ -7,22 +7,23 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
 - Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
 - CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
+- 本轮修复 backend e2e 后置 CI：artifact 清单补齐 `backend-8011`、`health-8011` 与 `e2e-queue-8011`，移除 finalize 后才生成的 failure diagnostics；`ci_boot_backend_instance.sh` 本地优先使用 `backend/.venv/bin/python -m uvicorn`。
 - SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- 本轮无后端运行时变更；前端补齐任务详情 failure hint 映射、SSE close 后失败摘要兜底与 Chromium 并发 e2e 等待稳定性，任务/审计/RAG API、SSE、trace 与 export shape 不变。
+- 本轮无后端业务运行时变更；任务/审计/RAG API、SSE、trace 与 export shape 不变。
 - `backend/app` 与 `backend/scripts` 所有 Python 源码均低于 3000 行；`tool_runtime.py` 与 `test_tool_runtime_slice.py` 保持兼容入口，新增实现继续落到主题模块。
 
 ## 当前验证基线
 
-- Release gate：`bash scripts/ci_run_release_gate.sh --phase auto --summary-file /tmp/release-gate-check.md --json-summary-file /tmp/release-gate-check.json` 通过。
+- Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量。
 - Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1988/1988` 通过。
 - Targeted：`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行规模边界。
-- E2E 基线：backend main 通过；frontend full Chromium `56 passed / 1 skipped`；timeout/queue 已纳入 backend/frontend CI workflow。
+- E2E 基线：backend main、timeout、queue 三段通过；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`。
 - Hygiene：`py_compile`、`git diff --check`、备份计划 diff 检查通过。
 
 ## 下一步后端计划
 
-1. 当前状态：`product-ux-polish` 已 100% 封板，前后端 e2e 复核与 release gate 均已通过，后端契约保持稳定，可进入下一主线。
+1. 当前状态：`product-ux-polish` 已 100% 封板；backend e2e 后置 artifact/release-gate 稳定性已修复并复验，后端契约保持稳定，可进入下一主线。
 2. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认后端范围。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
