@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 _MIN_RECOMMENDED_TASK_TIMEOUT_SEC = 30.0
 _RESTORE_DRILL_MAX_AGE_DAYS = 90
+_INCIDENT_DRILL_MAX_AGE_DAYS = 180
 _WARNING_SEVERITIES = ("critical", "warning", "info")
 
 
@@ -79,6 +80,15 @@ def _build_warning_summary(warnings: list[dict[str, str]]) -> dict[str, object]:
 
 
 def _build_runbook_health(settings: Any) -> dict[str, object]:
+    incident_drill_at = _parse_datetime(
+        getattr(settings, "incident_last_drill_at", None)
+    )
+    incident_drill_age_days = _age_days(incident_drill_at)
+    incident_drill_recent = (
+        incident_drill_age_days is not None
+        and incident_drill_age_days <= _INCIDENT_DRILL_MAX_AGE_DAYS
+    )
+
     return {
         "operations_runbook_configured": _has_text(
             getattr(settings, "operations_runbook_url", None)
@@ -87,6 +97,10 @@ def _build_runbook_health(settings: Any) -> dict[str, object]:
             getattr(settings, "incident_contact", None)
         ),
         "status_page_configured": _has_text(getattr(settings, "status_page_url", None)),
+        "incident_drill_recorded": incident_drill_at is not None,
+        "incident_drill_age_days": incident_drill_age_days,
+        "incident_drill_max_age_days": _INCIDENT_DRILL_MAX_AGE_DAYS,
+        "incident_drill_recent": incident_drill_recent,
     }
 
 
@@ -369,6 +383,23 @@ def _build_operations_warnings(
                 "message": "INSIGHT_AGENT_INCIDENT_CONTACT should be set in production.",
             }
         )
+    if is_production and bool(runbook["incident_contact_configured"]):
+        if not bool(runbook["incident_drill_recorded"]):
+            warnings.append(
+                {
+                    "code": "incident_response_drill_missing",
+                    "severity": "warning",
+                    "message": "INSIGHT_AGENT_INCIDENT_LAST_DRILL_AT should record the latest incident response drill.",
+                }
+            )
+        elif not bool(runbook["incident_drill_recent"]):
+            warnings.append(
+                {
+                    "code": "incident_response_drill_stale",
+                    "severity": "warning",
+                    "message": "The latest incident response drill is older than the recommended production window.",
+                }
+            )
     if is_production and not bool(runbook["status_page_configured"]):
         warnings.append(
             {

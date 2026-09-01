@@ -227,6 +227,11 @@ class Settings(BaseSettings):
         alias="INSIGHT_AGENT_INCIDENT_CONTACT",
         description="生产值班/应急联系人；/health 仅暴露是否已配置，不回显原值",
     )
+    incident_last_drill_at: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_INCIDENT_LAST_DRILL_AT",
+        description="最近一次应急响应演练时间（ISO-8601）；用于 /health.operations 判断演练新鲜度",
+    )
     status_page_url: str | None = Field(
         default=None,
         alias="INSIGHT_AGENT_STATUS_PAGE_URL",
