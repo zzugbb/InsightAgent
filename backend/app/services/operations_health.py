@@ -36,6 +36,36 @@ _WARNING_CODE_DOMAINS = {
     "stale_recovery_disabled": "runtime",
     "chroma_probe_disabled": "runtime",
 }
+_WARNING_CODE_SEVERITIES = {
+    "default_jwt_secret": "critical",
+    "missing_secret_key": "warning",
+    "production_database_missing": "critical",
+    "production_database_localhost": "warning",
+    "production_cors_allows_wildcard": "critical",
+    "production_cors_allows_localhost": "warning",
+    "remote_provider_missing_api_key": "critical",
+    "task_timeout_below_recommended": "warning",
+    "stream_reconnect_poll_backoff_inverted": "warning",
+    "stream_reconnect_heartbeat_exceeds_task_timeout": "warning",
+    "execution_stale_window_not_above_heartbeat": "warning",
+    "backup_disabled": "critical",
+    "backup_provider_missing": "warning",
+    "backup_restore_runbook_missing": "warning",
+    "backup_restore_drill_missing": "warning",
+    "backup_restore_drill_stale": "warning",
+    "operations_runbook_missing": "critical",
+    "incident_contact_missing": "critical",
+    "incident_response_drill_missing": "warning",
+    "incident_response_drill_stale": "warning",
+    "status_page_missing": "info",
+    "default_execution_owner": "warning",
+    "stale_recovery_disabled": "info",
+    "chroma_probe_disabled": "info",
+}
+_READINESS_CHECK_IDS = {
+    "default_jwt_secret": "auth_jwt_credential_replaced",
+    "missing_secret_key": "auth_encryption_key_configured",
+}
 
 
 def build_operations_health(settings: Any) -> dict[str, object]:
@@ -81,9 +111,30 @@ def build_operations_health(settings: Any) -> dict[str, object]:
             ),
         },
         "chroma_probe_enabled": bool(settings.chroma_probe),
+        "readiness_checks": _build_readiness_checks(warnings),
         "risk_domains": _build_risk_domains(warnings),
         "warning_summary": warning_summary,
         "warnings": warnings,
+    }
+
+
+def _build_readiness_checks(warnings: list[dict[str, str]]) -> dict[str, object]:
+    warning_codes = {warning.get("code", "") for warning in warnings}
+    items = [
+        {
+            "id": _READINESS_CHECK_IDS.get(code, code),
+            "domain": _WARNING_CODE_DOMAINS[code],
+            "severity": _WARNING_CODE_SEVERITIES[code],
+            "passed": code not in warning_codes,
+        }
+        for code in _WARNING_CODE_DOMAINS
+    ]
+    failed = sum(1 for item in items if not bool(item["passed"]))
+    return {
+        "total": len(items),
+        "passed": len(items) - failed,
+        "failed": failed,
+        "items": items,
     }
 
 

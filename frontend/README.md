@@ -4,8 +4,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前状态
 
-- `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
-- `production-operations-readiness` 已启动，当前约 90%；后端 `/health.operations` 已补运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、`warning_summary` 告警等级汇总、`risk_domains` 按域风险汇总与 `readiness_level`，前端暂不新增显示入口。
+- `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish` 与 `production-operations-readiness` 均已 100% 封板。
+- 后端 `/health.operations` 已补运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、`warning_summary` 告警等级汇总、`risk_domains` 按域风险汇总、`readiness_checks` 固定清单与 `readiness_level`，前端暂不新增显示入口。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地。
 - 前端继续消费后端统一的 preview/output/result-summary、trace/export 字段，不新增 provider 专用显示分支。
 - SSE `error.diagnostic.reason` 与 failure audit diagnostic 是后端追加的低敏兼容字段；前端现有错误提示继续使用 `code/message/detail/status_code`，审计详情可展示低敏 diagnostic reason，reconnect 继续依赖后端稳定 code/message。
@@ -24,8 +24,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 下一步前端计划
 
-1. 当前状态：`production-operations-readiness` 已启动，当前约 90%；前端本轮只记录后端健康摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应、应急响应演练新鲜度、告警等级汇总、按域风险汇总和 readiness_level 契约，暂不改变 UI。
-2. 下一步视后端运维 API 范围决定是否增加运行健康、发布/回滚可见性与运维入口。
+1. 当前状态：`production-operations-readiness` 已 100% 封板；前端只记录后端健康摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应、应急响应演练新鲜度、告警等级汇总、按域风险汇总、readiness_checks 和 readiness_level 契约，暂不改变 UI。
+2. 下一步候选为 `security-hardening` 或 `release-observability-polish`；若进入运维可视化，再评估运行健康、发布/回滚可见性与运维入口。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 后续候选主线

@@ -181,6 +181,42 @@ class ProductionOperationsHealthMixin:
                 },
             },
         )
+        self.assertEqual(payload["readiness_checks"]["total"], 24)
+        self.assertEqual(payload["readiness_checks"]["failed"], 4)
+        failed_checks = [
+            check
+            for check in payload["readiness_checks"]["items"]
+            if not check["passed"]
+        ]
+        self.assertEqual(
+            failed_checks,
+            [
+                {
+                    "id": "production_database_localhost",
+                    "domain": "deployment",
+                    "severity": "warning",
+                    "passed": False,
+                },
+                {
+                    "id": "production_cors_allows_wildcard",
+                    "domain": "deployment",
+                    "severity": "critical",
+                    "passed": False,
+                },
+                {
+                    "id": "remote_provider_missing_api_key",
+                    "domain": "deployment",
+                    "severity": "critical",
+                    "passed": False,
+                },
+                {
+                    "id": "chroma_probe_disabled",
+                    "domain": "runtime",
+                    "severity": "info",
+                    "passed": False,
+                },
+            ],
+        )
         self.assertEqual(payload["readiness"], "attention")
         self.assertEqual(payload["readiness_level"], "critical")
         self.assertNotIn("token=raw", str(payload))
@@ -279,6 +315,10 @@ class ProductionOperationsHealthMixin:
         )
         self.assertEqual(payload["readiness"], "ok")
         self.assertEqual(payload["readiness_level"], "ok")
+        self.assertEqual(payload["readiness_checks"]["failed"], 0)
+        self.assertTrue(
+            all(check["passed"] for check in payload["readiness_checks"]["items"])
+        )
 
     def test_production_operations_health_marks_info_only_readiness_level(
         self,
