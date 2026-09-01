@@ -299,6 +299,7 @@ from tool_runtime_slice.session_export_markdown import SessionExportMarkdownMixi
 from tool_runtime_slice.task_export_response_summary import TaskExportResponseSummaryMixin
 from tool_runtime_slice.task_session_export_payload import TaskSessionExportPayloadMixin
 from tool_runtime_slice.task_trace_export_governance import TaskTraceExportGovernanceMixin
+from tool_runtime_slice.production_operations_health import ProductionOperationsHealthMixin
 from tool_runtime_slice.production_reliability_execution import (
     ProductionReliabilityExecutionMixin,
 )
@@ -368,6 +369,7 @@ class ToolRuntimeSliceTests(
     ProductionReliabilityExecutionMixin,
     ProductionReliabilityQueueMixin,
     ProductionReliabilityStartupMixin,
+    ProductionOperationsHealthMixin,
     unittest.TestCase,
 ):
     def _make_sensitive_http_json_action_step(

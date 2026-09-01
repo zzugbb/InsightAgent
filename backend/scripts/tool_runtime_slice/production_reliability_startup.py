@@ -715,6 +715,9 @@ class ProductionReliabilityStartupMixin:
             backup_provider="managed",
             backup_restore_runbook_url="https://runbooks.example.com/restore",
             backup_last_restore_drill_at="2099-01-01T00:00:00Z",
+            operations_runbook_url="https://runbooks.example.com/operations",
+            incident_contact="oncall@example.com",
+            status_page_url="https://status.example.com",
         )
 
         try:
@@ -797,6 +800,9 @@ class ProductionReliabilityStartupMixin:
                 backup_provider="managed",
                 backup_restore_runbook_url="https://runbooks.example.com/restore",
                 backup_last_restore_drill_at="2099-01-01T00:00:00Z",
+                operations_runbook_url="https://runbooks.example.com/operations",
+                incident_contact="oncall@example.com",
+                status_page_url="https://status.example.com",
             )
         )
 
@@ -841,6 +847,9 @@ class ProductionReliabilityStartupMixin:
                 backup_provider="managed",
                 backup_restore_runbook_url="https://runbooks.example.com/restore",
                 backup_last_restore_drill_at="2099-01-01T00:00:00Z",
+                operations_runbook_url="https://runbooks.example.com/operations",
+                incident_contact="oncall@example.com",
+                status_page_url="https://status.example.com",
             )
         )
 
@@ -902,6 +911,9 @@ class ProductionReliabilityStartupMixin:
                 backup_provider="managed",
                 backup_restore_runbook_url="https://runbooks.example.com/restore",
                 backup_last_restore_drill_at="2099-01-01T00:00:00Z",
+                operations_runbook_url="https://runbooks.example.com/operations",
+                incident_contact="oncall@example.com",
+                status_page_url="https://status.example.com",
             )
         )
 
@@ -972,6 +984,9 @@ class ProductionReliabilityStartupMixin:
                 backup_provider="",
                 backup_restore_runbook_url="https://runbooks.example.com/restore?token=raw",
                 backup_last_restore_drill_at="2024-01-01T00:00:00Z",
+                operations_runbook_url="https://runbooks.example.com/operations",
+                incident_contact="oncall@example.com",
+                status_page_url="https://status.example.com",
             )
         )
 

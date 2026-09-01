@@ -217,6 +217,21 @@ class Settings(BaseSettings):
         alias="INSIGHT_AGENT_BACKUP_LAST_RESTORE_DRILL_AT",
         description="最近一次恢复演练时间（ISO-8601）；用于 /health.operations 判断演练新鲜度",
     )
+    operations_runbook_url: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_OPERATIONS_RUNBOOK_URL",
+        description="生产运维 runbook 链接；/health 仅暴露是否已配置，不回显原值",
+    )
+    incident_contact: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_INCIDENT_CONTACT",
+        description="生产值班/应急联系人；/health 仅暴露是否已配置，不回显原值",
+    )
+    status_page_url: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_STATUS_PAGE_URL",
+        description="状态页链接；/health 仅暴露是否已配置，不回显原值",
+    )
     tool_registry_overrides_json: str | None = Field(
         default=None,
         alias="INSIGHT_AGENT_TOOL_REGISTRY_OVERRIDES_JSON",

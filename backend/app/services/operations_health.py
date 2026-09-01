@@ -13,11 +13,19 @@ def build_operations_health(settings: Any) -> dict[str, object]:
     deployment = _build_deployment_health(settings)
     slo = _build_slo_health(settings)
     backup_restore = _build_backup_restore_health(settings)
-    warnings = _build_operations_warnings(settings, deployment, slo, backup_restore)
+    runbook = _build_runbook_health(settings)
+    warnings = _build_operations_warnings(
+        settings,
+        deployment,
+        slo,
+        backup_restore,
+        runbook,
+    )
     return {
         "readiness": "attention" if warnings else "ok",
         "backup_restore": backup_restore,
         "deployment": deployment,
+        "runbook": runbook,
         "slo": slo,
         "task_timeout_sec": float(settings.task_timeout_sec),
         "task_queue": {
@@ -43,6 +51,18 @@ def build_operations_health(settings: Any) -> dict[str, object]:
         },
         "chroma_probe_enabled": bool(settings.chroma_probe),
         "warnings": warnings,
+    }
+
+
+def _build_runbook_health(settings: Any) -> dict[str, object]:
+    return {
+        "operations_runbook_configured": _has_text(
+            getattr(settings, "operations_runbook_url", None)
+        ),
+        "incident_contact_configured": _has_text(
+            getattr(settings, "incident_contact", None)
+        ),
+        "status_page_configured": _has_text(getattr(settings, "status_page_url", None)),
     }
 
 
@@ -156,6 +176,7 @@ def _build_operations_warnings(
     deployment: dict[str, object],
     slo: dict[str, object],
     backup_restore: dict[str, object],
+    runbook: dict[str, object],
 ) -> list[dict[str, str]]:
     warnings: list[dict[str, str]] = []
     is_production = str(settings.app_env).strip().lower() == "production"
@@ -308,6 +329,30 @@ def _build_operations_warnings(
                 "message": "The latest restore drill is older than the recommended production window.",
             }
         )
+    if is_production and not bool(runbook["operations_runbook_configured"]):
+        warnings.append(
+            {
+                "code": "operations_runbook_missing",
+                "severity": "critical",
+                "message": "INSIGHT_AGENT_OPERATIONS_RUNBOOK_URL should be set in production.",
+            }
+        )
+    if is_production and not bool(runbook["incident_contact_configured"]):
+        warnings.append(
+            {
+                "code": "incident_contact_missing",
+                "severity": "critical",
+                "message": "INSIGHT_AGENT_INCIDENT_CONTACT should be set in production.",
+            }
+        )
+    if is_production and not bool(runbook["status_page_configured"]):
+        warnings.append(
+            {
+                "code": "status_page_missing",
+                "severity": "info",
+                "message": "INSIGHT_AGENT_STATUS_PAGE_URL should be set when an external status page exists.",
+            }
+        )
     if not bool(settings.chroma_probe):
         warnings.append(
             {
@@ -373,6 +418,10 @@ def _remote_provider_configured(settings: Any) -> bool:
     provider = str(getattr(settings, "provider", "") or "").strip().lower()
     api_key = str(getattr(settings, "api_key", "") or "").strip()
     return bool(provider and provider != "mock" and api_key)
+
+
+def _has_text(value: object) -> bool:
+    return bool(str(value or "").strip())
 
 
 def _read_float(settings: Any, field_name: str, default: float) -> float:

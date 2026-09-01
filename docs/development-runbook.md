@@ -41,7 +41,15 @@ artifact-stage guard 的 main push 严格度为 `fail-on-missing`，PR 严格度
 ```bash
 cd frontend
 npm run lint
-node --test --experimental-strip-types app/components/workbench/utils.node.test.ts lib/stores/chat-stream-store-utils.node.test.ts app/components/workbench/model-settings-modal-utils.node.test.ts
+node --test --experimental-strip-types \
+  lib/stores/chat-stream-store-utils.node.test.ts \
+  app/components/workbench/runtime-debug-modal-utils.node.test.ts \
+  app/components/workbench/audit-logs-modal-utils.node.test.ts \
+  app/components/workbench/model-settings-modal-utils.node.test.ts \
+  app/components/workbench/utils.node.test.ts \
+  app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts \
+  app/source-file-size.node.test.ts \
+  app/tasks/task-detail-page-utils.node.test.ts
 ```
 
 ## 需要提权的本机服务
