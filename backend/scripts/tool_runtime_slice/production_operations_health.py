@@ -80,3 +80,108 @@ class ProductionOperationsHealthMixin:
         )
         self.assertNotIn("token=raw", str(payload))
         self.assertNotIn("status.example.com", str(payload))
+
+    def test_production_operations_health_summarizes_warning_severity_counts(
+        self,
+    ) -> None:
+        operations_module = __import__(
+            "app.services.operations_health",
+            fromlist=["build_operations_health"],
+        )
+
+        payload = operations_module.build_operations_health(
+            SimpleNamespace(
+                app_env="production",
+                mode="remote",
+                provider="openai",
+                api_key=None,
+                database_url="postgresql://insight:secret@127.0.0.1:5432/insightagent",
+                cors_origins=["https://app.example.com", "*"],
+                chroma_probe=False,
+                trace_persist_min_interval_sec=0.25,
+                stream_reconnect_poll_fast_sec=0.3,
+                stream_reconnect_poll_max_sec=2.0,
+                stream_reconnect_heartbeat_interval_sec=2.0,
+                task_timeout_sec=180.0,
+                task_queue_max_concurrent=16,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.25,
+                task_execution_owner_id="backend-prod-a",
+                task_execution_stale_after_sec=45.0,
+                task_execution_heartbeat_interval_sec=2.0,
+                auth_jwt_secret="prod-secret",
+                auth_secret_key="separate-secret",
+                backup_enabled=True,
+                backup_provider="managed",
+                backup_restore_runbook_url="https://runbooks.example.com/restore",
+                backup_last_restore_drill_at="2099-01-01T00:00:00Z",
+                operations_runbook_url="https://runbooks.example.com/operations",
+                incident_contact="oncall@example.com",
+                status_page_url="https://status.example.com/private?token=raw",
+            )
+        )
+
+        self.assertEqual(
+            payload["warning_summary"],
+            {
+                "total": 4,
+                "critical": 2,
+                "warning": 1,
+                "info": 1,
+                "highest_severity": "critical",
+            },
+        )
+        self.assertNotIn("token=raw", str(payload))
+
+    def test_production_operations_health_summarizes_clean_warning_state(
+        self,
+    ) -> None:
+        operations_module = __import__(
+            "app.services.operations_health",
+            fromlist=["build_operations_health"],
+        )
+
+        payload = operations_module.build_operations_health(
+            SimpleNamespace(
+                app_env="production",
+                mode="remote",
+                provider="openai",
+                api_key="configured-api-key",
+                database_url="postgresql://insight:secret@db:5432/insightagent",
+                cors_origins=["https://app.example.com"],
+                chroma_probe=True,
+                trace_persist_min_interval_sec=0.25,
+                stream_reconnect_poll_fast_sec=0.3,
+                stream_reconnect_poll_max_sec=2.0,
+                stream_reconnect_heartbeat_interval_sec=2.0,
+                task_timeout_sec=180.0,
+                task_queue_max_concurrent=16,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.25,
+                task_execution_owner_id="backend-prod-a",
+                task_execution_stale_after_sec=45.0,
+                task_execution_heartbeat_interval_sec=2.0,
+                auth_jwt_secret="prod-secret",
+                auth_secret_key="separate-secret",
+                backup_enabled=True,
+                backup_provider="managed",
+                backup_restore_runbook_url="https://runbooks.example.com/restore",
+                backup_last_restore_drill_at="2099-01-01T00:00:00Z",
+                operations_runbook_url="https://runbooks.example.com/operations",
+                incident_contact="oncall@example.com",
+                status_page_url="https://status.example.com",
+            )
+        )
+
+        self.assertEqual(
+            payload["warning_summary"],
+            {
+                "total": 0,
+                "critical": 0,
+                "warning": 0,
+                "info": 0,
+                "highest_severity": None,
+            },
+        )

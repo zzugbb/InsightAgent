@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 _MIN_RECOMMENDED_TASK_TIMEOUT_SEC = 30.0
 _RESTORE_DRILL_MAX_AGE_DAYS = 90
+_WARNING_SEVERITIES = ("critical", "warning", "info")
 
 
 def build_operations_health(settings: Any) -> dict[str, object]:
@@ -50,7 +51,28 @@ def build_operations_health(settings: Any) -> dict[str, object]:
             ),
         },
         "chroma_probe_enabled": bool(settings.chroma_probe),
+        "warning_summary": _build_warning_summary(warnings),
         "warnings": warnings,
+    }
+
+
+def _build_warning_summary(warnings: list[dict[str, str]]) -> dict[str, object]:
+    counts = {severity: 0 for severity in _WARNING_SEVERITIES}
+    for warning in warnings:
+        severity = warning.get("severity", "")
+        if severity in counts:
+            counts[severity] += 1
+    highest_severity = next(
+        (severity for severity in _WARNING_SEVERITIES if counts[severity] > 0),
+        None,
+    )
+
+    return {
+        "total": len(warnings),
+        "critical": counts["critical"],
+        "warning": counts["warning"],
+        "info": counts["info"],
+        "highest_severity": highest_severity,
     }
 
 

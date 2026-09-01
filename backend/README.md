@@ -5,26 +5,26 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 ## 当前状态
 
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
-- `production-operations-readiness` 已启动，当前约 50%；已完成 `/health` 非敏感 `operations` readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练与 runbook/值班响应摘要。
+- `production-operations-readiness` 已启动，当前约 60%；已完成 `/health` 非敏感 `operations` readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要与告警等级汇总。
 - Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
 - CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
 - 后端/frontend e2e 后置 CI 已完成稳定性收口：backend artifact 清单、boot wrapper、无 venv runner JSON fallback、frontend queue runtime API base URL、queue 慢加载稳定性与 export diagnostics 范围均已修复；commit `6ea51c7` 对应 GitHub backend/frontend e2e 与 release-gate 均已 completed success。
 - SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- `/health` 保持既有字段不变，并新增 `operations.readiness/warnings`、部署配置、SLO 阈值口径、备份恢复演练、runbook/值班响应、任务队列、执行实例、超时与 Chroma probe 摘要，用于部署/值班快速判断运行态配置风险。
+- `/health` 保持既有字段不变，并新增 `operations.readiness/warnings/warning_summary`、部署配置、SLO 阈值口径、备份恢复演练、runbook/值班响应、任务队列、执行实例、超时与 Chroma probe 摘要，用于部署/值班快速判断运行态配置风险。
 - `backend/app` 与 `backend/scripts` 所有 Python 源码均低于 3000 行；`tool_runtime.py` 与 `test_tool_runtime_slice.py` 保持兼容入口，新增实现继续落到主题模块。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量；无 `backend/.venv` fixture 下 release readiness / release gate JSON 校验通过。
-- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1996/1996` 通过。
-- Targeted：`production_operations 8/8`、`production_operations_health 6/6`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
+- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1998/1998` 通过。
+- Targeted：`production_operations 10/10`、`production_operations_health 8/8`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行规模边界。
 - E2E 基线：backend main、timeout、queue 三段通过；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443`、`frontend-e2e` run `33373178435`、`release-gate` run `33373178464` 均 completed success。
 - Hygiene：`py_compile`、`git diff --check`、备份计划 diff 检查通过。
 
 ## 下一步后端计划
 
-1. 当前状态：`production-operations-readiness` 已启动，当前约 50%；后端已完成 `/health` 运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练与 runbook/值班响应摘要。
+1. 当前状态：`production-operations-readiness` 已启动，当前约 60%；后端已完成 `/health` 运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要与告警等级汇总。
 2. 下一步后端继续做封板前收敛与必要的运维文档复核。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
@@ -260,4 +260,4 @@ docker compose up -d chroma
 - 当前外部 SSE / trace / export / e2e 契约尽量保持稳定，优先做内部 runtime/helper 收口。
 - registry 治理语义已封板，不优先继续扩大旧 fallback 兼容面，也不继续维护已归档的 runtime spec 历史文档。
 - 文档收敛只处理当前状态、验证基线、下一步计划/候选主线、稳定契约和高信号摘要；长期参考章节不应被整段删除。
-`GET /health` 额外返回只读 `operations` 摘要，包含 `readiness`、非敏感 `warnings`、部署配置分类与布尔校验、SLO 阈值口径、备份恢复演练状态、runbook/值班响应配置状态、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；不会返回数据库连接串、API key、密钥、联系人或 runbook URL 原文，也不改变既有健康字段。
+`GET /health` 额外返回只读 `operations` 摘要，包含 `readiness`、非敏感 `warnings`、`warning_summary` 告警等级计数、部署配置分类与布尔校验、SLO 阈值口径、备份恢复演练状态、runbook/值班响应配置状态、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；不会返回数据库连接串、API key、密钥、联系人或 runbook URL 原文，也不改变既有健康字段。
