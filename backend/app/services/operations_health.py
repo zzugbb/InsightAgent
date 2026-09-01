@@ -22,8 +22,10 @@ def build_operations_health(settings: Any) -> dict[str, object]:
         backup_restore,
         runbook,
     )
+    warning_summary = _build_warning_summary(warnings)
     return {
         "readiness": "attention" if warnings else "ok",
+        "readiness_level": warning_summary["highest_severity"] or "ok",
         "backup_restore": backup_restore,
         "deployment": deployment,
         "runbook": runbook,
@@ -51,7 +53,7 @@ def build_operations_health(settings: Any) -> dict[str, object]:
             ),
         },
         "chroma_probe_enabled": bool(settings.chroma_probe),
-        "warning_summary": _build_warning_summary(warnings),
+        "warning_summary": warning_summary,
         "warnings": warnings,
     }
 
