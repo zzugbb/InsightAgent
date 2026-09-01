@@ -5,32 +5,33 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
+- `production-operations-readiness` 已启动，当前约 10%；第一片先落后端 `/health.operations` 运维 readiness 摘要，前端暂不新增显示入口。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地。
 - 前端继续消费后端统一的 preview/output/result-summary、trace/export 字段，不新增 provider 专用显示分支。
 - SSE `error.diagnostic.reason` 与 failure audit diagnostic 是后端追加的低敏兼容字段；前端现有错误提示继续使用 `code/message/detail/status_code`，审计详情可展示低敏 diagnostic reason，reconnect 继续依赖后端稳定 code/message。
 - 任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center/任务详情 normalized 状态、失败诊断及轮询控制已对齐；Task Center、Audit Logs 与知识库治理均可区分初始/陈旧数据错误并原位重试；任务详情 failure hint code 映射与 SSE close 后失败摘要兜底已补齐。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 - 前端 e2e workflow 覆盖 smoke/full/queue，queue 阶段使用独立 `:8011` backend；main push Playwright artifact-stage guard 使用 `fail-on-missing`。
-- 本轮修复 GitHub frontend-e2e：queue phase wrapper 同步注入 `NEXT_PUBLIC_API_BASE_URL`，queue recovery active task 拉长以避免 CI 慢加载时过早释放队列槽位，export diagnostics 只纳入 export 相关 edge-case error-context。
+- GitHub frontend-e2e queue runtime API base URL、CI 慢加载稳定性与 export diagnostics 误判已修复；commit `6ea51c7` 对应 GitHub frontend-e2e、backend-e2e 与 release-gate 均为 success。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase auto` 通过，Markdown/JSON summary 与 release readiness matrix 输出通过。
 - Node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；8 个测试文件 `140/140` 通过，包含 frontend source size boundary。
 - `npm run lint` 与 `npm run build` 通过。
-- E2E 基线：targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center 加载失败与原位重试、知识库治理加载失败/重试均通过；full Chromium `56 passed / 1 skipped`；低并发 queue phase 本地真实复验 `1/1` 通过且已纳入 CI workflow。
-- Backend 契约基线：full slice `1988/1988`；module boundary `4/4`；backend main/timeout/queue e2e 与 main push artifact-stage guard 通过；GitHub backend-e2e 红点定位为后置 tooling fixture 无 venv JSON 校验，已补 fallback 并在 commit `45c3808` completed success。
+- E2E 基线：targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center 加载失败与原位重试、知识库治理加载失败/重试均通过；full Chromium `56 passed / 1 skipped`；低并发 queue phase 本地真实复验 `1/1` 通过且已纳入 CI workflow；commit `6ea51c7` 的 GitHub `frontend-e2e` run `33373178435` completed success。
+- Backend 契约基线：full slice `1990/1990`；module boundary `4/4`；backend main/timeout/queue e2e 与 main push artifact-stage guard 通过；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443` 与 `release-gate` run `33373178464` 均 completed success。
 
 ## 下一步前端计划
 
-1. 当前状态：`product-ux-polish` 已 100% 封板；前端 full Chromium 并发 e2e、targeted Chromium、静态 release gate 与后端 e2e 后置门禁均已收口。
-2. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认前端与运维界面范围。
+1. 当前状态：`production-operations-readiness` 已启动，当前约 10%；前端本轮只记录后端健康摘要契约，暂不改变 UI。
+2. 下一步视后端运维 API 范围决定是否增加运行健康、发布/回滚可见性与运维入口。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 后续候选主线
 
-- `production-operations-readiness`：运行健康、发布/回滚可见性与运维入口。
 - `security-hardening`：会话安全、敏感配置提示与安全错误反馈。
+- `release-observability-polish`：发布/回滚可见性、artifact 保留策略与门禁趋势摘要。
 
 ## 稳定契约
 

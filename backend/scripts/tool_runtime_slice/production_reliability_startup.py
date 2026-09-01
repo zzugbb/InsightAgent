@@ -658,3 +658,110 @@ class ProductionReliabilityStartupMixin:
                 )
 
         self.assertEqual(calls, ["init", "recover", "inside"])
+
+    def test_production_operations_health_exposes_non_sensitive_runtime_readiness(
+        self,
+    ) -> None:
+        health_module = __import__("app.api.routes.health", fromlist=["health"])
+        original_get_settings = health_module.get_settings
+        original_get_database_locator = health_module.get_database_locator
+        original_probe_chroma_reachable = health_module.probe_chroma_reachable
+
+        fake_settings = SimpleNamespace(
+            app_env="production",
+            mode="remote",
+            provider="openai",
+            model_name="gpt-4o-mini",
+            chroma_http_url="http://chroma:8000",
+            chroma_probe=False,
+            task_timeout_sec=120.0,
+            task_queue_max_concurrent=8,
+            task_queue_max_concurrent_per_user=2,
+            task_queue_max_concurrent_per_session=1,
+            task_queue_poll_interval_sec=0.5,
+            task_execution_owner_id="default",
+            task_execution_stale_after_sec=0.0,
+            task_execution_heartbeat_interval_sec=2.0,
+            auth_jwt_secret="dev-only-change-me",
+            auth_secret_key=None,
+        )
+
+        try:
+            health_module.get_settings = lambda: fake_settings
+            health_module.get_database_locator = lambda: "postgresql://db/insightagent"
+            health_module.probe_chroma_reachable = (
+                lambda _url: (_ for _ in ()).throw(AssertionError("probe disabled"))
+            )
+
+            payload = health_module.health()
+        finally:
+            health_module.get_settings = original_get_settings
+            health_module.get_database_locator = original_get_database_locator
+            health_module.probe_chroma_reachable = original_probe_chroma_reachable
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["database_locator"], "postgresql://db/insightagent")
+        self.assertEqual(payload["chroma"]["reachable"], None)
+        operations = payload["operations"]
+        self.assertEqual(operations["readiness"], "attention")
+        self.assertEqual(
+            operations["task_queue"],
+            {
+                "max_concurrent": 8,
+                "per_user_limit_enabled": True,
+                "per_session_limit_enabled": True,
+                "poll_interval_sec": 0.5,
+            },
+        )
+        self.assertEqual(
+            operations["task_execution"],
+            {
+                "owner_id_configured": False,
+                "stale_recovery_enabled": False,
+                "stale_after_sec": 0.0,
+                "heartbeat_interval_sec": 2.0,
+            },
+        )
+        self.assertEqual(operations["task_timeout_sec"], 120.0)
+        self.assertEqual(operations["chroma_probe_enabled"], False)
+        self.assertEqual(
+            [warning["code"] for warning in operations["warnings"]],
+            [
+                "default_execution_owner",
+                "stale_recovery_disabled",
+                "default_jwt_secret",
+                "missing_secret_key",
+                "chroma_probe_disabled",
+            ],
+        )
+        self.assertNotIn("dev-only-change-me", str(operations))
+
+    def test_production_operations_health_marks_configured_runtime_ready(
+        self,
+    ) -> None:
+        operations_module = __import__(
+            "app.services.operations_health",
+            fromlist=["build_operations_health"],
+        )
+        payload = operations_module.build_operations_health(
+            SimpleNamespace(
+                app_env="production",
+                chroma_probe=True,
+                task_timeout_sec=180.0,
+                task_queue_max_concurrent=16,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.25,
+                task_execution_owner_id="backend-prod-a",
+                task_execution_stale_after_sec=45.0,
+                task_execution_heartbeat_interval_sec=2.0,
+                auth_jwt_secret="prod-secret",
+                auth_secret_key="separate-secret",
+            )
+        )
+
+        self.assertEqual(payload["readiness"], "ok")
+        self.assertEqual(payload["warnings"], [])
+        self.assertEqual(payload["task_queue"]["max_concurrent"], 16)
+        self.assertEqual(payload["task_execution"]["owner_id_configured"], True)
+        self.assertEqual(payload["task_execution"]["stale_recovery_enabled"], True)

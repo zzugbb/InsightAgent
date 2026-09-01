@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.config import get_settings
 from app.db import get_database_locator
 from app.services.chroma_status import probe_chroma_reachable
+from app.services.operations_health import build_operations_health
 
 
 router = APIRouter()
@@ -30,4 +31,5 @@ def health() -> dict[str, object]:
             "url": chroma_url,
             "reachable": chroma_reachable,
         },
+        "operations": build_operations_health(settings),
     }

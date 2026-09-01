@@ -7,24 +7,24 @@
 - `provider-tool-expansion` 已 100% 封板。
 - `ci-release-engineering` 已 100% 封板。
 - `production-runtime-hardening` 已 100% 封板：SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- `product-ux-polish` 已 100% 封板：语义 Trace 回放、Task Center/任务详情 normalized 状态与失败诊断、列表加载错误/陈旧数据保留/原位重试均已收口；本轮补齐任务详情 failure hint code 映射与 SSE close 后失败摘要兜底，full Chromium 并发 e2e 已复绿。
-- 本轮修复后端 e2e 后置 CI 稳定性：release-gate JSON summary 不再依赖 Python 子进程转义，backend artifact 清单补齐 8011 queue 产物并移除 finalize 后才生成的 failure diagnostics，backend 启动 wrapper 本地优先使用 `backend/.venv/bin/python -m uvicorn`；GitHub backend-e2e 红点定位为 tooling fixture 在无本地 venv runner 上硬编码 `backend/.venv/bin/python`，已改为优先 venv、缺失时 fallback `python3`。
-- 本轮继续修复 GitHub frontend-e2e：queue phase 的 Next runtime 现在显式继承 `NEXT_PUBLIC_API_BASE_URL`，避免浏览器端误连默认 `8000`；queue recovery active mock stream 拉长以抵抗 CI 慢页面加载；frontend export diagnostics 只扫描 export 相关 edge-case error-context，避免 queue 失败截图误触发 export P0 guard。
+- `product-ux-polish` 已 100% 封板：语义 Trace 回放、Task Center/任务详情 normalized 状态与失败诊断、列表加载错误/陈旧数据保留/原位重试、任务详情 failure hint code 映射与 SSE close 后失败摘要兜底均已收口。
+- `production-operations-readiness` 已启动，当前约 10%：`/health` 新增非敏感 `operations` 摘要，暴露任务队列、执行实例、stale recovery、超时与 Chroma probe 的运维 readiness/warnings，不改变既有 `/health` 字段。
+- 后端与前端 e2e 后置 CI 稳定性已收口：backend 无 venv runner JSON 校验 fallback、frontend queue runtime API base URL、queue 慢加载稳定性与 export diagnostics 范围均已修复；commit `6ea51c7` 对应 GitHub `backend-e2e`、`frontend-e2e`、`release-gate` 均为 success。
 - 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 已用 `json.tool` 复核；无 `backend/.venv` fixture 下 release readiness / release gate JSON 校验通过。
-- Backend：full slice `1988/1988`；module boundary `4/4`；targeted production_reliability `39/39`、reconnect `9/9` 通过。
+- Backend：full slice `1990/1990`；module boundary `4/4`；targeted production_operations_health `2/2`、production_reliability `39/39`、reconnect `9/9` 通过。
 - Frontend：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；node tests `140/140`、`npm run lint`、`npm run build` 通过。
-- E2E 基线：backend main、timeout、queue 三段通过；GitHub backend-e2e run `33369418475` 中这三段均为 success，红点来自后置 tooling fixture 127，后续 commit `45c3808` 的 backend-e2e 已 completed success；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`，targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center/知识库治理错误恢复均通过。
+- E2E 基线：backend main、timeout、queue 三段通过；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`，targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center/知识库治理错误恢复均通过；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443`、`frontend-e2e` run `33373178435`、`release-gate` run `33373178464` 均 completed success。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前状态：`product-ux-polish` 已 100% 封板；本轮后端 e2e 后置 artifact/release-gate 稳定性已修复并复验，可进入下一主线。
+1. 当前状态：`production-operations-readiness` 已启动，当前约 10%；第一片聚焦 `/health` 运维 readiness 摘要。
 2. 已封板主线新增 `product-ux-polish`；既有 provider/tool、生产运行态、源码规模、CI/release、RAG、可观测性、可靠性、治理与并发主线保持完成。
-3. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认范围。
+3. 下一步继续补部署配置校验、健康/SLO 口径、备份恢复演练与运维 runbook。
 
 ## 稳定契约
 
@@ -138,12 +138,12 @@ docker compose -f compose.full.yml up -d
 
 ## 后续候选主线
 
-- `production-operations-readiness`：部署配置校验、健康/SLO、备份恢复演练与运维 runbook。
 - `security-hardening`：鉴权会话、密钥/安全头、限流与依赖安全审计。
+- `release-observability-polish`：发布/回滚可见性、artifact 保留策略与门禁趋势摘要。
 
 ## 下一步
 
-- `product-ux-polish` 已封板；确认候选主线范围后再启动下一轮红测与实现。
+- `production-operations-readiness` 继续按先红测、再实现、再 targeted/full slice 推进。
 
 ## 文档维护约定
 

@@ -5,33 +5,34 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 ## 当前状态
 
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
+- `production-operations-readiness` 已启动，当前约 10%；第一片完成 `/health` 非敏感 `operations` readiness 摘要。
 - Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
 - CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
 - 本轮修复 backend e2e 后置 CI：artifact 清单补齐 `backend-8011`、`health-8011` 与 `e2e-queue-8011`，移除 finalize 后才生成的 failure diagnostics；`ci_boot_backend_instance.sh` 本地优先使用 `backend/.venv/bin/python -m uvicorn`；tooling fixture 的 JSON 校验在无 `backend/.venv` runner 上 fallback `python3`。
-- GitHub frontend-e2e 的后续红点定位为前端 queue runtime base URL 与 export diagnostics 误判；本轮只改前端 e2e wrapper/diagnostics 与 queue test 稳定性，后端 API/SSE/trace/export 契约无变更。
+- GitHub frontend-e2e 的后续红点定位为前端 queue runtime base URL 与 export diagnostics 误判，已修复；commit `6ea51c7` 对应 GitHub backend/frontend e2e 与 release-gate 均已 completed success。
 - SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- 本轮无后端业务运行时变更；任务/审计/RAG API、SSE、trace 与 export shape 不变。
+- `/health` 保持既有字段不变，并新增 `operations.readiness/warnings`、任务队列、执行实例、超时与 Chroma probe 摘要，用于部署/值班快速判断运行态配置风险。
 - `backend/app` 与 `backend/scripts` 所有 Python 源码均低于 3000 行；`tool_runtime.py` 与 `test_tool_runtime_slice.py` 保持兼容入口，新增实现继续落到主题模块。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量；无 `backend/.venv` fixture 下 release readiness / release gate JSON 校验通过。
-- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1988/1988` 通过。
-- Targeted：`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
+- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1990/1990` 通过。
+- Targeted：`production_operations_health 2/2`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行规模边界。
-- E2E 基线：backend main、timeout、queue 三段通过；GitHub backend-e2e run `33369418475` 中业务三段均为 success，失败点定位在后置 tooling fixture 127，后续 commit `45c3808` 的 backend-e2e 已 completed success；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`。
+- E2E 基线：backend main、timeout、queue 三段通过；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443`、`frontend-e2e` run `33373178435`、`release-gate` run `33373178464` 均 completed success。
 - Hygiene：`py_compile`、`git diff --check`、备份计划 diff 检查通过。
 
 ## 下一步后端计划
 
-1. 当前状态：`product-ux-polish` 已 100% 封板；backend e2e 后置 artifact/release-gate 稳定性已修复并复验，后端契约保持稳定，可进入下一主线。
-2. 下一主线候选：`production-operations-readiness` 或 `security-hardening`，启动前先确认后端范围。
+1. 当前状态：`production-operations-readiness` 已启动，当前约 10%；后端第一片聚焦 `/health` 运维 readiness 摘要。
+2. 下一步后端继续补部署配置校验、健康/SLO 口径、备份恢复演练与运维 runbook。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
 
-- `production-operations-readiness`：部署配置校验、健康/SLO、备份恢复演练与运维 runbook。
 - `security-hardening`：鉴权会话、密钥/安全头、限流与依赖安全审计。
+- `release-observability-polish`：发布/回滚可见性、artifact 保留策略与门禁趋势摘要。
 
 ## 稳定契约
 
@@ -253,3 +254,4 @@ docker compose up -d chroma
 - 当前外部 SSE / trace / export / e2e 契约尽量保持稳定，优先做内部 runtime/helper 收口。
 - registry 治理语义已封板，不优先继续扩大旧 fallback 兼容面，也不继续维护已归档的 runtime spec 历史文档。
 - 文档收敛只处理当前状态、验证基线、下一步计划/候选主线、稳定契约和高信号摘要；长期参考章节不应被整段删除。
+`GET /health` 额外返回只读 `operations` 摘要，包含 `readiness`、非敏感 `warnings`、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；不会返回密钥原文，也不改变既有健康字段。
