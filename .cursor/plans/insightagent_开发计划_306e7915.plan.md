@@ -2,9 +2,9 @@
 name: InsightAgent 开发计划
 overview: provider-tool-expansion、ci-release-engineering、production-runtime-hardening、product-ux-polish 与 production-operations-readiness 已 100% 封板。
 current_focus:
-  mainline: production-operations-readiness
-  status: 100% 封板
-  latest_change: /health.operations 增加非敏感 readiness_checks 固定清单，封板生产运维就绪摘要
+  mainline: security-hardening
+  status: 约 0%
+  latest_change: 当前焦点从 production-operations-readiness 切换到 security-hardening
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -36,10 +36,9 @@ completed_mainlines:
   - product-ux-polish：语义 Trace、normalized 状态/失败诊断、治理与观测列表错误恢复及伪空态治理
   - production-operations-readiness：/health.operations 非敏感运维 readiness、部署/SLO/备份恢复/runbook/演练摘要、warning_summary、risk_domains、readiness_checks 与 readiness_level
 next_candidate_mainlines:
-  - security-hardening：鉴权会话、密钥/安全头、限流与依赖安全审计
   - release-observability-polish：发布/回滚可见性、artifact 保留策略与门禁趋势摘要
 next_steps:
-  - 下一主线候选为 security-hardening 或 release-observability-polish
+  - security-hardening 优先从鉴权会话、密钥/安全头、限流与依赖安全审计中选择可红测证明的小切片
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -49,6 +48,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish` 与 `production-operations-readiness` 均已 100% 封板。
+- `security-hardening` 已进入，当前约 0%；下一步优先寻找鉴权会话、密钥/安全头、限流与依赖安全审计中可红测证明的安全缺口。
 - `production-operations-readiness` 封板摘要：`/health.operations` 已完成非敏感运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、告警等级汇总、按域风险汇总、readiness_checks 固定清单与 readiness_level。
 - 生产运行态封板摘要：SSE `error.diagnostic` 与 failure audit detail 默认对齐低敏 `reason` 枚举，前端审计详情可展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段不变。
 - 产品体验封板摘要：语义 Trace、Task Center/任务详情 normalized 状态与失败诊断、Task Center/Audit Logs/知识库治理加载恢复、伪空态治理、任务详情 failure hint code 映射与 SSE close 后失败摘要兜底已收口。
@@ -93,8 +93,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 后续维护线
 
-- 当前状态：`production-operations-readiness` 已 100% 封板；`/health.operations` readiness、readiness_level、deployment 配置校验、SLO 阈值口径、backup_restore、runbook 摘要、应急响应演练新鲜度、warning_summary、risk_domains 与 readiness_checks 已按先红测再实现完成。
-- 后续候选：`security-hardening` 或 `release-observability-polish`。
+- 当前状态：`security-hardening` 已进入，当前约 0%；先保持外部 SSE / trace / export / e2e 契约稳定，再从鉴权会话、密钥/安全头、限流与依赖安全审计中补红测。
+- 后续候选：`release-observability-polish`。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 文档收敛边界

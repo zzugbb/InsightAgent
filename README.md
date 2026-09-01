@@ -9,6 +9,7 @@
 - `production-runtime-hardening` 已 100% 封板：SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
 - `product-ux-polish` 已 100% 封板：语义 Trace 回放、Task Center/任务详情 normalized 状态与失败诊断、列表加载错误/陈旧数据保留/原位重试、任务详情 failure hint code 映射与 SSE close 后失败摘要兜底均已收口。
 - `production-operations-readiness` 已 100% 封板：`/health` 新增非敏感 `operations` 摘要，暴露部署配置、SLO 阈值口径、备份恢复演练、运维 runbook/值班响应、应急响应演练新鲜度、告警等级汇总、按域风险汇总、机器友好的 readiness_level、readiness_checks 清单、任务队列、执行实例、stale recovery、超时与 Chroma probe 的运维 readiness/warnings，不改变既有 `/health` 字段。
+- `security-hardening` 已进入，当前约 0%：优先从鉴权会话、密钥/安全头、限流与依赖安全审计中选择可红测证明的小切片。
 - 后端与前端 e2e 后置 CI 稳定性已收口：backend 无 venv runner JSON 校验 fallback、frontend queue runtime API base URL、queue 慢加载稳定性与 export diagnostics 范围均已修复；commit `6ea51c7` 对应 GitHub `backend-e2e`、`frontend-e2e`、`release-gate` 均为 success。
 - 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
@@ -22,9 +23,9 @@
 
 ## 当前开发计划
 
-1. 当前状态：`production-operations-readiness` 已 100% 封板；已完成 `/health` 运维 readiness 摘要、非敏感部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、告警等级汇总、按域风险汇总、readiness_checks 清单与 readiness_level。
+1. 当前状态：`security-hardening` 已进入，当前约 0%；优先寻找鉴权会话、密钥/安全头、限流与依赖安全审计中可红测证明的安全缺口。
 2. 已封板主线新增 `production-operations-readiness`；既有 provider/tool、生产运行态、源码规模、CI/release、RAG、可观测性、可靠性、治理、并发与产品体验主线保持完成。
-3. 下一步候选为 `security-hardening` 或 `release-observability-polish`。
+3. 下一候选主线保留 `release-observability-polish`。
 
 ## 稳定契约
 
@@ -138,12 +139,11 @@ docker compose -f compose.full.yml up -d
 
 ## 后续候选主线
 
-- `security-hardening`：鉴权会话、密钥/安全头、限流与依赖安全审计。
 - `release-observability-polish`：发布/回滚可见性、artifact 保留策略与门禁趋势摘要。
 
 ## 下一步
 
-- 下一主线继续按先红测、再实现、再 targeted/full slice 推进，优先候选为 `security-hardening` 或 `release-observability-polish`。
+- `security-hardening` 继续按先红测、再实现、再 targeted/full slice 推进，优先找鉴权会话、密钥/安全头、限流与依赖安全审计中的小切片。
 
 ## 文档维护约定
 

@@ -5,6 +5,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 ## 当前状态
 
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish` 与 `production-operations-readiness` 均已 100% 封板。
+- `security-hardening` 已进入，当前约 0%；后端优先从鉴权会话、密钥/安全头、限流与依赖安全审计中选择可红测证明的小切片。
 - `production-operations-readiness` 已完成 `/health` 非敏感 `operations` readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、告警等级汇总、按域风险汇总、readiness_checks 清单与 readiness_level。
 - Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
 - CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
@@ -24,13 +25,12 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 下一步后端计划
 
-1. 当前状态：`production-operations-readiness` 已 100% 封板；后端已完成 `/health` 运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、告警等级汇总、按域风险汇总、readiness_checks 清单与 readiness_level。
-2. 下一步后端候选为 `security-hardening` 或 `release-observability-polish`。
+1. 当前状态：`security-hardening` 已进入，当前约 0%；后端优先找鉴权会话、密钥/安全头、限流与依赖安全审计中的小切片。
+2. 下一步后端候选为鉴权会话收口、生产密钥/安全头校验、API 限流或依赖安全审计。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
 
-- `security-hardening`：鉴权会话、密钥/安全头、限流与依赖安全审计。
 - `release-observability-polish`：发布/回滚可见性、artifact 保留策略与门禁趋势摘要。
 
 ## 稳定契约
