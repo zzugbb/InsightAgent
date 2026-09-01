@@ -141,6 +141,46 @@ class ProductionOperationsHealthMixin:
                 "highest_severity": "critical",
             },
         )
+        self.assertEqual(
+            payload["risk_domains"],
+            {
+                "deployment": {
+                    "total": 3,
+                    "critical": 2,
+                    "warning": 1,
+                    "info": 0,
+                    "highest_severity": "critical",
+                },
+                "slo": {
+                    "total": 0,
+                    "critical": 0,
+                    "warning": 0,
+                    "info": 0,
+                    "highest_severity": None,
+                },
+                "backup_restore": {
+                    "total": 0,
+                    "critical": 0,
+                    "warning": 0,
+                    "info": 0,
+                    "highest_severity": None,
+                },
+                "runbook": {
+                    "total": 0,
+                    "critical": 0,
+                    "warning": 0,
+                    "info": 0,
+                    "highest_severity": None,
+                },
+                "runtime": {
+                    "total": 1,
+                    "critical": 0,
+                    "warning": 0,
+                    "info": 1,
+                    "highest_severity": "info",
+                },
+            },
+        )
         self.assertEqual(payload["readiness"], "attention")
         self.assertEqual(payload["readiness_level"], "critical")
         self.assertNotIn("token=raw", str(payload))
@@ -195,6 +235,46 @@ class ProductionOperationsHealthMixin:
                 "warning": 0,
                 "info": 0,
                 "highest_severity": None,
+            },
+        )
+        self.assertEqual(
+            payload["risk_domains"],
+            {
+                "deployment": {
+                    "total": 0,
+                    "critical": 0,
+                    "warning": 0,
+                    "info": 0,
+                    "highest_severity": None,
+                },
+                "slo": {
+                    "total": 0,
+                    "critical": 0,
+                    "warning": 0,
+                    "info": 0,
+                    "highest_severity": None,
+                },
+                "backup_restore": {
+                    "total": 0,
+                    "critical": 0,
+                    "warning": 0,
+                    "info": 0,
+                    "highest_severity": None,
+                },
+                "runbook": {
+                    "total": 0,
+                    "critical": 0,
+                    "warning": 0,
+                    "info": 0,
+                    "highest_severity": None,
+                },
+                "runtime": {
+                    "total": 0,
+                    "critical": 0,
+                    "warning": 0,
+                    "info": 0,
+                    "highest_severity": None,
+                },
             },
         )
         self.assertEqual(payload["readiness"], "ok")
@@ -303,6 +383,11 @@ class ProductionOperationsHealthMixin:
         self.assertEqual(
             [warning["code"] for warning in payload["warnings"]],
             ["incident_response_drill_missing"],
+        )
+        self.assertEqual(payload["risk_domains"]["runbook"]["total"], 1)
+        self.assertEqual(
+            payload["risk_domains"]["runbook"]["highest_severity"],
+            "warning",
         )
         self.assertEqual(payload["readiness_level"], "warning")
         self.assertNotIn("token=raw", str(payload))

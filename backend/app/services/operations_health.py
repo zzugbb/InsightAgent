@@ -9,6 +9,33 @@ _MIN_RECOMMENDED_TASK_TIMEOUT_SEC = 30.0
 _RESTORE_DRILL_MAX_AGE_DAYS = 90
 _INCIDENT_DRILL_MAX_AGE_DAYS = 180
 _WARNING_SEVERITIES = ("critical", "warning", "info")
+_RISK_DOMAINS = ("deployment", "slo", "backup_restore", "runbook", "runtime")
+_WARNING_CODE_DOMAINS = {
+    "default_jwt_secret": "deployment",
+    "missing_secret_key": "deployment",
+    "production_database_missing": "deployment",
+    "production_database_localhost": "deployment",
+    "production_cors_allows_wildcard": "deployment",
+    "production_cors_allows_localhost": "deployment",
+    "remote_provider_missing_api_key": "deployment",
+    "task_timeout_below_recommended": "slo",
+    "stream_reconnect_poll_backoff_inverted": "slo",
+    "stream_reconnect_heartbeat_exceeds_task_timeout": "slo",
+    "execution_stale_window_not_above_heartbeat": "slo",
+    "backup_disabled": "backup_restore",
+    "backup_provider_missing": "backup_restore",
+    "backup_restore_runbook_missing": "backup_restore",
+    "backup_restore_drill_missing": "backup_restore",
+    "backup_restore_drill_stale": "backup_restore",
+    "operations_runbook_missing": "runbook",
+    "incident_contact_missing": "runbook",
+    "incident_response_drill_missing": "runbook",
+    "incident_response_drill_stale": "runbook",
+    "status_page_missing": "runbook",
+    "default_execution_owner": "runtime",
+    "stale_recovery_disabled": "runtime",
+    "chroma_probe_disabled": "runtime",
+}
 
 
 def build_operations_health(settings: Any) -> dict[str, object]:
@@ -54,8 +81,21 @@ def build_operations_health(settings: Any) -> dict[str, object]:
             ),
         },
         "chroma_probe_enabled": bool(settings.chroma_probe),
+        "risk_domains": _build_risk_domains(warnings),
         "warning_summary": warning_summary,
         "warnings": warnings,
+    }
+
+
+def _build_risk_domains(warnings: list[dict[str, str]]) -> dict[str, object]:
+    by_domain = {domain: [] for domain in _RISK_DOMAINS}
+    for warning in warnings:
+        domain = _WARNING_CODE_DOMAINS.get(warning.get("code", ""), "runtime")
+        by_domain[domain].append(warning)
+
+    return {
+        domain: _build_warning_summary(domain_warnings)
+        for domain, domain_warnings in by_domain.items()
     }
 
 
