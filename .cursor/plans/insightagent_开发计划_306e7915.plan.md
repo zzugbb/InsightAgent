@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: provider-tool-expansion、ci-release-engineering、production-runtime-hardening 与 product-ux-polish 已 100% 封板；production-operations-readiness 已启动。
 current_focus:
   mainline: production-operations-readiness
-  status: 约 30%
-  latest_change: /health.operations 增加非敏感 slo 阈值口径摘要，覆盖 task timeout、reconnect poll/heartbeat 与 execution stale recovery 窗口风险
+  status: 约 40%
+  latest_change: /health.operations 增加非敏感 backup_restore 摘要，覆盖备份启用、provider/runbook 配置与恢复演练新鲜度风险
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -19,12 +19,12 @@ stable_contracts:
   - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 status_normalized，显式 failure_hint/failure_source 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload
   - Task Center、Audit Logs 与知识库治理加载错误、陈旧数据保留及原位重试只调整前端 query/presentation 状态，不改变任务、审计或 RAG API shape
   - SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload
-  - /health 保持既有字段不变，新增 operations readiness/warnings、部署配置、SLO 阈值口径、队列、执行实例、超时与 Chroma probe 摘要，不暴露数据库连接串、API key、密钥原文或完整敏感连接信息
+  - /health 保持既有字段不变，新增 operations readiness/warnings、部署配置、SLO 阈值口径、备份恢复演练、队列、执行实例、超时与 Chroma probe 摘要，不暴露数据库连接串、API key、密钥、runbook URL 原文或完整敏感连接信息
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
   release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；无 backend/.venv fixture 下 release readiness / release gate JSON 校验 passed
-  backend: full slice 1992/1992；module boundary 4/4；production_operations_health 4/4；production_reliability 39/39；reconnect 9/9
+  backend: full slice 1994/1994；module boundary 4/4；production_operations 6/6；production_operations_health 5/5；production_reliability 39/39；reconnect 9/9
   frontend: workbench utils targeted 78/78；store utils targeted 16/16；task detail targeted 10/10；audit targeted 10/10；knowledge governance targeted 6/6；node tests 140/140；npm run lint passed；npm run build passed
   e2e: backend main/timeout/queue passed；backend tooling scope local passed；frontend queue Chromium local 1/1 passed；backend finalize + artifact-stage guard main push fail-on-missing passed，included_count=20、missing_count=0；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；commit 6ea51c7 的 GitHub backend-e2e run 33373178443、frontend-e2e run 33373178435、release-gate run 33373178464 均 completed success
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
@@ -38,7 +38,7 @@ next_candidate_mainlines:
   - security-hardening：鉴权会话、密钥/安全头、限流与依赖安全审计
   - release-observability-polish：发布/回滚可见性、artifact 保留策略与门禁趋势摘要
 next_steps:
-  - production-operations-readiness 继续补备份恢复演练与运维 runbook
+  - production-operations-readiness 继续补运维 runbook 与封板前收敛
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -48,11 +48,11 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
-- `production-operations-readiness` 已启动，当前约 30%；`/health.operations` 已完成非敏感运维 readiness 摘要、部署配置校验摘要与 SLO 阈值口径摘要。
+- `production-operations-readiness` 已启动，当前约 40%；`/health.operations` 已完成非敏感运维 readiness 摘要、部署配置校验、SLO 阈值口径与备份恢复演练摘要。
 - 生产运行态封板摘要：SSE `error.diagnostic` 与 failure audit detail 默认对齐低敏 `reason` 枚举，前端审计详情可展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段不变。
 - 产品体验封板摘要：语义 Trace、Task Center/任务详情 normalized 状态与失败诊断、Task Center/Audit Logs/知识库治理加载恢复、伪空态治理、任务详情 failure hint code 映射与 SSE close 后失败摘要兜底已收口。
 - 后端/frontend e2e 后置门禁摘要：release-gate JSON summary 已移除 Python 子进程转义依赖，backend artifact 清单覆盖 main/timeout/queue 产物且不再列 finalize 后才生成的 failure diagnostics，本地 boot wrapper 优先走 `backend/.venv/bin/python -m uvicorn`；无 venv runner JSON 校验 fallback、frontend queue runtime API base URL、queue 慢加载稳定性与 export diagnostics 范围均已修复，commit `6ea51c7` 对应 GitHub 三条 workflow 均 success。
-- 运维就绪摘要：`/health` 新增 `operations` 字段，返回 readiness、非敏感 warnings、deployment 配置摘要、SLO 阈值口径摘要、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；既有健康字段保持兼容。
+- 运维就绪摘要：`/health` 新增 `operations` 字段，返回 readiness、非敏感 warnings、deployment 配置摘要、SLO 阈值口径摘要、backup_restore 摘要、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；既有健康字段保持兼容。
 - 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
 - 代码规模治理已纳入常规边界：`backend/app`、`backend/scripts` 与 `frontend` 源码保持单文件 <= 3000 行；`frontend/package-lock.json` 等生成锁文件不作为拆分对象。
 
@@ -68,8 +68,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1992/1992`。
-- Backend targeted：`production_operations_health 4/4`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `1994/1994`。
+- Backend targeted：`production_operations 6/6`、`production_operations_health 5/5`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，当前 `4/4`，包含 3000 行规模边界。
 - Frontend node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；当前 `140/140`，包含 frontend source size boundary。
 - Frontend lint/build：`cd frontend && npm run lint`、`cd frontend && npm run build` 通过。
@@ -92,7 +92,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 后续维护线
 
-- 当前状态：`production-operations-readiness` 已启动，当前约 30%；`/health.operations` readiness、deployment 配置校验与 SLO 阈值口径摘要已按先红测再实现完成。
+- 当前状态：`production-operations-readiness` 已启动，当前约 40%；`/health.operations` readiness、deployment 配置校验、SLO 阈值口径与 backup_restore 摘要已按先红测再实现完成。
 - 后续候选：`security-hardening` 或 `release-observability-polish`，当前主线完成后再进入。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 

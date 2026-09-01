@@ -5,27 +5,27 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 ## 当前状态
 
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening` 与 `product-ux-polish` 均已 100% 封板。
-- `production-operations-readiness` 已启动，当前约 30%；已完成 `/health` 非敏感 `operations` readiness 摘要、部署配置校验摘要与 SLO 阈值口径摘要。
+- `production-operations-readiness` 已启动，当前约 40%；已完成 `/health` 非敏感 `operations` readiness 摘要、部署配置校验、SLO 阈值口径与备份恢复演练摘要。
 - Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
 - CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
 - 后端/frontend e2e 后置 CI 已完成稳定性收口：backend artifact 清单、boot wrapper、无 venv runner JSON fallback、frontend queue runtime API base URL、queue 慢加载稳定性与 export diagnostics 范围均已修复；commit `6ea51c7` 对应 GitHub backend/frontend e2e 与 release-gate 均已 completed success。
 - SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- `/health` 保持既有字段不变，并新增 `operations.readiness/warnings`、部署配置、SLO 阈值口径、任务队列、执行实例、超时与 Chroma probe 摘要，用于部署/值班快速判断运行态配置风险。
+- `/health` 保持既有字段不变，并新增 `operations.readiness/warnings`、部署配置、SLO 阈值口径、备份恢复演练、任务队列、执行实例、超时与 Chroma probe 摘要，用于部署/值班快速判断运行态配置风险。
 - `backend/app` 与 `backend/scripts` 所有 Python 源码均低于 3000 行；`tool_runtime.py` 与 `test_tool_runtime_slice.py` 保持兼容入口，新增实现继续落到主题模块。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量；无 `backend/.venv` fixture 下 release readiness / release gate JSON 校验通过。
-- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1992/1992` 通过。
-- Targeted：`production_operations_health 4/4`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
+- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`1994/1994` 通过。
+- Targeted：`production_operations 6/6`、`production_operations_health 5/5`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行规模边界。
 - E2E 基线：backend main、timeout、queue 三段通过；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443`、`frontend-e2e` run `33373178435`、`release-gate` run `33373178464` 均 completed success。
 - Hygiene：`py_compile`、`git diff --check`、备份计划 diff 检查通过。
 
 ## 下一步后端计划
 
-1. 当前状态：`production-operations-readiness` 已启动，当前约 30%；后端已完成 `/health` 运维 readiness 摘要、部署配置校验摘要与 SLO 阈值口径摘要。
-2. 下一步后端继续补备份恢复演练与运维 runbook。
+1. 当前状态：`production-operations-readiness` 已启动，当前约 40%；后端已完成 `/health` 运维 readiness 摘要、部署配置校验、SLO 阈值口径与备份恢复演练摘要。
+2. 下一步后端继续补运维 runbook 与封板前收敛。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
@@ -245,6 +245,10 @@ docker compose up -d chroma
 - `TASK_EXECUTION_OWNER_ID`：当前 backend 执行实例 ID，多实例部署时应为每个实例设置唯一稳定值
 - `TASK_EXECUTION_HEARTBEAT_INTERVAL_SEC`：running 任务刷新 DB heartbeat 的最小间隔，默认 `2.0`
 - `TASK_EXECUTION_STALE_AFTER_SEC`：启动恢复时接管其他实例 stale running 任务的阈值，默认 `0` 关闭
+- `INSIGHT_AGENT_BACKUP_ENABLED`：生产备份是否已启用，默认 `false`
+- `INSIGHT_AGENT_BACKUP_PROVIDER`：备份提供方标识；`/health` 仅暴露是否已配置
+- `INSIGHT_AGENT_BACKUP_RESTORE_RUNBOOK_URL`：恢复 runbook 链接；`/health` 仅暴露是否已配置
+- `INSIGHT_AGENT_BACKUP_LAST_RESTORE_DRILL_AT`：最近一次恢复演练时间（ISO-8601），用于判断恢复演练新鲜度
 
 测试、e2e、服务启动、端口和提交权限以 [`docs/development-runbook.md`](../docs/development-runbook.md) 为准。
 
@@ -253,4 +257,4 @@ docker compose up -d chroma
 - 当前外部 SSE / trace / export / e2e 契约尽量保持稳定，优先做内部 runtime/helper 收口。
 - registry 治理语义已封板，不优先继续扩大旧 fallback 兼容面，也不继续维护已归档的 runtime spec 历史文档。
 - 文档收敛只处理当前状态、验证基线、下一步计划/候选主线、稳定契约和高信号摘要；长期参考章节不应被整段删除。
-`GET /health` 额外返回只读 `operations` 摘要，包含 `readiness`、非敏感 `warnings`、部署配置分类与布尔校验、SLO 阈值口径、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；不会返回数据库连接串、API key、密钥原文，也不改变既有健康字段。
+`GET /health` 额外返回只读 `operations` 摘要，包含 `readiness`、非敏感 `warnings`、部署配置分类与布尔校验、SLO 阈值口径、备份恢复演练状态、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；不会返回数据库连接串、API key、密钥或 runbook URL 原文，也不改变既有健康字段。

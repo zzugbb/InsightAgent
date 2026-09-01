@@ -197,6 +197,26 @@ class Settings(BaseSettings):
         alias="INSIGHT_AGENT_SECRET_KEY",
         description="用户密钥加密主密钥；为空时回退 JWT 密钥（仅开发建议）",
     )
+    backup_enabled: bool = Field(
+        default=False,
+        alias="INSIGHT_AGENT_BACKUP_ENABLED",
+        description="生产备份是否已启用；用于 /health.operations 的运维就绪摘要",
+    )
+    backup_provider: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_BACKUP_PROVIDER",
+        description="备份提供方标识；/health 仅暴露是否已配置，不回显原值",
+    )
+    backup_restore_runbook_url: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_BACKUP_RESTORE_RUNBOOK_URL",
+        description="备份恢复 runbook 链接；/health 仅暴露是否已配置，不回显原值",
+    )
+    backup_last_restore_drill_at: str | None = Field(
+        default=None,
+        alias="INSIGHT_AGENT_BACKUP_LAST_RESTORE_DRILL_AT",
+        description="最近一次恢复演练时间（ISO-8601）；用于 /health.operations 判断演练新鲜度",
+    )
     tool_registry_overrides_json: str | None = Field(
         default=None,
         alias="INSIGHT_AGENT_TOOL_REGISTRY_OVERRIDES_JSON",

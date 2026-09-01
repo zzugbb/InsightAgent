@@ -1,18 +1,22 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
 
 _MIN_RECOMMENDED_TASK_TIMEOUT_SEC = 30.0
+_RESTORE_DRILL_MAX_AGE_DAYS = 90
 
 
 def build_operations_health(settings: Any) -> dict[str, object]:
     deployment = _build_deployment_health(settings)
     slo = _build_slo_health(settings)
-    warnings = _build_operations_warnings(settings, deployment, slo)
+    backup_restore = _build_backup_restore_health(settings)
+    warnings = _build_operations_warnings(settings, deployment, slo, backup_restore)
     return {
         "readiness": "attention" if warnings else "ok",
+        "backup_restore": backup_restore,
         "deployment": deployment,
         "slo": slo,
         "task_timeout_sec": float(settings.task_timeout_sec),
@@ -39,6 +43,31 @@ def build_operations_health(settings: Any) -> dict[str, object]:
         },
         "chroma_probe_enabled": bool(settings.chroma_probe),
         "warnings": warnings,
+    }
+
+
+def _build_backup_restore_health(settings: Any) -> dict[str, object]:
+    backup_enabled = _read_bool(settings, "backup_enabled", False)
+    provider_configured = bool(
+        str(getattr(settings, "backup_provider", "") or "").strip()
+    )
+    restore_runbook_configured = bool(
+        str(getattr(settings, "backup_restore_runbook_url", "") or "").strip()
+    )
+    drill_at = _parse_datetime(getattr(settings, "backup_last_restore_drill_at", None))
+    age_days = _age_days(drill_at)
+    restore_drill_recent = (
+        age_days is not None and age_days <= _RESTORE_DRILL_MAX_AGE_DAYS
+    )
+
+    return {
+        "backup_enabled": backup_enabled,
+        "provider_configured": provider_configured,
+        "restore_runbook_configured": restore_runbook_configured,
+        "last_restore_drill_recorded": drill_at is not None,
+        "last_restore_drill_age_days": age_days,
+        "restore_drill_max_age_days": _RESTORE_DRILL_MAX_AGE_DAYS,
+        "restore_drill_recent": restore_drill_recent,
     }
 
 
@@ -126,6 +155,7 @@ def _build_operations_warnings(
     settings: Any,
     deployment: dict[str, object],
     slo: dict[str, object],
+    backup_restore: dict[str, object],
 ) -> list[dict[str, str]]:
     warnings: list[dict[str, str]] = []
     is_production = str(settings.app_env).strip().lower() == "production"
@@ -238,6 +268,46 @@ def _build_operations_warnings(
                 "message": "TASK_EXECUTION_STALE_AFTER_SEC should be greater than TASK_EXECUTION_HEARTBEAT_INTERVAL_SEC.",
             }
         )
+    if is_production and not bool(backup_restore["backup_enabled"]):
+        warnings.append(
+            {
+                "code": "backup_disabled",
+                "severity": "critical",
+                "message": "INSIGHT_AGENT_BACKUP_ENABLED should be enabled in production.",
+            }
+        )
+    if is_production and not bool(backup_restore["provider_configured"]):
+        warnings.append(
+            {
+                "code": "backup_provider_missing",
+                "severity": "warning",
+                "message": "INSIGHT_AGENT_BACKUP_PROVIDER should be set in production.",
+            }
+        )
+    if is_production and not bool(backup_restore["restore_runbook_configured"]):
+        warnings.append(
+            {
+                "code": "backup_restore_runbook_missing",
+                "severity": "warning",
+                "message": "INSIGHT_AGENT_BACKUP_RESTORE_RUNBOOK_URL should be set in production.",
+            }
+        )
+    if is_production and not bool(backup_restore["last_restore_drill_recorded"]):
+        warnings.append(
+            {
+                "code": "backup_restore_drill_missing",
+                "severity": "warning",
+                "message": "INSIGHT_AGENT_BACKUP_LAST_RESTORE_DRILL_AT should record the latest restore drill.",
+            }
+        )
+    elif is_production and not bool(backup_restore["restore_drill_recent"]):
+        warnings.append(
+            {
+                "code": "backup_restore_drill_stale",
+                "severity": "warning",
+                "message": "The latest restore drill is older than the recommended production window.",
+            }
+        )
     if not bool(settings.chroma_probe):
         warnings.append(
             {
@@ -312,7 +382,45 @@ def _read_float(settings: Any, field_name: str, default: float) -> float:
         return default
 
 
+def _read_bool(settings: Any, field_name: str, default: bool) -> bool:
+    value = getattr(settings, field_name, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+    return bool(value)
+
+
 def _read_mapping(value: object) -> dict[str, object]:
     if isinstance(value, dict):
         return value
     return {}
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _age_days(value: datetime | None) -> int | None:
+    if value is None:
+        return None
+    now = datetime.now(timezone.utc)
+    age = now - value.astimezone(timezone.utc)
+    return max(0, age.days)
