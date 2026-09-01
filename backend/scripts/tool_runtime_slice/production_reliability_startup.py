@@ -830,3 +830,69 @@ class ProductionReliabilityStartupMixin:
         )
         self.assertNotIn("secret", str(payload))
         self.assertNotIn("127.0.0.1:5432", str(payload))
+
+    def test_production_operations_health_flags_slo_threshold_risks(
+        self,
+    ) -> None:
+        operations_module = __import__(
+            "app.services.operations_health",
+            fromlist=["build_operations_health"],
+        )
+
+        payload = operations_module.build_operations_health(
+            SimpleNamespace(
+                app_env="production",
+                mode="remote",
+                provider="openai",
+                api_key="configured-api-key",
+                database_url="postgresql://insight:secret@db:5432/insightagent",
+                cors_origins=["https://app.example.com"],
+                chroma_probe=True,
+                trace_persist_min_interval_sec=0.25,
+                stream_reconnect_poll_fast_sec=3.0,
+                stream_reconnect_poll_max_sec=1.0,
+                stream_reconnect_heartbeat_interval_sec=15.0,
+                task_timeout_sec=10.0,
+                task_queue_max_concurrent=16,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.25,
+                task_execution_owner_id="backend-prod-a",
+                task_execution_stale_after_sec=5.0,
+                task_execution_heartbeat_interval_sec=5.0,
+                auth_jwt_secret="prod-secret",
+                auth_secret_key="separate-secret",
+            )
+        )
+
+        self.assertEqual(
+            payload["slo"],
+            {
+                "task_timeout_sec": 10.0,
+                "minimum_recommended_task_timeout_sec": 30.0,
+                "task_timeout_meets_recommended_minimum": False,
+                "trace_persist_min_interval_sec": 0.25,
+                "stream_reconnect": {
+                    "poll_fast_sec": 3.0,
+                    "poll_max_sec": 1.0,
+                    "heartbeat_interval_sec": 15.0,
+                    "poll_backoff_order_ok": False,
+                    "heartbeat_within_task_timeout": False,
+                },
+                "task_execution": {
+                    "heartbeat_interval_sec": 5.0,
+                    "stale_after_sec": 5.0,
+                    "stale_recovery_margin_sec": 0.0,
+                    "stale_recovery_margin_ok": False,
+                },
+            },
+        )
+        self.assertEqual(
+            [warning["code"] for warning in payload["warnings"]],
+            [
+                "task_timeout_below_recommended",
+                "stream_reconnect_poll_backoff_inverted",
+                "stream_reconnect_heartbeat_exceeds_task_timeout",
+                "execution_stale_window_not_above_heartbeat",
+            ],
+        )

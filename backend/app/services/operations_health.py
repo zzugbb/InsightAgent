@@ -4,12 +4,17 @@ from typing import Any
 from urllib.parse import urlparse
 
 
+_MIN_RECOMMENDED_TASK_TIMEOUT_SEC = 30.0
+
+
 def build_operations_health(settings: Any) -> dict[str, object]:
     deployment = _build_deployment_health(settings)
-    warnings = _build_operations_warnings(settings, deployment)
+    slo = _build_slo_health(settings)
+    warnings = _build_operations_warnings(settings, deployment, slo)
     return {
         "readiness": "attention" if warnings else "ok",
         "deployment": deployment,
+        "slo": slo,
         "task_timeout_sec": float(settings.task_timeout_sec),
         "task_queue": {
             "max_concurrent": int(settings.task_queue_max_concurrent),
@@ -50,12 +55,82 @@ def _build_deployment_health(settings: Any) -> dict[str, object]:
     }
 
 
+def _build_slo_health(settings: Any) -> dict[str, object]:
+    task_timeout_sec = _read_float(settings, "task_timeout_sec", 180.0)
+    trace_persist_min_interval_sec = _read_float(
+        settings,
+        "trace_persist_min_interval_sec",
+        0.35,
+    )
+    stream_reconnect_poll_fast_sec = _read_float(
+        settings,
+        "stream_reconnect_poll_fast_sec",
+        0.3,
+    )
+    stream_reconnect_poll_max_sec = _read_float(
+        settings,
+        "stream_reconnect_poll_max_sec",
+        2.0,
+    )
+    stream_reconnect_heartbeat_interval_sec = _read_float(
+        settings,
+        "stream_reconnect_heartbeat_interval_sec",
+        2.0,
+    )
+    task_execution_heartbeat_interval_sec = _read_float(
+        settings,
+        "task_execution_heartbeat_interval_sec",
+        2.0,
+    )
+    task_execution_stale_after_sec = _read_float(
+        settings,
+        "task_execution_stale_after_sec",
+        0.0,
+    )
+    stale_recovery_margin_sec = (
+        task_execution_stale_after_sec - task_execution_heartbeat_interval_sec
+        if task_execution_stale_after_sec > 0
+        else None
+    )
+
+    return {
+        "task_timeout_sec": task_timeout_sec,
+        "minimum_recommended_task_timeout_sec": _MIN_RECOMMENDED_TASK_TIMEOUT_SEC,
+        "task_timeout_meets_recommended_minimum": (
+            task_timeout_sec >= _MIN_RECOMMENDED_TASK_TIMEOUT_SEC
+        ),
+        "trace_persist_min_interval_sec": trace_persist_min_interval_sec,
+        "stream_reconnect": {
+            "poll_fast_sec": stream_reconnect_poll_fast_sec,
+            "poll_max_sec": stream_reconnect_poll_max_sec,
+            "heartbeat_interval_sec": stream_reconnect_heartbeat_interval_sec,
+            "poll_backoff_order_ok": (
+                stream_reconnect_poll_fast_sec <= stream_reconnect_poll_max_sec
+            ),
+            "heartbeat_within_task_timeout": (
+                stream_reconnect_heartbeat_interval_sec < task_timeout_sec
+            ),
+        },
+        "task_execution": {
+            "heartbeat_interval_sec": task_execution_heartbeat_interval_sec,
+            "stale_after_sec": task_execution_stale_after_sec,
+            "stale_recovery_margin_sec": stale_recovery_margin_sec,
+            "stale_recovery_margin_ok": (
+                stale_recovery_margin_sec is None or stale_recovery_margin_sec > 0
+            ),
+        },
+    }
+
+
 def _build_operations_warnings(
     settings: Any,
     deployment: dict[str, object],
+    slo: dict[str, object],
 ) -> list[dict[str, str]]:
     warnings: list[dict[str, str]] = []
     is_production = str(settings.app_env).strip().lower() == "production"
+    stream_reconnect = _read_mapping(slo.get("stream_reconnect"))
+    task_execution = _read_mapping(slo.get("task_execution"))
 
     if not _has_non_default_execution_owner(settings):
         warnings.append(
@@ -131,6 +206,38 @@ def _build_operations_warnings(
                 "message": "INSIGHT_AGENT_API_KEY must be set when remote provider mode is enabled.",
             }
         )
+    if is_production and not bool(slo["task_timeout_meets_recommended_minimum"]):
+        warnings.append(
+            {
+                "code": "task_timeout_below_recommended",
+                "severity": "warning",
+                "message": "TASK_TIMEOUT_SEC is below the recommended production minimum.",
+            }
+        )
+    if not bool(stream_reconnect["poll_backoff_order_ok"]):
+        warnings.append(
+            {
+                "code": "stream_reconnect_poll_backoff_inverted",
+                "severity": "warning",
+                "message": "STREAM_RECONNECT_POLL_FAST_SEC should be less than or equal to STREAM_RECONNECT_POLL_MAX_SEC.",
+            }
+        )
+    if not bool(stream_reconnect["heartbeat_within_task_timeout"]):
+        warnings.append(
+            {
+                "code": "stream_reconnect_heartbeat_exceeds_task_timeout",
+                "severity": "warning",
+                "message": "STREAM_RECONNECT_HEARTBEAT_INTERVAL_SEC should be lower than TASK_TIMEOUT_SEC.",
+            }
+        )
+    if not bool(task_execution["stale_recovery_margin_ok"]):
+        warnings.append(
+            {
+                "code": "execution_stale_window_not_above_heartbeat",
+                "severity": "warning",
+                "message": "TASK_EXECUTION_STALE_AFTER_SEC should be greater than TASK_EXECUTION_HEARTBEAT_INTERVAL_SEC.",
+            }
+        )
     if not bool(settings.chroma_probe):
         warnings.append(
             {
@@ -196,3 +303,16 @@ def _remote_provider_configured(settings: Any) -> bool:
     provider = str(getattr(settings, "provider", "") or "").strip().lower()
     api_key = str(getattr(settings, "api_key", "") or "").strip()
     return bool(provider and provider != "mock" and api_key)
+
+
+def _read_float(settings: Any, field_name: str, default: float) -> float:
+    try:
+        return float(getattr(settings, field_name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _read_mapping(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    return {}
