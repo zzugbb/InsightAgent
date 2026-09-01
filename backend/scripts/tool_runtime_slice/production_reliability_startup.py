@@ -672,6 +672,9 @@ class ProductionReliabilityStartupMixin:
             mode="remote",
             provider="openai",
             model_name="gpt-4o-mini",
+            api_key="configured-api-key",
+            database_url="postgresql://insight:secret@db:5432/insightagent",
+            cors_origins=["https://app.example.com"],
             chroma_http_url="http://chroma:8000",
             chroma_probe=False,
             task_timeout_sec=120.0,
@@ -746,6 +749,11 @@ class ProductionReliabilityStartupMixin:
         payload = operations_module.build_operations_health(
             SimpleNamespace(
                 app_env="production",
+                mode="remote",
+                provider="openai",
+                api_key="configured-api-key",
+                database_url="postgresql://insight:secret@db:5432/insightagent",
+                cors_origins=["https://app.example.com"],
                 chroma_probe=True,
                 task_timeout_sec=180.0,
                 task_queue_max_concurrent=16,
@@ -765,3 +773,60 @@ class ProductionReliabilityStartupMixin:
         self.assertEqual(payload["task_queue"]["max_concurrent"], 16)
         self.assertEqual(payload["task_execution"]["owner_id_configured"], True)
         self.assertEqual(payload["task_execution"]["stale_recovery_enabled"], True)
+
+    def test_production_operations_health_flags_deployment_config_risks(
+        self,
+    ) -> None:
+        operations_module = __import__(
+            "app.services.operations_health",
+            fromlist=["build_operations_health"],
+        )
+
+        payload = operations_module.build_operations_health(
+            SimpleNamespace(
+                app_env="production",
+                mode="remote",
+                provider="openai",
+                api_key=None,
+                database_url="postgresql://insight:secret@127.0.0.1:5432/insightagent",
+                cors_origins=[
+                    "http://localhost:3001",
+                    "https://app.example.com",
+                    "*",
+                ],
+                chroma_probe=True,
+                task_timeout_sec=180.0,
+                task_queue_max_concurrent=16,
+                task_queue_max_concurrent_per_user=0,
+                task_queue_max_concurrent_per_session=0,
+                task_queue_poll_interval_sec=0.25,
+                task_execution_owner_id="backend-prod-a",
+                task_execution_stale_after_sec=45.0,
+                task_execution_heartbeat_interval_sec=2.0,
+                auth_jwt_secret="prod-secret",
+                auth_secret_key="separate-secret",
+            )
+        )
+
+        self.assertEqual(
+            payload["deployment"],
+            {
+                "database_configured": True,
+                "database_kind": "postgresql",
+                "cors_origin_count": 3,
+                "cors_allows_localhost": True,
+                "cors_allows_wildcard": True,
+                "remote_provider_configured": False,
+            },
+        )
+        self.assertEqual(
+            [warning["code"] for warning in payload["warnings"]],
+            [
+                "production_database_localhost",
+                "production_cors_allows_wildcard",
+                "production_cors_allows_localhost",
+                "remote_provider_missing_api_key",
+            ],
+        )
+        self.assertNotIn("secret", str(payload))
+        self.assertNotIn("127.0.0.1:5432", str(payload))
