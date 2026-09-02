@@ -10,6 +10,25 @@ from fastapi.testclient import TestClient
 
 
 class SecurityHardeningMixin:
+    def test_security_secret_material_rejects_default_jwt_secret_in_production(
+        self,
+    ) -> None:
+        security_module = __import__(
+            "app.security",
+            fromlist=["hash_refresh_token", "get_settings"],
+        )
+        original_get_settings = security_module.get_settings
+        security_module.get_settings = lambda: SimpleNamespace(  # type: ignore[assignment]
+            app_env="production",
+            auth_secret_key=None,
+            auth_jwt_secret="dev-only-change-me",
+        )
+        try:
+            with self.assertRaisesRegex(RuntimeError, "default JWT secret"):
+                security_module.hash_refresh_token("refresh-token")
+        finally:
+            security_module.get_settings = original_get_settings  # type: ignore[assignment]
+
     def test_security_auth_token_refresh_validates_secret_before_session_rotation(
         self,
     ) -> None:

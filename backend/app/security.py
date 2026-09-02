@@ -134,6 +134,7 @@ def verify_password(password: str, *, salt_hex: str, digest_hex: str) -> bool:
 
 def _secret_material() -> bytes:
     settings = get_settings()
+    _ensure_jwt_secret_allowed(settings)
     source = settings.auth_secret_key or settings.auth_jwt_secret
     return hashlib.sha256(source.encode("utf-8")).digest()
 

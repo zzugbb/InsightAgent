@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: provider-tool-expansion、ci-release-engineering、production-runtime-hardening、product-ux-polish 与 production-operations-readiness 已 100% 封板。
 current_focus:
   mainline: security-hardening
-  status: 约 80%
-  latest_change: Auth token 签发与刷新会先校验 access token 签发配置，再创建/轮换 refresh token 与写入 auth session，避免生产默认 JWT secret 错误留下会话副作用
+  status: 约 90%
+  latest_change: 生产默认 JWT secret 不能用于签发、验签、refresh token 哈希或 secret 加密派生，避免默认凭据成为任何运行态 secret material
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -23,6 +23,7 @@ stable_contracts:
   - Access token 解析要求 JWT header 为 alg=HS256、typ=JWT；签名、过期和 subject 校验语义保持不变
   - Refresh token 请求会先 trim 并拒绝空白值；服务层将空白 refresh token 视为无效 token 返回，不暴露内部异常
   - 生产环境禁止使用默认 INSIGHT_AGENT_JWT_SECRET 签发或验签 access token；开发默认值仍只允许在非生产环境使用
+  - 生产环境默认 INSIGHT_AGENT_JWT_SECRET 也不能作为 refresh token 哈希或 secret 加密派生材料
   - 生产环境禁止 INSIGHT_AGENT_CORS_ORIGINS 包含 wildcard *；非生产 CORS 调试行为保持不变
   - 鉴权依赖对 token parser 异常统一返回低敏 401 invalid token，保留 WWW-Authenticate: Bearer，不向客户端回显内部配置或解析细节
   - Auth token 签发与刷新会在创建/轮换 refresh token 和写入 auth session 前先校验 access token 签发配置；生产默认 JWT secret 错误不留下会话存储副作用
@@ -31,7 +32,7 @@ stable_contracts:
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
   release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；无 backend/.venv fixture 下 release readiness / release gate JSON 校验 passed
-  backend: full slice 2015/2015；module boundary 4/4；security 15/15；current_user_hides 2/2；cors 2/2；default_secret 2/2；security_refresh 2/2；auth 3/3；production_operations 12/12；production_operations_health 10/10；production_reliability 39/39；reconnect 9/9
+  backend: full slice 2016/2016；module boundary 4/4；security 16/16；current_user_hides 2/2；cors 2/2；default_secret 3/3；security_refresh 2/2；auth 3/3；settings 217/217；production_operations 12/12；production_operations_health 10/10；production_reliability 39/39；reconnect 9/9
   frontend: workbench utils targeted 78/78；store utils targeted 16/16；task detail targeted 10/10；audit targeted 10/10；knowledge governance targeted 6/6；手动扩展 node tests 141/141；release gate 内置 frontend node 清单 140/140；npm run lint passed；npm run build passed
   e2e: backend main/timeout/queue passed；backend tooling scope local passed；frontend queue Chromium local 1/1 passed；backend finalize + artifact-stage guard main push fail-on-missing passed，included_count=20、missing_count=0；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；commit 6ea51c7 的 GitHub backend-e2e run 33373178443、frontend-e2e run 33373178435、release-gate run 33373178464 均 completed success
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
@@ -55,7 +56,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish` 与 `production-operations-readiness` 均已 100% 封板。
-- `security-hardening` 已进入，当前约 80%；后端已补全局安全响应头，收紧 access/refresh token 输入边界，阻断生产默认 JWT secret/wildcard CORS，将认证 token 解析错误低敏化为稳定 401，并确保默认生产 JWT secret 配置错误不会先写入或轮换 auth session；业务 payload 与 SSE/trace/export 契约不变。
+- `security-hardening` 已进入，当前约 90%；后端已补全局安全响应头，收紧 access/refresh token 输入边界，阻断生产默认 JWT secret/wildcard CORS，将认证 token 解析错误低敏化为稳定 401，并确保默认生产 JWT secret 不能用于签发、验签、refresh token 哈希或密钥加密派生；业务 payload 与 SSE/trace/export 契约不变。
 - `production-operations-readiness` 封板摘要：`/health.operations` 已完成非敏感运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、告警等级汇总、按域风险汇总、readiness_checks 固定清单与 readiness_level。
 - 生产运行态封板摘要：SSE `error.diagnostic` 与 failure audit detail 默认对齐低敏 `reason` 枚举，前端审计详情可展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段不变。
 - 产品体验封板摘要：语义 Trace、Task Center/任务详情 normalized 状态与失败诊断、Task Center/Audit Logs/知识库治理加载恢复、伪空态治理、任务详情 failure hint code 映射与 SSE close 后失败摘要兜底已收口。
@@ -76,8 +77,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `2015/2015`。
-- Backend targeted：`security 15/15`、`current_user_hides 2/2`、`cors 2/2`、`default_secret 2/2`、`security_refresh 2/2`、`auth 3/3`、`production_operations 12/12`、`production_operations_health 10/10`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
+- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `2016/2016`。
+- Backend targeted：`security 16/16`、`current_user_hides 2/2`、`cors 2/2`、`default_secret 3/3`、`security_refresh 2/2`、`auth 3/3`、`settings 217/217`、`production_operations 12/12`、`production_operations_health 10/10`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，当前 `4/4`，包含 3000 行规模边界。
 - Frontend node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；手动扩展当前 `141/141`，release gate 内置 frontend node 清单 `140/140`，包含 frontend source size boundary。
 - Frontend lint/build：`cd frontend && npm run lint`、`cd frontend && npm run build` 通过。
@@ -100,7 +101,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 后续维护线
 
-- 当前状态：`security-hardening` 已进入，当前约 80%；后端全局安全响应头、token 输入边界收紧、生产默认 JWT secret/wildcard CORS 硬阻断、认证错误详情低敏化与 auth session 写入/轮换前签发配置校验已按先红测再实现完成，后续继续从 API 限流、依赖安全审计与剩余鉴权边界中补红测。
+- 当前状态：`security-hardening` 已进入，当前约 90%；后端全局安全响应头、token 输入边界收紧、生产默认 JWT secret/wildcard CORS 硬阻断、认证错误详情低敏化、auth session 写入/轮换前签发配置校验与 secret material 派生保护已按先红测再实现完成，后续做最后一轮 API 限流、依赖安全审计与剩余鉴权边界确认。
 - 后续候选：`release-observability-polish`。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
