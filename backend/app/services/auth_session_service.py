@@ -141,6 +141,9 @@ def refresh_auth_tokens(
     if user is None:
         return None
 
+    from app.security import create_access_token
+
+    access_token = create_access_token(user_id=user_id, email=str(user["email"]))
     next_refresh_token = create_refresh_token()
     next_refresh_hash = hash_refresh_token(next_refresh_token)
     expires_at = _build_expire_at_iso(now)
@@ -176,9 +179,6 @@ def refresh_auth_tokens(
             return None
         connection.commit()
 
-    from app.security import create_access_token
-
-    access_token = create_access_token(user_id=user_id, email=str(user["email"]))
     return {
         "access_token": access_token,
         "refresh_token": next_refresh_token,

@@ -10,6 +10,51 @@ from fastapi.testclient import TestClient
 
 
 class SecurityHardeningMixin:
+    def test_security_auth_token_refresh_validates_secret_before_session_rotation(
+        self,
+    ) -> None:
+        auth_session_module = __import__(
+            "app.services.auth_session_service",
+            fromlist=[
+                "refresh_auth_tokens",
+                "_load_session_by_hash",
+                "get_user_by_id",
+                "get_db_connection",
+            ],
+        )
+        security_module = __import__("app.security", fromlist=["get_settings"])
+        original_get_settings = security_module.get_settings
+        original_load_session_by_hash = auth_session_module._load_session_by_hash
+        original_get_user_by_id = auth_session_module.get_user_by_id
+        original_get_db_connection = auth_session_module.get_db_connection
+        auth_session_module._load_session_by_hash = lambda _hash: {  # type: ignore[assignment]
+            "id": "session-refresh-rotation",
+            "user_id": "user-refresh-rotation",
+            "expires_at": (datetime.now() + timedelta(days=1)).isoformat(),
+            "revoked_at": None,
+        }
+        auth_session_module.get_user_by_id = lambda _user_id: {  # type: ignore[assignment]
+            "id": "user-refresh-rotation",
+            "email": "user@example.com",
+        }
+        auth_session_module.get_db_connection = lambda: (_ for _ in ()).throw(  # type: ignore[assignment]
+            AssertionError("auth session rotation should not be touched before JWT secret validation")
+        )
+        security_module.get_settings = lambda: SimpleNamespace(  # type: ignore[assignment]
+            app_env="production",
+            auth_secret_key=None,
+            auth_jwt_secret="dev-only-change-me",
+            auth_access_token_ttl_minutes=5,
+        )
+        try:
+            with self.assertRaisesRegex(RuntimeError, "default JWT secret"):
+                auth_session_module.refresh_auth_tokens(refresh_token="refresh-token")
+        finally:
+            security_module.get_settings = original_get_settings  # type: ignore[assignment]
+            auth_session_module._load_session_by_hash = original_load_session_by_hash  # type: ignore[assignment]
+            auth_session_module.get_user_by_id = original_get_user_by_id  # type: ignore[assignment]
+            auth_session_module.get_db_connection = original_get_db_connection  # type: ignore[assignment]
+
     def test_security_auth_token_issue_validates_secret_before_session_write(
         self,
     ) -> None:
