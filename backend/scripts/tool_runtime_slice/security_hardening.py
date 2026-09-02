@@ -9,6 +9,32 @@ from fastapi.testclient import TestClient
 
 
 class SecurityHardeningMixin:
+    def test_security_production_cors_rejects_wildcard_origin(self) -> None:
+        main_module = __import__(
+            "app.main",
+            fromlist=["_validate_cors_origins_for_environment"],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "wildcard CORS origin"):
+            main_module._validate_cors_origins_for_environment(  # type: ignore[attr-defined]
+                SimpleNamespace(
+                    app_env="production",
+                    cors_origins=["https://app.example.com", "*"],
+                )
+            )
+
+    def test_security_development_cors_allows_wildcard_origin(self) -> None:
+        main_module = __import__(
+            "app.main",
+            fromlist=["_validate_cors_origins_for_environment"],
+        )
+
+        self.assertIsNone(
+            main_module._validate_cors_origins_for_environment(  # type: ignore[attr-defined]
+                SimpleNamespace(app_env="development", cors_origins=["*"])
+            )
+        )
+
     def test_security_access_token_signing_rejects_default_secret_in_production(
         self,
     ) -> None:

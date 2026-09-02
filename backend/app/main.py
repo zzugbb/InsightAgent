@@ -14,7 +14,19 @@ from app.services.chat_persistence_service import (
 from app.security_headers import add_security_headers
 
 
+def _validate_cors_origins_for_environment(settings_obj: object) -> None:
+    app_env = str(getattr(settings_obj, "app_env", "") or "").strip().lower()
+    raw_origins = getattr(settings_obj, "cors_origins", [])
+    if isinstance(raw_origins, str):
+        origins = [raw_origins]
+    else:
+        origins = [str(origin) for origin in (raw_origins or [])]
+    if app_env == "production" and any(origin.strip() == "*" for origin in origins):
+        raise RuntimeError("wildcard CORS origin is not allowed in production")
+
+
 settings = get_settings()
+_validate_cors_origins_for_environment(settings)
 
 
 @asynccontextmanager
