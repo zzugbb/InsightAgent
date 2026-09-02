@@ -33,6 +33,8 @@ main() {
   assert_contains "if: always() && steps.finalize_frontend.conclusion == 'success'" "${FRONTEND_WORKFLOW}"
   assert_contains "path: \${{ steps.finalize_backend.outputs.artifacts_stage_dir }}" "${BACKEND_WORKFLOW}"
   assert_contains "path: \${{ steps.finalize_frontend.outputs.artifacts_stage_dir }}" "${FRONTEND_WORKFLOW}"
+  assert_contains "retention-days: 14" "${BACKEND_WORKFLOW}"
+  assert_contains "retention-days: 14" "${FRONTEND_WORKFLOW}"
   assert_contains "fetch-depth: 0" "${BACKEND_WORKFLOW}"
   assert_contains "fetch-depth: 0" "${FRONTEND_WORKFLOW}"
   assert_contains "bash scripts/ci_run_artifact_stage_guard.sh \\" "${BACKEND_WORKFLOW}"
@@ -94,6 +96,7 @@ main() {
   assert_contains "--json-summary-file /tmp/release-gate-summary.json" "${RELEASE_GATE_WORKFLOW}"
   assert_contains "name: release-gate-summary" "${RELEASE_GATE_WORKFLOW}"
   assert_contains "path: /tmp/release-gate-summary.json" "${RELEASE_GATE_WORKFLOW}"
+  assert_contains "retention-days: 14" "${RELEASE_GATE_WORKFLOW}"
   assert_not_contains "ci_run_backend_e2e.sh" "${RELEASE_GATE_WORKFLOW}"
   assert_not_contains "ci_run_frontend_e2e.sh" "${RELEASE_GATE_WORKFLOW}"
 

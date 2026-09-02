@@ -60,6 +60,7 @@ main() {
   assert_contains "backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py" "${TMP_DIR}/all.txt"
   assert_contains "PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py" "${TMP_DIR}/all.txt"
   assert_contains "node --test --experimental-strip-types" "${TMP_DIR}/all.txt"
+  assert_contains "app/components/workbench/task-queue-diagnostics-contract.type.test.ts" "${TMP_DIR}/all.txt"
   assert_contains "app/source-file-size.node.test.ts" "${TMP_DIR}/all.txt"
   assert_contains "npm run lint" "${TMP_DIR}/all.txt"
   assert_contains "npm run build" "${TMP_DIR}/all.txt"

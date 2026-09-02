@@ -51,6 +51,9 @@ main() {
   assert_contains "| frontend-e2e-full | yes | yes |" "${TMP_DIR}/readiness.md"
   assert_contains "| frontend-e2e-queue | yes | yes |" "${TMP_DIR}/readiness.md"
   assert_contains "| artifact-stage-guard | yes | no |" "${TMP_DIR}/readiness.md"
+  assert_contains "| release-visibility-summary | yes | no |" "${TMP_DIR}/readiness.md"
+  assert_contains "| rollback-decision-log | yes | no |" "${TMP_DIR}/readiness.md"
+  assert_contains "| artifact-retention-policy | yes | no |" "${TMP_DIR}/readiness.md"
 
   bash "${SCRIPT}" --format json --output "${TMP_DIR}/readiness.json"
   "$(json_tool_python)" -m json.tool "${TMP_DIR}/readiness.json" >/dev/null
@@ -62,6 +65,9 @@ main() {
   assert_contains '"service_required": true' "${TMP_DIR}/readiness.json"
   assert_contains '"gate_id": "frontend-e2e-queue"' "${TMP_DIR}/readiness.json"
   assert_contains '"gate_id": "artifact-stage-guard"' "${TMP_DIR}/readiness.json"
+  assert_contains '"gate_id": "release-visibility-summary"' "${TMP_DIR}/readiness.json"
+  assert_contains '"gate_id": "rollback-decision-log"' "${TMP_DIR}/readiness.json"
+  assert_contains '"gate_id": "artifact-retention-policy"' "${TMP_DIR}/readiness.json"
 
   bash "${SCRIPT}" --format markdown > "${TMP_DIR}/stdout.md"
   assert_contains "release readiness matrix" "${TMP_DIR}/stdout.md"

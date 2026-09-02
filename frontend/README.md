@@ -7,20 +7,20 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`。
 - `security-hardening` 封板结论：前端不新增 UI，继续跟随后端安全 header、token 校验、生产密钥、CORS、认证错误低敏化、auth session 副作用保护与 secret material 派生保护契约；SSE、trace、export 与任务列表契约保持稳定。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
-- 当前处于主线间文档收敛，不进入下一主线；`release-observability-polish` 仅保留为候选，前端展示需求后续再评估。
+- 当前主线：`release-observability-polish`，进度约 20%；release gate 内置前端 node 清单已纳入 task queue diagnostics 类型契约测试，发布/e2e artifacts 显式保留 14 天。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核。
-- Frontend：扩展 node tests `141/141`；release gate 内置 node 清单 `140/140`；`npm run lint` 与 `npm run build` 通过。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `141/141`；`npm run lint` 与 `npm run build` 通过。
 - Backend 契约基线：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. 当前先完成四份活跃文档收敛，暂不启动下一主线。
-2. `release-observability-polish` 仅作为候选保留；是否需要前端展示待下一主线正式启动后再定。
+1. `release-observability-polish` 已启动，第一片完成 release gate 前端类型契约覆盖与 artifact retention 基线。
+2. 下一步若涉及门禁趋势或发布/回滚摘要展示，再补前端可见性入口；否则保持前端契约稳定。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 后续候选主线

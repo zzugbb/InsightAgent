@@ -32,9 +32,10 @@ git diff -- data/insightagent.plan.back.md
 
 `scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`auto` 在 PR 中按 changed files 选择 backend/frontend 阶段，并始终跑 tooling 与 hygiene；非 PR 或 diff 不可解析时保守跑全量。`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace 与备份计划 diff；可用 `--dry-run` 查看命令清单，可用 `--summary-file` / `--json-summary-file` 输出 CI 摘要。
 
-`scripts/ci_release_readiness_matrix.sh` 只生成发布候选检查矩阵，支持 `--format markdown|json` 与 `--output <path>`。矩阵明确区分不需要服务的静态 release gate、需要已启动服务的 backend/frontend e2e，以及 e2e 后置 artifact-stage guard；它不启动服务，也不替代下方 service-backed e2e 命令。
+`scripts/ci_release_readiness_matrix.sh` 只生成发布候选检查矩阵，支持 `--format markdown|json` 与 `--output <path>`。矩阵明确区分不需要服务的静态 release gate、需要已启动服务的 backend/frontend e2e，以及 e2e 后置 artifact-stage guard；并保留 release visibility summary、rollback decision log 与 artifact retention policy 三类发布/回滚可见性检查项。它不启动服务，也不替代下方 service-backed e2e 命令。
 GitHub backend/frontend e2e workflow 已按矩阵覆盖低并发 queue 阶段；backend 失败诊断可重复传 `--secondary-health-url`，用于同时采集 timeout 与 queue 实例。
 artifact-stage guard 的 main push 严格度为 `fail-on-missing`，PR 严格度为 `fail-on-empty`；手动 `workflow_dispatch` 可用 `artifact_stage_strict_level` 覆盖。
+release-gate、backend-e2e 与 frontend-e2e 上传的发布/e2e artifacts 显式保留 `14` 天。
 
 前端检查：
 
@@ -46,6 +47,7 @@ node --test --experimental-strip-types \
   app/components/workbench/runtime-debug-modal-utils.node.test.ts \
   app/components/workbench/audit-logs-modal-utils.node.test.ts \
   app/components/workbench/model-settings-modal-utils.node.test.ts \
+  app/components/workbench/task-queue-diagnostics-contract.type.test.ts \
   app/components/workbench/utils.node.test.ts \
   app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts \
   app/source-file-size.node.test.ts \

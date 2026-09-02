@@ -6,20 +6,20 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`。
 - `security-hardening` 封板结论：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断均已收口。
-- 当前处于主线间文档收敛，不进入下一主线；候选主线仍为 `release-observability-polish`。
+- 当前主线：`release-observability-polish`，进度约 20%；第一片已补 release readiness matrix 发布/回滚可见性检查、artifact `retention-days: 14` 与 release gate 前端类型契约测试覆盖。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
-- Frontend：扩展 node tests `141/141`；release gate 内置 node 清单 `140/140`；`npm run lint` 与 `npm run build` 通过。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `141/141`；`npm run lint` 与 `npm run build` 通过。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. `security-hardening` 已 100% 封板，当前先完成四份活跃文档收敛。
-2. 下一主线暂不启动；`release-observability-polish` 仅作为候选保留。
+1. `release-observability-polish` 已启动，第一片聚焦发布/回滚可见性与 artifact retention。
+2. 下一片优先从门禁趋势摘要或发布/回滚摘要结构化输出里选择可红测证明的小切片。
 3. 后续开发继续按先红测、再实现、再 targeted/full slice 推进。
 
 ## 稳定契约

@@ -219,3 +219,4 @@ jobs:
           name: ${{ steps.finalize_backend.outputs.artifact_name }}
           path: ${{ steps.finalize_backend.outputs.artifacts_stage_dir }}
           if-no-files-found: ignore
+          retention-days: 14

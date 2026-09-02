@@ -97,6 +97,7 @@ jobs:
           name: release-gate-summary
           path: /tmp/release-gate-summary.json
           if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload release readiness matrix
         if: always()
@@ -107,3 +108,4 @@ jobs:
             /tmp/release-readiness.md
             /tmp/release-readiness.json
           if-no-files-found: ignore
+          retention-days: 14
