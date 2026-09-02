@@ -2,12 +2,71 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
 class SecurityHardeningMixin:
+    def test_security_access_token_signing_rejects_default_secret_in_production(
+        self,
+    ) -> None:
+        security_module = __import__(
+            "app.security",
+            fromlist=["create_access_token", "get_settings"],
+        )
+        original_get_settings = security_module.get_settings
+        security_module.get_settings = lambda: SimpleNamespace(  # type: ignore[assignment]
+            app_env="production",
+            auth_jwt_secret="dev-only-change-me",
+            auth_access_token_ttl_minutes=5,
+        )
+        try:
+            with self.assertRaisesRegex(RuntimeError, "default JWT secret"):
+                security_module.create_access_token(
+                    user_id="user-default-secret",
+                    email="user@example.com",
+                )
+        finally:
+            security_module.get_settings = original_get_settings  # type: ignore[assignment]
+
+    def test_security_access_token_parse_rejects_default_secret_in_production(
+        self,
+    ) -> None:
+        security_module = __import__(
+            "app.security",
+            fromlist=["_b64url_encode", "_sign_hs256", "parse_access_token", "get_settings"],
+        )
+        header = {"alg": "HS256", "typ": "JWT"}
+        payload = {
+            "sub": "user-default-secret",
+            "email": "user@example.com",
+            "iat": int(datetime.now(UTC).timestamp()),
+            "exp": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp()),
+        }
+        header_part = security_module._b64url_encode(  # type: ignore[attr-defined]
+            json.dumps(header, separators=(",", ":")).encode("utf-8")
+        )
+        payload_part = security_module._b64url_encode(  # type: ignore[attr-defined]
+            json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        )
+        signed_input = f"{header_part}.{payload_part}".encode("ascii")
+        sign_part = security_module._b64url_encode(  # type: ignore[attr-defined]
+            security_module._sign_hs256(signed_input, "dev-only-change-me")  # type: ignore[attr-defined]
+        )
+        token = f"{header_part}.{payload_part}.{sign_part}"
+        original_get_settings = security_module.get_settings
+        security_module.get_settings = lambda: SimpleNamespace(  # type: ignore[assignment]
+            app_env="production",
+            auth_jwt_secret="dev-only-change-me",
+        )
+        try:
+            with self.assertRaisesRegex(RuntimeError, "default JWT secret"):
+                security_module.parse_access_token(token)
+        finally:
+            security_module.get_settings = original_get_settings  # type: ignore[assignment]
+
     def test_security_refresh_request_rejects_blank_refresh_token(self) -> None:
         auth_routes_module = __import__(
             "app.api.routes.auth",

@@ -10,6 +10,9 @@ from datetime import UTC, datetime, timedelta
 from app.config import get_settings
 
 
+_DEFAULT_DEV_JWT_SECRET = "dev-only-change-me"
+
+
 def _b64url_encode(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
@@ -23,8 +26,16 @@ def _sign_hs256(message: bytes, secret: str) -> bytes:
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).digest()
 
 
+def _ensure_jwt_secret_allowed(settings: object) -> None:
+    app_env = str(getattr(settings, "app_env", "") or "").strip().lower()
+    jwt_secret = str(getattr(settings, "auth_jwt_secret", "") or "")
+    if app_env == "production" and jwt_secret == _DEFAULT_DEV_JWT_SECRET:
+        raise RuntimeError("default JWT secret is not allowed in production")
+
+
 def create_access_token(*, user_id: str, email: str) -> str:
     settings = get_settings()
+    _ensure_jwt_secret_allowed(settings)
     now = datetime.now(UTC)
     exp = now + timedelta(minutes=int(settings.auth_access_token_ttl_minutes))
     header = {"alg": "HS256", "typ": "JWT"}
@@ -75,8 +86,10 @@ def parse_access_token(token: str) -> dict[str, object]:
     if header.get("typ") != "JWT":
         raise ValueError("invalid token type")
 
+    settings = get_settings()
+    _ensure_jwt_secret_allowed(settings)
     signed_input = f"{header_part}.{payload_part}".encode("ascii")
-    expected_sign = _sign_hs256(signed_input, get_settings().auth_jwt_secret)
+    expected_sign = _sign_hs256(signed_input, settings.auth_jwt_secret)
     given_sign = _b64url_decode(sign_part)
     if not hmac.compare_digest(expected_sign, given_sign):
         raise ValueError("invalid token signature")
