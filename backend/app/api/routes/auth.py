@@ -98,6 +98,14 @@ class AuthTokenResponse(BaseModel):
 class RefreshRequest(BaseModel):
     refresh_token: str = Field(min_length=16, max_length=1024)
 
+    @field_validator("refresh_token")
+    @classmethod
+    def _validate_refresh_token(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("refresh token is required")
+        return normalized
+
 
 class LogoutRequest(BaseModel):
     session_id: str | None = None

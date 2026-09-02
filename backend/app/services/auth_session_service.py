@@ -126,7 +126,10 @@ def refresh_auth_tokens(
     user_agent: str | None = None,
     ip_address: str | None = None,
 ) -> dict[str, object] | None:
-    incoming_hash = hash_refresh_token(refresh_token)
+    try:
+        incoming_hash = hash_refresh_token(refresh_token)
+    except ValueError:
+        return None
     session = _load_session_by_hash(incoming_hash)
     now = datetime.now()
     now_iso = now.isoformat()

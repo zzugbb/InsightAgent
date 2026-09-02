@@ -8,6 +8,23 @@ from fastapi.testclient import TestClient
 
 
 class SecurityHardeningMixin:
+    def test_security_refresh_request_rejects_blank_refresh_token(self) -> None:
+        auth_routes_module = __import__(
+            "app.api.routes.auth",
+            fromlist=["RefreshRequest"],
+        )
+
+        with self.assertRaisesRegex(ValueError, "refresh token is required"):
+            auth_routes_module.RefreshRequest(refresh_token=" " * 16)
+
+    def test_security_refresh_tokens_treat_blank_token_as_invalid(self) -> None:
+        auth_session_module = __import__(
+            "app.services.auth_session_service",
+            fromlist=["refresh_auth_tokens"],
+        )
+
+        self.assertIsNone(auth_session_module.refresh_auth_tokens(refresh_token=" " * 16))
+
     def test_security_access_token_rejects_signed_non_hs256_algorithm(self) -> None:
         security_module = __import__(
             "app.security",
