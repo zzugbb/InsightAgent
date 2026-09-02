@@ -328,7 +328,7 @@ def _build_operations_warnings(
                 "message": "TASK_EXECUTION_STALE_AFTER_SEC is disabled.",
             }
         )
-    if is_production and str(settings.auth_jwt_secret) == "dev-only-change-me":
+    if is_production and str(settings.auth_jwt_secret).strip() == "dev-only-change-me":
         warnings.append(
             {
                 "code": "default_jwt_secret",

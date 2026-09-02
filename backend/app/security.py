@@ -28,7 +28,7 @@ def _sign_hs256(message: bytes, secret: str) -> bytes:
 
 def _ensure_jwt_secret_allowed(settings: object) -> None:
     app_env = str(getattr(settings, "app_env", "") or "").strip().lower()
-    jwt_secret = str(getattr(settings, "auth_jwt_secret", "") or "")
+    jwt_secret = str(getattr(settings, "auth_jwt_secret", "") or "").strip()
     if app_env == "production" and jwt_secret == _DEFAULT_DEV_JWT_SECRET:
         raise RuntimeError("default JWT secret is not allowed in production")
 

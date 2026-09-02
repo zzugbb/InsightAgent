@@ -9,23 +9,23 @@
 - `production-runtime-hardening` 已 100% 封板：SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
 - `product-ux-polish` 已 100% 封板：语义 Trace 回放、Task Center/任务详情 normalized 状态与失败诊断、列表加载错误/陈旧数据保留/原位重试、任务详情 failure hint code 映射与 SSE close 后失败摘要兜底均已收口。
 - `production-operations-readiness` 已 100% 封板：`/health` 新增非敏感 `operations` 摘要，暴露部署配置、SLO 阈值口径、备份恢复演练、运维 runbook/值班响应、应急响应演练新鲜度、告警等级汇总、按域风险汇总、机器友好的 readiness_level、readiness_checks 清单、任务队列、执行实例、stale recovery、超时与 Chroma probe 的运维 readiness/warnings，不改变既有 `/health` 字段。
-- `security-hardening` 已进入，当前约 90%：后端已补全局安全响应头，收紧 access/refresh token 输入边界，阻断生产默认 JWT secret/wildcard CORS，将认证 token 解析错误低敏化为稳定 401，并确保默认生产 JWT secret 不能用于签发、验签、refresh token 哈希或密钥加密派生；业务 payload 与 SSE/trace/export 契约不变。
+- `security-hardening` 已 100% 封板：后端已补全局安全响应头，收紧 access/refresh token 输入边界，阻断生产默认 JWT secret/wildcard CORS，将认证 token 解析错误低敏化为稳定 401，并确保默认生产 JWT secret 及首尾空白包装值不能用于签发、验签、refresh token 哈希或密钥加密派生；业务 payload 与 SSE/trace/export 契约不变。
 - 后端与前端 e2e 后置 CI 稳定性已收口：backend 无 venv runner JSON 校验 fallback、frontend queue runtime API base URL、queue 慢加载稳定性与 export diagnostics 范围均已修复；commit `6ea51c7` 对应 GitHub `backend-e2e`、`frontend-e2e`、`release-gate` 均为 success。
 - 后续开发继续保持 SSE / trace / export / e2e 外部契约兼容，并维持 backend/app、backend/scripts 与 frontend 源码单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 已用 `json.tool` 复核；无 `backend/.venv` fixture 下 release readiness / release gate JSON 校验通过。
-- Backend：full slice `2016/2016`；module boundary `4/4`；targeted security `16/16`、current_user_hides `2/2`、cors `2/2`、default_secret `3/3`、security_refresh `2/2`、auth `3/3`、settings `217/217`、production_operations `12/12`、production_operations_health `10/10`、production_reliability `39/39`、reconnect `9/9` 通过。
+- Backend：full slice `2018/2018`；module boundary `4/4`；targeted security `17/17`、current_user_hides `2/2`、cors `2/2`、default_secret `3/3`、security_refresh `2/2`、auth `3/3`、settings `217/217`、production_operations `12/12`、production_operations_health `11/11`、production_reliability `39/39`、reconnect `9/9` 通过。
 - Frontend：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；手动扩展 node tests `141/141`，release gate 内置 frontend node 清单 `140/140`；`npm run lint`、`npm run build` 通过。
 - E2E 基线：backend main、timeout、queue 三段通过；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`，targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center/知识库治理错误恢复均通过；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443`、`frontend-e2e` run `33373178435`、`release-gate` run `33373178464` 均 completed success。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前状态：`security-hardening` 已进入，当前约 90%；已完成后端全局安全响应头、token 输入边界收紧、生产默认 JWT secret/wildcard CORS 硬阻断、认证错误详情低敏化、auth session 写入/轮换前签发配置校验与 secret material 派生保护，下一步做最后一轮剩余鉴权边界/API 限流/依赖安全审计确认。
-2. 已封板主线新增 `production-operations-readiness`；既有 provider/tool、生产运行态、源码规模、CI/release、RAG、可观测性、可靠性、治理、并发与产品体验主线保持完成。
-3. 下一候选主线保留 `release-observability-polish`。
+1. 当前状态：`security-hardening` 已 100% 封板；已完成后端全局安全响应头、token 输入边界收紧、生产默认 JWT secret/wildcard CORS 硬阻断、认证错误详情低敏化、auth session 写入/轮换前签发配置校验、secret material 派生保护与空白包装默认 secret 识别。
+2. 已封板主线新增 `security-hardening`；既有 provider/tool、生产运行态、生产运维就绪、源码规模、CI/release、RAG、可观测性、可靠性、治理、并发与产品体验主线保持完成。
+3. 下一主线可进入 `release-observability-polish`。
 
 ## 稳定契约
 
@@ -33,8 +33,8 @@
 - 后端全局 HTTP 响应追加安全 header；只增加响应头，不改变 JSON payload、SSE event、trace/delta 或 export body shape。
 - Access token 解析要求 JWT header 为 `alg=HS256`、`typ=JWT`；签名、过期和 subject 校验语义保持不变。
 - Refresh token 请求会先 trim 并拒绝空白值；服务层将空白 refresh token 视为无效 token 返回，不暴露内部异常。
-- 生产环境禁止使用默认 `INSIGHT_AGENT_JWT_SECRET` 签发或验签 access token；开发默认值仍只允许在非生产环境使用。
-- 生产环境默认 `INSIGHT_AGENT_JWT_SECRET` 也不能作为 refresh token 哈希或 secret 加密派生材料。
+- 生产环境禁止使用默认 `INSIGHT_AGENT_JWT_SECRET` 或其首尾空白包装值签发或验签 access token；开发默认值仍只允许在非生产环境使用。
+- 生产环境默认 `INSIGHT_AGENT_JWT_SECRET` 及其首尾空白包装值也不能作为 refresh token 哈希或 secret 加密派生材料；`/health.operations` 按同一口径报告 `default_jwt_secret`。
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
 - Auth token 签发与刷新会在创建/轮换 refresh token 和写入 auth session 前先校验 access token 签发配置；生产默认 JWT secret 错误不留下会话存储副作用。

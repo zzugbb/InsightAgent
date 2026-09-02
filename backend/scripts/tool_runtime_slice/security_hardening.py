@@ -10,6 +10,28 @@ from fastapi.testclient import TestClient
 
 
 class SecurityHardeningMixin:
+    def test_security_rejects_whitespace_wrapped_default_jwt_secret_in_production(
+        self,
+    ) -> None:
+        security_module = __import__(
+            "app.security",
+            fromlist=["create_access_token", "get_settings"],
+        )
+        original_get_settings = security_module.get_settings
+        security_module.get_settings = lambda: SimpleNamespace(  # type: ignore[assignment]
+            app_env="production",
+            auth_jwt_secret="  dev-only-change-me  ",
+            auth_access_token_ttl_minutes=5,
+        )
+        try:
+            with self.assertRaisesRegex(RuntimeError, "default JWT secret"):
+                security_module.create_access_token(
+                    user_id="user-whitespace-default-secret",
+                    email="user@example.com",
+                )
+        finally:
+            security_module.get_settings = original_get_settings  # type: ignore[assignment]
+
     def test_security_secret_material_rejects_default_jwt_secret_in_production(
         self,
     ) -> None:
