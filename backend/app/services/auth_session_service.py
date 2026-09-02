@@ -72,6 +72,7 @@ def issue_auth_tokens(
 ) -> dict[str, object]:
     from app.security import create_access_token
 
+    access_token = create_access_token(user_id=str(user["id"]), email=str(user["email"]))
     now = datetime.now()
     now_iso = now.isoformat()
     session_id = str(uuid4())
@@ -111,7 +112,6 @@ def issue_auth_tokens(
         )
         connection.commit()
 
-    access_token = create_access_token(user_id=str(user["id"]), email=str(user["email"]))
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,

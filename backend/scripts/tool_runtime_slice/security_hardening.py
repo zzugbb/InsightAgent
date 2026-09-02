@@ -10,6 +10,34 @@ from fastapi.testclient import TestClient
 
 
 class SecurityHardeningMixin:
+    def test_security_auth_token_issue_validates_secret_before_session_write(
+        self,
+    ) -> None:
+        auth_session_module = __import__(
+            "app.services.auth_session_service",
+            fromlist=["issue_auth_tokens", "get_db_connection"],
+        )
+        security_module = __import__("app.security", fromlist=["get_settings"])
+        original_get_settings = security_module.get_settings
+        original_get_db_connection = auth_session_module.get_db_connection
+        auth_session_module.get_db_connection = lambda: (_ for _ in ()).throw(  # type: ignore[assignment]
+            AssertionError("auth session storage should not be touched before JWT secret validation")
+        )
+        security_module.get_settings = lambda: SimpleNamespace(  # type: ignore[assignment]
+            app_env="production",
+            auth_secret_key=None,
+            auth_jwt_secret="dev-only-change-me",
+            auth_access_token_ttl_minutes=5,
+        )
+        try:
+            with self.assertRaisesRegex(RuntimeError, "default JWT secret"):
+                auth_session_module.issue_auth_tokens(
+                    user={"id": "user-session-write", "email": "user@example.com"}
+                )
+        finally:
+            security_module.get_settings = original_get_settings  # type: ignore[assignment]
+            auth_session_module.get_db_connection = original_get_db_connection  # type: ignore[assignment]
+
     def test_security_current_user_hides_internal_token_parser_errors(self) -> None:
         deps_module = __import__(
             "app.api.deps",
