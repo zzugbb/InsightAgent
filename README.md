@@ -151,7 +151,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- `security-hardening` 继续按先红测、再实现、再 targeted/full slice 推进，优先找鉴权会话、生产密钥校验、限流与依赖安全审计中的小切片。
+- `release-observability-polish` 可按先红测、再实现、再 targeted/full slice 推进，优先找发布/回滚可见性、artifact 保留策略与门禁趋势摘要中的小切片。
 
 ## 文档维护约定
 
