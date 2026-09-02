@@ -31,7 +31,7 @@ def get_current_user(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=401,
-            detail=str(exc) or "invalid token",
+            detail="invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     user_id = payload.get("sub")

@@ -5,10 +5,60 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from fastapi import FastAPI
+from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
 
 
 class SecurityHardeningMixin:
+    def test_security_current_user_hides_internal_token_parser_errors(self) -> None:
+        deps_module = __import__(
+            "app.api.deps",
+            fromlist=["get_current_user", "parse_access_token"],
+        )
+        original_parse_access_token = deps_module.parse_access_token
+        deps_module.parse_access_token = lambda _token: (_ for _ in ()).throw(  # type: ignore[assignment]
+            RuntimeError("default JWT secret is not allowed in production")
+        )
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials="token-with-internal-parser-error",
+        )
+        try:
+            with self.assertRaises(Exception) as context:
+                deps_module.get_current_user(credentials)
+        finally:
+            deps_module.parse_access_token = original_parse_access_token  # type: ignore[assignment]
+
+        exc = context.exception
+        self.assertEqual(getattr(exc, "status_code", None), 401)
+        self.assertEqual(getattr(exc, "detail", None), "invalid token")
+        self.assertEqual(getattr(exc, "headers", {}), {"WWW-Authenticate": "Bearer"})
+        self.assertNotIn("default JWT secret", str(getattr(exc, "detail", "")))
+
+    def test_security_current_user_hides_token_validation_details(self) -> None:
+        deps_module = __import__(
+            "app.api.deps",
+            fromlist=["get_current_user", "parse_access_token"],
+        )
+        original_parse_access_token = deps_module.parse_access_token
+        deps_module.parse_access_token = lambda _token: (_ for _ in ()).throw(  # type: ignore[assignment]
+            ValueError("unsupported token algorithm")
+        )
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials="token-with-validation-detail",
+        )
+        try:
+            with self.assertRaises(Exception) as context:
+                deps_module.get_current_user(credentials)
+        finally:
+            deps_module.parse_access_token = original_parse_access_token  # type: ignore[assignment]
+
+        exc = context.exception
+        self.assertEqual(getattr(exc, "status_code", None), 401)
+        self.assertEqual(getattr(exc, "detail", None), "invalid token")
+        self.assertNotIn("unsupported token algorithm", str(getattr(exc, "detail", "")))
+
     def test_security_production_cors_rejects_wildcard_origin(self) -> None:
         main_module = __import__(
             "app.main",
