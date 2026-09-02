@@ -66,6 +66,15 @@ def parse_access_token(token: str) -> dict[str, object]:
     if len(parts) != 3:
         raise ValueError("invalid token format")
     header_part, payload_part, sign_part = parts
+    header_raw = _b64url_decode(header_part)
+    header = json.loads(header_raw.decode("utf-8"))
+    if not isinstance(header, dict):
+        raise ValueError("invalid token header")
+    if header.get("alg") != "HS256":
+        raise ValueError("unsupported token algorithm")
+    if header.get("typ") != "JWT":
+        raise ValueError("invalid token type")
+
     signed_input = f"{header_part}.{payload_part}".encode("ascii")
     expected_sign = _sign_hs256(signed_input, get_settings().auth_jwt_secret)
     given_sign = _b64url_decode(sign_part)

@@ -5,7 +5,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 ## 当前状态
 
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish` 与 `production-operations-readiness` 均已 100% 封板。
-- `security-hardening` 已进入，当前约 10%；后端已补全局安全响应头，覆盖 nosniff、frame deny、referrer policy、permissions policy 与 cross-origin opener policy，不改变业务 payload。
+- `security-hardening` 已进入，当前约 20%；后端已补全局安全响应头，并收紧 access token header 校验，拒绝签名有效但 `alg/typ` 不符合 `HS256/JWT` 的 token，不改变业务 payload。
 - `production-operations-readiness` 已完成 `/health` 非敏感 `operations` readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、告警等级汇总、按域风险汇总、readiness_checks 清单与 readiness_level。
 - Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
 - CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
@@ -17,15 +17,15 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 ## 当前验证基线
 
 - Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量；无 `backend/.venv` fixture 下 release readiness / release gate JSON 校验通过。
-- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`2003/2003` 通过。
-- Targeted：`security_headers 3/3`、`production_operations 12/12`、`production_operations_health 10/10`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
+- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`2005/2005` 通过。
+- Targeted：`security 5/5`、`auth 1/1`、`production_operations 12/12`、`production_operations_health 10/10`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
 - Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行规模边界。
 - E2E 基线：backend main、timeout、queue 三段通过；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443`、`frontend-e2e` run `33373178435`、`release-gate` run `33373178464` 均 completed success。
 - Hygiene：`py_compile`、`git diff --check`、备份计划 diff 检查通过。
 
 ## 下一步后端计划
 
-1. 当前状态：`security-hardening` 已进入，当前约 10%；后端已完成全局安全响应头第一片。
+1. 当前状态：`security-hardening` 已进入，当前约 20%；后端已完成全局安全响应头与 access token header 校验收紧。
 2. 下一步后端候选为鉴权会话收口、生产密钥校验、API 限流或依赖安全审计。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
@@ -37,6 +37,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 - SSE 事件、REST `TraceStep`、result summary、safe output 与 JSON/Markdown export shape 保持稳定。
 - 全局 HTTP 响应追加 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、`Permissions-Policy` 与 `Cross-Origin-Opener-Policy`；该安全头层不改变业务响应体、SSE event、trace/delta 或 export body shape。
+- Access token 解析要求 JWT header 为 `alg=HS256`、`typ=JWT`；签名、过期和 subject 校验语义保持不变。
 - `tool_start/tool_end` 与 trace action 节点通过 `step_id` 对齐。
 - remote provider 错误在 SSE `error` 中保持结构化 `code / fatal / retryable / detail / status_code`，并在 SSE 与 failure audit 中追加低敏 `diagnostic.category/reason/recoverability/http_status_family/has_detail`。
 - 任务详情页可通过兼容 URL 参数 `trace_semantic` 回放语义 Trace；前端语义切换与 normalized 状态/轮询控制均不改变后端任务、trace 或 export payload。
