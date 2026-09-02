@@ -82,9 +82,15 @@ main() {
   assert_contains "### release gate" "${TMP_DIR}/summary.md"
   assert_contains "- phase: frontend" "${TMP_DIR}/summary.md"
   assert_contains "- result: DRY-RUN" "${TMP_DIR}/summary.md"
+  assert_contains "- total_steps: 3" "${TMP_DIR}/summary.md"
+  assert_contains "- dry_run_steps: 3" "${TMP_DIR}/summary.md"
+  assert_contains "- failed_steps: 0" "${TMP_DIR}/summary.md"
+  assert_contains "- failed_step_labels: none" "${TMP_DIR}/summary.md"
   assert_contains "| frontend node tests | DRY-RUN |" "${TMP_DIR}/summary.md"
   assert_contains '"phase": "frontend"' "${TMP_DIR}/summary.json"
   assert_contains '"result": "DRY-RUN"' "${TMP_DIR}/summary.json"
+  assert_contains '"step_summary": {"total": 3, "pass": 0, "fail": 0, "dry_run": 3}' "${TMP_DIR}/summary.json"
+  assert_contains '"failed_step_labels": []' "${TMP_DIR}/summary.json"
   assert_contains '"label": "frontend build"' "${TMP_DIR}/summary.json"
 
   env RELEASE_GATE_PYTHON=/no/such/python bash "${SCRIPT}" \

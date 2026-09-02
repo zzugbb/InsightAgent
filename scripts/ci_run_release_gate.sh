@@ -97,6 +97,35 @@ record_step() {
 write_summaries() {
   local result="$1"
   local i
+  local total_steps="${#STEP_LABELS[@]}"
+  local pass_steps=0
+  local fail_steps=0
+  local dry_run_steps=0
+  local failed_step_labels="none"
+  local failed_json="["
+  local failed_count=0
+
+  for i in "${!STEP_LABELS[@]}"; do
+    case "${STEP_RESULTS[$i]}" in
+      PASS) pass_steps=$((pass_steps + 1)) ;;
+      FAIL)
+        fail_steps=$((fail_steps + 1))
+        if [ "${failed_step_labels}" = "none" ]; then
+          failed_step_labels="${STEP_LABELS[$i]}"
+        else
+          failed_step_labels+=",${STEP_LABELS[$i]}"
+        fi
+        if [ "${failed_count}" -gt 0 ]; then
+          failed_json+=", "
+        fi
+        failed_json+="$(json_string "${STEP_LABELS[$i]}")"
+        failed_count=$((failed_count + 1))
+        ;;
+      DRY-RUN) dry_run_steps=$((dry_run_steps + 1)) ;;
+    esac
+  done
+  failed_json+="]"
+
   if [ -n "${summary_file}" ]; then
     mkdir -p "$(dirname "${summary_file}")"
     {
@@ -111,6 +140,11 @@ write_summaries() {
       fi
       echo "- result: ${result}"
       echo "- dry_run: ${dry_run}"
+      echo "- total_steps: ${total_steps}"
+      echo "- passed_steps: ${pass_steps}"
+      echo "- failed_steps: ${fail_steps}"
+      echo "- dry_run_steps: ${dry_run_steps}"
+      echo "- failed_step_labels: ${failed_step_labels}"
       echo
       echo "| step | result | exit_code | workdir | command |"
       echo "| --- | --- | --- | --- | --- |"
@@ -130,6 +164,12 @@ write_summaries() {
       printf '  "changed_files_count": %s,\n' "$(json_string "${changed_files_count}")"
       printf '  "result": %s,\n' "$(json_string "${result}")"
       printf '  "dry_run": %s,\n' "$(json_string "${dry_run}")"
+      printf '  "step_summary": {"total": %s, "pass": %s, "fail": %s, "dry_run": %s},\n' \
+        "${total_steps}" \
+        "${pass_steps}" \
+        "${fail_steps}" \
+        "${dry_run_steps}"
+      printf '  "failed_step_labels": %s,\n' "${failed_json}"
       printf '  "steps": [\n'
       for i in "${!STEP_LABELS[@]}"; do
         if [ "${i}" -gt 0 ]; then
