@@ -5,7 +5,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前状态
 
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish` 与 `production-operations-readiness` 均已 100% 封板。
-- `security-hardening` 已进入，当前约 0%；前端优先记录后端安全契约变化，必要时再补登录/session/错误提示侧的兼容展示。
+- `security-hardening` 已进入，当前约 10%；后端已补全局安全响应头，前端暂不新增 UI，继续保持 SSE、trace、export 与任务列表契约稳定。
 - 后端 `/health.operations` 已补运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、`warning_summary` 告警等级汇总、`risk_domains` 按域风险汇总、`readiness_checks` 固定清单与 `readiness_level`，前端暂不新增显示入口。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地。
 - 前端继续消费后端统一的 preview/output/result-summary、trace/export 字段，不新增 provider 专用显示分支。
@@ -21,11 +21,11 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；8 个测试文件 `140/140` 通过，包含 frontend source size boundary。
 - `npm run lint` 与 `npm run build` 通过。
 - E2E 基线：targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center 加载失败与原位重试、知识库治理加载失败/重试均通过；full Chromium `56 passed / 1 skipped`；低并发 queue phase 本地真实复验 `1/1` 通过且已纳入 CI workflow；commit `6ea51c7` 的 GitHub `frontend-e2e` run `33373178435` completed success。
-- Backend 契约基线：full slice `2000/2000`；module boundary `4/4`；backend main/timeout/queue e2e 与 main push artifact-stage guard 通过；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443` 与 `release-gate` run `33373178464` 均 completed success。
+- Backend 契约基线：full slice `2003/2003`；targeted security_headers `3/3`；module boundary `4/4`；backend main/timeout/queue e2e 与 main push artifact-stage guard 通过；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443` 与 `release-gate` run `33373178464` 均 completed success。
 
 ## 下一步前端计划
 
-1. 当前状态：`security-hardening` 已进入，当前约 0%；前端先跟随后端安全契约，不主动改变 SSE、trace、export 或任务列表 API。
+1. 当前状态：`security-hardening` 已进入，当前约 10%；前端先跟随后端安全 header 契约，不主动改变 SSE、trace、export 或任务列表 API。
 2. 下一步视后端安全 API 范围决定是否补登录/session 过期、权限错误或限流提示的兼容展示。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 

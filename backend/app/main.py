@@ -11,6 +11,7 @@ from app.services.chat_persistence_service import (
     get_task_execution_stale_after_sec,
     recover_orphaned_running_tasks_on_startup,
 )
+from app.security_headers import add_security_headers
 
 
 settings = get_settings()
@@ -39,5 +40,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+add_security_headers(app)
 
 app.include_router(api_router)
