@@ -2,9 +2,9 @@
 name: InsightAgent 开发计划
 overview: provider-tool-expansion、ci-release-engineering、production-runtime-hardening、product-ux-polish、production-operations-readiness 与 security-hardening 已 100% 封板。
 current_focus:
-  mainline: release-observability-polish
-  status: 待启动
-  latest_change: security-hardening 已 100% 封板；生产默认 JWT secret 及首尾空白包装值不能用于签发、验签、refresh token 哈希或 secret 加密派生
+  mainline: mainline-closeout
+  status: 文档收敛中
+  latest_change: security-hardening 已 100% 封板；暂不进入下一主线，四份活跃文档收敛到封板结论、验证基线与候选主线
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -47,7 +47,7 @@ completed_mainlines:
 next_candidate_mainlines:
   - release-observability-polish：发布/回滚可见性、artifact 保留策略与门禁趋势摘要
 next_steps:
-  - release-observability-polish 待启动，优先从发布/回滚可见性、artifact 保留策略与门禁趋势摘要中选择可红测证明的小切片
+  - 先完成四份活跃文档收敛确认；下一主线暂不启动，release-observability-polish 仅保留为候选
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -57,14 +57,10 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness` 与 `security-hardening` 均已 100% 封板。
-- `security-hardening` 封板摘要：后端已补全局安全响应头，收紧 access/refresh token 输入边界，阻断生产默认 JWT secret/wildcard CORS，将认证 token 解析错误低敏化为稳定 401，并确保默认生产 JWT secret 及首尾空白包装值不能用于签发、验签、refresh token 哈希或密钥加密派生；业务 payload 与 SSE/trace/export 契约不变。
-- `production-operations-readiness` 封板摘要：`/health.operations` 已完成非敏感运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、告警等级汇总、按域风险汇总、readiness_checks 固定清单与 readiness_level。
-- 生产运行态封板摘要：SSE `error.diagnostic` 与 failure audit detail 默认对齐低敏 `reason` 枚举，前端审计详情可展示该低敏原因；reconnect 保留 provider 错误 code 并补齐安全消息映射。旧 `code/fatal/retryable/detail/status_code` 与 audit `status_code/retryable` 字段不变。
-- 产品体验封板摘要：语义 Trace、Task Center/任务详情 normalized 状态与失败诊断、Task Center/Audit Logs/知识库治理加载恢复、伪空态治理、任务详情 failure hint code 映射与 SSE close 后失败摘要兜底已收口。
-- 后端/frontend e2e 后置门禁摘要：release-gate JSON summary 已移除 Python 子进程转义依赖，backend artifact 清单覆盖 main/timeout/queue 产物且不再列 finalize 后才生成的 failure diagnostics，本地 boot wrapper 优先走 `backend/.venv/bin/python -m uvicorn`；无 venv runner JSON 校验 fallback、frontend queue runtime API base URL、queue 慢加载稳定性与 export diagnostics 范围均已修复，commit `6ea51c7` 对应 GitHub 三条 workflow 均 success。
-- 运维就绪摘要：`/health` 新增 `operations` 字段，返回 readiness、readiness_level、非敏感 warnings、warning_summary 告警等级计数、risk_domains 按域风险计数、readiness_checks 固定清单、deployment 配置摘要、SLO 阈值口径摘要、backup_restore 摘要、runbook 摘要、应急响应演练新鲜度、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；既有健康字段保持兼容。
-- 当前本机运行/提交路径已记录到 `docs/development-runbook.md`：slice/lint 多数普通运行，本机端口/Docker/e2e/服务启动/git index 写入按流程先普通尝试，失败后按 runbook 提权。
-- 代码规模治理已纳入常规边界：`backend/app`、`backend/scripts` 与 `frontend` 源码保持单文件 <= 3000 行；`frontend/package-lock.json` 等生成锁文件不作为拆分对象。
+- `security-hardening` 封板结论：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断均已收口，业务 payload 与 SSE/trace/export 契约不变。
+- `production-operations-readiness` 封板结论：`/health.operations` 提供非敏感 readiness、warning/risk/check 摘要、部署/SLO/备份恢复/runbook/演练/队列/执行/超时/Chroma probe 状态，既有健康字段保持兼容。
+- 当前处于主线间文档收敛，不进入下一主线；`release-observability-polish` 仅保留为候选。
+- 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
 ## 已完成能力摘要
 
@@ -78,33 +74,22 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- Backend slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，当前 `2018/2018`。
-- Backend targeted：`security 17/17`、`current_user_hides 2/2`、`cors 2/2`、`default_secret 3/3`、`security_refresh 2/2`、`auth 3/3`、`settings 217/217`、`production_operations 12/12`、`production_operations_health 11/11`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
-- Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，当前 `4/4`，包含 3000 行规模边界。
-- Frontend node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；手动扩展当前 `141/141`，release gate 内置 frontend node 清单 `140/140`，包含 frontend source size boundary。
-- Frontend lint/build：`cd frontend && npm run lint`、`cd frontend && npm run build` 通过。
-- E2E：backend main、timeout、queue 三段通过；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复通过；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443`、`frontend-e2e` run `33373178435`、`release-gate` run `33373178464` 均 completed success。
-- Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量。
-- Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check`、备份计划 diff 检查通过。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核。
+- Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
+- Frontend：扩展 node tests `141/141`；release gate 内置 node 清单 `140/140`；`npm run lint` 与 `npm run build` 通过。
+- E2E/CI：backend main/timeout/queue、frontend queue/full Chromium、artifact-stage guard 与 commit `6ea51c7` 对应 GitHub backend-e2e/frontend-e2e/release-gate 均为通过基线。
+- Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 最近封板主线
 
-- `product-ux-polish`：已 100% 封板；语义 Trace、normalized 状态/失败诊断、治理与观测列表错误恢复及伪空态治理已收口，外部契约不变。
-- `production-runtime-hardening`：已 100% 封板；SSE/failure audit diagnostic 统一、provider call/selection failure 低敏 reason、前端审计详情 reason 展示与 reconnect provider 错误消息映射已收口，旧 SSE/trace/export/e2e 契约保持稳定。
-- `ci-release-engineering`：已 100% 封板；release gate、release readiness matrix、backend/frontend queue workflow、artifact diagnostics、main push `fail-on-missing` 与多 health URL 失败诊断均已收口。
-- `source-size-maintenance`：已封板；tool runtime/test slice、chat persistence 与 frontend globals.css 已拆分并纳入规模边界。
-- `provider-tool-expansion`：已 100% 封板；provider search 总量/命中归一化、显式 result_fields 特殊键、provider planner 多协议工具调用容器/别名/JSON 字符串参数解析与 failed reconnect 稳定错误码复原均已收口，旧 SSE/trace/export/display shape 不变。
-- `security-hardening`：已 100% 封板；安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断已收口，业务 payload 与 SSE/trace/export 契约不变。
-- `rag-product-experience`：已 100% 封板；知识库治理版本明细、source/document 文档组、文档组删除、Runtime Debug RAG query 召回摘要、质量分布、筛选与 distance 解释均已收口。
-- `observability-experience`：已封板；失败线索、来源分类、跨视图 Failure 回放、Task Center 观测筛选、Audit Logs 服务端 keyword、Trace Failure 语义统计与过滤一致性均已收口。
-- `production-reliability-hardening`：已封板；任务队列清理、owner/heartbeat、guarded terminal writes、reconnect/断流语义、race 防误复活与 GitHub checks 均已收口。
-- `rag-governance-hardening`：已封板；RAG 来源/metadata、版本摘要、知识库标识、shared/private 边界、route/runtime trace/export/display 与错误出口均已完成治理收口。
-- `registry-governance`：已封板；provider/source 脱敏、冲突 alias、settings/preflight/runtime/trace/export/audit/SSE 共享 alias map、模型输出层安全摘要与 settings runtime_artifacts diagnostics alias 已收口。
+- 近期封板：`security-hardening`、`production-operations-readiness`、`product-ux-polish`、`production-runtime-hardening`、`ci-release-engineering`、`provider-tool-expansion` 均已 100%，外部 SSE/trace/export/display/e2e 契约保持稳定。
+- 运行与发布能力：低敏诊断、运维 readiness、release gate、e2e workflow、artifact strict policy、provider/tool 归一化与前端失败回放已进入稳定基线。
+- 长期治理能力：RAG 产品体验、observability experience、production reliability、RAG governance、registry governance 与 source-size-maintenance 均已封板，后续只按新需求增量维护。
 
 ## 后续维护线
 
-- 当前状态：`security-hardening` 已 100% 封板，当前焦点转入 `release-observability-polish` 待启动。
-- 后续候选：`release-observability-polish`，优先发布/回滚可见性、artifact 保留策略与门禁趋势摘要。
+- 当前状态：`security-hardening` 已 100% 封板，当前焦点是主线间文档收敛，暂不启动下一主线。
+- 后续候选：`release-observability-polish`，发布/回滚可见性、artifact 保留策略与门禁趋势摘要暂仅作为候选方向保留。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 文档收敛边界

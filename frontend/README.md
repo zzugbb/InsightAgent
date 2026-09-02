@@ -4,29 +4,23 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前状态
 
-- `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness` 与 `security-hardening` 均已 100% 封板。
-- `security-hardening` 封板摘要：后端已补全局安全响应头、收紧 access/refresh token 输入边界、阻断生产默认 JWT secret/wildcard CORS，将认证 token 解析错误低敏化为稳定 401，并确保默认生产 JWT secret 及首尾空白包装值不能用于签发、验签、refresh token 哈希或密钥加密派生；前端未新增 UI，SSE、trace、export 与任务列表契约保持稳定。
-- 后端 `/health.operations` 已补运维 readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、`warning_summary` 告警等级汇总、`risk_domains` 按域风险汇总、`readiness_checks` 固定清单与 `readiness_level`，前端暂不新增显示入口。
-- Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地。
-- 前端继续消费后端统一的 preview/output/result-summary、trace/export 字段，不新增 provider 专用显示分支。
-- SSE `error.diagnostic.reason` 与 failure audit diagnostic 是后端追加的低敏兼容字段；前端现有错误提示继续使用 `code/message/detail/status_code`，审计详情可展示低敏 diagnostic reason，reconnect 继续依赖后端稳定 code/message。
-- 任务详情页与 Workbench Inspector 已补齐语义 Trace 聚焦；Task Center/任务详情 normalized 状态、失败诊断及轮询控制已对齐；Task Center、Audit Logs 与知识库治理均可区分初始/陈旧数据错误并原位重试；任务详情 failure hint code 映射与 SSE close 后失败摘要兜底已补齐。
+- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`。
+- `security-hardening` 封板结论：前端不新增 UI，继续跟随后端安全 header、token 校验、生产密钥、CORS、认证错误低敏化、auth session 副作用保护与 secret material 派生保护契约；SSE、trace、export 与任务列表契约保持稳定。
+- Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
+- 当前处于主线间文档收敛，不进入下一主线；`release-observability-polish` 仅保留为候选，前端展示需求后续再评估。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
-- 前端 e2e workflow 覆盖 smoke/full/queue，queue 阶段使用独立 `:8011` backend；main push Playwright artifact-stage guard 使用 `fail-on-missing`。
-- GitHub frontend-e2e queue runtime API base URL、CI 慢加载稳定性与 export diagnostics 误判已修复；commit `6ea51c7` 对应 GitHub frontend-e2e、backend-e2e 与 release-gate 均为 success。
 
 ## 当前验证基线
 
-- Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，Markdown/JSON summary 与 release readiness matrix 输出通过。
-- Node tests：workbench utils targeted `78/78`、store utils targeted `16/16`、task detail targeted `10/10`、audit targeted `10/10`、knowledge governance targeted `6/6`；手动扩展 9 个测试文件 `141/141` 通过，release gate 内置 frontend node 清单 `140/140`，包含 frontend source size boundary。
-- `npm run lint` 与 `npm run build` 通过。
-- E2E 基线：targeted Chromium remote network/401/cancel、trace delta retry、审计日志/Task Center 加载失败与原位重试、知识库治理加载失败/重试均通过；full Chromium `56 passed / 1 skipped`；低并发 queue phase 本地真实复验 `1/1` 通过且已纳入 CI workflow；commit `6ea51c7` 的 GitHub `frontend-e2e` run `33373178435` completed success。
-- Backend 契约基线：full slice `2018/2018`；targeted security `17/17`、current_user_hides `2/2`、cors `2/2`、default_secret `3/3`、security_refresh `2/2`、auth `3/3`、settings `217/217`、production_operations_health `11/11`；module boundary `4/4`；backend main/timeout/queue e2e 与 main push artifact-stage guard 通过；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443` 与 `release-gate` run `33373178464` 均 completed success。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核。
+- Frontend：扩展 node tests `141/141`；release gate 内置 node 清单 `140/140`；`npm run lint` 与 `npm run build` 通过。
+- Backend 契约基线：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
+- Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. 当前状态：`security-hardening` 已 100% 封板；前端已跟随后端安全 header、token 校验、生产密钥、CORS、认证错误低敏化、auth session 副作用保护与 secret material 派生保护契约，不改变 SSE、trace、export 或任务列表 API。
-2. 下一步进入 `release-observability-polish` 候选范围后，再视发布/回滚可见性与门禁趋势摘要是否需要前端展示。
+1. 当前先完成四份活跃文档收敛，暂不启动下一主线。
+2. `release-observability-polish` 仅作为候选保留；是否需要前端展示待下一主线正式启动后再定。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 后续候选主线

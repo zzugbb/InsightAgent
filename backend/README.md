@@ -4,29 +4,23 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前状态
 
-- `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness` 与 `security-hardening` 均已 100% 封板。
-- `security-hardening` 封板摘要：后端已补全局安全响应头，收紧 access/refresh token 输入边界，阻断生产默认 JWT secret/wildcard CORS，将认证 token 解析错误低敏化为稳定 401，并确保默认生产 JWT secret 及首尾空白包装值不能用于签发、验签、refresh token 哈希或密钥加密派生，不改变业务 payload。
-- `production-operations-readiness` 已完成 `/health` 非敏感 `operations` readiness 摘要、部署配置校验、SLO 阈值口径、备份恢复演练、runbook/值班响应摘要、应急响应演练新鲜度、告警等级汇总、按域风险汇总、readiness_checks 清单与 readiness_level。
-- Provider/tool 兼容能力已覆盖 HTTP JSON search 总量/命中归一化、GraphQL connection、常见搜索 API 别名、多 provider planner tool call 输出与 JSON 字符串参数。
-- CI/release 工程已覆盖 release gate、release readiness matrix、backend main/timeout/queue service-backed e2e、artifact diagnostics、main push artifact `fail-on-missing` 与多 health URL 失败诊断。
-- 后端/frontend e2e 后置 CI 已完成稳定性收口：backend artifact 清单、boot wrapper、无 venv runner JSON fallback、frontend queue runtime API base URL、queue 慢加载稳定性与 export diagnostics 范围均已修复；commit `6ea51c7` 对应 GitHub backend/frontend e2e 与 release-gate 均已 completed success。
-- SSE `error.diagnostic`、失败审计 detail、前端审计详情与 reconnect provider 错误消息已对齐低敏诊断语义，旧字段保持兼容。
-- `/health` 保持既有字段不变，并新增 `operations.readiness/readiness_level/warnings/warning_summary/risk_domains/readiness_checks`、部署配置、SLO 阈值口径、备份恢复演练、runbook/值班响应与应急响应演练新鲜度、任务队列、执行实例、超时与 Chroma probe 摘要，用于部署/值班快速判断运行态配置风险。
-- `backend/app` 与 `backend/scripts` 所有 Python 源码均低于 3000 行；`tool_runtime.py` 与 `test_tool_runtime_slice.py` 保持兼容入口，新增实现继续落到主题模块。
+- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`。
+- `security-hardening` 封板结论：全局安全响应头、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断已收口，业务 payload 不变。
+- `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
+- 当前处于主线间文档收敛，不进入下一主线；`release-observability-polish` 仅保留为候选。
+- `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- Release gate：`bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json` 通过，覆盖 backend/frontend/tooling/hygiene 全量；无 `backend/.venv` fixture 下 release readiness / release gate JSON 校验通过。
-- Full slice：`backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py`，`2018/2018` 通过。
-- Targeted：`security 17/17`、`current_user_hides 2/2`、`cors 2/2`、`default_secret 3/3`、`security_refresh 2/2`、`auth 3/3`、`settings 217/217`、`production_operations 12/12`、`production_operations_health 11/11`、`production_reliability 39/39`、`reconnect 9/9`、registry/http_json/provider/runtime/trace/export/usage 通过。
-- Module boundary：`cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_boundaries.py`，`4/4` 通过，包含 3000 行规模边界。
-- E2E 基线：backend main、timeout、queue 三段通过；backend tooling scope 本地复验通过；frontend queue Chromium 专项本地复绿；backend finalize + artifact-stage guard 在 main push `fail-on-missing` 下通过，`included_count=20`、`missing_count=0`；frontend full Chromium `56 passed / 1 skipped`；commit `6ea51c7` 的 GitHub `backend-e2e` run `33373178443`、`frontend-e2e` run `33373178435`、`release-gate` run `33373178464` 均 completed success。
-- Hygiene：`py_compile`、`git diff --check`、备份计划 diff 检查通过。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核。
+- Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
+- Frontend：扩展 node tests `141/141`；release gate 内置 node 清单 `140/140`；`npm run lint` 与 `npm run build` 通过。
+- Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步后端计划
 
-1. 当前状态：`security-hardening` 已 100% 封板；后端已完成全局安全响应头、token 输入边界收紧、生产默认 JWT secret/wildcard CORS 硬阻断、认证错误详情低敏化、auth session 写入/轮换前签发配置校验、secret material 派生保护与空白包装默认 secret 识别。
-2. 下一步后端进入 `release-observability-polish` 候选范围，优先发布/回滚可见性、artifact 保留策略与门禁趋势摘要。
+1. 当前先完成四份活跃文档收敛，暂不启动下一主线。
+2. `release-observability-polish` 仅作为候选保留，后续再从发布/回滚可见性、artifact 保留策略与门禁趋势摘要中选取红测切片。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
