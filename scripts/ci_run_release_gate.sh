@@ -130,6 +130,7 @@ write_summaries() {
     mkdir -p "$(dirname "${summary_file}")"
     {
       echo "### release gate"
+      echo "- summary_schema_version: 1"
       echo "- phase: ${phase}"
       if [ -n "${resolved_phase_csv}" ]; then
         echo "- resolved_phases: ${resolved_phase_csv}"
@@ -158,6 +159,7 @@ write_summaries() {
     mkdir -p "$(dirname "${json_summary_file}")"
     {
       printf '{\n'
+      printf '  "summary_schema_version": 1,\n'
       printf '  "phase": %s,\n' "$(json_string "${phase}")"
       printf '  "resolved_phases": %s,\n' "$(json_string "${resolved_phase_csv}")"
       printf '  "changed_files_source": %s,\n' "$(json_string "${changed_files_resolve_source}")"

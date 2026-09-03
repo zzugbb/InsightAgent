@@ -6,7 +6,7 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`。
 - `security-hardening` 封板结论：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断均已收口。
-- 当前主线：`release-observability-polish`，进度约 35%；已补 release readiness matrix 发布/回滚可见性检查、artifact `retention-days: 14`、release gate 前端类型契约测试覆盖，并让 release gate Markdown/JSON summary 输出步骤聚合计数与失败步骤标签。
+- 当前主线：`release-observability-polish`，进度约 40%；已补 release readiness matrix 发布/回滚可见性检查、artifact `retention-days: 14`、release gate 前端类型契约测试覆盖，并让 release gate Markdown/JSON summary 输出 schema version、步骤聚合计数与失败步骤标签。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
@@ -18,7 +18,7 @@
 
 ## 当前开发计划
 
-1. `release-observability-polish` 已推进到 release summary 结构化输出：`step_summary` 与 `failed_step_labels` 可用于发布审批、趋势比较和失败定位。
+1. `release-observability-polish` 已推进到 release summary 结构化输出：`summary_schema_version`、`step_summary` 与 `failed_step_labels` 可用于发布审批、趋势比较和失败定位。
 2. 下一片优先从门禁趋势摘要或发布/回滚摘要可见性中选择可红测证明的小切片。
 3. 后续开发继续按先红测、再实现、再 targeted/full slice 推进。
 
@@ -130,7 +130,7 @@ bash scripts/ci_run_release_gate.sh --phase auto
 bash scripts/ci_release_readiness_matrix.sh --format markdown
 ```
 
-`scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 resolved phases、逐步结果、步骤聚合计数与失败步骤标签；service-backed e2e 仍按 runbook 单独执行。
+`scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 summary schema version、resolved phases、逐步结果、步骤聚合计数与失败步骤标签；service-backed e2e 仍按 runbook 单独执行。
 
 完整本地栈（backend + frontend + chroma + postgres）可使用：
 
