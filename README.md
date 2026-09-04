@@ -5,24 +5,21 @@
 ## 当前状态
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
-- `security-hardening` 封板结论：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断均已收口。
-- `release-observability-polish` 封板结论：release readiness matrix、artifact `retention-days: 14`、release gate 前端类型契约测试、结构化 release gate summary、previous summary artifact 下载诊断、trend summary 与 `decision_summary` 已收口，可支撑 release approval 与 rollback decision。
-- `production-runtime-hardening` 后续运维体验封板结论：已补 `/health.operations.operator_summary`、release gate `operator_summary`、previous summary download `operator_summary`、artifact stage guard `operator_summary`、export diagnostics overview `operator_summary`、trend Markdown operator 快读字段与 operator summary contract 静态检查；release-gate workflow 会在摘要上传前执行 operator contract，健康检查、门禁结果、趋势输入、artifact guard/诊断和重点风险已聚合成低敏值班摘要。
+- 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验。
 - 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `decision_summary` 与 `operator_summary`；previous summary download、artifact stage guard、trend Markdown operator 快读字段、operator summary contract、release-gate workflow 校验步骤与 export diagnostics overview targeted/pipeline 校验通过。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `141/141`；`npm run lint` 与 `npm run build` 通过。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. `production-runtime-hardening` 后续运维体验已 100% 封板：`/health.operations`、release gate summary、artifact/trend 信息已形成可校验的运维/发布检查入口。
-2. Release gate summary、previous summary download、artifact stage guard、trend Markdown、export diagnostics overview 与 operator summary contract 已对齐到同一 operator-facing 口径：ready/review/action_required、最高严重级别、重点阶段/范围与阻塞步骤/guard 标签。
-3. 下一主线候选为 `product-ux-polish` 下一阶段：从 Task Center / Trace / Audit / Knowledge Governance 中挑一个前端体验点继续打磨。
+1. `production-runtime-hardening` 后续运维体验已封板，后续只按新需求增量维护。
+2. 下一主线候选为 `product-ux-polish` 下一阶段：从 Task Center / Trace / Audit / Knowledge Governance 中挑一个前端体验点继续打磨。
 
 ## 稳定契约
 
@@ -32,12 +29,7 @@
 - Refresh token 请求会先 trim 并拒绝空白值；服务层将空白 refresh token 视为无效 token 返回，不暴露内部异常。
 - 生产环境禁止使用默认 `INSIGHT_AGENT_JWT_SECRET` 或其首尾空白包装值签发或验签 access token；开发默认值仍只允许在非生产环境使用。
 - 生产环境默认 `INSIGHT_AGENT_JWT_SECRET` 及其首尾空白包装值也不能作为 refresh token 哈希或 secret 加密派生材料；`/health.operations` 按同一口径报告 `default_jwt_secret`。
-- `/health.operations.operator_summary` 仅聚合低敏状态、最高严重级别、失败检查数、重点风险域与告警代码，不回显数据库连接串、API key、密钥、联系人或 runbook URL。
-- Release gate `operator_summary` 仅聚合低敏状态、最高严重级别、阶段与失败步骤标签，不回显环境变量、密钥、完整日志或外部服务响应。
-- Release gate trend Markdown 只渲染当前/上一份 summary 的低敏 operator 状态、主行动与关注阶段，不回显命令输出、环境变量或完整日志。
-- Previous summary download `operator_summary` 仅聚合低敏状态、主行动、原因枚举、趋势关注域和阻塞原因枚举，不回显 artifact 路径、下载目录或 CLI 输出。
-- Artifact stage guard `operator_summary` 仅聚合低敏状态、主行动、included/missing 计数、关注 scope 与阻塞原因枚举，不回显 stage 路径、manifest 路径或 artifact 文件名。
-- Export diagnostics overview `operator_summary` 仅聚合低敏状态、告警计数、guard 失败数、关注 scope 与阻塞 guard scope，不回显 artifact 路径、日志正文或外部服务响应。
+- `/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 的 operator-facing 摘要仅聚合低敏状态、主行动、最高严重级别、失败/告警计数、关注阶段/风险域/scope 与原因枚举；不回显连接串、API key、密钥、联系人、runbook URL、artifact 路径、命令输出、日志正文、环境变量或外部服务响应。
 - Operator summary contract 只校验 summary JSON/Markdown 中的低敏状态、主行动、严重级别和标量列表字段，不启动服务、不读取外部日志。
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
@@ -156,13 +148,9 @@ docker compose -f compose.full.yml up -d
 
 详细测试、e2e、启动和提交流程以 [`docs/development-runbook.md`](docs/development-runbook.md) 为准。
 
-## 后续候选主线
-
-- `product-ux-polish` 下一阶段：从 Task Center / Trace / Audit / Knowledge Governance 中挑一个高价值前端体验点继续打磨。
-
 ## 下一步
 
-- 下一步进入 `product-ux-polish` 下一阶段候选评估，从 Task Center / Trace / Audit / Knowledge Governance 中选择一个高价值前端体验点。
+- 进入 `product-ux-polish` 下一阶段候选评估，从 Task Center / Trace / Audit / Knowledge Governance 中选择一个高价值前端体验点。
 
 ## 文档维护约定
 
