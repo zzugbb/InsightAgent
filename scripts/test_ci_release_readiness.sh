@@ -60,6 +60,8 @@ main() {
   assert_contains "download diagnostics and operator_summary" "${TMP_DIR}/readiness.md"
   assert_contains "| release-gate-trend-summary | yes | no |" "${TMP_DIR}/readiness.md"
   assert_contains "bash scripts/ci_release_gate_trend_summary.sh --current-json <path> --previous-json <path>" "${TMP_DIR}/readiness.md"
+  assert_contains "| operator-summary-contract | yes | no |" "${TMP_DIR}/readiness.md"
+  assert_contains "bash scripts/ci_assert_operator_summary_contract.sh --summary-json <path> --summary-kind <kind>" "${TMP_DIR}/readiness.md"
   assert_contains "| rollback-decision-log | yes | no |" "${TMP_DIR}/readiness.md"
   assert_contains "| artifact-retention-policy | yes | no |" "${TMP_DIR}/readiness.md"
 
@@ -79,6 +81,8 @@ main() {
   assert_contains '"gate_id": "release-gate-previous-summary"' "${TMP_DIR}/readiness.json"
   assert_contains 'download diagnostics and operator_summary' "${TMP_DIR}/readiness.json"
   assert_contains '"gate_id": "release-gate-trend-summary"' "${TMP_DIR}/readiness.json"
+  assert_contains '"gate_id": "operator-summary-contract"' "${TMP_DIR}/readiness.json"
+  assert_contains 'Validates low-sensitivity operator_summary contract fields' "${TMP_DIR}/readiness.json"
   assert_contains '"gate_id": "rollback-decision-log"' "${TMP_DIR}/readiness.json"
   assert_contains '"gate_id": "artifact-retention-policy"' "${TMP_DIR}/readiness.json"
 

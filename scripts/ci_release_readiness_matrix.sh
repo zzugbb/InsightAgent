@@ -54,6 +54,7 @@ render_markdown() {
 | release-visibility-summary | yes | no | `bash scripts/ci_run_release_gate.sh --phase all --summary-file <path> --json-summary-file <path>` | Captures resolved phases, step results, `decision_summary`, and `operator_summary` for release approval and post-release comparison. |
 | release-gate-previous-summary | yes | no | `bash scripts/ci_download_previous_release_gate_summary.sh --workflow release-gate.yml --branch <branch> --current-run-id <id> --output-file <path>` | Attempts to download the latest previous successful release gate summary for true cross-run comparison; missing history degrades to baseline download diagnostics and operator_summary. |
 | release-gate-trend-summary | yes | no | `bash scripts/ci_release_gate_trend_summary.sh --current-json <path> --previous-json <path> --summary-file <path> --json-summary-file <path>` | Produces baseline or delta-friendly release gate trend metadata without starting services. |
+| operator-summary-contract | yes | no | `bash scripts/ci_assert_operator_summary_contract.sh --summary-json <path> --summary-kind <kind>` | Validates low-sensitivity operator_summary contract fields and optional Markdown operator quick-read fields. |
 | rollback-decision-log | yes | no | `cat $GITHUB_STEP_SUMMARY` | Confirms the release and trend summaries expose rollback decision, failed steps, e2e, and artifact guard context. |
 | artifact-retention-policy | yes | no | `grep -R "retention-days: 14" .github/workflows` | Ensures uploaded release, backend e2e, and frontend e2e artifacts have an explicit two-week retention window. |
 MARKDOWN
@@ -141,6 +142,13 @@ render_json() {
       "service_required": false,
       "command": "bash scripts/ci_release_gate_trend_summary.sh --current-json <path> --previous-json <path> --summary-file <path> --json-summary-file <path>",
       "notes": "Produces baseline or delta-friendly release gate trend metadata without starting services."
+    },
+    {
+      "gate_id": "operator-summary-contract",
+      "required_for_release": true,
+      "service_required": false,
+      "command": "bash scripts/ci_assert_operator_summary_contract.sh --summary-json <path> --summary-kind <kind>",
+      "notes": "Validates low-sensitivity operator_summary contract fields and optional Markdown operator quick-read fields."
     },
     {
       "gate_id": "rollback-decision-log",
