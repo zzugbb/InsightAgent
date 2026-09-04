@@ -20,6 +20,7 @@ run_common() {
   bash "${ROOT_DIR}/scripts/test_ci_finalize_e2e_scope.sh"
   bash "${ROOT_DIR}/scripts/test_ci_workflow_guards.sh"
   bash "${ROOT_DIR}/scripts/test_ci_release_gate.sh"
+  bash "${ROOT_DIR}/scripts/test_ci_release_gate_trend_summary.sh"
   bash "${ROOT_DIR}/scripts/test_ci_release_readiness.sh"
   bash "${ROOT_DIR}/scripts/test_ci_boot_backend_instance.sh"
   bash "${ROOT_DIR}/scripts/test_ci_run_backend_e2e.sh"

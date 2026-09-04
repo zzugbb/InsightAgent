@@ -52,6 +52,7 @@ render_markdown() {
 | frontend-e2e-queue | yes | yes | `bash scripts/ci_run_frontend_e2e.sh --phase queue --api-base-url http://127.0.0.1:8011 --frontend-base-url http://127.0.0.1:3001` | Validates low-concurrency queue recovery through the browser UI. |
 | artifact-stage-guard | yes | no | `bash scripts/ci_run_artifact_stage_guard.sh --scope <backend|frontend> --stage-dir <dir> --artifact-name <artifact>` | Runs after e2e finalization to ensure diagnostics artifacts are staged before upload. |
 | release-visibility-summary | yes | no | `bash scripts/ci_run_release_gate.sh --phase all --summary-file <path> --json-summary-file <path>` | Captures resolved phases and step results for release approval and post-release comparison. |
+| release-gate-trend-summary | yes | no | `bash scripts/ci_release_gate_trend_summary.sh --current-json <path> --summary-file <path> --json-summary-file <path>` | Produces baseline or delta-friendly release gate trend metadata without starting services. |
 | rollback-decision-log | yes | no | `cat $GITHUB_STEP_SUMMARY` | Confirms the release summary keeps enough gate, e2e, and artifact guard context to decide rollback. |
 | artifact-retention-policy | yes | no | `grep -R "retention-days: 14" .github/workflows` | Ensures uploaded release, backend e2e, and frontend e2e artifacts have an explicit two-week retention window. |
 MARKDOWN
@@ -125,6 +126,13 @@ render_json() {
       "service_required": false,
       "command": "bash scripts/ci_run_release_gate.sh --phase all --summary-file <path> --json-summary-file <path>",
       "notes": "Captures resolved phases and step results for release approval and post-release comparison."
+    },
+    {
+      "gate_id": "release-gate-trend-summary",
+      "required_for_release": true,
+      "service_required": false,
+      "command": "bash scripts/ci_release_gate_trend_summary.sh --current-json <path> --summary-file <path> --json-summary-file <path>",
+      "notes": "Produces baseline or delta-friendly release gate trend metadata without starting services."
     },
     {
       "gate_id": "rollback-decision-log",

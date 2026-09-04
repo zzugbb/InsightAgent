@@ -7,7 +7,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`。
 - `security-hardening` 封板结论：前端不新增 UI，继续跟随后端安全 header、token 校验、生产密钥、CORS、认证错误低敏化、auth session 副作用保护与 secret material 派生保护契约；SSE、trace、export 与任务列表契约保持稳定。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
-- 当前主线：`release-observability-polish`，进度约 44%；release gate 内置前端 node 清单已纳入 task queue diagnostics 类型契约测试，发布/e2e artifacts 显式保留 14 天，release gate Markdown/JSON summary 已输出 summary kind、schema version、service-required 标识、步骤聚合计数与失败步骤标签。
+- 当前主线：`release-observability-polish`，进度约 60%；release gate 内置前端 node 清单已纳入 task queue diagnostics 类型契约测试，发布/e2e artifacts 显式保留 14 天，release gate summary 与 trend summary 已结构化输出并上传 artifact。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
@@ -19,8 +19,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 下一步前端计划
 
-1. `release-observability-polish` 已推进到 release summary 结构化输出：`summary_kind`、`summary_schema_version`、`service_required`、`step_summary` 与 `failed_step_labels` 可用于发布审批、趋势比较和失败定位。
-2. 下一步若涉及门禁趋势或发布/回滚摘要展示，再补前端可见性入口；否则保持前端契约稳定。
+1. `release-observability-polish` 已推进到门禁趋势摘要：`ci_release_gate_trend_summary.sh` 可读取 current/previous release gate JSON，输出 baseline/improved/regressed/changed/unchanged 与失败步骤增删。
+2. 下一步若涉及发布/回滚摘要展示，再补前端可见性入口；否则保持前端契约稳定。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 后续候选主线

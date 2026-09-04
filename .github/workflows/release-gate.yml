@@ -90,12 +90,32 @@ jobs:
             --summary-file "$GITHUB_STEP_SUMMARY" \
             --json-summary-file /tmp/release-gate-summary.json
 
+      - name: Write release gate trend summary
+        if: always()
+        run: |
+          bash scripts/ci_release_gate_trend_summary.sh \
+            --current-json /tmp/release-gate-summary.json \
+            --summary-file /tmp/release-gate-trend-summary.md \
+            --json-summary-file /tmp/release-gate-trend-summary.json
+          cat /tmp/release-gate-trend-summary.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload release gate summary
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: release-gate-summary
           path: /tmp/release-gate-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload release gate trend summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-gate-trend-summary
+          path: |
+            /tmp/release-gate-trend-summary.md
+            /tmp/release-gate-trend-summary.json
           if-no-files-found: ignore
           retention-days: 14
 
