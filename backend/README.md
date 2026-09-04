@@ -4,28 +4,29 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前状态
 
-- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`。
+- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - `security-hardening` 封板结论：全局安全响应头、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断已收口，业务 payload 不变。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
-- 当前主线：`release-observability-polish`，进度约 80%；release readiness matrix 已补发布摘要、回滚判定、artifact retention、previous summary artifact 与 trend summary 检查，backend/frontend/release-gate artifacts 显式保留 14 天，release gate Markdown/JSON summary、previous download 诊断与 trend summary 已结构化输出。
+- `release-observability-polish` 封板结论：release readiness matrix、artifact retention、previous summary artifact 下载诊断、release gate Markdown/JSON summary、trend summary 与 `decision_summary` 已结构化输出，可支撑 release approval 与 rollback decision。
+- 当前状态：暂无新主线展开；等待用户授权 push 或选择下一主线。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `decision_summary`。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `141/141`；`npm run lint` 与 `npm run build` 通过。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步后端计划
 
-1. `release-observability-polish` 已推进到跨 run 门禁趋势摘要：release-gate workflow 会尝试下载同分支上一条 successful `release-gate-summary` artifact，缺少历史样本时写低敏 baseline 诊断。
-2. 下一步聚焦发布/回滚摘要可见性封板，确认 summary 足够支撑 release approval 与 rollback decision。
+1. `release-observability-polish` 已本地 100% 封板；本轮未 push。
+2. 下一步由用户确认是否授权 push，或选择新的候选主线。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
 
-- `release-observability-polish`：发布/回滚可见性、artifact 保留策略、release summary 结构化输出与跨 run 门禁趋势摘要。
+- 暂无已展开新主线；下一步可在用户授权后 push 当前本地提交，或从新的产品/运维/安全候选中选择。
 
 ## 稳定契约
 
@@ -229,9 +230,9 @@ cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_bou
 bash scripts/ci_run_release_gate.sh --phase auto
 ```
 
-`scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 summary kind、summary schema version、service-required 标识、resolved phases、逐步结果、步骤聚合计数与失败步骤标签；service-backed e2e 仍按 runbook 单独执行。
+`scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 summary kind、summary schema version、service-required 标识、resolved phases、逐步结果、步骤聚合计数、失败步骤标签与 release/rollback `decision_summary`；service-backed e2e 仍按 runbook 单独执行。
 `scripts/ci_download_previous_release_gate_summary.sh` 会在 GitHub release-gate workflow 中尝试下载同分支上一条 successful `release-gate-summary` artifact；缺少 `gh`、分支、run id、历史 run 或 artifact 时只输出低敏诊断并保留 baseline 路径。
-`scripts/ci_release_gate_trend_summary.sh` 可从当前和可选上一份 release gate JSON summary 生成趋势摘要，GitHub release-gate workflow 会产出并上传 `release-gate-trend-summary` artifact。
+`scripts/ci_release_gate_trend_summary.sh` 可从当前和可选上一份 release gate JSON summary 生成趋势摘要，并透传 release/rollback `decision_summary`；GitHub release-gate workflow 会产出并上传 `release-gate-trend-summary` artifact。
 
 如需 Memory / RAG 能力，在仓库根目录执行：
 

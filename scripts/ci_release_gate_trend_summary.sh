@@ -93,6 +93,18 @@ def failed_labels(data: dict) -> list[str]:
     return [str(item) for item in raw if str(item)]
 
 
+def decision_summary(data: dict) -> dict:
+    raw = data.get("decision_summary") if isinstance(data.get("decision_summary"), dict) else {}
+    follow_up_raw = raw.get("required_follow_up")
+    follow_up = follow_up_raw if isinstance(follow_up_raw, list) else []
+    return {
+        "release_decision": str(raw.get("release_decision") or ""),
+        "rollback_decision": str(raw.get("rollback_decision") or ""),
+        "reason": str(raw.get("reason") or ""),
+        "required_follow_up": [str(item) for item in follow_up if str(item)],
+    }
+
+
 def compact_release_gate(data: dict) -> dict:
     return {
         "summary_kind": str(data.get("summary_kind") or ""),
@@ -103,6 +115,7 @@ def compact_release_gate(data: dict) -> dict:
         "resolved_phases": str(data.get("resolved_phases") or ""),
         "step_summary": step_summary(data),
         "failed_step_labels": failed_labels(data),
+        "decision_summary": decision_summary(data),
     }
 
 

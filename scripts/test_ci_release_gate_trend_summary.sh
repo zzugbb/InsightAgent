@@ -45,7 +45,8 @@ main() {
   "phase": "all",
   "result": "PASS",
   "step_summary": {"total": 9, "pass": 9, "fail": 0, "dry_run": 0},
-  "failed_step_labels": []
+  "failed_step_labels": [],
+  "decision_summary": {"release_decision": "approve", "rollback_decision": "not_required", "reason": "all_required_static_gates_passed", "required_follow_up": []}
 }
 JSON
 
@@ -57,7 +58,8 @@ JSON
   "phase": "all",
   "result": "FAIL",
   "step_summary": {"total": 9, "pass": 8, "fail": 1, "dry_run": 0},
-  "failed_step_labels": ["frontend lint"]
+  "failed_step_labels": ["frontend lint"],
+  "decision_summary": {"release_decision": "hold", "rollback_decision": "investigate_failed_gate", "reason": "failed_required_static_gate", "required_follow_up": ["inspect_failed_steps", "keep_previous_release"]}
 }
 JSON
 
@@ -74,6 +76,8 @@ JSON
   assert_contains '"summary_kind": "release_gate_trend"' "${TMP_DIR}/baseline.json"
   assert_contains '"previous_available": false' "${TMP_DIR}/baseline.json"
   assert_contains '"trend_result": "baseline"' "${TMP_DIR}/baseline.json"
+  assert_contains '"release_decision": "approve"' "${TMP_DIR}/baseline.json"
+  assert_contains '"rollback_decision": "not_required"' "${TMP_DIR}/baseline.json"
 
   bash "${SCRIPT}" \
     --current-json "${TMP_DIR}/current.json" \
@@ -90,6 +94,8 @@ JSON
   assert_contains '"fail": -1' "${TMP_DIR}/trend.json"
   assert_contains '"removed_failed_step_labels": [' "${TMP_DIR}/trend.json"
   assert_contains '"frontend lint"' "${TMP_DIR}/trend.json"
+  assert_contains '"release_decision": "hold"' "${TMP_DIR}/trend.json"
+  assert_contains '"rollback_decision": "investigate_failed_gate"' "${TMP_DIR}/trend.json"
 
   expect_fail bash "${SCRIPT}" --current-json "${TMP_DIR}/missing.json"
 

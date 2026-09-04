@@ -104,6 +104,10 @@ write_summaries() {
   local failed_step_labels="none"
   local failed_json="["
   local failed_count=0
+  local release_decision="approve"
+  local rollback_decision="not_required"
+  local decision_reason="all_required_static_gates_passed"
+  local follow_up_json="[]"
 
   for i in "${!STEP_LABELS[@]}"; do
     case "${STEP_RESULTS[$i]}" in
@@ -125,6 +129,18 @@ write_summaries() {
     esac
   done
   failed_json+="]"
+
+  if [ "${result}" = "DRY-RUN" ]; then
+    release_decision="dry_run_review"
+    rollback_decision="not_applicable_dry_run"
+    decision_reason="dry_run_does_not_authorize_release"
+    follow_up_json='["run_release_gate_without_dry_run"]'
+  elif [ "${fail_steps}" -gt 0 ]; then
+    release_decision="hold"
+    rollback_decision="investigate_failed_gate"
+    decision_reason="failed_required_static_gate"
+    follow_up_json='["inspect_failed_steps", "keep_previous_release"]'
+  fi
 
   if [ -n "${summary_file}" ]; then
     mkdir -p "$(dirname "${summary_file}")"
@@ -148,6 +164,9 @@ write_summaries() {
       echo "- failed_steps: ${fail_steps}"
       echo "- dry_run_steps: ${dry_run_steps}"
       echo "- failed_step_labels: ${failed_step_labels}"
+      echo "- release_decision: ${release_decision}"
+      echo "- rollback_decision: ${rollback_decision}"
+      echo "- decision_reason: ${decision_reason}"
       echo
       echo "| step | result | exit_code | workdir | command |"
       echo "| --- | --- | --- | --- | --- |"
@@ -176,6 +195,11 @@ write_summaries() {
         "${fail_steps}" \
         "${dry_run_steps}"
       printf '  "failed_step_labels": %s,\n' "${failed_json}"
+      printf '  "decision_summary": {"release_decision": %s, "rollback_decision": %s, "reason": %s, "required_follow_up": %s},\n' \
+        "$(json_string "${release_decision}")" \
+        "$(json_string "${rollback_decision}")" \
+        "$(json_string "${decision_reason}")" \
+        "${follow_up_json}"
       printf '  "steps": [\n'
       for i in "${!STEP_LABELS[@]}"; do
         if [ "${i}" -gt 0 ]; then
