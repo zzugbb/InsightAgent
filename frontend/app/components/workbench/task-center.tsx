@@ -28,6 +28,7 @@ import {
   resolveTaskFailureDiagnosticChipClick,
   resolveTaskFailureDiagnosticGroupsForTaskCenter,
   resolveTaskFailureHintDisplay,
+  resolveTaskCenterOperatorHint,
   resolveTaskDetailHrefTraceSemanticFilter,
   resolveTaskObservabilityFilterChange,
   resolveTaskSnapshotSummary,
@@ -273,6 +274,16 @@ export function TaskCenter({
             snapshot?.failureHint,
             t.stream.streamErrorByCode,
           );
+          const operatorHint = resolveTaskCenterOperatorHint({
+            task,
+            snapshot,
+            labels: {
+              failureHint: t.taskCenter.operatorHintFailureHint,
+              failureTrace: t.taskCenter.operatorHintFailureTrace,
+              queued: t.taskCenter.operatorHintQueued,
+              running: t.taskCenter.operatorHintRunning,
+            },
+          });
           const failureSourceLabel =
             snapshot?.failureSource
               ? formatTaskFailureSourceLabel(snapshot.failureSource, t.inspector)
@@ -325,6 +336,14 @@ export function TaskCenter({
                 <span className="task-summary-failed-hint">
                   {t.inspector.taskFailureHint}
                   {failureSourceLabel ? ` · ${failureSourceLabel}` : ""}: {failedHint}
+                </span>
+              ) : null}
+              {operatorHint ? (
+                <span
+                  className={`task-center-operator-hint task-center-operator-hint--${operatorHint.kind}`}
+                  data-testid="task-center-operator-hint"
+                >
+                  {operatorHint.label}
                 </span>
               ) : null}
             </div>
@@ -392,6 +411,10 @@ export function TaskCenter({
       taskSnapshots,
       taskObservabilityFilter,
       t.inspector,
+      t.taskCenter.operatorHintFailureHint,
+      t.taskCenter.operatorHintFailureTrace,
+      t.taskCenter.operatorHintQueued,
+      t.taskCenter.operatorHintRunning,
       t.taskCenter.semanticCalculatorLabel,
       t.taskCenter.semanticFailureLabel,
       t.taskCenter.semanticPlannerLabel,

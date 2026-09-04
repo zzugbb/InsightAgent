@@ -20,6 +20,7 @@ import {
   resolveTaskFailureDiagnosticChipClick,
   resolveTaskFailureDiagnosticDrilldown,
   resolveTaskCenterListState,
+  resolveTaskCenterOperatorHint,
   resolveTaskDetailHrefTraceSemanticFilter,
   resolveInspectorTraceSemanticFilterChange,
   resolveTaskStatusDisplay,
@@ -2670,6 +2671,92 @@ test("resolveTaskStatusDisplay keeps Task Center status text and tone on normali
       label: "Queued for execution",
       tone: "running",
     },
+  );
+});
+
+test("resolveTaskCenterOperatorHint gives Task Center local next actions", () => {
+  const labels = {
+    failureHint: "Open Failure trace and fix the reported source",
+    failureTrace: "Review Failure trace before retrying",
+    queued: "Watch queue capacity before sending another run",
+    running: "Monitor live stream until the task finishes",
+  };
+
+  assert.deepEqual(
+    resolveTaskCenterOperatorHint({
+      task: { status: "completed", status_normalized: "failed" },
+      snapshot: {
+        failureHint: "remote_provider_network_error",
+        semanticStats: {
+          planner: 1,
+          retrieval: 0,
+          calculator: 0,
+          failure: 1,
+        },
+      },
+      labels,
+    }),
+    {
+      kind: "failure_hint",
+      label: "Open Failure trace and fix the reported source",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskCenterOperatorHint({
+      task: { status: "completed" },
+      snapshot: {
+        failureHint: null,
+        semanticStats: {
+          planner: 1,
+          retrieval: 0,
+          calculator: 0,
+          failure: 1,
+        },
+      },
+      labels,
+    }),
+    {
+      kind: "failure_trace",
+      label: "Review Failure trace before retrying",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskCenterOperatorHint({
+      task: { status: "queued" },
+      snapshot: null,
+      labels,
+    }),
+    {
+      kind: "queued",
+      label: "Watch queue capacity before sending another run",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskCenterOperatorHint({
+      task: { status: "running" },
+      snapshot: null,
+      labels,
+    }),
+    {
+      kind: "running",
+      label: "Monitor live stream until the task finishes",
+    },
+  );
+  assert.equal(
+    resolveTaskCenterOperatorHint({
+      task: { status: "completed" },
+      snapshot: {
+        failureHint: null,
+        semanticStats: {
+          planner: 0,
+          retrieval: 0,
+          calculator: 0,
+          failure: 0,
+        },
+      },
+      labels,
+    }),
+    null,
   );
 });
 

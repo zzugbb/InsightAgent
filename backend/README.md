@@ -4,23 +4,24 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前状态
 
-- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
+- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish` 初版、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验。
-- 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
+- 当前主线：`product-ux-polish` 下一阶段约 10% 推进中；本轮 Task Center operator next-action 提示为纯前端本地派生，后端任务列表 API、SSE、trace 与 export payload 不变。
+- 后续候选切片：继续从 Trace / Audit / Knowledge Governance 中选择高价值前端体验点打磨。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `141/141`；`npm run lint` 与 `npm run build` 通过。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `142/142`；`npm run lint` 与 `npm run build` 通过；Browser QA 覆盖 Task Center desktop/mobile operator hint 渲染与 failure chip 交互。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步后端计划
 
-1. `production-runtime-hardening` 后续运维体验已封板，后续只按新需求增量维护。
-2. 下一主线候选为 `product-ux-polish` 下一阶段；后端侧继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
+1. 当前推进 `product-ux-polish` 下一阶段；本轮无后端 API 改动。
+2. 后端侧继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 稳定契约
 
@@ -40,6 +41,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 任务详情页可通过兼容 URL 参数 `trace_semantic` 回放语义 Trace；前端语义切换与 normalized 状态/轮询控制均不改变后端任务、trace 或 export payload。
 - Workbench Inspector 语义筛选清理旧 search/kind 干扰属于前端本地状态变更，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure drilldown、normalized 状态/失败摘要与显式 `failure_hint` 优先级均为前端本地语义，不改变任务列表 API、后端 trace 或 export shape。
+- Task Center operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生，不新增后端字段，不改变任务列表 API、SSE、trace 或 export payload。
 - Task Center、Audit Logs 与知识库治理列表的错误恢复/陈旧数据保留不改变任务、审计或 RAG API shape。
 - 前端 SSE close 后失败摘要兜底只补拉既有任务/trace 并映射低敏 failure hint，不改变后端 SSE、任务、trace 或 export payload。
 - Memory/RAG collection 命名、Chroma 503 降级、shared knowledge base 权限语义保持稳定。

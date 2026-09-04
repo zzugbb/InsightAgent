@@ -617,6 +617,59 @@ export function resolveTaskStatusDisplay(
   };
 }
 
+export type TaskCenterOperatorHintKind =
+  | "failure_hint"
+  | "failure_trace"
+  | "queued"
+  | "running";
+
+export type TaskCenterOperatorHint = {
+  kind: TaskCenterOperatorHintKind;
+  label: string;
+};
+
+export function resolveTaskCenterOperatorHint(args: {
+  task: Pick<TaskSummary, "status" | "status_normalized">;
+  snapshot:
+    | Pick<TaskSnapshotSummary, "failureHint" | "semanticStats">
+    | null
+    | undefined;
+  labels: {
+    failureHint: string;
+    failureTrace: string;
+    queued: string;
+    running: string;
+  };
+}): TaskCenterOperatorHint | null {
+  if (args.snapshot?.failureHint?.trim()) {
+    return {
+      kind: "failure_hint",
+      label: args.labels.failureHint,
+    };
+  }
+  if ((args.snapshot?.semanticStats.failure ?? 0) > 0) {
+    return {
+      kind: "failure_trace",
+      label: args.labels.failureTrace,
+    };
+  }
+
+  const status = resolveTaskEffectiveStatus(args.task).trim().toLowerCase();
+  if (status === "queued" || status === "pending") {
+    return {
+      kind: "queued",
+      label: args.labels.queued,
+    };
+  }
+  if (status === "running") {
+    return {
+      kind: "running",
+      label: args.labels.running,
+    };
+  }
+  return null;
+}
+
 type TaskFailureInsight = {
   hint: string;
   source: TaskFailureSource;

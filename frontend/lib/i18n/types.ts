@@ -133,6 +133,10 @@ export type Messages = {
     semanticRetrievalLabel: string;
     semanticCalculatorLabel: string;
     semanticFailureLabel: string;
+    operatorHintFailureHint: string;
+    operatorHintFailureTrace: string;
+    operatorHintQueued: string;
+    operatorHintRunning: string;
     openTaskDetail: string;
     openTaskDetailAria: string;
   };
