@@ -7,7 +7,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`。
 - `security-hardening` 封板结论：全局安全响应头、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断已收口，业务 payload 不变。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
-- 当前主线：`release-observability-polish`，进度约 40%；release readiness matrix 已补发布摘要、回滚判定与 artifact retention 检查，backend/frontend/release-gate artifacts 显式保留 14 天，release gate Markdown/JSON summary 已输出 schema version、步骤聚合计数与失败步骤标签。
+- 当前主线：`release-observability-polish`，进度约 42%；release readiness matrix 已补发布摘要、回滚判定与 artifact retention 检查，backend/frontend/release-gate artifacts 显式保留 14 天，release gate Markdown/JSON summary 已输出 summary kind、schema version、步骤聚合计数与失败步骤标签。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
@@ -19,7 +19,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 下一步后端计划
 
-1. `release-observability-polish` 已推进到 release summary 结构化输出：`summary_schema_version`、`step_summary` 与 `failed_step_labels` 可用于发布审批、趋势比较和失败定位。
+1. `release-observability-polish` 已推进到 release summary 结构化输出：`summary_kind`、`summary_schema_version`、`step_summary` 与 `failed_step_labels` 可用于发布审批、趋势比较和失败定位。
 2. 下一步从门禁趋势摘要或发布/回滚摘要可见性中选取可红测证明的小切片。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
@@ -229,7 +229,7 @@ cd backend && PYTHONPATH=. .venv/bin/python scripts/test_tool_runtime_module_bou
 bash scripts/ci_run_release_gate.sh --phase auto
 ```
 
-`scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 summary schema version、resolved phases、逐步结果、步骤聚合计数与失败步骤标签；service-backed e2e 仍按 runbook 单独执行。
+`scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 summary kind、summary schema version、resolved phases、逐步结果、步骤聚合计数与失败步骤标签；service-backed e2e 仍按 runbook 单独执行。
 
 如需 Memory / RAG 能力，在仓库根目录执行：
 
