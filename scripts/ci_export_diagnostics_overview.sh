@@ -110,6 +110,83 @@ def summarize_guard(data):
         "warning_p1": int(data.get("warning_p1", 0) or 0),
     }
 
+
+def unique(items):
+    seen = set()
+    result = []
+    for item in items:
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
+
+
+def build_operator_summary(
+    frontend_diag_summary,
+    frontend_guard_summary,
+    backend_diag_summary,
+    backend_guard_summary,
+    warning_total,
+    warning_p0,
+    warning_p1,
+    guard_failure_count,
+):
+    missing_scopes = []
+    warning_scopes = []
+    blocking_guard_scopes = []
+
+    scoped_parts = [
+        ("frontend", frontend_diag_summary, frontend_guard_summary),
+        ("backend", backend_diag_summary, backend_guard_summary),
+    ]
+    for scope, diag_summary, guard_summary in scoped_parts:
+        if not diag_summary.get("available") or not guard_summary.get("available"):
+            missing_scopes.append(scope)
+        scope_warning_total = int(diag_summary.get("warning_total", 0) or 0) + int(guard_summary.get("warning_total", 0) or 0)
+        if scope_warning_total > 0:
+            warning_scopes.append(scope)
+        if guard_summary.get("available") and guard_summary.get("gate_result") == "FAIL":
+            blocking_guard_scopes.append(scope)
+
+    if blocking_guard_scopes:
+        status = "action_required"
+        headline = "export diagnostics guard failures need attention"
+        primary_action = "inspect_failed_artifact_guards"
+        highest_severity = "critical"
+        focus_scopes = blocking_guard_scopes
+    elif missing_scopes:
+        status = "review"
+        headline = "export diagnostics inputs need review"
+        primary_action = "review_missing_diagnostics_inputs"
+        highest_severity = "info"
+        focus_scopes = missing_scopes
+    elif warning_total > 0:
+        status = "review"
+        headline = "export diagnostics warnings need review"
+        primary_action = "review_diagnostics_warnings"
+        highest_severity = "warning"
+        focus_scopes = warning_scopes
+    else:
+        status = "ready"
+        headline = "export diagnostics ready"
+        primary_action = "continue_release_review"
+        highest_severity = "ok"
+        focus_scopes = ["frontend", "backend"]
+
+    return {
+        "status": status,
+        "headline": headline,
+        "primary_action": primary_action,
+        "highest_severity": highest_severity,
+        "warning_total": warning_total,
+        "warning_p0": warning_p0,
+        "warning_p1": warning_p1,
+        "guard_failures": guard_failure_count,
+        "focus_scopes": unique(focus_scopes),
+        "blocking_guard_scopes": unique(blocking_guard_scopes),
+    }
+
 frontend_diag, frontend_diag_ok = load_json(frontend_diag_path)
 frontend_guard, frontend_guard_ok = load_json(frontend_guard_path)
 backend_diag, backend_diag_ok = load_json(backend_diag_path)
@@ -134,9 +211,21 @@ for g in [frontend_guard_summary, backend_guard_summary]:
     if g.get("available") and g.get("gate_result") == "FAIL":
         guard_failures += 1
 
+operator_summary = build_operator_summary(
+    frontend_diag_summary,
+    frontend_guard_summary,
+    backend_diag_summary,
+    backend_guard_summary,
+    all_warning_total,
+    all_warning_p0,
+    all_warning_p1,
+    guard_failures,
+)
+
 overview = {
     "label": label,
     "generated_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "operator_summary": operator_summary,
     "frontend": {
         "diagnostics": frontend_diag_summary,
         "guard": frontend_guard_summary,
@@ -160,6 +249,9 @@ lines = []
 lines.append(f"## export diagnostics overview ({label})")
 lines.append(f"- generated_at_utc: {overview['generated_at_utc']}")
 lines.append(f"- totals: warning_total={all_warning_total}, p0={all_warning_p0}, p1={all_warning_p1}, guard_failures={guard_failures}")
+lines.append(f"- operator_status: {operator_summary['status']}")
+lines.append(f"- operator_primary_action: {operator_summary['primary_action']}")
+lines.append(f"- operator_focus_scopes: {','.join(operator_summary['focus_scopes']) or 'none'}")
 
 if frontend_diag_summary.get("available"):
     lines.append("### frontend diagnostics")

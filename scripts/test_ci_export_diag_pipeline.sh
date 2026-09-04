@@ -124,6 +124,8 @@ JSON
   assert_file "${TMP_DIR}/fe-warn-overview.json"
   assert_contains "gate_result: FAIL" "${TMP_DIR}/fe-warn-guard.md"
   assert_contains "selected_strict_level: any" "${TMP_DIR}/fe-warn-summary.md"
+  assert_contains "operator_primary_action: inspect_failed_artifact_guards" "${TMP_DIR}/fe-warn-overview.md"
+  assert_contains '"primary_action": "inspect_failed_artifact_guards"' "${TMP_DIR}/fe-warn-overview.json"
 
   expect_pass bash "${PIPELINE_SCRIPT}" \
     --scope backend \

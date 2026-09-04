@@ -51,11 +51,20 @@ JSON
 
   assert_contains "${out_md}" "## export diagnostics overview (unit-test)"
   assert_contains "${out_md}" "- totals: warning_total=3, p0=1, p1=2, guard_failures=1"
+  assert_contains "${out_md}" "- operator_status: action_required"
+  assert_contains "${out_md}" "- operator_primary_action: inspect_failed_artifact_guards"
+  assert_contains "${out_md}" "- operator_focus_scopes: frontend"
   assert_contains "${out_md}" "- strict_level=p0, gate_result=FAIL"
 
   assert_contains "${out_json}" '"label": "unit-test"'
   assert_contains "${out_json}" '"warning_total": 3'
   assert_contains "${out_json}" '"guard_failures": 1'
+  assert_contains "${out_json}" '"operator_summary": {'
+  assert_contains "${out_json}" '"status": "action_required"'
+  assert_contains "${out_json}" '"primary_action": "inspect_failed_artifact_guards"'
+  assert_contains "${out_json}" '"highest_severity": "critical"'
+  assert_contains "${out_json}" '"focus_scopes": ['
+  assert_contains "${out_json}" '"blocking_guard_scopes": ['
 
   cat > "${TMP_DIR}/malformed-backend-diag.json" <<'JSON'
 {"status":
@@ -71,10 +80,13 @@ JSON
     --label "malformed-json"
 
   assert_contains "${malformed_md}" "## export diagnostics overview (malformed-json)"
+  assert_contains "${malformed_md}" "- operator_status: review"
+  assert_contains "${malformed_md}" "- operator_primary_action: review_missing_diagnostics_inputs"
   assert_contains "${malformed_md}" "### backend diagnostics"
   assert_contains "${malformed_md}" "- unavailable"
   assert_contains "${malformed_json}" '"label": "malformed-json"'
   assert_contains "${malformed_json}" '"available": false'
+  assert_contains "${malformed_json}" '"primary_action": "review_missing_diagnostics_inputs"'
 
   echo "ci_export_diagnostics_overview tests passed"
 }
