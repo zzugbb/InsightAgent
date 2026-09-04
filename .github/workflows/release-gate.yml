@@ -38,9 +38,14 @@ concurrency:
   group: release-gate-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   RELEASE_GATE_PHASE: ${{ github.event.inputs.release_gate_phase || 'auto' }}
+  RELEASE_GATE_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   static:
@@ -90,11 +95,30 @@ jobs:
             --summary-file "$GITHUB_STEP_SUMMARY" \
             --json-summary-file /tmp/release-gate-summary.json
 
+      - name: Download previous release gate summary
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/ci_download_previous_release_gate_summary.sh \
+            --workflow release-gate.yml \
+            --branch "${RELEASE_GATE_SOURCE_BRANCH}" \
+            --current-run-id "${GITHUB_RUN_ID}" \
+            --output-file /tmp/previous-release-gate-summary.json \
+            --summary-file /tmp/previous-release-gate-download-summary.md \
+            --json-summary-file /tmp/previous-release-gate-download-summary.json
+          cat /tmp/previous-release-gate-download-summary.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Write release gate trend summary
         if: always()
         run: |
+          previous_summary_args=()
+          if [ -f /tmp/previous-release-gate-summary.json ]; then
+            previous_summary_args=(--previous-json /tmp/previous-release-gate-summary.json)
+          fi
           bash scripts/ci_release_gate_trend_summary.sh \
             --current-json /tmp/release-gate-summary.json \
+            "${previous_summary_args[@]}" \
             --summary-file /tmp/release-gate-trend-summary.md \
             --json-summary-file /tmp/release-gate-trend-summary.json
           cat /tmp/release-gate-trend-summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -114,6 +138,9 @@ jobs:
         with:
           name: release-gate-trend-summary
           path: |
+            /tmp/previous-release-gate-summary.json
+            /tmp/previous-release-gate-download-summary.md
+            /tmp/previous-release-gate-download-summary.json
             /tmp/release-gate-trend-summary.md
             /tmp/release-gate-trend-summary.json
           if-no-files-found: ignore
