@@ -192,16 +192,31 @@ lines = [
     f"- previous_available: {'yes' if previous is not None else 'no'}",
     f"- trend_result: {result}",
     f"- current_result: {current['result']}",
+]
+if previous is not None:
+    lines.append(f"- previous_result: {previous['result']}")
+lines.extend([
     f"- current_total_steps: {current['step_summary']['total']}",
     f"- current_failed_steps: {current['step_summary']['fail']}",
+])
+if previous is not None:
+    lines.append(f"- previous_failed_steps: {previous['step_summary']['fail']}")
+lines.extend([
+    f"- current_operator_status: {current['operator_summary']['status'] or 'unknown'}",
+    f"- current_operator_primary_action: {current['operator_summary']['primary_action'] or 'unknown'}",
+    f"- current_operator_focus_phases: {markdown_list(current['operator_summary']['focus_phases'])}",
+])
+if previous is not None:
+    lines.extend([
+        f"- previous_operator_status: {previous['operator_summary']['status'] or 'unknown'}",
+        f"- previous_operator_primary_action: {previous['operator_summary']['primary_action'] or 'unknown'}",
+    ])
+lines.extend([
     f"- failed_steps_delta: {deltas['fail']:+d}",
     f"- current_failed_step_labels: {markdown_list(current['failed_step_labels'])}",
     f"- added_failed_step_labels: {markdown_list(added_failed)}",
     f"- removed_failed_step_labels: {markdown_list(removed_failed)}",
-]
-if previous is not None:
-    lines.insert(7, f"- previous_result: {previous['result']}")
-    lines.insert(9, f"- previous_failed_steps: {previous['step_summary']['fail']}")
+])
 lines.append("")
 
 if summary_path:

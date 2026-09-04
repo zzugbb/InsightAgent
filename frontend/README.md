@@ -8,13 +8,13 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `security-hardening` 封板结论：前端不新增 UI，继续跟随后端安全 header、token 校验、生产密钥、CORS、认证错误低敏化、auth session 副作用保护与 secret material 派生保护契约；SSE、trace、export 与任务列表契约保持稳定。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - `release-observability-polish` 封板结论：release gate 内置前端 node 清单已纳入 task queue diagnostics 类型契约测试，发布/e2e artifacts 显式保留 14 天，release gate summary、previous download 诊断、trend summary 与 release/rollback `decision_summary` 已结构化输出并上传 artifact。
-- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 75%；已补后端 `/health.operations.operator_summary`、release gate `operator_summary`、previous summary download `operator_summary`、artifact stage guard `operator_summary` 与 export diagnostics overview `operator_summary`，前端契约保持只读兼容。
+- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 85%；已补后端 `/health.operations.operator_summary`、release gate `operator_summary`、previous summary download `operator_summary`、artifact stage guard `operator_summary`、export diagnostics overview `operator_summary` 与 trend Markdown operator 快读字段，前端契约保持只读兼容。
 - 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
-- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `decision_summary` 与 `operator_summary`；previous summary download、artifact stage guard、export diagnostics overview targeted/pipeline 校验通过。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `decision_summary` 与 `operator_summary`；previous summary download、artifact stage guard、trend Markdown operator 快读字段与 export diagnostics overview targeted/pipeline 校验通过。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `141/141`；`npm run lint` 与 `npm run build` 通过。
 - Backend 契约基线：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
@@ -22,7 +22,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 当前主线为 `production-runtime-hardening` 后续运维体验：把 `/health.operations`、release gate summary、artifact/trend 信息做成更易读的运维/发布检查入口。
-2. Release gate summary、previous summary download、artifact stage guard 与 export diagnostics overview 已对齐同一 operator-facing 口径，不改变前端 SSE / trace / export / task list 契约。
+2. Release gate summary、previous summary download、artifact stage guard、trend Markdown 与 export diagnostics overview 已对齐同一 operator-facing 口径，不改变前端 SSE / trace / export / task list 契约。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 后续候选主线
