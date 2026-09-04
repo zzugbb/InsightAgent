@@ -123,6 +123,22 @@ jobs:
             --json-summary-file /tmp/release-gate-trend-summary.json
           cat /tmp/release-gate-trend-summary.md >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Validate operator summaries
+        if: always()
+        run: |
+          if [ -f /tmp/release-gate-summary.json ]; then
+            bash scripts/ci_assert_operator_summary_contract.sh \
+              --summary-json /tmp/release-gate-summary.json \
+              --summary-kind release_gate \
+              --markdown "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f /tmp/release-gate-trend-summary.json ]; then
+            bash scripts/ci_assert_operator_summary_contract.sh \
+              --summary-json /tmp/release-gate-trend-summary.json \
+              --summary-kind release_gate_trend \
+              --markdown /tmp/release-gate-trend-summary.md
+          fi
+
       - name: Upload release gate summary
         if: always()
         uses: actions/upload-artifact@v7

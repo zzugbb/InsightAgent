@@ -4,25 +4,25 @@
 
 ## 当前状态
 
-- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
+- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - `security-hardening` 封板结论：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断均已收口。
 - `release-observability-polish` 封板结论：release readiness matrix、artifact `retention-days: 14`、release gate 前端类型契约测试、结构化 release gate summary、previous summary artifact 下载诊断、trend summary 与 `decision_summary` 已收口，可支撑 release approval 与 rollback decision。
-- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 95%；已补 `/health.operations.operator_summary`、release gate `operator_summary`、previous summary download `operator_summary`、artifact stage guard `operator_summary`、export diagnostics overview `operator_summary`、trend Markdown operator 快读字段与 operator summary contract 静态检查，把健康检查、门禁结果、趋势输入、artifact guard/诊断和重点风险聚合成低敏值班摘要。
+- `production-runtime-hardening` 后续运维体验封板结论：已补 `/health.operations.operator_summary`、release gate `operator_summary`、previous summary download `operator_summary`、artifact stage guard `operator_summary`、export diagnostics overview `operator_summary`、trend Markdown operator 快读字段与 operator summary contract 静态检查；release-gate workflow 会在摘要上传前执行 operator contract，健康检查、门禁结果、趋势输入、artifact guard/诊断和重点风险已聚合成低敏值班摘要。
 - 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `decision_summary` 与 `operator_summary`；previous summary download、artifact stage guard、trend Markdown operator 快读字段、operator summary contract 与 export diagnostics overview targeted/pipeline 校验通过。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `decision_summary` 与 `operator_summary`；previous summary download、artifact stage guard、trend Markdown operator 快读字段、operator summary contract、release-gate workflow 校验步骤与 export diagnostics overview targeted/pipeline 校验通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `141/141`；`npm run lint` 与 `npm run build` 通过。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前主线为 `production-runtime-hardening` 后续运维体验：把 `/health.operations`、release gate summary、artifact/trend 信息做成更易读的运维/发布检查入口。
-2. 已将 release gate summary、previous summary download、artifact stage guard、trend Markdown、export diagnostics overview 与 operator summary contract 对齐到同一 operator-facing 口径：ready/review/action_required、最高严重级别、重点阶段/范围与阻塞步骤/guard 标签。
-3. 后续候选为 `product-ux-polish` 下一阶段：从 Task Center / Trace / Audit / Knowledge Governance 中挑一个前端体验点继续打磨。
+1. `production-runtime-hardening` 后续运维体验已 100% 封板：`/health.operations`、release gate summary、artifact/trend 信息已形成可校验的运维/发布检查入口。
+2. Release gate summary、previous summary download、artifact stage guard、trend Markdown、export diagnostics overview 与 operator summary contract 已对齐到同一 operator-facing 口径：ready/review/action_required、最高严重级别、重点阶段/范围与阻塞步骤/guard 标签。
+3. 下一主线候选为 `product-ux-polish` 下一阶段：从 Task Center / Trace / Audit / Knowledge Governance 中挑一个前端体验点继续打磨。
 
 ## 稳定契约
 
@@ -142,7 +142,7 @@ bash scripts/ci_release_readiness_matrix.sh --format markdown
 `scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 summary kind、summary schema version、service-required 标识、resolved phases、逐步结果、步骤聚合计数、失败步骤标签、release/rollback `decision_summary` 与 `operator_summary`；service-backed e2e 仍按 runbook 单独执行。
 `scripts/ci_download_previous_release_gate_summary.sh` 会在 GitHub release-gate workflow 中尝试下载同分支上一条 successful `release-gate-summary` artifact；缺少 `gh`、分支、run id、历史 run 或 artifact 时只输出低敏诊断和 `operator_summary` 并保留 baseline 路径。
 `scripts/ci_release_gate_trend_summary.sh` 可从当前和可选上一份 release gate JSON summary 生成趋势摘要，Markdown 直接展示当前/上一份 operator 状态、主行动和关注阶段，并在 JSON 中透传 release/rollback `decision_summary` 与 `operator_summary`；GitHub release-gate workflow 会产出并上传 `release-gate-trend-summary` artifact。
-`scripts/ci_assert_operator_summary_contract.sh` 可对 release/trend/artifact/export 等 summary JSON 和可选 Markdown 运行低敏 operator 摘要契约检查；该检查已纳入 tooling 自测与 release readiness matrix。
+`scripts/ci_assert_operator_summary_contract.sh` 可对 release/trend/artifact/export 等 summary JSON 和可选 Markdown 运行低敏 operator 摘要契约检查；该检查已纳入 tooling 自测、release-gate workflow 与 release readiness matrix。
 `scripts/ci_assert_artifact_stage_health.sh` 会为 e2e artifact stage guard 输出低敏 `operator_summary`，用于区分可继续、需复核 warning、需补齐 artifact 的值班行动。
 `scripts/ci_export_diagnostics_overview.sh` 会把 backend/frontend diagnostics 与 artifact guard 结果汇总为 overview，并输出低敏 `operator_summary` 便于值班快速判断缺失输入、warning 或 guard failure。
 
@@ -162,7 +162,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- 继续 `production-runtime-hardening` 后续运维体验，下一步可做最后文档收敛与封板确认。
+- 下一步进入 `product-ux-polish` 下一阶段候选评估，从 Task Center / Trace / Audit / Knowledge Governance 中选择一个高价值前端体验点。
 
 ## 文档维护约定
 
