@@ -93,11 +93,17 @@ SH
   assert_contains '"result": "PASS_PREVIOUS_100"' "${TMP_DIR}/previous-release-gate-summary.json"
   assert_contains "- summary_kind: release_gate_previous_summary_download" "${TMP_DIR}/download.md"
   assert_contains "- previous_available: yes" "${TMP_DIR}/download.md"
+  assert_contains "- operator_status: ready" "${TMP_DIR}/download.md"
+  assert_contains "- operator_primary_action: compare_release_gate_trend" "${TMP_DIR}/download.md"
   assert_contains "- previous_run_id: 100" "${TMP_DIR}/download.md"
   assert_contains '"summary_kind": "release_gate_previous_summary_download"' "${TMP_DIR}/download.json"
   assert_contains '"previous_available": true' "${TMP_DIR}/download.json"
   assert_contains '"previous_run_id": 100' "${TMP_DIR}/download.json"
   assert_contains '"reason": "downloaded"' "${TMP_DIR}/download.json"
+  assert_contains '"operator_summary": {' "${TMP_DIR}/download.json"
+  assert_contains '"status": "ready"' "${TMP_DIR}/download.json"
+  assert_contains '"primary_action": "compare_release_gate_trend"' "${TMP_DIR}/download.json"
+  assert_contains '"focus_areas": [' "${TMP_DIR}/download.json"
 
   bash "${SCRIPT}" \
     --branch main \
@@ -109,8 +115,11 @@ SH
   "$(json_tool_python)" -m json.tool "${TMP_DIR}/missing-summary.json" >/dev/null
   assert_contains "- previous_available: no" "${TMP_DIR}/missing.md"
   assert_contains "- reason: gh_unavailable" "${TMP_DIR}/missing.md"
+  assert_contains "- operator_status: review" "${TMP_DIR}/missing.md"
+  assert_contains "- operator_primary_action: review_previous_summary_baseline" "${TMP_DIR}/missing.md"
   assert_contains '"previous_available": false' "${TMP_DIR}/missing-summary.json"
   assert_contains '"reason": "gh_unavailable"' "${TMP_DIR}/missing-summary.json"
+  assert_contains '"primary_action": "review_previous_summary_baseline"' "${TMP_DIR}/missing-summary.json"
 
   bash "${SCRIPT}" \
     --current-run-id 200 \
@@ -119,7 +128,9 @@ SH
     --summary-file "${TMP_DIR}/missing-branch.md" \
     --json-summary-file "${TMP_DIR}/missing-branch-summary.json"
   assert_contains "- reason: missing_branch" "${TMP_DIR}/missing-branch.md"
+  assert_contains "- operator_primary_action: provide_release_gate_context" "${TMP_DIR}/missing-branch.md"
   assert_contains '"reason": "missing_branch"' "${TMP_DIR}/missing-branch-summary.json"
+  assert_contains '"primary_action": "provide_release_gate_context"' "${TMP_DIR}/missing-branch-summary.json"
 
   echo "ci_download_previous_release_gate_summary tests passed"
 }

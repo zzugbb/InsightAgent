@@ -98,9 +98,56 @@ from pathlib import Path
 previous_available = previous_available_raw == "true"
 previous_run_id = int(previous_run_id_raw) if previous_run_id_raw else None
 output_exists = Path(output_file).is_file()
+
+if previous_available:
+    operator_summary = {
+        "status": "ready",
+        "headline": "previous release gate summary available",
+        "primary_action": "compare_release_gate_trend",
+        "highest_severity": "ok",
+        "previous_available": True,
+        "reason": reason,
+        "focus_areas": ["trend"],
+        "blocking_reasons": [],
+    }
+elif reason in {"missing_branch", "missing_current_run_id", "missing_workflow", "missing_artifact_name"}:
+    operator_summary = {
+        "status": "review",
+        "headline": "release gate context missing for previous summary lookup",
+        "primary_action": "provide_release_gate_context",
+        "highest_severity": "info",
+        "previous_available": False,
+        "reason": reason,
+        "focus_areas": ["release_context"],
+        "blocking_reasons": [reason],
+    }
+elif reason == "no_previous_success":
+    operator_summary = {
+        "status": "review",
+        "headline": "no previous release gate summary is available",
+        "primary_action": "accept_baseline_without_previous_summary",
+        "highest_severity": "info",
+        "previous_available": False,
+        "reason": reason,
+        "focus_areas": ["trend_baseline"],
+        "blocking_reasons": [],
+    }
+else:
+    operator_summary = {
+        "status": "review",
+        "headline": "previous summary download needs review",
+        "primary_action": "review_previous_summary_baseline",
+        "highest_severity": "warning",
+        "previous_available": False,
+        "reason": reason,
+        "focus_areas": ["github_artifact"],
+        "blocking_reasons": [reason],
+    }
+
 payload = {
     "summary_schema_version": 1,
     "summary_kind": "release_gate_previous_summary_download",
+    "operator_summary": operator_summary,
     "previous_available": previous_available,
     "reason": reason,
     "workflow": workflow,
@@ -118,6 +165,9 @@ lines = [
     "- summary_kind: release_gate_previous_summary_download",
     f"- previous_available: {'yes' if previous_available else 'no'}",
     f"- reason: {reason}",
+    f"- operator_status: {operator_summary['status']}",
+    f"- operator_primary_action: {operator_summary['primary_action']}",
+    f"- operator_focus_areas: {','.join(operator_summary['focus_areas']) or 'none'}",
     f"- workflow: {workflow or 'unknown'}",
     f"- branch: {branch or 'unknown'}",
     f"- current_run_id: {current_run_id or 'unknown'}",

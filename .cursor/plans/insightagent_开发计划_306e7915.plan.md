@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: provider-tool-expansion、ci-release-engineering、production-runtime-hardening、product-ux-polish、production-operations-readiness、security-hardening 与 release-observability-polish 已 100% 封板。
 current_focus:
   mainline: production-runtime-hardening 后续运维体验
-  status: 约 45%
-  latest_change: /health.operations、release gate summary 与 export diagnostics overview 增加低敏 operator_summary，统一聚合 ready/review/action_required、最高严重级别、失败检查数/失败步骤/guard 失败数、重点风险域/阶段/scope 与阻塞告警代码/步骤标签/guard scope；release-observability-polish 保持 100% 封板
+  status: 约 60%
+  latest_change: /health.operations、release gate summary、previous summary download 与 export diagnostics overview 增加低敏 operator_summary，统一聚合 ready/review/action_required、最高严重级别、失败检查数/失败步骤/guard 失败数、重点风险域/阶段/scope 与阻塞告警代码/步骤标签/guard scope；release-observability-polish 保持 100% 封板
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -30,11 +30,12 @@ stable_contracts:
   - /health 保持既有字段不变，新增 operations readiness/readiness_level/warnings/warning_summary/risk_domains/readiness_checks、部署配置、SLO 阈值口径、备份恢复演练、runbook/值班响应、应急响应演练新鲜度、队列、执行实例、超时与 Chroma probe 摘要，不暴露数据库连接串、API key、密钥、联系人、runbook URL 原文或完整敏感连接信息
   - /health.operations.operator_summary 只聚合低敏状态、最高严重级别、失败检查数、重点风险域与告警代码，不回显数据库连接串、API key、密钥、联系人或 runbook URL
   - release gate operator_summary 只聚合低敏状态、最高严重级别、阶段与失败步骤标签，不回显环境变量、密钥、完整日志或外部服务响应
+  - previous summary download operator_summary 只聚合低敏状态、主行动、原因枚举、趋势关注域和阻塞原因枚举，不回显 artifact 路径、下载目录或 CLI 输出
   - export diagnostics overview operator_summary 只聚合低敏状态、告警计数、guard 失败数、关注 scope 与阻塞 guard scope，不回显 artifact 路径、日志正文或外部服务响应
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；summary 包含 summary_kind、summary_schema_version、service_required、step_summary、failed_step_labels、decision_summary 与 operator_summary；previous summary download、release gate trend summary、export diagnostics overview targeted/tooling 校验 passed；无 backend/.venv fixture 下 release readiness / release gate JSON 校验 passed
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-all-summary.md --json-summary-file /tmp/release-gate-all-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；summary 包含 summary_kind、summary_schema_version、service_required、step_summary、failed_step_labels、decision_summary 与 operator_summary；previous summary download operator_summary、release gate trend summary、export diagnostics overview targeted/tooling 校验 passed；无 backend/.venv fixture 下 release readiness / release gate JSON 校验 passed
   backend: full slice 2018/2018；module boundary 4/4；security 17/17；current_user_hides 2/2；cors 2/2；default_secret 3/3；security_refresh 2/2；auth 3/3；settings 217/217；production_operations 12/12；production_operations_health 11/11；production_reliability 39/39；reconnect 9/9
   frontend: workbench utils targeted 78/78；store utils targeted 16/16；task detail targeted 10/10；audit targeted 10/10；knowledge governance targeted 6/6；手动扩展 node tests 141/141；release gate 内置 frontend node 清单 141/141；npm run lint passed；npm run build passed
   e2e: backend main/timeout/queue passed；backend tooling scope local passed；frontend queue Chromium local 1/1 passed；backend finalize + artifact-stage guard main 分支 fail-on-missing passed，included_count=20、missing_count=0；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；commit 6ea51c7 的 GitHub backend-e2e run 33373178443、frontend-e2e run 33373178435、release-gate run 33373178464 均 completed success
@@ -52,7 +53,7 @@ next_candidate_mainlines:
   - production-runtime-hardening 后续运维体验：当前主线，聚焦 /health.operations、release gate summary、artifact/trend 信息的运维/发布检查入口与值班可读性
   - product-ux-polish 下一阶段：后续候选，从 Task Center / Trace / Audit / Knowledge Governance 中挑一个高价值前端体验点继续打磨
 next_steps:
-  - 继续把 release/trend/artifact 的 operator-facing 摘要收敛成一致的值班检查读法，保持外部 SSE/trace/export/e2e 契约稳定
+  - 继续把 release/trend/artifact 的 operator-facing 摘要补到更细的 artifact guard 输出或最终总览读法里，保持外部 SSE/trace/export/e2e 契约稳定
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -65,7 +66,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - `security-hardening` 封板结论：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断均已收口，业务 payload 与 SSE/trace/export 契约不变。
 - `production-operations-readiness` 封板结论：`/health.operations` 提供非敏感 readiness、warning/risk/check 摘要、部署/SLO/备份恢复/runbook/演练/队列/执行/超时/Chroma probe 状态，既有健康字段保持兼容。
 - 当前状态：`release-observability-polish` 已本地 100% 封板；已补 release readiness matrix 发布/回滚可见性检查、artifact `retention-days: 14`、release gate 前端类型契约测试覆盖、结构化 release gate summary、previous summary artifact 下载诊断、baseline/delta 友好的 release gate trend summary 与 release/rollback `decision_summary`。
-- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 45%；已补 `/health.operations.operator_summary`、release gate `operator_summary` 与 export diagnostics overview `operator_summary`，把健康检查、门禁结果、artifact 诊断和重点风险聚合成低敏值班摘要。
+- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 60%；已补 `/health.operations.operator_summary`、release gate `operator_summary`、previous summary download `operator_summary` 与 export diagnostics overview `operator_summary`，把健康检查、门禁结果、趋势输入、artifact 诊断和重点风险聚合成低敏值班摘要。
 - 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
@@ -81,7 +82,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `summary_kind`、`summary_schema_version`、`service_required`、`step_summary`、`failed_step_labels`、`decision_summary` 与 `operator_summary`；previous summary download、trend summary、export diagnostics overview targeted/tooling 校验通过。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `summary_kind`、`summary_schema_version`、`service_required`、`step_summary`、`failed_step_labels`、`decision_summary` 与 `operator_summary`；previous summary download operator_summary、trend summary、export diagnostics overview targeted/tooling 校验通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `141/141`；`npm run lint` 与 `npm run build` 通过。
 - E2E/CI：backend main/timeout/queue、frontend queue/full Chromium、artifact-stage guard 与 commit `6ea51c7` 对应 GitHub backend-e2e/frontend-e2e/release-gate 均为通过基线。
@@ -95,7 +96,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 后续维护线
 
-- 当前状态：`production-runtime-hardening` 后续运维体验约 45%；`/health.operations.operator_summary`、release gate `operator_summary` 与 export diagnostics overview `operator_summary` 已对齐。
+- 当前状态：`production-runtime-hardening` 后续运维体验约 60%；`/health.operations.operator_summary`、release gate `operator_summary`、previous summary download `operator_summary` 与 export diagnostics overview `operator_summary` 已对齐。
 - 后续候选：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑一个高价值前端体验点继续打磨。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
