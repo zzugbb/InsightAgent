@@ -7,7 +7,7 @@
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - `security-hardening` 封板结论：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断均已收口。
 - `release-observability-polish` 封板结论：release readiness matrix、artifact `retention-days: 14`、release gate 前端类型契约测试、结构化 release gate summary、previous summary artifact 下载诊断、trend summary 与 `decision_summary` 已收口，可支撑 release approval 与 rollback decision。
-- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 15%；第一片聚焦 `/health.operations.operator_summary`，把 readiness/warnings/risk domains 聚合成低敏值班摘要。
+- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 30%；已补 `/health.operations.operator_summary` 与 release gate `operator_summary`，把健康检查、门禁结果和重点风险聚合成低敏值班摘要。
 - 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
@@ -21,7 +21,7 @@
 ## 当前开发计划
 
 1. 当前主线为 `production-runtime-hardening` 后续运维体验：把 `/health.operations`、release gate summary、artifact/trend 信息做成更易读的运维/发布检查入口。
-2. 第一片已从 `/health.operations.operator_summary` 开始，目标是提供 ready/review/action_required、最高风险、重点风险域与阻塞告警代码。
+2. 已将 release gate summary 对齐到同一 operator-facing 口径：ready/review/action_required、最高严重级别、重点阶段与阻塞步骤标签。
 3. 后续候选为 `product-ux-polish` 下一阶段：从 Task Center / Trace / Audit / Knowledge Governance 中挑一个前端体验点继续打磨。
 
 ## 稳定契约
@@ -33,6 +33,7 @@
 - 生产环境禁止使用默认 `INSIGHT_AGENT_JWT_SECRET` 或其首尾空白包装值签发或验签 access token；开发默认值仍只允许在非生产环境使用。
 - 生产环境默认 `INSIGHT_AGENT_JWT_SECRET` 及其首尾空白包装值也不能作为 refresh token 哈希或 secret 加密派生材料；`/health.operations` 按同一口径报告 `default_jwt_secret`。
 - `/health.operations.operator_summary` 仅聚合低敏状态、最高严重级别、失败检查数、重点风险域与告警代码，不回显数据库连接串、API key、密钥、联系人或 runbook URL。
+- Release gate `operator_summary` 仅聚合低敏状态、最高严重级别、阶段与失败步骤标签，不回显环境变量、密钥、完整日志或外部服务响应。
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
 - Auth token 签发与刷新会在创建/轮换 refresh token 和写入 auth session 前先校验 access token 签发配置；生产默认 JWT secret 错误不留下会话存储副作用。
@@ -133,9 +134,9 @@ bash scripts/ci_run_release_gate.sh --phase auto
 bash scripts/ci_release_readiness_matrix.sh --format markdown
 ```
 
-`scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 summary kind、summary schema version、service-required 标识、resolved phases、逐步结果、步骤聚合计数、失败步骤标签与 release/rollback `decision_summary`；service-backed e2e 仍按 runbook 单独执行。
+`scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 summary kind、summary schema version、service-required 标识、resolved phases、逐步结果、步骤聚合计数、失败步骤标签、release/rollback `decision_summary` 与 `operator_summary`；service-backed e2e 仍按 runbook 单独执行。
 `scripts/ci_download_previous_release_gate_summary.sh` 会在 GitHub release-gate workflow 中尝试下载同分支上一条 successful `release-gate-summary` artifact；缺少 `gh`、分支、run id、历史 run 或 artifact 时只输出低敏诊断并保留 baseline 路径。
-`scripts/ci_release_gate_trend_summary.sh` 可从当前和可选上一份 release gate JSON summary 生成趋势摘要，并透传 release/rollback `decision_summary`；GitHub release-gate workflow 会产出并上传 `release-gate-trend-summary` artifact。
+`scripts/ci_release_gate_trend_summary.sh` 可从当前和可选上一份 release gate JSON summary 生成趋势摘要，并透传 release/rollback `decision_summary` 与 `operator_summary`；GitHub release-gate workflow 会产出并上传 `release-gate-trend-summary` artifact。
 
 完整本地栈（backend + frontend + chroma + postgres）可使用：
 
@@ -153,7 +154,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- 继续 `production-runtime-hardening` 后续运维体验，下一步可把 release gate summary 与 `/health.operations` 的 operator-facing 口径进一步对齐。
+- 继续 `production-runtime-hardening` 后续运维体验，下一步可把 artifact/trend 诊断与 operator-facing 摘要进一步对齐。
 
 ## 文档维护约定
 

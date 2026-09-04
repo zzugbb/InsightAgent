@@ -46,7 +46,8 @@ main() {
   "result": "PASS",
   "step_summary": {"total": 9, "pass": 9, "fail": 0, "dry_run": 0},
   "failed_step_labels": [],
-  "decision_summary": {"release_decision": "approve", "rollback_decision": "not_required", "reason": "all_required_static_gates_passed", "required_follow_up": []}
+  "decision_summary": {"release_decision": "approve", "rollback_decision": "not_required", "reason": "all_required_static_gates_passed", "required_follow_up": []},
+  "operator_summary": {"status": "ready", "headline": "release gate checks passed", "primary_action": "continue_release_review", "highest_severity": "ok", "total_steps": 9, "failed_steps": 0, "focus_phases": ["backend", "frontend", "tooling", "hygiene"], "blocking_step_labels": []}
 }
 JSON
 
@@ -59,7 +60,8 @@ JSON
   "result": "FAIL",
   "step_summary": {"total": 9, "pass": 8, "fail": 1, "dry_run": 0},
   "failed_step_labels": ["frontend lint"],
-  "decision_summary": {"release_decision": "hold", "rollback_decision": "investigate_failed_gate", "reason": "failed_required_static_gate", "required_follow_up": ["inspect_failed_steps", "keep_previous_release"]}
+  "decision_summary": {"release_decision": "hold", "rollback_decision": "investigate_failed_gate", "reason": "failed_required_static_gate", "required_follow_up": ["inspect_failed_steps", "keep_previous_release"]},
+  "operator_summary": {"status": "action_required", "headline": "release gate failures need attention", "primary_action": "inspect_failed_steps", "highest_severity": "critical", "total_steps": 9, "failed_steps": 1, "focus_phases": ["frontend"], "blocking_step_labels": ["frontend lint"]}
 }
 JSON
 
@@ -78,6 +80,9 @@ JSON
   assert_contains '"trend_result": "baseline"' "${TMP_DIR}/baseline.json"
   assert_contains '"release_decision": "approve"' "${TMP_DIR}/baseline.json"
   assert_contains '"rollback_decision": "not_required"' "${TMP_DIR}/baseline.json"
+  assert_contains '"operator_summary": {' "${TMP_DIR}/baseline.json"
+  assert_contains '"status": "ready"' "${TMP_DIR}/baseline.json"
+  assert_contains '"primary_action": "continue_release_review"' "${TMP_DIR}/baseline.json"
 
   bash "${SCRIPT}" \
     --current-json "${TMP_DIR}/current.json" \
@@ -96,6 +101,8 @@ JSON
   assert_contains '"frontend lint"' "${TMP_DIR}/trend.json"
   assert_contains '"release_decision": "hold"' "${TMP_DIR}/trend.json"
   assert_contains '"rollback_decision": "investigate_failed_gate"' "${TMP_DIR}/trend.json"
+  assert_contains '"status": "action_required"' "${TMP_DIR}/trend.json"
+  assert_contains '"blocking_step_labels": [' "${TMP_DIR}/trend.json"
 
   expect_fail bash "${SCRIPT}" --current-json "${TMP_DIR}/missing.json"
 

@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: provider-tool-expansion、ci-release-engineering、production-runtime-hardening、product-ux-polish、production-operations-readiness、security-hardening 与 release-observability-polish 已 100% 封板。
 current_focus:
   mainline: production-runtime-hardening 后续运维体验
-  status: 约 15%
-  latest_change: /health.operations 增加低敏 operator_summary，聚合 ready/review/action_required、最高严重级别、失败检查数、重点风险域与阻塞告警代码；release-observability-polish 保持 100% 封板
+  status: 约 30%
+  latest_change: /health.operations 与 release gate summary 增加低敏 operator_summary，统一聚合 ready/review/action_required、最高严重级别、失败检查数/失败步骤、重点风险域/阶段与阻塞告警代码/步骤标签；release-observability-polish 保持 100% 封板
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -29,6 +29,7 @@ stable_contracts:
   - Auth token 签发与刷新会在创建/轮换 refresh token 和写入 auth session 前先校验 access token 签发配置；生产默认 JWT secret 错误不留下会话存储副作用
   - /health 保持既有字段不变，新增 operations readiness/readiness_level/warnings/warning_summary/risk_domains/readiness_checks、部署配置、SLO 阈值口径、备份恢复演练、runbook/值班响应、应急响应演练新鲜度、队列、执行实例、超时与 Chroma probe 摘要，不暴露数据库连接串、API key、密钥、联系人、runbook URL 原文或完整敏感连接信息
   - /health.operations.operator_summary 只聚合低敏状态、最高严重级别、失败检查数、重点风险域与告警代码，不回显数据库连接串、API key、密钥、联系人或 runbook URL
+  - release gate operator_summary 只聚合低敏状态、最高严重级别、阶段与失败步骤标签，不回显环境变量、密钥、完整日志或外部服务响应
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
@@ -50,7 +51,7 @@ next_candidate_mainlines:
   - production-runtime-hardening 后续运维体验：当前主线，聚焦 /health.operations、release gate summary、artifact/trend 信息的运维/发布检查入口与值班可读性
   - product-ux-polish 下一阶段：后续候选，从 Task Center / Trace / Audit / Knowledge Governance 中挑一个高价值前端体验点继续打磨
 next_steps:
-  - 继续对齐 /health.operations 与 release gate summary 的 operator-facing 口径，保持外部 SSE/trace/export/e2e 契约稳定
+  - 继续把 artifact/trend 诊断与 operator-facing 摘要对齐，保持外部 SSE/trace/export/e2e 契约稳定
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -63,7 +64,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - `security-hardening` 封板结论：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断均已收口，业务 payload 与 SSE/trace/export 契约不变。
 - `production-operations-readiness` 封板结论：`/health.operations` 提供非敏感 readiness、warning/risk/check 摘要、部署/SLO/备份恢复/runbook/演练/队列/执行/超时/Chroma probe 状态，既有健康字段保持兼容。
 - 当前状态：`release-observability-polish` 已本地 100% 封板；已补 release readiness matrix 发布/回滚可见性检查、artifact `retention-days: 14`、release gate 前端类型契约测试覆盖、结构化 release gate summary、previous summary artifact 下载诊断、baseline/delta 友好的 release gate trend summary 与 release/rollback `decision_summary`。
-- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 15%；第一片聚焦 `/health.operations.operator_summary`，把 readiness/warnings/risk domains 聚合成低敏值班摘要。
+- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 30%；已补 `/health.operations.operator_summary` 与 release gate `operator_summary`，把健康检查、门禁结果和重点风险聚合成低敏值班摘要。
 - 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
@@ -93,7 +94,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 后续维护线
 
-- 当前状态：`production-runtime-hardening` 后续运维体验约 15%；`/health.operations.operator_summary` 已作为第一片启动。
+- 当前状态：`production-runtime-hardening` 后续运维体验约 30%；`/health.operations.operator_summary` 与 release gate `operator_summary` 已对齐。
 - 后续候选：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑一个高价值前端体验点继续打磨。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 

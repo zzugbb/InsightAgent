@@ -8,7 +8,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `security-hardening` 封板结论：前端不新增 UI，继续跟随后端安全 header、token 校验、生产密钥、CORS、认证错误低敏化、auth session 副作用保护与 secret material 派生保护契约；SSE、trace、export 与任务列表契约保持稳定。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - `release-observability-polish` 封板结论：release gate 内置前端 node 清单已纳入 task queue diagnostics 类型契约测试，发布/e2e artifacts 显式保留 14 天，release gate summary、previous download 诊断、trend summary 与 release/rollback `decision_summary` 已结构化输出并上传 artifact。
-- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 15%；第一片聚焦后端 `/health.operations.operator_summary`，前端契约保持只读兼容。
+- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 30%；已补后端 `/health.operations.operator_summary` 与 release gate `operator_summary`，前端契约保持只读兼容。
 - 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
@@ -22,7 +22,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 下一步前端计划
 
 1. 当前主线为 `production-runtime-hardening` 后续运维体验：把 `/health.operations`、release gate summary、artifact/trend 信息做成更易读的运维/发布检查入口。
-2. 第一片以后端 `/health.operations.operator_summary` 开始，不改变前端 SSE / trace / export / task list 契约。
+2. Release gate summary 已对齐同一 operator-facing 口径，不改变前端 SSE / trace / export / task list 契约。
 3. 前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 后续候选主线

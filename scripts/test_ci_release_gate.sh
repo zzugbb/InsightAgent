@@ -92,6 +92,9 @@ main() {
   assert_contains "- release_decision: dry_run_review" "${TMP_DIR}/summary.md"
   assert_contains "- rollback_decision: not_applicable_dry_run" "${TMP_DIR}/summary.md"
   assert_contains "- decision_reason: dry_run_does_not_authorize_release" "${TMP_DIR}/summary.md"
+  assert_contains "- operator_status: review" "${TMP_DIR}/summary.md"
+  assert_contains "- operator_primary_action: run_release_gate_without_dry_run" "${TMP_DIR}/summary.md"
+  assert_contains "- operator_focus_phases: frontend" "${TMP_DIR}/summary.md"
   assert_contains "| frontend node tests | DRY-RUN |" "${TMP_DIR}/summary.md"
   assert_contains '"summary_schema_version": 1' "${TMP_DIR}/summary.json"
   assert_contains '"summary_kind": "release_gate"' "${TMP_DIR}/summary.json"
@@ -101,6 +104,7 @@ main() {
   assert_contains '"step_summary": {"total": 3, "pass": 0, "fail": 0, "dry_run": 3}' "${TMP_DIR}/summary.json"
   assert_contains '"failed_step_labels": []' "${TMP_DIR}/summary.json"
   assert_contains '"decision_summary": {"release_decision": "dry_run_review", "rollback_decision": "not_applicable_dry_run", "reason": "dry_run_does_not_authorize_release", "required_follow_up": ["run_release_gate_without_dry_run"]}' "${TMP_DIR}/summary.json"
+  assert_contains '"operator_summary": {"status": "review", "headline": "release gate dry run needs verification", "primary_action": "run_release_gate_without_dry_run", "highest_severity": "info", "total_steps": 3, "failed_steps": 0, "focus_phases": ["frontend"], "blocking_step_labels": []}' "${TMP_DIR}/summary.json"
   assert_contains '"label": "frontend build"' "${TMP_DIR}/summary.json"
 
   env RELEASE_GATE_PYTHON=/no/such/python bash "${SCRIPT}" \

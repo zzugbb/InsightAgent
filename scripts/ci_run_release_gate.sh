@@ -86,6 +86,46 @@ json_string() {
   printf '"%s"\n' "${value}"
 }
 
+contains_item() {
+  local needle="$1"
+  shift
+  local existing
+  for existing in "$@"; do
+    if [ "${existing}" = "${needle}" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+json_array_from_items() {
+  local rendered="["
+  local count=0
+  local item
+  for item in "$@"; do
+    if [ -z "${item}" ]; then
+      continue
+    fi
+    if [ "${count}" -gt 0 ]; then
+      rendered+=", "
+    fi
+    rendered+="$(json_string "${item}")"
+    count=$((count + 1))
+  done
+  rendered+="]"
+  printf '%s\n' "${rendered}"
+}
+
+phase_from_step_label() {
+  case "$1" in
+    backend*) printf '%s\n' "backend" ;;
+    frontend*) printf '%s\n' "frontend" ;;
+    "ci tooling"*) printf '%s\n' "tooling" ;;
+    "backend compileall"|"diff whitespace"|"backup plan"*) printf '%s\n' "hygiene" ;;
+    *) printf '%s\n' "" ;;
+  esac
+}
+
 record_step() {
   STEP_LABELS+=("$1")
   STEP_WORKDIRS+=("$2")
@@ -108,6 +148,16 @@ write_summaries() {
   local rollback_decision="not_required"
   local decision_reason="all_required_static_gates_passed"
   local follow_up_json="[]"
+  local operator_status="ready"
+  local operator_headline="release gate checks passed"
+  local operator_primary_action="continue_release_review"
+  local operator_highest_severity="ok"
+  local operator_focus_phases="none"
+  local operator_focus_phases_json="[]"
+  local operator_blocking_step_labels_json="[]"
+  local focus_phases=()
+  local focus_phase
+  local phase_item
 
   for i in "${!STEP_LABELS[@]}"; do
     case "${STEP_RESULTS[$i]}" in
@@ -135,11 +185,49 @@ write_summaries() {
     rollback_decision="not_applicable_dry_run"
     decision_reason="dry_run_does_not_authorize_release"
     follow_up_json='["run_release_gate_without_dry_run"]'
+    operator_status="review"
+    operator_headline="release gate dry run needs verification"
+    operator_primary_action="run_release_gate_without_dry_run"
+    operator_highest_severity="info"
   elif [ "${fail_steps}" -gt 0 ]; then
     release_decision="hold"
     rollback_decision="investigate_failed_gate"
     decision_reason="failed_required_static_gate"
     follow_up_json='["inspect_failed_steps", "keep_previous_release"]'
+    operator_status="action_required"
+    operator_headline="release gate failures need attention"
+    operator_primary_action="inspect_failed_steps"
+    operator_highest_severity="critical"
+    operator_blocking_step_labels_json="${failed_json}"
+  fi
+
+  if [ "${fail_steps}" -gt 0 ]; then
+    for i in "${!STEP_LABELS[@]}"; do
+      if [ "${STEP_RESULTS[$i]}" != "FAIL" ]; then
+        continue
+      fi
+      focus_phase="$(phase_from_step_label "${STEP_LABELS[$i]}")"
+      if [ -n "${focus_phase}" ] && ! contains_item "${focus_phase}" "${focus_phases[@]}"; then
+        focus_phases+=("${focus_phase}")
+      fi
+    done
+  elif [ -n "${resolved_phase_csv}" ]; then
+    IFS=',' read -r -a focus_phases <<< "${resolved_phase_csv}"
+  elif [ "${phase}" = "all" ]; then
+    focus_phases=(backend frontend tooling hygiene)
+  elif [ "${phase}" != "auto" ]; then
+    focus_phases=("${phase}")
+  fi
+
+  operator_focus_phases_json="$(json_array_from_items "${focus_phases[@]}")"
+  if [ "${#focus_phases[@]}" -gt 0 ]; then
+    operator_focus_phases=""
+    for phase_item in "${focus_phases[@]}"; do
+      if [ -n "${operator_focus_phases}" ]; then
+        operator_focus_phases+=","
+      fi
+      operator_focus_phases+="${phase_item}"
+    done
   fi
 
   if [ -n "${summary_file}" ]; then
@@ -167,6 +255,9 @@ write_summaries() {
       echo "- release_decision: ${release_decision}"
       echo "- rollback_decision: ${rollback_decision}"
       echo "- decision_reason: ${decision_reason}"
+      echo "- operator_status: ${operator_status}"
+      echo "- operator_primary_action: ${operator_primary_action}"
+      echo "- operator_focus_phases: ${operator_focus_phases}"
       echo
       echo "| step | result | exit_code | workdir | command |"
       echo "| --- | --- | --- | --- | --- |"
@@ -200,6 +291,15 @@ write_summaries() {
         "$(json_string "${rollback_decision}")" \
         "$(json_string "${decision_reason}")" \
         "${follow_up_json}"
+      printf '  "operator_summary": {"status": %s, "headline": %s, "primary_action": %s, "highest_severity": %s, "total_steps": %s, "failed_steps": %s, "focus_phases": %s, "blocking_step_labels": %s},\n' \
+        "$(json_string "${operator_status}")" \
+        "$(json_string "${operator_headline}")" \
+        "$(json_string "${operator_primary_action}")" \
+        "$(json_string "${operator_highest_severity}")" \
+        "${total_steps}" \
+        "${fail_steps}" \
+        "${operator_focus_phases_json}" \
+        "${operator_blocking_step_labels_json}"
       printf '  "steps": [\n'
       for i in "${!STEP_LABELS[@]}"; do
         if [ "${i}" -gt 0 ]; then

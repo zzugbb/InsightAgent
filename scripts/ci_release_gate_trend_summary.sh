@@ -105,6 +105,24 @@ def decision_summary(data: dict) -> dict:
     }
 
 
+def operator_summary(data: dict) -> dict:
+    raw = data.get("operator_summary") if isinstance(data.get("operator_summary"), dict) else {}
+    focus_phases_raw = raw.get("focus_phases")
+    blocking_labels_raw = raw.get("blocking_step_labels")
+    focus_phases = focus_phases_raw if isinstance(focus_phases_raw, list) else []
+    blocking_labels = blocking_labels_raw if isinstance(blocking_labels_raw, list) else []
+    return {
+        "status": str(raw.get("status") or ""),
+        "headline": str(raw.get("headline") or ""),
+        "primary_action": str(raw.get("primary_action") or ""),
+        "highest_severity": str(raw.get("highest_severity") or ""),
+        "total_steps": int(raw.get("total_steps") or 0),
+        "failed_steps": int(raw.get("failed_steps") or 0),
+        "focus_phases": [str(item) for item in focus_phases if str(item)],
+        "blocking_step_labels": [str(item) for item in blocking_labels if str(item)],
+    }
+
+
 def compact_release_gate(data: dict) -> dict:
     return {
         "summary_kind": str(data.get("summary_kind") or ""),
@@ -116,6 +134,7 @@ def compact_release_gate(data: dict) -> dict:
         "step_summary": step_summary(data),
         "failed_step_labels": failed_labels(data),
         "decision_summary": decision_summary(data),
+        "operator_summary": operator_summary(data),
     }
 
 
