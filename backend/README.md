@@ -8,13 +8,13 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `security-hardening` 封板结论：全局安全响应头、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断已收口，业务 payload 不变。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - `release-observability-polish` 封板结论：release readiness matrix、artifact retention、previous summary artifact 下载诊断、release gate Markdown/JSON summary、trend summary 与 `decision_summary` 已结构化输出，可支撑 release approval 与 rollback decision。
-- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 60%；已补 `/health.operations.operator_summary`、release gate `operator_summary`、previous summary download `operator_summary` 与 export diagnostics overview `operator_summary`，把健康检查、门禁结果、趋势输入、artifact 诊断和重点风险聚合成低敏值班摘要。
+- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 75%；已补 `/health.operations.operator_summary`、release gate `operator_summary`、previous summary download `operator_summary`、artifact stage guard `operator_summary` 与 export diagnostics overview `operator_summary`，把健康检查、门禁结果、趋势输入、artifact guard/诊断和重点风险聚合成低敏值班摘要。
 - 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `decision_summary` 与 `operator_summary`；previous summary download、export diagnostics overview targeted/pipeline 校验通过。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 已用 `json.tool` 复核，包含 `decision_summary` 与 `operator_summary`；previous summary download、artifact stage guard、export diagnostics overview targeted/pipeline 校验通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `141/141`；`npm run lint` 与 `npm run build` 通过。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
@@ -22,7 +22,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 ## 下一步后端计划
 
 1. 当前主线为 `production-runtime-hardening` 后续运维体验：把 `/health.operations`、release gate summary、artifact/trend 信息做成更易读的运维/发布检查入口。
-2. 已将 release gate summary、previous summary download 与 export diagnostics overview 对齐到同一 operator-facing 口径：ready/review/action_required、最高严重级别、重点阶段/范围与阻塞步骤/guard 标签。
+2. 已将 release gate summary、previous summary download、artifact stage guard 与 export diagnostics overview 对齐到同一 operator-facing 口径：ready/review/action_required、最高严重级别、重点阶段/范围与阻塞步骤/guard 标签。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
@@ -40,6 +40,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `/health.operations.operator_summary` 仅聚合低敏状态、最高严重级别、失败检查数、重点风险域与告警代码，不回显数据库连接串、API key、密钥、联系人或 runbook URL。
 - Release gate `operator_summary` 仅聚合低敏状态、最高严重级别、阶段与失败步骤标签，不回显环境变量、密钥、完整日志或外部服务响应。
 - Previous summary download `operator_summary` 仅聚合低敏状态、主行动、原因枚举、趋势关注域和阻塞原因枚举，不回显 artifact 路径、下载目录或 CLI 输出。
+- Artifact stage guard `operator_summary` 仅聚合低敏状态、主行动、included/missing 计数、关注 scope 与阻塞原因枚举，不回显 stage 路径、manifest 路径或 artifact 文件名。
 - Export diagnostics overview `operator_summary` 仅聚合低敏状态、告警计数、guard 失败数、关注 scope 与阻塞 guard scope，不回显 artifact 路径、日志正文或外部服务响应。
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
@@ -238,6 +239,7 @@ bash scripts/ci_run_release_gate.sh --phase auto
 `scripts/ci_run_release_gate.sh` 的 Markdown/JSON summary 会保留 summary kind、summary schema version、service-required 标识、resolved phases、逐步结果、步骤聚合计数、失败步骤标签、release/rollback `decision_summary` 与 `operator_summary`；service-backed e2e 仍按 runbook 单独执行。
 `scripts/ci_download_previous_release_gate_summary.sh` 会在 GitHub release-gate workflow 中尝试下载同分支上一条 successful `release-gate-summary` artifact；缺少 `gh`、分支、run id、历史 run 或 artifact 时只输出低敏诊断和 `operator_summary` 并保留 baseline 路径。
 `scripts/ci_release_gate_trend_summary.sh` 可从当前和可选上一份 release gate JSON summary 生成趋势摘要，并透传 release/rollback `decision_summary` 与 `operator_summary`；GitHub release-gate workflow 会产出并上传 `release-gate-trend-summary` artifact。
+`scripts/ci_assert_artifact_stage_health.sh` 会为 e2e artifact stage guard 输出低敏 `operator_summary`，用于区分可继续、需复核 warning、需补齐 artifact 的值班行动。
 `scripts/ci_export_diagnostics_overview.sh` 会把 backend/frontend diagnostics 与 artifact guard 结果汇总为 overview，并输出低敏 `operator_summary` 便于值班快速判断缺失输入、warning 或 guard failure。
 
 如需 Memory / RAG 能力，在仓库根目录执行：

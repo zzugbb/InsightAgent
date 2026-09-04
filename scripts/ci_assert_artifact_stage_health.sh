@@ -100,6 +100,24 @@ json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+json_string_array() {
+  local rendered="["
+  local count=0
+  local item
+  for item in "$@"; do
+    if [ -z "${item}" ]; then
+      continue
+    fi
+    if [ "${count}" -gt 0 ]; then
+      rendered+=", "
+    fi
+    rendered+="\"$(json_escape "${item}")\""
+    count=$((count + 1))
+  done
+  rendered+="]"
+  printf '%s\n' "${rendered}"
+}
+
 status="ok"
 if [ "${included_count}" -lt "${min_included_count}" ] || [ "${missing_count}" -gt 0 ]; then
   status="warning"
@@ -138,6 +156,40 @@ case "${strict_level}" in
     ;;
 esac
 
+operator_status="ready"
+operator_headline="artifact stage guard passed"
+operator_primary_action="continue_release_review"
+operator_highest_severity="ok"
+operator_blocking_reasons=()
+
+if [ "${included_count}" -lt "${min_included_count}" ]; then
+  operator_blocking_reasons+=("included_count_below_min")
+fi
+if [ "${missing_count}" -gt 0 ]; then
+  operator_blocking_reasons+=("missing_artifacts")
+fi
+
+if [ "${gate_result}" = "FAIL" ]; then
+  operator_status="action_required"
+  operator_headline="artifact stage guard failed"
+  operator_highest_severity="critical"
+  if [ "${missing_count}" -gt 0 ]; then
+    operator_primary_action="restore_missing_artifacts"
+  else
+    operator_primary_action="stage_required_artifacts"
+  fi
+elif [ "${status}" = "warning" ]; then
+  operator_status="review"
+  operator_headline="artifact stage warnings need review"
+  operator_primary_action="review_artifact_stage_warnings"
+  operator_highest_severity="warning"
+fi
+
+operator_blocking_reasons_json="[]"
+if [ "${#operator_blocking_reasons[@]}" -gt 0 ]; then
+  operator_blocking_reasons_json="$(json_string_array "${operator_blocking_reasons[@]}")"
+fi
+
 if [ "${quiet}" != "1" ]; then
   echo "[artifact-guard][${label}] strict_level=${strict_level} status=${status} included=${included_count} missing=${missing_count} gate=${gate_result}"
 fi
@@ -152,6 +204,8 @@ if [ -n "${summary_file}" ]; then
     echo "- included_count: ${included_count}"
     echo "- missing_count: ${missing_count}"
     echo "- min_included_count: ${min_included_count}"
+    echo "- operator_status: ${operator_status}"
+    echo "- operator_primary_action: ${operator_primary_action}"
     echo "- stage_dir: ${stage_dir:-unknown}"
     echo "- manifest: ${manifest:-unknown}"
     echo "- gate_result: ${gate_result}"
@@ -170,6 +224,17 @@ if [ -n "${json_summary_file}" ]; then
   "included_count": ${included_count},
   "missing_count": ${missing_count},
   "min_included_count": ${min_included_count},
+  "operator_summary": {
+    "status": "$(json_escape "${operator_status}")",
+    "headline": "$(json_escape "${operator_headline}")",
+    "primary_action": "$(json_escape "${operator_primary_action}")",
+    "highest_severity": "$(json_escape "${operator_highest_severity}")",
+    "included_count": ${included_count},
+    "missing_count": ${missing_count},
+    "min_included_count": ${min_included_count},
+    "focus_scopes": ["$(json_escape "${scope}")"],
+    "blocking_reasons": ${operator_blocking_reasons_json}
+  },
   "stage_dir": "$(json_escape "${stage_dir}")",
   "manifest": "$(json_escape "${manifest}")",
   "gate_result": "$(json_escape "${gate_result}")",

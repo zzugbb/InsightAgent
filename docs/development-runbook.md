@@ -38,7 +38,7 @@ git diff -- data/insightagent.plan.back.md
 
 `scripts/ci_release_readiness_matrix.sh` 只生成发布候选检查矩阵，支持 `--format markdown|json` 与 `--output <path>`。矩阵明确区分不需要服务的静态 release gate、previous summary 下载诊断、需要已启动服务的 backend/frontend e2e，以及 e2e 后置 artifact-stage guard；并保留 release visibility summary、rollback decision log 与 artifact retention policy 三类发布/回滚可见性检查项。它不启动服务，也不替代下方 service-backed e2e 命令。
 GitHub backend/frontend e2e workflow 已按矩阵覆盖低并发 queue 阶段；backend 失败诊断可重复传 `--secondary-health-url`，用于同时采集 timeout 与 queue 实例。
-artifact-stage guard 的 main 分支严格度为 `fail-on-missing`，PR 严格度为 `fail-on-empty`；手动 `workflow_dispatch` 可用 `artifact_stage_strict_level` 覆盖。
+artifact-stage guard 的 main 分支严格度为 `fail-on-missing`，PR 严格度为 `fail-on-empty`；手动 `workflow_dispatch` 可用 `artifact_stage_strict_level` 覆盖。`ci_assert_artifact_stage_health.sh` 的 Markdown/JSON 输出包含低敏 `operator_summary`，用于区分可继续、需复核 warning、需补齐 artifact 的值班行动。
 release-gate、backend-e2e 与 frontend-e2e 上传的发布/e2e artifacts 显式保留 `14` 天。
 `scripts/ci_export_diagnostics_overview.sh` 会汇总 backend/frontend diagnostics 与 artifact guard 结果，并输出低敏 `operator_summary`，只包含状态、主行动、告警计数、guard 失败数、关注 scope 与阻塞 guard scope。
 
