@@ -7,7 +7,8 @@
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - `security-hardening` 封板结论：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断均已收口。
 - `release-observability-polish` 封板结论：release readiness matrix、artifact `retention-days: 14`、release gate 前端类型契约测试、结构化 release gate summary、previous summary artifact 下载诊断、trend summary 与 `decision_summary` 已收口，可支撑 release approval 与 rollback decision。
-- 当前状态：暂无新主线展开；等待用户授权 push 或选择下一主线。
+- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 15%；第一片聚焦 `/health.operations.operator_summary`，把 readiness/warnings/risk domains 聚合成低敏值班摘要。
+- 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
@@ -19,9 +20,9 @@
 
 ## 当前开发计划
 
-1. `release-observability-polish` 已本地 100% 封板；本轮未 push。
-2. 下一步由用户确认是否授权 push，或选择新的候选主线。
-3. 后续开发继续按先红测、再实现、再 targeted/full slice 推进。
+1. 当前主线为 `production-runtime-hardening` 后续运维体验：把 `/health.operations`、release gate summary、artifact/trend 信息做成更易读的运维/发布检查入口。
+2. 第一片已从 `/health.operations.operator_summary` 开始，目标是提供 ready/review/action_required、最高风险、重点风险域与阻塞告警代码。
+3. 后续候选为 `product-ux-polish` 下一阶段：从 Task Center / Trace / Audit / Knowledge Governance 中挑一个前端体验点继续打磨。
 
 ## 稳定契约
 
@@ -31,6 +32,7 @@
 - Refresh token 请求会先 trim 并拒绝空白值；服务层将空白 refresh token 视为无效 token 返回，不暴露内部异常。
 - 生产环境禁止使用默认 `INSIGHT_AGENT_JWT_SECRET` 或其首尾空白包装值签发或验签 access token；开发默认值仍只允许在非生产环境使用。
 - 生产环境默认 `INSIGHT_AGENT_JWT_SECRET` 及其首尾空白包装值也不能作为 refresh token 哈希或 secret 加密派生材料；`/health.operations` 按同一口径报告 `default_jwt_secret`。
+- `/health.operations.operator_summary` 仅聚合低敏状态、最高严重级别、失败检查数、重点风险域与告警代码，不回显数据库连接串、API key、密钥、联系人或 runbook URL。
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
 - Auth token 签发与刷新会在创建/轮换 refresh token 和写入 auth session 前先校验 access token 签发配置；生产默认 JWT secret 错误不留下会话存储副作用。
@@ -147,11 +149,11 @@ docker compose -f compose.full.yml up -d
 
 ## 后续候选主线
 
-- 暂无已展开新主线；下一步可在用户授权后 push 当前本地提交，或从新的产品/运维/安全候选中选择。
+- `product-ux-polish` 下一阶段：从 Task Center / Trace / Audit / Knowledge Governance 中挑一个高价值前端体验点继续打磨。
 
 ## 下一步
 
-- 当前主线已本地封板；下一步等待 push 授权或新主线选择。
+- 继续 `production-runtime-hardening` 后续运维体验，下一步可把 release gate summary 与 `/health.operations` 的 operator-facing 口径进一步对齐。
 
 ## 文档维护约定
 

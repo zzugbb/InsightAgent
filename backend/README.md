@@ -6,9 +6,10 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`、`product-ux-polish`、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - `security-hardening` 封板结论：全局安全响应头、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断已收口，业务 payload 不变。
-- `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
+- `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - `release-observability-polish` 封板结论：release readiness matrix、artifact retention、previous summary artifact 下载诊断、release gate Markdown/JSON summary、trend summary 与 `decision_summary` 已结构化输出，可支撑 release approval 与 rollback decision。
-- 当前状态：暂无新主线展开；等待用户授权 push 或选择下一主线。
+- 当前主线：`production-runtime-hardening` 后续运维体验，进度约 15%；第一片聚焦 `/health.operations.operator_summary`，把 readiness/warnings/risk domains 聚合成低敏值班摘要。
+- 后续候选主线：`product-ux-polish` 下一阶段，从 Task Center / Trace / Audit / Knowledge Governance 中挑选高价值前端体验点继续打磨。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
@@ -20,13 +21,13 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 下一步后端计划
 
-1. `release-observability-polish` 已本地 100% 封板；本轮未 push。
-2. 下一步由用户确认是否授权 push，或选择新的候选主线。
+1. 当前主线为 `production-runtime-hardening` 后续运维体验：把 `/health.operations`、release gate summary、artifact/trend 信息做成更易读的运维/发布检查入口。
+2. 第一片已从 `/health.operations.operator_summary` 开始，目标是提供 ready/review/action_required、最高风险、重点风险域与阻塞告警代码。
 3. 继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
 
 ## 后续候选主线
 
-- 暂无已展开新主线；下一步可在用户授权后 push 当前本地提交，或从新的产品/运维/安全候选中选择。
+- `product-ux-polish` 下一阶段：从 Task Center / Trace / Audit / Knowledge Governance 中挑一个高价值前端体验点继续打磨。
 
 ## 稳定契约
 
@@ -36,6 +37,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - Refresh token 请求会先 trim 并拒绝空白值；服务层将空白 refresh token 视为无效 token 返回，不暴露内部异常。
 - 生产环境禁止使用默认 `INSIGHT_AGENT_JWT_SECRET` 或其首尾空白包装值签发或验签 access token；开发默认值仍只允许在非生产环境使用。
 - 生产环境默认 `INSIGHT_AGENT_JWT_SECRET` 及其首尾空白包装值也不能作为 refresh token 哈希或 secret 加密派生材料；`/health.operations` 按同一口径报告 `default_jwt_secret`。
+- `/health.operations.operator_summary` 仅聚合低敏状态、最高严重级别、失败检查数、重点风险域与告警代码，不回显数据库连接串、API key、密钥、联系人或 runbook URL。
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
 - Auth token 签发与刷新会在创建/轮换 refresh token 和写入 auth session 前先校验 access token 签发配置；生产默认 JWT secret 错误不留下会话存储副作用。
@@ -268,4 +270,4 @@ docker compose up -d chroma
 - 当前外部 SSE / trace / export / e2e 契约尽量保持稳定，优先做内部 runtime/helper 收口。
 - registry 治理语义已封板，不优先继续扩大旧 fallback 兼容面，也不继续维护已归档的 runtime spec 历史文档。
 - 文档收敛只处理当前状态、验证基线、下一步计划/候选主线、稳定契约和高信号摘要；长期参考章节不应被整段删除。
-`GET /health` 额外返回只读 `operations` 摘要，包含 `readiness`、`readiness_level`、非敏感 `warnings`、`warning_summary` 告警等级计数、`risk_domains` 按 deployment/SLO/backup_restore/runbook/runtime 聚合的风险计数、`readiness_checks` 固定清单、部署配置分类与布尔校验、SLO 阈值口径、备份恢复演练状态、runbook/值班响应配置状态、应急响应演练新鲜度、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；不会返回数据库连接串、API key、密钥、联系人或 runbook URL 原文，也不改变既有健康字段。
+`GET /health` 额外返回只读 `operations` 摘要，包含 `readiness`、`readiness_level`、`operator_summary` 值班摘要、非敏感 `warnings`、`warning_summary` 告警等级计数、`risk_domains` 按 deployment/SLO/backup_restore/runbook/runtime 聚合的风险计数、`readiness_checks` 固定清单、部署配置分类与布尔校验、SLO 阈值口径、备份恢复演练状态、runbook/值班响应配置状态、应急响应演练新鲜度、任务队列并发、执行实例 stale recovery、任务超时与 Chroma probe 状态；不会返回数据库连接串、API key、密钥、联系人或 runbook URL 原文，也不改变既有健康字段。

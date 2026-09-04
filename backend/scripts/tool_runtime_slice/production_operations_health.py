@@ -183,6 +183,22 @@ class ProductionOperationsHealthMixin:
         )
         self.assertEqual(payload["readiness_checks"]["total"], 24)
         self.assertEqual(payload["readiness_checks"]["failed"], 4)
+        self.assertEqual(
+            payload["operator_summary"],
+            {
+                "status": "action_required",
+                "headline": "critical operations risks need attention",
+                "primary_action": "fix_critical_readiness",
+                "highest_severity": "critical",
+                "total_warnings": 4,
+                "failed_checks": 4,
+                "focus_domains": ["deployment", "runtime"],
+                "blocking_warning_codes": [
+                    "production_cors_allows_wildcard",
+                    "remote_provider_missing_api_key",
+                ],
+            },
+        )
         failed_checks = [
             check
             for check in payload["readiness_checks"]["items"]
@@ -366,6 +382,19 @@ class ProductionOperationsHealthMixin:
         self.assertEqual(payload["readiness"], "ok")
         self.assertEqual(payload["readiness_level"], "ok")
         self.assertEqual(payload["readiness_checks"]["failed"], 0)
+        self.assertEqual(
+            payload["operator_summary"],
+            {
+                "status": "ready",
+                "headline": "operations checks are ready",
+                "primary_action": "monitor",
+                "highest_severity": "ok",
+                "total_warnings": 0,
+                "failed_checks": 0,
+                "focus_domains": [],
+                "blocking_warning_codes": [],
+            },
+        )
         self.assertTrue(
             all(check["passed"] for check in payload["readiness_checks"]["items"])
         )

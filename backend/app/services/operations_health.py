@@ -81,6 +81,8 @@ def build_operations_health(settings: Any) -> dict[str, object]:
         runbook,
     )
     warning_summary = _build_warning_summary(warnings)
+    readiness_checks = _build_readiness_checks(warnings)
+    risk_domains = _build_risk_domains(warnings)
     return {
         "readiness": "attention" if warnings else "ok",
         "readiness_level": warning_summary["highest_severity"] or "ok",
@@ -111,8 +113,14 @@ def build_operations_health(settings: Any) -> dict[str, object]:
             ),
         },
         "chroma_probe_enabled": bool(settings.chroma_probe),
-        "readiness_checks": _build_readiness_checks(warnings),
-        "risk_domains": _build_risk_domains(warnings),
+        "operator_summary": _build_operator_summary(
+            warning_summary,
+            readiness_checks,
+            risk_domains,
+            warnings,
+        ),
+        "readiness_checks": readiness_checks,
+        "risk_domains": risk_domains,
         "warning_summary": warning_summary,
         "warnings": warnings,
     }
@@ -167,6 +175,53 @@ def _build_warning_summary(warnings: list[dict[str, str]]) -> dict[str, object]:
         "warning": counts["warning"],
         "info": counts["info"],
         "highest_severity": highest_severity,
+    }
+
+
+def _build_operator_summary(
+    warning_summary: dict[str, object],
+    readiness_checks: dict[str, object],
+    risk_domains: dict[str, object],
+    warnings: list[dict[str, str]],
+) -> dict[str, object]:
+    highest_severity = str(warning_summary.get("highest_severity") or "ok")
+    critical_count = int(warning_summary.get("critical") or 0)
+    warning_count = int(warning_summary.get("warning") or 0)
+
+    if critical_count > 0:
+        status = "action_required"
+        headline = "critical operations risks need attention"
+        primary_action = "fix_critical_readiness"
+    elif warning_count > 0:
+        status = "review"
+        headline = "operations warnings need review"
+        primary_action = "review_warning_readiness"
+    elif int(warning_summary.get("info") or 0) > 0:
+        status = "review"
+        headline = "informational operations checks need review"
+        primary_action = "review_info_readiness"
+    else:
+        status = "ready"
+        headline = "operations checks are ready"
+        primary_action = "monitor"
+
+    return {
+        "status": status,
+        "headline": headline,
+        "primary_action": primary_action,
+        "highest_severity": highest_severity,
+        "total_warnings": int(warning_summary.get("total") or 0),
+        "failed_checks": int(readiness_checks.get("failed") or 0),
+        "focus_domains": [
+            domain
+            for domain in _RISK_DOMAINS
+            if int(_read_mapping(risk_domains.get(domain)).get("total") or 0) > 0
+        ],
+        "blocking_warning_codes": [
+            warning["code"]
+            for warning in warnings
+            if warning.get("severity") == "critical" and warning.get("code")
+        ],
     }
 
 
