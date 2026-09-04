@@ -132,6 +132,7 @@ write_summaries() {
       echo "### release gate"
       echo "- summary_schema_version: 1"
       echo "- summary_kind: release_gate"
+      echo "- service_required: no"
       echo "- phase: ${phase}"
       if [ -n "${resolved_phase_csv}" ]; then
         echo "- resolved_phases: ${resolved_phase_csv}"
@@ -162,6 +163,7 @@ write_summaries() {
       printf '{\n'
       printf '  "summary_schema_version": 1,\n'
       printf '  "summary_kind": "release_gate",\n'
+      printf '  "service_required": false,\n'
       printf '  "phase": %s,\n' "$(json_string "${phase}")"
       printf '  "resolved_phases": %s,\n' "$(json_string "${resolved_phase_csv}")"
       printf '  "changed_files_source": %s,\n' "$(json_string "${changed_files_resolve_source}")"
