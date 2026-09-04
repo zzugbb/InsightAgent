@@ -7,6 +7,7 @@ import {
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
+  resolveTaskDetailOperatorHint,
   resolveTaskDetailSemanticFilterChange,
   resolveTaskDetailSemanticTracePreset,
   resolveTaskDetailStatusDisplay,
@@ -52,6 +53,82 @@ test("resolveTaskDetailStatusDisplay prioritizes normalized task status", () => 
       label: "Queued for execution",
       tone: "running",
     },
+  );
+});
+
+test("resolveTaskDetailOperatorHint derives local next actions without new task fields", () => {
+  const labels = {
+    failureHint: "Review failure hint and source before retrying",
+    failureTrace: "Review failure trace before retrying",
+    queued: "Waiting for execution slot",
+    running: "Monitor live stream until task finishes",
+  };
+
+  assert.deepEqual(
+    resolveTaskDetailOperatorHint({
+      status: "completed",
+      snapshot: {
+        failureHint: "remote provider unavailable",
+        semanticStats: { failure: 1 },
+      },
+      labels,
+    }),
+    {
+      kind: "failure_hint",
+      label: "Review failure hint and source before retrying",
+      traceSemanticFilter: "failure",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskDetailOperatorHint({
+      status: "completed",
+      snapshot: {
+        failureHint: null,
+        semanticStats: { failure: 2 },
+      },
+      labels,
+    }),
+    {
+      kind: "failure_trace",
+      label: "Review failure trace before retrying",
+      traceSemanticFilter: "failure",
+    },
+  );
+  assert.deepEqual(
+    resolveTaskDetailOperatorHint({
+      status: "completed",
+      status_normalized: "queued",
+      snapshot: null,
+      labels,
+    }),
+    {
+      kind: "queued",
+      label: "Waiting for execution slot",
+      traceSemanticFilter: null,
+    },
+  );
+  assert.deepEqual(
+    resolveTaskDetailOperatorHint({
+      status: "running",
+      snapshot: null,
+      labels,
+    }),
+    {
+      kind: "running",
+      label: "Monitor live stream until task finishes",
+      traceSemanticFilter: null,
+    },
+  );
+  assert.equal(
+    resolveTaskDetailOperatorHint({
+      status: "completed",
+      snapshot: {
+        failureHint: "",
+        semanticStats: { failure: 0 },
+      },
+      labels,
+    }),
+    null,
   );
 });
 

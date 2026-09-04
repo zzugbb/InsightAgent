@@ -6,21 +6,21 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish` 初版、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验。
-- 当前主线：`product-ux-polish` 下一阶段约 10% 推进中；Task Center 已补本地 operator next-action 提示，覆盖失败 hint、Failure trace、queued 与 running 四类任务，不改变任务列表 API、SSE、trace 或 export payload。
-- 后续候选切片：继续从 Trace / Audit / Knowledge Governance 中选择高价值前端体验点打磨。
+- 当前主线：`product-ux-polish` 下一阶段约 20% 推进中；Task Center 与任务详情页已补本地 operator next-action 提示，覆盖失败 hint、Failure trace、queued 与 running 任务处置，不改变任务列表/详情 API、SSE、trace 或 export payload。
+- 后续候选切片：继续从 Audit / Knowledge Governance 中选择高价值前端体验点打磨，并保持 Trace 回放入口稳定。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
+- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`decision_summary.release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `142/142`；`npm run lint` 与 `npm run build` 通过；Browser QA 覆盖 Task Center desktop/mobile operator hint 渲染与 failure chip 交互。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `143/143`；task detail targeted `11/11`；`npm run lint` 与 `npm run build` 通过；Browser QA 覆盖任务详情页 desktop/mobile operator hint 渲染、Failure 语义聚焦与无错误 overlay/console。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前推进 `product-ux-polish` 下一阶段，先从 Task Center 的任务列表可读性和失败处置入口开始。
-2. 下一批候选为 Trace / Audit / Knowledge Governance 中的高价值前端体验点，保持外部契约稳定。
+1. 当前推进 `product-ux-polish` 下一阶段，已从 Task Center 延伸到任务详情页，把失败处置入口和 Trace 回放提示串起来。
+2. 下一批候选为 Audit / Knowledge Governance 中的高价值前端体验点，保持外部契约稳定。
 
 ## 稳定契约
 
@@ -35,10 +35,10 @@
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
 - Auth token 签发与刷新会在创建/轮换 refresh token 和写入 auth session 前先校验 access token 签发配置；生产默认 JWT secret 错误不留下会话存储副作用。
-- 任务详情页 `trace_semantic` URL 参数保持兼容扩展；语义切换仅同步 URL 并清理本地筛选，状态文字/色调与轮询控制优先使用 `status_normalized`，均不改变任务、trace 或 export payload。
+- 任务详情页 `trace_semantic` URL 参数保持兼容扩展；语义切换与 operator next-action 提示仅使用既有 status、failure hint/source 与 semantic failure stats 做本地展示，状态文字/色调与轮询控制优先使用 `status_normalized`，均不改变任务、trace 或 export payload。
 - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地筛选/展示状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
-- Task Center operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生，不新增后端字段，不改变任务列表 API、SSE、trace 或 export payload。
+- Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生，不新增后端字段，不改变任务列表/详情 API、SSE、trace 或 export payload。
 - Task Center、Audit Logs 与知识库治理的加载错误、陈旧数据保留与原位重试只调整前端 query/presentation 状态，不改变任务、审计或 RAG API shape。
 - SSE close 后失败摘要兜底只在流结束但前端尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload。
 - 默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`。
@@ -58,7 +58,7 @@
 - 鉴权与数据层：JWT + refresh 会话管理、用户级设置与密钥加密、PostgreSQL 单后端运行时已落地。
 - 基础治理：`RBAC-lite`、`rag-rbac-lite`、shared/private 知识库语义、审计事件扩展已落地。
 - 执行可靠性：任务取消/超时、running task 恢复、任务/会话导出、usage dashboard、生产可靠性治理与主链路 e2e / CI tooling 已落地。
-- 观测体验：失败诊断、任务回放、Trace 语义过滤、Task Center 观测筛选、Audit Logs 服务端 keyword 与跨视图 Failure 回放已落地。
+- 观测体验：失败诊断、任务回放、Trace 语义过滤、Task Center/任务详情 operator next-action、Audit Logs 服务端 keyword 与跨视图 Failure 回放已落地。
 - RAG 产品体验：知识库版本明细、source/document 文档组、文档组删除、召回摘要、质量分布、筛选与 distance 解释已落地。
 - Provider/tool 兼容：常见搜索总量/命中归一化、多 provider planner 工具调用形态、JSON 字符串参数与 failed reconnect 错误码复原已落地。
 
@@ -152,7 +152,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- 进入 `product-ux-polish` 下一阶段候选评估，从 Task Center / Trace / Audit / Knowledge Governance 中选择一个高价值前端体验点。
+- 继续 `product-ux-polish` 下一阶段，从 Audit / Knowledge Governance 中选择一个高价值前端体验点。
 
 ## 文档维护约定
 

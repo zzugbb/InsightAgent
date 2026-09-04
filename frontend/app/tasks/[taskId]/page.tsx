@@ -40,6 +40,7 @@ import {
   resolveTaskDetailFailureHint,
   resolveTaskDetailFailureTracePreset,
   resolveTaskDetailInitialTraceFilterState,
+  resolveTaskDetailOperatorHint,
   resolveTaskDetailSemanticFilterChange,
   resolveTaskDetailSemanticTracePreset,
   resolveTaskDetailStatusDisplay,
@@ -164,6 +165,29 @@ export default function TaskDetailPage() {
     taskSnapshot?.failureSource
       ? formatTaskFailureSourceLabel(taskSnapshot.failureSource, t.inspector)
       : null;
+  const taskDetailOperatorHint = useMemo(
+    () =>
+      resolveTaskDetailOperatorHint({
+        status: task?.status,
+        status_normalized: task?.status_normalized,
+        snapshot: taskSnapshot,
+        labels: {
+          failureHint: t.taskDetail.operatorHintFailureHint,
+          failureTrace: t.taskDetail.operatorHintFailureTrace,
+          queued: t.taskDetail.operatorHintQueued,
+          running: t.taskDetail.operatorHintRunning,
+        },
+      }),
+    [
+      task?.status,
+      task?.status_normalized,
+      taskSnapshot,
+      t.taskDetail.operatorHintFailureHint,
+      t.taskDetail.operatorHintFailureTrace,
+      t.taskDetail.operatorHintQueued,
+      t.taskDetail.operatorHintRunning,
+    ],
+  );
 
   const filteredTraceSteps = useMemo(() => {
     return filterTraceSteps(traceSteps, {
@@ -358,6 +382,30 @@ export default function TaskDetailPage() {
                   taskSnapshot.ragKnowledgeBaseIds.join(", "),
                 )}
               </p>
+            ) : null}
+
+            {taskDetailOperatorHint ? (
+              <section
+                className={`inspector-block task-detail-operator-block task-detail-operator-block--${taskDetailOperatorHint.kind}`}
+                data-testid="task-detail-operator-hint"
+              >
+                <p className="summary-label">{t.taskDetail.operatorHintTitle}</p>
+                <div className="task-detail-operator-hint-row">
+                  <span>{taskDetailOperatorHint.label}</span>
+                  {taskDetailOperatorHint.traceSemanticFilter === "failure" &&
+                  taskSnapshot?.semanticStats.failure ? (
+                    <Button
+                      className="task-detail-operator-action"
+                      data-testid="task-detail-operator-focus-failure"
+                      size="small"
+                      type="link"
+                      onClick={focusFailureTrace}
+                    >
+                      {t.taskDetail.viewFailureTrace}
+                    </Button>
+                  ) : null}
+                </div>
+              </section>
             ) : null}
 
             {taskSnapshot?.failureHint ? (

@@ -725,6 +725,11 @@ export type Messages = {
     ragHitsLabel: string;
     ragKnowledgeBasesLabel: (ids: string) => string;
     usageLead: string;
+    operatorHintTitle: string;
+    operatorHintFailureHint: string;
+    operatorHintFailureTrace: string;
+    operatorHintQueued: string;
+    operatorHintRunning: string;
     failureHintTitle: string;
     viewFailureTrace: string;
     traceTitle: string;

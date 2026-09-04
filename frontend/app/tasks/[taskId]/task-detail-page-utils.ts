@@ -35,6 +35,35 @@ type TaskDetailStatusInput = {
   status_label?: string;
 };
 
+export type TaskDetailOperatorHintKind =
+  | "failure_hint"
+  | "failure_trace"
+  | "queued"
+  | "running";
+
+export type TaskDetailOperatorHint = {
+  kind: TaskDetailOperatorHintKind;
+  label: string;
+  traceSemanticFilter: TaskDetailTraceSemanticFilter | null;
+};
+
+type TaskDetailOperatorHintInput = {
+  status?: string | null;
+  status_normalized?: string | null;
+  snapshot?: {
+    failureHint?: string | null;
+    semanticStats?: {
+      failure?: number | null;
+    } | null;
+  } | null;
+  labels: {
+    failureHint: string;
+    failureTrace: string;
+    queued: string;
+    running: string;
+  };
+};
+
 const FAILURE_DIAGNOSTIC_TOKENS = [
   "error",
   "failed",
@@ -114,6 +143,49 @@ export function resolveTaskDetailStatusDisplay(
     label: normalized || task.status_label?.trim() || raw || "unknown",
     tone: resolveTaskDetailStatusTone(normalized || raw),
   };
+}
+
+export function resolveTaskDetailOperatorHint(
+  input: TaskDetailOperatorHintInput,
+): TaskDetailOperatorHint | null {
+  const failureHint =
+    typeof input.snapshot?.failureHint === "string"
+      ? input.snapshot.failureHint.trim()
+      : "";
+  if (failureHint) {
+    return {
+      kind: "failure_hint",
+      label: input.labels.failureHint,
+      traceSemanticFilter: "failure",
+    };
+  }
+
+  if ((input.snapshot?.semanticStats?.failure ?? 0) > 0) {
+    return {
+      kind: "failure_trace",
+      label: input.labels.failureTrace,
+      traceSemanticFilter: "failure",
+    };
+  }
+
+  const status = (input.status_normalized?.trim() || input.status || "")
+    .trim()
+    .toLowerCase();
+  if (status === "queued" || status === "pending") {
+    return {
+      kind: "queued",
+      label: input.labels.queued,
+      traceSemanticFilter: null,
+    };
+  }
+  if (status === "running") {
+    return {
+      kind: "running",
+      label: input.labels.running,
+      traceSemanticFilter: null,
+    };
+  }
+  return null;
 }
 
 export function buildTaskDetailTraceSemanticHref(
