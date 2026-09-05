@@ -7,21 +7,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish` 初版、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验；前端契约保持只读兼容。
-- 当前主线：`product-ux-polish` 下一阶段约 20% 推进中；Task Center 与任务详情页已补 operator next-action 提示，失败 hint、Failure trace、queued 与 running 任务在列表/详情中给出本地派生的下一步行动。
-- 后续候选切片：继续从 Audit / Knowledge Governance 中选择高价值前端体验点打磨，并保持 Trace 回放入口稳定。
+- 当前主线：`product-ux-polish` 下一阶段约 30% 推进中；Task Center、任务详情页与 Audit Logs 已补 operator next-action 提示，失败 hint、Failure trace、queued、running 与失败/超时审计在列表/详情/审计中给出本地派生的下一步行动。
+- 后续候选切片：继续从 Knowledge Governance 中选择高价值前端体验点打磨，并保持 Trace 回放入口稳定。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`decision_summary.release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `143/143`；task detail targeted `11/11`；`npm run lint` 与 `npm run build` 通过；Browser QA 覆盖任务详情页 desktop/mobile operator hint 渲染、Failure 语义聚焦与无错误 overlay/console。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `144/144`；audit targeted `11/11`；task detail targeted `11/11`；`npm run lint` 与 `npm run build` 通过；本轮 Audit Logs service-backed Browser QA 因本机 Docker daemon 未运行、PostgreSQL `127.0.0.1:5432` connection refused 未完成。
 - Backend 契约基线：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. 当前推进 `product-ux-polish` 下一阶段，已从 Task Center 延伸到任务详情页，把失败处置入口和 Trace 回放提示串起来。
-2. 下一批候选为 Audit / Knowledge Governance 中的高价值前端体验点；前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
+1. 当前推进 `product-ux-polish` 下一阶段，已从 Task Center、任务详情页延伸到 Audit Logs，把失败处置入口和 Trace 回放提示串起来。
+2. 下一批候选为 Knowledge Governance 中的高价值前端体验点；前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 稳定契约
 
@@ -32,7 +32,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `trace_semantic` URL 参数兼容支持 `planner/retrieval/calculator/failure`；详情页语义切换与 operator next-action 提示仅使用既有 status、failure hint/source 与 semantic failure stats 做本地展示，状态文字/色调与轮询控制优先使用 `status_normalized`，均不改变任务、trace 或 export payload。
 - Workbench Inspector 语义筛选只调整本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
-- Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生，不新增后端字段，不改变任务列表/详情 API、SSE、trace 或 export payload。
+- Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload。
 - Task Center、Audit Logs 与知识库治理的初始错误、陈旧数据错误与原位重试只调整 TanStack Query/presentation 状态，不改变任务、审计或 RAG API shape；初始失败不再误显示空态，陈旧数据仍可查看。
 - SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload。
 - queued/running/cancel/reconnect 与 task recovery 前端语义保持稳定。
@@ -41,7 +41,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - Workbench：会话、消息、任务中心、Trace/Context Inspector 与 running task recovery。
 - 任务回放：任务详情页、Trace 时间线/流程图、Failure 入口、operator next-action 提示、任务和会话 JSON/Markdown 导出。
-- 任务详情页支持通过 `trace_semantic` URL 参数直达语义 Trace，并在切换时更新可分享 URL、清理旧筛选；Task Center failure drilldown 可直达 Failure 回放，列表与详情统一 normalized 状态、显式失败诊断、operator next-action 和轮询控制。
+- 任务详情页支持通过 `trace_semantic` URL 参数直达语义 Trace，并在切换时更新可分享 URL、清理旧筛选；Task Center 与 Audit Logs failure drilldown 可直达 Failure 回放，列表、详情与审计统一 normalized 状态、显式失败诊断、operator next-action 和轮询控制。
 - 设置与治理：模型设置、provider/source diagnostics、task queue diagnostics、审计日志、usage dashboard、知识库治理。
 - Memory/RAG 调试：会话级 `memory_{session_id}` 调试入口、知识库 `kb_{user_hash}_{knowledge_base_id}` 状态/写入/检索入口。
 - 前端不新增 provider 专用显示分支，继续消费后端统一 preview/output/result-summary 与 trace/export 字段。
@@ -65,9 +65,9 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - 实时流、持久化 trace 与导出回放当前共用同一套 `TraceStep` 消费主干，前端优先避免派生本地专用语义。
 - `tool_end.result_summary`、preview/output key、retrieval follow-up 与 registry diagnostics 已进入工作台主展示链，当前重点是继续跟随后端保持 helper/runtime 语义一致。
-- 任务失败线索已进入共享快照语义；Task Center、任务详情、Usage Dashboard 与 Audit Logs 复用同一失败摘要、来源分类、可读错误码和 Failure 轨迹入口。
+- 任务失败线索已进入共享快照语义；Task Center、任务详情、Usage Dashboard 与 Audit Logs 复用同一失败摘要、来源分类、可读错误码、operator next-action 和 Failure 轨迹入口。
 - 远端错误/取消 e2e 的并发等待已对齐真实 UI 状态：任务详情 failure 计数等待稳定，trace retry ETA 限定可见 Context 面板，remote cancel 先验证冷却阻塞再等待恢复。
-- Usage Dashboard、Audit Logs、Task Center 与任务详情页已统一失败回放入口和 Failure 计数。
+- Usage Dashboard、Audit Logs、Task Center 与任务详情页已统一失败回放入口、Failure 计数与处置提示。
 - running task recovery、remote cancel、model settings diagnostics 与知识库治理 shared 权限是当前最容易回归的前端运行态重点。
 - 当前前端回归重点仍围绕 workbench 主链、remote errors、settings、usage dashboard 与 common tooling。
 

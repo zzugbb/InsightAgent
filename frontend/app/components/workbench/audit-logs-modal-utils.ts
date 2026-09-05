@@ -22,6 +22,13 @@ export type AuditLogsListState =
   | "stale_error"
   | "empty"
   | "ready";
+export type AuditOperatorHintKind = "task_failure" | "task_timeout";
+export type AuditOperatorHint = {
+  kind: AuditOperatorHintKind;
+  label: string;
+  traceSemanticFilter: "failure";
+  canOpenTaskDetail: boolean;
+};
 
 export type AuditFailureLabels = {
   fieldCode: string;
@@ -34,6 +41,11 @@ export type AuditFailureLabels = {
   taskFailureSourceToolError: string;
   taskFailureSourceTraceContent: string;
   taskFailureSourceLegacyTrace: string;
+};
+
+type AuditOperatorHintLabels = {
+  taskFailure: string;
+  taskTimeout: string;
 };
 
 export function resolveAuditLogsListState(args: {
@@ -179,6 +191,39 @@ export function formatAuditTaskFailureSummary(
     ? formatAuditFailureSourceLabel(detail?.failure_source, labels)
     : null;
   return `${eventLabel} · ${failureSource ? `${failureSource}: ` : ""}${failureHint}`;
+}
+
+export function resolveAuditOperatorHint(args: {
+  eventType: string;
+  hasTaskDetailHref: boolean;
+  detail: Record<string, unknown> | null | undefined;
+  labels: AuditOperatorHintLabels;
+}): AuditOperatorHint | null {
+  const normalizedEventType = args.eventType.trim().toLowerCase();
+  if (normalizedEventType !== "task_failed" && normalizedEventType !== "task_timeout") {
+    return null;
+  }
+  if (!args.detail) {
+    return null;
+  }
+  const hasFailureSignal = Boolean(
+    asString(args.detail.failure_hint) ||
+      asString(args.detail.code) ||
+      asString(args.detail.message) ||
+      asString(asRecord(args.detail.diagnostic)?.reason),
+  );
+  if (!hasFailureSignal) {
+    return null;
+  }
+  return {
+    kind: normalizedEventType === "task_timeout" ? "task_timeout" : "task_failure",
+    label:
+      normalizedEventType === "task_timeout"
+        ? args.labels.taskTimeout
+        : args.labels.taskFailure,
+    traceSemanticFilter: "failure",
+    canOpenTaskDetail: args.hasTaskDetailHref,
+  };
 }
 
 export function resolveAuditReadableDetail(

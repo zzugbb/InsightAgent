@@ -360,6 +360,10 @@ export type Messages = {
       eventAt: (ts: string) => string;
       detailLabel: string;
       detailExpand: string;
+      operatorHintTitle: string;
+      operatorHintTaskFailure: string;
+      operatorHintTaskTimeout: string;
+      operatorHintOpenFailureTrace: string;
       eventLabelLogin: string;
       eventLabelLogout: string;
       eventLabelRefresh: string;

@@ -5,6 +5,7 @@ import {
   buildAuditLogsUrl,
   formatAuditTaskFailureSummary,
   resolveAuditLogsListState,
+  resolveAuditOperatorHint,
   resolveAuditReadableDetail,
 } from "./audit-logs-modal-utils.ts";
 
@@ -130,6 +131,57 @@ test("formatAuditTaskFailureSummary maps stream error code before raw transport 
       labels,
     ),
     "Task failed · Failed to reach remote provider. Check network or base URL.",
+  );
+});
+
+test("resolveAuditOperatorHint derives local failure replay actions", () => {
+  const operatorLabels = {
+    taskFailure: "Open failure replay before retrying",
+    taskTimeout: "Open timeout replay before deciding next step",
+  };
+
+  assert.deepEqual(
+    resolveAuditOperatorHint({
+      eventType: "task_failed",
+      hasTaskDetailHref: true,
+      detail: {
+        code: "remote_provider_network_error",
+        failure_hint: "remote provider unavailable",
+      },
+      labels: operatorLabels,
+    }),
+    {
+      kind: "task_failure",
+      label: "Open failure replay before retrying",
+      traceSemanticFilter: "failure",
+      canOpenTaskDetail: true,
+    },
+  );
+  assert.deepEqual(
+    resolveAuditOperatorHint({
+      eventType: "task_timeout",
+      hasTaskDetailHref: false,
+      detail: {
+        code: "task_timeout",
+        message: "Task timed out",
+      },
+      labels: operatorLabels,
+    }),
+    {
+      kind: "task_timeout",
+      label: "Open timeout replay before deciding next step",
+      traceSemanticFilter: "failure",
+      canOpenTaskDetail: false,
+    },
+  );
+  assert.equal(
+    resolveAuditOperatorHint({
+      eventType: "login",
+      hasTaskDetailHref: true,
+      detail: { reason: "password" },
+      labels: operatorLabels,
+    }),
+    null,
   );
 });
 

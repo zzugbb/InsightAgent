@@ -18,6 +18,7 @@ import {
   buildAuditLogsUrl,
   formatAuditTaskFailureSummary,
   resolveAuditLogsListState,
+  resolveAuditOperatorHint,
   resolveAuditReadableDetail,
 } from "./audit-logs-modal-utils";
 import type { AuditLogItem, AuditLogListResponse } from "./types";
@@ -920,15 +921,53 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
               ]}
               expandable={{
                 expandedRowRender: (record) => {
+                  const detail = asDetailMap(record.event_detail);
                   const detailRows = resolveReadableDetail(record);
                   const detailText = record.event_detail
                     ? JSON.stringify(record.event_detail, null, 2)
                     : "";
+                  const taskHref = resolveAuditTaskDetailHref(record);
+                  const operatorHint = resolveAuditOperatorHint({
+                    eventType: record.event_type,
+                    hasTaskDetailHref: Boolean(taskHref),
+                    detail,
+                    labels: {
+                      taskFailure: t.sidebar.audit.operatorHintTaskFailure,
+                      taskTimeout: t.sidebar.audit.operatorHintTaskTimeout,
+                    },
+                  });
                   if (detailRows.length === 0 && !detailText) {
                     return <span className="audit-modal-note">—</span>;
                   }
                   return (
                     <div className="audit-modal-expanded">
+                      {operatorHint ? (
+                        <div
+                          className={`audit-modal-operator-hint audit-modal-operator-hint--${operatorHint.kind}`}
+                          data-testid="audit-operator-hint"
+                        >
+                          <div className="audit-modal-operator-hint-row">
+                            <div>
+                              <p>{t.sidebar.audit.operatorHintTitle}</p>
+                              <span>{operatorHint.label}</span>
+                            </div>
+                            {operatorHint.canOpenTaskDetail && taskHref ? (
+                              <Button
+                                size="small"
+                                type="link"
+                                className="audit-modal-operator-action"
+                                data-testid="audit-operator-open-failure-trace"
+                                href={taskHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                icon={<ExternalLink size={14} aria-hidden />}
+                              >
+                                {t.sidebar.audit.operatorHintOpenFailureTrace}
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
                       {detailRows.length > 0 ? (
                         <dl className="audit-modal-detail-list">
                           {detailRows.map((entry) => (

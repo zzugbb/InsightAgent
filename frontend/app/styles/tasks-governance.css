@@ -879,6 +879,39 @@
   gap: 4px;
 }
 
+.audit-modal-operator-hint {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, #dc2626 24%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, #dc2626 5%, var(--panel));
+}
+
+.audit-modal-operator-hint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.audit-modal-operator-hint-row p {
+  margin: 0 0 2px;
+  color: #16a34a;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.audit-modal-operator-hint-row span {
+  color: var(--text);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.audit-modal-operator-action {
+  flex: 0 0 auto;
+  padding-inline: 0;
+}
+
 .audit-modal-detail-row {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
