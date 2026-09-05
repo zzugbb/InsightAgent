@@ -742,6 +742,8 @@ export const en: Messages = {
       kbIdPlaceholder: "Default: default ([a-z0-9_-])",
       applyKb: "Apply",
       statusLoading: "Loading knowledge base status…",
+      statusFailedTitle: "Knowledge base status failed to load",
+      statusRefresh: "Refresh status",
       ingestPlaceholder:
         "Paste text to ingest into the knowledge base (auto chunking enabled)…",
       ingestSourcePlaceholder: "Optional source label (e.g. handbook.md)",

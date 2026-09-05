@@ -648,6 +648,8 @@ export type Messages = {
       kbIdPlaceholder: string;
       applyKb: string;
       statusLoading: string;
+      statusFailedTitle: string;
+      statusRefresh: string;
       ingestPlaceholder: string;
       ingestSourcePlaceholder: string;
       ingestButton: string;

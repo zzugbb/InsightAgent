@@ -728,6 +728,8 @@ export const zh: Messages = {
       kbIdPlaceholder: "默认 default，可输入 [a-z0-9_-]",
       applyKb: "应用",
       statusLoading: "正在查询知识库状态…",
+      statusFailedTitle: "知识库状态加载失败",
+      statusRefresh: "刷新状态",
       ingestPlaceholder: "粘贴要写入知识库的文本（支持长文自动切块）…",
       ingestSourcePlaceholder: "可选：来源标识（如 handbook.md）",
       ingestButton: "写入知识库",

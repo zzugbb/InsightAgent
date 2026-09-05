@@ -619,6 +619,69 @@ test("runtime debug RAG failures preserve input and support retry", async ({
   await expect(queryInput).toHaveValue("Preserve this query input");
 });
 
+test("runtime debug RAG status refresh recovers without hiding stale status", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+  let statusAttempts = 0;
+
+  await page.route("**/api/rag/status?**", async (route) => {
+    statusAttempts += 1;
+    if ([1, 2, 4, 5].includes(statusAttempts)) {
+      await route.fulfill({ status: 503, body: "temporarily unavailable" });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_base_id: "default",
+        collection: "kb_default_mock",
+        chroma_url: "http://127.0.0.1:8001",
+        chroma_reachable: true,
+        collection_exists: true,
+        document_count: 1,
+        error: null,
+      }),
+    });
+  });
+  await page.route("**/api/rag/ingest", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_base_id: "default",
+        collection: "kb_default_mock",
+        documents_ingested: 1,
+        chunks_added: 1,
+        document_count: 2,
+        chunk_size: 800,
+        chunk_overlap: 120,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await openRuntimeDebugModal(page);
+
+  const statusError = page.getByTestId("inspector-rag-status-error");
+  await expect(statusError).toBeVisible();
+  await page.getByTestId("inspector-rag-status-retry").click();
+  await expect(statusError).toBeHidden();
+  await expect(page.getByText(/Connected|已连接/)).toBeVisible();
+
+  await page.getByTestId("inspector-rag-ingest-input").fill("refresh status");
+  await page.getByTestId("inspector-rag-ingest-submit").click();
+  await expect(statusError).toBeVisible();
+  await expect(page.getByText(/Connected|已连接/)).toBeVisible();
+  await page.getByTestId("inspector-rag-status-retry").click();
+  await expect(statusError).toBeHidden();
+  expect(statusAttempts).toBe(6);
+});
+
 test("workbench main path keeps shared kb actions disabled for non-admin", async ({
   page,
   request,

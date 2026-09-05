@@ -13,6 +13,7 @@ import {
   resolveRagRecallQuality,
   resolveRagMutationRecovery,
   resolveRagKnowledgeBaseSwitch,
+  resolveRagStatusView,
 } from "./runtime-debug-modal-utils.ts";
 
 test("formatRagRecallDistance formats finite distances", () => {
@@ -243,4 +244,23 @@ test("resolveRagKnowledgeBaseSwitch normalizes ids and detects real changes", ()
     knowledgeBaseId: "default",
     changed: true,
   });
+});
+
+test("resolveRagStatusView preserves stale status while exposing refresh errors", () => {
+  assert.deepEqual(
+    resolveRagStatusView({ isLoading: true, isError: false, hasData: false }),
+    { showLoading: true, showError: false, showStatus: false },
+  );
+  assert.deepEqual(
+    resolveRagStatusView({ isLoading: false, isError: true, hasData: false }),
+    { showLoading: false, showError: true, showStatus: false },
+  );
+  assert.deepEqual(
+    resolveRagStatusView({ isLoading: false, isError: true, hasData: true }),
+    { showLoading: false, showError: true, showStatus: true },
+  );
+  assert.deepEqual(
+    resolveRagStatusView({ isLoading: false, isError: false, hasData: true }),
+    { showLoading: false, showError: false, showStatus: true },
+  );
 });

@@ -22,6 +22,12 @@ export type RagKnowledgeBaseSwitch = {
   changed: boolean;
 };
 
+export type RagStatusView = {
+  showLoading: boolean;
+  showError: boolean;
+  showStatus: boolean;
+};
+
 export type RagRecallQuality = {
   tone: RagRecallQualityTone;
   labelKey:
@@ -115,6 +121,22 @@ export function resolveRagKnowledgeBaseSwitch(
   return {
     knowledgeBaseId: next,
     changed: current !== next,
+  };
+}
+
+export function resolveRagStatusView({
+  isLoading,
+  isError,
+  hasData,
+}: {
+  isLoading: boolean;
+  isError: boolean;
+  hasData: boolean;
+}): RagStatusView {
+  return {
+    showLoading: isLoading && !hasData,
+    showError: isError,
+    showStatus: hasData,
   };
 }
 

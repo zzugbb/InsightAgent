@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Input, Modal, Space, Typography } from "antd";
-import { BookOpenCheck } from "lucide-react";
+import { BookOpenCheck, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { apiJson, apiPostJson } from "../../../lib/api-client";
@@ -22,6 +22,7 @@ import { RuntimeDebugRagResults } from "./runtime-debug-rag-results";
 import {
   resolveRagKnowledgeBaseSwitch,
   resolveRagMutationRecovery,
+  resolveRagStatusView,
 } from "./runtime-debug-modal-utils";
 import { API_BASE_URL } from "./utils";
 import { parseMemoryMetadataJson, shortenId } from "./utils";
@@ -167,6 +168,11 @@ export function RuntimeDebugModal({
     ragStatusQuery.isError && ragStatusQuery.error
       ? toUserFacingError(ragStatusQuery.error, t.errors).banner
       : null;
+  const ragStatusView = resolveRagStatusView({
+    isLoading: ragStatusLoading,
+    isError: Boolean(ragStatusError),
+    hasData: Boolean(ragStatus),
+  });
   const ragIngestError =
     ragIngestMutation.isError && ragIngestMutation.error
       ? toUserFacingError(ragIngestMutation.error, t.errors)
@@ -484,11 +490,32 @@ export function RuntimeDebugModal({
         </div>
 
         <div className="memory-status-block" aria-live="polite">
-          {ragStatusLoading ? (
+          {ragStatusView.showLoading ? (
             <p className="memory-status-loading">{t.inspector.rag.statusLoading}</p>
-          ) : ragStatusError ? (
-            <p className="memory-status-err">{ragStatusError}</p>
-          ) : ragStatus ? (
+          ) : null}
+          {ragStatusView.showError && ragStatusError ? (
+            <Alert
+              type="error"
+              showIcon
+              data-testid="inspector-rag-status-error"
+              title={t.inspector.rag.statusFailedTitle}
+              description={ragStatusError}
+              action={
+                <Button
+                  size="small"
+                  icon={<RefreshCw size={14} aria-hidden />}
+                  loading={ragStatusQuery.isFetching}
+                  data-testid="inspector-rag-status-retry"
+                  onClick={() => {
+                    void ragStatusQuery.refetch();
+                  }}
+                >
+                  {t.inspector.rag.statusRefresh}
+                </Button>
+              }
+            />
+          ) : null}
+          {ragStatusView.showStatus && ragStatus ? (
             <>
               <div className="memory-status-line">
                 <span className="memory-status-key">Chroma</span>

@@ -4,24 +4,23 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前状态
 
-- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish` 初版、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
+- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
-- 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验。
-- 当前主线：`product-ux-polish` 下一阶段约 90% 推进中；Runtime Debug RAG 已具备失败分类恢复与跨知识库反馈隔离；后端外部契约不变。
-- 后续候选切片：补齐 RAG 状态加载失败的原位刷新，再核对本主线封板条件，并保持 Trace 回放入口稳定。
+- 最近封板：`product-ux-polish` 下一阶段已 100% 封板；前端 operator next-action、错误恢复、跨视图往返与 Runtime Debug RAG 状态恢复均复用既有后端数据和权限语义。
+- 当前结论：产品体验主线封板验证通过，可进入下一主线；下一主线待确认，后端外部契约不变。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`decision_summary.release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `149/149`；runtime debug targeted `11/11`；RAG 失败恢复与跨库反馈隔离已纳入主路径且 7 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步后端计划
 
-1. 当前推进 `product-ux-polish` 下一阶段；Runtime Debug RAG 失败恢复与跨知识库反馈隔离已落地，本轮无后端 API 改动。
-2. 后端侧继续保持 full slice 入口、SSE / trace / export 外部契约、runbook 提权流程与单文件规模治理稳定。
+1. `product-ux-polish` 下一阶段已 100% 封板，本轮无后端 API 改动，可进入下一主线。
+2. 下一主线待确认；后端侧继续保持 full slice、SSE / trace / export 外部契约与单文件规模治理稳定。
 
 ## 稳定契约
 
@@ -43,7 +42,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - Task Center failure drilldown、normalized 状态/失败摘要与显式 `failure_hint` 优先级均为前端本地语义，不改变任务列表 API、后端 trace 或 export shape。
 - Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload。
 - Knowledge Governance operator next-action、共享范围说明与破坏性操作禁用只由现有 query 状态、`chroma_reachable`、知识库 ID 和用户角色本地派生；Knowledge Governance <-> RAG 往返仅切换、聚焦并展开已有前端弹窗，不新增后端字段，不改变 shared RAG 权限或 API shape。
-- Runtime Debug RAG 失败恢复与跨库反馈隔离仅使用现有 HTTP 状态、本地 mutation 变量和 reset；切换不同知识库会清理旧反馈并保留输入草稿，不改变 RAG 请求/响应、权限或审计契约。
+- Runtime Debug RAG 状态加载失败支持原位刷新，缓存状态在刷新失败时继续可见；失败恢复与跨库反馈隔离仅使用现有 query/mutation 状态和 reset，保留输入草稿，不改变 RAG 请求/响应、权限或审计契约。
 - Task Center、Audit Logs 与知识库治理列表的错误恢复/陈旧数据保留不改变任务、审计或 RAG API shape。
 - 前端 SSE close 后失败摘要兜底只补拉既有任务/trace 并映射低敏 failure hint，不改变后端 SSE、任务、trace 或 export payload。
 - Memory/RAG collection 命名、Chroma 503 降级、shared knowledge base 权限语义保持稳定。
