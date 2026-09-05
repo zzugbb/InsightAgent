@@ -12,6 +12,7 @@ import {
   resolveRagQueryInsight,
   resolveRagRecallQuality,
   resolveRagMutationRecovery,
+  resolveRagKnowledgeBaseSwitch,
 } from "./runtime-debug-modal-utils.ts";
 
 test("formatRagRecallDistance formats finite distances", () => {
@@ -223,5 +224,23 @@ test("resolveRagMutationRecovery separates retryable, input and auth failures", 
   assert.deepEqual(resolveRagMutationRecovery(new Error("NETWORK")), {
     kind: "retry",
     canRetry: true,
+  });
+});
+
+test("resolveRagKnowledgeBaseSwitch normalizes ids and detects real changes", () => {
+  assert.deepEqual(resolveRagKnowledgeBaseSwitch("default", " default "), {
+    knowledgeBaseId: "default",
+    changed: false,
+  });
+  assert.deepEqual(
+    resolveRagKnowledgeBaseSwitch("default", " release-notes "),
+    {
+      knowledgeBaseId: "release-notes",
+      changed: true,
+    },
+  );
+  assert.deepEqual(resolveRagKnowledgeBaseSwitch("release-notes", "  "), {
+    knowledgeBaseId: "default",
+    changed: true,
   });
 });

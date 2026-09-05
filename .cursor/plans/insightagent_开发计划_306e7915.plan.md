@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: provider-tool-expansion、ci-release-engineering、production-runtime-hardening（含后续运维体验）、product-ux-polish 初版、production-operations-readiness、security-hardening 与 release-observability-polish 已 100% 封板；product-ux-polish 下一阶段已启动。
 current_focus:
   mainline: product-ux-polish 下一阶段
-  status: 80% 推进中
-  latest_change: Runtime Debug RAG 写入/检索失败按重试、输入检查、重新认证分类提示；可重试错误保留输入与 mutation 变量，不改变 RAG API shape
+  status: 90% 推进中
+  latest_change: Runtime Debug RAG 切换不同知识库时清理旧写入/检索反馈并保留输入草稿；同库重新应用不清理，RAG 操作进行中禁止切库，不改变 RAG API shape
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -19,7 +19,7 @@ stable_contracts:
   - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 status_normalized，显式 failure_hint/failure_source 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload
   - Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload
   - Knowledge Governance operator next-action、共享范围说明与破坏性操作禁用只由现有 query 状态、chroma_reachable、knowledge_base_id 和用户角色本地派生；Knowledge Governance <-> RAG 往返仅切换、聚焦并展开已有前端弹窗，不新增后端字段，不改变 shared RAG 权限或 API shape
-  - Runtime Debug RAG 失败恢复仅按现有 HTTP 状态和本地 mutation 变量分类提示、保留输入并重试，不改变 RAG 请求/响应、权限或审计契约
+  - Runtime Debug RAG 失败恢复与跨库反馈隔离仅使用现有 HTTP 状态、本地 mutation 变量和 reset；切换不同知识库会清理旧反馈并保留输入草稿，不改变 RAG 请求/响应、权限或审计契约
   - Task Center、Audit Logs 与知识库治理加载错误、陈旧数据保留及原位重试只调整前端 query/presentation 状态，不改变任务、审计或 RAG API shape
   - SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload
   - 全局 HTTP 响应追加安全 header，仅增加响应头，不改变业务响应体、SSE event、trace/delta 或 export body shape
@@ -36,9 +36,9 @@ stable_contracts:
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-rag-recovery-summary.md --json-summary-file /tmp/release-gate-rag-recovery-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；release/trend operator contract passed
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-rag-kb-switch-summary.md --json-summary-file /tmp/release-gate-rag-kb-switch-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；release/trend operator contract passed
   backend: full slice 2018/2018；module boundary 4/4；security 17/17；current_user_hides 2/2；cors 2/2；default_secret 3/3；security_refresh 2/2；auth 3/3；settings 217/217；production_operations 12/12；production_operations_health 11/11；production_reliability 39/39；reconnect 9/9
-  frontend: workbench utils targeted 79/79；store utils targeted 16/16；task detail targeted 11/11；audit targeted 11/11；knowledge governance targeted 9/9；runtime debug targeted 10/10；手动扩展 node tests 148/148；release gate 内置 frontend node 清单 148/148；RAG 失败保留输入并重试 Chromium 用例已纳入主路径且 7 个用例可正常收集；npm run lint passed；npm run build passed；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成
+  frontend: workbench utils targeted 79/79；store utils targeted 16/16；task detail targeted 11/11；audit targeted 11/11；knowledge governance targeted 9/9；runtime debug targeted 11/11；手动扩展 node tests 149/149；release gate 内置 frontend node 清单 149/149；RAG 失败恢复与跨库反馈隔离已纳入主路径且 7 个 Chromium 用例可正常收集；npm run lint passed；npm run build passed；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成
   e2e: backend main/timeout/queue passed；backend tooling scope local passed；frontend queue Chromium local 1/1 passed；backend finalize + artifact-stage guard main 分支 fail-on-missing passed，included_count=20、missing_count=0；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；commit 6ea51c7 的 GitHub backend-e2e run 33373178443、frontend-e2e run 33373178435、release-gate run 33373178464 均 completed success
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
@@ -51,9 +51,9 @@ completed_mainlines:
   - security-hardening：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断
   - release-observability-polish：release readiness matrix、artifact retention、release gate summary/trend summary、previous artifact 下载诊断与 release/rollback decision_summary
 next_candidate_mainlines:
-  - product-ux-polish 下一阶段：当前主线，切换知识库时清理旧写入/检索反馈，避免跨库错读，并保持 Trace 回放入口稳定
+  - product-ux-polish 下一阶段：当前主线，补齐 RAG 状态加载失败的原位刷新，再核对主线封板条件，并保持 Trace 回放入口稳定
 next_steps:
-  - 继续 product-ux-polish 下一阶段，切换知识库时清理旧写入/检索反馈，避免跨库错读，保持外部 SSE/trace/export/e2e 契约稳定
+  - 继续 product-ux-polish 下一阶段，补齐 RAG 状态加载失败的原位刷新并核对主线封板条件，保持外部 SSE/trace/export/e2e 契约稳定
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -64,8 +64,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish` 初版、`production-operations-readiness`、`security-hardening` 与 `release-observability-polish` 均已 100% 封板。
 - 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验。
-- 当前主线：`product-ux-polish` 下一阶段约 80% 推进中；Runtime Debug RAG 写入/检索失败会按重试、输入检查、重新认证分类给出原位恢复提示，并为可重试错误保留输入与请求变量。
-- 后续候选切片：切换知识库时清理旧写入/检索反馈，避免跨库错读，并保持 Trace 回放入口稳定。
+- 当前主线：`product-ux-polish` 下一阶段约 90% 推进中；Runtime Debug RAG 已具备失败分类恢复，并在切换到不同知识库时清理旧写入/检索反馈，同时保留输入草稿。
+- 后续候选切片：补齐 RAG 状态加载失败的原位刷新，再核对本主线封板条件，并保持 Trace 回放入口稳定。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
 ## 已完成能力摘要
@@ -82,14 +82,14 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`decision_summary.release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `148/148`；runtime debug targeted `10/10`；RAG 失败保留输入并重试的 Chromium 用例已纳入主路径且 7 个用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `149/149`；runtime debug targeted `11/11`；RAG 失败恢复与跨库反馈隔离已纳入主路径且 7 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
 - E2E/CI：backend main/timeout/queue、frontend queue/full Chromium、artifact-stage guard 与 commit `6ea51c7` 对应 GitHub backend-e2e/frontend-e2e/release-gate 均为通过基线。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 后续维护线
 
-- 当前状态：`product-ux-polish` 下一阶段约 80% 推进中，Runtime Debug RAG 失败分类提示、输入保留与可重试动作已落地；外部 SSE/trace/export/display/e2e 契约保持稳定。
-- 后续候选：切换知识库时清理旧写入/检索反馈，避免跨库错读。
+- 当前状态：`product-ux-polish` 下一阶段约 90% 推进中，Runtime Debug RAG 失败恢复与跨知识库反馈隔离已落地；外部 SSE/trace/export/display/e2e 契约保持稳定。
+- 后续候选：补齐 RAG 状态加载失败的原位刷新，再核对本主线封板条件。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 文档收敛边界

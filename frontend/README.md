@@ -7,21 +7,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish` 初版、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验；前端契约保持只读兼容。
-- 当前主线：`product-ux-polish` 下一阶段约 80% 推进中；Runtime Debug RAG 写入/检索失败会按重试、输入检查、重新认证分类给出原位恢复提示，并为可重试错误保留输入与请求变量。
-- 后续候选切片：切换知识库时清理旧写入/检索反馈，避免跨库错读，并保持 Trace 回放入口稳定。
+- 当前主线：`product-ux-polish` 下一阶段约 90% 推进中；Runtime Debug RAG 已具备失败分类恢复，并在切换到不同知识库时清理旧写入/检索反馈，同时保留输入草稿。
+- 后续候选切片：补齐 RAG 状态加载失败的原位刷新，再核对本主线封板条件，并保持 Trace 回放入口稳定。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`decision_summary.release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `148/148`；runtime debug targeted `10/10`；RAG 失败保留输入并重试的 Chromium 用例已纳入主路径且 7 个用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `149/149`；runtime debug targeted `11/11`；RAG 失败恢复与跨库反馈隔离已纳入主路径且 7 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
 - Backend 契约基线：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. 当前推进 `product-ux-polish` 下一阶段，RAG 写入/检索失败分类提示、输入保留与可重试动作已落地。
-2. 下一批候选为切换知识库时清理旧写入/检索反馈；前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
+1. 当前推进 `product-ux-polish` 下一阶段，RAG 失败恢复与跨知识库反馈隔离已落地。
+2. 下一批候选为 RAG 状态加载失败原位刷新与主线封板核对；前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 稳定契约
 
@@ -34,7 +34,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
 - Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload。
 - Knowledge Governance operator next-action、共享范围说明与清空/删除禁用只由现有 query 状态、`chroma_reachable`、知识库 ID 和用户角色本地派生；Knowledge Governance <-> RAG 往返仅切换、聚焦并展开已有弹窗，不改变 shared RAG 权限或 API shape。
-- Runtime Debug RAG 失败恢复仅按现有 HTTP 状态和本地 mutation 变量分类提示、保留输入并重试，不改变 RAG 请求/响应、权限或审计契约。
+- Runtime Debug RAG 失败恢复与跨库反馈隔离仅使用现有 HTTP 状态、本地 mutation 变量和 reset；切换不同知识库会清理旧反馈并保留输入草稿，不改变 RAG 请求/响应、权限或审计契约。
 - Task Center、Audit Logs 与知识库治理的初始错误、陈旧数据错误与原位重试只调整 TanStack Query/presentation 状态，不改变任务、审计或 RAG API shape；初始失败不再误显示空态，陈旧数据仍可查看。
 - SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload。
 - queued/running/cancel/reconnect 与 task recovery 前端语义保持稳定。

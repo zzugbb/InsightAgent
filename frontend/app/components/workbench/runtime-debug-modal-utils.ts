@@ -17,6 +17,11 @@ export type RagMutationRecovery = {
   canRetry: boolean;
 };
 
+export type RagKnowledgeBaseSwitch = {
+  knowledgeBaseId: string;
+  changed: boolean;
+};
+
 export type RagRecallQuality = {
   tone: RagRecallQualityTone;
   labelKey:
@@ -99,6 +104,18 @@ export function resolveRagMutationRecovery(error: unknown): RagMutationRecovery 
     return { kind: "review_input", canRetry: false };
   }
   return { kind: "retry", canRetry: true };
+}
+
+export function resolveRagKnowledgeBaseSwitch(
+  currentKnowledgeBaseId: string,
+  draftKnowledgeBaseId: string,
+): RagKnowledgeBaseSwitch {
+  const current = currentKnowledgeBaseId.trim() || "default";
+  const next = draftKnowledgeBaseId.trim() || "default";
+  return {
+    knowledgeBaseId: next,
+    changed: current !== next,
+  };
 }
 
 export function formatRagRecallDistance(value: unknown): string | null {

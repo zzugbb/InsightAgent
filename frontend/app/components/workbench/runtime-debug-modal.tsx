@@ -19,7 +19,10 @@ import type {
 } from "./types";
 import { RuntimeDebugRecoveryAlert } from "./runtime-debug-recovery-alert";
 import { RuntimeDebugRagResults } from "./runtime-debug-rag-results";
-import { resolveRagMutationRecovery } from "./runtime-debug-modal-utils";
+import {
+  resolveRagKnowledgeBaseSwitch,
+  resolveRagMutationRecovery,
+} from "./runtime-debug-modal-utils";
 import { API_BASE_URL } from "./utils";
 import { parseMemoryMetadataJson, shortenId } from "./utils";
 
@@ -183,11 +186,20 @@ export function RuntimeDebugModal({
     review_input: t.inspector.rag.recoveryReviewInputHint,
     reauthenticate: t.inspector.rag.recoveryReauthenticateHint,
   };
+  const ragOperationPending =
+    ragIngestMutation.isPending || ragQueryMutation.isPending;
 
   const applyRagKnowledgeBase = () => {
-    const next = ragKnowledgeBaseId.trim() || "default";
-    setRagKnowledgeBaseId(next);
-    setRagAppliedKnowledgeBaseId(next);
+    const next = resolveRagKnowledgeBaseSwitch(
+      ragAppliedKnowledgeBaseId,
+      ragKnowledgeBaseId,
+    );
+    setRagKnowledgeBaseId(next.knowledgeBaseId);
+    setRagAppliedKnowledgeBaseId(next.knowledgeBaseId);
+    if (next.changed) {
+      ragIngestMutation.reset();
+      ragQueryMutation.reset();
+    }
   };
 
   useEffect(() => {
@@ -457,11 +469,13 @@ export function RuntimeDebugModal({
               onPressEnter={applyRagKnowledgeBase}
               placeholder={t.inspector.rag.kbIdPlaceholder}
               className="rag-kb-input"
+              disabled={ragOperationPending}
               data-testid="inspector-rag-kb-input"
             />
             <Button
               size="small"
               onClick={applyRagKnowledgeBase}
+              disabled={ragOperationPending}
               data-testid="inspector-rag-kb-apply"
             >
               {t.inspector.rag.applyKb}

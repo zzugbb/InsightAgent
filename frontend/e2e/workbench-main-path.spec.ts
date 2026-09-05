@@ -610,6 +610,13 @@ test("runtime debug RAG failures preserve input and support retry", async ({
   await expect(page.getByTestId("inspector-rag-query-results")).toBeVisible();
   expect(ingestAttempts).toBe(2);
   expect(queryAttempts).toBe(2);
+
+  await page.getByTestId("inspector-rag-kb-input").fill("secondary");
+  await page.getByTestId("inspector-rag-kb-apply").click();
+  await expect(page.getByTestId("inspector-rag-ingest-review")).toBeHidden();
+  await expect(page.getByTestId("inspector-rag-query-results")).toBeHidden();
+  await expect(ingestInput).toHaveValue("Preserve this ingest input");
+  await expect(queryInput).toHaveValue("Preserve this query input");
 });
 
 test("workbench main path keeps shared kb actions disabled for non-admin", async ({
