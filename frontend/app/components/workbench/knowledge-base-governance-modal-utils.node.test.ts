@@ -5,6 +5,7 @@ import {
   buildKnowledgeBaseDocumentDeleteUrl,
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseGovernanceListState,
+  resolveKnowledgeBaseGovernanceOperatorHint,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
 } from "./knowledge-base-governance-modal-utils.ts";
@@ -33,6 +34,67 @@ test("resolveKnowledgeBaseGovernanceListState distinguishes load and stale-data 
       rowCount: 0,
     }),
     "empty",
+  );
+});
+
+test("resolveKnowledgeBaseGovernanceOperatorHint prioritizes safe local next actions", () => {
+  const labels = {
+    staleData: "Refresh cached data before destructive changes",
+    storageUnreachable: "Restore storage connectivity, then refresh",
+    empty: "Ingest content before reviewing governance details",
+  };
+
+  assert.deepEqual(
+    resolveKnowledgeBaseGovernanceOperatorHint({
+      listState: "stale_error",
+      chromaReachable: false,
+      labels,
+    }),
+    {
+      kind: "stale_data",
+      label: labels.staleData,
+      blocksMutations: true,
+    },
+  );
+  assert.deepEqual(
+    resolveKnowledgeBaseGovernanceOperatorHint({
+      listState: "ready",
+      chromaReachable: false,
+      labels,
+    }),
+    {
+      kind: "storage_unreachable",
+      label: labels.storageUnreachable,
+      blocksMutations: true,
+    },
+  );
+  assert.deepEqual(
+    resolveKnowledgeBaseGovernanceOperatorHint({
+      listState: "empty",
+      chromaReachable: true,
+      labels,
+    }),
+    {
+      kind: "empty",
+      label: labels.empty,
+      blocksMutations: false,
+    },
+  );
+  assert.equal(
+    resolveKnowledgeBaseGovernanceOperatorHint({
+      listState: "ready",
+      chromaReachable: true,
+      labels,
+    }),
+    null,
+  );
+  assert.equal(
+    resolveKnowledgeBaseGovernanceOperatorHint({
+      listState: "loading",
+      chromaReachable: null,
+      labels,
+    }),
+    null,
   );
 });
 

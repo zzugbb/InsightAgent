@@ -346,6 +346,13 @@ export const zh: Messages = {
       refreshAria: "刷新知识库列表",
       loadFailed: "知识库列表加载失败",
       noKnowledgeBases: "当前账号暂无知识库。",
+      operatorHintTitle: "下一步操作",
+      operatorHintStaleData:
+        "当前展示缓存中的知识库；刷新成功前请勿清空或删除数据。",
+      operatorHintStorageUnreachable:
+        "请先恢复 Chroma 连接，再刷新列表后操作知识库。",
+      operatorHintEmpty:
+        "请先在运行诊断的 RAG 面板写入内容，再返回此处检查版本与 chunk。",
       tableKbId: "知识库 ID",
       tableCollection: "Collection",
       tableDocuments: "条数",

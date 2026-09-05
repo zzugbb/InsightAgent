@@ -33,6 +33,17 @@ export type KnowledgeBaseGovernanceListState =
   | "empty"
   | "ready";
 
+export type KnowledgeBaseGovernanceOperatorHintKind =
+  | "stale_data"
+  | "storage_unreachable"
+  | "empty";
+
+export type KnowledgeBaseGovernanceOperatorHint = {
+  kind: KnowledgeBaseGovernanceOperatorHintKind;
+  label: string;
+  blocksMutations: boolean;
+};
+
 export function resolveKnowledgeBaseGovernanceListState(args: {
   isLoading: boolean;
   isError: boolean;
@@ -45,6 +56,43 @@ export function resolveKnowledgeBaseGovernanceListState(args: {
     return "loading";
   }
   return args.rowCount > 0 ? "ready" : "empty";
+}
+
+export function resolveKnowledgeBaseGovernanceOperatorHint(args: {
+  listState: KnowledgeBaseGovernanceListState;
+  chromaReachable: boolean | null;
+  labels: {
+    staleData: string;
+    storageUnreachable: string;
+    empty: string;
+  };
+}): KnowledgeBaseGovernanceOperatorHint | null {
+  if (args.listState === "stale_error") {
+    return {
+      kind: "stale_data",
+      label: args.labels.staleData,
+      blocksMutations: true,
+    };
+  }
+  if (
+    args.listState !== "loading" &&
+    args.listState !== "error" &&
+    args.chromaReachable === false
+  ) {
+    return {
+      kind: "storage_unreachable",
+      label: args.labels.storageUnreachable,
+      blocksMutations: true,
+    };
+  }
+  if (args.listState === "empty") {
+    return {
+      kind: "empty",
+      label: args.labels.empty,
+      blocksMutations: false,
+    };
+  }
+  return null;
 }
 
 export function buildKnowledgeBaseDocumentDeleteUrl(

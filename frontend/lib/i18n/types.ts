@@ -286,6 +286,10 @@ export type Messages = {
       refreshAria: string;
       loadFailed: string;
       noKnowledgeBases: string;
+      operatorHintTitle: string;
+      operatorHintStaleData: string;
+      operatorHintStorageUnreachable: string;
+      operatorHintEmpty: string;
       tableKbId: string;
       tableCollection: string;
       tableDocuments: string;

@@ -19,6 +19,7 @@ import {
   buildKnowledgeBaseDocumentDeleteUrl,
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseGovernanceListState,
+  resolveKnowledgeBaseGovernanceOperatorHint,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
 } from "./knowledge-base-governance-modal-utils";
@@ -136,6 +137,17 @@ export function KnowledgeBaseGovernanceModal({
   const listError = listQuery.isError
     ? toUserFacingError(listQuery.error, t.errors)
     : null;
+  const operatorHint = resolveKnowledgeBaseGovernanceOperatorHint({
+    listState,
+    chromaReachable: listQuery.data?.chroma_reachable ?? null,
+    labels: {
+      staleData: t.sidebar.knowledgeBase.operatorHintStaleData,
+      storageUnreachable:
+        t.sidebar.knowledgeBase.operatorHintStorageUnreachable,
+      empty: t.sidebar.knowledgeBase.operatorHintEmpty,
+    },
+  });
+  const mutationsBlocked = operatorHint?.blocksMutations ?? false;
   const isAdmin =
     String(currentUser?.role ?? "")
       .trim()
@@ -208,8 +220,18 @@ export function KnowledgeBaseGovernanceModal({
                     documentDeleteMutation.isPending &&
                     documentDeleteMutation.variables?.key === group.key
                   }
-                  disabled={roleRestricted || documentDeleteMutation.isPending}
-                  title={roleRestricted ? t.errors.auth : undefined}
+                  disabled={
+                    roleRestricted ||
+                    mutationsBlocked ||
+                    documentDeleteMutation.isPending
+                  }
+                  title={
+                    roleRestricted
+                      ? t.errors.auth
+                      : mutationsBlocked
+                        ? operatorHint?.label
+                        : undefined
+                  }
                   data-testid="kb-document-group-delete"
                 >
                   {t.sidebar.knowledgeBase.actionDeleteDocument}
@@ -310,7 +332,13 @@ export function KnowledgeBaseGovernanceModal({
         const deleteBusy =
           deleteMutation.isPending && deleteMutation.variables === row.knowledge_base_id;
         const roleRestricted = isSharedKb && !isAdmin;
-        const disabled = clearBusy || deleteBusy || roleRestricted;
+        const disabled =
+          clearBusy || deleteBusy || roleRestricted || mutationsBlocked;
+        const disabledReason = roleRestricted
+          ? t.errors.auth
+          : mutationsBlocked
+            ? operatorHint?.label
+            : undefined;
         return (
           <div className="kb-row-actions">
             <Popconfirm
@@ -326,7 +354,7 @@ export function KnowledgeBaseGovernanceModal({
                 type="text"
                 loading={clearBusy}
                 disabled={disabled}
-                title={roleRestricted ? t.errors.auth : undefined}
+                title={disabledReason}
                 className="kb-action-btn"
                 data-testid="kb-governance-action-clear"
               >
@@ -351,7 +379,7 @@ export function KnowledgeBaseGovernanceModal({
                 className="kb-action-btn"
                 loading={deleteBusy}
                 disabled={disabled}
-                title={roleRestricted ? t.errors.auth : undefined}
+                title={disabledReason}
                 data-testid="kb-governance-action-delete"
               >
                 {deleteBusy
@@ -433,6 +461,17 @@ export function KnowledgeBaseGovernanceModal({
               {t.sidebar.knowledgeBase.refresh}
             </Button>
           }
+        />
+      ) : null}
+
+      {operatorHint ? (
+        <Alert
+          type={operatorHint.blocksMutations ? "warning" : "info"}
+          showIcon
+          className={`kb-governance-operator-hint kb-governance-operator-hint--${operatorHint.kind}`}
+          data-testid="kb-governance-operator-hint"
+          title={t.sidebar.knowledgeBase.operatorHintTitle}
+          description={operatorHint.label}
         />
       ) : null}
 

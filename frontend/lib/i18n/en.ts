@@ -352,6 +352,13 @@ export const en: Messages = {
       refreshAria: "Refresh knowledge base list",
       loadFailed: "Failed to load knowledge bases",
       noKnowledgeBases: "No knowledge bases for this account yet.",
+      operatorHintTitle: "Next action",
+      operatorHintStaleData:
+        "Cached knowledge bases remain visible. Refresh successfully before clearing or deleting data.",
+      operatorHintStorageUnreachable:
+        "Restore Chroma connectivity, then refresh before changing knowledge bases.",
+      operatorHintEmpty:
+        "Ingest content from Runtime Debug, then return here to review versions and chunks.",
       tableKbId: "Knowledge base ID",
       tableCollection: "Collection",
       tableDocuments: "Chunks",

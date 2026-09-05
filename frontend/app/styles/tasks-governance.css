@@ -1032,6 +1032,21 @@
   color: var(--muted);
 }
 
+.kb-governance-operator-hint {
+  margin-bottom: 12px;
+  border-radius: 8px;
+}
+
+.kb-governance-operator-hint .ant-alert-message {
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.kb-governance-operator-hint .ant-alert-description {
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .kb-governance-table-wrap {
   border: 1px solid var(--line);
   border-radius: 12px;
