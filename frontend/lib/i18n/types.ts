@@ -656,9 +656,15 @@ export type Messages = {
       ingestReviewTitle: string;
       ingestReviewDescription: (knowledgeBaseId: string) => string;
       ingestReviewAction: string;
+      ingestFailedTitle: string;
       queryPlaceholder: string;
       queryButton: string;
       queryEmptyInput: string;
+      queryFailedTitle: string;
+      recoveryRetry: string;
+      recoveryRetryHint: string;
+      recoveryReviewInputHint: string;
+      recoveryReauthenticateHint: string;
       queryEmpty: string;
       queryHits: (n: number) => string;
       queryInsightLabel: string;

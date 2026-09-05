@@ -753,9 +753,18 @@ export const en: Messages = {
       ingestReviewDescription: (knowledgeBaseId) =>
         `Open ${knowledgeBaseId} to verify its document version and chunks.`,
       ingestReviewAction: "Review details",
+      ingestFailedTitle: "Ingest failed",
       queryPlaceholder: "Ask a question or enter keywords…",
       queryButton: "Query KB",
       queryEmptyInput: "Enter a query before searching.",
+      queryFailedTitle: "Query failed",
+      recoveryRetry: "Retry",
+      recoveryRetryHint:
+        "Your input is preserved. Retry when the service is available.",
+      recoveryReviewInputHint:
+        "Review the knowledge base ID and input before submitting again.",
+      recoveryReauthenticateHint:
+        "Sign in again or ask an administrator to verify your access.",
       queryEmpty: "No hits in this knowledge base yet.",
       queryHits: (n: number) => `${n} hit(s)`,
       queryInsightLabel: "Recall summary",

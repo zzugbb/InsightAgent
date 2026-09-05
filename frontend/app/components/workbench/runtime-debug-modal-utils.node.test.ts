@@ -11,6 +11,7 @@ import {
   resolveRagSourceFilterOptions,
   resolveRagQueryInsight,
   resolveRagRecallQuality,
+  resolveRagMutationRecovery,
 } from "./runtime-debug-modal-utils.ts";
 
 test("formatRagRecallDistance formats finite distances", () => {
@@ -200,4 +201,27 @@ test("resolveRagFilterEmptyMessageKey explains active filters", () => {
     resolveRagFilterEmptyMessageKey("all", "all"),
     "filterEmptyGeneric",
   );
+});
+
+test("resolveRagMutationRecovery separates retryable, input and auth failures", () => {
+  assert.deepEqual(resolveRagMutationRecovery({ status: 503 }), {
+    kind: "retry",
+    canRetry: true,
+  });
+  assert.deepEqual(resolveRagMutationRecovery({ status: 429 }), {
+    kind: "retry",
+    canRetry: true,
+  });
+  assert.deepEqual(resolveRagMutationRecovery({ status: 422 }), {
+    kind: "review_input",
+    canRetry: false,
+  });
+  assert.deepEqual(resolveRagMutationRecovery({ status: 403 }), {
+    kind: "reauthenticate",
+    canRetry: false,
+  });
+  assert.deepEqual(resolveRagMutationRecovery(new Error("NETWORK")), {
+    kind: "retry",
+    canRetry: true,
+  });
 });

@@ -7,6 +7,15 @@ export type RagFilterEmptyMessageKey =
   | "sourceFilterEmpty"
   | "combinedFilterEmpty"
   | "filterEmptyGeneric";
+export type RagMutationRecoveryKind =
+  | "retry"
+  | "review_input"
+  | "reauthenticate";
+
+export type RagMutationRecovery = {
+  kind: RagMutationRecoveryKind;
+  canRetry: boolean;
+};
 
 export type RagRecallQuality = {
   tone: RagRecallQualityTone;
@@ -70,6 +79,26 @@ function cleanFiniteInteger(value: unknown): number | null {
     return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
   }
   return null;
+}
+
+export function resolveRagMutationRecovery(error: unknown): RagMutationRecovery {
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? cleanFiniteInteger(error.status)
+      : null;
+  if (status === 401 || status === 403) {
+    return { kind: "reauthenticate", canRetry: false };
+  }
+  if (
+    status !== null &&
+    status >= 400 &&
+    status < 500 &&
+    status !== 408 &&
+    status !== 429
+  ) {
+    return { kind: "review_input", canRetry: false };
+  }
+  return { kind: "retry", canRetry: true };
 }
 
 export function formatRagRecallDistance(value: unknown): string | null {

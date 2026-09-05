@@ -527,6 +527,91 @@ test("runtime debug rag filters explain combined empty results", async ({
   await expect(page.getByText("Beta weak recall hit")).toBeHidden();
 });
 
+test("runtime debug RAG failures preserve input and support retry", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+  let ingestAttempts = 0;
+  let queryAttempts = 0;
+
+  await page.route("**/api/rag/status?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_base_id: "default",
+        collection: "kb_default_mock",
+        chroma_url: "http://127.0.0.1:8001",
+        chroma_reachable: true,
+        collection_exists: true,
+        document_count: 1,
+        error: null,
+      }),
+    });
+  });
+  await page.route("**/api/rag/ingest", async (route) => {
+    ingestAttempts += 1;
+    if (ingestAttempts === 1) {
+      await route.fulfill({ status: 503, body: "temporarily unavailable" });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_base_id: "default",
+        collection: "kb_default_mock",
+        documents_ingested: 1,
+        chunks_added: 1,
+        document_count: 2,
+        chunk_size: 800,
+        chunk_overlap: 120,
+      }),
+    });
+  });
+  await page.route("**/api/rag/query", async (route) => {
+    queryAttempts += 1;
+    if (queryAttempts === 1) {
+      await route.fulfill({ status: 503, body: "temporarily unavailable" });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_base_id: "default",
+        collection: "kb_default_mock",
+        hit_count: 0,
+        hits: [],
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await openRuntimeDebugModal(page);
+
+  const ingestInput = page.getByTestId("inspector-rag-ingest-input");
+  await ingestInput.fill("Preserve this ingest input");
+  await page.getByTestId("inspector-rag-ingest-submit").click();
+  await expect(page.getByTestId("inspector-rag-ingest-error")).toBeVisible();
+  await expect(ingestInput).toHaveValue("Preserve this ingest input");
+  await page.getByTestId("inspector-rag-ingest-error-retry").click();
+  await expect(page.getByTestId("inspector-rag-ingest-review")).toBeVisible();
+
+  const queryInput = page.getByTestId("inspector-rag-query-input");
+  await queryInput.fill("Preserve this query input");
+  await page.getByTestId("inspector-rag-query-submit").click();
+  await expect(page.getByTestId("inspector-rag-query-error")).toBeVisible();
+  await expect(queryInput).toHaveValue("Preserve this query input");
+  await page.getByTestId("inspector-rag-query-error-retry").click();
+  await expect(page.getByTestId("inspector-rag-query-results")).toBeVisible();
+  expect(ingestAttempts).toBe(2);
+  expect(queryAttempts).toBe(2);
+});
+
 test("workbench main path keeps shared kb actions disabled for non-admin", async ({
   page,
   request,

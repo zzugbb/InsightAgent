@@ -17,7 +17,9 @@ import type {
   RagStatus,
   SessionMemoryStatus,
 } from "./types";
+import { RuntimeDebugRecoveryAlert } from "./runtime-debug-recovery-alert";
 import { RuntimeDebugRagResults } from "./runtime-debug-rag-results";
+import { resolveRagMutationRecovery } from "./runtime-debug-modal-utils";
 import { API_BASE_URL } from "./utils";
 import { parseMemoryMetadataJson, shortenId } from "./utils";
 
@@ -162,6 +164,25 @@ export function RuntimeDebugModal({
     ragStatusQuery.isError && ragStatusQuery.error
       ? toUserFacingError(ragStatusQuery.error, t.errors).banner
       : null;
+  const ragIngestError =
+    ragIngestMutation.isError && ragIngestMutation.error
+      ? toUserFacingError(ragIngestMutation.error, t.errors)
+      : null;
+  const ragIngestRecovery = ragIngestError
+    ? resolveRagMutationRecovery(ragIngestMutation.error)
+    : null;
+  const ragQueryError =
+    ragQueryMutation.isError && ragQueryMutation.error
+      ? toUserFacingError(ragQueryMutation.error, t.errors)
+      : null;
+  const ragQueryRecovery = ragQueryError
+    ? resolveRagMutationRecovery(ragQueryMutation.error)
+    : null;
+  const recoveryGuidance = {
+    retry: t.inspector.rag.recoveryRetryHint,
+    review_input: t.inspector.rag.recoveryReviewInputHint,
+    reauthenticate: t.inspector.rag.recoveryReauthenticateHint,
+  };
 
   const applyRagKnowledgeBase = () => {
     const next = ragKnowledgeBaseId.trim() || "default";
@@ -532,13 +553,23 @@ export function RuntimeDebugModal({
               {t.inspector.rag.ingestButton}
             </Button>
           </div>
-          {ragIngestMutation.isError && ragIngestMutation.error ? (
-            <p className="memory-debug-err">
-              {(() => {
-                const u = toUserFacingError(ragIngestMutation.error, t.errors);
-                return u.hint ? `${u.banner} ${u.hint}` : u.banner;
-              })()}
-            </p>
+          {ragIngestError && ragIngestRecovery ? (
+            <RuntimeDebugRecoveryAlert
+              title={t.inspector.rag.ingestFailedTitle}
+              error={ragIngestError}
+              guidance={recoveryGuidance[ragIngestRecovery.kind]}
+              retryLabel={t.inspector.rag.recoveryRetry}
+              canRetry={
+                ragIngestRecovery.canRetry && Boolean(ragIngestMutation.variables)
+              }
+              retrying={ragIngestMutation.isPending}
+              testId="inspector-rag-ingest-error"
+              onRetry={() => {
+                if (ragIngestMutation.variables) {
+                  ragIngestMutation.mutate(ragIngestMutation.variables);
+                }
+              }}
+            />
           ) : null}
           {ragIngestMutation.isSuccess && ragIngestMutation.data ? (
             <Alert
@@ -595,13 +626,23 @@ export function RuntimeDebugModal({
               {t.inspector.rag.queryButton}
             </Button>
           </div>
-          {ragQueryMutation.isError && ragQueryMutation.error ? (
-            <p className="memory-debug-err">
-              {(() => {
-                const u = toUserFacingError(ragQueryMutation.error, t.errors);
-                return u.hint ? `${u.banner} ${u.hint}` : u.banner;
-              })()}
-            </p>
+          {ragQueryError && ragQueryRecovery ? (
+            <RuntimeDebugRecoveryAlert
+              title={t.inspector.rag.queryFailedTitle}
+              error={ragQueryError}
+              guidance={recoveryGuidance[ragQueryRecovery.kind]}
+              retryLabel={t.inspector.rag.recoveryRetry}
+              canRetry={
+                ragQueryRecovery.canRetry && Boolean(ragQueryMutation.variables)
+              }
+              retrying={ragQueryMutation.isPending}
+              testId="inspector-rag-query-error"
+              onRetry={() => {
+                if (ragQueryMutation.variables) {
+                  ragQueryMutation.mutate(ragQueryMutation.variables);
+                }
+              }}
+            />
           ) : null}
           {ragQueryMutation.isSuccess && ragQueryMutation.data ? (
             <RuntimeDebugRagResults
