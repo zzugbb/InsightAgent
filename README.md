@@ -6,21 +6,21 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；Task Center、任务详情、Audit、Knowledge Governance 与 Runtime Debug RAG 已形成稳定的 operator next-action、错误恢复、跨视图往返和跨库状态隔离体验。
-- 当前结论：产品体验主线封板验证通过，可进入下一主线；GitHub release-gate 后置校验的旧摘要兼容问题已完成本地修复，下一主线待确认。
+- 当前主线：`test-maintainability-hardening`，进度 25%；两个大测试主题已拆为双分片，release gate 失败路径也可稳定输出结构化摘要。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate all：本地修复后 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9。GitHub run `33960030175` 的主 gate 成功，仅后置 operator 校验因旧成功基线缺少 `operator_summary` 失败；旧 artifact 兼容红测与 contract 回归已通过，下一次远端运行待验证。
-- Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
+- Backend：full slice `2018/2018`；module boundary `5/5`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
 - GitHub E2E：封板提交 `91d9435` 的 backend-e2e run `33960030177` 与 frontend-e2e run `33960030231` 均成功。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. `product-ux-polish` 下一阶段已 100% 封板，可进入下一主线。
-2. 下一主线待确认；继续保持外部契约、规模边界与现有产品回归基线稳定。
+1. `test-maintainability-hardening` 当前 25%：继续治理临近边界的测试主题，并保持原测试发现与门禁摘要入口稳定。
+2. 收敛测试规模与选择性运行约定；继续保持外部契约和现有产品回归基线稳定。
 
 ## 稳定契约
 
@@ -33,6 +33,8 @@
 - `/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 的 operator-facing 摘要仅聚合低敏状态、主行动、最高严重级别、失败/告警计数、关注阶段/风险域/scope 与原因枚举；不回显连接串、API key、密钥、联系人、runbook URL、artifact 路径、命令输出、日志正文、环境变量或外部服务响应。
 - Operator summary contract 只校验 summary JSON/Markdown 中的低敏状态、主行动、严重级别和标量列表字段，不启动服务、不读取外部日志。
 - Release gate trend 对缺少 `operator_summary` 的旧 artifact 按既有 result、step summary 与失败标签派生低敏兼容摘要；新格式仍执行严格 operator contract。
+- `backend/scripts/tool_runtime_slice` 主题文件保持 <= 2800 行；拆分主题通过 `_partN` 承载测试，原主题模块继续作为稳定组合入口。
+- Release gate 即使在首个失败步骤发生时也保留该步骤退出码，并输出 `FAIL` decision/operator summary；空 focus phase 不触发 Bash `set -u` 二次失败。
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
 - Auth token 签发与刷新会在创建/轮换 refresh token 和写入 auth session 前先校验 access token 签发配置；生产默认 JWT secret 错误不留下会话存储副作用。
@@ -155,7 +157,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- `product-ux-polish` 下一阶段已封板；下一主线待确认。
+- `test-maintainability-hardening` 当前 25%；继续治理测试主题规模余量、选择性运行入口与失败门禁可诊断性。
 
 ## 文档维护约定
 

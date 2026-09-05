@@ -12,7 +12,9 @@ from app.services import tool_runtime_registry_runtime
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MAX_BACKEND_PYTHON_LINES = 3000
+MAX_TOOL_RUNTIME_TEST_TOPIC_LINES = 2800
 SIZE_BOUNDARY_ROOTS = (BACKEND_ROOT / "app", BACKEND_ROOT / "scripts")
+TOOL_RUNTIME_SLICE_ROOT = BACKEND_ROOT / "scripts" / "tool_runtime_slice"
 
 
 class ToolRuntimeModuleBoundaryTests(unittest.TestCase):
@@ -52,6 +54,17 @@ class ToolRuntimeModuleBoundaryTests(unittest.TestCase):
                     oversized.append(
                         f"{path.relative_to(BACKEND_ROOT)} has {line_count} lines"
                     )
+
+        self.assertEqual([], oversized)
+
+    def test_tool_runtime_test_topics_keep_split_headroom(self) -> None:
+        oversized: list[str] = []
+        for path in sorted(TOOL_RUNTIME_SLICE_ROOT.glob("*.py")):
+            line_count = len(path.read_text(encoding="utf-8").splitlines())
+            if line_count > MAX_TOOL_RUNTIME_TEST_TOPIC_LINES:
+                oversized.append(
+                    f"{path.relative_to(BACKEND_ROOT)} has {line_count} lines"
+                )
 
         self.assertEqual([], oversized)
 

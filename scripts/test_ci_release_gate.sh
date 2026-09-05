@@ -107,6 +107,30 @@ main() {
   assert_contains '"operator_summary": {"status": "review", "headline": "release gate dry run needs verification", "primary_action": "run_release_gate_without_dry_run", "highest_severity": "info", "total_steps": 3, "failed_steps": 0, "focus_phases": ["frontend"], "blocking_step_labels": []}' "${TMP_DIR}/summary.json"
   assert_contains '"label": "frontend build"' "${TMP_DIR}/summary.json"
 
+  mkdir -p "${TMP_DIR}/failing-bin"
+  cat > "${TMP_DIR}/failing-bin/git" <<'SH'
+#!/usr/bin/env bash
+exit 9
+SH
+  chmod +x "${TMP_DIR}/failing-bin/git"
+  set +e
+  PATH="${TMP_DIR}/failing-bin:${PATH}" bash "${SCRIPT}" \
+    --phase hygiene \
+    --summary-file "${TMP_DIR}/failed-summary.md" \
+    --json-summary-file "${TMP_DIR}/failed-summary.json" \
+    > "${TMP_DIR}/failed-summary-stdout.txt" 2>&1
+  failed_gate_exit=$?
+  set -e
+  if [ "${failed_gate_exit}" -ne 9 ]; then
+    echo "expected failed release gate exit 9, got ${failed_gate_exit}" >&2
+    cat "${TMP_DIR}/failed-summary-stdout.txt" >&2
+    exit 1
+  fi
+  assert_contains "- result: FAIL" "${TMP_DIR}/failed-summary.md"
+  assert_contains "- operator_status: action_required" "${TMP_DIR}/failed-summary.md"
+  assert_contains "- operator_focus_phases: hygiene" "${TMP_DIR}/failed-summary.md"
+  assert_contains '"blocking_step_labels": ["diff whitespace"]' "${TMP_DIR}/failed-summary.json"
+
   env RELEASE_GATE_PYTHON=/no/such/python bash "${SCRIPT}" \
     --dry-run \
     --phase frontend \

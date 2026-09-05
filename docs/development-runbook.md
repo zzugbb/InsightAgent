@@ -13,6 +13,7 @@
 - 每个主线确认封板后，整理 `README.md`、`backend/README.md`、`frontend/README.md` 与实时计划文件：仅收敛“进度/封板状态相关块”，保留当前状态、当前验证基线、下一步计划/候选主线、稳定契约与少量高信号摘要；删除或收缩按轮流水账、旧失败过程和重复验证清单。
 - 文档收敛不是把整份 README 改成短状态页；接口范围、运行方式、关键实现位置、SSE/Trace 契约、Memory/RAG 说明、文档维护约定等长期参考章节应保留，除非对应功能真的被删除或迁移。
 - 控制单文件规模：新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆出新主题文件或新模块，再继续追加。历史上的 `backend/scripts/test_tool_runtime_slice.py` 和 `app/services/tool_runtime.py` 已按该规则拆成 slice 主题包与 facade 模块。
+- `backend/scripts/tool_runtime_slice` 主题文件保持 <= 2800 行；临近上限时拆到 `_partN.py`，原主题文件保留为组合 facade，后续新增测试进入有余量的分片。
 
 ## 不需要提权的常用命令
 
@@ -33,7 +34,7 @@ git diff --cached --check
 git diff -- data/insightagent.plan.back.md
 ```
 
-`scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`auto` 在 PR 中按 changed files 选择 backend/frontend 阶段，并始终跑 tooling 与 hygiene；非 PR 或 diff 不可解析时保守跑全量。`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace 与备份计划 diff；可用 `--dry-run` 查看命令清单，可用 `--summary-file` / `--json-summary-file` 输出 CI 摘要，摘要包含 `summary_kind`、`summary_schema_version`、`service_required`、resolved phases、逐步结果、`step_summary` 聚合计数、`failed_step_labels`、release/rollback `decision_summary` 与 `operator_summary`。
+`scripts/ci_run_release_gate.sh` 是不启动本机服务的发布前门禁聚合入口：`auto` 在 PR 中按 changed files 选择 backend/frontend 阶段，并始终跑 tooling 与 hygiene；非 PR 或 diff 不可解析时保守跑全量。`backend` 跑 full slice 与 module boundary，`frontend` 跑 node tests、lint、build，`tooling` 跑 CI/e2e tooling 自测，`hygiene` 跑 compileall、diff whitespace 与备份计划 diff；可用 `--dry-run` 查看命令清单，可用 `--summary-file` / `--json-summary-file` 输出 CI 摘要，摘要包含 `summary_kind`、`summary_schema_version`、`service_required`、resolved phases、逐步结果、`step_summary` 聚合计数、`failed_step_labels`、release/rollback `decision_summary` 与 `operator_summary`。首个步骤失败时保留原退出码，并在退出前写出失败 decision/operator summary；空 focus phase 不应触发 `set -u` 二次失败。
 `scripts/ci_download_previous_release_gate_summary.sh` 通过 GitHub CLI 尝试下载同分支上一条 successful `release-gate-summary` artifact，不启动服务；缺少 `gh`、分支、run id、历史 run 或 artifact 时写 `release_gate_previous_summary_download` 低敏诊断和 `operator_summary` 并返回成功。
 `scripts/ci_release_gate_trend_summary.sh` 只读取当前和可选上一份 release gate JSON summary，不启动服务；输出 baseline/improved/regressed/changed/unchanged、步骤计数 delta、新增/移除失败步骤标签，Markdown 直接展示当前/上一份 operator 状态、主行动和关注阶段，并在 JSON 中透传 release/rollback `decision_summary` 与 `operator_summary`。旧 release gate artifact 尚无 `operator_summary` 时，会按既有 result、step summary 与失败标签派生低敏兼容摘要，避免历史基线阻断后置契约校验。GitHub release-gate workflow 会生成 previous download 诊断并上传 `release-gate-trend-summary` artifact。
 `scripts/ci_assert_operator_summary_contract.sh` 只读取 summary JSON 和可选 Markdown，不启动服务；校验低敏 `operator_summary` 必需字段、状态/严重级别枚举、标量列表值，以及 Markdown 是否暴露 operator 状态与主行动。该检查已纳入 tooling 自测、release-gate workflow 与 release readiness matrix，release-gate workflow 会在摘要上传前校验 release/trend summary。

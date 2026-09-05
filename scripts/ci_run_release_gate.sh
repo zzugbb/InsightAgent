@@ -207,8 +207,10 @@ write_summaries() {
         continue
       fi
       focus_phase="$(phase_from_step_label "${STEP_LABELS[$i]}")"
-      if [ -n "${focus_phase}" ] && ! contains_item "${focus_phase}" "${focus_phases[@]}"; then
-        focus_phases+=("${focus_phase}")
+      if [ -n "${focus_phase}" ]; then
+        if [ "${#focus_phases[@]}" -eq 0 ] || ! contains_item "${focus_phase}" "${focus_phases[@]}"; then
+          focus_phases+=("${focus_phase}")
+        fi
       fi
     done
   elif [ -n "${resolved_phase_csv}" ]; then
@@ -219,8 +221,8 @@ write_summaries() {
     focus_phases=("${phase}")
   fi
 
-  operator_focus_phases_json="$(json_array_from_items "${focus_phases[@]}")"
   if [ "${#focus_phases[@]}" -gt 0 ]; then
+    operator_focus_phases_json="$(json_array_from_items "${focus_phases[@]}")"
     operator_focus_phases=""
     for phase_item in "${focus_phases[@]}"; do
       if [ -n "${operator_focus_phases}" ]; then
