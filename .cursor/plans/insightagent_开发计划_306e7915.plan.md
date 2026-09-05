@@ -4,7 +4,7 @@ overview: provider-tool-expansion、ci-release-engineering、production-runtime-
 current_focus:
   mainline: product-ux-polish 下一阶段
   status: 100% 已封板
-  latest_change: Runtime Debug RAG 状态加载失败支持原位刷新，缓存状态在刷新失败时继续可见；本主线封板验证通过，可进入下一主线
+  latest_change: product-ux-polish 下一阶段封板保持成立；GitHub release-gate 旧成功基线缺少 operator_summary 的后置校验兼容问题已补红测并本地修复
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -33,13 +33,14 @@ stable_contracts:
   - /health 保持既有字段不变，新增 operations readiness/readiness_level/warnings/warning_summary/risk_domains/readiness_checks、部署配置、SLO 阈值口径、备份恢复演练、runbook/值班响应、应急响应演练新鲜度、队列、执行实例、超时与 Chroma probe 摘要，不暴露数据库连接串、API key、密钥、联系人、runbook URL 原文或完整敏感连接信息
   - /health.operations、release gate、previous summary、artifact guard、trend/export diagnostics 的 operator-facing 摘要只聚合低敏状态、主行动、最高严重级别、失败/告警计数、关注阶段/风险域/scope 与原因枚举，不回显连接串、API key、密钥、联系人、runbook URL、artifact 路径、命令输出、日志正文、环境变量或外部服务响应
   - operator summary contract 只校验 summary JSON/Markdown 中的低敏状态、主行动、严重级别和标量列表字段，不启动服务、不读取外部日志
+  - release gate trend 对缺少 operator_summary 的旧 artifact 按既有 result、step summary 与失败标签派生低敏兼容摘要；新格式仍执行严格 operator contract
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-rag-status-recovery-summary.md --json-summary-file /tmp/release-gate-rag-status-recovery-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；release/trend operator contract passed
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-legacy-operator-compat-final-summary.md --json-summary-file /tmp/release-gate-legacy-operator-compat-final-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；legacy previous summary compatibility、release/trend operator contract passed
   backend: full slice 2018/2018；module boundary 4/4；security 17/17；current_user_hides 2/2；cors 2/2；default_secret 3/3；security_refresh 2/2；auth 3/3；settings 217/217；production_operations 12/12；production_operations_health 11/11；production_reliability 39/39；reconnect 9/9
   frontend: workbench utils targeted 79/79；store utils targeted 16/16；task detail targeted 11/11；audit targeted 11/11；knowledge governance targeted 9/9；runtime debug targeted 12/12；手动扩展 node tests 150/150；release gate 内置 frontend node 清单 150/150；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；npm run lint passed；npm run build passed；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成
-  e2e: backend main/timeout/queue passed；backend tooling scope local passed；frontend queue Chromium local 1/1 passed；backend finalize + artifact-stage guard main 分支 fail-on-missing passed，included_count=20、missing_count=0；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；commit 6ea51c7 的 GitHub backend-e2e run 33373178443、frontend-e2e run 33373178435、release-gate run 33373178464 均 completed success
+  e2e: backend main/timeout/queue passed；backend tooling scope local passed；frontend queue Chromium local 1/1 passed；backend finalize + artifact-stage guard main 分支 fail-on-missing passed，included_count=20、missing_count=0；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；封板 commit 91d9435 的 GitHub backend-e2e run 33960030177 与 frontend-e2e run 33960030231 completed success；release-gate run 33960030175 主 gate success、仅旧摘要后置 operator 校验失败，兼容修复的下一次远端运行待验证
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -64,7 +65,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening` 与 `release-observability-polish` 均已 100% 封板。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；Task Center、任务详情、Audit、Knowledge Governance 与 Runtime Debug RAG 已形成稳定的 operator next-action、错误恢复、跨视图往返和跨库状态隔离体验。
-- 当前结论：产品体验主线封板验证通过，可进入下一主线；下一主线待确认。
+- 当前结论：产品体验主线封板验证通过，可进入下一主线；GitHub release-gate 后置校验的旧摘要兼容问题已完成本地修复，下一主线待确认。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
 ## 已完成能力摘要
@@ -79,10 +80,10 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`decision_summary.release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
+- Release gate all：本地修复后 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9。GitHub run `33960030175` 的主 gate 成功，仅后置 operator 校验因旧成功基线缺少 `operator_summary` 失败；旧 artifact 兼容红测与 contract 回归已通过，下一次远端运行待验证。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
-- E2E/CI：backend main/timeout/queue、frontend queue/full Chromium、artifact-stage guard 与 commit `6ea51c7` 对应 GitHub backend-e2e/frontend-e2e/release-gate 均为通过基线。
+- E2E/CI：backend main/timeout/queue、frontend queue/full Chromium 与 artifact-stage guard 为通过基线；封板 commit `91d9435` 的 GitHub backend-e2e run `33960030177`、frontend-e2e run `33960030231` 均成功。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 后续维护线

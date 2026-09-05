@@ -106,7 +106,51 @@ def decision_summary(data: dict) -> dict:
 
 
 def operator_summary(data: dict) -> dict:
-    raw = data.get("operator_summary") if isinstance(data.get("operator_summary"), dict) else {}
+    raw_value = data.get("operator_summary")
+    if "operator_summary" not in data:
+        steps = step_summary(data)
+        result = str(data.get("result") or "UNKNOWN").upper()
+        resolved_phases = [
+            item.strip()
+            for item in str(data.get("resolved_phases") or "").split(",")
+            if item.strip()
+        ]
+        phase = str(data.get("phase") or "")
+        if not resolved_phases and phase == "all":
+            resolved_phases = ["backend", "frontend", "tooling", "hygiene"]
+        elif not resolved_phases and phase and phase != "auto":
+            resolved_phases = [phase]
+        if result == "PASS" and steps["fail"] == 0:
+            status = "ready"
+            headline = "release gate checks passed"
+            primary_action = "continue_release_review"
+            highest_severity = "ok"
+        elif result == "DRY-RUN":
+            status = "review"
+            headline = "release gate dry run needs verification"
+            primary_action = "run_release_gate_without_dry_run"
+            highest_severity = "info"
+        elif result == "FAIL" or steps["fail"] > 0:
+            status = "action_required"
+            headline = "release gate failures need attention"
+            primary_action = "inspect_failed_steps"
+            highest_severity = "critical"
+        else:
+            status = "review"
+            headline = "legacy release gate summary needs review"
+            primary_action = "review_legacy_release_gate_summary"
+            highest_severity = "warning"
+        return {
+            "status": status,
+            "headline": headline,
+            "primary_action": primary_action,
+            "highest_severity": highest_severity,
+            "total_steps": steps["total"],
+            "failed_steps": steps["fail"],
+            "focus_phases": resolved_phases,
+            "blocking_step_labels": failed_labels(data) if steps["fail"] > 0 else [],
+        }
+    raw = raw_value if isinstance(raw_value, dict) else {}
     focus_phases_raw = raw.get("focus_phases")
     blocking_labels_raw = raw.get("blocking_step_labels")
     focus_phases = focus_phases_raw if isinstance(focus_phases_raw, list) else []

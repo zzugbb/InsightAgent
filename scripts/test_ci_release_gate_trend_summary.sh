@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${ROOT_DIR}/scripts/ci_release_gate_trend_summary.sh"
+CONTRACT_SCRIPT="${ROOT_DIR}/scripts/ci_assert_operator_summary_contract.sh"
 TMP_DIR=""
 
 json_tool_python() {
@@ -65,6 +66,32 @@ JSON
 }
 JSON
 
+  cat > "${TMP_DIR}/legacy-previous.json" <<'JSON'
+{
+  "summary_kind": "release_gate",
+  "summary_schema_version": 1,
+  "service_required": false,
+  "phase": "all",
+  "result": "PASS",
+  "step_summary": {"total": 9, "pass": 9, "fail": 0, "dry_run": 0},
+  "failed_step_labels": [],
+  "decision_summary": {"release_decision": "approve", "rollback_decision": "not_required", "reason": "all_required_static_gates_passed", "required_follow_up": []}
+}
+JSON
+
+  cat > "${TMP_DIR}/empty-operator-previous.json" <<'JSON'
+{
+  "summary_kind": "release_gate",
+  "summary_schema_version": 1,
+  "service_required": false,
+  "phase": "all",
+  "result": "PASS",
+  "step_summary": {"total": 9, "pass": 9, "fail": 0, "dry_run": 0},
+  "failed_step_labels": [],
+  "operator_summary": {}
+}
+JSON
+
   bash "${SCRIPT}" \
     --current-json "${TMP_DIR}/current.json" \
     --summary-file "${TMP_DIR}/baseline.md" \
@@ -110,6 +137,30 @@ JSON
   assert_contains '"rollback_decision": "investigate_failed_gate"' "${TMP_DIR}/trend.json"
   assert_contains '"status": "action_required"' "${TMP_DIR}/trend.json"
   assert_contains '"blocking_step_labels": [' "${TMP_DIR}/trend.json"
+
+  bash "${SCRIPT}" \
+    --current-json "${TMP_DIR}/current.json" \
+    --previous-json "${TMP_DIR}/legacy-previous.json" \
+    --summary-file "${TMP_DIR}/legacy-trend.md" \
+    --json-summary-file "${TMP_DIR}/legacy-trend.json"
+  assert_contains "- previous_operator_status: ready" "${TMP_DIR}/legacy-trend.md"
+  assert_contains "- previous_operator_primary_action: continue_release_review" "${TMP_DIR}/legacy-trend.md"
+  bash "${CONTRACT_SCRIPT}" \
+    --summary-json "${TMP_DIR}/legacy-trend.json" \
+    --summary-kind release_gate_trend \
+    --markdown "${TMP_DIR}/legacy-trend.md" \
+    > "${TMP_DIR}/legacy-contract.out"
+  assert_contains "operator_summary_contract=PASS" "${TMP_DIR}/legacy-contract.out"
+
+  bash "${SCRIPT}" \
+    --current-json "${TMP_DIR}/current.json" \
+    --previous-json "${TMP_DIR}/empty-operator-previous.json" \
+    --summary-file "${TMP_DIR}/empty-operator-trend.md" \
+    --json-summary-file "${TMP_DIR}/empty-operator-trend.json"
+  expect_fail bash "${CONTRACT_SCRIPT}" \
+    --summary-json "${TMP_DIR}/empty-operator-trend.json" \
+    --summary-kind release_gate_trend \
+    --markdown "${TMP_DIR}/empty-operator-trend.md"
 
   expect_fail bash "${SCRIPT}" --current-json "${TMP_DIR}/missing.json"
 
