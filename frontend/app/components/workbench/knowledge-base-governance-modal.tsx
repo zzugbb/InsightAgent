@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { LockKeyhole, RefreshCw, UsersRound } from "lucide-react";
+import { DatabaseZap, LockKeyhole, RefreshCw, UsersRound } from "lucide-react";
 
 import { apiDeleteJson, apiJson, apiPostJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
@@ -31,6 +31,7 @@ const API_BASE_URL =
 type KnowledgeBaseGovernanceModalProps = {
   open: boolean;
   onClose: () => void;
+  onOpenRag: () => void;
   currentUser?: {
     id: string;
     email: string;
@@ -49,6 +50,7 @@ type DocumentDeleteArgs = {
 export function KnowledgeBaseGovernanceModal({
   open,
   onClose,
+  onOpenRag,
   currentUser,
 }: KnowledgeBaseGovernanceModalProps) {
   const { message } = App.useApp();
@@ -503,6 +505,19 @@ export function KnowledgeBaseGovernanceModal({
           data-testid="kb-governance-operator-hint"
           title={t.sidebar.knowledgeBase.operatorHintTitle}
           description={operatorHint.label}
+          action={
+            operatorHint.action === "open_rag" ? (
+              <Button
+                size="small"
+                type="primary"
+                icon={<DatabaseZap size={14} aria-hidden />}
+                data-testid="kb-governance-open-rag"
+                onClick={onOpenRag}
+              >
+                {t.sidebar.knowledgeBase.operatorHintOpenRag}
+              </Button>
+            ) : undefined
+          }
         />
       ) : null}
 

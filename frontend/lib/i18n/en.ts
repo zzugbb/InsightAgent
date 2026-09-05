@@ -359,6 +359,7 @@ export const en: Messages = {
         "Restore Chroma connectivity, then refresh before changing knowledge bases.",
       operatorHintEmpty:
         "Ingest content from Runtime Debug, then return here to review versions and chunks.",
+      operatorHintOpenRag: "Open RAG tools",
       accessSharedReadOnly: "Shared read-only · Ask an admin to make changes",
       accessSharedAdmin: "Shared admin scope · Changes affect all members",
       tableKbId: "Knowledge base ID",

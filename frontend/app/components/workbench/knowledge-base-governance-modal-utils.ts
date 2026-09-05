@@ -42,6 +42,7 @@ export type KnowledgeBaseGovernanceOperatorHint = {
   kind: KnowledgeBaseGovernanceOperatorHintKind;
   label: string;
   blocksMutations: boolean;
+  action: "open_rag" | null;
 };
 
 export type KnowledgeBaseAccessHint = {
@@ -78,6 +79,7 @@ export function resolveKnowledgeBaseGovernanceOperatorHint(args: {
       kind: "stale_data",
       label: args.labels.staleData,
       blocksMutations: true,
+      action: null,
     };
   }
   if (
@@ -89,6 +91,7 @@ export function resolveKnowledgeBaseGovernanceOperatorHint(args: {
       kind: "storage_unreachable",
       label: args.labels.storageUnreachable,
       blocksMutations: true,
+      action: null,
     };
   }
   if (args.listState === "empty") {
@@ -96,6 +99,7 @@ export function resolveKnowledgeBaseGovernanceOperatorHint(args: {
       kind: "empty",
       label: args.labels.empty,
       blocksMutations: false,
+      action: "open_rag",
     };
   }
   return null;

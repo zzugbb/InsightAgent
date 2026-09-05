@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App, Button, Input, Modal, Space, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { apiJson, apiPostJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
@@ -26,12 +26,14 @@ type RuntimeDebugModalProps = {
   open: boolean;
   onClose: () => void;
   activeSessionId?: string | null;
+  initialFocus?: "rag" | null;
 };
 
 export function RuntimeDebugModal({
   open,
   onClose,
   activeSessionId = null,
+  initialFocus = null,
 }: RuntimeDebugModalProps) {
   const t = useMessages();
   const queryClient = useQueryClient();
@@ -45,6 +47,7 @@ export function RuntimeDebugModal({
   const [ragIngestDraft, setRagIngestDraft] = useState("");
   const [ragIngestSource, setRagIngestSource] = useState("");
   const [ragQueryDraft, setRagQueryDraft] = useState("");
+  const ragSectionRef = useRef<HTMLDivElement>(null);
 
   const sessionMemoryQuery = useQuery({
     queryKey: ["session-memory-status", activeSessionId ?? "__none__"],
@@ -179,6 +182,18 @@ export function RuntimeDebugModal({
       destroyOnHidden
       className="runtime-debug-ant-modal"
       data-testid="runtime-debug-modal"
+      afterOpenChange={(isOpen) => {
+        if (!isOpen || initialFocus !== "rag") {
+          return;
+        }
+        const ragSection = ragSectionRef.current;
+        ragSection?.scrollIntoView({ block: "start" });
+        ragSection
+          ?.querySelector<HTMLTextAreaElement>(
+            '[data-testid="inspector-rag-ingest-input"]',
+          )
+          ?.focus({ preventScroll: true });
+      }}
     >
       <Typography.Paragraph
         type="secondary"
@@ -394,7 +409,11 @@ export function RuntimeDebugModal({
         ) : null}
       </div>
 
-      <div className="runtime-debug-section">
+      <div
+        ref={ragSectionRef}
+        className="runtime-debug-section"
+        data-testid="runtime-debug-rag-section"
+      >
         <p className="summary-label">{t.inspector.rag.kicker}</p>
         <strong className="memory-placeholder-title">{t.inspector.rag.title}</strong>
         <p className="panel-note panel-note--muted memory-placeholder-lead">

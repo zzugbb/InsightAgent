@@ -55,6 +55,7 @@ test("resolveKnowledgeBaseGovernanceOperatorHint prioritizes safe local next act
       kind: "stale_data",
       label: labels.staleData,
       blocksMutations: true,
+      action: null,
     },
   );
   assert.deepEqual(
@@ -67,6 +68,7 @@ test("resolveKnowledgeBaseGovernanceOperatorHint prioritizes safe local next act
       kind: "storage_unreachable",
       label: labels.storageUnreachable,
       blocksMutations: true,
+      action: null,
     },
   );
   assert.deepEqual(
@@ -79,6 +81,7 @@ test("resolveKnowledgeBaseGovernanceOperatorHint prioritizes safe local next act
       kind: "empty",
       label: labels.empty,
       blocksMutations: false,
+      action: "open_rag",
     },
   );
   assert.equal(

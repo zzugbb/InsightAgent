@@ -592,6 +592,53 @@ test("workbench main path keeps shared kb actions disabled for non-admin", async
   await expect(privateRow.getByTestId("kb-governance-action-delete")).toBeEnabled();
 });
 
+test("empty knowledge governance hands off to focused RAG ingest", async ({
+  page,
+  request,
+}) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+
+  await page.route("**/api/rag/knowledge-bases", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_bases: [],
+        knowledge_base_count: 0,
+        chroma_url: "http://127.0.0.1:8001",
+        chroma_reachable: true,
+        error: null,
+      }),
+    });
+  });
+  await page.route("**/api/rag/status?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_base_id: "default",
+        collection: "kb_default_mock",
+        chroma_url: "http://127.0.0.1:8001",
+        chroma_reachable: true,
+        collection_exists: false,
+        document_count: 0,
+        error: null,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await page.getByTestId("sidebar-settings-trigger").click();
+  await page.getByTestId("settings-menu-knowledge-base").click();
+  await page.getByTestId("kb-governance-open-rag").click();
+
+  await expect(page.locator(".knowledge-base-governance-ant-modal")).toBeHidden();
+  await expect(page.getByTestId("runtime-debug-rag-section")).toBeVisible();
+  await expect(page.getByTestId("inspector-rag-ingest-input")).toBeFocused();
+});
+
 test("running task can recover after reload and be cancelled", async ({
   page,
   request,

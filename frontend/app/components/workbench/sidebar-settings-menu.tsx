@@ -66,6 +66,9 @@ export function SidebarSettingsMenu({
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
   const [runtimeDebugOpen, setRuntimeDebugOpen] = useState(false);
+  const [runtimeDebugInitialFocus, setRuntimeDebugInitialFocus] = useState<
+    "rag" | null
+  >(null);
   const [mounted, setMounted] = useState(false);
   const [popoverPos, setPopoverPos] = useState<PopoverPos | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -182,7 +185,19 @@ export function SidebarSettingsMenu({
   function openRuntimeDebug() {
     setOpen(false);
     setExpanded(null);
+    setRuntimeDebugInitialFocus(null);
     setRuntimeDebugOpen(true);
+  }
+
+  function openRagFromKnowledgeBase() {
+    setKnowledgeBaseOpen(false);
+    setRuntimeDebugInitialFocus("rag");
+    setRuntimeDebugOpen(true);
+  }
+
+  function closeRuntimeDebug() {
+    setRuntimeDebugOpen(false);
+    setRuntimeDebugInitialFocus(null);
   }
 
   const themeLabel =
@@ -534,12 +549,14 @@ export function SidebarSettingsMenu({
       <KnowledgeBaseGovernanceModal
         open={knowledgeBaseOpen}
         onClose={() => setKnowledgeBaseOpen(false)}
+        onOpenRag={openRagFromKnowledgeBase}
         currentUser={currentUser}
       />
       <RuntimeDebugModal
         open={runtimeDebugOpen}
-        onClose={() => setRuntimeDebugOpen(false)}
+        onClose={closeRuntimeDebug}
         activeSessionId={activeSessionId}
+        initialFocus={runtimeDebugInitialFocus}
       />
       <UsageDashboardModal
         open={usageOpen}

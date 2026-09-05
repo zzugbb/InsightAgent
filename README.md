@@ -6,21 +6,21 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish` 初版、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验。
-- 当前主线：`product-ux-polish` 下一阶段约 50% 推进中；Knowledge Governance 已补状态级下一步提示与共享范围行内说明，普通成员明确只读并联系管理员，管理员明确变更会影响全部共享成员。
-- 后续候选切片：补齐 Knowledge Governance 到 Runtime Debug RAG 写入入口的直接处置衔接，并保持 Trace 回放入口稳定。
+- 当前主线：`product-ux-polish` 下一阶段约 60% 推进中；Knowledge Governance 空态可直接打开 Runtime Debug 的 RAG 工具，并自动定位、聚焦写入输入框。
+- 后续候选切片：补齐 RAG 写入成功后返回 Knowledge Governance 复核版本与 chunk 的处置闭环，并保持 Trace 回放入口稳定。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`decision_summary.release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `146/146`；knowledge governance targeted `8/8`；audit targeted `11/11`；task detail targeted `11/11`；`npm run lint` 与 `npm run build` 通过；本轮共享知识库 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `146/146`；knowledge governance targeted `8/8`；新增 Knowledge Governance -> RAG Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 当前推进 `product-ux-polish` 下一阶段，共享知识库成员只读与管理员影响范围提示已落地。
-2. 下一批候选为 Knowledge Governance 到 Runtime Debug RAG 写入入口的直接处置衔接，保持外部契约稳定。
+1. 当前推进 `product-ux-polish` 下一阶段，Knowledge Governance 到 Runtime Debug RAG 写入入口的直接处置衔接已落地。
+2. 下一批候选为 RAG 写入成功后返回 Knowledge Governance 复核版本与 chunk 的闭环，保持外部契约稳定。
 
 ## 稳定契约
 
@@ -39,7 +39,7 @@
 - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地筛选/展示状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
 - Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload。
-- Knowledge Governance operator next-action、共享范围说明与破坏性操作禁用只由现有 query 状态、`chroma_reachable`、知识库 ID 和用户角色本地派生；不新增后端字段，不改变 shared RAG 权限或 API shape。
+- Knowledge Governance operator next-action、共享范围说明与破坏性操作禁用只由现有 query 状态、`chroma_reachable`、知识库 ID 和用户角色本地派生；空态直达 RAG 仅切换并聚焦已有前端弹窗，不新增后端字段，不改变 shared RAG 权限或 API shape。
 - Task Center、Audit Logs 与知识库治理的加载错误、陈旧数据保留与原位重试只调整前端 query/presentation 状态，不改变任务、审计或 RAG API shape。
 - SSE close 后失败摘要兜底只在流结束但前端尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload。
 - 默认 settings 仍按 provider/model/api_key 自动选择 `remote` 或 canonical `mock`。
@@ -153,7 +153,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- 继续 `product-ux-polish` 下一阶段，补齐 Knowledge Governance 到 Runtime Debug RAG 写入入口的直接处置衔接。
+- 继续 `product-ux-polish` 下一阶段，补齐 RAG 写入成功后返回 Knowledge Governance 复核版本与 chunk 的处置闭环。
 
 ## 文档维护约定
 
