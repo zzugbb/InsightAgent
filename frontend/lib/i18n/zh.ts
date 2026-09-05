@@ -353,6 +353,8 @@ export const zh: Messages = {
         "请先恢复 Chroma 连接，再刷新列表后操作知识库。",
       operatorHintEmpty:
         "请先在运行诊断的 RAG 面板写入内容，再返回此处检查版本与 chunk。",
+      accessSharedReadOnly: "共享只读 · 如需变更请联系管理员",
+      accessSharedAdmin: "共享管理范围 · 变更将影响所有成员",
       tableKbId: "知识库 ID",
       tableCollection: "Collection",
       tableDocuments: "条数",

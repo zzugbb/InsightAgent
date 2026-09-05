@@ -290,6 +290,8 @@ export type Messages = {
       operatorHintStaleData: string;
       operatorHintStorageUnreachable: string;
       operatorHintEmpty: string;
+      accessSharedReadOnly: string;
+      accessSharedAdmin: string;
       tableKbId: string;
       tableCollection: string;
       tableDocuments: string;

@@ -44,6 +44,12 @@ export type KnowledgeBaseGovernanceOperatorHint = {
   blocksMutations: boolean;
 };
 
+export type KnowledgeBaseAccessHint = {
+  kind: "shared_readonly" | "shared_admin";
+  label: string;
+  blocksMutations: boolean;
+};
+
 export function resolveKnowledgeBaseGovernanceListState(args: {
   isLoading: boolean;
   isError: boolean;
@@ -93,6 +99,30 @@ export function resolveKnowledgeBaseGovernanceOperatorHint(args: {
     };
   }
   return null;
+}
+
+export function resolveKnowledgeBaseAccessHint(args: {
+  knowledgeBaseId: string;
+  isAdmin: boolean;
+  labels: {
+    readOnly: string;
+    admin: string;
+  };
+}): KnowledgeBaseAccessHint | null {
+  if (!args.knowledgeBaseId.trim().toLowerCase().startsWith("shared-")) {
+    return null;
+  }
+  return args.isAdmin
+    ? {
+        kind: "shared_admin",
+        label: args.labels.admin,
+        blocksMutations: false,
+      }
+    : {
+        kind: "shared_readonly",
+        label: args.labels.readOnly,
+        blocksMutations: true,
+      };
 }
 
 export function buildKnowledgeBaseDocumentDeleteUrl(

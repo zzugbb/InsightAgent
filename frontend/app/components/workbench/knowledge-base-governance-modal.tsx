@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { RefreshCw } from "lucide-react";
+import { LockKeyhole, RefreshCw, UsersRound } from "lucide-react";
 
 import { apiDeleteJson, apiJson, apiPostJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
@@ -17,6 +17,7 @@ import type {
 } from "./types";
 import {
   buildKnowledgeBaseDocumentDeleteUrl,
+  resolveKnowledgeBaseAccessHint,
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseGovernanceListState,
   resolveKnowledgeBaseGovernanceOperatorHint,
@@ -152,11 +153,20 @@ export function KnowledgeBaseGovernanceModal({
     String(currentUser?.role ?? "")
       .trim()
       .toLowerCase() === "admin";
+  const resolveAccessHint = (knowledgeBaseId: string) =>
+    resolveKnowledgeBaseAccessHint({
+      knowledgeBaseId,
+      isAdmin,
+      labels: {
+        readOnly: t.sidebar.knowledgeBase.accessSharedReadOnly,
+        admin: t.sidebar.knowledgeBase.accessSharedAdmin,
+      },
+    });
   const renderVersionDetails = (row: RagKnowledgeBaseSummary) => {
     const versionRows = resolveKnowledgeBaseVersionRows(row.document_versions);
     const documentGroups = resolveKnowledgeBaseDocumentGroups(row.document_versions);
     const summary = summarizeKnowledgeBaseVersions(row.document_versions);
-    const roleRestricted = row.knowledge_base_id.startsWith("shared-") && !isAdmin;
+    const accessHint = resolveAccessHint(row.knowledge_base_id);
     return (
       <div
         className="kb-version-details"
@@ -221,13 +231,13 @@ export function KnowledgeBaseGovernanceModal({
                     documentDeleteMutation.variables?.key === group.key
                   }
                   disabled={
-                    roleRestricted ||
+                    accessHint?.blocksMutations ||
                     mutationsBlocked ||
                     documentDeleteMutation.isPending
                   }
                   title={
-                    roleRestricted
-                      ? t.errors.auth
+                    accessHint?.blocksMutations
+                      ? accessHint.label
                       : mutationsBlocked
                         ? operatorHint?.label
                         : undefined
@@ -277,8 +287,27 @@ export function KnowledgeBaseGovernanceModal({
     {
       title: t.sidebar.knowledgeBase.tableKbId,
       dataIndex: "knowledge_base_id",
-      width: 180,
-      render: (value: string) => <code className="kb-id-cell">{value}</code>,
+      width: 220,
+      render: (value: string) => {
+        const accessHint = resolveAccessHint(value);
+        const AccessIcon =
+          accessHint?.kind === "shared_readonly" ? LockKeyhole : UsersRound;
+        return (
+          <div className="kb-id-stack">
+            <code className="kb-id-cell">{value}</code>
+            {accessHint ? (
+              <span
+                className={`kb-access-hint kb-access-hint--${accessHint.kind}`}
+                data-testid="kb-governance-access-hint"
+                title={accessHint.label}
+              >
+                <AccessIcon size={12} aria-hidden />
+                {accessHint.label}
+              </span>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       title: t.sidebar.knowledgeBase.tableCollection,
@@ -326,16 +355,18 @@ export function KnowledgeBaseGovernanceModal({
       className: "kb-actions-col",
       width: 118,
       render: (_, row) => {
-        const isSharedKb = row.knowledge_base_id.startsWith("shared-");
+        const accessHint = resolveAccessHint(row.knowledge_base_id);
         const clearBusy =
           clearMutation.isPending && clearMutation.variables === row.knowledge_base_id;
         const deleteBusy =
           deleteMutation.isPending && deleteMutation.variables === row.knowledge_base_id;
-        const roleRestricted = isSharedKb && !isAdmin;
         const disabled =
-          clearBusy || deleteBusy || roleRestricted || mutationsBlocked;
-        const disabledReason = roleRestricted
-          ? t.errors.auth
+          clearBusy ||
+          deleteBusy ||
+          Boolean(accessHint?.blocksMutations) ||
+          mutationsBlocked;
+        const disabledReason = accessHint?.blocksMutations
+          ? accessHint.label
           : mutationsBlocked
             ? operatorHint?.label
             : undefined;

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildKnowledgeBaseDocumentDeleteUrl,
+  resolveKnowledgeBaseAccessHint,
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseGovernanceListState,
   resolveKnowledgeBaseGovernanceOperatorHint,
@@ -92,6 +93,46 @@ test("resolveKnowledgeBaseGovernanceOperatorHint prioritizes safe local next act
     resolveKnowledgeBaseGovernanceOperatorHint({
       listState: "loading",
       chromaReachable: null,
+      labels,
+    }),
+    null,
+  );
+});
+
+test("resolveKnowledgeBaseAccessHint explains shared scope by role", () => {
+  const labels = {
+    readOnly: "Shared scope is read-only; ask an admin to change it",
+    admin: "Changes affect everyone with shared access",
+  };
+
+  assert.deepEqual(
+    resolveKnowledgeBaseAccessHint({
+      knowledgeBaseId: "shared-release-notes",
+      isAdmin: false,
+      labels,
+    }),
+    {
+      kind: "shared_readonly",
+      label: labels.readOnly,
+      blocksMutations: true,
+    },
+  );
+  assert.deepEqual(
+    resolveKnowledgeBaseAccessHint({
+      knowledgeBaseId: "shared-release-notes",
+      isAdmin: true,
+      labels,
+    }),
+    {
+      kind: "shared_admin",
+      label: labels.admin,
+      blocksMutations: false,
+    },
+  );
+  assert.equal(
+    resolveKnowledgeBaseAccessHint({
+      knowledgeBaseId: "private-release-notes",
+      isAdmin: false,
       labels,
     }),
     null,
