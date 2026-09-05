@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: provider-tool-expansion、ci-release-engineering、production-runtime-hardening（含后续运维体验）、product-ux-polish 初版、production-operations-readiness、security-hardening 与 release-observability-polish 已 100% 封板；product-ux-polish 下一阶段已启动。
 current_focus:
   mainline: product-ux-polish 下一阶段
-  status: 60% 推进中
-  latest_change: Knowledge Governance 空态增加 RAG 直接处置入口；切换到 Runtime Debug 后自动定位并聚焦写入输入框，不改变 shared RAG 权限或 API shape
+  status: 70% 推进中
+  latest_change: Knowledge Governance 与 Runtime Debug RAG 形成双向处置闭环；写入成功后可返回并自动展开目标知识库的版本与 chunk 明细，不改变 shared RAG 权限或 API shape
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -18,7 +18,7 @@ stable_contracts:
   - Workbench Inspector 语义筛选只调整前端本地 trace 筛选状态；保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload
   - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 status_normalized，显式 failure_hint/failure_source 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload
   - Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload
-  - Knowledge Governance operator next-action、共享范围说明与破坏性操作禁用只由现有 query 状态、chroma_reachable、knowledge_base_id 和用户角色本地派生；空态直达 RAG 仅切换并聚焦已有前端弹窗，不新增后端字段，不改变 shared RAG 权限或 API shape
+  - Knowledge Governance operator next-action、共享范围说明与破坏性操作禁用只由现有 query 状态、chroma_reachable、knowledge_base_id 和用户角色本地派生；Knowledge Governance <-> RAG 往返仅切换、聚焦并展开已有前端弹窗，不新增后端字段，不改变 shared RAG 权限或 API shape
   - Task Center、Audit Logs 与知识库治理加载错误、陈旧数据保留及原位重试只调整前端 query/presentation 状态，不改变任务、审计或 RAG API shape
   - SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload
   - 全局 HTTP 响应追加安全 header，仅增加响应头，不改变业务响应体、SSE event、trace/delta 或 export body shape
@@ -35,9 +35,9 @@ stable_contracts:
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-kb-rag-handoff-summary.md --json-summary-file /tmp/release-gate-kb-rag-handoff-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；release/trend operator contract passed
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-rag-governance-review-summary.md --json-summary-file /tmp/release-gate-rag-governance-review-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；release/trend operator contract passed
   backend: full slice 2018/2018；module boundary 4/4；security 17/17；current_user_hides 2/2；cors 2/2；default_secret 3/3；security_refresh 2/2；auth 3/3；settings 217/217；production_operations 12/12；production_operations_health 11/11；production_reliability 39/39；reconnect 9/9
-  frontend: workbench utils targeted 79/79；store utils targeted 16/16；task detail targeted 11/11；audit targeted 11/11；knowledge governance targeted 8/8；手动扩展 node tests 146/146；release gate 内置 frontend node 清单 146/146；新增 Knowledge Governance -> RAG Chromium 用例可正常收集；npm run lint passed；npm run build passed；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成
+  frontend: workbench utils targeted 79/79；store utils targeted 16/16；task detail targeted 11/11；audit targeted 11/11；knowledge governance targeted 9/9；手动扩展 node tests 147/147；release gate 内置 frontend node 清单 147/147；Knowledge Governance <-> RAG Chromium 往返用例可正常收集；npm run lint passed；npm run build passed；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成
   e2e: backend main/timeout/queue passed；backend tooling scope local passed；frontend queue Chromium local 1/1 passed；backend finalize + artifact-stage guard main 分支 fail-on-missing passed，included_count=20、missing_count=0；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；commit 6ea51c7 的 GitHub backend-e2e run 33373178443、frontend-e2e run 33373178435、release-gate run 33373178464 均 completed success
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
@@ -50,9 +50,9 @@ completed_mainlines:
   - security-hardening：安全 header、JWT header/默认密钥/CORS 硬阻断、refresh token 输入收敛、认证错误低敏化、auth session 副作用保护与 secret material 默认凭据阻断
   - release-observability-polish：release readiness matrix、artifact retention、release gate summary/trend summary、previous artifact 下载诊断与 release/rollback decision_summary
 next_candidate_mainlines:
-  - product-ux-polish 下一阶段：当前主线，补齐 RAG 写入成功后返回 Knowledge Governance 复核版本与 chunk 的处置闭环，并保持 Trace 回放入口稳定
+  - product-ux-polish 下一阶段：当前主线，强化 Runtime Debug RAG 写入/检索失败后的原位恢复提示，并保持 Trace 回放入口稳定
 next_steps:
-  - 继续 product-ux-polish 下一阶段，补齐 RAG 写入成功后返回 Knowledge Governance 复核版本与 chunk 的处置闭环，保持外部 SSE/trace/export/e2e 契约稳定
+  - 继续 product-ux-polish 下一阶段，强化 Runtime Debug RAG 写入/检索失败后的原位恢复提示，保持外部 SSE/trace/export/e2e 契约稳定
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -63,8 +63,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish` 初版、`production-operations-readiness`、`security-hardening` 与 `release-observability-polish` 均已 100% 封板。
 - 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验。
-- 当前主线：`product-ux-polish` 下一阶段约 60% 推进中；Knowledge Governance 空态可直接打开 Runtime Debug 的 RAG 工具，并自动定位、聚焦写入输入框。
-- 后续候选切片：补齐 RAG 写入成功后返回 Knowledge Governance 复核版本与 chunk 的处置闭环，并保持 Trace 回放入口稳定。
+- 当前主线：`product-ux-polish` 下一阶段约 70% 推进中；Knowledge Governance 与 Runtime Debug RAG 已形成双向处置闭环，写入成功后可返回并自动展开目标知识库的版本与 chunk 明细。
+- 后续候选切片：强化 Runtime Debug RAG 写入/检索失败后的原位恢复提示，并保持 Trace 回放入口稳定。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
 ## 已完成能力摘要
@@ -81,14 +81,14 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`decision_summary.release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
 - Backend：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `146/146`；knowledge governance targeted `8/8`；新增 Knowledge Governance -> RAG Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `147/147`；knowledge governance targeted `9/9`；Knowledge Governance <-> RAG Chromium 往返用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
 - E2E/CI：backend main/timeout/queue、frontend queue/full Chromium、artifact-stage guard 与 commit `6ea51c7` 对应 GitHub backend-e2e/frontend-e2e/release-gate 均为通过基线。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 后续维护线
 
-- 当前状态：`product-ux-polish` 下一阶段约 60% 推进中，Knowledge Governance 空态到 Runtime Debug RAG 写入入口的直达聚焦已落地；外部 SSE/trace/export/display/e2e 契约保持稳定。
-- 后续候选：补齐 RAG 写入成功后返回 Knowledge Governance 复核版本与 chunk 的处置闭环。
+- 当前状态：`product-ux-polish` 下一阶段约 70% 推进中，Knowledge Governance 与 Runtime Debug RAG 写入、复核往返闭环已落地；外部 SSE/trace/export/display/e2e 契约保持稳定。
+- 后续候选：强化 Runtime Debug RAG 写入/检索失败后的原位恢复提示。
 - 新 provider/source 协议：按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 文档收敛边界

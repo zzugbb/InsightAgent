@@ -734,6 +734,10 @@ export const zh: Messages = {
       ingestEmpty: "请先输入要写入知识库的文本。",
       ingestSuccess: (chunks: number, total: number) =>
         `写入成功：新增 ${chunks} 个 chunk，当前总计 ${total} 条`,
+      ingestReviewTitle: "内容已可复核",
+      ingestReviewDescription: (knowledgeBaseId) =>
+        `打开 ${knowledgeBaseId} 检查文档版本与 chunk 明细。`,
+      ingestReviewAction: "复核详情",
       queryPlaceholder: "输入检索问题或关键词…",
       queryButton: "检索知识库",
       queryEmptyInput: "请先输入检索内容。",

@@ -7,6 +7,7 @@ import {
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseGovernanceListState,
   resolveKnowledgeBaseGovernanceOperatorHint,
+  resolveKnowledgeBaseReviewRowKey,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
 } from "./knowledge-base-governance-modal-utils.ts";
@@ -140,6 +141,20 @@ test("resolveKnowledgeBaseAccessHint explains shared scope by role", () => {
     }),
     null,
   );
+});
+
+test("resolveKnowledgeBaseReviewRowKey locates the requested knowledge base", () => {
+  const rows = [
+    { knowledge_base_id: "default", collection: "kb_default" },
+    { knowledge_base_id: "release-notes", collection: "kb_release_notes" },
+  ];
+
+  assert.equal(
+    resolveKnowledgeBaseReviewRowKey(rows, " release-notes "),
+    "kb_release_notes",
+  );
+  assert.equal(resolveKnowledgeBaseReviewRowKey(rows, "missing"), null);
+  assert.equal(resolveKnowledgeBaseReviewRowKey(rows, null), null);
 });
 
 test("resolveKnowledgeBaseVersionRows returns stable sorted display rows", () => {

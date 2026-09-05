@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { DatabaseZap, LockKeyhole, RefreshCw, UsersRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { Key } from "react";
 
 import { apiDeleteJson, apiJson, apiPostJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
@@ -21,17 +23,20 @@ import {
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseGovernanceListState,
   resolveKnowledgeBaseGovernanceOperatorHint,
+  resolveKnowledgeBaseReviewRowKey,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
 } from "./knowledge-base-governance-modal-utils";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const EMPTY_KNOWLEDGE_BASE_ROWS: RagKnowledgeBaseSummary[] = [];
 
 type KnowledgeBaseGovernanceModalProps = {
   open: boolean;
   onClose: () => void;
   onOpenRag: () => void;
+  initialKnowledgeBaseId?: string | null;
   currentUser?: {
     id: string;
     email: string;
@@ -51,11 +56,13 @@ export function KnowledgeBaseGovernanceModal({
   open,
   onClose,
   onOpenRag,
+  initialKnowledgeBaseId = null,
   currentUser,
 }: KnowledgeBaseGovernanceModalProps) {
   const { message } = App.useApp();
   const t = useMessages();
   const queryClient = useQueryClient();
+  const [expandedRowKeys, setExpandedRowKeys] = useState<Key[]>([]);
 
   const listQuery = useQuery({
     queryKey: ["rag-kb-governance"],
@@ -131,7 +138,20 @@ export function KnowledgeBaseGovernanceModal({
     },
   });
 
-  const rows = listQuery.data?.knowledge_bases ?? [];
+  const rows = listQuery.data?.knowledge_bases ?? EMPTY_KNOWLEDGE_BASE_ROWS;
+  useEffect(() => {
+    if (!open) {
+      setExpandedRowKeys([]);
+      return;
+    }
+    const reviewRowKey = resolveKnowledgeBaseReviewRowKey(
+      rows,
+      initialKnowledgeBaseId,
+    );
+    if (reviewRowKey) {
+      setExpandedRowKeys([reviewRowKey]);
+    }
+  }, [initialKnowledgeBaseId, open, rows]);
   const listState = resolveKnowledgeBaseGovernanceListState({
     isLoading: listQuery.isLoading,
     isError: listQuery.isError,
@@ -533,6 +553,8 @@ export function KnowledgeBaseGovernanceModal({
               expandedRowRender: renderVersionDetails,
               rowExpandable: (row) =>
                 resolveKnowledgeBaseVersionRows(row.document_versions).length > 0,
+              expandedRowKeys,
+              onExpandedRowsChange: (keys) => setExpandedRowKeys([...keys]),
             }}
             pagination={false}
             locale={{ emptyText: t.sidebar.knowledgeBase.noKnowledgeBases }}

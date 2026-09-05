@@ -7,21 +7,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish` 初版、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`production-runtime-hardening` 后续运维体验已 100% 封板；`/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 已形成低敏 operator-facing 摘要，并由 operator summary contract 与 release-gate workflow 校验；前端契约保持只读兼容。
-- 当前主线：`product-ux-polish` 下一阶段约 60% 推进中；Knowledge Governance 空态可直接打开 Runtime Debug 的 RAG 工具，并自动定位、聚焦写入输入框。
-- 后续候选切片：补齐 RAG 写入成功后返回 Knowledge Governance 复核版本与 chunk 的处置闭环，并保持 Trace 回放入口稳定。
+- 当前主线：`product-ux-polish` 下一阶段约 70% 推进中；Knowledge Governance 与 Runtime Debug RAG 已形成双向处置闭环，写入成功后可返回并自动展开目标知识库的版本与 chunk 明细。
+- 后续候选切片：强化 Runtime Debug RAG 写入/检索失败后的原位恢复提示，并保持 Trace 回放入口稳定。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
 - Release gate all：PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 复核为 `result=PASS`、`decision_summary.release_decision=approve`、`operator_summary.status=ready`，9 个步骤全过、0 失败；release/trend operator contract 均通过。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `146/146`；knowledge governance targeted `8/8`；新增 Knowledge Governance -> RAG Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `147/147`；knowledge governance targeted `9/9`；Knowledge Governance <-> RAG Chromium 往返用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
 - Backend 契约基线：full slice `2018/2018`；module boundary `4/4`；security `17/17`；production operations health `11/11`。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. 当前推进 `product-ux-polish` 下一阶段，Knowledge Governance 空态到 Runtime Debug RAG 写入入口的直达聚焦已落地。
-2. 下一批候选为 RAG 写入成功后返回 Knowledge Governance 复核版本与 chunk 的闭环；前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
+1. 当前推进 `product-ux-polish` 下一阶段，Knowledge Governance 与 Runtime Debug RAG 的写入、复核往返闭环已落地。
+2. 下一批候选为 RAG 写入/检索失败后的原位恢复提示；前端回归门继续以 node/type/lint、低并发 queue phase、targeted Chromium 与 full Chromium 为准。
 
 ## 稳定契约
 
@@ -33,7 +33,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Workbench Inspector 语义筛选只调整本地 trace 筛选状态：保留时间线/流程图视图，清理旧 search/kind 干扰，不改变 SSE、trace/delta、任务 API 或 export payload。
 - Task Center failure source 诊断 chips 与状态筛选只调整前端本地状态；状态、失败摘要和观测筛选统一优先使用 `status_normalized`，显式 `failure_hint/failure_source` 优先于 trace 文本推断，不改变任务列表 API 与 trace/export payload。
 - Task Center 与任务详情页 operator next-action 提示只由现有 status、failure hint/source 与 semantic failure stats 本地派生；Audit Logs operator next-action 提示只由现有 event_type、event_detail 与 task_id 本地派生；不新增后端字段，不改变任务/审计 API、SSE、trace 或 export payload。
-- Knowledge Governance operator next-action、共享范围说明与清空/删除禁用只由现有 query 状态、`chroma_reachable`、知识库 ID 和用户角色本地派生；空态直达 RAG 仅切换并聚焦已有弹窗，不改变 shared RAG 权限或 API shape。
+- Knowledge Governance operator next-action、共享范围说明与清空/删除禁用只由现有 query 状态、`chroma_reachable`、知识库 ID 和用户角色本地派生；Knowledge Governance <-> RAG 往返仅切换、聚焦并展开已有弹窗，不改变 shared RAG 权限或 API shape。
 - Task Center、Audit Logs 与知识库治理的初始错误、陈旧数据错误与原位重试只调整 TanStack Query/presentation 状态，不改变任务、审计或 RAG API shape；初始失败不再误显示空态，陈旧数据仍可查看。
 - SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload。
 - queued/running/cancel/reconnect 与 task recovery 前端语义保持稳定。

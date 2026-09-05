@@ -64,6 +64,8 @@ export function SidebarSettingsMenu({
   const [modelOpen, setModelOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
+  const [knowledgeBaseInitialReviewId, setKnowledgeBaseInitialReviewId] =
+    useState<string | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
   const [runtimeDebugOpen, setRuntimeDebugOpen] = useState(false);
   const [runtimeDebugInitialFocus, setRuntimeDebugInitialFocus] = useState<
@@ -173,6 +175,7 @@ export function SidebarSettingsMenu({
   function openKnowledgeBase() {
     setOpen(false);
     setExpanded(null);
+    setKnowledgeBaseInitialReviewId(null);
     setKnowledgeBaseOpen(true);
   }
 
@@ -191,8 +194,21 @@ export function SidebarSettingsMenu({
 
   function openRagFromKnowledgeBase() {
     setKnowledgeBaseOpen(false);
+    setKnowledgeBaseInitialReviewId(null);
     setRuntimeDebugInitialFocus("rag");
     setRuntimeDebugOpen(true);
+  }
+
+  function reviewKnowledgeBase(knowledgeBaseId: string) {
+    setRuntimeDebugOpen(false);
+    setRuntimeDebugInitialFocus(null);
+    setKnowledgeBaseInitialReviewId(knowledgeBaseId);
+    setKnowledgeBaseOpen(true);
+  }
+
+  function closeKnowledgeBase() {
+    setKnowledgeBaseOpen(false);
+    setKnowledgeBaseInitialReviewId(null);
   }
 
   function closeRuntimeDebug() {
@@ -548,8 +564,9 @@ export function SidebarSettingsMenu({
       <AuditLogsModal open={auditOpen} onClose={() => setAuditOpen(false)} />
       <KnowledgeBaseGovernanceModal
         open={knowledgeBaseOpen}
-        onClose={() => setKnowledgeBaseOpen(false)}
+        onClose={closeKnowledgeBase}
         onOpenRag={openRagFromKnowledgeBase}
+        initialKnowledgeBaseId={knowledgeBaseInitialReviewId}
         currentUser={currentUser}
       />
       <RuntimeDebugModal
@@ -557,6 +574,7 @@ export function SidebarSettingsMenu({
         onClose={closeRuntimeDebug}
         activeSessionId={activeSessionId}
         initialFocus={runtimeDebugInitialFocus}
+        onReviewKnowledgeBase={reviewKnowledgeBase}
       />
       <UsageDashboardModal
         open={usageOpen}

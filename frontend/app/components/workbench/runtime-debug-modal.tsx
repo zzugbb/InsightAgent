@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Input, Modal, Space, Typography } from "antd";
+import { Alert, App, Button, Input, Modal, Space, Typography } from "antd";
+import { BookOpenCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { apiJson, apiPostJson } from "../../../lib/api-client";
@@ -27,6 +28,7 @@ type RuntimeDebugModalProps = {
   onClose: () => void;
   activeSessionId?: string | null;
   initialFocus?: "rag" | null;
+  onReviewKnowledgeBase: (knowledgeBaseId: string) => void;
 };
 
 export function RuntimeDebugModal({
@@ -34,6 +36,7 @@ export function RuntimeDebugModal({
   onClose,
   activeSessionId = null,
   initialFocus = null,
+  onReviewKnowledgeBase,
 }: RuntimeDebugModalProps) {
   const t = useMessages();
   const queryClient = useQueryClient();
@@ -123,6 +126,9 @@ export function RuntimeDebugModal({
     onSuccess: (data) => {
       void queryClient.invalidateQueries({
         queryKey: ["rag-status"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["rag-kb-governance"],
       });
       message.success(
         t.inspector.rag.ingestSuccess(data.chunks_added, data.document_count),
@@ -533,6 +539,31 @@ export function RuntimeDebugModal({
                 return u.hint ? `${u.banner} ${u.hint}` : u.banner;
               })()}
             </p>
+          ) : null}
+          {ragIngestMutation.isSuccess && ragIngestMutation.data ? (
+            <Alert
+              type="success"
+              showIcon
+              data-testid="inspector-rag-ingest-review"
+              title={t.inspector.rag.ingestReviewTitle}
+              description={t.inspector.rag.ingestReviewDescription(
+                ragIngestMutation.data.knowledge_base_id,
+              )}
+              action={
+                <Button
+                  size="small"
+                  icon={<BookOpenCheck size={14} aria-hidden />}
+                  data-testid="inspector-rag-ingest-review-open"
+                  onClick={() =>
+                    onReviewKnowledgeBase(
+                      ragIngestMutation.data.knowledge_base_id,
+                    )
+                  }
+                >
+                  {t.inspector.rag.ingestReviewAction}
+                </Button>
+              }
+            />
           ) : null}
 
           <TextArea

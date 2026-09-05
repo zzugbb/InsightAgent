@@ -51,6 +51,17 @@ export type KnowledgeBaseAccessHint = {
   blocksMutations: boolean;
 };
 
+export function resolveKnowledgeBaseReviewRowKey(
+  rows: Array<{ knowledge_base_id: string; collection: string }>,
+  knowledgeBaseId: string | null | undefined,
+): string | null {
+  const target = knowledgeBaseId?.trim();
+  if (!target) {
+    return null;
+  }
+  return rows.find((row) => row.knowledge_base_id === target)?.collection ?? null;
+}
+
 export function resolveKnowledgeBaseGovernanceListState(args: {
   isLoading: boolean;
   isError: boolean;

@@ -749,6 +749,10 @@ export const en: Messages = {
       ingestEmpty: "Enter text before ingesting.",
       ingestSuccess: (chunks: number, total: number) =>
         `Ingested ${chunks} chunks. Total: ${total}.`,
+      ingestReviewTitle: "Content is ready to review",
+      ingestReviewDescription: (knowledgeBaseId) =>
+        `Open ${knowledgeBaseId} to verify its document version and chunks.`,
+      ingestReviewAction: "Review details",
       queryPlaceholder: "Ask a question or enter keywords…",
       queryButton: "Query KB",
       queryEmptyInput: "Enter a query before searching.",

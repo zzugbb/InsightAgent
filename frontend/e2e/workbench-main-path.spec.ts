@@ -598,14 +598,33 @@ test("empty knowledge governance hands off to focused RAG ingest", async ({
 }) => {
   const auth = await registerViaApi(request);
   await seedBrowserAuth(page, auth);
+  let hasIngested = false;
 
   await page.route("**/api/rag/knowledge-bases", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        knowledge_bases: [],
-        knowledge_base_count: 0,
+        knowledge_bases: hasIngested
+          ? [
+              {
+                knowledge_base_id: "default",
+                collection: "kb_default_mock",
+                document_count: 1,
+                unique_document_count: 1,
+                document_versions: [
+                  {
+                    document_version: "sha256:e2e-review-version",
+                    content_hash: "e2e-review-content-hash",
+                    source: "review-e2e.md",
+                    document_id: "review-e2e-document",
+                    chunk_count: 1,
+                  },
+                ],
+              },
+            ]
+          : [],
+        knowledge_base_count: hasIngested ? 1 : 0,
         chroma_url: "http://127.0.0.1:8001",
         chroma_reachable: true,
         error: null,
@@ -627,6 +646,22 @@ test("empty knowledge governance hands off to focused RAG ingest", async ({
       }),
     });
   });
+  await page.route("**/api/rag/ingest", async (route) => {
+    hasIngested = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        knowledge_base_id: "default",
+        collection: "kb_default_mock",
+        documents_ingested: 1,
+        chunks_added: 1,
+        document_count: 1,
+        chunk_size: 800,
+        chunk_overlap: 120,
+      }),
+    });
+  });
 
   await page.goto("/");
   await ensureWorkbenchReady(page, auth);
@@ -637,6 +672,19 @@ test("empty knowledge governance hands off to focused RAG ingest", async ({
   await expect(page.locator(".knowledge-base-governance-ant-modal")).toBeHidden();
   await expect(page.getByTestId("runtime-debug-rag-section")).toBeVisible();
   await expect(page.getByTestId("inspector-rag-ingest-input")).toBeFocused();
+
+  await page
+    .getByTestId("inspector-rag-ingest-input")
+    .fill("Knowledge governance review handoff");
+  await page.getByTestId("inspector-rag-ingest-submit").click();
+  await expect(page.getByTestId("inspector-rag-ingest-review")).toBeVisible();
+  await page.getByTestId("inspector-rag-ingest-review-open").click();
+
+  await expect(page.getByTestId("runtime-debug-modal")).toBeHidden();
+  await expect(page.locator(".knowledge-base-governance-ant-modal")).toBeVisible();
+  const reviewPanel = page.getByTestId("kb-version-detail-panel");
+  await expect(reviewPanel).toBeVisible();
+  await expect(reviewPanel.getByText("review-e2e-document").first()).toBeVisible();
 });
 
 test("running task can recover after reload and be cancelled", async ({

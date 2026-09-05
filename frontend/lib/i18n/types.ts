@@ -653,6 +653,9 @@ export type Messages = {
       ingestButton: string;
       ingestEmpty: string;
       ingestSuccess: (chunks: number, total: number) => string;
+      ingestReviewTitle: string;
+      ingestReviewDescription: (knowledgeBaseId: string) => string;
+      ingestReviewAction: string;
       queryPlaceholder: string;
       queryButton: string;
       queryEmptyInput: string;
