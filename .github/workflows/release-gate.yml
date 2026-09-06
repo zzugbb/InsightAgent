@@ -92,8 +92,9 @@ jobs:
             --base-sha "${{ github.event.pull_request.base.sha || '' }}" \
             --head-sha "${{ github.sha }}" \
             --ref "${GITHUB_REF}" \
-            --summary-file "$GITHUB_STEP_SUMMARY" \
+            --summary-file /tmp/release-gate-summary.md \
             --json-summary-file /tmp/release-gate-summary.json
+          cat /tmp/release-gate-summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Download previous release gate summary
         if: always()
@@ -130,7 +131,7 @@ jobs:
             bash scripts/ci_assert_operator_summary_contract.sh \
               --summary-json /tmp/release-gate-summary.json \
               --summary-kind release_gate \
-              --markdown "$GITHUB_STEP_SUMMARY"
+              --markdown /tmp/release-gate-summary.md
           fi
           if [ -f /tmp/release-gate-trend-summary.json ]; then
             bash scripts/ci_assert_operator_summary_contract.sh \
@@ -144,7 +145,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-gate-summary
-          path: /tmp/release-gate-summary.json
+          path: |
+            /tmp/release-gate-summary.md
+            /tmp/release-gate-summary.json
           if-no-files-found: ignore
           retention-days: 14
 

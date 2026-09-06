@@ -6,20 +6,20 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；Task Center、任务详情、Audit、Knowledge Governance 与 Runtime Debug RAG 已形成稳定的 operator next-action、错误恢复、跨视图往返和跨库状态隔离体验。
-- 当前主线：`test-maintainability-hardening`，进度 25%；两个大测试主题已拆为双分片，release gate 失败路径也可稳定输出结构化摘要。
+- 当前主线：`test-maintainability-hardening`，进度 30%；两个大测试主题已拆为双分片，release gate 摘要已使用跨 step 稳定文件完成校验与留档。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate all：本地修复后 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9。GitHub run `33960030175` 的主 gate 成功，仅后置 operator 校验因旧成功基线缺少 `operator_summary` 失败；旧 artifact 兼容红测与 contract 回归已通过，下一次远端运行待验证。
+- Release gate all：本地 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9。GitHub run `33961323010` 的主 gate、趋势生成和 artifact 上传均成功，后置校验因 `$GITHUB_STEP_SUMMARY` 按 step 隔离而读取空 Markdown；workflow 已改为生成、校验并上传同一 `/tmp/release-gate-summary.md`，定向回归通过，下一次远端运行待验证。
 - Backend：full slice `2018/2018`；module boundary `5/5`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
-- GitHub E2E：封板提交 `91d9435` 的 backend-e2e run `33960030177` 与 frontend-e2e run `33960030231` 均成功。
+- GitHub E2E：提交 `9a66862` 的 backend-e2e run `33961323014` 与 frontend-e2e run `33961323002` 均成功。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. `test-maintainability-hardening` 当前 25%：继续治理临近边界的测试主题，并保持原测试发现与门禁摘要入口稳定。
+1. `test-maintainability-hardening` 当前 30%：继续治理临近边界的测试主题，并保持原测试发现与门禁摘要入口稳定。
 2. 收敛测试规模与选择性运行约定；继续保持外部契约和现有产品回归基线稳定。
 
 ## 稳定契约
@@ -142,6 +142,7 @@ bash scripts/ci_release_readiness_matrix.sh --format markdown
 `scripts/ci_download_previous_release_gate_summary.sh` 会在 GitHub release-gate workflow 中尝试下载同分支上一条 successful `release-gate-summary` artifact；缺少 `gh`、分支、run id、历史 run 或 artifact 时只输出低敏诊断和 `operator_summary` 并保留 baseline 路径。
 `scripts/ci_release_gate_trend_summary.sh` 可从当前和可选上一份 release gate JSON summary 生成趋势摘要，Markdown 直接展示当前/上一份 operator 状态、主行动和关注阶段，并在 JSON 中透传 release/rollback `decision_summary` 与 `operator_summary`；GitHub release-gate workflow 会产出并上传 `release-gate-trend-summary` artifact。
 `scripts/ci_assert_operator_summary_contract.sh` 可对 release/trend/artifact/export 等 summary JSON 和可选 Markdown 运行低敏 operator 摘要契约检查；该检查已纳入 tooling 自测、release-gate workflow 与 release readiness matrix。
+GitHub release-gate workflow 将 release Markdown 固定写入 `/tmp/release-gate-summary.md`，再追加到当前 step summary；后置契约校验与 artifact 上传复用该文件，不依赖跨 step 的 `$GITHUB_STEP_SUMMARY`。
 `scripts/ci_assert_artifact_stage_health.sh` 会为 e2e artifact stage guard 输出低敏 `operator_summary`，用于区分可继续、需复核 warning、需补齐 artifact 的值班行动。
 `scripts/ci_export_diagnostics_overview.sh` 会把 backend/frontend diagnostics 与 artifact guard 结果汇总为 overview，并输出低敏 `operator_summary` 便于值班快速判断缺失输入、warning 或 guard failure。
 
@@ -157,7 +158,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- `test-maintainability-hardening` 当前 25%；继续治理测试主题规模余量、选择性运行入口与失败门禁可诊断性。
+- `test-maintainability-hardening` 当前 30%；继续治理测试主题规模余量、选择性运行入口与失败门禁可诊断性。
 
 ## 文档维护约定
 
