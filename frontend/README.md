@@ -7,7 +7,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；Task Center、任务详情、Audit、Knowledge Governance 与 Runtime Debug RAG 已形成稳定的 operator next-action、错误恢复、跨视图往返和跨库状态隔离体验。
-- 当前主线：`test-maintainability-hardening`，进度 35%；两个后端测试主题已完成双分片治理，release gate 摘要与失败路径测试已完成跨 workflow 环境加固，前端运行时与外部契约不变。
+- 当前主线：`test-maintainability-hardening`，进度 50%；四个后端测试主题已完成双分片治理，测试主题规模门禁收紧至 2500 行，release gate 摘要与失败路径测试已完成跨 workflow 环境加固，前端运行时与外部契约不变。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
@@ -20,7 +20,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 下一步前端计划
 
-1. `test-maintainability-hardening` 当前 35%；本轮不改前端实现，继续保持 node/type/lint/build 与门禁摘要入口稳定。
+1. `test-maintainability-hardening` 当前 50%；本轮不改前端实现，继续保持 node/type/lint/build 与门禁摘要入口稳定。
 2. 后续测试治理保持低并发 queue phase、targeted Chromium 与 full Chromium 契约稳定。
 
 ## 稳定契约

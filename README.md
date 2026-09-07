@@ -6,7 +6,7 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；Task Center、任务详情、Audit、Knowledge Governance 与 Runtime Debug RAG 已形成稳定的 operator next-action、错误恢复、跨视图往返和跨库状态隔离体验。
-- 当前主线：`test-maintainability-hardening`，进度 35%；两个大测试主题已拆为双分片，release gate 摘要与失败路径测试已完成跨 workflow 环境加固。
+- 当前主线：`test-maintainability-hardening`，进度 50%；四个大测试主题已拆为双分片，测试主题规模门禁收紧至 2500 行，release gate 摘要与失败路径测试已完成跨 workflow 环境加固。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
@@ -19,7 +19,7 @@
 
 ## 当前开发计划
 
-1. `test-maintainability-hardening` 当前 35%：继续治理临近边界的测试主题，并保持原测试发现与门禁摘要入口稳定。
+1. `test-maintainability-hardening` 当前 50%：继续收敛选择性运行入口，并保持原测试发现与门禁摘要入口稳定。
 2. 收敛测试规模与选择性运行约定；继续保持外部契约和现有产品回归基线稳定。
 
 ## 稳定契约
@@ -33,7 +33,7 @@
 - `/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 的 operator-facing 摘要仅聚合低敏状态、主行动、最高严重级别、失败/告警计数、关注阶段/风险域/scope 与原因枚举；不回显连接串、API key、密钥、联系人、runbook URL、artifact 路径、命令输出、日志正文、环境变量或外部服务响应。
 - Operator summary contract 只校验 summary JSON/Markdown 中的低敏状态、主行动、严重级别和标量列表字段，不启动服务、不读取外部日志。
 - Release gate trend 对缺少 `operator_summary` 的旧 artifact 按既有 result、step summary 与失败标签派生低敏兼容摘要；新格式仍执行严格 operator contract。
-- `backend/scripts/tool_runtime_slice` 主题文件保持 <= 2800 行；拆分主题通过 `_partN` 承载测试，原主题模块继续作为稳定组合入口。
+- `backend/scripts/tool_runtime_slice` 主题文件保持 <= 2500 行；拆分主题通过 `_partN` 承载测试，原主题模块继续作为稳定组合入口。
 - Release gate 即使在首个失败步骤发生时也保留该步骤退出码，并输出 `FAIL` decision/operator summary；空 focus phase 不触发 Bash `set -u` 二次失败。
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
@@ -158,7 +158,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- `test-maintainability-hardening` 当前 35%；继续治理测试主题规模余量、选择性运行入口与失败门禁可诊断性。
+- `test-maintainability-hardening` 当前 50%；继续收敛选择性运行入口与失败门禁可诊断性。
 
 ## 文档维护约定
 

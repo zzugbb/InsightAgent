@@ -13,7 +13,7 @@
 - 每个主线确认封板后，整理 `README.md`、`backend/README.md`、`frontend/README.md` 与实时计划文件：仅收敛“进度/封板状态相关块”，保留当前状态、当前验证基线、下一步计划/候选主线、稳定契约与少量高信号摘要；删除或收缩按轮流水账、旧失败过程和重复验证清单。
 - 文档收敛不是把整份 README 改成短状态页；接口范围、运行方式、关键实现位置、SSE/Trace 契约、Memory/RAG 说明、文档维护约定等长期参考章节应保留，除非对应功能真的被删除或迁移。
 - 控制单文件规模：新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆出新主题文件或新模块，再继续追加。历史上的 `backend/scripts/test_tool_runtime_slice.py` 和 `app/services/tool_runtime.py` 已按该规则拆成 slice 主题包与 facade 模块。
-- `backend/scripts/tool_runtime_slice` 主题文件保持 <= 2800 行；临近上限时拆到 `_partN.py`，原主题文件保留为组合 facade，后续新增测试进入有余量的分片。
+- `backend/scripts/tool_runtime_slice` 主题文件保持 <= 2500 行；临近上限时拆到 `_partN.py`，原主题文件保留为组合 facade，后续新增测试进入有余量的分片。
 - tooling fixture 会同时在 release-gate 与 backend/frontend E2E workflow 中运行；失败注入测试不能假设 E2E runner 存在 `backend/.venv`，应在首个无依赖命令上注入确定性退出码。
 
 ## 不需要提权的常用命令

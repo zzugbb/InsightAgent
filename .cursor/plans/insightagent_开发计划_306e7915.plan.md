@@ -3,12 +3,12 @@ name: InsightAgent 开发计划
 overview: 既有产品、运行时、安全与发布主线均已封板；当前进入 test-maintainability-hardening，优先治理测试主题规模余量与稳定发现入口。
 current_focus:
   mainline: test-maintainability-hardening
-  status: 35%
-  latest_change: release gate 失败摘要测试改用无 venv 依赖的 fake-node 注入，可在 release-gate 与 backend/frontend E2E workflow runner 中复用；稳定 Markdown 路径远端验证通过
+  status: 50%
+  latest_change: registry source file diagnostics 与 task usage dashboard 测试主题拆为稳定 facade + 双分片，方法集合与 full slice 数量不变；测试主题规模门禁由 2800 行收紧至 2500 行
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
-  largest_source: backend/app/services/tool_runtime_execution.py 2864 行；tool_runtime_slice 最大测试主题 registry_source_file_diagnostics.py 2605 行
+  largest_source: backend/app/services/tool_runtime_execution.py 2864 行；tool_runtime_slice 最大测试主题 http_json_request_validation.py 2403 行
   key_facades: tool_runtime_execution.py 2864、tool_runtime_registry.py 2768、tool_runtime.py 2547、tool_runtime_http_json.py 2522、frontend/app/globals.css 7
 stable_contracts:
   - 默认 settings 根据 provider/model/api_key 自动选择 remote 或 canonical mock
@@ -35,13 +35,13 @@ stable_contracts:
   - operator summary contract 只校验 summary JSON/Markdown 中的低敏状态、主行动、严重级别和标量列表字段，不启动服务、不读取外部日志
   - release gate trend 对缺少 operator_summary 的旧 artifact 按既有 result、step summary 与失败标签派生低敏兼容摘要；新格式仍执行严格 operator contract
   - GitHub release-gate workflow 以 /tmp/release-gate-summary.md 作为跨 step 稳定 Markdown，当前 step summary 展示、operator 契约校验与 artifact 上传复用同一内容
-  - backend/scripts/tool_runtime_slice 主题文件保持 <= 2800 行；拆分主题由 _partN 承载测试，原主题模块作为稳定组合 facade
+  - backend/scripts/tool_runtime_slice 主题文件保持 <= 2500 行；拆分主题由 _partN 承载测试，原主题模块作为稳定组合 facade
   - release gate 首个失败步骤保留原退出码并输出 FAIL decision/operator summary；空 focus phase 不触发 Bash set -u 二次失败
   - release gate 失败路径 fixture 不依赖 backend/.venv 等可选 workflow 环境，只用 fake-node 在 frontend 首步注入确定性退出码
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-e2e-fixture-portability-final-summary.md --json-summary-file /tmp/release-gate-e2e-fixture-portability-final-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；无 venv 干净副本、backend/frontend tooling scope、failure summary、workflow guard 与 operator contract passed
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-test-maintainability-split-summary.md --json-summary-file /tmp/release-gate-test-maintainability-split-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；无 venv 干净副本、backend/frontend tooling scope、failure summary、workflow guard 与 operator contract passed
   backend: full slice 2018/2018；module boundary 5/5；security 17/17；current_user_hides 2/2；cors 2/2；default_secret 3/3；security_refresh 2/2；auth 3/3；settings 217/217；production_operations 12/12；production_operations_health 11/11；production_reliability 39/39；reconnect 9/9
   frontend: workbench utils targeted 79/79；store utils targeted 16/16；task detail targeted 11/11；audit targeted 11/11；knowledge governance targeted 9/9；runtime debug targeted 12/12；手动扩展 node tests 150/150；release gate 内置 frontend node 清单 150/150；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；npm run lint passed；npm run build passed；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成
   e2e: backend main/timeout/queue passed；backend tooling scope local passed；frontend queue Chromium local 1/1 passed；backend finalize + artifact-stage guard main 分支 fail-on-missing passed，included_count=20、missing_count=0；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；commit df0bb9f 的 GitHub release-gate run 34002573615 completed success；backend run 34002573610 的 main/timeout/queue 与 frontend run 34002573600 的 smoke/full/queue 均 success，仅 tooling fixture 因 E2E runner 无 backend/.venv 失败；fake-node 可移植性修复已通过无 venv 干净副本和 backend/frontend scope 本地回归，下一次远端运行待验证
@@ -69,7 +69,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening` 与 `release-observability-polish` 均已 100% 封板。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；Task Center、任务详情、Audit、Knowledge Governance 与 Runtime Debug RAG 已形成稳定的 operator next-action、错误恢复、跨视图往返和跨库状态隔离体验。
-- 当前主线：`test-maintainability-hardening`，进度 35%；两个大测试主题已拆为双分片，release gate 摘要与失败路径测试已完成跨 workflow 环境加固。
+- 当前主线：`test-maintainability-hardening`，进度 50%；四个大测试主题已拆为双分片，测试主题规模门禁收紧至 2500 行，release gate 摘要与失败路径测试已完成跨 workflow 环境加固。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
 ## 已完成能力摘要
@@ -92,8 +92,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前主线
 
-- 当前状态：`test-maintainability-hardening` 35%；两个临近 3000 行边界的测试主题已拆为 `_part1/_part2`，原模块保留稳定 facade；release gate Markdown 路径和失败测试的跨 workflow 可移植性已加固。
-- 下一步：继续治理临近边界的测试主题与选择性运行入口；外部 SSE/trace/export/display/e2e 契约保持稳定。
+- 当前状态：`test-maintainability-hardening` 50%；四个大测试主题已拆为 `_part1/_part2`，原模块保留稳定 facade，测试主题规模门禁由 2800 行收紧至 2500 行；release gate Markdown 路径和失败测试的跨 workflow 可移植性已加固。
+- 下一步：收敛选择性运行入口及其可诊断性；外部 SSE/trace/export/display/e2e 契约保持稳定。
 - 新 provider/source 协议仍按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 文档收敛边界

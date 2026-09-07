@@ -12,7 +12,7 @@ from app.services import tool_runtime_registry_runtime
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MAX_BACKEND_PYTHON_LINES = 3000
-MAX_TOOL_RUNTIME_TEST_TOPIC_LINES = 2800
+MAX_TOOL_RUNTIME_TEST_TOPIC_LINES = 2500
 SIZE_BOUNDARY_ROOTS = (BACKEND_ROOT / "app", BACKEND_ROOT / "scripts")
 TOOL_RUNTIME_SLICE_ROOT = BACKEND_ROOT / "scripts" / "tool_runtime_slice"
 

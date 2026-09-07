@@ -7,7 +7,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；前端 operator next-action、错误恢复、跨视图往返与 Runtime Debug RAG 状态恢复均复用既有后端数据和权限语义。
-- 当前主线：`test-maintainability-hardening`，进度 35%；两个大测试主题已拆为双分片，release gate 摘要与失败路径测试已完成跨 workflow 环境加固，后端运行时契约不变。
+- 当前主线：`test-maintainability-hardening`，进度 50%；四个大测试主题已拆为双分片，测试主题规模门禁收紧至 2500 行，release gate 摘要与失败路径测试已完成跨 workflow 环境加固，后端运行时契约不变。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
@@ -20,7 +20,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 下一步后端计划
 
-1. `test-maintainability-hardening` 当前 35%：继续治理临近边界的测试主题，稳定原 mixin import、测试发现与门禁摘要入口。
+1. `test-maintainability-hardening` 当前 50%：继续收敛选择性运行入口，稳定原 mixin import、测试发现与门禁摘要入口。
 2. 收敛测试规模与选择性运行约定；继续保持 full slice、SSE / trace / export 外部契约稳定。
 
 ## 稳定契约
@@ -34,7 +34,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `/health.operations`、release gate、previous summary、artifact guard、trend/export diagnostics 的 operator-facing 摘要仅聚合低敏状态、主行动、最高严重级别、失败/告警计数、关注阶段/风险域/scope 与原因枚举；不回显连接串、API key、密钥、联系人、runbook URL、artifact 路径、命令输出、日志正文、环境变量或外部服务响应。
 - Operator summary contract 只校验 summary JSON/Markdown 中的低敏状态、主行动、严重级别和标量列表字段，不启动服务、不读取外部日志。
 - Release gate trend 对缺少 `operator_summary` 的旧 artifact 按既有 result、step summary 与失败标签派生低敏兼容摘要；新格式仍执行严格 operator contract。
-- `scripts/tool_runtime_slice` 主题文件保持 <= 2800 行；拆分主题通过 `_partN` 承载测试，原主题模块继续作为稳定组合入口。
+- `scripts/tool_runtime_slice` 主题文件保持 <= 2500 行；拆分主题通过 `_partN` 承载测试，原主题模块继续作为稳定组合入口。
 - Release gate 首个失败步骤保留原退出码并输出 `FAIL` decision/operator summary；空 focus phase 不触发 Bash `set -u` 二次失败。
 - 生产环境禁止 `INSIGHT_AGENT_CORS_ORIGINS` 包含 wildcard `*`；非生产 CORS 调试行为保持不变。
 - 鉴权依赖对 token parser 异常统一返回低敏 `401 invalid token`，保留 `WWW-Authenticate: Bearer`，不向客户端回显内部配置或解析细节。
