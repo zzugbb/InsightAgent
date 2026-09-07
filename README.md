@@ -6,20 +6,20 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；Task Center、任务详情、Audit、Knowledge Governance 与 Runtime Debug RAG 已形成稳定的 operator next-action、错误恢复、跨视图往返和跨库状态隔离体验。
-- 当前主线：`test-maintainability-hardening`，进度 30%；两个大测试主题已拆为双分片，release gate 摘要已使用跨 step 稳定文件完成校验与留档。
+- 当前主线：`test-maintainability-hardening`，进度 35%；两个大测试主题已拆为双分片，release gate 摘要与失败路径测试已完成跨 workflow 环境加固。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate all：本地 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9。GitHub run `33961323010` 的主 gate、趋势生成和 artifact 上传均成功，后置校验因 `$GITHUB_STEP_SUMMARY` 按 step 隔离而读取空 Markdown；workflow 已改为生成、校验并上传同一 `/tmp/release-gate-summary.md`，定向回归通过，下一次远端运行待验证。
+- Release gate all：本地 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9；提交 `df0bb9f` 的 GitHub run `34002573615` 已完成远端成功验证。
 - Backend：full slice `2018/2018`；module boundary `5/5`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
-- GitHub E2E：提交 `9a66862` 的 backend-e2e run `33961323014` 与 frontend-e2e run `33961323002` 均成功。
+- GitHub E2E：提交 `df0bb9f` 的 backend run `34002573610` 中 main/timeout/queue 全过，frontend run `34002573600` 中 smoke/full/queue 全过；两者仅 tooling fixture 因错误依赖 E2E runner 不存在的 `backend/.venv` 失败。失败注入已改为无 venv 依赖的 fake-node 场景，无 venv 干净副本及 backend/frontend scope 回归通过，下一次远端运行待验证。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. `test-maintainability-hardening` 当前 30%：继续治理临近边界的测试主题，并保持原测试发现与门禁摘要入口稳定。
+1. `test-maintainability-hardening` 当前 35%：继续治理临近边界的测试主题，并保持原测试发现与门禁摘要入口稳定。
 2. 收敛测试规模与选择性运行约定；继续保持外部契约和现有产品回归基线稳定。
 
 ## 稳定契约
@@ -158,7 +158,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- `test-maintainability-hardening` 当前 30%；继续治理测试主题规模余量、选择性运行入口与失败门禁可诊断性。
+- `test-maintainability-hardening` 当前 35%；继续治理测试主题规模余量、选择性运行入口与失败门禁可诊断性。
 
 ## 文档维护约定
 

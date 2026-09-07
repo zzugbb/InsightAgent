@@ -7,20 +7,20 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；前端 operator next-action、错误恢复、跨视图往返与 Runtime Debug RAG 状态恢复均复用既有后端数据和权限语义。
-- 当前主线：`test-maintainability-hardening`，进度 30%；两个大测试主题已拆为双分片，release gate 摘要已使用跨 step 稳定文件完成校验与留档，后端运行时契约不变。
+- 当前主线：`test-maintainability-hardening`，进度 35%；两个大测试主题已拆为双分片，release gate 摘要与失败路径测试已完成跨 workflow 环境加固，后端运行时契约不变。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- Release gate all：本地 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9。GitHub run `33961323010` 的主 gate、趋势生成和 artifact 上传均成功，后置校验因 `$GITHUB_STEP_SUMMARY` 按 step 隔离而读取空 Markdown；workflow 已改为生成、校验并上传同一 `/tmp/release-gate-summary.md`，定向回归通过，下一次远端运行待验证。
+- Release gate all：本地 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9；提交 `df0bb9f` 的 GitHub run `34002573615` 已完成远端成功验证。
 - Backend：full slice `2018/2018`；module boundary `5/5`；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
-- GitHub E2E：提交 `9a66862` 的 backend-e2e run `33961323014` 与 frontend-e2e run `33961323002` 均成功。
+- GitHub E2E：提交 `df0bb9f` 的 backend run `34002573610` 中 main/timeout/queue 全过，frontend run `34002573600` 中 smoke/full/queue 全过；两者仅 tooling fixture 因错误依赖 E2E runner 不存在的 `backend/.venv` 失败。失败注入已改为无 venv 依赖的 fake-node 场景，无 venv 干净副本及 backend/frontend scope 回归通过，下一次远端运行待验证。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步后端计划
 
-1. `test-maintainability-hardening` 当前 30%：继续治理临近边界的测试主题，稳定原 mixin import、测试发现与门禁摘要入口。
+1. `test-maintainability-hardening` 当前 35%：继续治理临近边界的测试主题，稳定原 mixin import、测试发现与门禁摘要入口。
 2. 收敛测试规模与选择性运行约定；继续保持 full slice、SSE / trace / export 外部契约稳定。
 
 ## 稳定契约

@@ -108,14 +108,14 @@ main() {
   assert_contains '"label": "frontend build"' "${TMP_DIR}/summary.json"
 
   mkdir -p "${TMP_DIR}/failing-bin"
-  cat > "${TMP_DIR}/failing-bin/git" <<'SH'
+  cat > "${TMP_DIR}/failing-bin/node" <<'SH'
 #!/usr/bin/env bash
 exit 9
 SH
-  chmod +x "${TMP_DIR}/failing-bin/git"
+  chmod +x "${TMP_DIR}/failing-bin/node"
   set +e
   PATH="${TMP_DIR}/failing-bin:${PATH}" bash "${SCRIPT}" \
-    --phase hygiene \
+    --phase frontend \
     --summary-file "${TMP_DIR}/failed-summary.md" \
     --json-summary-file "${TMP_DIR}/failed-summary.json" \
     > "${TMP_DIR}/failed-summary-stdout.txt" 2>&1
@@ -128,8 +128,8 @@ SH
   fi
   assert_contains "- result: FAIL" "${TMP_DIR}/failed-summary.md"
   assert_contains "- operator_status: action_required" "${TMP_DIR}/failed-summary.md"
-  assert_contains "- operator_focus_phases: hygiene" "${TMP_DIR}/failed-summary.md"
-  assert_contains '"blocking_step_labels": ["diff whitespace"]' "${TMP_DIR}/failed-summary.json"
+  assert_contains "- operator_focus_phases: frontend" "${TMP_DIR}/failed-summary.md"
+  assert_contains '"blocking_step_labels": ["frontend node tests"]' "${TMP_DIR}/failed-summary.json"
 
   env RELEASE_GATE_PYTHON=/no/such/python bash "${SCRIPT}" \
     --dry-run \
