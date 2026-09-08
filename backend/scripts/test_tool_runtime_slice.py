@@ -12,6 +12,7 @@ import tempfile
 import unittest
 import zlib
 from collections import UserDict, UserList, UserString
+from fnmatch import fnmatchcase
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -417,13 +418,29 @@ def _iter_test_ids(test: unittest.TestSuite | unittest.TestCase):
     yield test.id()
 
 
+TOOL_RUNTIME_TEST_SELECTIONS = (
+    "queue",
+    "task",
+    "security",
+    "production_operations",
+    "production_reliability",
+    "reconnect",
+)
+
+
 class ToolRuntimeTestProgram(unittest.TestProgram):
     def _getParentArgParser(self):
         parser = super()._getParentArgParser()
-        parser.add_argument(
+        listing_group = parser.add_mutually_exclusive_group()
+        listing_group.add_argument(
             "--list-tests",
             action="store_true",
             help="List selected tool runtime tests without running them",
+        )
+        listing_group.add_argument(
+            "--list-selections",
+            action="store_true",
+            help="List maintained -k selections and their discovered test counts",
         )
         return parser
 
@@ -442,6 +459,36 @@ class ToolRuntimeTestProgram(unittest.TestProgram):
                 print(f"test_id={test_id}")
             print(f"tool_runtime_selected_test_count={selected_count}")
             if empty_selection and self.exit:
+                raise SystemExit(5)
+            return
+        if self.list_selections:
+            if selected_patterns:
+                print(
+                    "[tool-runtime-slice] --list-selections cannot be combined with -k",
+                    file=sys.stderr,
+                )
+                if self.exit:
+                    raise SystemExit(2)
+                return
+            test_ids = tuple(_iter_test_ids(self.test))
+            missing_selections: list[str] = []
+            for selection in TOOL_RUNTIME_TEST_SELECTIONS:
+                test_count = sum(
+                    fnmatchcase(test_id, f"*{selection}*") for test_id in test_ids
+                )
+                print(f"selection={selection} test_count={test_count}")
+                if test_count == 0:
+                    missing_selections.append(selection)
+            print(
+                "tool_runtime_selection_count="
+                f"{len(TOOL_RUNTIME_TEST_SELECTIONS)}"
+            )
+            if missing_selections and self.exit:
+                print(
+                    "[tool-runtime-slice] maintained selections matched no tests: "
+                    + ", ".join(missing_selections),
+                    file=sys.stderr,
+                )
                 raise SystemExit(5)
             return
         super().runTests()

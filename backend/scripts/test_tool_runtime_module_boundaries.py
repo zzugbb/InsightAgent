@@ -121,6 +121,57 @@ class ToolRuntimeModuleBoundaryTests(unittest.TestCase):
         self.assertIn("tool_runtime_selected_test_count=1", result.stdout)
         self.assertNotIn("Ran 1 test", result.stderr)
 
+    def test_selective_slice_run_lists_maintained_selections(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TOOL_RUNTIME_SLICE_SCRIPT),
+                "--list-selections",
+            ],
+            cwd=BACKEND_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode)
+        for selection in (
+            "queue",
+            "task",
+            "security",
+            "production_operations",
+            "production_reliability",
+            "reconnect",
+        ):
+            self.assertRegex(
+                result.stdout,
+                rf"selection={selection} test_count=[1-9][0-9]*",
+            )
+        self.assertIn("tool_runtime_selection_count=6", result.stdout)
+        self.assertNotIn("Ran ", result.stderr)
+
+    def test_selective_slice_run_rejects_selection_catalog_filter(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TOOL_RUNTIME_SLICE_SCRIPT),
+                "--list-selections",
+                "-k",
+                "queue",
+            ],
+            cwd=BACKEND_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(2, result.returncode)
+        self.assertIn(
+            "--list-selections cannot be combined with -k",
+            result.stderr,
+        )
+        self.assertNotIn("Traceback", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
