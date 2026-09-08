@@ -15,6 +15,7 @@
 - 控制单文件规模：新增测试/实现优先落到主题文件；主题文件明显膨胀时先拆出新主题文件或新模块，再继续追加。历史上的 `backend/scripts/test_tool_runtime_slice.py` 和 `app/services/tool_runtime.py` 已按该规则拆成 slice 主题包与 facade 模块。
 - `backend/scripts/tool_runtime_slice` 主题文件保持 <= 2500 行；临近上限时拆到 `_partN.py`，原主题文件保留为组合 facade，后续新增测试进入有余量的分片。
 - `test_tool_runtime_slice.py -k <pattern>` 沿用 unittest 子串筛选；有效筛选与 full slice 行为不变，显式筛选零匹配时会打印 pattern 并以退出码 5 结束。
+- `test_tool_runtime_slice.py --list-tests [-k <pattern>]` 只列出发现到的测试 ID 与总数，不执行测试；可用于提交前确认 selector 的真实覆盖范围。
 - tooling fixture 会同时在 release-gate 与 backend/frontend E2E workflow 中运行；失败注入测试不能假设 E2E runner 存在 `backend/.venv`，应在首个无依赖命令上注入确定性退出码。
 
 ## 不需要提权的常用命令
@@ -25,6 +26,7 @@
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k queue
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task
+backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py --list-tests -k queue
 python3 -m py_compile backend/app/config.py backend/app/services/chat_execution_service.py backend/app/services/task_queue_service.py
 bash scripts/ci_run_release_gate.sh --phase auto
 bash scripts/ci_release_readiness_matrix.sh --format markdown

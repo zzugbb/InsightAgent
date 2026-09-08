@@ -3,8 +3,8 @@ name: InsightAgent 开发计划
 overview: 既有产品、运行时、安全与发布主线均已封板；当前进入 test-maintainability-hardening，优先治理测试主题规模余量与稳定发现入口。
 current_focus:
   mainline: test-maintainability-hardening
-  status: 65%
-  latest_change: tool runtime 测试入口为显式 -k 零匹配输出稳定筛选诊断并保持 Python 3.14 原生退出码 5；有效筛选与 2018 项 full slice 发现语义不变
+  status: 80%
+  latest_change: tool runtime 测试入口新增 --list-tests，可单独或结合 -k 输出实际匹配测试 ID 与总数而不执行；零匹配诊断/退出码 5、有效筛选与 2018 项 full slice 语义保持稳定
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -37,13 +37,14 @@ stable_contracts:
   - GitHub release-gate workflow 以 /tmp/release-gate-summary.md 作为跨 step 稳定 Markdown，当前 step summary 展示、operator 契约校验与 artifact 上传复用同一内容
   - backend/scripts/tool_runtime_slice 主题文件保持 <= 2500 行；拆分主题由 _partN 承载测试，原主题模块作为稳定组合 facade
   - tool runtime full slice 与有效 -k 筛选沿用原生 unittest 语义；显式 -k 零匹配时输出筛选表达式并保持退出码 5
+  - tool runtime --list-tests 可单独或结合 -k 列出实际匹配测试 ID 与总数而不执行；零匹配继续返回退出码 5
   - release gate 首个失败步骤保留原退出码并输出 FAIL decision/operator summary；空 focus phase 不触发 Bash set -u 二次失败
   - release gate 失败路径 fixture 不依赖 backend/.venv 等可选 workflow 环境，只用 fake-node 在 frontend 首步注入确定性退出码
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-test-selection-diagnostics-summary.md --json-summary-file /tmp/release-gate-test-selection-diagnostics-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；无 venv 干净副本、backend/frontend tooling scope、failure summary、workflow guard 与 operator contract passed
-  backend: full slice 2018/2018；module boundary 6/6；有效 -k targeted 1/1；零匹配诊断与退出码 5 passed；security 17/17；current_user_hides 2/2；cors 2/2；default_secret 3/3；security_refresh 2/2；auth 3/3；settings 217/217；production_operations 12/12；production_operations_health 11/11；production_reliability 39/39；reconnect 9/9
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-test-listing-summary.md --json-summary-file /tmp/release-gate-test-listing-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败；无 venv 干净副本、backend/frontend tooling scope、failure summary、workflow guard 与 operator contract passed
+  backend: full slice 2018/2018；module boundary 7/7；有效 -k targeted 1/1；--list-tests + -k 清单 1 项且未执行；零匹配诊断与退出码 5 passed；security 17/17；current_user_hides 2/2；cors 2/2；default_secret 3/3；security_refresh 2/2；auth 3/3；settings 217/217；production_operations 12/12；production_operations_health 11/11；production_reliability 39/39；reconnect 9/9
   frontend: workbench utils targeted 79/79；store utils targeted 16/16；task detail targeted 11/11；audit targeted 11/11；knowledge governance targeted 9/9；runtime debug targeted 12/12；手动扩展 node tests 150/150；release gate 内置 frontend node 清单 150/150；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；npm run lint passed；npm run build passed；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成
   e2e: backend main/timeout/queue passed；backend tooling scope local passed；frontend queue Chromium local 1/1 passed；backend finalize + artifact-stage guard main 分支 fail-on-missing passed，included_count=20、missing_count=0；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；commit df0bb9f 的 GitHub release-gate run 34002573615 completed success；backend run 34002573610 的 main/timeout/queue 与 frontend run 34002573600 的 smoke/full/queue 均 success，仅 tooling fixture 因 E2E runner 无 backend/.venv 失败；fake-node 可移植性修复已通过无 venv 干净副本和 backend/frontend scope 本地回归，下一次远端运行待验证
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
@@ -59,7 +60,7 @@ completed_mainlines:
 next_candidate_mainlines:
   - test-maintainability-hardening：测试主题规模余量、稳定 facade 与选择性运行可维护性
 next_steps:
-  - 收敛选择性运行清单与门禁自测，保持现有回归入口和外部契约稳定
+  - 收敛常用选择器清单与门禁自测，准备 test-maintainability-hardening 封板核对
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -70,7 +71,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening` 与 `release-observability-polish` 均已 100% 封板。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；Task Center、任务详情、Audit、Knowledge Governance 与 Runtime Debug RAG 已形成稳定的 operator next-action、错误恢复、跨视图往返和跨库状态隔离体验。
-- 当前主线：`test-maintainability-hardening`，进度 65%；四个大测试主题已拆为双分片，测试主题规模门禁收紧至 2500 行，选择性运行具备零匹配诊断，release gate 测试入口保持稳定。
+- 当前主线：`test-maintainability-hardening`，进度 80%；四个大测试主题已拆为双分片，测试主题规模门禁为 2500 行，选择性运行支持零匹配诊断与匹配测试清单，release gate 测试入口保持稳定。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
 ## 已完成能力摘要
@@ -86,15 +87,15 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 ## 当前验证基线
 
 - Release gate all：本地 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9；提交 `df0bb9f` 的 GitHub run `34002573615` 已完成远端成功验证。
-- Backend：full slice `2018/2018`；module boundary `6/6`；有效 `-k` targeted `1/1`；零匹配诊断与退出码 5 通过；security `17/17`；production operations health `11/11`。
+- Backend：full slice `2018/2018`；module boundary `7/7`；有效 `-k` targeted `1/1`；`--list-tests -k` 清单 1 项且未执行；零匹配诊断与退出码 5 通过；security `17/17`；production operations health `11/11`。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
 - E2E/CI：提交 `df0bb9f` 的 backend run `34002573610` 中 main/timeout/queue 全过，frontend run `34002573600` 中 smoke/full/queue 全过；两者仅 tooling fixture 的可选 venv 依赖失败，fake-node 修复已通过无 venv 干净副本与两个 scope 回归。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前主线
 
-- 当前状态：`test-maintainability-hardening` 65%；四个大测试主题保留稳定 facade + 双分片，测试主题规模门禁为 2500 行；显式 `-k` 零匹配已有稳定诊断和退出码 5。
-- 下一步：收敛选择性运行清单与门禁自测；外部 SSE/trace/export/display/e2e 契约保持稳定。
+- 当前状态：`test-maintainability-hardening` 80%；四个大测试主题保留稳定 facade + 双分片，测试主题规模门禁为 2500 行；显式 `-k` 零匹配已有稳定诊断，`--list-tests` 可预览真实筛选范围。
+- 下一步：收敛常用选择器清单与门禁自测，准备主线封板核对；外部 SSE/trace/export/display/e2e 契约保持稳定。
 - 新 provider/source 协议仍按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
 ## 文档收敛边界

@@ -95,6 +95,32 @@ class ToolRuntimeModuleBoundaryTests(unittest.TestCase):
             result.stderr,
         )
 
+    def test_selective_slice_run_lists_matching_tests_without_execution(self) -> None:
+        selected_test = (
+            "test_build_tool_registry_from_file_artifacts_merges_registry_source_diagnostics"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TOOL_RUNTIME_SLICE_SCRIPT),
+                "--list-tests",
+                "-k",
+                selected_test,
+            ],
+            cwd=BACKEND_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode)
+        self.assertIn(
+            f"test_id=__main__.ToolRuntimeSliceTests.{selected_test}",
+            result.stdout,
+        )
+        self.assertIn("tool_runtime_selected_test_count=1", result.stdout)
+        self.assertNotIn("Ran 1 test", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

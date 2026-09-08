@@ -7,20 +7,20 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`product-ux-polish` 下一阶段已 100% 封板；Task Center、任务详情、Audit、Knowledge Governance 与 Runtime Debug RAG 已形成稳定的 operator next-action、错误恢复、跨视图往返和跨库状态隔离体验。
-- 当前主线：`test-maintainability-hardening`，进度 65%；四个后端测试主题已完成双分片治理，测试主题规模门禁收紧至 2500 行，选择性运行具备零匹配诊断，前端运行时与外部契约不变。
+- 当前主线：`test-maintainability-hardening`，进度 80%；四个后端测试主题已完成双分片治理，测试主题规模门禁为 2500 行，选择性运行支持零匹配诊断与匹配测试清单，前端运行时与外部契约不变。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
 - Release gate all：本地 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、9/9；提交 `df0bb9f` 的 GitHub run `34002573615` 已完成远端成功验证。
 - Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
-- Backend 契约基线：full slice `2018/2018`；module boundary `6/6`；security `17/17`；production operations health `11/11`。
+- Backend 契约基线：full slice `2018/2018`；module boundary `7/7`；security `17/17`；production operations health `11/11`。
 - GitHub E2E：提交 `df0bb9f` 的 backend run `34002573610` 中 main/timeout/queue 全过，frontend run `34002573600` 中 smoke/full/queue 全过；两者仅 tooling fixture 因错误依赖 E2E runner 不存在的 `backend/.venv` 失败。失败注入已改为无 venv 依赖的 fake-node 场景，无 venv 干净副本及 backend/frontend scope 回归通过，下一次远端运行待验证。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. `test-maintainability-hardening` 当前 65%；本轮不改前端实现，继续保持 node/type/lint/build 与门禁摘要入口稳定。
+1. `test-maintainability-hardening` 当前 80%；本轮不改前端实现，继续保持 node/type/lint/build 与门禁摘要入口稳定。
 2. 后续测试治理保持低并发 queue phase、targeted Chromium 与 full Chromium 契约稳定。
 
 ## 稳定契约
@@ -38,6 +38,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Release gate trend 对缺少 `operator_summary` 的旧 artifact 按既有 result、step summary 与失败标签派生低敏兼容摘要；新格式仍执行严格 operator contract，不改变前端运行时契约。
 - 后端测试主题分片和规模余量门禁不改变前端 node/e2e 清单、SSE、trace 或 export 契约。
 - 后端 `-k` 零匹配诊断只影响测试 CLI 的错误可读性，不改变前端 node/e2e 清单或运行时契约。
+- 后端 `--list-tests` 只读取测试发现结果，不执行测试，也不改变前端 node/e2e 清单或运行时契约。
 - Release gate 失败摘要稳定性修复不改变前端构建命令、node/e2e 清单或运行时 payload。
 - Task Center、Audit Logs 与知识库治理的初始错误、陈旧数据错误与原位重试只调整 TanStack Query/presentation 状态，不改变任务、审计或 RAG API shape；初始失败不再误显示空态，陈旧数据仍可查看。
 - SSE close 后失败摘要兜底只在流关闭但本地尚未进入 terminal phase 时补拉任务/trace 并映射低敏 failure hint，不改变 SSE、任务、trace 或 export payload。

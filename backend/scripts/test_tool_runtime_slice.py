@@ -409,15 +409,41 @@ class ToolRuntimeSliceTests(
         }
 
 
+def _iter_test_ids(test: unittest.TestSuite | unittest.TestCase):
+    if isinstance(test, unittest.TestSuite):
+        for nested_test in test:
+            yield from _iter_test_ids(nested_test)
+        return
+    yield test.id()
+
+
 class ToolRuntimeTestProgram(unittest.TestProgram):
+    def _getParentArgParser(self):
+        parser = super()._getParentArgParser()
+        parser.add_argument(
+            "--list-tests",
+            action="store_true",
+            help="List selected tool runtime tests without running them",
+        )
+        return parser
+
     def runTests(self) -> None:
         selected_patterns = tuple(self.testNamePatterns or ())
-        if selected_patterns and self.test.countTestCases() == 0:
+        selected_count = self.test.countTestCases()
+        empty_selection = bool(selected_patterns) and selected_count == 0
+        if empty_selection:
             print(
                 "[tool-runtime-slice] no tool runtime tests matched -k selection: "
                 + ", ".join(selected_patterns),
                 file=sys.stderr,
             )
+        if self.list_tests:
+            for test_id in sorted(_iter_test_ids(self.test)):
+                print(f"test_id={test_id}")
+            print(f"tool_runtime_selected_test_count={selected_count}")
+            if empty_selection and self.exit:
+                raise SystemExit(5)
+            return
         super().runTests()
 
 
