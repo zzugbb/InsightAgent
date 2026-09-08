@@ -409,5 +409,17 @@ class ToolRuntimeSliceTests(
         }
 
 
+class ToolRuntimeTestProgram(unittest.TestProgram):
+    def runTests(self) -> None:
+        selected_patterns = tuple(self.testNamePatterns or ())
+        if selected_patterns and self.test.countTestCases() == 0:
+            print(
+                "[tool-runtime-slice] no tool runtime tests matched -k selection: "
+                + ", ".join(selected_patterns),
+                file=sys.stderr,
+            )
+        super().runTests()
+
+
 if __name__ == "__main__":
-    unittest.main()
+    ToolRuntimeTestProgram()

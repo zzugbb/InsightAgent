@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 from app.services import tool_runtime
@@ -15,6 +17,7 @@ MAX_BACKEND_PYTHON_LINES = 3000
 MAX_TOOL_RUNTIME_TEST_TOPIC_LINES = 2500
 SIZE_BOUNDARY_ROOTS = (BACKEND_ROOT / "app", BACKEND_ROOT / "scripts")
 TOOL_RUNTIME_SLICE_ROOT = BACKEND_ROOT / "scripts" / "tool_runtime_slice"
+TOOL_RUNTIME_SLICE_SCRIPT = BACKEND_ROOT / "scripts" / "test_tool_runtime_slice.py"
 
 
 class ToolRuntimeModuleBoundaryTests(unittest.TestCase):
@@ -67,6 +70,30 @@ class ToolRuntimeModuleBoundaryTests(unittest.TestCase):
                 )
 
         self.assertEqual([], oversized)
+
+    def test_selective_slice_run_rejects_unmatched_pattern(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TOOL_RUNTIME_SLICE_SCRIPT),
+                "-k",
+                "__definitely_no_tool_runtime_test_matches__",
+            ],
+            cwd=BACKEND_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(5, result.returncode)
+        self.assertIn(
+            "no tool runtime tests matched -k selection",
+            result.stderr,
+        )
+        self.assertIn(
+            "__definitely_no_tool_runtime_test_matches__",
+            result.stderr,
+        )
 
 
 if __name__ == "__main__":
