@@ -7,21 +7,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`test-maintainability-hardening` 已 100% 封板；四个后端测试主题完成稳定 facade + 双分片治理，2500 行主题门禁、零匹配诊断、测试预览与六个维护选择器均已纳入稳定测试入口。
-- 当前状态：可进入下一候选主线评审；`runtime-dependency-modernization` 尚未开始，前端运行时与外部契约不变。
+- 当前主线：`runtime-dependency-modernization` 20%；首个切片已用 runtime dependency contract 锁定 Node 24 ESM 模块模式，`package.json` / lockfile 显式声明 `"type": "module"`，前端 node 清单不再出现 `MODULE_TYPELESS_PACKAGE_JSON` 告警。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
-- Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
+- Release gate all：`runtime-dependency-modernization` 首切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `153/153`，且 Node 24 `MODULE_TYPELESS_PACKAGE_JSON` 告警已消除；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 未启动本机服务。
 - Backend 契约基线：full slice `2018/2018`；module boundary `9/9`；security `17/17`；production operations health `11/11`。
 - E2E/CI：backend main/timeout/queue 与 frontend smoke/full/queue 最近验证通过；tooling failure fixture 已移除可选 venv 依赖，并通过无 venv 干净副本及 backend/frontend scope 回归。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. 下一候选主线：`runtime-dependency-modernization`，评审前不启动；优先治理 Node 模块模式告警并核对 Next 工具链约束。
-2. 后续实施继续保持 node/lint/build、低并发 queue phase、targeted Chromium 与 full Chromium 契约稳定。
+1. 当前主线：`runtime-dependency-modernization` 20%；Node 模块模式首切片已完成。
+2. 后续继续以 runtime dependency contract 约束 Node/Next 工具链，保持 node/lint/build、低并发 queue phase、targeted Chromium 与 full Chromium 契约稳定。
 
 ## 稳定契约
 

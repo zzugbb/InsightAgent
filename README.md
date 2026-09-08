@@ -6,21 +6,21 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`。
 - 最近封板：`test-maintainability-hardening` 已 100% 封板；四个大测试主题完成稳定 facade + 双分片治理，2500 行主题门禁、零匹配诊断、测试预览与六个维护选择器均已纳入稳定测试入口。
-- 当前状态：可进入下一候选主线评审；`runtime-dependency-modernization` 尚未开始。
+- 当前主线：`runtime-dependency-modernization` 20%；首个切片已用红测约束前端 Node 24 ESM 模块模式，`frontend/package.json` / lockfile 显式声明 `"type": "module"`，release gate 前端 node 清单同步纳入 runtime dependency contract。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
+- Release gate all：`runtime-dependency-modernization` 首切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
 - Backend：full slice `2018/2018`；module boundary `9/9`；security `17/17`；production operations health `11/11`。
-- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `150/150`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 因本机 Docker daemon 未运行、PostgreSQL/Chroma 服务不可用未完成。
+- Frontend：release gate 内置 node 清单与扩展 node tests 均为 `153/153`，且 Node 24 `MODULE_TYPELESS_PACKAGE_JSON` 告警已消除；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 未启动本机服务。
 - E2E/CI：backend main/timeout/queue 与 frontend smoke/full/queue 最近验证通过；tooling failure fixture 已移除可选 venv 依赖，并通过无 venv 干净副本及 backend/frontend scope 回归。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. 下一候选主线：`runtime-dependency-modernization`，评审前不启动；聚焦 Node 模块模式告警与 Python 3.14 依赖兼容治理。
-2. 后续实施继续先补红测，并保持 SSE / trace / export / e2e 外部契约和现有产品回归基线稳定。
+1. 当前主线：`runtime-dependency-modernization` 20%；已完成 Node 模块模式首切片。
+2. 下一切片优先处理本轮 backend full slice 暴露的 Python 3.14 依赖兼容告警：FastAPI 0.115.12 触发 `asyncio.iscoroutinefunction` DeprecationWarning；继续先补红测/约束，再做局部依赖或兼容实现。
 
 ## 稳定契约
 
@@ -161,7 +161,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- `test-maintainability-hardening` 已 100% 封板；下一步评审 `runtime-dependency-modernization`，当前尚未开始。
+- `runtime-dependency-modernization` 当前 20%；下一步处理 Python 3.14 依赖兼容告警，并继续核对 Next 工具链约束。
 
 ## 文档维护约定
 
