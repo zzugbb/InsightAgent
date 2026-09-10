@@ -7,21 +7,21 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`test-maintainability-hardening` 已 100% 封板；四个大测试主题完成稳定 facade + 双分片治理，2500 行主题门禁、零匹配诊断、测试预览与六个维护选择器均已纳入稳定测试入口。
-- 当前主线：`runtime-dependency-modernization` 60%；Node 24 ESM 与 Python 3.14 FastAPI 兼容切片已完成，第三个切片将 Next 与 eslint-config-next 的 package 声明、lock root 和实际解析版本精确对齐到 `15.2.4`；后端运行时契约不变。
+- 当前主线：`runtime-dependency-modernization` 80%；Node 24 ESM、Python 3.14 FastAPI 兼容与 Next lint 工具链约束已完成，第四个切片将 Next / eslint-config-next 精确升级到 `15.5.25` 并迁移到 ESLint CLI flat config；后端运行时契约不变。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- Release gate all：`runtime-dependency-modernization` 第三切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
+- Release gate all：`runtime-dependency-modernization` 第四切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
 - Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：runtime dependency contract `4/4`；release gate 内置 node 清单与扩展 node tests 均为 `154/154`，Node 24 `MODULE_TYPELESS_PACKAGE_JSON` 告警已消除，Next / eslint-config-next 声明与解析版本均精确为 `15.2.4`；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 未启动本机服务。
-- E2E/CI：backend main/timeout/queue 与 frontend smoke/full/queue 最近验证通过；tooling failure fixture 已移除可选 venv 依赖，并通过无 venv 干净副本及 backend/frontend scope 回归。
+- Frontend：runtime dependency contract `5/5`；release gate 内置 node tests `155/155`；Next / eslint-config-next 三层版本均为 `15.5.25`；ESLint CLI flat config 与 build 通过。联网 `npm audit` 为 8 项（3 low / 2 moderate / 3 high / 0 critical），升级前的 Next critical 已消除。
+- E2E/CI：backend main/timeout/queue 与 frontend smoke/full/queue 最近验证通过；本轮因 Docker daemon 未运行，未重跑 service-backed e2e，历史结果不计入本轮验收；tooling 回归由 release gate 覆盖。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步后端计划
 
-1. 当前主线：`runtime-dependency-modernization` 60%；Node 模块模式、Python 3.14 FastAPI 兼容与 Next lint 工具链精确对齐切片均已通过 release gate。
-2. 下一切片评估 Next 15 patch-line 的兼容与安全升级边界；后端继续保持 FastAPI 精确 pin、full slice 与 SSE / trace / export 外部契约稳定。
+1. 当前主线：`runtime-dependency-modernization` 80%；Next 15 patch-line 安全升级与 ESLint CLI 迁移已通过 release gate。
+2. 下一切片约束剩余 npm audit 开发/传递依赖，并在 Docker 可用时补跑 service-backed e2e；后端继续保持 FastAPI 精确 pin、full slice 与 SSE / trace / export 外部契约稳定。
 
 ## 稳定契约
 

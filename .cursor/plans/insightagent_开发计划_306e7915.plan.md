@@ -1,10 +1,10 @@
 ---
 name: InsightAgent 开发计划
-overview: test-maintainability-hardening 已完成封板；runtime-dependency-modernization 已完成 Node 模块模式、Python 3.14 FastAPI 兼容与 Next lint 工具链精确对齐三个切片。
+overview: test-maintainability-hardening 已完成封板；runtime-dependency-modernization 已完成 Node 模块模式、Python 3.14 FastAPI 兼容、Next lint 工具链约束与 Next 15 patch-line 安全升级四个切片。
 current_focus:
   mainline: runtime-dependency-modernization
-  status: 60%
-  latest_change: 扩展前端 runtime dependency contract，要求 Next 与 eslint-config-next 在 package 声明、lock root 和实际解析版本三层精确一致；eslint-config-next 从 caret 范围收紧为 15.2.4，不改变现有依赖树
+  status: 80%
+  latest_change: 红测固定 Next 15.5.25 与 ESLint CLI/flat config 契约；Next、eslint-config-next 与 lockfile 三层精确升级到 15.5.25，并显式忽略 Next 构建产物
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -44,10 +44,10 @@ stable_contracts:
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-runtime-dependency-modernization-slice3-summary.md --json-summary-file /tmp/release-gate-runtime-dependency-modernization-slice3-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-runtime-dependency-modernization-slice4-summary.md --json-summary-file /tmp/release-gate-runtime-dependency-modernization-slice4-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败
   backend: runtime dependency contract 2/2；full slice 2020/2020；module boundary 9/9；FastAPI 0.118.3 / Starlette 0.46.2 通过 pip check，Python 3.14 路由注册无 asyncio.iscoroutinefunction DeprecationWarning；security 17/17；production operations health 11/11
-  frontend: runtime dependency contract 4/4；手动扩展 node tests 154/154；release gate 内置 frontend node 清单 154/154，Next / eslint-config-next 声明、lock root 与解析版本均精确为 15.2.4，且无 MODULE_TYPELESS_PACKAGE_JSON 告警；runtime debug targeted 12/12；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；npm run lint passed；npm run build passed；本轮 rendered QA 未启动本机服务
-  e2e: backend main/timeout/queue 与 frontend smoke/full/queue 最近验证通过；frontend full Chromium 56 passed / 1 skipped；targeted Chromium remote network/401/cancel、trace delta retry、Audit Logs/Task Center/知识库治理错误恢复 passed；tooling failure fixture 已移除可选 venv 依赖，并通过无 venv 干净副本和 backend/frontend scope 回归
+  frontend: runtime dependency contract 5/5；手动扩展及 release gate 内置 node tests 155/155；Next / eslint-config-next 声明、lock root 与解析版本均精确为 15.5.25；eslint . flat config 与 npm run build passed；联网 npm audit 为 8 项（3 low / 2 moderate / 3 high / 0 critical），升级前的 Next critical 已消除
+  e2e: backend main/timeout/queue 与 frontend smoke/full/queue 最近验证通过；本轮 Docker daemon 未运行，未重跑 service-backed e2e，历史结果不计入本轮验收；tooling 回归由 release gate 覆盖
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -60,9 +60,9 @@ completed_mainlines:
   - release-observability-polish：release readiness matrix、artifact retention、release gate summary/trend summary、previous artifact 下载诊断与 release/rollback decision_summary
   - test-maintainability-hardening：四个大测试主题稳定 facade + 双分片、2500 行主题门禁、零匹配诊断、测试预览与六个维护选择器
 next_candidate_mainlines:
-  - runtime-dependency-modernization：当前 60%，已完成 Node 模块模式、Python 3.14 FastAPI 兼容与 Next lint 工具链精确对齐三个切片；后续评估 Next 15 patch-line 升级边界
+  - runtime-dependency-modernization：当前 80%，已完成 Node 模块模式、Python 3.14 FastAPI 兼容、Next lint 工具链精确对齐与 Next 15.5.25 安全升级四个切片；后续约束剩余 npm audit 项并补跑 service-backed e2e
 next_steps:
-  - 评估 Next 15 patch-line 的兼容与安全升级边界，先用红测固定目标版本、lockfile 与 Node 24 构建契约，再做局部升级
+  - 为剩余 npm audit 开发/传递依赖建立可执行回归约束并评估最小修复；Docker 可用时补跑 service-backed e2e 后决定主线封板
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -73,7 +73,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish` 与 `test-maintainability-hardening` 均已 100% 封板。
 - 最近封板：`test-maintainability-hardening` 已 100% 封板；四个大测试主题完成稳定 facade + 双分片治理，2500 行主题门禁、零匹配诊断、测试预览与六个维护选择器均已纳入稳定测试入口。
-- 当前主线：`runtime-dependency-modernization` 60%；Node 模块模式、Python 3.14 FastAPI 兼容与 Next lint 工具链精确对齐三个切片已完成，Next / eslint-config-next 三层版本契约均为 `15.2.4`。
+- 当前主线：`runtime-dependency-modernization` 80%；Node 模块模式、Python 3.14 FastAPI 兼容、Next lint 工具链约束与 Next 15 patch-line 安全升级四个切片已完成，Next / eslint-config-next 三层版本契约均为 `15.5.25`。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
 ## 已完成能力摘要
@@ -88,16 +88,16 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- Release gate all：`runtime-dependency-modernization` 第三切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
+- Release gate all：`runtime-dependency-modernization` 第四切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
 - Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：runtime dependency contract `4/4`；release gate 内置 node 清单与扩展 node tests 均为 `154/154`，Next / eslint-config-next 声明、lock root 与解析版本均精确为 `15.2.4`，且 Node 24 `MODULE_TYPELESS_PACKAGE_JSON` 告警已消除；runtime debug targeted `12/12`；RAG 状态刷新、失败恢复与跨库反馈隔离已纳入主路径且 8 个 Chromium 用例可正常收集；`npm run lint` 与 `npm run build` 通过；本轮 rendered QA 未启动本机服务。
-- E2E/CI：backend main/timeout/queue 与 frontend smoke/full/queue 最近验证通过；tooling failure fixture 已移除可选 venv 依赖，并通过无 venv 干净副本与两个 scope 回归。
+- Frontend：runtime dependency contract `5/5`；release gate 内置 node tests `155/155`；Next / eslint-config-next 声明、lock root 与解析版本均精确为 `15.5.25`；`eslint .` flat config 与 `npm run build` 通过；联网 `npm audit` 为 8 项（3 low / 2 moderate / 3 high / 0 critical），升级前的 Next critical 已消除。
+- E2E/CI：backend main/timeout/queue 与 frontend smoke/full/queue 最近验证通过；本轮因 Docker daemon 未运行，未重跑 service-backed e2e，历史结果不计入本轮验收；tooling 回归由 release gate 覆盖。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前主线
 
-- 当前主线：`runtime-dependency-modernization` 60%；已完成 Node 模块模式告警治理、Python 3.14 FastAPI 兼容约束与 Next lint 工具链精确对齐，前后端 runtime dependency contract 均已纳入 release gate。
-- 下一切片：评估 Next 15 patch-line 的兼容与安全升级边界，先用红测固定目标版本与 lockfile 契约，再做局部升级。
+- 当前主线：`runtime-dependency-modernization` 80%；已完成 Node 模块模式告警治理、Python 3.14 FastAPI 兼容约束、Next lint 工具链精确对齐与 Next `15.5.25` 安全升级，前后端 runtime dependency contract 均已纳入 release gate。
+- 下一切片：为剩余 npm audit 开发/传递依赖建立可执行回归约束并评估最小修复；Docker 可用时补跑 service-backed e2e 后决定封板。
 - 后续实现继续保持外部 SSE/trace/export/display/e2e 契约稳定。
 - 新 provider/source 协议仍按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 

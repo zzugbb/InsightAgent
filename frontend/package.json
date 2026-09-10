@@ -10,7 +10,7 @@
     "dev": "next dev -H 127.0.0.1 -p 3001",
     "build": "next build",
     "start": "next start -H 127.0.0.1 -p 3001",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test:e2e": "playwright test --project=chromium",
     "test:e2e:smoke:matrix": "playwright test --grep @smoke --project=chromium --project=firefox --project=webkit"
   },
@@ -24,7 +24,7 @@
     "katex": "^0.16.45",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.7.0",
-    "next": "15.2.4",
+    "next": "15.5.25",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-markdown": "9.0.1",
@@ -36,12 +36,13 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "3.3.7",
     "@playwright/test": "^1.59.1",
     "@types/node": "^24.12.2",
     "@types/react": "19.0.12",
     "@types/react-dom": "19.0.5",
     "eslint": "^9.24.0",
-    "eslint-config-next": "15.2.4",
+    "eslint-config-next": "15.5.25",
     "typescript": "5.8.2"
   }
 }

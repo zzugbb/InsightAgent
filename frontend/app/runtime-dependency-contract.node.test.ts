@@ -4,9 +4,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const FRONTEND_ROOT = path.resolve(import.meta.dirname, "..");
+const EXPECTED_NEXT_VERSION = "15.5.25";
 
 type PackageJson = {
   type?: string;
+  scripts?: Record<string, string>;
   engines?: {
     node?: string;
   };
@@ -51,8 +53,21 @@ test("frontend Next runtime and lint tooling stay version-aligned", async () => 
   const packageJson = await readPackageJson();
   const nextVersion = packageJson.dependencies?.next;
 
-  assert.equal(nextVersion, "15.2.4");
+  assert.equal(nextVersion, EXPECTED_NEXT_VERSION);
   assert.equal(packageJson.devDependencies?.["eslint-config-next"], nextVersion);
+});
+
+test("frontend lint uses the explicit ESLint CLI configuration", async () => {
+  const packageJson = await readPackageJson();
+  const eslintConfig = await readFile(
+    path.join(FRONTEND_ROOT, "eslint.config.mjs"),
+    "utf8",
+  );
+
+  assert.equal(packageJson.scripts?.lint, "eslint .");
+  assert.match(eslintConfig, /next\/core-web-vitals/);
+  assert.match(eslintConfig, /next\/typescript/);
+  assert.match(eslintConfig, /\.next\/\*\*/);
 });
 
 test("frontend lockfile keeps Next runtime and lint tooling exactly aligned", async () => {
