@@ -5,6 +5,15 @@ import assert from "node:assert/strict";
 
 const FRONTEND_ROOT = path.resolve(import.meta.dirname, "..");
 const EXPECTED_NEXT_VERSION = "15.5.25";
+const EXPECTED_ESLINT_VERSION = "9.39.5";
+const EXPECTED_AUDIT_SAFE_LOCK_VERSIONS = {
+  "node_modules/@eslint/plugin-kit": "0.4.1",
+  "node_modules/@humanfs/node": "0.16.8",
+  "node_modules/brace-expansion": "1.1.21",
+  "node_modules/@typescript-eslint/typescript-estree/node_modules/brace-expansion":
+    "5.0.12",
+  "node_modules/nanoid": "3.3.19",
+} as const;
 
 type PackageJson = {
   type?: string;
@@ -83,4 +92,27 @@ test("frontend lockfile keeps Next runtime and lint tooling exactly aligned", as
     packageLock.packages?.["node_modules/eslint-config-next"]?.version,
     nextVersion,
   );
+});
+
+test("frontend lockfile keeps fixable audit dependencies on safe patches", async () => {
+  const packageJson = await readPackageJson();
+  const packageLock = await readPackageLock();
+  const lockRoot = packageLock.packages?.[""];
+
+  assert.equal(packageJson.devDependencies?.eslint, EXPECTED_ESLINT_VERSION);
+  assert.equal(lockRoot?.devDependencies?.eslint, EXPECTED_ESLINT_VERSION);
+  assert.equal(
+    packageLock.packages?.["node_modules/eslint"]?.version,
+    EXPECTED_ESLINT_VERSION,
+  );
+
+  for (const [packagePath, expectedVersion] of Object.entries(
+    EXPECTED_AUDIT_SAFE_LOCK_VERSIONS,
+  )) {
+    assert.equal(
+      packageLock.packages?.[packagePath]?.version,
+      expectedVersion,
+      `${packagePath} must stay on its audited safe patch`,
+    );
+  }
 });
