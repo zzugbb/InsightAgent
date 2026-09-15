@@ -7,21 +7,21 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI 与当前版本范围内可修复的审计依赖均已建立精确约束。
-- 当前主线：`next-major-upgrade-readiness` 15%；首个前端工具链预检切片已完成，后端运行时及 SSE / trace / export 外部契约未修改。
+- 当前主线：`next-major-upgrade-readiness` 30%；Next 15.5 Turbopack production build 已通过并纳入 release gate，后端运行时及 SSE / trace / export 外部契约未修改。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- Release gate all：`next-major-upgrade-readiness` 第 1 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
+- Release gate all：`next-major-upgrade-readiness` 第 2 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；普通与 Turbopack production build 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：Next 16 readiness contract `4/4`，真实预检 `ready_with_actions`、0 blocker；runtime dependency contract `6/6`；release gate 内置 node tests `160/160`；Next / eslint-config-next 仍为 `15.5.25`，ESLint 为 `9.39.5`。
+- Frontend：Next 16 readiness contract `6/6`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `6/6`；release gate 内置 node tests `162/162`；Next / eslint-config-next 仍为 `15.5.25`，普通与 Turbopack production build 均通过。
 - E2E/CI：本切片不改前后端运行时，未重跑 service-backed e2e；最近封板基线仍为 Chromium `59 passed / 1 skipped`，tooling 回归由本轮 release gate 覆盖。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步后端计划
 
-1. `next-major-upgrade-readiness` 当前 15%；可执行预检已确认真实仓库无 webpack、旧 middleware 或同步 Request API 阻塞面。
-2. 下一切片先验证前端 Turbopack production build；后端继续保持 FastAPI 精确 pin、full slice 与 SSE / trace / export 外部契约稳定。
+1. `next-major-upgrade-readiness` 当前 30%；可执行预检与双构建门禁已确认真实仓库无已知项目级阻塞面。
+2. 下一切片锁定并执行前端 Next 16 联合依赖升级；后端继续保持 FastAPI 精确 pin、full slice 与 SSE / trace / export 外部契约稳定。
 
 ## 稳定契约
 

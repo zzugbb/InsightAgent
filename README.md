@@ -6,21 +6,21 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`。
 - 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI flat config 与可在当前版本范围修复的审计依赖均已建立精确回归约束。
-- 当前主线：`next-major-upgrade-readiness` 15%；首个切片已用红测建立 Next 16 可执行预检，真实仓库为 `ready_with_actions`、0 blocker，尚未执行跨主版本依赖升级。
+- 当前主线：`next-major-upgrade-readiness` 30%；Next 15.5 Turbopack production build 已通过并纳入 release gate，真实预检为 `ready_with_actions`、0 blocker、2 actions，尚未执行跨主版本依赖升级。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate all：`next-major-upgrade-readiness` 第 1 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
+- Release gate all：`next-major-upgrade-readiness` 第 2 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；普通与 Turbopack production build 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：Next 16 readiness contract `4/4`，真实预检 `ready_with_actions`、0 blocker；runtime dependency contract `6/6`；release gate 内置 node tests `160/160`；Next / eslint-config-next 仍为 `15.5.25`，ESLint 为 `9.39.5`；`eslint .` 与 build 通过。联网 `npm audit` 的既有基线剩 2 项，留待跨主版本切片处理。
+- Frontend：Next 16 readiness contract `6/6`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `6/6`；release gate 内置 node tests `162/162`；Next / eslint-config-next 仍为 `15.5.25`，ESLint 为 `9.39.5`；`eslint .`、普通 build 与 Turbopack build 通过。联网 `npm audit` 的既有基线剩 2 项，留待跨主版本切片处理。
 - E2E/CI：本切片不改前后端运行时，未重跑 service-backed e2e；最近封板基线仍为 Chromium `59 passed / 1 skipped`，tooling 回归由本轮 release gate 覆盖。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. `next-major-upgrade-readiness` 当前 15%；可执行预检已确认 Node 24、TypeScript 5.8 与 ESLint CLI 前置条件通过，并扫描 webpack、middleware 与同步 Request API 阻塞面。
-2. 下一切片先验证 Next 15.5 下的 Turbopack production build，再决定 Next 16、React、类型包与 eslint-config-next 的联合升级窗口。
+1. `next-major-upgrade-readiness` 当前 30%；可执行预检与双构建门禁已确认 Node 24、TypeScript 5.8、ESLint CLI 及 Turbopack production build 前置条件通过。
+2. 下一切片用红测锁定 Next 16、React/React DOM、类型包与 eslint-config-next 的精确联合版本，再执行受控依赖升级与原生 flat config 迁移。
 
 ## 稳定契约
 
@@ -161,7 +161,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- `next-major-upgrade-readiness` 当前 15%；下一切片验证 Turbopack production build，并继续保持 Next 16 依赖联合升级、原生 flat config 与 PostCSS 审计修复的边界清晰。
+- `next-major-upgrade-readiness` 当前 30%；下一切片锁定并执行 Next 16 依赖联合升级与原生 flat config 迁移，再复核 PostCSS 审计结果。
 
 ## 文档维护约定
 

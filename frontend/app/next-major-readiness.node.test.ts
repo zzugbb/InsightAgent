@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 
 import { evaluateNextMajorReadiness } from "../scripts/next-major-readiness.ts";
@@ -99,4 +101,31 @@ test("Next 16 preflight accepts awaited request APIs across whitespace", () => {
 
   assert.equal(report.status, "ready_with_actions");
   assert.deepEqual(report.blockers, []);
+});
+
+test("frontend exposes a dedicated Turbopack production build without replacing the stable build", async () => {
+  const packageJson = JSON.parse(
+    await readFile(path.resolve(import.meta.dirname, "..", "package.json"), "utf8"),
+  ) as { scripts?: Record<string, string> };
+
+  assert.equal(packageJson.scripts?.build, "next build");
+  assert.equal(packageJson.scripts?.["build:turbopack"], "next build --turbopack");
+});
+
+test("Next 16 preflight accepts a dedicated Turbopack production build", () => {
+  const report = evaluateNextMajorReadiness({
+    ...BASE_INPUT,
+    packageJson: {
+      ...BASE_INPUT.packageJson,
+      scripts: {
+        ...BASE_INPUT.packageJson.scripts,
+        "build:turbopack": "next build --turbopack",
+      },
+    },
+  });
+
+  assert.deepEqual(
+    report.actions.map(({ id }) => id),
+    ["next-16-dependency-alignment", "native-eslint-flat-config"],
+  );
 });

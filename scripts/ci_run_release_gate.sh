@@ -374,6 +374,10 @@ run_frontend() {
     "frontend build" \
     "${ROOT_DIR}/frontend" \
     npm run build
+  run_step \
+    "frontend Turbopack build" \
+    "${ROOT_DIR}/frontend" \
+    npm run build:turbopack
 }
 
 run_tooling() {

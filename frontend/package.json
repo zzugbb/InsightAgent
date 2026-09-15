@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 3001",
     "build": "next build",
+    "build:turbopack": "next build --turbopack",
     "check:next-major-readiness": "node --experimental-strip-types scripts/next-major-readiness.ts",
     "start": "next start -H 127.0.0.1 -p 3001",
     "lint": "eslint .",

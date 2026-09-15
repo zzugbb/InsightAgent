@@ -103,7 +103,11 @@ export function evaluateNextMajorReadiness(input: ReadinessInput): ReadinessRepo
     });
   }
 
-  if (!packageJson.scripts?.build?.includes("--turbopack")) {
+  const turbopackBuildConfigured = [
+    packageJson.scripts?.build,
+    packageJson.scripts?.["build:turbopack"],
+  ].some((command) => command?.includes("next build --turbopack"));
+  if (!turbopackBuildConfigured) {
     actions.push({
       id: "turbopack-build-verification",
       detail: "Verify the production build with Turbopack before accepting the Next 16 default.",
