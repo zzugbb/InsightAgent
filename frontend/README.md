@@ -7,21 +7,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI flat config 与当前版本范围内可修复的审计依赖均已建立精确约束。
-- 当前主线：`runtime-dependency-modernization` 100%；最终静态 release gate 与 service-backed Chromium 均通过，可进入下一候选主线。
+- 当前主线：`next-major-upgrade-readiness` 15%；首个切片已用红测建立 Next 16 可执行预检，真实仓库为 `ready_with_actions`、0 blocker，尚未升级 Next / React / ESLint 工具链。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
-- Release gate all：`runtime-dependency-modernization` 最终封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
-- Frontend：runtime dependency contract `6/6`；release gate 内置 node tests `156/156`；Next / eslint-config-next 为 `15.5.25`，ESLint 为 `9.39.5`，plugin-kit、humanfs、brace-expansion 与 nanoid 已锁定安全补丁；`eslint .` 与 build 通过。联网 `npm audit` 剩 2 项（1 moderate / 1 high / 0 critical），均来自 Next 15.5 固定的 PostCSS，npm 仅提供 Next 16 主版本修复路径。
+- Release gate all：`next-major-upgrade-readiness` 第 1 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
+- Frontend：Next 16 readiness contract `4/4`，真实预检 `ready_with_actions`、0 blocker；runtime dependency contract `6/6`；release gate 内置 node tests `160/160`；Next / eslint-config-next 仍为 `15.5.25`，ESLint 为 `9.39.5`；`eslint .` 与 build 通过。
 - Backend 契约基线：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` 在 Python 3.14 下无目标弃用告警；security `17/17`；production operations health `11/11`。
-- E2E/CI：本轮 service-backed Chromium `59 passed / 1 skipped`；SSE、trace、export、RAG、鉴权、恢复与远端错误映射路径均通过，queue 专项按 full phase 设计 skipped；tooling 回归由 release gate 覆盖。
+- E2E/CI：本切片不改前后端运行时，未重跑 service-backed e2e；最近封板基线仍为 Chromium `59 passed / 1 skipped`，tooling 回归由本轮 release gate 覆盖。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. `runtime-dependency-modernization` 已 100% 封板；最终验证来自 release gate 9/9 与 service-backed Chromium 59 passed / 1 skipped。
-2. 下一候选主线：`next-major-upgrade-readiness`，联合评估 Next 16、ESLint 10 与 PostCSS 修复路径，并继续保持 node/lint/build 与 e2e 契约稳定。
+1. `next-major-upgrade-readiness` 当前 15%；`npm run check:next-major-readiness` 已覆盖 Node/TypeScript/ESLint CLI 前置条件和 webpack、middleware、同步 Request API 阻塞面。
+2. 下一切片先验证 Next 15.5 下的 Turbopack production build，再联合处理 Next 16、React、类型包、eslint-config-next 与原生 flat config。
 
 ## 稳定契约
 

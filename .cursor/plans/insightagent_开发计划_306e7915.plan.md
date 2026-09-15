@@ -1,10 +1,10 @@
 ---
 name: InsightAgent 开发计划
-overview: runtime-dependency-modernization 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next 15.5.25、ESLint CLI 与当前版本范围内可修复的审计依赖均已建立精确约束。
+overview: next-major-upgrade-readiness 当前 15%；首个切片已建立 Next 16 可执行预检，真实仓库前置条件通过且无已知项目级 blocker，跨主版本依赖尚未升级。
 current_focus:
-  mainline: runtime-dependency-modernization
-  status: 100%
-  latest_change: 红测固定 ESLint 9.39.5 与 plugin-kit、humanfs、brace-expansion、nanoid 安全锁版本；联网 audit 从 8 项降至 Next 15.5 固定 PostCSS 形成的 2 项，最终 release gate 与 service-backed Chromium 均通过
+  mainline: next-major-upgrade-readiness
+  status: 15%
+  latest_change: 红测建立 Next 16 readiness evaluator 与真实仓库 CLI；Node 24、TypeScript 5.8、ESLint CLI 前置条件通过，webpack、旧 middleware、同步 Request API 扫描为 0 blocker，并明确依赖联合升级、原生 flat config、Turbopack build 三项 action
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -45,10 +45,10 @@ stable_contracts:
   - Next 15.5.25 与 eslint-config-next 保持精确对齐；ESLint 9.39.5 及当前版本范围内可修复的审计传递依赖由 lockfile contract 固定，Next 16 / ESLint 10 只在独立主线联合迁移
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-runtime-dependency-modernization-slice5-summary.md --json-summary-file /tmp/release-gate-runtime-dependency-modernization-slice5-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-next-major-readiness-slice1-summary.md --json-summary-file /tmp/release-gate-next-major-readiness-slice1-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，9 个步骤全过、0 失败
   backend: runtime dependency contract 2/2；full slice 2020/2020；module boundary 9/9；FastAPI 0.118.3 / Starlette 0.46.2 通过 pip check，Python 3.14 路由注册无 asyncio.iscoroutinefunction DeprecationWarning；security 17/17；production operations health 11/11
-  frontend: runtime dependency contract 6/6；手动扩展及 release gate 内置 node tests 156/156；Next / eslint-config-next 为 15.5.25，ESLint 为 9.39.5，plugin-kit、humanfs、brace-expansion 与 nanoid 锁定安全补丁；eslint . 与 npm run build passed；联网 npm audit 剩 2 项（1 moderate / 1 high / 0 critical），均受 Next 15.5 固定 PostCSS 约束
-  e2e: service-backed Chromium 59 passed / 1 skipped；SSE、trace、export、RAG、鉴权、恢复与远端错误映射路径通过，queue 专项按 full phase 设计 skipped
+  frontend: Next 16 readiness contract 4/4，真实预检 ready_with_actions、0 blocker；runtime dependency contract 6/6；release gate 内置 node tests 160/160；Next / eslint-config-next 仍为 15.5.25，ESLint 为 9.39.5；eslint . 与 npm run build passed
+  e2e: 本切片不改前后端运行时，未重跑 service-backed e2e；最近封板基线为 Chromium 59 passed / 1 skipped
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -64,7 +64,7 @@ completed_mainlines:
 next_candidate_mainlines:
   - next-major-upgrade-readiness：用独立红测与官方 codemod 联合评估 Next 16、ESLint 10、PostCSS 审计修复和既有 e2e 兼容，不回改已封板主线
 next_steps:
-  - 进入 next-major-upgrade-readiness 前先核对 Next 16 / React / ESLint 10 官方兼容矩阵，再选一个红测可证明的最小迁移切片
+  - 先用红测约束并验证 Next 15.5 的 Turbopack production build，再决定 Next 16、React、类型包与 eslint-config-next 的联合升级窗口
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -75,7 +75,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening` 与 `runtime-dependency-modernization` 均已 100% 封板。
 - 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI 与当前版本范围内可修复的审计依赖均已建立精确约束。
-- 当前主线：`runtime-dependency-modernization` 100%；最终静态 release gate 与 service-backed Chromium 均通过，可进入 `next-major-upgrade-readiness` 候选主线。
+- 当前主线：`next-major-upgrade-readiness` 15%；首个切片已建立可执行预检，真实仓库为 `ready_with_actions`、0 blocker，未修改运行时契约。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
 ## 已完成能力摘要
@@ -90,16 +90,16 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- Release gate all：`runtime-dependency-modernization` 最终封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
+- Release gate all：`next-major-upgrade-readiness` 第 1 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，9/9。
 - Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：runtime dependency contract `6/6`；release gate 内置 node tests `156/156`；Next / eslint-config-next 为 `15.5.25`，ESLint 为 `9.39.5`，当前版本范围内可修复的审计依赖已清除；`eslint .` 与 build 通过；联网 `npm audit` 剩 2 项（1 moderate / 1 high / 0 critical），均受 Next 15.5 固定 PostCSS 约束。
-- E2E/CI：本轮 service-backed Chromium `59 passed / 1 skipped`；SSE、trace、export、RAG、鉴权、恢复与远端错误映射路径均通过，queue 专项按 full phase 设计 skipped。
+- Frontend：Next 16 readiness contract `4/4`，真实预检 `ready_with_actions`、0 blocker；runtime dependency contract `6/6`；release gate 内置 node tests `160/160`；Next / eslint-config-next 仍为 `15.5.25`，ESLint 为 `9.39.5`；`eslint .` 与 build 通过。
+- E2E/CI：本切片不改前后端运行时，未重跑 service-backed e2e；最近封板基线仍为 Chromium `59 passed / 1 skipped`。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前主线
 
-- 当前主线：`runtime-dependency-modernization` 100% 封板；最终 release gate 9/9、service-backed Chromium 59 passed / 1 skipped，前后端 runtime dependency contract 均已纳入 release gate。
-- 下一候选主线：`next-major-upgrade-readiness`，用独立红测和官方 codemod 联合评估 Next 16、ESLint 10 与 PostCSS 修复路径。
+- 当前主线：`next-major-upgrade-readiness` 15%；`npm run check:next-major-readiness` 已把官方 Next 16 前置条件、已知项目级阻塞面与迁移动作转为结构化契约。
+- 下一切片：先验证 Next 15.5 下的 Turbopack production build，再联合处理 Next 16、React、类型包、eslint-config-next 与原生 flat config。
 - 后续实现继续保持外部 SSE/trace/export/display/e2e 契约稳定。
 - 新 provider/source 协议仍按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 
