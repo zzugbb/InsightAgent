@@ -103,10 +103,28 @@ export function evaluateNextMajorReadiness(input: ReadinessInput): ReadinessRepo
     });
   }
 
-  const turbopackBuildConfigured = [
-    packageJson.scripts?.build,
-    packageJson.scripts?.["build:turbopack"],
-  ].some((command) => command?.includes("next build --turbopack"));
+  if (majorVersion(packageJson.devDependencies?.eslint) !== 10) {
+    actions.push({
+      id: "eslint-10-plugin-compatibility",
+      detail: "Keep ESLint 9 until the React lint plugin bundled by eslint-config-next supports ESLint 10.",
+    });
+  }
+
+  const hasReactCompilerLintHold =
+    eslintConfig.includes('"react-hooks/set-state-in-effect": "off"')
+    && eslintConfig.includes('"react-hooks/refs": "off"');
+  if (hasReactCompilerLintHold) {
+    actions.push({
+      id: "react-compiler-lint-migration",
+      detail: "Migrate existing effect state updates and render-time ref access before enabling the new rules.",
+    });
+  }
+
+  const nextMajor = majorVersion(packageJson.dependencies?.next);
+  const turbopackBuildConfigured =
+    ((nextMajor ?? 0) >= 16 && packageJson.scripts?.build === "next build")
+    || [packageJson.scripts?.build, packageJson.scripts?.["build:turbopack"]]
+      .some((command) => command?.includes("next build --turbopack"));
   if (!turbopackBuildConfigured) {
     actions.push({
       id: "turbopack-build-verification",

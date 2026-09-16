@@ -1,10 +1,10 @@
 ---
 name: InsightAgent 开发计划
-overview: next-major-upgrade-readiness 当前 30%；Next 15.5 Turbopack production build 已通过并纳入 release gate，真实预检剩 2 个迁移动作且无 blocker，跨主版本依赖尚未升级。
+overview: next-major-upgrade-readiness 当前 70%；Next 16.3.5 / React 19.2.8 联合升级、原生 flat config、零漏洞审计与真实 e2e 已完成，真实预检剩 2 个兼容性动作且无 blocker。
 current_focus:
   mainline: next-major-upgrade-readiness
-  status: 30%
-  latest_change: 红测固定独立 build:turbopack 命令与 readiness action 收敛；Next 15.5.25 Turbopack production build 通过并纳入 release gate，普通 build 保持稳定，真实预检剩依赖联合升级与原生 flat config 两项 action
+  status: 70%
+  latest_change: 红测锁定 Next 16.3.5、React 19.2.8、类型包、eslint-config-next、原生 flat config、生产 typecheck 排除项和双构建语义；npm audit 清零，真实 e2e 通过，ESLint 9.39.5 暂按插件兼容范围保留
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -42,13 +42,13 @@ stable_contracts:
   - release gate 首个失败步骤保留原退出码并输出 FAIL decision/operator summary；空 focus phase 不触发 Bash set -u 二次失败
   - release gate 失败路径 fixture 不依赖 backend/.venv 等可选 workflow 环境，只用 fake-node 在 frontend 首步注入确定性退出码
   - queued/running/cancel/reconnect 与 task recovery 语义保持稳定
-  - Next 15.5.25 与 eslint-config-next 保持精确对齐；ESLint 9.39.5 及当前版本范围内可修复的审计传递依赖由 lockfile contract 固定，Next 16 / ESLint 10 只在独立主线联合迁移
+  - Next 16.3.5 与 eslint-config-next 精确对齐，React / React DOM 固定 19.2.8；ESLint 9.39.5 在 eslint-plugin-react 支持 ESLint 10 前保持兼容锁定，原生 flat config 仅临时关闭 react-hooks/set-state-in-effect 与 react-hooks/refs
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-next-major-readiness-slice2-summary.md --json-summary-file /tmp/release-gate-next-major-readiness-slice2-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；普通与 Turbopack production build 均在门禁内，JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，10 个步骤全过、0 失败
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-next-major-readiness-slice3-final-summary.md --json-summary-file /tmp/release-gate-next-major-readiness-slice3-final-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 复核为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，10 个步骤全过、0 失败
   backend: runtime dependency contract 2/2；full slice 2020/2020；module boundary 9/9；FastAPI 0.118.3 / Starlette 0.46.2 通过 pip check，Python 3.14 路由注册无 asyncio.iscoroutinefunction DeprecationWarning；security 17/17；production operations health 11/11
-  frontend: Next 16 readiness contract 6/6，真实预检 ready_with_actions、0 blocker、2 actions；runtime dependency contract 6/6；release gate 内置 node tests 162/162；Next / eslint-config-next 仍为 15.5.25，ESLint 为 9.39.5；eslint .、普通 build 与 Turbopack build passed
-  e2e: 本切片不改前后端运行时，未重跑 service-backed e2e；最近封板基线为 Chromium 59 passed / 1 skipped
+  frontend: Next 16 readiness contract 7/7，真实预检 ready_with_actions、0 blocker、2 actions；runtime dependency contract 8/8；release gate 内置 node tests 165/165；Next / eslint-config-next 为 16.3.5，React / React DOM 为 19.2.8，ESLint 为 9.39.5；npm audit 0，lint 0 error / 2 warning，默认 Turbopack build 与显式 webpack fallback passed
+  e2e: 本切片已在真实 backend/frontend 服务上重跑 Chromium full e2e，59 passed / 1 skipped
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -62,9 +62,9 @@ completed_mainlines:
   - test-maintainability-hardening：四个大测试主题稳定 facade + 双分片、2500 行主题门禁、零匹配诊断、测试预览与六个维护选择器
   - runtime-dependency-modernization：Node 24 ESM、Python 3.14 FastAPI、Next 15.5.25、ESLint CLI flat config、审计安全补丁锁定与最终 service-backed e2e
 next_candidate_mainlines:
-  - next-major-upgrade-readiness：用独立红测与官方 codemod 联合评估 Next 16、ESLint 10、PostCSS 审计修复和既有 e2e 兼容，不回改已封板主线
+  - next-major-upgrade-readiness：Next 16 / React 19.2、原生 flat config、双构建与 PostCSS 审计修复已完成；剩余 React Compiler lint 迁移和 ESLint 10 插件兼容性验证
 next_steps:
-  - 用红测锁定 Next 16、React/React DOM、类型包与 eslint-config-next 的精确联合版本，再执行受控依赖升级与原生 flat config 迁移
+  - 按主题迁移 React Compiler 新 lint 规则，减少临时 compatibility override；持续验证 eslint-plugin-react 对 ESLint 10 的支持后再做受控升级
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
 
@@ -75,7 +75,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening` 与 `runtime-dependency-modernization` 均已 100% 封板。
 - 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI 与当前版本范围内可修复的审计依赖均已建立精确约束。
-- 当前主线：`next-major-upgrade-readiness` 30%；Next 15.5 Turbopack production build 已通过并纳入 release gate，真实仓库为 `ready_with_actions`、0 blocker、2 actions，未修改运行时契约。
+- 当前主线：`next-major-upgrade-readiness` 70%；Next `16.3.5` / React `19.2.8`、原生 flat config、零漏洞审计与真实 e2e 已完成，真实仓库为 `ready_with_actions`、0 blocker、2 actions，未修改外部运行时契约。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
 ## 已完成能力摘要
@@ -90,16 +90,16 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- Release gate all：`next-major-upgrade-readiness` 第 2 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；普通与 Turbopack production build 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
+- Release gate all：`next-major-upgrade-readiness` 第 3 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：Next 16 readiness contract `6/6`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `6/6`；release gate 内置 node tests `162/162`；Next / eslint-config-next 仍为 `15.5.25`，ESLint 为 `9.39.5`；`eslint .`、普通 build 与 Turbopack build 通过。
-- E2E/CI：本切片不改前后端运行时，未重跑 service-backed e2e；最近封板基线仍为 Chromium `59 passed / 1 skipped`。
+- Frontend：Next 16 readiness contract `7/7`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `8/8`；release gate 内置 node tests `165/165`；Next / eslint-config-next 为 `16.3.5`，React / React DOM 为 `19.2.8`，ESLint 为 `9.39.5`；`npm audit` 为 0，lint 0 error / 2 warning，默认 Turbopack build 与显式 webpack fallback 通过。
+- E2E/CI：本切片已在真实 backend/frontend 服务上重跑 Chromium full e2e，`59 passed / 1 skipped`。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前主线
 
-- 当前主线：`next-major-upgrade-readiness` 30%；可执行预检与 release gate 已持续验证普通及 Turbopack production build，迁移前置阻塞为 0。
-- 下一切片：锁定并执行 Next 16、React/React DOM、类型包与 eslint-config-next 联合升级，再迁移原生 flat config 并复核 PostCSS 审计结果。
+- 当前主线：`next-major-upgrade-readiness` 70%；Next 16 / React 19.2 联合升级、原生 flat config、双构建门禁、零漏洞审计与真实 e2e 已完成，项目级 blocker 为 0。
+- 下一切片：按主题迁移 React Compiler 新 lint 规则，并在 eslint-plugin-react 明确支持 ESLint 10 后再以红测驱动升级。
 - 后续实现继续保持外部 SSE/trace/export/display/e2e 契约稳定。
 - 新 provider/source 协议仍按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。
 

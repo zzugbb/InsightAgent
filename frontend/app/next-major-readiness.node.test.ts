@@ -15,6 +15,7 @@ const BASE_INPUT = {
       "react-dom": "19.0.0",
     },
     devDependencies: {
+      eslint: "9.39.5",
       "eslint-config-next": "15.5.25",
       typescript: "5.8.2",
     },
@@ -44,6 +45,7 @@ test("Next 16 preflight separates satisfied prerequisites from migration actions
     [
       "next-16-dependency-alignment",
       "native-eslint-flat-config",
+      "eslint-10-plugin-compatibility",
       "turbopack-build-verification",
     ],
   );
@@ -103,13 +105,14 @@ test("Next 16 preflight accepts awaited request APIs across whitespace", () => {
   assert.deepEqual(report.blockers, []);
 });
 
-test("frontend exposes a dedicated Turbopack production build without replacing the stable build", async () => {
+test("frontend keeps the Next 16 Turbopack default with an explicit webpack fallback", async () => {
   const packageJson = JSON.parse(
     await readFile(path.resolve(import.meta.dirname, "..", "package.json"), "utf8"),
   ) as { scripts?: Record<string, string> };
 
   assert.equal(packageJson.scripts?.build, "next build");
-  assert.equal(packageJson.scripts?.["build:turbopack"], "next build --turbopack");
+  assert.equal(packageJson.scripts?.["build:webpack"], "next build --webpack");
+  assert.equal(packageJson.scripts?.["build:turbopack"], undefined);
 });
 
 test("Next 16 preflight accepts a dedicated Turbopack production build", () => {
@@ -126,6 +129,30 @@ test("Next 16 preflight accepts a dedicated Turbopack production build", () => {
 
   assert.deepEqual(
     report.actions.map(({ id }) => id),
-    ["next-16-dependency-alignment", "native-eslint-flat-config"],
+    [
+      "next-16-dependency-alignment",
+      "native-eslint-flat-config",
+      "eslint-10-plugin-compatibility",
+    ],
   );
+});
+
+test("real frontend reaches Next 16 with an explicit ESLint 10 compatibility hold", async () => {
+  const frontendRoot = path.resolve(import.meta.dirname, "..");
+  const packageJson = JSON.parse(
+    await readFile(path.join(frontendRoot, "package.json"), "utf8"),
+  );
+  const report = evaluateNextMajorReadiness({
+    packageJson,
+    eslintConfig: await readFile(path.join(frontendRoot, "eslint.config.mjs"), "utf8"),
+    nextConfig: await readFile(path.join(frontendRoot, "next.config.ts"), "utf8"),
+    sourceFiles: [],
+  });
+
+  assert.equal(report.status, "ready_with_actions");
+  assert.deepEqual(
+    report.actions.map(({ id }) => id),
+    ["eslint-10-plugin-compatibility", "react-compiler-lint-migration"],
+  );
+  assert.deepEqual(report.blockers, []);
 });
