@@ -123,7 +123,7 @@ test("frontend lint uses the native Next 16 flat configuration", async () => {
   assert.match(eslintConfig, /globalIgnores/);
   assert.match(eslintConfig, /\.next\/\*\*/);
   assert.match(eslintConfig, /["']react-hooks\/set-state-in-effect["']:\s*["']off["']/);
-  assert.match(eslintConfig, /["']react-hooks\/refs["']:\s*["']off["']/);
+  assert.doesNotMatch(eslintConfig, /["']react-hooks\/refs["']:\s*["']off["']/);
   assert.doesNotMatch(eslintConfig, /FlatCompat/);
   assert.doesNotMatch(eslintConfig, /@eslint\/eslintrc/);
 });

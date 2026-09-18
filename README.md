@@ -6,21 +6,21 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`。
 - 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI flat config 与可在当前版本范围修复的审计依赖均已建立精确回归约束。
-- 当前主线：`next-major-upgrade-readiness` 70%；Next `16.3.5`、React / React DOM `19.2.8`、eslint-config-next `16.3.5` 与原生 flat config 已完成受控升级，真实预检为 `ready_with_actions`、0 blocker、2 actions。
+- 当前主线：`next-major-upgrade-readiness` 80%；Next `16.3.5` / React `19.2.8` 联合升级保持稳定，`react-hooks/refs` 已全局启用并清零 Workbench 命中，真实预检为 `ready_with_actions`、0 blocker、2 actions。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate all：`next-major-upgrade-readiness` 第 3 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
+- Release gate all：`next-major-upgrade-readiness` 第 4 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：Next 16 readiness contract `7/7`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `8/8`；release gate 内置 node tests `165/165`；Next / eslint-config-next 为 `16.3.5`，React / React DOM 为 `19.2.8`，ESLint 因插件兼容性保持 `9.39.5`；`npm audit` 为 0，lint 0 error / 2 warning，默认 Turbopack build 与显式 webpack fallback 通过。
+- Frontend：Next 16 readiness contract `8/8`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `8/8`；release gate 内置 node tests `166/166`；`react-hooks/refs` 全局启用，ESLint 因插件兼容性保持 `9.39.5`；`npm audit` 基线为 0，lint 0 error / 2 warning，默认 Turbopack build 与显式 webpack fallback 通过。
 - E2E/CI：本切片已在真实 backend/frontend 服务上重跑 Chromium full e2e，`59 passed / 1 skipped`；tooling 回归由本轮 release gate 覆盖。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. `next-major-upgrade-readiness` 当前 70%；Next 16 / React 19.2 联合升级、原生 flat config、零漏洞审计与真实 e2e 已完成。
-2. 下一切片按主题偿还 React Compiler 新 lint 规则的兼容关闭项，并持续验证 `eslint-plugin-react` 对 ESLint 10 的支持，不做无依据的强制升级。
+1. `next-major-upgrade-readiness` 当前 80%；Next 16 / React 19.2、原生 flat config、双构建、零漏洞审计、`refs` 规则迁移与真实 e2e 已完成。
+2. 下一切片按组件主题迁移 `react-hooks/set-state-in-effect` 命中，并持续验证 `eslint-plugin-react` 对 ESLint 10 的支持，不做无依据的强制升级。
 
 ## 稳定契约
 
@@ -161,7 +161,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- `next-major-upgrade-readiness` 当前 70%；下一切片聚焦 React Compiler lint 迁移与 ESLint 10 插件兼容性，继续保持双构建、零漏洞审计和外部契约稳定。
+- `next-major-upgrade-readiness` 当前 80%；下一切片聚焦 `set-state-in-effect` 主题迁移与 ESLint 10 插件兼容性，继续保持双构建、零漏洞审计和外部契约稳定。
 
 ## 文档维护约定
 

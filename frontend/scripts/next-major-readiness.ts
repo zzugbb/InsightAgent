@@ -112,11 +112,11 @@ export function evaluateNextMajorReadiness(input: ReadinessInput): ReadinessRepo
 
   const hasReactCompilerLintHold =
     eslintConfig.includes('"react-hooks/set-state-in-effect": "off"')
-    && eslintConfig.includes('"react-hooks/refs": "off"');
+    || eslintConfig.includes('"react-hooks/refs": "off"');
   if (hasReactCompilerLintHold) {
     actions.push({
       id: "react-compiler-lint-migration",
-      detail: "Migrate existing effect state updates and render-time ref access before enabling the new rules.",
+      detail: "Remove the remaining React Compiler lint compatibility overrides before enabling every native rule.",
     });
   }
 

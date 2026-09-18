@@ -137,6 +137,34 @@ test("Next 16 preflight accepts a dedicated Turbopack production build", () => {
   );
 });
 
+test("Next 16 preflight keeps the compiler migration action until every lint hold is removed", () => {
+  const report = evaluateNextMajorReadiness({
+    ...BASE_INPUT,
+    packageJson: {
+      ...BASE_INPUT.packageJson,
+      dependencies: {
+        next: "16.3.5",
+        react: "19.2.8",
+        "react-dom": "19.2.8",
+      },
+      devDependencies: {
+        ...BASE_INPUT.packageJson.devDependencies,
+        "eslint-config-next": "16.3.5",
+      },
+    },
+    eslintConfig: [
+      'import nextVitals from "eslint-config-next/core-web-vitals";',
+      'import nextTs from "eslint-config-next/typescript";',
+      '"react-hooks/set-state-in-effect": "off"',
+    ].join("\n"),
+  });
+
+  assert.deepEqual(
+    report.actions.map(({ id }) => id),
+    ["eslint-10-plugin-compatibility", "react-compiler-lint-migration"],
+  );
+});
+
 test("real frontend reaches Next 16 with an explicit ESLint 10 compatibility hold", async () => {
   const frontendRoot = path.resolve(import.meta.dirname, "..");
   const packageJson = JSON.parse(

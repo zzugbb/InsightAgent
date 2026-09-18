@@ -122,6 +122,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [taskGovernanceProviderSourceFilter, setTaskGovernanceProviderSourceFilter] =
     useState<string>("__all__");
   const [prompt, setPrompt] = useState("");
+  const [lastSentPrompt, setLastSentPrompt] = useState("");
   const [liveRegionText, setLiveRegionText] = useState("");
   const [sessionExporting, setSessionExporting] = useState<
     "json" | "markdown" | null
@@ -164,18 +165,11 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const traceDeltaSyncInFlightRef = useRef(false);
   const traceDeltaRetryCountRef = useRef(0);
   const isNarrow = useMediaQuery(NARROW_QUERY);
-  const sidebarWidthRef = useRef(SIDEBAR_W_DEFAULT);
-  sidebarWidthRef.current = sidebarWidthPx;
-  const inspectorWidthRef = useRef(INSPECTOR_W_DEFAULT);
-  inspectorWidthRef.current = inspectorWidthPx;
 
   const composerRef = useRef<TextAreaRef | null>(null);
-  /** 发送成功后输入框会清空，流式失败重试时用于恢复同一条文案 */
-  const lastSentPromptRef = useRef("");
   const inspectorShellRef = useRef<HTMLElement>(null);
   const sidebarShellRef = useRef<HTMLElement>(null);
   const activeSessionIdRef = useRef<string | null>(null);
-  activeSessionIdRef.current = activeSessionId;
   const sessionOpenButtonRef = useRef<HTMLButtonElement>(null);
   const inspectorOpenButtonRef = useRef<HTMLButtonElement>(null);
   /** 避免 GET /tasks?session_id= 404 时重复 toast / 重复清空 */
@@ -184,6 +178,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const blockedRecoveryTaskIdsRef = useRef<Set<string>>(new Set());
   const recoveringTaskIdRef = useRef<string | null>(null);
   const cancelSendCooldownTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
 
   const isStreaming = useChatStreamStore((s: ChatStreamStore) => s.isStreaming);
   const sseTokens = useChatStreamStore((s: ChatStreamStore) => s.sseTokens);
@@ -1209,7 +1207,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
     try {
       const sessionId = await ensureSessionForSend();
-      lastSentPromptRef.current = text;
+      setLastSentPrompt(text);
       setPrompt("");
       setInspectorTab("trace");
       if (isNarrow) {
@@ -1244,8 +1242,8 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   function handleRetryStream() {
     resetStreamUi();
-    if (!prompt.trim() && lastSentPromptRef.current) {
-      setPrompt(lastSentPromptRef.current);
+    if (!prompt.trim() && lastSentPrompt) {
+      setPrompt(lastSentPrompt);
     }
     void handleSend();
   }
@@ -1369,7 +1367,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       return undefined;
     }
     const nowIso = new Date().toISOString();
-    const prompt = lastSentPromptRef.current.trim();
+    const prompt = lastSentPrompt.trim();
     return {
       id: taskId,
       session_id: sessionId,
@@ -1387,6 +1385,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     activeTaskFromList,
     activeTaskIdScoped,
     activeSessionId,
+    lastSentPrompt,
     scopedIsStreaming,
     scopedSsePhase,
   ]);
@@ -1439,7 +1438,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       if (sidebarCollapsed || isNarrow) return;
       event.preventDefault();
       const startX = event.clientX;
-      const startW = sidebarWidthRef.current;
+      const startW = sidebarWidthPx;
       function onMove(ev: MouseEvent) {
         const delta = ev.clientX - startX;
         const next = Math.min(
@@ -1459,7 +1458,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [isNarrow, sidebarCollapsed],
+    [isNarrow, sidebarCollapsed, sidebarWidthPx],
   );
 
   const onInspectorResizeStart = useCallback(
@@ -1467,7 +1466,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       if (inspectorCollapsed || isNarrow) return;
       event.preventDefault();
       const startX = event.clientX;
-      const startW = inspectorWidthRef.current;
+      const startW = inspectorWidthPx;
       function onMove(ev: MouseEvent) {
         const delta = startX - ev.clientX;
         const next = Math.min(
@@ -1487,7 +1486,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [isNarrow, inspectorCollapsed],
+    [inspectorCollapsed, inspectorWidthPx, isNarrow],
   );
 
   const shellClass = [
@@ -1562,7 +1561,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         apiBanner={bannerError}
         onDismissBanner={() => setBannerError(null)}
         sessionMessages={sessionMessages}
-        pendingUserInput={scopedIsStreaming ? lastSentPromptRef.current : ""}
+        pendingUserInput={scopedIsStreaming ? lastSentPrompt : ""}
         pendingUserTaskId={scopedSseTaskId}
         messagesLoading={messagesLoading}
         messagesMessage={messagesMessage}
