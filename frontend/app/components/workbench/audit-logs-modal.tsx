@@ -3,7 +3,7 @@
 import { Alert, App, Button, Input, Modal, Segmented, Select, Space, Table, Tag, Tooltip } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { apiJson } from "../../../lib/api-client";
 import { toUserFacingError } from "../../../lib/errors";
@@ -90,21 +90,6 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
   const [exporting, setExporting] = useState<"json" | "csv" | null>(null);
   const [exportScope, setExportScope] = useState<ExportScope>("all");
   const offset = (page - 1) * pageSize;
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setEventFilter("all");
-    setTimeFilter("7d");
-    setSessionIdFilter("");
-    setTaskIdFilter("");
-    setKeyword("");
-    setPage(1);
-    setPageSize(10);
-    setExportScope("all");
-    setExporting(null);
-  }, [open]);
 
   const query = useQuery({
     queryKey: [

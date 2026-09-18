@@ -561,7 +561,11 @@ export function SidebarSettingsMenu({
         onClose={() => setModelOpen(false)}
         triggerRef={triggerRef}
       />
-      <AuditLogsModal open={auditOpen} onClose={() => setAuditOpen(false)} />
+      <AuditLogsModal
+        key={auditOpen ? "audit-open" : "audit-closed"}
+        open={auditOpen}
+        onClose={() => setAuditOpen(false)}
+      />
       <KnowledgeBaseGovernanceModal
         open={knowledgeBaseOpen}
         onClose={closeKnowledgeBase}

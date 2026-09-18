@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { pathToFileURL } from "node:url";
 
 const FRONTEND_ROOT = path.resolve(import.meta.dirname, "..");
 const EXPECTED_NEXT_VERSION = "16.3.5";
@@ -122,10 +123,36 @@ test("frontend lint uses the native Next 16 flat configuration", async () => {
   assert.match(eslintConfig, /defineConfig/);
   assert.match(eslintConfig, /globalIgnores/);
   assert.match(eslintConfig, /\.next\/\*\*/);
-  assert.match(eslintConfig, /["']react-hooks\/set-state-in-effect["']:\s*["']off["']/);
   assert.doesNotMatch(eslintConfig, /["']react-hooks\/refs["']:\s*["']off["']/);
   assert.doesNotMatch(eslintConfig, /FlatCompat/);
   assert.doesNotMatch(eslintConfig, /@eslint\/eslintrc/);
+});
+
+test("React Compiler state-effect hold is scoped to the remaining migration files", async () => {
+  const configModule = await import(
+    pathToFileURL(path.join(FRONTEND_ROOT, "eslint.config.mjs")).href
+  ) as {
+    default: Array<{
+      files?: string[];
+      rules?: Record<string, unknown>;
+    }>;
+  };
+  const scopedHolds = configModule.default
+    .filter(
+      (entry) => entry.rules?.["react-hooks/set-state-in-effect"] === "off",
+    )
+    .flatMap((entry) => entry.files ?? ["<global>"]);
+
+  assert.deepEqual(scopedHolds, [
+    "app/components/workbench/index.tsx",
+    "app/components/workbench/knowledge-base-governance-modal.tsx",
+    "app/components/workbench/model-settings-modal.tsx",
+    "app/components/workbench/runtime-debug-modal.tsx",
+    "app/components/workbench/sidebar-settings-menu.tsx",
+    "app/components/workbench/task-center.tsx",
+    "app/components/workbench/usage-dashboard-modal.tsx",
+    "lib/preferences-context.tsx",
+  ]);
 });
 
 test("frontend lockfile keeps Next runtime and lint tooling exactly aligned", async () => {
