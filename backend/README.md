@@ -7,21 +7,21 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI 与当前版本范围内可修复的审计依赖均已建立精确约束。
-- 当前主线：`next-major-upgrade-readiness` 85%；前端 `set-state-in-effect` 已从全局关闭收窄为 8 个明确迁移文件，后端运行时及 SSE / trace / export 外部契约未修改。
+- 当前主线：`next-major-upgrade-readiness` 88%；前端 `set-state-in-effect` 已从全局关闭收窄为 7 个明确迁移文件，后端运行时及 SSE / trace / export 外部契约未修改。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- Release gate all：`next-major-upgrade-readiness` 第 5 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
+- Release gate all：`next-major-upgrade-readiness` 第 6 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：Next 16 readiness contract `8/8`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `9/9`；release gate 内置 node tests `167/167`；`set-state-in-effect` 仅对 8 个存量文件保留例外，全库强制扫描剩 19 处；双构建均通过。
-- E2E/CI：本切片真实服务目标 e2e `1/1`，覆盖审计弹窗关闭/重开状态复位；最近 full Chromium 基线仍为 `59 passed / 1 skipped`。
+- Frontend：Next 16 readiness contract `8/8`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `9/9`；release gate 内置 node tests `167/167`；`set-state-in-effect` 仅对 7 个存量文件保留例外，全库强制扫描剩 18 处；双构建均通过。
+- E2E/CI：本切片真实服务目标 e2e `1/1`，覆盖 Usage Dashboard 与审计弹窗关闭/重开状态复位；最近 full Chromium 基线仍为 `59 passed / 1 skipped`。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步后端计划
 
-1. `next-major-upgrade-readiness` 当前 85%；Compiler lint 全局豁免已消失，审计弹窗迁移和目标 e2e 已确认无项目级 blocker。
-2. 下一切片从前端 8 个显式债务文件继续迁移；后端保持 FastAPI 精确 pin、full slice 与 SSE / trace / export 外部契约稳定。
+1. `next-major-upgrade-readiness` 当前 88%；Compiler lint 全局豁免已消失，审计与 Usage Dashboard 弹窗迁移和目标 e2e 已确认无项目级 blocker。
+2. 下一切片从前端 7 个显式债务文件继续迁移；后端保持 FastAPI 精确 pin、full slice 与 SSE / trace / export 外部契约稳定。
 
 ## 稳定契约
 

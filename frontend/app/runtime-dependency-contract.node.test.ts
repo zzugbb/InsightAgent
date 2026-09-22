@@ -150,7 +150,6 @@ test("React Compiler state-effect hold is scoped to the remaining migration file
     "app/components/workbench/runtime-debug-modal.tsx",
     "app/components/workbench/sidebar-settings-menu.tsx",
     "app/components/workbench/task-center.tsx",
-    "app/components/workbench/usage-dashboard-modal.tsx",
     "lib/preferences-context.tsx",
   ]);
 });

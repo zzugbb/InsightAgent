@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Modal, Segmented, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -124,18 +124,6 @@ export function UsageDashboardModal({
     useState<string>(GOVERNANCE_FILTER_ALL);
   const [toolRegistryProviderSourceFilter, setToolRegistryProviderSourceFilter] =
     useState<string>(GOVERNANCE_FILTER_ALL);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setScope(activeSessionId ? "session" : "global");
-    setMetric("tokens");
-    setView("sessions");
-    setSourceFilter("all");
-    setToolRegistryProfileFilter(GOVERNANCE_FILTER_ALL);
-    setToolRegistryProviderSourceFilter(GOVERNANCE_FILTER_ALL);
-  }, [open, activeSessionId]);
 
   const resolvedScope: UsageScope =
     scope === "session" && activeSessionId ? "session" : "global";

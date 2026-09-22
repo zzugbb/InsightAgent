@@ -581,6 +581,7 @@ export function SidebarSettingsMenu({
         onReviewKnowledgeBase={reviewKnowledgeBase}
       />
       <UsageDashboardModal
+        key={`${usageOpen ? "usage-open" : "usage-closed"}-${activeSessionId ?? "global"}`}
         open={usageOpen}
         onClose={() => setUsageOpen(false)}
         activeSessionId={activeSessionId}
