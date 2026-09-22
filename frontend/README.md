@@ -7,21 +7,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI flat config 与当前版本范围内可修复的审计依赖均已建立精确约束。
-- 当前主线：`next-major-upgrade-readiness` 88%；`react-hooks/set-state-in-effect` 已从全局关闭收窄为 7 个明确迁移文件，审计与 Usage Dashboard 弹窗改用实例重建保持重开复位，真实预检为 `ready_with_actions`、0 blocker、2 actions。
+- 当前主线：`next-major-upgrade-readiness` 91%；`react-hooks/set-state-in-effect` 已从全局关闭收窄为 6 个明确迁移文件，Runtime Debug 的会话 Memory 状态已拆入按会话重建的主题组件，真实预检为 `ready_with_actions`、0 blocker、2 actions。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
-- Release gate all：`next-major-upgrade-readiness` 第 6 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
-- Frontend：Next 16 readiness contract `8/8`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `9/9`；release gate 内置 node tests `167/167`；`set-state-in-effect` 例外精确限制在 7 个存量文件，全库强制扫描剩 18 处；ESLint `9.39.5`，lint 0 error / 2 warning，双构建通过。
+- Release gate all：`next-major-upgrade-readiness` 第 7 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
+- Frontend：Next 16 readiness contract `8/8`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `9/9`；release gate 内置 node tests `167/167`；`set-state-in-effect` 例外精确限制在 6 个存量文件，全库强制扫描剩 17 处；ESLint `9.39.5`，lint 0 error / 2 warning，双构建通过。
 - Backend 契约基线：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` 在 Python 3.14 下无目标弃用告警；security `17/17`；production operations health `11/11`。
-- E2E/CI：真实服务目标 e2e `1/1`，覆盖 Usage Dashboard 与审计弹窗填写筛选、关闭与重开复位；最近 full Chromium 基线仍为 `59 passed / 1 skipped`。
+- E2E/CI：真实服务目标 e2e `1/1`，覆盖 Runtime Debug RAG 输入保留、错误重试与知识库切换清理；最近 full Chromium 基线仍为 `59 passed / 1 skipped`。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. `next-major-upgrade-readiness` 当前 88%；新前端文件默认受 `set-state-in-effect` 约束，存量债务只能通过明确文件清单保留例外。
-2. 下一切片从 7 个文件、18 处命中继续按组件主题迁移；ESLint 10 等待 `eslint-plugin-react` 兼容后再以红测驱动升级。
+1. `next-major-upgrade-readiness` 当前 91%；Runtime Debug 会话 Memory 子组件按 `activeSessionId` 重建，RAG 草稿与检索状态继续独立保留。
+2. 下一切片从 6 个文件、17 处命中继续按组件主题迁移；ESLint 10 等待 `eslint-plugin-react` 兼容后再以红测驱动升级。
 
 ## 稳定契约
 
@@ -91,7 +91,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `app/components/workbench/model-settings-modal.tsx`：mock/remote 模型设置、校验与保存
 - `app/components/workbench/audit-logs-modal.tsx` / `audit-logs-modal-utils.ts`：审计日志筛选、服务端 keyword URL、分页、失败详情可读化、展开与导出
 - `app/components/workbench/knowledge-base-governance-modal.tsx`：知识库治理
-- `app/components/workbench/runtime-debug-modal.tsx`：Memory / RAG 调试
+- `app/components/workbench/runtime-debug-modal.tsx` / `runtime-debug-memory-section.tsx`：RAG 调试编排与按会话重建的 Memory 调试区
 - `app/tasks/[taskId]/page.tsx`：任务详情页与任务导出入口
 - `lib/stores/chat-stream-store.ts`：SSE 事件分发与 trace 状态
 - `lib/stores/chat-stream-store-utils.ts`：tool_end / tool meta 合并、preview/output/result-summary 归一化

@@ -6,21 +6,21 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`。
 - 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI flat config 与可在当前版本范围修复的审计依赖均已建立精确回归约束。
-- 当前主线：`next-major-upgrade-readiness` 88%；`react-hooks/set-state-in-effect` 已从全局关闭收窄为 7 个明确迁移文件，审计与 Usage Dashboard 弹窗命中已清零，真实预检为 `ready_with_actions`、0 blocker、2 actions。
+- 当前主线：`next-major-upgrade-readiness` 91%；`react-hooks/set-state-in-effect` 已从全局关闭收窄为 6 个明确迁移文件，Runtime Debug 的会话 Memory 状态已拆入按会话重建的主题组件，真实预检为 `ready_with_actions`、0 blocker、2 actions。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- Release gate all：`next-major-upgrade-readiness` 第 6 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
+- Release gate all：`next-major-upgrade-readiness` 第 7 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：Next 16 readiness contract `8/8`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `9/9`；release gate 内置 node tests `167/167`；`set-state-in-effect` 仅对 7 个存量文件保留例外，全库强制扫描剩 18 处；ESLint `9.39.5`，lint 0 error / 2 warning，双构建通过。
-- E2E/CI：本切片真实服务目标 e2e `1/1`，覆盖 Usage Dashboard 与审计弹窗关闭/重开状态复位；最近 full Chromium 基线仍为 `59 passed / 1 skipped`，tooling 回归由本轮 release gate 覆盖。
+- Frontend：Next 16 readiness contract `8/8`，真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `9/9`；release gate 内置 node tests `167/167`；`set-state-in-effect` 仅对 6 个存量文件保留例外，全库强制扫描剩 17 处；ESLint `9.39.5`，lint 0 error / 2 warning，双构建通过。
+- E2E/CI：本切片真实服务目标 e2e `1/1`，覆盖 Runtime Debug RAG 输入保留、错误重试与知识库切换清理；最近 full Chromium 基线仍为 `59 passed / 1 skipped`，tooling 回归由本轮 release gate 覆盖。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 当前开发计划
 
-1. `next-major-upgrade-readiness` 当前 88%；Compiler lint 全局豁免已消失，审计与 Usage Dashboard 弹窗通过实例重建保留重开复位语义。
-2. 下一切片从 7 个明确文件、18 处 `set-state-in-effect` 命中继续按组件主题迁移，并持续验证 ESLint 10 插件兼容性。
+1. `next-major-upgrade-readiness` 当前 91%；Runtime Debug 的 session-scoped Memory 状态与全局 RAG 状态已拆开，按会话实例重建只复位 Memory 草稿和 mutation 状态。
+2. 下一切片从 6 个明确文件、17 处 `set-state-in-effect` 命中继续按组件主题迁移，并持续验证 ESLint 10 插件兼容性。
 
 ## 稳定契约
 
@@ -161,7 +161,7 @@ docker compose -f compose.full.yml up -d
 
 ## 下一步
 
-- `next-major-upgrade-readiness` 当前 88%；下一切片从剩余 7 个显式白名单文件逐项迁移 `set-state-in-effect`，并继续验证 ESLint 10 插件兼容性。
+- `next-major-upgrade-readiness` 当前 91%；下一切片从剩余 6 个显式白名单文件逐项迁移 `set-state-in-effect`，并继续验证 ESLint 10 插件兼容性。
 
 ## 文档维护约定
 
