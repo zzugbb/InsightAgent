@@ -7,6 +7,7 @@ import {
   useLayoutEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -63,31 +64,45 @@ function readThemeFromDom(): Theme | null {
   return null;
 }
 
+// Keep the first client render aligned with SSR, then read browser preferences.
+function subscribeToHydration() {
+  return () => {};
+}
+
+function getClientHydrationSnapshot() {
+  return true;
+}
+
+function getServerHydrationSnapshot() {
+  return false;
+}
+
 export function PreferencesProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
-  const [primaryColor, setPrimaryColorState] = useState(DEFAULT_PRIMARY_HEX);
-  const [locale, setLocaleState] = useState<Locale>("zh");
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  );
+  const [themeOverride, setThemeState] = useState<Theme | null>(null);
+  const [primaryColorOverride, setPrimaryColorState] = useState<string | null>(null);
+  const [localeOverride, setLocaleState] = useState<Locale | null>(null);
+  const theme = themeOverride ?? (hydrated
+    ? readThemeFromDom() ?? readStoredTheme() ??
+      (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : "dark");
+  const primaryColor = primaryColorOverride ??
+    (hydrated ? readStoredPrimaryColor() : DEFAULT_PRIMARY_HEX);
+  const locale = localeOverride ?? (hydrated
+    ? readStoredLocale() ??
+      (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en")
+    : "zh");
 
   useLayoutEffect(() => {
-    const t =
-      readThemeFromDom() ??
-      readStoredTheme() ??
-      (window.matchMedia("(prefers-color-scheme: light)").matches
-        ? "light"
-        : "dark");
-    setThemeState(t);
-    document.documentElement.setAttribute("data-theme", t);
-
-    const p = readStoredPrimaryColor();
-    setPrimaryColorState(p);
-    applyPrimaryColorToDocument(p);
-
-    const l =
-      readStoredLocale() ??
-      (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
-    setLocaleState(l);
-    document.documentElement.lang = l === "zh" ? "zh-CN" : "en-US";
-  }, []);
+    if (!hydrated) return;
+    document.documentElement.setAttribute("data-theme", theme);
+    applyPrimaryColorToDocument(primaryColor);
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en-US";
+  }, [hydrated, theme, primaryColor, locale]);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
