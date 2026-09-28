@@ -30,6 +30,10 @@ import { ChatColumn } from "./chat-column";
 import { Inspector } from "./inspector";
 import { Sidebar } from "./sidebar";
 import { TaskCenter } from "./task-center";
+import {
+  reconcileRuntimeNoticeDismissal,
+} from "./workbench-runtime-notice";
+import type { RuntimeNoticeDismissal } from "./workbench-runtime-notice";
 import type {
   InspectorTab,
   PaginatedList,
@@ -108,7 +112,12 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("trace");
   const [bannerError, setBannerError] = useState<string | null>(null);
-  const [runtimeNoticeDismissed, setRuntimeNoticeDismissed] = useState(false);
+  const [runtimeNoticeDismissal, setRuntimeNoticeDismissal] =
+    useState<RuntimeNoticeDismissal>({
+      mode: undefined,
+      apiKeyConfigured: undefined,
+      dismissed: false,
+    });
   const [inspectorDrawerOpen, setInspectorDrawerOpen] = useState(false);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
   const [taskCenterDrawerOpen, setTaskCenterDrawerOpen] = useState(false);
@@ -572,9 +581,16 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         ? t.chat.runtimeNoticeMock
         : null;
 
-  useEffect(() => {
-    setRuntimeNoticeDismissed(false);
-  }, [settingsSummary?.mode, settingsSummary?.api_key_configured]);
+  const currentRuntimeNoticeDismissal = reconcileRuntimeNoticeDismissal(
+    runtimeNoticeDismissal,
+    {
+      mode: settingsSummary?.mode,
+      apiKeyConfigured: settingsSummary?.api_key_configured,
+    },
+  );
+  if (currentRuntimeNoticeDismissal !== runtimeNoticeDismissal) {
+    setRuntimeNoticeDismissal(currentRuntimeNoticeDismissal);
+  }
 
   const openModelSettings = useCallback(() => {
     window.dispatchEvent(new CustomEvent(OPEN_MODEL_SETTINGS_EVENT));
@@ -1588,9 +1604,12 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         onOpenTaskCenter={openTaskCenterDrawer}
         composerRef={composerRef}
         liveRegionText={liveRegionText}
-        runtimeNotice={runtimeNoticeDismissed ? null : runtimeNotice}
+        runtimeNotice={currentRuntimeNoticeDismissal.dismissed ? null : runtimeNotice}
         onOpenModelSettings={openModelSettings}
-        onDismissRuntimeNotice={() => setRuntimeNoticeDismissed(true)}
+        onDismissRuntimeNotice={() => setRuntimeNoticeDismissal((current) => ({
+          ...current,
+          dismissed: true,
+        }))}
         recoveryNotice={recoveryNotice}
         onDismissRecoveryNotice={() => setRecoveryNotice(null)}
       />

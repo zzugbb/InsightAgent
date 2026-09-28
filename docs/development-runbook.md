@@ -65,6 +65,7 @@ node --test --experimental-strip-types \
   app/components/workbench/utils.node.test.ts \
   app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts \
   app/components/workbench/task-center-pagination.node.test.ts \
+  app/components/workbench/workbench-runtime-notice.node.test.ts \
   app/runtime-dependency-contract.node.test.ts \
   app/source-file-size.node.test.ts \
   app/tasks/task-detail-page-utils.node.test.ts

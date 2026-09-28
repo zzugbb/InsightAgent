@@ -27,6 +27,7 @@ FRONTEND_NODE_TESTS=(
   "app/components/workbench/utils.node.test.ts"
   "app/components/workbench/knowledge-base-governance-modal-utils.node.test.ts"
   "app/components/workbench/task-center-pagination.node.test.ts"
+  "app/components/workbench/workbench-runtime-notice.node.test.ts"
   "app/next-major-readiness.node.test.ts"
   "app/runtime-dependency-contract.node.test.ts"
   "app/source-file-size.node.test.ts"
