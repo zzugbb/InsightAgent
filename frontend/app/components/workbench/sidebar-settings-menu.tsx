@@ -71,12 +71,9 @@ export function SidebarSettingsMenu({
   const [runtimeDebugInitialFocus, setRuntimeDebugInitialFocus] = useState<
     "rag" | null
   >(null);
-  const [mounted, setMounted] = useState(false);
   const [popoverPos, setPopoverPos] = useState<PopoverPos | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => setMounted(true), []);
 
   const layoutPopover = useCallback(() => {
     const el = triggerRef.current;
@@ -91,7 +88,6 @@ export function SidebarSettingsMenu({
 
   useLayoutEffect(() => {
     if (!open) {
-      setPopoverPos(null);
       return;
     }
     layoutPopover();
@@ -136,12 +132,6 @@ export function SidebarSettingsMenu({
       document.removeEventListener("mousedown", onDocMouseDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
-
-  useEffect(() => {
-    if (open) {
-      setExpanded(null);
-    }
   }, [open]);
 
   useEffect(() => {
@@ -230,7 +220,7 @@ export function SidebarSettingsMenu({
   const popoverWidth = Math.max(popoverPos?.width ?? 0, 300);
 
   const popoverContent =
-    open && mounted && popoverPos ? (
+    open && popoverPos ? (
       <div
         ref={popoverRef}
         className="settings-menu-popover settings-menu-popover--accordion"
@@ -546,7 +536,10 @@ export function SidebarSettingsMenu({
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={t.sidebar.settingsButton}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setExpanded(null);
+          setOpen((v) => !v);
+        }}
         data-testid="sidebar-settings-trigger"
       >
         <Settings2 size={18} strokeWidth={1.75} aria-hidden />
