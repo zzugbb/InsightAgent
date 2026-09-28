@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, App, Button, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { DatabaseZap, LockKeyhole, RefreshCw, UsersRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Key } from "react";
 
 import { apiDeleteJson, apiJson, apiPostJson } from "../../../lib/api-client";
@@ -23,7 +23,7 @@ import {
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseGovernanceListState,
   resolveKnowledgeBaseGovernanceOperatorHint,
-  resolveKnowledgeBaseReviewRowKey,
+  resolveKnowledgeBaseExpandedRowKeys,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
 } from "./knowledge-base-governance-modal-utils";
@@ -62,7 +62,7 @@ export function KnowledgeBaseGovernanceModal({
   const { message } = App.useApp();
   const t = useMessages();
   const queryClient = useQueryClient();
-  const [expandedRowKeys, setExpandedRowKeys] = useState<Key[]>([]);
+  const [manualExpandedRowKeys, setManualExpandedRowKeys] = useState<Key[] | null>(null);
 
   const listQuery = useQuery({
     queryKey: ["rag-kb-governance"],
@@ -139,19 +139,11 @@ export function KnowledgeBaseGovernanceModal({
   });
 
   const rows = listQuery.data?.knowledge_bases ?? EMPTY_KNOWLEDGE_BASE_ROWS;
-  useEffect(() => {
-    if (!open) {
-      setExpandedRowKeys([]);
-      return;
-    }
-    const reviewRowKey = resolveKnowledgeBaseReviewRowKey(
-      rows,
-      initialKnowledgeBaseId,
-    );
-    if (reviewRowKey) {
-      setExpandedRowKeys([reviewRowKey]);
-    }
-  }, [initialKnowledgeBaseId, open, rows]);
+  const expandedRowKeys = resolveKnowledgeBaseExpandedRowKeys(
+    rows,
+    initialKnowledgeBaseId,
+    manualExpandedRowKeys,
+  );
   const listState = resolveKnowledgeBaseGovernanceListState({
     isLoading: listQuery.isLoading,
     isError: listQuery.isError,
@@ -554,7 +546,7 @@ export function KnowledgeBaseGovernanceModal({
               rowExpandable: (row) =>
                 resolveKnowledgeBaseVersionRows(row.document_versions).length > 0,
               expandedRowKeys,
-              onExpandedRowsChange: (keys) => setExpandedRowKeys([...keys]),
+              onExpandedRowsChange: (keys) => setManualExpandedRowKeys([...keys]),
             }}
             pagination={false}
             locale={{ emptyText: t.sidebar.knowledgeBase.noKnowledgeBases }}

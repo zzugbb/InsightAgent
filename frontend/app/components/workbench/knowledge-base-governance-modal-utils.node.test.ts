@@ -7,6 +7,7 @@ import {
   resolveKnowledgeBaseDocumentGroups,
   resolveKnowledgeBaseGovernanceListState,
   resolveKnowledgeBaseGovernanceOperatorHint,
+  resolveKnowledgeBaseExpandedRowKeys,
   resolveKnowledgeBaseReviewRowKey,
   resolveKnowledgeBaseVersionRows,
   summarizeKnowledgeBaseVersions,
@@ -155,6 +156,33 @@ test("resolveKnowledgeBaseReviewRowKey locates the requested knowledge base", ()
   );
   assert.equal(resolveKnowledgeBaseReviewRowKey(rows, "missing"), null);
   assert.equal(resolveKnowledgeBaseReviewRowKey(rows, null), null);
+});
+
+test("review expansion follows loaded rows until the user changes it", () => {
+  const rows = [
+    { knowledge_base_id: "release-notes", collection: "kb_release_notes" },
+  ];
+
+  assert.deepEqual(
+    resolveKnowledgeBaseExpandedRowKeys([], "release-notes", null),
+    [],
+  );
+  assert.deepEqual(
+    resolveKnowledgeBaseExpandedRowKeys(rows, "release-notes", null),
+    ["kb_release_notes"],
+  );
+  assert.deepEqual(
+    resolveKnowledgeBaseExpandedRowKeys(rows, "release-notes", []),
+    [],
+  );
+  assert.deepEqual(
+    resolveKnowledgeBaseExpandedRowKeys(rows, "release-notes", ["other"]),
+    ["other"],
+  );
+  assert.deepEqual(
+    resolveKnowledgeBaseExpandedRowKeys(rows, "release-notes", [1n]),
+    [1n],
+  );
 });
 
 test("resolveKnowledgeBaseVersionRows returns stable sorted display rows", () => {

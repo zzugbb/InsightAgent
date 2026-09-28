@@ -1,3 +1,4 @@
+import type { Key } from "react";
 import type { RagDocumentVersionSummary } from "./types";
 
 export type KnowledgeBaseVersionRow = {
@@ -60,6 +61,18 @@ export function resolveKnowledgeBaseReviewRowKey(
     return null;
   }
   return rows.find((row) => row.knowledge_base_id === target)?.collection ?? null;
+}
+
+export function resolveKnowledgeBaseExpandedRowKeys(
+  rows: Array<{ knowledge_base_id: string; collection: string }>,
+  knowledgeBaseId: string | null | undefined,
+  manualExpandedRowKeys: Key[] | null,
+): Key[] {
+  if (manualExpandedRowKeys !== null) {
+    return manualExpandedRowKeys;
+  }
+  const reviewRowKey = resolveKnowledgeBaseReviewRowKey(rows, knowledgeBaseId);
+  return reviewRowKey ? [reviewRowKey] : [];
 }
 
 export function resolveKnowledgeBaseGovernanceListState(args: {

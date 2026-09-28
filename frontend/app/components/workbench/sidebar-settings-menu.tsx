@@ -567,6 +567,7 @@ export function SidebarSettingsMenu({
         onClose={() => setAuditOpen(false)}
       />
       <KnowledgeBaseGovernanceModal
+        key={`${knowledgeBaseOpen ? "kb-open" : "kb-closed"}-${knowledgeBaseInitialReviewId ?? "default"}`}
         open={knowledgeBaseOpen}
         onClose={closeKnowledgeBase}
         onOpenRag={openRagFromKnowledgeBase}
