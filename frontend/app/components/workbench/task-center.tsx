@@ -10,10 +10,18 @@ import {
   Table,
 } from "antd";
 import type { RefObject } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useMessages, usePreferences } from "../../../lib/preferences-context";
 
+import {
+  reconcileTaskCenterPageSelection,
+  resolveTaskCenterPage,
+} from "./task-center-pagination";
+import type {
+  TaskCenterPageFilters,
+  TaskCenterPageSelection,
+} from "./task-center-pagination";
 import type { SessionSummary, TaskSummary } from "./types";
 import {
   buildTaskDetailHref,
@@ -100,7 +108,8 @@ export function TaskCenter({
   const [taskSortOrder, setTaskSortOrder] = useState<"latest" | "oldest">(
     "latest",
   );
-  const [page, setPage] = useState(1);
+  const [pageSelection, setPageSelection] =
+    useState<TaskCenterPageSelection | null>(null);
   const [pageSize, setPageSize] = useState(10);
 
   const scopedTasks = useMemo(() => {
@@ -249,9 +258,7 @@ export function TaskCenter({
     ],
   );
 
-  useEffect(() => {
-    setPage(1);
-  }, [
+  const pageFilters: TaskCenterPageFilters = {
     activeSessionId,
     scopeMode,
     taskSearchQuery,
@@ -261,7 +268,15 @@ export function TaskCenter({
     taskStatusFilter,
     taskGovernanceProfileFilter,
     taskGovernanceProviderSourceFilter,
-  ]);
+  };
+  const currentPageSelection = reconcileTaskCenterPageSelection(
+    pageSelection,
+    pageFilters,
+  );
+  if (currentPageSelection !== pageSelection) {
+    setPageSelection(currentPageSelection);
+  }
+  const page = resolveTaskCenterPage(currentPageSelection, pageFilters);
 
   const columns = useMemo(
     () => [
@@ -705,7 +720,7 @@ export function TaskCenter({
                 total: filteredTasks.length,
                 showSizeChanger: true,
                 onChange: (nextPage, nextPageSize) => {
-                  setPage(nextPage);
+                  setPageSelection({ page: nextPage, filters: pageFilters });
                   if (nextPageSize && nextPageSize !== pageSize) {
                     setPageSize(nextPageSize);
                   }
