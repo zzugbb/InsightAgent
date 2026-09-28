@@ -1,4 +1,5 @@
 import type {
+  SettingsFormState,
   SettingsSummary,
   TaskQueueDiagnostics,
   ToolRegistryDiagnosticsSummary,
@@ -6,6 +7,28 @@ import type {
   ToolRegistryProviderSourceOptionDetail,
   ToolRegistryProviderToolDetail,
 } from "./types";
+
+export function resolveModelSettingsForm(
+  settings: Pick<
+    SettingsSummary,
+    | "mode"
+    | "provider"
+    | "model"
+    | "base_url"
+    | "tool_registry_profile"
+    | "tool_registry_provider_source"
+  >,
+): SettingsFormState {
+  return {
+    mode: settings.mode,
+    provider: settings.provider,
+    model: settings.model,
+    base_url: settings.base_url ?? "",
+    api_key: "",
+    tool_registry_profile: settings.tool_registry_profile,
+    tool_registry_provider_source: settings.tool_registry_provider_source,
+  };
+}
 
 type ModelSettingsPreviewSource = Pick<
   SettingsSummary,

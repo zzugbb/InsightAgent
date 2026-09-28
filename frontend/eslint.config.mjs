@@ -4,7 +4,6 @@ import nextTs from "eslint-config-next/typescript";
 
 const setStateInEffectMigrationFiles = [
   "app/components/workbench/index.tsx",
-  "app/components/workbench/model-settings-modal.tsx",
   "lib/preferences-context.tsx",
 ];
 

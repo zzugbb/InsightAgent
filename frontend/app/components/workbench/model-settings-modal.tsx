@@ -27,6 +27,7 @@ import type {
 import {
   buildModelSettingsUrl,
   formatTaskQueueDiagnosticsSummary,
+  resolveModelSettingsForm,
   resolveModelSettingsSelectionDetails,
 } from "./model-settings-modal-utils";
 import { API_BASE_URL } from "./utils";
@@ -68,6 +69,10 @@ export function ModelSettingsModal({
     | "available_tool_registry_profile_details"
     | "available_tool_registry_provider_source_details"
   > | null>(null);
+  const [syncedSource, setSyncedSource] = useState<{
+    open: boolean;
+    data: SettingsSummary | undefined;
+  }>({ open: false, data: undefined });
   const normalizedActiveSessionId = activeSessionId?.trim() ?? "";
   const settingsUrl = buildModelSettingsUrl(API_BASE_URL, normalizedActiveSessionId);
   const settingsQueryKey = ["settings", "model", normalizedActiveSessionId];
@@ -77,22 +82,16 @@ export function ModelSettingsModal({
     queryFn: () => apiJson<SettingsSummary>(settingsUrl),
   });
 
-  useEffect(() => {
-    if (!open || !data) {
-      return;
+  if (open !== syncedSource.open || (open && data !== syncedSource.data)) {
+    setSyncedSource({ open, data });
+    if (!open) {
+      setForm(DEFAULT_FORM);
+      setValidatedPreview(null);
+    } else if (data) {
+      setForm(resolveModelSettingsForm(data));
+      setValidatedPreview(null);
     }
-    const nextForm: SettingsFormState = {
-      mode: data.mode,
-      provider: data.provider,
-      model: data.model,
-      base_url: data.base_url ?? "",
-      api_key: "",
-      tool_registry_profile: data.tool_registry_profile,
-      tool_registry_provider_source: data.tool_registry_provider_source,
-    };
-    setForm(nextForm);
-    setValidatedPreview(null);
-  }, [data, open]);
+  }
 
   useEffect(() => {
     if (isError && error) {
@@ -151,13 +150,6 @@ export function ModelSettingsModal({
       message.error(`${t.settings.validateFail}: ${u.banner}`);
     },
   });
-
-  useEffect(() => {
-    if (!open) {
-      setForm(DEFAULT_FORM);
-      setValidatedPreview(null);
-    }
-  }, [open]);
 
   function setRemoteField(
     field: keyof RemoteFormState,

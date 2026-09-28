@@ -7,7 +7,35 @@ import {
   formatToolRegistryProviderSourceDiagnosticsSummary,
   formatToolRegistryProviderToolDetailsSummary,
   resolveModelSettingsSelectionDetails,
+  resolveModelSettingsForm,
 } from "./model-settings-modal-utils.ts";
+
+test("resolveModelSettingsForm loads persisted settings without exposing an API key", () => {
+  assert.deepEqual(resolveModelSettingsForm({
+    mode: "remote",
+    provider: "openai",
+    model: "gpt-example",
+    base_url: "https://api.example.test/v1",
+    tool_registry_profile: "retrieval_only",
+    tool_registry_provider_source: "custom",
+  }), {
+    mode: "remote",
+    provider: "openai",
+    model: "gpt-example",
+    base_url: "https://api.example.test/v1",
+    api_key: "",
+    tool_registry_profile: "retrieval_only",
+    tool_registry_provider_source: "custom",
+  });
+  assert.equal(resolveModelSettingsForm({
+    mode: "mock",
+    provider: "mock",
+    model: "mock-gpt",
+    base_url: null,
+    tool_registry_profile: "default",
+    tool_registry_provider_source: "default",
+  }).base_url, "");
+});
 
 test("buildModelSettingsUrl includes encoded active session when present", () => {
   assert.equal(
