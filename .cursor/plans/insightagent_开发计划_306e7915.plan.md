@@ -1,10 +1,10 @@
 ---
 name: InsightAgent 开发计划
-overview: next-major-upgrade-readiness 已 100% 封板；project-completion-audit 静态盘点 1/3（约 33%）完成，用户报告 GLM 已测试但覆盖记录待核对，尚无试点环境；项目总完成度未量化。
+overview: next-major-upgrade-readiness 已 100% 封板；project-completion-audit 1/3（约 33%）完成，历史 GLM 成功链路已核实、当前最小调用 HTTP 429，尚无试点环境；项目总完成度未量化。
 current_focus:
   mainline: project-completion-audit
-  status: 静态盘点 1/3（约 33%）完成；真实环境证据与范围/签收待完成
-  latest_change: 新增 docs/project-completion-audit.md；用户报告 GLM 已测试但覆盖范围待核对，没有试点环境，本机 backend/.env 仍为 mock；本轮未改实现、未复跑 e2e
+  status: 静态盘点 1/3（约 33%）完成；历史 GLM 证据已核实，当前成功调用、环境与范围/签收待完成
+  latest_change: 只读核对 10 条历史 glm-5.1 provider-usage 完成任务、工具/RAG Trace 和一条任务导出；一次极短实时 GLM 请求 HTTP 429，未重试；本轮未改实现、未复跑 e2e
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -45,7 +45,8 @@ stable_contracts:
   - Next 16.3.5 与 eslint-config-next 精确对齐，React / React DOM 固定 19.2.8；React Compiler refs / set-state-in-effect 无例外；ESLint 9.39.5 在 eslint-plugin-react 官方支持 ESLint 10 前保持兼容锁定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  source: 以下为上一主线封板基线；project-completion-audit 本轮仅做静态盘点，未复跑测试/e2e，也未验证目标环境
+  source: 以下门禁数字为上一主线封板基线；project-completion-audit 本轮做静态盘点、只读历史证据核对和一次真实 GLM 请求，未复跑测试/e2e，也未验证目标环境
+  current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；当前最小 GLM 调用 HTTP 429，未重试
   release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-next-major-readiness-seal-summary.md --json-summary-file /tmp/release-gate-next-major-readiness-seal-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，10/10
   backend: 上一主线封板时 full slice 2020/2020、module boundary 9/9；FastAPI/Python 3.14、安全与运维专项沿用已封板基线
   frontend: node tests 184/184；真实预检 ready_with_actions、0 blocker、1 个 ESLint 10 外部兼容动作；set-state-in-effect 全局启用且强制扫描 0 处；lint 0 error / 2 warning，双构建 passed
@@ -67,7 +68,7 @@ next_candidate_mainlines:
   - 试点收尾实施主线：由 project-completion-audit 的真实环境证据与范围/签收结论确定具体切片，不预先宣称剩余工作已知
   - eslint-10-adoption：非试点阻塞；等待 eslint-plugin-react 官方兼容版本发布，不使用 force/peer override 绕过安装约束
 next_steps:
-  - 按 docs/project-completion-audit.md 先核对既有 GLM 测试并补齐缺失验收路径；试点部署/恢复等待环境，随后裁决原始计划范围；项目总完成度暂不估百分比
+  - 按 docs/project-completion-audit.md 先核对 GLM 429 限流/额度状态，恢复后补当前成功链路验收；试点部署/恢复等待环境，随后裁决原始计划范围；项目总完成度暂不估百分比
   - ESLint 10 保留为非阻塞维护候选，官方兼容后再补依赖契约红测并运行完整门禁
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
@@ -79,7 +80,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization` 与 `next-major-upgrade-readiness` 均已 100% 封板。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next 16 / React 19.2、原生 flat ESLint、React Compiler 规则无例外、双构建与 full Chromium 已验证，未修改外部运行时契约。
-- 当前主线：`project-completion-audit` 静态盘点 1/3（约 33%）完成；[审计清单](../../docs/project-completion-audit.md)记录 GLM 测试覆盖、试点部署/恢复、原始范围与用户签收的证据缺口。用户报告 GLM 已测试，尚无试点环境；项目整体完成度未量化。
+- 当前主线：`project-completion-audit` 1/3（约 33%）完成；[审计清单](../../docs/project-completion-audit.md)已核实历史 GLM 成功任务、工具/RAG Trace 与导出，当前实时调用 HTTP 429；试点部署/恢复、原始范围与用户签收仍缺证据，项目整体完成度未量化。
 - 非阻塞维护候选：`eslint-10-adoption` 等待 `eslint-plugin-react` 官方兼容版本；原预检为 `ready_with_actions`、0 blocker、1 个外部兼容动作，不强制覆盖 peer 约束。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
@@ -95,7 +96,8 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- 以下数字来自上一主线封板，本轮收尾审计未复跑测试或 e2e，也未验证真实供应商或生产环境。
+- 以下门禁数字来自上一主线封板，本轮收尾审计未复跑测试或 e2e，也未验证当前真实供应商成功调用或生产环境。
+- 本轮审计：历史 `glm-5.1` provider-usage 完成任务 10 条；工具/RAG Trace 与一条 JSON/Markdown 导出构建已核对；最小实时 GLM 调用 HTTP 429，未重试。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
 - Frontend：node tests `184/184`；真实预检 `ready_with_actions`、0 blocker、1 个 ESLint 10 外部兼容动作；`set-state-in-effect` 全局启用且强制扫描 0 处；lint 0 error / 2 warning，双构建通过。
@@ -104,7 +106,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前主线
 
-- 当前主线：`project-completion-audit` 静态盘点 1/3 完成；下一阶段先核对既有 GLM 测试并补齐缺失路径，目标部署/恢复待环境具备，再裁决原始完整版范围并做用户签收。项目总完成百分比暂不估算。
+- 当前主线：`project-completion-audit` 1/3 完成；下一阶段先核对 GLM 429 状态并补当前成功链路，目标部署/恢复待环境具备，再裁决原始完整版范围并做用户签收。项目总完成百分比暂不估算。
 - 非阻塞维护候选：`eslint-10-adoption` 等待 [eslint-plugin-react 官方兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布；届时补依赖红测后再受控升级。
 - 后续实现继续保持外部 SSE/trace/export/display/e2e 契约稳定。
 - 新 provider/source 协议仍按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。

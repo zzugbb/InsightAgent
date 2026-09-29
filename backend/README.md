@@ -7,13 +7,14 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；前端 Next 16 / React 19.2、原生 flat ESLint 与 React Compiler 规则迁移完成，后端运行时及 SSE / trace / export 外部契约未修改。
-- 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[静态盘点](../docs/project-completion-audit.md)将 GLM 测试覆盖记录、试点部署和 PostgreSQL+Chroma 恢复演练列为待核对/待实证。用户报告 GLM 已测试，本机 `backend/.env` 仍是 mock，尚无试点环境。
+- 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)核实历史 GLM 成功任务、工具/RAG Trace 与一条历史导出；当前最小实时调用返回 HTTP 429。尚无试点环境。
 - 非阻塞维护候选：ESLint 10 正式采用仍等待 `eslint-plugin-react` 官方兼容版本；目前保留 ESLint 9 精确 pin 和原预检中的 1 个外部兼容动作。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- 以下数字来自上一主线封板，本轮审计未复跑测试或 e2e，也未验证真实供应商与生产环境。
+- 以下门禁数字来自上一主线封板，本轮审计未复跑测试或 e2e，也未验证当前真实供应商成功调用与生产环境。
+- 本轮审计：只读核对 10 条历史 `glm-5.1` provider-usage 完成任务；当前 JSON/Markdown 导出构建可处理其中一条；一次最小 GLM 调用返回 HTTP 429，未重试。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
 - Frontend：node tests `184/184`；真实预检 `ready_with_actions`、0 blocker、1 个 ESLint 10 外部兼容动作；`set-state-in-effect` 全局启用且强制扫描 0 处；lint 0 error / 2 warning，双构建通过。
@@ -22,7 +23,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 下一步后端计划
 
-1. `project-completion-audit` 静态盘点 1/3 完成；下一阶段先核对既有 GLM 测试并补齐缺失路径，目标部署和恢复证据待试点环境具备，再裁决原始完整版剩余范围。
+1. `project-completion-audit` 第 1/3 阶段完成；先核对 GLM 测试账号的 429 状态，再补当前成功链路；目标部署和恢复证据待试点环境具备，随后裁决原始完整版剩余范围。
 2. ESLint 10 作为非阻塞维护候选等待上游兼容发布；后端保持 FastAPI 精确 pin 与 SSE / trace / export 外部契约稳定。
 
 ## 稳定契约
