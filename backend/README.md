@@ -4,24 +4,24 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前状态
 
-- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`。
+- 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
-- 最近封板：`runtime-dependency-modernization` 已 100% 封板；Node 24 ESM、Python 3.14 FastAPI、Next `15.5.25`、ESLint CLI 与当前版本范围内可修复的审计依赖均已建立精确约束。
-- 当前主线：`next-major-upgrade-readiness` 99%；前端 `set-state-in-effect` 仅剩 Workbench 主组件 1 个迁移文件 8 处，后端运行时及 SSE / trace / export 外部契约未修改。
+- 最近封板：`next-major-upgrade-readiness` 已 100% 封板；前端 Next 16 / React 19.2、原生 flat ESLint 与 React Compiler 规则迁移完成，后端运行时及 SSE / trace / export 外部契约未修改。
+- 后续候选：ESLint 10 正式采用仍等待 `eslint-plugin-react` 官方兼容版本；目前保留 ESLint 9 精确 pin 和真实预检中的 1 个外部兼容动作。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- Release gate all：`next-major-upgrade-readiness` 第 13 切片核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 默认 Turbopack build 与显式 webpack fallback 均在门禁内，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
-- Backend：runtime dependency contract `2/2`；full slice `2020/2020`；module boundary `9/9`；FastAPI `0.118.3` / Starlette `0.46.2` 通过 `pip check`，Python 3.14 路由注册无目标弃用告警；security `17/17`；production operations health `11/11`。
-- Frontend：Next 16 readiness contract `8/8`，最近真实预检 `ready_with_actions`、0 blocker、2 actions；runtime dependency contract `9/9`；release gate 内置 node tests `173/173`；`set-state-in-effect` 仅对 1 个存量文件保留例外，强制扫描剩 8 处；双构建均通过。
-- E2E/CI：本切片真实服务工作台主路径 e2e `1/1`，覆盖 trace、RAG 与任务/会话导出；最近 full Chromium 基线仍为 `59 passed / 1 skipped`。
+- Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
+- Backend：本轮 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
+- Frontend：node tests `184/184`；真实预检 `ready_with_actions`、0 blocker、1 个 ESLint 10 外部兼容动作；`set-state-in-effect` 全局启用且强制扫描 0 处；lint 0 error / 2 warning，双构建通过。
+- E2E/CI：本轮真实服务 full Chromium `64 passed / 1 skipped`，覆盖 Workbench、SSE、trace、RAG、任务/会话导出及恢复路径。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步后端计划
 
-1. `next-major-upgrade-readiness` 当前 99%；运行提示关闭状态迁移与目标 e2e 已确认无项目级 blocker。
-2. 下一切片从前端 Workbench 主组件剩余 8 处命中继续迁移；后端保持 FastAPI 精确 pin、full slice 与 SSE / trace / export 外部契约稳定。
+1. `next-major-upgrade-readiness` 100% 封板，代码、full Chromium e2e 与 release gate 已验证，可进入下一主线。
+2. 下一候选为 ESLint 10 正式采用；等待上游兼容发布，后端保持 FastAPI 精确 pin、full slice 与 SSE / trace / export 外部契约稳定。
 
 ## 稳定契约
 

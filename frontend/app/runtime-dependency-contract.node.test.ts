@@ -128,7 +128,7 @@ test("frontend lint uses the native Next 16 flat configuration", async () => {
   assert.doesNotMatch(eslintConfig, /@eslint\/eslintrc/);
 });
 
-test("React Compiler state-effect hold is scoped to the remaining migration files", async () => {
+test("React Compiler state-effect rule has no migration hold", async () => {
   const configModule = await import(
     pathToFileURL(path.join(FRONTEND_ROOT, "eslint.config.mjs")).href
   ) as {
@@ -143,9 +143,7 @@ test("React Compiler state-effect hold is scoped to the remaining migration file
     )
     .flatMap((entry) => entry.files ?? ["<global>"]);
 
-  assert.deepEqual(scopedHolds, [
-    "app/components/workbench/index.tsx",
-  ]);
+  assert.deepEqual(scopedHolds, []);
 });
 
 test("frontend lockfile keeps Next runtime and lint tooling exactly aligned", async () => {

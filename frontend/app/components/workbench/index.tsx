@@ -30,10 +30,28 @@ import { ChatColumn } from "./chat-column";
 import { Inspector } from "./inspector";
 import { Sidebar } from "./sidebar";
 import { TaskCenter } from "./task-center";
+import { useWorkbenchLayout } from "./use-workbench-layout";
+import {
+  INSPECTOR_W_MAX,
+  INSPECTOR_W_MIN,
+  SIDEBAR_W_MAX,
+  SIDEBAR_W_MIN,
+} from "./workbench-layout";
 import {
   reconcileRuntimeNoticeDismissal,
 } from "./workbench-runtime-notice";
 import type { RuntimeNoticeDismissal } from "./workbench-runtime-notice";
+import { resolveTraceDeltaReset } from "./workbench-trace-sync";
+import type { TraceDeltaSource } from "./workbench-trace-sync";
+import { reconcileRecoveryPreparation } from "./workbench-recovery";
+import type { RecoveryPreparation } from "./workbench-recovery";
+import {
+  resolveNarrowDrawers,
+  resolveRemoteSendCooldownUntil,
+  resolveTaskCenterScope,
+  reconcileQueryBanner,
+} from "./workbench-ui-state";
+import type { QueryBannerSource } from "./workbench-ui-state";
 import type {
   InspectorTab,
   PaginatedList,
@@ -45,10 +63,6 @@ import type {
 } from "./types";
 import {
   ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
-  INSPECTOR_COLLAPSED_STORAGE_KEY,
-  INSPECTOR_WIDTH_STORAGE_KEY,
-  SIDEBAR_COLLAPSED_STORAGE_KEY,
-  SIDEBAR_WIDTH_STORAGE_KEY,
 } from "../../../lib/storage-keys";
 import {
   API_BASE_URL,
@@ -57,13 +71,6 @@ import {
 import { useMediaQuery } from "./use-media-query";
 
 const NARROW_QUERY = "(max-width: 980px)";
-const SIDEBAR_W_MIN = 200;
-const SIDEBAR_W_MAX = 480;
-const SIDEBAR_W_DEFAULT = 280;
-
-const INSPECTOR_W_MIN = 260;
-const INSPECTOR_W_MAX = 560;
-const INSPECTOR_W_DEFAULT = 340;
 const TRACE_DELTA_SYNC_BASE_MS = 1800;
 const TRACE_DELTA_SYNC_MAX_MS = 15_000;
 const TRACE_DELTA_SYNC_MAX_RETRY_EXP = 3;
@@ -112,6 +119,15 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("trace");
   const [bannerError, setBannerError] = useState<string | null>(null);
+  const [observedQueryBannerSource, setObservedQueryBannerSource] =
+    useState<QueryBannerSource>({
+      settingsError: null,
+      sessionsError: null,
+      tasksError: null,
+      messagesError: null,
+      activeSessionId: null,
+      errorLabels: null,
+    });
   const [runtimeNoticeDismissal, setRuntimeNoticeDismissal] =
     useState<RuntimeNoticeDismissal>({
       mode: undefined,
@@ -123,7 +139,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [taskCenterDrawerOpen, setTaskCenterDrawerOpen] = useState(false);
   const [newSessionBusy, setNewSessionBusy] = useState(false);
   const [taskCenterScope, setTaskCenterScope] = useState<"session" | "global">(
-    "session",
+    "global",
   );
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
   const [taskGovernanceProfileFilter, setTaskGovernanceProfileFilter] =
@@ -136,10 +152,16 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [sessionExporting, setSessionExporting] = useState<
     "json" | "markdown" | null
   >(null);
-  const [sidebarWidthPx, setSidebarWidthPx] = useState(SIDEBAR_W_DEFAULT);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [inspectorWidthPx, setInspectorWidthPx] = useState(INSPECTOR_W_DEFAULT);
-  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const {
+    sidebarWidthPx,
+    setSidebarWidthPx,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    inspectorWidthPx,
+    setInspectorWidthPx,
+    inspectorCollapsed,
+    setInspectorCollapsed,
+  } = useWorkbenchLayout();
   const [traceDeltaSyncStatus, setTraceDeltaSyncStatus] = useState<
     "idle" | "syncing" | "ok" | "retrying" | "paused"
   >("idle");
@@ -156,10 +178,18 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [traceDeltaRecoveredAt, setTraceDeltaRecoveredAt] = useState<number | null>(
     null,
   );
+  const [observedTraceDeltaSource, setObservedTraceDeltaSource] =
+    useState<TraceDeltaSource>({
+      isStreaming: false,
+      isPageVisible: true,
+      taskId: "",
+    });
   const [recoveryNotice, setRecoveryNotice] = useState<{
     type: "info" | "success" | "error";
     text: string;
   } | null>(null);
+  const [recoveryPreparation, setRecoveryPreparation] =
+    useState<RecoveryPreparation>({ preparedTaskIds: [], launchTaskId: null });
   const [cancelSendCooldownUntil, setCancelSendCooldownUntil] = useState<
     number | null
   >(null);
@@ -174,6 +204,20 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const traceDeltaSyncInFlightRef = useRef(false);
   const traceDeltaRetryCountRef = useRef(0);
   const isNarrow = useMediaQuery(NARROW_QUERY);
+  const currentTaskCenterScope = resolveTaskCenterScope(taskCenterScope, activeSessionId);
+  if (currentTaskCenterScope !== taskCenterScope) {
+    setTaskCenterScope(currentTaskCenterScope);
+  }
+  const currentNarrowDrawers = resolveNarrowDrawers(isNarrow, {
+    inspector: inspectorDrawerOpen,
+    session: sessionDrawerOpen,
+  });
+  if (inspectorDrawerOpen !== currentNarrowDrawers.inspector) {
+    setInspectorDrawerOpen(currentNarrowDrawers.inspector);
+  }
+  if (sessionDrawerOpen !== currentNarrowDrawers.session) {
+    setSessionDrawerOpen(currentNarrowDrawers.session);
+  }
 
   const composerRef = useRef<TextAreaRef | null>(null);
   const inspectorShellRef = useRef<HTMLElement>(null);
@@ -184,7 +228,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   /** 避免 GET /tasks?session_id= 404 时重复 toast / 重复清空 */
   const tasksSession404HandledRef = useRef(false);
   const pendingRestoreSessionIdRef = useRef<string | null>(null);
-  const blockedRecoveryTaskIdsRef = useRef<Set<string>>(new Set());
   const recoveringTaskIdRef = useRef<string | null>(null);
   const cancelSendCooldownTimerRef = useRef<number | null>(null);
 
@@ -200,6 +243,31 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const ssePhase = useChatStreamStore((s: ChatStreamStore) => s.ssePhase);
   const sseQueue = useChatStreamStore((s: ChatStreamStore) => s.sseQueue);
   const sseTaskId = useChatStreamStore((s: ChatStreamStore) => s.sseTaskId);
+  const currentTraceDeltaSource = {
+    isStreaming,
+    isPageVisible,
+    taskId: sseTaskId?.trim() ?? "",
+  };
+  const traceDeltaReset = resolveTraceDeltaReset(
+    observedTraceDeltaSource,
+    currentTraceDeltaSource,
+  );
+  if (traceDeltaReset !== null) {
+    setObservedTraceDeltaSource(currentTraceDeltaSource);
+    if (traceDeltaReset === "idle") {
+      setTraceDeltaRetryCount(0);
+      setTraceDeltaSyncStatus("idle");
+      setTraceDeltaNextRetryAt(null);
+      setTraceDeltaRecoveredAt(null);
+    } else if (traceDeltaReset === "paused") {
+      setTraceDeltaSyncStatus("paused");
+      setTraceDeltaNextRetryAt(null);
+    } else {
+      setTraceDeltaLastError(null);
+      setTraceDeltaNextRetryAt(null);
+      setTraceDeltaRecoveredAt(null);
+    }
+  }
   const sseSessionId = useChatStreamStore(
     (s: ChatStreamStore) => s.sseSessionId,
   );
@@ -275,7 +343,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const TASK_PAGE_SESSION = 50;
   const TASK_PAGE_GLOBAL = 50;
   const taskScopeSessionId =
-    taskCenterScope === "session" ? activeSessionId : null;
+    currentTaskCenterScope === "session" ? activeSessionId : null;
   const deferredTaskSearchQuery = useDeferredValue(taskSearchQuery.trim());
   const deferredTaskGovernanceProfileFilter = useDeferredValue(
     taskGovernanceProfileFilter,
@@ -288,17 +356,17 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     queryKey: [
       "tasks",
       "paged",
-      taskCenterScope,
+      currentTaskCenterScope,
       taskScopeSessionId ?? "__global__",
       deferredTaskSearchQuery,
       deferredTaskGovernanceProfileFilter,
       deferredTaskGovernanceProviderSourceFilter,
     ],
     initialPageParam: 0,
-    enabled: taskCenterScope === "global" || Boolean(taskScopeSessionId),
+    enabled: currentTaskCenterScope === "global" || Boolean(taskScopeSessionId),
     queryFn: ({ pageParam }) => {
       const limit =
-        taskCenterScope === "session" ? TASK_PAGE_SESSION : TASK_PAGE_GLOBAL;
+        currentTaskCenterScope === "session" ? TASK_PAGE_SESSION : TASK_PAGE_GLOBAL;
       const base = `${API_BASE_URL}/api/tasks?limit=${limit}&offset=${pageParam}`;
       const withSession = taskScopeSessionId
         ? `${base}&session_id=${encodeURIComponent(taskScopeSessionId)}`
@@ -350,7 +418,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }, [fetchNextTasksPage, tasksFetchingNextPage, tasksHasNextPage]);
 
   useEffect(() => {
-    if (taskCenterScope !== "session") {
+    if (currentTaskCenterScope !== "session") {
       tasksSession404HandledRef.current = false;
       return;
     }
@@ -374,7 +442,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     void queryClient.invalidateQueries({ queryKey: ["sessions"] });
   }, [
     activeSessionId,
-    taskCenterScope,
+    currentTaskCenterScope,
     tasksQuery.isError,
     tasksQuery.error,
     message,
@@ -384,30 +452,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   useEffect(() => {
     try {
-      const w = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
-      if (w) {
-        const n = Number.parseInt(w, 10);
-        if (!Number.isNaN(n)) {
-          setSidebarWidthPx(
-            Math.min(SIDEBAR_W_MAX, Math.max(SIDEBAR_W_MIN, n)),
-          );
-        }
-      }
-      if (localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1") {
-        setSidebarCollapsed(true);
-      }
-      const iw = localStorage.getItem(INSPECTOR_WIDTH_STORAGE_KEY);
-      if (iw) {
-        const n = Number.parseInt(iw, 10);
-        if (!Number.isNaN(n)) {
-          setInspectorWidthPx(
-            Math.min(INSPECTOR_W_MAX, Math.max(INSPECTOR_W_MIN, n)),
-          );
-        }
-      }
-      if (localStorage.getItem(INSPECTOR_COLLAPSED_STORAGE_KEY) === "1") {
-        setInspectorCollapsed(true);
-      }
       const activeSessionRaw = localStorage.getItem(
         ACTIVE_WORKBENCH_SESSION_STORAGE_KEY,
       );
@@ -419,47 +463,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       /* ignore */
     }
   }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidthPx));
-    } catch {
-      /* ignore */
-    }
-  }, [sidebarWidthPx]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        SIDEBAR_COLLAPSED_STORAGE_KEY,
-        sidebarCollapsed ? "1" : "0",
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [sidebarCollapsed]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        INSPECTOR_WIDTH_STORAGE_KEY,
-        String(inspectorWidthPx),
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [inspectorWidthPx]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        INSPECTOR_COLLAPSED_STORAGE_KEY,
-        inspectorCollapsed ? "1" : "0",
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [inspectorCollapsed]);
 
   useEffect(() => {
     try {
@@ -572,6 +575,13 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     [activeSessionId, recentTasks],
   );
   const settingsSummary = settingsQuery.data ?? null;
+  const currentCancelSendCooldownUntil = resolveRemoteSendCooldownUntil(
+    settingsSummary?.mode,
+    cancelSendCooldownUntil,
+  );
+  if (currentCancelSendCooldownUntil !== cancelSendCooldownUntil) {
+    setCancelSendCooldownUntil(currentCancelSendCooldownUntil);
+  }
   const runtimeNotice =
     settingsSummary?.mode === "remote"
       ? settingsSummary.api_key_configured
@@ -669,10 +679,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       window.clearTimeout(cancelSendCooldownTimerRef.current);
       cancelSendCooldownTimerRef.current = null;
     }
-    if (cancelSendCooldownUntil !== null) {
-      setCancelSendCooldownUntil(null);
-    }
-  }, [cancelSendCooldownUntil, settingsSummary?.mode]);
+  }, [settingsSummary?.mode]);
 
   const sessionMessages = messagesQuery.data?.messages ?? [];
 
@@ -793,33 +800,32 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     };
   }, [completeActiveStreamLocal, isStreaming, sseTaskId]);
 
-  useEffect(() => {
-    const err =
-      settingsQuery.error || sessionsQuery.error || tasksQuery.error;
-    if (err) {
-      const u = toUserFacingError(err, t.errors);
-      setBannerError((prev) => prev ?? `${u.banner}${u.hint ? ` ${u.hint}` : ""}`);
+  const currentQueryBanner = reconcileQueryBanner(
+    observedQueryBannerSource,
+    {
+      settingsError: settingsQuery.error,
+      sessionsError: sessionsQuery.error,
+      tasksError: tasksQuery.error,
+      messagesError: messagesQuery.error,
+      activeSessionId,
+      errorLabels: t.errors,
+    },
+    bannerError,
+    (error) => {
+      const userFacing = toUserFacingError(error, t.errors);
+      return `${userFacing.banner}${userFacing.hint ? ` ${userFacing.hint}` : ""}`;
+    },
+  );
+  if (currentQueryBanner.source !== observedQueryBannerSource) {
+    setObservedQueryBannerSource(currentQueryBanner.source);
+    if (currentQueryBanner.banner !== bannerError) {
+      setBannerError(currentQueryBanner.banner);
     }
-  }, [settingsQuery.error, sessionsQuery.error, tasksQuery.error, t.errors]);
-
-  useEffect(() => {
-    if (!activeSessionId || !messagesQuery.error) {
-      return;
-    }
-    const u = toUserFacingError(messagesQuery.error, t.errors);
-    setBannerError((prev) => prev ?? `${u.banner}${u.hint ? ` ${u.hint}` : ""}`);
-  }, [activeSessionId, messagesQuery.error, t.errors]);
-
-  useEffect(() => {
-    if (!isNarrow) {
-      setInspectorDrawerOpen(false);
-      setSessionDrawerOpen(false);
-    }
-  }, [isNarrow]);
+  }
 
   useEffect(() => {
     const drawerOpen =
-      isNarrow && (inspectorDrawerOpen || sessionDrawerOpen);
+      isNarrow && (currentNarrowDrawers.inspector || currentNarrowDrawers.session);
     if (drawerOpen) {
       const previous = document.body.style.overflow;
       document.body.style.overflow = "hidden";
@@ -827,10 +833,10 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         document.body.style.overflow = previous;
       };
     }
-  }, [isNarrow, inspectorDrawerOpen, sessionDrawerOpen]);
+  }, [isNarrow, currentNarrowDrawers.inspector, currentNarrowDrawers.session]);
 
   useEffect(() => {
-    if (!isNarrow || (!inspectorDrawerOpen && !sessionDrawerOpen)) {
+    if (!isNarrow || (!currentNarrowDrawers.inspector && !currentNarrowDrawers.session)) {
       return;
     }
     function onKeyDown(event: KeyboardEvent) {
@@ -841,16 +847,16 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isNarrow, inspectorDrawerOpen, sessionDrawerOpen]);
+  }, [isNarrow, currentNarrowDrawers.inspector, currentNarrowDrawers.session]);
 
   useFocusTrap(
-    Boolean(isNarrow && inspectorDrawerOpen),
+    currentNarrowDrawers.inspector,
     inspectorShellRef,
     inspectorOpenButtonRef,
   );
 
   useFocusTrap(
-    Boolean(isNarrow && sessionDrawerOpen),
+    currentNarrowDrawers.session,
     sidebarShellRef,
     sessionOpenButtonRef,
   );
@@ -933,29 +939,16 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   useEffect(() => {
     if (!isStreaming) {
       traceDeltaRetryCountRef.current = 0;
-      setTraceDeltaRetryCount(0);
-      setTraceDeltaSyncStatus("idle");
-      setTraceDeltaNextRetryAt(null);
-      setTraceDeltaRecoveredAt(null);
       return;
     }
     if (!isPageVisible) {
-      setTraceDeltaSyncStatus("paused");
-      setTraceDeltaNextRetryAt(null);
       return;
     }
     const taskId = sseTaskId?.trim() ?? "";
     if (!taskId) {
       traceDeltaRetryCountRef.current = 0;
-      setTraceDeltaRetryCount(0);
-      setTraceDeltaSyncStatus("idle");
-      setTraceDeltaNextRetryAt(null);
-      setTraceDeltaRecoveredAt(null);
       return;
     }
-    setTraceDeltaLastError(null);
-    setTraceDeltaNextRetryAt(null);
-    setTraceDeltaRecoveredAt(null);
     let stopped = false;
     let timerId: number | null = null;
 
@@ -1044,13 +1037,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }, [isStreaming, sseTaskId, syncTraceDelta]);
 
   useEffect(() => {
-    if (activeSessionId) {
-      return;
-    }
-    setTaskCenterScope("global");
-  }, [activeSessionId]);
-
-  useEffect(() => {
     if (activeSessionId == null) {
       return;
     }
@@ -1058,66 +1044,74 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
   }, [activeSessionId, queryClient]);
 
-  useEffect(() => {
-    const blocked = blockedRecoveryTaskIdsRef.current;
-    if (blocked.size === 0) {
-      return;
+  const runningTaskIds = recentTasks
+    .filter((task) => isTaskRunningLike(task))
+    .map((task) => task.id);
+  const activeSessionRunningTask = activeSessionId && isPageVisible
+    ? recentTasks
+        .filter(
+          (task) =>
+            task.session_id === activeSessionId && isTaskRunningLike(task),
+        )
+        .sort(
+          (a, b) =>
+            Date.parse(b.updated_at || "") - Date.parse(a.updated_at || ""),
+        )[0]
+    : null;
+  const runningTaskId = activeSessionRunningTask?.id.trim() ?? "";
+  const currentTaskId = streamSessionMatchesActive ? (sseTaskId?.trim() ?? "") : "";
+  const recoveryCandidateId = runningTaskId &&
+    !(isStreaming && !streamSessionMatchesActive) &&
+    currentTaskId !== runningTaskId
+      ? runningTaskId
+      : null;
+  const currentRecoveryPreparation = reconcileRecoveryPreparation(
+    recoveryPreparation,
+    runningTaskIds,
+    recoveryCandidateId,
+  );
+  if (currentRecoveryPreparation !== recoveryPreparation) {
+    setRecoveryPreparation(currentRecoveryPreparation);
+    if (
+      currentRecoveryPreparation.launchTaskId &&
+      currentRecoveryPreparation.launchTaskId !== recoveryPreparation.launchTaskId
+    ) {
+      setInspectorTab("trace");
+      setRecoveryNotice({
+        type: "info",
+        text: t.stream.streamRecoveryStart(currentRecoveryPreparation.launchTaskId),
+      });
     }
-    const runningTaskIds = new Set(
-      recentTasks.filter((task) => isTaskRunningLike(task)).map((task) => task.id),
-    );
-    for (const taskId of Array.from(blocked)) {
-      if (!runningTaskIds.has(taskId)) {
-        blocked.delete(taskId);
-      }
+  }
+
+  useEffect(() => {
+    const recoveringTaskId = recoveringTaskIdRef.current;
+    if (
+      recoveringTaskId &&
+      !recentTasks.some((task) => task.id === recoveringTaskId && isTaskRunningLike(task))
+    ) {
+      recoveringTaskIdRef.current = null;
     }
   }, [recentTasks]);
 
   useEffect(() => {
-    if (!activeSessionId || !isPageVisible) {
+    if (!activeSessionId || !isPageVisible || !activeSessionRunningTask) {
       return;
     }
-
-    const activeSessionRunningTask = recentTasks
-      .filter(
-        (task) =>
-          task.session_id === activeSessionId && isTaskRunningLike(task),
-      )
-      .sort(
-        (a, b) =>
-          Date.parse(b.updated_at || "") - Date.parse(a.updated_at || ""),
-      )[0];
-
-    if (!activeSessionRunningTask) {
-      return;
-    }
-
-    const runningTaskId = activeSessionRunningTask.id.trim();
-    if (!runningTaskId) {
+    if (!runningTaskId || currentRecoveryPreparation.launchTaskId !== runningTaskId) {
       return;
     }
     if (recoveringTaskIdRef.current === runningTaskId) {
       return;
     }
-    if (blockedRecoveryTaskIdsRef.current.has(runningTaskId)) {
-      return;
-    }
-
     if (isStreaming && !streamSessionMatchesActive) {
       return;
     }
-
-    const currentTaskId = streamSessionMatchesActive ? (sseTaskId?.trim() ?? "") : "";
     if (currentTaskId && currentTaskId === runningTaskId) {
       return;
     }
 
     recoveringTaskIdRef.current = runningTaskId;
-    setInspectorTab("trace");
-    setRecoveryNotice({
-      type: "info",
-      text: t.stream.streamRecoveryStart(runningTaskId),
-    });
     let recoveryConnected = false;
     void resumeTaskStream({
       apiBaseUrl: API_BASE_URL,
@@ -1137,7 +1131,6 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     })
       .then((ok) => {
         if (!ok) {
-          blockedRecoveryTaskIdsRef.current.add(runningTaskId);
           setRecoveryNotice({
             type: "error",
             text: t.stream.streamRecoveryFailed(runningTaskId),
@@ -1148,21 +1141,17 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             text: t.stream.streamRecoveryDone(runningTaskId),
           });
         }
-      })
-      .finally(() => {
-        if (recoveringTaskIdRef.current === runningTaskId) {
-          recoveringTaskIdRef.current = null;
-        }
       });
   }, [
     activeSessionId,
+    activeSessionRunningTask,
+    currentRecoveryPreparation.launchTaskId,
+    currentTaskId,
     isPageVisible,
     isStreaming,
-    recentTasks,
     resumeTaskStream,
+    runningTaskId,
     streamSessionMatchesActive,
-    ssePhase,
-    sseTaskId,
     t.stream,
   ]);
 
@@ -1207,7 +1196,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
     if (
       settingsSummary?.mode === "remote" &&
-      cancelSendCooldownUntil !== null
+      currentCancelSendCooldownUntil !== null
     ) {
       message.info(t.workbench.composerCoolingDown);
       return;
@@ -1435,7 +1424,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     ? (cancelTaskMutation.variables ?? null)
     : null;
   const remoteSendCoolingDown =
-    settingsSummary?.mode === "remote" && cancelSendCooldownUntil !== null;
+    currentCancelSendCooldownUntil !== null;
 
   let composerHint = t.workbench.composerEnterSend;
   let composerHintVariant: "default" | "error" = "default";
@@ -1474,7 +1463,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [isNarrow, sidebarCollapsed, sidebarWidthPx],
+    [isNarrow, setSidebarWidthPx, sidebarCollapsed, sidebarWidthPx],
   );
 
   const onInspectorResizeStart = useCallback(
@@ -1502,15 +1491,15 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [inspectorCollapsed, inspectorWidthPx, isNarrow],
+    [inspectorCollapsed, inspectorWidthPx, isNarrow, setInspectorWidthPx],
   );
 
   const shellClass = [
     "app-shell",
     !isNarrow && sidebarCollapsed ? "app-shell--sidebar-collapsed" : "",
     !isNarrow && inspectorCollapsed ? "app-shell--inspector-collapsed" : "",
-    isNarrow && inspectorDrawerOpen ? "inspector-drawer-open" : "",
-    isNarrow && sessionDrawerOpen ? "session-drawer-open" : "",
+    currentNarrowDrawers.inspector ? "inspector-drawer-open" : "",
+    currentNarrowDrawers.session ? "session-drawer-open" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1574,7 +1563,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         activeSessionId={activeSessionId}
         settingsSummary={settingsSummary}
         isStreaming={scopedIsStreaming}
-        apiBanner={bannerError}
+        apiBanner={currentQueryBanner.banner}
         onDismissBanner={() => setBannerError(null)}
         sessionMessages={sessionMessages}
         pendingUserInput={scopedIsStreaming ? lastSentPrompt : ""}
@@ -1652,7 +1641,7 @@ export function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           }}
           onSelectTask={handleSelectTask}
           onClose={() => setTaskCenterDrawerOpen(false)}
-          scopeMode={taskCenterScope}
+          scopeMode={currentTaskCenterScope}
           onScopeModeChange={setTaskCenterScope}
         />
       </Drawer>

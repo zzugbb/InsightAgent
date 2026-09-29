@@ -180,7 +180,7 @@ test("real frontend reaches Next 16 with an explicit ESLint 10 compatibility hol
   assert.equal(report.status, "ready_with_actions");
   assert.deepEqual(
     report.actions.map(({ id }) => id),
-    ["eslint-10-plugin-compatibility", "react-compiler-lint-migration"],
+    ["eslint-10-plugin-compatibility"],
   );
   assert.deepEqual(report.blockers, []);
 });
