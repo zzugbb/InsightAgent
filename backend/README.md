@@ -7,7 +7,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；前端 Next 16 / React 19.2、原生 flat ESLint 与 React Compiler 规则迁移完成，后端运行时及 SSE / trace / export 外部契约未修改。
-- 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)核实历史 GLM 成功任务、工具/RAG Trace 与一条历史导出；当前最小实时调用返回 HTTP 429。尚无试点环境。
+- 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)核实历史 GLM 成功任务、工具/RAG Trace 与一条历史导出；当前最小实时调用 HTTP 429，用户确认 GLM 服务到期。尚无试点环境。
 - 非阻塞维护候选：ESLint 10 正式采用仍等待 `eslint-plugin-react` 官方兼容版本；目前保留 ESLint 9 精确 pin 和原预检中的 1 个外部兼容动作。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
@@ -23,7 +23,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 下一步后端计划
 
-1. `project-completion-audit` 第 1/3 阶段完成；先核对 GLM 测试账号的 429 状态，再补当前成功链路；目标部署和恢复证据待试点环境具备，随后裁决原始完整版剩余范围。
+1. `project-completion-audit` 第 1/3 阶段完成；GLM 到期期间暂停真实请求，先推进原始完整版范围裁决建议；续用或换有效兼容账号后补当前成功链路，目标部署和恢复证据待试点环境具备。
 2. ESLint 10 作为非阻塞维护候选等待上游兼容发布；后端保持 FastAPI 精确 pin 与 SSE / trace / export 外部契约稳定。
 
 ## 稳定契约
