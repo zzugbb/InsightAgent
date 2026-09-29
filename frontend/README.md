@@ -7,21 +7,23 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
-- 后续候选：ESLint 10 正式采用；当前 `eslint-plugin-react@7.37.5` peer 范围不支持 ESLint 10，真实预检为 `ready_with_actions`、0 blocker、1 个外部兼容动作，保持 ESLint `9.39.5` 精确锁定。
+- 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[静态盘点](../docs/project-completion-audit.md)区分现有模拟服务 e2e 与真实供应商、真实用户流程验收。用户报告 GLM 已测试但覆盖记录待核对，本机 `backend/.env` 仍为 mock，项目整体完成度尚不能可靠量化。
+- 非阻塞维护候选：ESLint 10 正式采用；当前 `eslint-plugin-react@7.37.5` peer 范围不支持 ESLint 10，原预检为 `ready_with_actions`、0 blocker、1 个外部兼容动作，保持 ESLint `9.39.5` 精确锁定。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
+- 以下数字来自上一主线封板，本轮审计未复跑测试或 e2e，也未做目标用户签收。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Frontend：node tests `184/184`；真实预检 `ready_with_actions`、0 blocker、1 个 ESLint 10 外部兼容动作；`set-state-in-effect` 全局启用且强制扫描 0 处；lint 0 error / 2 warning，双构建通过。
-- Backend 契约基线：本轮 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
-- E2E/CI：本轮真实服务 full Chromium `64 passed / 1 skipped`，覆盖 Workbench、SSE、trace、RAG、任务/会话导出、恢复、冷却、布局恢复和响应式抽屉。
+- Backend 契约基线：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
+- E2E/CI：封板时本地服务 full Chromium `64 passed / 1 skipped`，覆盖 Workbench、SSE、trace、RAG、任务/会话导出、恢复、冷却、布局恢复和响应式抽屉。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
 
 ## 下一步前端计划
 
-1. `next-major-upgrade-readiness` 100% 封板，代码、full Chromium e2e 与 release gate 已验证，可进入下一主线。
-2. 下一候选为 ESLint 10 正式采用：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，再以依赖契约红测受控升级。
+1. `project-completion-audit` 静态盘点 1/3 完成；下一阶段先核对既有 GLM 测试，再补齐目标用户任务中的设置、对话、工具/RAG、Trace、usage、导出及失败恢复验收。
+2. ESLint 10 作为非阻塞维护候选：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，再以依赖契约红测受控升级。
 
 ## 稳定契约
 
