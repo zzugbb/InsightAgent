@@ -8,7 +8,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；前端 Next 16 / React 19.2、原生 flat ESLint 与 React Compiler 规则迁移完成，后端运行时及 SSE / trace / export 外部契约未修改。
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)核实历史 GLM 成功任务、工具/RAG Trace 与一条历史导出；当前最小实时调用 HTTP 429，用户确认 GLM 服务到期。尚无试点环境。
-- A2 新增[试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)：后端 Dockerfile 采用非 root Uvicorn 且不在启动时安装依赖，静态检查无告警；六个镜像摘要纳入低敏预检。前端 standalone 本地首页返回 HTTP 200；实际镜像构建、目标环境部署与回滚未实测。
+- A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)已准备：后端直接固定 Chroma 1.5.7，后端/前端镜像均使用摘要固定基础镜像在本机 ARM64 构建通过；六个镜像摘要纳入低敏预检。目标环境部署与回滚未实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`；独立 fixture 经离线快照恢复后，PostgreSQL 行与 Chroma 向量均读回。旧容器重建前须保存原 `/data`；目标环境恢复待验证。
 - A4 已落地低敏请求日志、`X-Request-ID`、远端 LLM HTTP 尝试事件与离线汇总、`api_surface_baseline.json`：44 个 OpenAPI 操作和 78 个组件指纹进入后端门禁，差异按[变更记录](../docs/api-changelog.md)人工判断。目标环境指标采集、告警及调用方流程仍待验证。
 - 非阻塞维护候选：ESLint 10 正式采用仍受前端锁文件中 React/import/jsx-a11y 三个插件的 peer 范围约束；保持 ESLint 9 精确 pin，预检的 1 个动作概括这组外部兼容约束。
@@ -16,7 +16,8 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 当前验证基线
 
-- 本主线已完成 A3 fixture、后端与 tooling 门禁；本轮前端 Node/lint/双构建已复跑。full release gate/e2e 仍沿用上一主线封板数字；当前真实供应商成功调用与生产环境未验证。
+- 本主线已完成 A3 fixture、后端与 tooling 门禁；前端 Node/lint/双构建及两份本地试点镜像构建已验证。full release gate/e2e 仍沿用上一主线封板数字；当前真实供应商成功调用与生产环境未验证。
+- 本轮 A2 后端镜像：以 `10001:10001` 运行，容器内 `app.main` 导入、Chroma 1.5.7 与 `pip check` 通过；前端容器首页及 CSS HTTP 200，已停止。镜像尚未推送至目标仓库。
 - 本轮审计：只读核对 10 条历史 `glm-5.1` provider-usage 完成任务；当前 JSON/Markdown 导出构建可处理其中一条；一次最小 GLM 调用返回 HTTP 429，未重试。
 - 本轮 A3 演练：快照工具安全测试通过；修正旧 Chroma 空卷问题后，第二轮独立项目的 PostgreSQL 与 Chroma 数据均恢复读回，仅覆盖本地 fixture。
 - 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已纳入快照工具和 A2 配置预检测试；两份开发 Compose 的既有配置校验通过。

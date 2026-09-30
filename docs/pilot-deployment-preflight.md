@@ -35,7 +35,7 @@ python3 scripts/check_pilot_deploy_config.py --env-file /安全路径/pilot.env
 
 ## 生产镜像配方
 
-`backend/Dockerfile.pilot` 安装后端依赖并以非 root 用户运行 Uvicorn，不使用源码卷或 `--reload`；`frontend/Dockerfile.pilot` 用 `npm ci`、`next build` 生成 Next standalone 产物，再以非 root 用户运行 `server.js`。两份 `.dockerignore` 排除本地环境文件、依赖目录、缓存及测试产物，避免把开发机密钥或大体积构建目录送入 Docker 上下文。
+`backend/Dockerfile.pilot` 通过 `requirements.pilot.txt` 将 Chroma 直接依赖固定在本地已验证的 `1.5.7`，安装后以非 root 用户运行 Uvicorn，不使用源码卷或 `--reload`；`frontend/Dockerfile.pilot` 用 `npm ci`、`next build` 生成 Next standalone 产物，再以非 root 用户运行 `server.js`。两份 `.dockerignore` 排除本地环境文件、依赖目录、缓存及测试产物，避免把开发机密钥或大体积构建目录送入 Docker 上下文。
 
 在构建机使用已核对摘要的官方 Python/Node 基础镜像，示例命令中的值由操作员替换；前端 API 地址是公开的构建参数，不传入后端密钥：
 
@@ -49,14 +49,16 @@ docker build -f frontend/Dockerfile.pilot \
   -t insightagent-frontend:<候选版本> frontend
 ```
 
-构建后推送到目标镜像仓库并取得仓库返回的摘要，再填写 `PILOT_BACKEND_IMAGE` 和 `PILOT_FRONTEND_IMAGE`。当前后端 `chromadb>=0.5.20` 及其传递依赖未由仓库锁文件完全固定；镜像摘要可固定已构建产物，但同一源码再次构建仍需核对依赖解析与产物差异。目标环境的镜像拉取、健康检查、TLS/访问边界和回滚仍需实测。
+构建后推送到目标镜像仓库并取得仓库返回的摘要，再填写 `PILOT_BACKEND_IMAGE` 和 `PILOT_FRONTEND_IMAGE`。后端传递依赖仍未由仓库锁文件完全固定；镜像摘要可固定已构建产物，但同一源码再次构建仍需核对依赖解析与产物差异。目标环境的镜像拉取、健康检查、TLS/访问边界和回滚仍需实测。
+
+2026-09-30 本地验证：后端使用 `python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d`，前端使用 `node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6`，上述两份 Docker 配方在本机 ARM64 均实际构建成功。后端镜像以 `10001:10001` 运行，容器内 `chromadb==1.5.7`、`app.main` 导入与 `pip check` 通过；前端镜像以 `node` 运行，临时容器首页及静态 CSS 均返回 HTTP 200，容器已停止。这里只证明本机构建与基本运行；本地镜像 ID 不能充当目标仓库摘要，也没有完成目标环境部署。
 
 仅复核 Dockerfile 静态规则可运行 `docker build --check --build-arg PYTHON_BASE_IMAGE=python:3.14-slim -f backend/Dockerfile.pilot backend` 与对应的前端命令（`NODE_BASE_IMAGE=node:24-bookworm-slim`、`NEXT_PUBLIC_API_BASE_URL=https://api.example.com`）。此检查不会执行依赖安装或验证最终镜像；真正构建仍必须传入摘要固定的基础镜像。
 
 ## 目标环境演练记录
 
 1. 确认目标主机、操作者、访问边界、TLS 终止点与证书，并保存脱敏的代理配置/检查结果；前后端、PostgreSQL、Chroma 的对外端口按环境设计限制访问。
-2. 从可复核源码与锁文件构建后端/前端生产镜像；前端在构建期运行 `next build` 并在容器内运行 standalone `server.js`，后端不使用 `--reload`，容器启动时不安装依赖。记录源码提交、构建命令、基础与成品镜像摘要及构建时 API 地址。
+2. 从可复核源码、后端依赖清单与前端锁文件构建生产镜像；前端在构建期运行 `next build` 并在容器内运行 standalone `server.js`，后端不使用 `--reload`，容器启动时不安装依赖。记录源码提交、构建命令、基础与成品镜像摘要及构建时 API 地址。
 3. 在目标环境运行预检并保存其固定检查码结果；部署后核对 HTTPS、登录、会话、任务/SSE/Trace、RAG、导出、健康摘要和低敏日志。真实 LLM 成功路径需有效账号，GLM 到期期间保持未验证。
 4. 升级前保存 PostgreSQL/Chroma 备份，按照[恢复流程](local-stack-backup-restore.md)记录恢复可用性；以固定旧镜像摘要执行一次回滚，核对数据、登录和主链路。记录升级/回滚时间、失败点、责任人和最终结论。
 
