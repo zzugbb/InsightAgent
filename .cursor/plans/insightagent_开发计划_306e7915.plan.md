@@ -4,7 +4,7 @@ overview: next-major-upgrade-readiness 已 100% 封板；project-completion-audi
 current_focus:
   mainline: project-completion-audit
   status: 静态盘点 1/3（约 33%）完成；GLM 服务到期阻断当前成功调用，环境与范围/签收待完成
-  latest_change: 2026-09-30 A4 增加远端 LLM HTTP 尝试低敏事件与离线汇总，结合 OpenAPI 44 操作/78 组件指纹基线、X-Request-ID/请求日志；后端 full slice 2032/2032、module boundary 9/9 通过，其余范围仍待裁决
+  latest_change: 2026-09-30 A2 增加只读试点部署配置预检，核验 HTTPS/CORS、生产凭据与镜像摘要并接入 tooling；A4 请求/LLM 尝试观测和 OpenAPI 基线沿用已验证状态，目标环境仍待实测
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -50,7 +50,7 @@ validation_baseline:
   source: 以下 full release/frontend/e2e 数字为上一主线封板基线；本轮补跑前端 lint、核对 ESLint peer、完成本地恢复 fixture/tooling gate 与后端门禁，未复跑前端/e2e，也未验证目标环境
   current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；当前最小 GLM 调用 HTTP 429，未重试
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
-  tooling_current: bash scripts/ci_run_release_gate.sh --phase tooling passed，包含快照工具 4 条安全前置测试；compose.full.yml/docker-compose.yml 配置校验通过
+  tooling_current: bash scripts/ci_run_release_gate.sh --phase tooling passed，包含快照工具与 A2 部署配置预检测试；开发 Compose 既有配置校验通过
   backend_current: bash scripts/ci_run_release_gate.sh --phase backend passed；full slice 2032/2032、module boundary 9/9；请求/LLM HTTP 尝试观测与 OpenAPI 44 操作/78 组件指纹检查通过
   release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-next-major-readiness-seal-summary.md --json-summary-file /tmp/release-gate-next-major-readiness-seal-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，10/10
   backend: 上一主线封板时 full slice 2020/2020、module boundary 9/9；FastAPI/Python 3.14、安全与运维专项沿用已封板基线
@@ -73,7 +73,7 @@ next_candidate_mainlines:
   - 试点收尾实施主线：由 project-completion-audit 的真实环境证据与范围/签收结论确定具体切片，不预先宣称剩余工作已知
   - eslint-10-adoption：非试点阻塞；等待 eslint-plugin-react 官方兼容版本，并确认 import/jsx-a11y peer 范围支持 ESLint 10；不使用 force/peer override
 next_steps:
-  - GLM 到期期间暂停真实请求；按 docs/project-completion-audit.md 先裁决原始计划范围，续用或换有效兼容账号后补当前成功链路；试点部署/恢复等待环境，项目总完成度暂不估百分比
+  - GLM 到期期间暂停真实请求；按 docs/project-completion-audit.md 先裁决原始计划范围，续用或换有效兼容账号后补当前成功链路；试点环境确定后按 docs/pilot-deployment-preflight.md 预检并完成部署/恢复/回滚实证，项目总完成度暂不估百分比
   - ESLint 10 保留为非阻塞维护候选，三个插件正式兼容后再补依赖契约红测并运行完整门禁
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
@@ -86,6 +86,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization` 与 `next-major-upgrade-readiness` 均已 100% 封板。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next 16 / React 19.2、原生 flat ESLint、React Compiler 规则无例外、双构建与 full Chromium 已验证，未修改外部运行时契约。
 - 当前主线：`project-completion-audit` 1/3（约 33%）完成；[审计清单](../../docs/project-completion-audit.md)已核实历史 GLM 成功任务、工具/RAG Trace 与导出，当前实时调用 HTTP 429 且用户确认服务到期；原始范围已有建议、尚待裁决，试点部署/恢复与用户签收仍缺证据。
+- A2 只读试点部署配置预检与演练记录流程已纳入 tooling；目标环境、生产构建、TLS/访问边界与回滚仍缺实际证据。
 - A4 请求观测、远端 LLM HTTP 尝试低敏日志/离线汇总与 API 契约基线已落地；尝试数不等于账单调用数，OpenAPI 44 操作/78 组件指纹进入后端门禁。目标环境采集、告警及其余完整版能力仍待范围/环境决定。
 - 非阻塞维护候选：`eslint-10-adoption` 的 React/import/jsx-a11y 三个插件 peer 范围均排除 ESLint 10；React 官方修复尚未发布，预检的 1 个外部兼容动作概括这组约束，不强制覆盖 peer。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
