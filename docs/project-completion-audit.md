@@ -33,7 +33,7 @@
 | A3 | 生产前必须，试点需决定风险接受 | `backend/app/services/operations_health.py` 根据配置与演练时间戳报告备份/应急状态；本轮未在仓库找到 PostgreSQL+Chroma 的可执行备份/恢复流程或真实恢复记录。 | 对目标环境实际备份并从备份恢复 PostgreSQL 与 Chroma；验证会话、Trace、知识库和登录，记录 RPO/RTO、责任人及失败回退。 |
 | A4 | 范围决策 | 原始完整版阶段 6–9 还写有单步重跑/分支重跑、任务内并行工具、异步 RAG ingest、基础运行指标及破坏性 API 变更记录。当前 `tasks.py` 路由清单没有专用单步重跑端点，`rag.py` 的 ingest 是同步调用；本轮未找到任务内 `asyncio.gather`、指标端点或 changelog。静态搜索不能单独证明不存在等价实现。 | 逐项核验真实实现和产品价值，标记为“完成 / 试点必须 / 明确延期 / 取消”；留下决策理由，不让历史计划自动变成无限待办。 |
 | A5 | 试点前必须 | 现有 e2e 证明预设路径可自动跑通，但本轮没有目标用户、真实任务样本、可用性反馈或签收标准的证据。full Chromium 的 1 个 skip 是低并发队列专用场景，另有独立 queue e2e 路径，不直接视为产品缺陷。 | 选 2–3 个真实任务和目标用户，完成端到端走查；记录完成率、失败点、可理解性和签收结论。 |
-| A6 | 非收尾阻塞 | `eslint-10-adoption` 仍受 `eslint-plugin-react` 官方 peer 兼容性约束，现用 ESLint 9 精确锁定，预检 `ready_with_actions` 且 0 blocker。 | 官方兼容版本发布后再走红测和完整门禁；不以该升级作为试点完成条件。 |
+| A6 | 非收尾阻塞 | 2026-09-30 核对锁文件，`eslint-config-next` 内 React/import/jsx-a11y 三个插件的 peer 范围均排除 ESLint 10；React 插件官方兼容修复尚未发布。现用 ESLint 9 精确锁定，本轮 lint 0 error / 2 warning；预检的 1 个外部兼容动作概括这组约束。 | 官方兼容版本发布并确认三个插件均支持 ESLint 10 后，再走依赖红测和完整门禁；不以该升级作为试点完成条件。 |
 
 ## 原始范围裁决建议
 
