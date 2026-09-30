@@ -19,6 +19,7 @@
 - `test_tool_runtime_slice.py --list-selections` 动态列出六个维护选择器及其覆盖数，任一选择器零匹配时返回 5；该命令不能与 `-k` 组合。
 - tooling fixture 会同时在 release-gate 与 backend/frontend E2E workflow 中运行；失败注入测试不能假设 E2E runner 存在 `backend/.venv`，应在首个无依赖命令上注入确定性退出码。
 - 本地 PostgreSQL/Chroma 离线备份与隔离恢复见 [`docs/local-stack-backup-restore.md`](local-stack-backup-restore.md)；备份前必须停止对应 Compose 项目，恢复只写入全新项目卷。`compose.full.yml` 与 `docker-compose.yml` 的 Chroma 持久卷现挂载 `/data`，与当前镜像日志中的 persist path 一致；旧容器若曾使用 `/chroma/chroma`，重建前先保存容器内 `/data`，不能假设旧命名卷包含数据。
+- 后端请求观测日志为单行 JSON，字段为 `event=http_request`、服务端 `request_id`、method、路由模板、status_code、duration_ms；原始 URL/query/header/body 和异常正文不进入该日志。`X-Request-ID` 对已配置 CORS 来源可读。流式响应耗时到流关闭为止，SSE 建连后的业务失败不能只用 HTTP 200 判断，应结合 SSE/Trace 失败事件。
 
 ## 不需要提权的常用命令
 

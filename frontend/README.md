@@ -9,15 +9,17 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)已核实历史 GLM 任务与 Trace，当前实时调用 HTTP 429 且用户确认服务到期；前端真实用户流程仍待验收，项目整体完成度尚不能可靠量化。
 - A3 本地恢复基础：Compose 的 Chroma 数据卷已对齐镜像 `/data` 路径，隔离快照恢复后 PostgreSQL/Chroma fixture 均读回；前端登录、任务/Trace 与知识库的目标环境恢复验收仍待部署环境，详见[操作记录](../docs/local-stack-backup-restore.md)。
+- A4 请求观测切片由后端实现：已配置 CORS 来源可读取 `X-Request-ID` 响应头；前端页面与 SSE/trace/export 消费逻辑未改，试点指标采集仍待目标环境。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对 `eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10。预检的 1 个动作概括这组约束；继续精确锁定 ESLint `9.39.5`，不使用 `--force` 或 peer override。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
-- 除本轮 lint、A3 fixture 与 tooling gate 外，门禁数字来自上一主线封板；未复跑完整测试/e2e，也未做目标用户签收。
+- 除本轮 lint、A3 fixture、tooling gate 与后端门禁外，前端/e2e 数字来自上一主线封板；未复跑前端/e2e，也未做目标用户签收。
 - 本轮审计：历史 GLM 任务包含工具/RAG Trace，一条任务可由当前代码构建 JSON/Markdown 导出；最小实时 GLM 请求为 HTTP 429，尚不能据此认定前端真实供应商体验已通过。
 - 本轮 A3 演练：本地隔离快照恢复后 PostgreSQL 测试行与 Chroma 测试向量均读回；前端登录、任务/Trace 与知识库目标环境恢复未验收。
 - 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已包含快照工具安全前置测试；前端运行时代码与 e2e 本轮未改。
+- 本轮后端门禁：full slice `2024/2024`、module boundary `9/9`；新增响应 header 与低敏请求日志不改变前端数据契约。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Frontend：封板时 node tests `184/184`、真实预检 `ready_with_actions`（0 blocker、1 个 ESLint 10 外部兼容动作）、双构建通过；本轮 `npm run lint` 为 0 error / 2 warning，锁文件核对 3 个 peer 约束。
 - Backend 契约基线：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
@@ -32,6 +34,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 稳定契约
 
 - SSE 事件：`start`、`state`、`trace`、`tool_start`、`tool_end`、`heartbeat`、`token`、`cancelled`、`timeout`、`done`、`error`。
+- 已配置 CORS 来源可读取后端生成的 `X-Request-ID`，便于把前端失败报告与后端低敏请求日志关联；SSE 业务失败仍以事件/Trace 为准。
 - `trace.step` 与后端 `TraceStep` 同构；`tool_start/tool_end` 与 action 节点通过 `step_id` 对齐。
 - Workbench 使用 `trace/delta` 做静默增量刷新，流结束后补拉最终快照。
 - result summary、safe output、failure hint 与 diagnostics 使用后端统一语义。

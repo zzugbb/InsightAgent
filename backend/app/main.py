@@ -12,6 +12,7 @@ from app.services.chat_persistence_service import (
     recover_orphaned_running_tasks_on_startup,
 )
 from app.security_headers import add_security_headers
+from app.request_observability import add_request_observability
 
 
 def _validate_cors_origins_for_environment(settings_obj: object) -> None:
@@ -51,7 +52,9 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
 add_security_headers(app)
+add_request_observability(app)
 
 app.include_router(api_router)
