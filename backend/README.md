@@ -9,7 +9,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；前端 Next 16 / React 19.2、原生 flat ESLint 与 React Compiler 规则迁移完成，后端运行时及 SSE / trace / export 外部契约未修改。
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)核实历史 GLM 成功任务、工具/RAG Trace 与一条历史导出；当前最小实时调用 HTTP 429，用户确认 GLM 服务到期。尚无试点环境。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`；独立 fixture 经离线快照恢复后，PostgreSQL 行与 Chroma 向量均读回。旧容器重建前须保存原 `/data`；目标环境恢复待验证。
-- A4 请求观测切片已落地：`request_observability.py` 为 HTTP 响应生成 request ID，并输出低敏 JSON 日志供试点统计路由延迟/状态码；完整指标聚合、告警及 LLM 调用次数仍待范围裁决与目标环境验证。
+- A4 已落地低敏请求日志、`X-Request-ID` 与 `api_surface_baseline.json`：44 个 OpenAPI 操作和 78 个组件指纹进入后端门禁，差异按[变更记录](../docs/api-changelog.md)人工判断。指标聚合、告警、LLM 调用次数及目标调用方流程仍待验证。
 - 非阻塞维护候选：ESLint 10 正式采用仍受前端锁文件中 React/import/jsx-a11y 三个插件的 peer 范围约束；保持 ESLint 9 精确 pin，预检的 1 个动作概括这组外部兼容约束。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
@@ -19,7 +19,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 本轮审计：只读核对 10 条历史 `glm-5.1` provider-usage 完成任务；当前 JSON/Markdown 导出构建可处理其中一条；一次最小 GLM 调用返回 HTTP 429，未重试。
 - 本轮 A3 演练：快照工具安全测试通过；修正旧 Chroma 空卷问题后，第二轮独立项目的 PostgreSQL 与 Chroma 数据均恢复读回，仅覆盖本地 fixture。
 - 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已纳入快照工具 4 条安全前置测试；两份 Compose 配置校验通过。
-- 本轮后端门禁：`bash scripts/ci_run_release_gate.sh --phase backend` 通过，full slice `2024/2024`、module boundary `9/9`；请求观测测试验证路径/查询/异常正文不进入日志，且流式耗时覆盖完整响应。
+- 本轮后端门禁：`bash scripts/ci_run_release_gate.sh --phase backend` 通过，full slice `2027/2027`、module boundary `9/9`；请求观测低敏/流式耗时与 OpenAPI 指纹检查均已覆盖。其他 full release/frontend/e2e 数字沿用封板基线。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
 - Frontend：封板时 node tests `184/184`、真实预检 `ready_with_actions`（0 blocker、1 个 ESLint 10 外部兼容动作）、双构建通过；本轮 lint 0 error / 2 warning，锁文件核对 3 个 peer 约束。
@@ -36,6 +36,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - SSE 事件、REST `TraceStep`、result summary、safe output 与 JSON/Markdown export shape 保持稳定。
 - 全局 HTTP 响应追加 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、`Permissions-Policy` 与 `Cross-Origin-Opener-Policy`；该安全头层不改变业务响应体、SSE event、trace/delta 或 export body shape。
 - HTTP 响应增加服务端生成的 `X-Request-ID`，允许已配置 CORS 来源读取；低敏 JSON 行日志只记录 request ID、方法、路由模板、状态码与完整响应耗时，404 使用 `<unmatched>`。不记录原始 URL/query、请求 header/body 或异常正文；SSE 业务失败仍需看流事件与 Trace。
+- 运行时 OpenAPI 操作/组件指纹与 `api_surface_baseline.json` 一致性已纳入 full slice；新增或修改接口需审查兼容性并更新记录。指纹不能自动证明 SSE/Trace/export 的运行时语义兼容。
 - Access token 解析要求 JWT header 为 `alg=HS256`、`typ=JWT`；签名、过期和 subject 校验语义保持不变。
 - Refresh token 请求会先 trim 并拒绝空白值；服务层将空白 refresh token 视为无效 token 返回，不暴露内部异常。
 - 生产环境禁止使用默认 `INSIGHT_AGENT_JWT_SECRET` 或其首尾空白包装值签发或验签 access token；开发默认值仍只允许在非生产环境使用。
