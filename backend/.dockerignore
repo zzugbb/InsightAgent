@@ -1,0 +1,8 @@
+.env
+.env.*
+.venv/
+scripts/
+README.md
+api_surface_baseline.json
+**/__pycache__/
+**/*.pyc

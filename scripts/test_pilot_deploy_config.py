@@ -25,6 +25,7 @@ def valid_config() -> dict[str, str]:
            for field in (
                "PILOT_BACKEND_IMAGE", "PILOT_FRONTEND_IMAGE",
                "PILOT_CHROMA_IMAGE", "PILOT_POSTGRES_IMAGE",
+               "PILOT_PYTHON_BASE_IMAGE", "PILOT_NODE_BASE_IMAGE",
            )},
     }
 
@@ -44,6 +45,7 @@ class PilotDeployConfigTests(unittest.TestCase):
             "INSIGHT_AGENT_SECRET_KEY": "",
             "INSIGHT_AGENT_DATABASE_URL": "postgresql://insight:insight@postgres:5432/insightagent",
             "PILOT_CHROMA_IMAGE": "chromadb/chroma:latest",
+            "PILOT_NODE_BASE_IMAGE": "node:24-alpine",
         })
         failures = check_config(values)
         self.assertIn("production_environment_required", failures)
@@ -54,6 +56,7 @@ class PilotDeployConfigTests(unittest.TestCase):
         self.assertIn("encryption_key_invalid", failures)
         self.assertIn("database_credentials_invalid", failures)
         self.assertIn("image_digest_required:PILOT_CHROMA_IMAGE", failures)
+        self.assertIn("image_digest_required:PILOT_NODE_BASE_IMAGE", failures)
         self.assertNotIn("change-me-in-production", json.dumps(failures))
         self.assertNotIn("private-password", json.dumps(failures))
 

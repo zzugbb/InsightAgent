@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlsplit
 IMAGE_FIELDS = (
     "PILOT_BACKEND_IMAGE", "PILOT_FRONTEND_IMAGE",
     "PILOT_CHROMA_IMAGE", "PILOT_POSTGRES_IMAGE",
+    "PILOT_PYTHON_BASE_IMAGE", "PILOT_NODE_BASE_IMAGE",
 )
 IMAGE_DIGEST = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 DEFAULT_SECRET = "change-me-in-production"

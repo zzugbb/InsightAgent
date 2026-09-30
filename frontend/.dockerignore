@@ -1,0 +1,14 @@
+.env
+.env.*
+node_modules/
+.next/
+playwright-report/
+test-results/
+e2e/
+scripts/
+README.md
+AGENTS.md
+**/*.node.test.ts
+**/*.type.test.ts
+*.tsbuildinfo
+.DS_Store

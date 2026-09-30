@@ -1,0 +1,24 @@
+ARG NODE_BASE_IMAGE=node:24-bookworm-slim
+FROM ${NODE_BASE_IMAGE} AS builder
+
+ARG NODE_BASE_IMAGE
+WORKDIR /app
+RUN case "${NODE_BASE_IMAGE}" in *@sha256:*) ;; *) exit 1 ;; esac
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+
+ARG NEXT_PUBLIC_API_BASE_URL
+RUN test -n "${NEXT_PUBLIC_API_BASE_URL}" && npm run build
+
+FROM ${NODE_BASE_IMAGE} AS runtime
+ENV NODE_ENV=production \
+    HOSTNAME=0.0.0.0 \
+    PORT=3001
+WORKDIR /app
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/public ./public
+USER node
+EXPOSE 3001
+CMD ["node", "server.js"]

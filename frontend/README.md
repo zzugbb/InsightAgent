@@ -8,7 +8,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)已核实历史 GLM 任务与 Trace，当前实时调用 HTTP 429 且用户确认服务到期；前端真实用户流程仍待验收，项目整体完成度尚不能可靠量化。
-- A2 [试点部署预检](../docs/pilot-deployment-preflight.md)要求 HTTPS 浏览器/API 地址一致，并记录前端构建时的 `NEXT_PUBLIC_API_BASE_URL`；镜像内容与目标入口仍待实测。
+- A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)要求 HTTPS 浏览器/API 地址一致，并记录前端构建时的 `NEXT_PUBLIC_API_BASE_URL`；Next standalone 已由本地双构建生成并临时启动，首页返回 HTTP 200，实际镜像和目标入口仍待实测。
 - A3 本地恢复基础：Compose 的 Chroma 数据卷已对齐镜像 `/data` 路径，隔离快照恢复后 PostgreSQL/Chroma fixture 均读回；前端登录、任务/Trace 与知识库的目标环境恢复验收仍待部署环境，详见[操作记录](../docs/local-stack-backup-restore.md)。
 - A4 后端已提供低敏请求日志、远端 LLM HTTP 尝试事件与离线汇总、可供已配置 CORS 来源读取的 `X-Request-ID`，以及[OpenAPI 指纹基线与变更记录](../docs/api-changelog.md)；前端运行时代码未改，调用方兼容性与目标环境指标采集仍需验证。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对 `eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10。预检的 1 个动作概括这组约束；继续精确锁定 ESLint `9.39.5`，不使用 `--force` 或 peer override。
@@ -16,13 +16,13 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
-- 除本轮 lint、A3 fixture、tooling gate 与后端门禁外，前端/e2e 数字来自上一主线封板；未复跑前端/e2e，也未做目标用户签收。
+- 本轮前端 Node/lint/双构建已复跑；本主线 A3 fixture、tooling 与后端门禁已有本地证据。e2e 数字来自上一主线封板，目标用户尚未签收。
 - 本轮审计：历史 GLM 任务包含工具/RAG Trace，一条任务可由当前代码构建 JSON/Markdown 导出；最小实时 GLM 请求为 HTTP 429，尚不能据此认定前端真实供应商体验已通过。
 - 本轮 A3 演练：本地隔离快照恢复后 PostgreSQL 测试行与 Chroma 测试向量均读回；前端登录、任务/Trace 与知识库目标环境恢复未验收。
-- 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已包含快照工具和 A2 配置预检测试；前端运行时代码与 e2e 本轮未改。
-- 本轮后端门禁：full slice `2032/2032`、module boundary `9/9`；请求/LLM 尝试观测和 OpenAPI 44 操作、78 组件指纹已验证。前端 node/e2e 本轮未复跑。
+- 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已包含快照工具和 A2 配置预检测试；页面业务代码与 e2e 本轮未改，Next 构建配置新增 standalone 输出。
+- 本主线后端门禁：full slice `2032/2032`、module boundary `9/9`；请求/LLM 尝试观测和 OpenAPI 44 操作、78 组件指纹已验证。本轮前端 node 184/184、lint 0 error/2 warning、双构建通过并产出 standalone；e2e 未复跑。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
-- Frontend：封板时 node tests `184/184`、真实预检 `ready_with_actions`（0 blocker、1 个 ESLint 10 外部兼容动作）、双构建通过；本轮 `npm run lint` 为 0 error / 2 warning，锁文件核对 3 个 peer 约束。
+- Frontend：本轮 node tests `184/184`、lint 0 error / 2 warning、Turbopack/webpack 双构建通过；封板时真实预检 `ready_with_actions`（0 blocker、1 个 ESLint 10 外部兼容动作）沿用，锁文件核对 3 个 peer 约束。
 - Backend 契约基线：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
 - E2E/CI：封板时本地服务 full Chromium `64 passed / 1 skipped`，覆盖 Workbench、SSE、trace、RAG、任务/会话导出、恢复、冷却、布局恢复和响应式抽屉。
 - Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
