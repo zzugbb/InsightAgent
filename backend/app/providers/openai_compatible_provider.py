@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from time import monotonic
 from typing import Any, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.providers.base import ProviderCallError, ProviderResponse, ProviderUsage
+from app.providers.call_observability import record_provider_attempt
 from app.providers.response_utils import (
     coerce_provider_usage,
     extract_response_delta_text,
@@ -132,31 +134,48 @@ class OpenAICompatibleLLMProvider:
 
     def _request_json(self, payload: dict[str, Any]) -> dict[str, Any]:
         request = self._build_request(payload)
+        started_at = monotonic()
+        outcome = "unexpected_error"
+        status_code: int | None = None
+        usage_available = False
         try:
             with urlopen(request, timeout=self.timeout_sec) as response:
                 raw = response.read().decode("utf-8")
+                status_code = int(getattr(response, "status", 200))
+            if not raw.strip():
+                outcome = "empty_response"
+                raise ProviderCallError(
+                    code="remote_provider_empty_response",
+                    user_message="Remote provider returned an empty response.",
+                    detail=None,
+                    retryable=False,
+                )
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                outcome = "provider_error"
+                raise ProviderCallError(
+                    code="remote_provider_invalid_json",
+                    user_message="Remote provider returned invalid JSON.",
+                    detail=raw[:256],
+                    retryable=False,
+                ) from exc
+            usage_available = self._extract_usage(parsed) is not None
+            outcome = "http_response"
+            return parsed
         except HTTPError as exc:
+            outcome = "http_error"
+            status_code = exc.code
             self._raise_http_error(exc=exc, stream_mode=False)
         except URLError as exc:
+            outcome = "network_error"
             self._raise_network_error(exc=exc, stream_mode=False)
-
-        if not raw.strip():
-            raise ProviderCallError(
-                code="remote_provider_empty_response",
-                user_message="Remote provider returned an empty response.",
-                detail=None,
-                retryable=False,
+        finally:
+            record_provider_attempt(
+                mode="request", outcome=outcome,
+                started_at=started_at, status_code=status_code,
+                usage_available=usage_available,
             )
-
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ProviderCallError(
-                code="remote_provider_invalid_json",
-                user_message="Remote provider returned invalid JSON.",
-                detail=raw[:256],
-                retryable=False,
-            ) from exc
 
     def _extract_message_content(self, obj: object) -> str:
         choices = (
@@ -234,8 +253,12 @@ class OpenAICompatibleLLMProvider:
             yielded_chunks = 0
             done_seen = False
             request = self._build_request(payload)
+            started_at = monotonic()
+            outcome = "interrupted"
+            status_code: int | None = None
             try:
                 with urlopen(request, timeout=self.timeout_sec) as response:
+                    status_code = int(getattr(response, "status", 200))
                     for raw_line in response:
                         line = raw_line.decode("utf-8", errors="ignore").strip()
                         if not line or line.startswith(":"):
@@ -262,18 +285,42 @@ class OpenAICompatibleLLMProvider:
                         if delta:
                             yielded_chunks += 1
                             yield delta
+                if yielded_chunks == 0:
+                    if done_seen:
+                        outcome = "empty_response"
+                        raise ProviderCallError(
+                            code="remote_provider_empty_response",
+                            user_message="Remote provider stream finished without text output.",
+                            detail=None,
+                            retryable=False,
+                        )
+                    outcome = "interrupted"
+                    raise ProviderCallError(
+                        code="remote_provider_stream_interrupted",
+                        user_message="Remote provider stream ended before completion.",
+                        detail="done marker not received",
+                        retryable=True,
+                    )
+                outcome = "success"
+                return
             except HTTPError as exc:
+                status_code = exc.code
                 can_retry_without_stream_options = (
                     idx == 0
                     and exc.code == 400
                     and "stream_options" in payload
                 )
                 if can_retry_without_stream_options:
+                    outcome = "compat_retry"
                     continue
+                outcome = "http_error"
                 self._raise_http_error(exc=exc, stream_mode=True)
             except URLError as exc:
+                outcome = "network_error"
                 self._raise_network_error(exc=exc, stream_mode=True)
             except ProviderCallError:
+                if outcome == "interrupted":
+                    outcome = "provider_error"
                 raise
             except Exception as exc:  # noqa: BLE001
                 raise ProviderCallError(
@@ -282,22 +329,11 @@ class OpenAICompatibleLLMProvider:
                     detail=str(exc),
                     retryable=True,
                 ) from exc
-
-            if yielded_chunks == 0:
-                if done_seen:
-                    raise ProviderCallError(
-                        code="remote_provider_empty_response",
-                        user_message="Remote provider stream finished without text output.",
-                        detail=None,
-                        retryable=False,
-                    )
-                raise ProviderCallError(
-                    code="remote_provider_stream_interrupted",
-                    user_message="Remote provider stream ended before completion.",
-                    detail="done marker not received",
-                    retryable=True,
+            finally:
+                record_provider_attempt(
+                    mode="stream", outcome=outcome, started_at=started_at,
+                    status_code=status_code, usage_available=self._last_usage is not None,
                 )
-            return
 
     def get_last_usage(self) -> ProviderUsage | None:
         return self._last_usage

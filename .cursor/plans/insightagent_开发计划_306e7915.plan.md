@@ -4,7 +4,7 @@ overview: next-major-upgrade-readiness 已 100% 封板；project-completion-audi
 current_focus:
   mainline: project-completion-audit
   status: 静态盘点 1/3（约 33%）完成；GLM 服务到期阻断当前成功调用，环境与范围/签收待完成
-  latest_change: 2026-09-30 A4 新增 OpenAPI 44 操作/78 组件指纹基线与变更记录，结合服务端 X-Request-ID/低敏请求日志；后端 full slice 2027/2027、module boundary 9/9 通过，其余范围仍待裁决
+  latest_change: 2026-09-30 A4 增加远端 LLM HTTP 尝试低敏事件与离线汇总，结合 OpenAPI 44 操作/78 组件指纹基线、X-Request-ID/请求日志；后端 full slice 2032/2032、module boundary 9/9 通过，其余范围仍待裁决
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -51,7 +51,7 @@ validation_baseline:
   current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；当前最小 GLM 调用 HTTP 429，未重试
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
   tooling_current: bash scripts/ci_run_release_gate.sh --phase tooling passed，包含快照工具 4 条安全前置测试；compose.full.yml/docker-compose.yml 配置校验通过
-  backend_current: bash scripts/ci_run_release_gate.sh --phase backend passed；full slice 2027/2027、module boundary 9/9；请求观测与 OpenAPI 44 操作/78 组件指纹检查通过
+  backend_current: bash scripts/ci_run_release_gate.sh --phase backend passed；full slice 2032/2032、module boundary 9/9；请求/LLM HTTP 尝试观测与 OpenAPI 44 操作/78 组件指纹检查通过
   release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-next-major-readiness-seal-summary.md --json-summary-file /tmp/release-gate-next-major-readiness-seal-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，10/10
   backend: 上一主线封板时 full slice 2020/2020、module boundary 9/9；FastAPI/Python 3.14、安全与运维专项沿用已封板基线
   frontend: 封板时 node tests 184/184、真实预检 ready_with_actions（0 blocker、1 个 ESLint 10 外部兼容动作）、双构建 passed；本轮 lint 0 error / 2 warning，锁文件 React/import/jsx-a11y 三个 peer 范围排除 ESLint 10
@@ -86,7 +86,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization` 与 `next-major-upgrade-readiness` 均已 100% 封板。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next 16 / React 19.2、原生 flat ESLint、React Compiler 规则无例外、双构建与 full Chromium 已验证，未修改外部运行时契约。
 - 当前主线：`project-completion-audit` 1/3（约 33%）完成；[审计清单](../../docs/project-completion-audit.md)已核实历史 GLM 成功任务、工具/RAG Trace 与导出，当前实时调用 HTTP 429 且用户确认服务到期；原始范围已有建议、尚待裁决，试点部署/恢复与用户签收仍缺证据。
-- A4 请求观测与 API 契约基线已落地：服务端 request ID/低敏日志可供试点采集，OpenAPI 44 操作/78 组件指纹进入后端门禁并附变更记录；LLM 调用统计、告警及其余完整版能力仍待范围/环境决定。
+- A4 请求观测、远端 LLM HTTP 尝试低敏日志/离线汇总与 API 契约基线已落地；尝试数不等于账单调用数，OpenAPI 44 操作/78 组件指纹进入后端门禁。目标环境采集、告警及其余完整版能力仍待范围/环境决定。
 - 非阻塞维护候选：`eslint-10-adoption` 的 React/import/jsx-a11y 三个插件 peer 范围均排除 ESLint 10；React 官方修复尚未发布，预检的 1 个外部兼容动作概括这组约束，不强制覆盖 peer。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
@@ -106,7 +106,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - 本轮审计：历史 `glm-5.1` provider-usage 完成任务 10 条；工具/RAG Trace 与一条 JSON/Markdown 导出构建已核对；最小实时 GLM 调用 HTTP 429，未重试。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
-- 本轮 Backend：`bash scripts/ci_run_release_gate.sh --phase backend` 通过，full slice `2027/2027`、module boundary `9/9`；请求观测与 OpenAPI 指纹检查均已覆盖。
+- 本轮 Backend：`bash scripts/ci_run_release_gate.sh --phase backend` 通过，full slice `2032/2032`、module boundary `9/9`；请求/LLM 尝试观测与 OpenAPI 指纹检查均已覆盖。
 - Frontend：封板时 node tests `184/184`、真实预检 `ready_with_actions`（0 blocker、1 个 ESLint 10 外部兼容动作）、双构建通过；本轮 lint 0 error / 2 warning，锁文件核对 3 个 peer 约束。
 - E2E/CI：封板时本地服务 full Chromium `64 passed / 1 skipped`，覆盖 Workbench、SSE、trace、RAG、任务/会话导出、恢复、冷却、布局恢复与响应式抽屉。
 - Hygiene：`py_compile`、`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。

@@ -8,7 +8,7 @@
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
 - 当前主线：`project-completion-audit` 已完成第 1/3 阶段（约 33%）；[审计记录](docs/project-completion-audit.md)核实历史 GLM 成功任务与工具/RAG Trace，本轮实时调用 HTTP 429，用户确认服务已到期。尚无试点环境；项目整体完成度尚不能可靠量化。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
-- A4 已落地请求观测与 API 契约基线：服务端生成 `X-Request-ID` 和低敏请求日志，44 个 OpenAPI 操作、78 个组件指纹纳入后端门禁；[变更记录](docs/api-changelog.md)要求人工判断兼容性。原始任务内并行、重跑、异步 ingest 与产品范围仍待裁决。
+- A4 已落地请求观测、远端 LLM HTTP 尝试低敏日志及离线汇总、API 契约基线：44 个 OpenAPI 操作、78 个组件指纹纳入后端门禁；[变更记录](docs/api-changelog.md)要求人工判断兼容性。尝试数不等于账单调用数；任务内并行、重跑、异步 ingest 与产品范围仍待裁决。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对锁文件，`eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10，React 插件官方兼容修复尚未发布。预检的 1 个外部兼容动作概括这组约束；保持 ESLint `9.39.5` 精确锁定，不强制覆盖 peer 约束。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
@@ -18,7 +18,7 @@
 - 本轮审计：只读核对 10 条历史 `glm-5.1` provider-usage 完成任务及工具/RAG Trace；一条历史任务的 JSON/Markdown 导出构建通过；一次最小实时 GLM 调用返回 HTTP 429，未重试。
 - 本轮 A3 演练：快照工具安全测试通过；第一轮发现旧 Chroma 卷为空，修正挂载后第二轮离线快照恢复到新项目，PostgreSQL 测试行与 Chroma 测试向量均读回。此结果仅覆盖本地 fixture。
 - 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已包含快照工具的 4 条安全前置测试；两份 Compose 配置校验通过。
-- 本轮后端门禁：`bash scripts/ci_run_release_gate.sh --phase backend` 通过，full slice `2027/2027`、module boundary `9/9`；请求观测和 OpenAPI 44 操作、78 组件指纹均已覆盖。前端/e2e 与 full release gate 本轮未复跑。
+- 本轮后端门禁：`bash scripts/ci_run_release_gate.sh --phase backend` 通过，full slice `2032/2032`、module boundary `9/9`；请求/LLM 尝试观测和 OpenAPI 44 操作、78 组件指纹均已覆盖。前端/e2e 与 full release gate 本轮未复跑。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线，外部运行时契约未改。
 - Frontend：封板时 node tests `184/184`、真实预检 `ready_with_actions`（0 blocker、1 个 ESLint 10 外部兼容动作）、双构建通过；本轮重新运行 `npm run lint` 为 0 error / 2 warning，并核对锁文件的 3 个 peer 约束。
@@ -35,6 +35,7 @@
 - SSE 事件、`TraceStep`、result summary、safe output、JSON/Markdown export shape 保持稳定；`error.diagnostic` 与 failure audit diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性。
 - 后端全局 HTTP 响应追加安全 header；只增加响应头，不改变 JSON payload、SSE event、trace/delta 或 export body shape。
 - HTTP 请求由服务端生成 `X-Request-ID`；低敏 JSON 行日志仅含 request ID、方法、路由模板、状态码与完整响应耗时，404 用 `<unmatched>`。原始路径、query、header、body 与异常正文不进入该日志；SSE 建连后的业务失败仍需结合 SSE/Trace 判断。
+- 远端 OpenAI 兼容提供方每次实际 HTTP 尝试记录低敏 `llm_http_attempt` 事件；[运行手册](docs/development-runbook.md)给出离线汇总命令与计数口径。兼容回退产生两次尝试，目标环境采集和告警仍待实证。
 - `backend/api_surface_baseline.json` 对运行时 OpenAPI 操作和组件取指纹；任何漂移需按[API 变更记录](docs/api-changelog.md)核对兼容性。该检查不替代字段语义、SSE/Trace/export 行为审查。
 - Access token 解析要求 JWT header 为 `alg=HS256`、`typ=JWT`；签名、过期和 subject 校验语义保持不变。
 - Refresh token 请求会先 trim 并拒绝空白值；服务层将空白 refresh token 视为无效 token 返回，不暴露内部异常。

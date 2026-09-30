@@ -20,6 +20,7 @@
 - tooling fixture 会同时在 release-gate 与 backend/frontend E2E workflow 中运行；失败注入测试不能假设 E2E runner 存在 `backend/.venv`，应在首个无依赖命令上注入确定性退出码。
 - 本地 PostgreSQL/Chroma 离线备份与隔离恢复见 [`docs/local-stack-backup-restore.md`](local-stack-backup-restore.md)；备份前必须停止对应 Compose 项目，恢复只写入全新项目卷。`compose.full.yml` 与 `docker-compose.yml` 的 Chroma 持久卷现挂载 `/data`，与当前镜像日志中的 persist path 一致；旧容器若曾使用 `/chroma/chroma`，重建前先保存容器内 `/data`，不能假设旧命名卷包含数据。
 - 后端请求观测日志为单行 JSON，字段为 `event=http_request`、服务端 `request_id`、method、路由模板、status_code、duration_ms；原始 URL/query/header/body 和异常正文不进入该日志。`X-Request-ID` 对已配置 CORS 来源可读。流式响应耗时到流关闭为止，SSE 建连后的业务失败不能只用 HTTP 200 判断，应结合 SSE/Trace 失败事件。
+- 远端 OpenAI 兼容提供方每次实际 HTTP 尝试输出 `event=llm_http_attempt` 单行 JSON：`mode`、`outcome`、`status_family`、`duration_ms`、`usage_available`，无模型、主机、密钥、提示词或响应正文。`outcome` 描述本次 HTTP/流处理结果，不代表最终任务成功；`stream_options` 不兼容后的 400 回退会记两次尝试。用 `backend/.venv/bin/python backend/scripts/summarize_provider_attempts.py <日志文件>` 离线汇总；该数量是上游 HTTP 尝试数，不是任务数、账单调用数或 token 用量。目标环境仍需验证采集、留存和告警。
 
 ## 不需要提权的常用命令
 
@@ -33,6 +34,7 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py --list-tests
 backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py --list-selections
 backend/.venv/bin/python scripts/test_local_stack_snapshot.py
 backend/.venv/bin/python backend/scripts/check_api_surface.py
+backend/.venv/bin/python backend/scripts/summarize_provider_attempts.py <日志文件>
 python3 -m py_compile backend/app/config.py backend/app/services/chat_execution_service.py backend/app/services/task_queue_service.py
 bash scripts/ci_run_release_gate.sh --phase auto
 bash scripts/ci_release_readiness_matrix.sh --format markdown
