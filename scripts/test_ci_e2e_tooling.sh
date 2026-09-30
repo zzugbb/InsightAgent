@@ -36,6 +36,7 @@ run_common() {
   bash "${ROOT_DIR}/scripts/test_ci_export_diagnostics_overview.sh"
   bash "${ROOT_DIR}/scripts/test_ci_export_diag_pipeline.sh"
   bash "${ROOT_DIR}/scripts/test_ci_export_diag_flow.sh"
+  python3 "${ROOT_DIR}/scripts/test_local_stack_snapshot.py"
 }
 
 run_backend() {

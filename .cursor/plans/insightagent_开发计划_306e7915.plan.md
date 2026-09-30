@@ -4,7 +4,7 @@ overview: next-major-upgrade-readiness 已 100% 封板；project-completion-audi
 current_focus:
   mainline: project-completion-audit
   status: 静态盘点 1/3（约 33%）完成；GLM 服务到期阻断当前成功调用，环境与范围/签收待完成
-  latest_change: 用户优先询问 ESLint 10 升级；2026-09-30 核对 React/import/jsx-a11y 三个插件 peer 均排除 ESLint 10，React 官方修复未发布；本轮 lint 0 error / 2 warning，暂不强制升级
+  latest_change: 2026-09-30 A3 本地离线备份/隔离恢复工具已实现；演练发现旧 Chroma 卷挂载路径错误并改为 /data，第二轮 PostgreSQL/Chroma fixture 均恢复读回；目标环境恢复仍待验证
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -45,8 +45,10 @@ stable_contracts:
   - Next 16.3.5 与 eslint-config-next 精确对齐，React / React DOM 固定 19.2.8；React Compiler refs / set-state-in-effect 无例外；ESLint 9.39.5 在 React/import/jsx-a11y 插件正式兼容 ESLint 10 前保持锁定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  source: 以下完整门禁数字为上一主线封板基线；本轮补跑前端 lint 并核对 ESLint peer 约束，未复跑完整测试/e2e，也未验证目标环境
+  source: 以下完整门禁数字为上一主线封板基线；本轮补跑前端 lint、核对 ESLint peer 约束、完成本地离线恢复 fixture 与 tooling gate，未复跑完整测试/e2e，也未验证目标环境
   current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；当前最小 GLM 调用 HTTP 429，未重试
+  backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
+  tooling_current: bash scripts/ci_run_release_gate.sh --phase tooling passed，包含快照工具 4 条安全前置测试；compose.full.yml/docker-compose.yml 配置校验通过
   release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-next-major-readiness-seal-summary.md --json-summary-file /tmp/release-gate-next-major-readiness-seal-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，10/10
   backend: 上一主线封板时 full slice 2020/2020、module boundary 9/9；FastAPI/Python 3.14、安全与运维专项沿用已封板基线
   frontend: 封板时 node tests 184/184、真实预检 ready_with_actions（0 blocker、1 个 ESLint 10 外部兼容动作）、双构建 passed；本轮 lint 0 error / 2 warning，锁文件 React/import/jsx-a11y 三个 peer 范围排除 ESLint 10

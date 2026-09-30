@@ -7,13 +7,16 @@
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
 - 当前主线：`project-completion-audit` 已完成第 1/3 阶段（约 33%）；[审计记录](docs/project-completion-audit.md)核实历史 GLM 成功任务与工具/RAG Trace，本轮实时调用 HTTP 429，用户确认服务已到期。尚无试点环境；项目整体完成度尚不能可靠量化。
+- A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对锁文件，`eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10，React 插件官方兼容修复尚未发布。预检的 1 个外部兼容动作概括这组约束；保持 ESLint `9.39.5` 精确锁定，不强制覆盖 peer 约束。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- 除下述本轮 ESLint 核对外，门禁数字来自上一主线封板；本轮未复跑完整测试/e2e，不能当作当前真实供应商或生产环境的验收结果。
+- 除下述本轮 ESLint 核对、A3 fixture 和 tooling gate 外，门禁数字来自上一主线封板；本轮未复跑完整测试/e2e，不能当作当前真实供应商或生产环境的验收结果。
 - 本轮审计：只读核对 10 条历史 `glm-5.1` provider-usage 完成任务及工具/RAG Trace；一条历史任务的 JSON/Markdown 导出构建通过；一次最小实时 GLM 调用返回 HTTP 429，未重试。
+- 本轮 A3 演练：快照工具安全测试通过；第一轮发现旧 Chroma 卷为空，修正挂载后第二轮离线快照恢复到新项目，PostgreSQL 测试行与 Chroma 测试向量均读回。此结果仅覆盖本地 fixture。
+- 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已包含快照工具的 4 条安全前置测试；两份 Compose 配置校验通过。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线，外部运行时契约未改。
 - Frontend：封板时 node tests `184/184`、真实预检 `ready_with_actions`（0 blocker、1 个 ESLint 10 外部兼容动作）、双构建通过；本轮重新运行 `npm run lint` 为 0 error / 2 warning，并核对锁文件的 3 个 peer 约束。
@@ -22,7 +25,7 @@
 
 ## 当前开发计划
 
-1. `project-completion-audit` 第 1/3 阶段完成；GLM 服务到期期间暂停真实请求，续用或换有效兼容账号后补当前成功链路。先推进[原始范围裁决建议](docs/project-completion-audit.md)，试点部署与恢复演练待环境具备；项目总完成百分比暂不估算。
+1. `project-completion-audit` 第 1/3 阶段完成；GLM 服务到期期间暂停真实请求，续用或换有效兼容账号后补当前成功链路。先推进[原始范围裁决建议](docs/project-completion-audit.md)，试点部署与真实数据恢复演练待环境具备；旧 Chroma 容器重建前须检查并保存其 `/data`。项目总完成百分比暂不估算。
 2. ESLint 10 保留为非阻塞维护候选：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，并核对 import/jsx-a11y 的兼容版本；再以依赖契约红测和完整门禁受控升级。
 
 ## 稳定契约
