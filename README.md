@@ -7,7 +7,7 @@
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
 - 当前主线：`project-completion-audit` 已完成第 1/3 阶段（约 33%）；[审计记录](docs/project-completion-audit.md)核实历史 GLM 成功任务与工具/RAG Trace，本轮实时调用 HTTP 429，用户确认服务已到期。尚无试点环境；项目整体完成度尚不能可靠量化。
-- A2 [试点镜像配方与部署预检](docs/pilot-deployment-preflight.md)已准备：摘要固定基础镜像的后端/前端 Docker 构建均在本机 ARM64 通过；后端非 root 运行、应用导入和 Chroma 依赖检查通过，前端容器首页与 CSS 均 HTTP 200。目标环境部署与回滚仍待实测。
+- A2 [试点镜像配方与部署预检](docs/pilot-deployment-preflight.md)已准备：两份 Docker 镜像在本机 ARM64 构建通过；隔离联调的生产模式后端、PostgreSQL 注册/会话写读、Chroma 探测与前端 HTML/CSS 通过。目标环境部署、TLS 与回滚仍待实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
 - A4 已落地请求观测、远端 LLM HTTP 尝试低敏日志及离线汇总、API 契约基线：44 个 OpenAPI 操作、78 个组件指纹纳入后端门禁；[变更记录](docs/api-changelog.md)要求人工判断兼容性。尝试数不等于账单调用数；任务内并行、重跑、异步 ingest 与产品范围仍待裁决。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对锁文件，`eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10，React 插件官方兼容修复尚未发布。预检的 1 个外部兼容动作概括这组约束；保持 ESLint `9.39.5` 精确锁定，不强制覆盖 peer 约束。
@@ -15,8 +15,8 @@
 
 ## 当前验证基线
 
-- 本主线已核对 ESLint、A3 fixture、后端与 tooling 门禁；前端 Node/lint/双构建及本机两份试点镜像构建已验证。full release gate 和 e2e 数字仍来自上一主线封板，不能当作当前真实供应商或生产环境的验收结果。
-- 本轮 A2 镜像：后端容器以 `10001:10001` 运行，`app.main` 导入、Chroma 1.5.7 与 `pip check` 通过；前端容器以 `node` 运行，首页及静态 CSS HTTP 200，已停止。成品尚未推送至目标仓库。
+- 本主线已核对 ESLint、A3 fixture、后端与 tooling 门禁；前端 Node/lint/双构建、本机两份试点镜像构建及隔离联调已验证。full release gate 和 e2e 数字仍来自上一主线封板，不能当作当前真实供应商或生产环境的验收结果。
+- 本轮 A2 联调：生产模式后端的 PostgreSQL 注册/会话写读、Chroma 可达探测与前端首页/CSS 通过，临时资源已清理；镜像尚未推送目标仓库。
 - 本轮审计：只读核对 10 条历史 `glm-5.1` provider-usage 完成任务及工具/RAG Trace；一条历史任务的 JSON/Markdown 导出构建通过；一次最小实时 GLM 调用返回 HTTP 429，未重试。
 - 本轮 A3 演练：快照工具安全测试通过；第一轮发现旧 Chroma 卷为空，修正挂载后第二轮离线快照恢复到新项目，PostgreSQL 测试行与 Chroma 测试向量均读回。此结果仅覆盖本地 fixture。
 - 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已包含快照工具与 A2 部署配置预检测试；两份开发 Compose 的既有配置校验通过。

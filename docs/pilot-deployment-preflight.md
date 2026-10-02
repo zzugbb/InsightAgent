@@ -53,6 +53,16 @@ docker build -f frontend/Dockerfile.pilot \
 
 2026-09-30 本地验证：后端使用 `python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d`，前端使用 `node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6`，上述两份 Docker 配方在本机 ARM64 均实际构建成功。后端镜像以 `10001:10001` 运行，容器内 `chromadb==1.5.7`、`app.main` 导入与 `pip check` 通过；前端镜像以 `node` 运行，临时容器首页及静态 CSS 均返回 HTTP 200，容器已停止。这里只证明本机构建与基本运行；本地镜像 ID 不能充当目标仓库摘要，也没有完成目标环境部署。
 
+在 Docker 可用且上述四份镜像已在本机时，可运行隔离联调（运行和访问本机端口通常需要提权）：
+
+```bash
+backend/.venv/bin/python scripts/smoke_pilot_images.py \
+  --backend-image insightagent-backend:pilot-local-20260930 \
+  --frontend-image insightagent-frontend:pilot-local-5449d56
+```
+
+脚本创建随机命名的临时网络与容器、临时凭据，不挂载仓库或既有数据卷；以生产模式启动后端，验证 PostgreSQL 注册/会话写读、Chroma 可达、允许/拒绝来源的 CORS 响应和前端 HTML/CSS，结束时核验清理。默认 PostgreSQL/Chroma 镜像仅用于本地联调，运行时可通过参数指定；前端构建时 API 地址仍是镜像内的公开值，联调不验证浏览器跨域调用或 TLS。2026-10-02 在本机 ARM64 运行通过，临时资源已清理。
+
 仅复核 Dockerfile 静态规则可运行 `docker build --check --build-arg PYTHON_BASE_IMAGE=python:3.14-slim -f backend/Dockerfile.pilot backend` 与对应的前端命令（`NODE_BASE_IMAGE=node:24-bookworm-slim`、`NEXT_PUBLIC_API_BASE_URL=https://api.example.com`）。此检查不会执行依赖安装或验证最终镜像；真正构建仍必须传入摘要固定的基础镜像。
 
 ## 目标环境演练记录
