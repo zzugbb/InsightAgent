@@ -8,7 +8,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)已核实历史 GLM 任务与 Trace，当前实时调用 HTTP 429 且用户确认服务到期；前端真实用户流程仍待验收，项目整体完成度尚不能可靠量化。
-- A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)要求 HTTPS 浏览器/API 地址一致，并记录构建时的 `NEXT_PUBLIC_API_BASE_URL`；两份镜像在本机 ARM64 构建并完成隔离联调，前端 HTML/CSS 与后端数据库/Chroma 路径通过。目标入口仍待实测。
+- A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)要求 HTTPS 浏览器/API 地址一致，并记录构建时的 `NEXT_PUBLIC_API_BASE_URL`；两份镜像在本机 ARM64 构建并完成隔离联调，前端 HTML/CSS、浏览器实际 API 请求与后端数据库/Chroma 路径通过。目标入口仍待实测。
 - A3 本地恢复基础：Compose 的 Chroma 数据卷已对齐镜像 `/data` 路径，隔离快照恢复后 PostgreSQL/Chroma fixture 均读回；前端登录、任务/Trace 与知识库的目标环境恢复验收仍待部署环境，详见[操作记录](../docs/local-stack-backup-restore.md)。
 - A4 后端已提供低敏请求日志、远端 LLM HTTP 尝试事件与离线汇总、可供已配置 CORS 来源读取的 `X-Request-ID`，以及[OpenAPI 指纹基线与变更记录](../docs/api-changelog.md)；前端运行时代码未改，调用方兼容性与目标环境指标采集仍需验证。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对 `eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10。预检的 1 个动作概括这组约束；继续精确锁定 ESLint `9.39.5`，不使用 `--force` 或 peer override。
@@ -17,7 +17,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 当前验证基线
 
 - 本轮前端 Node/lint/双构建、Docker 镜像构建与隔离联调已验证；本主线 A3 fixture、tooling 与后端门禁已有本地证据。e2e 数字来自上一主线封板，目标用户尚未签收。
-- 本轮 A2 前端镜像：临时容器 HTML/CSS HTTP 200，后端生产模式的 PostgreSQL 注册/会话写读与 Chroma 探测通过，临时资源已清理。浏览器跨域调用与目标 HTTPS 入口未验证。
+- 本轮 A2 前端镜像：临时容器 HTML/CSS HTTP 200，浏览器认证请求命中预期构建 API 地址且错误地址负向检查失败；后端生产模式的 PostgreSQL 注册/会话写读与 Chroma 探测通过，临时资源已清理。目标 API 可达性与 HTTPS 入口未验证。
 - 本轮审计：历史 GLM 任务包含工具/RAG Trace，一条任务可由当前代码构建 JSON/Markdown 导出；最小实时 GLM 请求为 HTTP 429，尚不能据此认定前端真实供应商体验已通过。
 - 本轮 A3 演练：本地隔离快照恢复后 PostgreSQL 测试行与 Chroma 测试向量均读回；前端登录、任务/Trace 与知识库目标环境恢复未验收。
 - 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已包含快照工具和 A2 配置预检测试；页面业务代码与 e2e 本轮未改，Next 构建配置新增 standalone 输出。

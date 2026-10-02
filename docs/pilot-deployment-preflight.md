@@ -23,7 +23,7 @@ PILOT_PYTHON_BASE_IMAGE=python:3.14-slim@sha256:<64 位十六进制摘要>
 PILOT_NODE_BASE_IMAGE=node:24-bookworm-slim@sha256:<64 位十六进制摘要>
 ```
 
-`PILOT_FRONTEND_BUILD_API_BASE_URL` 是前端构建时的 `NEXT_PUBLIC_API_BASE_URL` 记录，必须与实际浏览器 API 地址一致。文件解析支持普通 `KEY=VALUE` 和单层引号，不执行 shell 展开。实际镜像构建来源及该值是否进入构建产物仍需人工核验。
+`PILOT_FRONTEND_BUILD_API_BASE_URL` 是前端构建时的 `NEXT_PUBLIC_API_BASE_URL` 记录，必须与实际浏览器 API 地址一致。文件解析支持普通 `KEY=VALUE` 和单层引号，不执行 shell 展开。下方隔离联调可检查已构建镜像实际发出的浏览器请求是否指向该地址；镜像构建来源仍需人工核验。
 
 从仓库根目录运行：
 
@@ -58,10 +58,11 @@ docker build -f frontend/Dockerfile.pilot \
 ```bash
 backend/.venv/bin/python scripts/smoke_pilot_images.py \
   --backend-image insightagent-backend:pilot-local-20260930 \
-  --frontend-image insightagent-frontend:pilot-local-5449d56
+  --frontend-image insightagent-frontend:pilot-local-5449d56 \
+  --expected-api-base-url https://api.pilot.example.com
 ```
 
-脚本创建随机命名的临时网络与容器、临时凭据，不挂载仓库或既有数据卷；以生产模式启动后端，验证 PostgreSQL 注册/会话写读、Chroma 可达、允许/拒绝来源的 CORS 响应和前端 HTML/CSS，结束时核验清理。默认 PostgreSQL/Chroma 镜像仅用于本地联调，运行时可通过参数指定；前端构建时 API 地址仍是镜像内的公开值，联调不验证浏览器跨域调用或 TLS。2026-10-02 在本机 ARM64 运行通过，临时资源已清理。
+`--expected-api-base-url` 应取环境文件中的 `PILOT_FRONTEND_BUILD_API_BASE_URL`。脚本创建随机命名的临时网络与容器、临时凭据，不挂载仓库或既有数据卷；以生产模式启动后端，验证 PostgreSQL 注册/会话写读、Chroma 可达、允许/拒绝来源的 CORS 响应和前端 HTML/CSS。它使用本机 Node/Playwright 在浏览器中注入一次性假 token，拦截外网请求，核对认证请求的实际 API 地址；配置不一致即失败。结束时核验清理。默认 PostgreSQL/Chroma 镜像仅用于本地联调，运行时可通过参数指定；此项不证明目标 API 可达、真实跨域调用或 TLS。2026-10-02 本机 ARM64 正向通过、错误地址负向失败，临时资源已清理。
 
 仅复核 Dockerfile 静态规则可运行 `docker build --check --build-arg PYTHON_BASE_IMAGE=python:3.14-slim -f backend/Dockerfile.pilot backend` 与对应的前端命令（`NODE_BASE_IMAGE=node:24-bookworm-slim`、`NEXT_PUBLIC_API_BASE_URL=https://api.example.com`）。此检查不会执行依赖安装或验证最终镜像；真正构建仍必须传入摘要固定的基础镜像。
 

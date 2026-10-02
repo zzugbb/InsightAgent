@@ -97,7 +97,23 @@ def check_cors(base: str) -> None:
             raise RuntimeError("production CORS policy check failed")
 
 
-def run_smoke(backend_image: str, frontend_image: str, postgres_image: str, chroma_image: str) -> None:
+def check_browser_api(frontend_port: int, expected_api_base_url: str) -> None:
+    browser_script = Path(__file__).resolve().parents[1] / "frontend/scripts/check-pilot-browser-api.mjs"
+    result = subprocess.run(
+        ["node", str(browser_script), f"http://127.0.0.1:{frontend_port}", expected_api_base_url],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode:
+        raise RuntimeError("browser client API address check failed")
+
+
+def run_smoke(
+    backend_image: str,
+    frontend_image: str,
+    postgres_image: str,
+    chroma_image: str,
+    expected_api_base_url: str,
+) -> None:
     for image in (backend_image, frontend_image, postgres_image, chroma_image):
         docker("image", "inspect", image)
     suffix = secrets.token_hex(5)
@@ -160,6 +176,7 @@ def run_smoke(backend_image: str, frontend_image: str, postgres_image: str, chro
             frontend_port = host_port(frontend, 3001)
             wait_until("frontend", lambda: _frontend_ready(frontend_port))
             check_frontend(frontend_port)
+            check_browser_api(frontend_port, expected_api_base_url)
 
             email = f"smoke-{suffix}@example.test"
             auth = request_json(backend_base + "/api/auth/register", payload={
@@ -175,7 +192,7 @@ def run_smoke(backend_image: str, frontend_image: str, postgres_image: str, chro
             fetched = request_json(backend_base + f"/api/sessions/{session_id}", token=token)
             if fetched.get("id") != session_id:
                 raise RuntimeError("session readback failed")
-            print("PASS: pilot images, production backend/CORS, PostgreSQL write/read, Chroma probe, frontend HTML/CSS")
+            print("PASS: pilot images, production backend/CORS, PostgreSQL write/read, Chroma probe, frontend HTML/CSS and browser API address")
         finally:
             for container in reversed(started):
                 docker("rm", "-f", container, check=False)
@@ -206,6 +223,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend-image", required=True)
     parser.add_argument("--frontend-image", required=True)
+    parser.add_argument("--expected-api-base-url", required=True)
     parser.add_argument("--postgres-image", default="postgres:16-alpine")
     parser.add_argument("--chroma-image", default="chromadb/chroma:latest")
     args = parser.parse_args()
@@ -214,7 +232,10 @@ def main() -> int:
 
     signal.signal(signal.SIGTERM, terminate)
     try:
-        run_smoke(args.backend_image, args.frontend_image, args.postgres_image, args.chroma_image)
+        run_smoke(
+            args.backend_image, args.frontend_image, args.postgres_image, args.chroma_image,
+            args.expected_api_base_url,
+        )
     except (RuntimeError, subprocess.SubprocessError, HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
         print(f"FAIL: {type(exc).__name__}: {exc}")
         return 1
