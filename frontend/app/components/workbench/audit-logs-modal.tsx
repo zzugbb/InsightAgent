@@ -147,6 +147,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     if (normalized === "task_create") {
       return t.sidebar.audit.eventLabelTaskCreate;
     }
+    if (normalized === "task_rerun_created") return t.taskDetail.rerun.auditCreated;
     if (normalized === "task_cancel") {
       return t.sidebar.audit.eventLabelTaskCancel;
     }
@@ -188,7 +189,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     if (normalized === "settings_validate") {
       return "magenta";
     }
-    if (normalized === "task_create") {
+    if (normalized === "task_create" || normalized === "task_rerun_created") {
       return "geekblue";
     }
     if (normalized === "task_cancel") {
@@ -298,7 +299,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
       }
       return parts.length > 0 ? `${eventLabel} · ${parts.join(" · ")}` : eventLabel;
     }
-    if (normalizedEventType === "task_create") {
+    if (normalizedEventType === "task_create" || normalizedEventType === "task_rerun_created") {
       const promptLength = detail.prompt_length;
       if (typeof promptLength === "number" && Number.isFinite(promptLength)) {
         return `${eventLabel} · ${t.sidebar.audit.fieldPromptLength} ${Math.trunc(promptLength)}`;
@@ -665,6 +666,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
                 label: t.sidebar.audit.filterEventTaskCreate,
                 value: "task_create",
               },
+              { label: t.taskDetail.rerun.auditCreated, value: "task_rerun_created" },
               {
                 label: t.sidebar.audit.filterEventTaskCancel,
                 value: "task_cancel",

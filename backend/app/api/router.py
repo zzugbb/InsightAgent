@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import audit, auth, health, rag, rag_ingest, sessions, settings, tasks
+from app.api.routes import audit, auth, health, rag, rag_ingest, sessions, settings, tasks, task_reruns
 
 
 api_router = APIRouter()
@@ -10,5 +10,6 @@ api_router.include_router(sessions.router, prefix="/api/sessions", tags=["sessio
 api_router.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 api_router.include_router(audit.router, prefix="/api/audit", tags=["audit"])
 api_router.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+api_router.include_router(task_reruns.router, prefix="/api/tasks", tags=["tasks"])
 api_router.include_router(rag.router, prefix="/api/rag", tags=["rag"])
 api_router.include_router(rag_ingest.router, prefix="/api/rag", tags=["rag"])

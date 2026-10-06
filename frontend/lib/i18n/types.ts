@@ -745,6 +745,12 @@ export type Messages = {
     };
   };
   taskDetail: {
+    rerun: {
+      title: string; create: string; run: string; cancel: string; retry: string;
+      input: string; explanation: string; waitForTerminal: string;
+      loadFailed: string; submitFailed: string; empty: string; branch: string;
+      parent: string; parentRemoved: string; openManually: string; auditCreated: string;
+    };
     backToWorkbench: string;
     heading: string;
     lead: string;

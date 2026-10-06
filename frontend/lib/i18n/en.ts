@@ -852,6 +852,14 @@ export const en: Messages = {
     },
   },
   taskDetail: {
+    rerun: {
+      title: "Task branches", create: "Rerun as branch", run: "Create and run", cancel: "Cancel", retry: "Retry",
+      input: "Branch task input", explanation: "Run the full task in a separate session using current model and tool settings. You can edit the input. Historical messages, Memory, traces, and outputs are not copied. Execution may call external services and incur costs.",
+      waitForTerminal: "Create a rerun branch after this task finishes.", loadFailed: "Task branches failed to load",
+      submitFailed: "Branch creation failed. Retry reuses this request to avoid duplicate branches.", empty: "No rerun branches yet.",
+      branch: "View branch", parent: "View source task", parentRemoved: "The source task was deleted. This branch remains available.",
+      openManually: "Branch created. Open it from recent sessions in the Workbench.", auditCreated: "Task branch created",
+    },
     backToWorkbench: "Back to Workbench",
     heading: "Task Detail",
     lead:

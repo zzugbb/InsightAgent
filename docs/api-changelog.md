@@ -14,3 +14,5 @@
 - 2026-10-06 · API 0.1.0：新增持久化异步 RAG 导入的创建、列表、详情和排队取消接口；保留同步 ingest 及 SSE/Trace/export 契约，新增接口为兼容扩展
 
 - 2026-10-06 · API 0.1.0：后台 RAG 任务新增可空 progress 计数字段，历史记录仍可读取；后台提交新增 5000 切块展开上限，超过上限的原有效请求现返回 422，调用方需分拆请求或降低 overlap。同步 ingest 及 SSE/Trace/export 契约保持不变
+
+- 2026-10-06 · API 0.1.0：新增任务分支重跑 POST/GET /api/tasks/{task_id}/reruns；只允许本人已终结任务创建独立会话，支持幂等与分页来源关系。新任务通过既有 stream 执行，使用当前设置；原任务、任务列表、SSE/Trace/export shape 保持不变，新增接口为兼容扩展

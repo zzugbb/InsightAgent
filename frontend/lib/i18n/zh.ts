@@ -833,6 +833,14 @@ export const zh: Messages = {
     },
   },
   taskDetail: {
+    rerun: {
+      title: "任务分支", create: "分支重跑", run: "创建并运行", cancel: "取消", retry: "重试",
+      input: "分支任务输入", explanation: "使用当前模型与工具设置，在独立会话中重新执行完整任务。可修改输入；历史消息、Memory、Trace 与输出不会复制。执行可能调用外部服务并产生费用。",
+      waitForTerminal: "任务结束后可创建重跑分支。", loadFailed: "分支关系加载失败",
+      submitFailed: "分支创建失败；重试会复用本次请求，避免重复创建。", empty: "暂无重跑分支。",
+      branch: "查看分支", parent: "查看来源任务", parentRemoved: "来源任务已删除，当前分支仍可使用。",
+      openManually: "分支已创建，请从工作台最近会话中打开。", auditCreated: "任务分支创建",
+    },
     backToWorkbench: "返回工作台",
     heading: "任务详情",
     lead: "查看任务快照、轨迹回放与导出，支持故障复盘与交付留档。",

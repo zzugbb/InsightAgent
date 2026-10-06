@@ -112,6 +112,8 @@ curl -I http://127.0.0.1:3001
 
 ## e2e 路径
 
+[任务分支重跑](task-reruns.md)专项用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_rerun`；原子创建、并发幂等、来源删除及既有 stream/export 闭环用 `backend/.venv/bin/python backend/scripts/test_task_rerun_postgres.py`。后者需要提权访问 Docker/随机本机端口，使用独立临时 PostgreSQL 和 mock，测试后清理；已加入 backend-e2e workflow。
+
 Docker 依赖通常已启动，可先普通查看：
 
 ```bash

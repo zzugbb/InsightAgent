@@ -9,26 +9,30 @@
 - 当前主线：`project-completion-audit` 已完成第 1/3 阶段（约 33%）；[审计记录](docs/project-completion-audit.md)核实历史 GLM 成功任务与工具/RAG Trace，本轮实时调用 HTTP 429，用户确认服务已到期。尚无试点环境；项目整体完成度尚不能可靠量化。
 - A2 [试点镜像配方与部署预检](docs/pilot-deployment-preflight.md)已准备：后端 84 个直接/传递依赖版本锁定并在镜像构建时核对；两份 Docker 镜像在本机 ARM64 构建通过，隔离联调覆盖生产模式后端、PostgreSQL、Chroma 与前端浏览器实际 API 地址。目标环境部署、TLS 与回滚仍待实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
-- A4 [后台 RAG 导入](docs/rag-background-ingest.md)已具备持久化队列、幂等、排队取消、多 worker 领取、超时/重启恢复及审计；本轮补充分批写入、确认进度、批前权限复核与展开预算，40 文档 / 400 切块隔离实写通过。OpenAPI 为 48 个操作、82 个组件；目标运行、单步/分支重跑、任务内并行与试点范围仍待决定。
+- A4 [后台 RAG 导入](docs/rag-background-ingest.md)已具备持久化队列、分批确认进度、权限复核、展开预算与恢复，40 文档 / 400 切块隔离实写通过；[完整任务分支重跑](docs/task-reruns.md)已支持输入编辑、独立会话、幂等与来源分页。OpenAPI 为 50 个操作、86 个组件；单步恢复、任务内并行及试点范围/目标运行仍待完成。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对锁文件，`eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10，React 插件官方兼容修复尚未发布。预检的 1 个外部兼容动作概括这组约束；保持 ESLint `9.39.5` 精确锁定，不强制覆盖 peer 约束。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
 - 最终本地验证来源：2026-10-06 full release gate（backend/frontend/tooling/hygiene）及完整 Chromium 回归；真实提供方成功调用和目标部署仍未验证。
-- 后端 full slice `2061/2061`、module boundary `9/9`；包含 18 个任务专项与 11 个批次专项测试，OpenAPI `48` 操作 / `82` 组件与提交基线一致。
-- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `70 passed / 1 skipped`；6 个导入场景覆盖真实 Chroma 写入检索、进度刷新、中断复核和桌面/手机交互。
-- 隔离 PostgreSQL/Chroma 集成 `21/21`：并发、权限、旧表升级、批次失败/中断进度与恢复；实际 40 文档 / 400 切块写入及版本元数据已核对（本机 fixture 约 3.15 秒，非吞吐承诺）；测试容器和本机服务已清理。
+- 后端 full slice `2068/2068`、module boundary `9/9`；包含 7 个任务分支专项及既有后台导入任务/批次专项，OpenAPI `50` 操作 / `86` 组件与提交基线一致。
+- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `74 passed / 1 skipped`；新增 4 个任务分支场景，既有 6 个导入场景回归通过，覆盖桌面与手机交互。
+- 隔离 PostgreSQL/Chroma 集成 `21/21`：并发、权限、旧表升级、批次失败/中断进度与恢复；实际 40 文档 / 400 切块写入及版本元数据已核对（本机 fixture 约 3.10 秒，非吞吐承诺）；另有 11/11 任务分支 PostgreSQL 场景覆盖原子回滚、并发幂等、权限、删除及 stream/export；测试容器和本机服务已清理。
 - 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
 - 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；当前请求 HTTP 429、用户确认服务到期。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
 - Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
 
 ## 当前开发计划
 
+[任务分支重跑](docs/task-reruns.md)已完成本地闭环；后续候选为单步恢复/部分分支执行与任务内并行，目标提供方和部署验收继续待实证。
+
 1. `project-completion-audit` 第 1/3 阶段完成；GLM 服务到期期间暂停真实请求，续用或换有效兼容账号后补当前成功链路。先推进[原始范围裁决建议](docs/project-completion-audit.md)；试点环境明确后运行[部署预检](docs/pilot-deployment-preflight.md)并完成部署/恢复/回滚演练。旧 Chroma 容器重建前须检查并保存其 `/data`。项目总完成百分比暂不估算。
 2. ESLint 10 保留为非阻塞维护候选：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，并核对 import/jsx-a11y 的兼容版本；再以依赖契约红测和完整门禁受控升级。
 
 ## 稳定契约
+
+- 任务分支只从本人已终结任务创建独立会话，复制或编辑 prompt；幂等创建与来源分页新增两个接口，使用执行时当前设置，不复制历史消息/Memory/Trace/输出；POST 只保存 queued 任务，既有 stream 执行，原任务和 SSE/Trace/export shape 保持不变。
 
 - 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约。
 

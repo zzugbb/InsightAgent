@@ -10,16 +10,16 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)核实历史 GLM 成功任务、工具/RAG Trace 与一条历史导出；当前最小实时调用 HTTP 429，用户确认 GLM 服务到期。尚无试点环境。
 - A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)已准备：后端 `requirements.pilot.lock` 锁定 84 个直接/传递依赖版本，镜像构建执行 `pip check` 与安装版本核对；本机 ARM64 构建和生产模式隔离联调通过。目标环境部署与回滚未实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`；独立 fixture 经离线快照恢复后，PostgreSQL 行与 Chroma 向量均读回。旧容器重建前须保存原 `/data`；目标环境恢复待验证。
-- A4 [后台 RAG 导入](../docs/rag-background-ingest.md)已具备持久化队列、幂等、排队取消、多 worker 领取、超时/重启恢复及审计；本轮补充分批写入、确认进度、批前权限复核与展开预算，40 文档 / 400 切块隔离实写通过。OpenAPI 为 48 个操作、82 个组件；目标运行、单步/分支重跑、任务内并行与试点范围仍待决定。
+- A4 [后台 RAG 导入](../docs/rag-background-ingest.md)已具备持久化队列、分批确认进度、权限复核、展开预算与恢复，40 文档 / 400 切块隔离实写通过；[完整任务分支重跑](../docs/task-reruns.md)已支持输入编辑、独立会话、幂等与来源分页。OpenAPI 为 50 个操作、86 个组件；单步恢复、任务内并行及试点范围/目标运行仍待完成。
 - 非阻塞维护候选：ESLint 10 正式采用仍受前端锁文件中 React/import/jsx-a11y 三个插件的 peer 范围约束；保持 ESLint 9 精确 pin，预检的 1 个动作概括这组外部兼容约束。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
 - 最终本地验证来源：2026-10-06 full release gate（backend/frontend/tooling/hygiene）及完整 Chromium 回归；真实提供方成功调用和目标部署仍未验证。
-- 后端 full slice `2061/2061`、module boundary `9/9`；包含 18 个任务专项与 11 个批次专项测试，OpenAPI `48` 操作 / `82` 组件与提交基线一致。
-- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `70 passed / 1 skipped`；6 个导入场景覆盖真实 Chroma 写入检索、进度刷新、中断复核和桌面/手机交互。
-- 隔离 PostgreSQL/Chroma 集成 `21/21`：并发、权限、旧表升级、批次失败/中断进度与恢复；实际 40 文档 / 400 切块写入及版本元数据已核对（本机 fixture 约 3.15 秒，非吞吐承诺）；测试容器和本机服务已清理。
+- 后端 full slice `2068/2068`、module boundary `9/9`；包含 7 个任务分支专项及既有后台导入任务/批次专项，OpenAPI `50` 操作 / `86` 组件与提交基线一致。
+- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `74 passed / 1 skipped`；新增 4 个任务分支场景，既有 6 个导入场景回归通过，覆盖桌面与手机交互。
+- 隔离 PostgreSQL/Chroma 集成 `21/21`：并发、权限、旧表升级、批次失败/中断进度与恢复；实际 40 文档 / 400 切块写入及版本元数据已核对（本机 fixture 约 3.10 秒，非吞吐承诺）；另有 11/11 任务分支 PostgreSQL 场景覆盖原子回滚、并发幂等、权限、删除及 stream/export；测试容器和本机服务已清理。
 - 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
 - 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；当前请求 HTTP 429、用户确认服务到期。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
 - Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
@@ -30,6 +30,10 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 2. ESLint 10 作为非阻塞维护候选等待上游兼容发布；后端保持 FastAPI 精确 pin 与 SSE / trace / export 外部契约稳定。
 
 ## 稳定契约
+
+[任务分支重跑](../docs/task-reruns.md)已完成本地闭环；单步恢复/任务内并行仍待实现，目标运行和用户签收未完成。
+
+- 任务分支只从本人已终结任务创建独立会话，复制或编辑 prompt；幂等创建与来源分页新增两个接口，使用执行时当前设置，不复制历史消息/Memory/Trace/输出；POST 只保存 queued 任务，既有 stream 执行，原任务和 SSE/Trace/export shape 保持不变。
 
 - 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约。
 
@@ -100,6 +104,8 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `GET /api/tasks?limit=&offset=&session_id=&query=`
 - `GET /api/tasks/{task_id}`
 - `POST /api/tasks/{task_id}/cancel`
+- `POST /api/tasks/{task_id}/reruns`（HTTP 201，独立会话、幂等创建 queued 分支）
+- `GET /api/tasks/{task_id}/reruns?limit=&offset=`（本人来源与直接分支分页）
 - `GET /api/tasks/{task_id}/export/json`
 - `GET /api/tasks/{task_id}/export/markdown`
 - `GET /api/tasks/{task_id}/stream`
@@ -130,10 +136,11 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 - `app/config.py`：统一配置读取
 - `app/schemas/trace.py`：`TraceStep` / `TraceStepMeta` 与解析校验
-- `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`settings`、`rag`、`audit`
+- `app/api/routes/`：`health`、`auth`、`sessions`、`tasks`、`task_reruns`、`settings`、`rag`、`audit`
 - `app/db.py`：PostgreSQL 连接、初始化与索引
 - `app/providers/`：provider 抽象、mock provider、OpenAI-compatible remote provider
 - `app/services/chat_execution_service.py`：任务流编排与 SSE 主链
+- `app/services/task_rerun_{service,schema}.py` 与 `app/api/routes/task_reruns.py`：完整任务分支的原子创建、幂等、独立会话与来源关系；详见[任务分支契约](../docs/task-reruns.md)
 - `app/services/task_queue_service.py`：单进程任务执行槽位、capacity-aware oldest eligible FIFO 等待调度、安全等待快照、等待项移除与测试重置入口
 - `app/services/tool_runtime.py`：tool runtime 兼容 facade，汇总旧导出路径
 - `app/services/tool_runtime_planning.py`：planner、provider planner 与 payload normalization

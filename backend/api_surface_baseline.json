@@ -29,6 +29,7 @@
     "GET /api/tasks/{task_id}": "392eb0e6d8972ad0d1235dd1ed50915ef26859069dbce4548a239fce302ebc1a",
     "GET /api/tasks/{task_id}/export/json": "3ffb10d78aaf9ae65f6420d4798a2e095a60812b338f2e1998c22a6a337e21f4",
     "GET /api/tasks/{task_id}/export/markdown": "4862a4bf4bfbe6ca1c7af3720225028f23ab714044fc0e831f806403a28aaa77",
+    "GET /api/tasks/{task_id}/reruns": "4c9811c23d1f993217a34230987e5a217eb4dcc97ef69022b6663d313290e4d6",
     "GET /api/tasks/{task_id}/stream": "9ced5b4f607e523b85c8db47c0c32db74de2d611bd69087470d22d059ba6557c",
     "GET /api/tasks/{task_id}/trace": "5756916fc7c5b9bdecdd5726d27f1963908feea8b820d24384a2915d0efef3d8",
     "GET /api/tasks/{task_id}/trace/delta": "481621a90a04b81581466adbc3782772bf531d21f3c99b9d6d1d889181d425f5",
@@ -50,6 +51,7 @@
     "POST /api/settings/validate": "5687544c5d4063c10875d0996178f74392aeaacd9b9921028bdc9f65f14567ed",
     "POST /api/tasks": "4e2ab55a9fd6a3dadded841f884235e9160d160783936d2260849e85ed4217fe",
     "POST /api/tasks/{task_id}/cancel": "344866c03ff0f59cbaeda008970750615673a0731db03a19c3c2dc7e4a3df56f",
+    "POST /api/tasks/{task_id}/reruns": "568a77fab210931771c04443207be3b052fdc480ba1662cf9f5bc2449e1e377c",
     "PUT /api/settings": "b7b40b3c199d185fa52df9f40af519c858ad977cc9c29c9894fc531a5c8db4d4"
   },
   "components": {
@@ -114,6 +116,10 @@
     "schemas.TaskGovernanceSummary": "843b6e05d4f43ad52e7e0e8891a026f49c3e8a1613ae0e88299665faddbe6fca",
     "schemas.TaskListResponse": "192055338eeec33062da97b5e568f7eb2e8a658b7b4c699a9c5cd1b5efa54fd4",
     "schemas.TaskQueueDiagnosticsSummary": "aa1f8ccd2e571a9e0fe2a1b9fb752f010793a3dfd5e27de3e67af9c372e51ada",
+    "schemas.TaskRerunChild": "d9c6c34db57a92f9ec52cac925a937d9c4abb699b60ea96d97ed83006f0fa6c5",
+    "schemas.TaskRerunListResponse": "188663de3dbbe6e9ce38619f3969725ec51572681e9cb1167effa7639d152453",
+    "schemas.TaskRerunRequest": "506872741f3dfbbe9304a3c31f88c33690ad30d6240dd2688e1326525d86dda9",
+    "schemas.TaskRerunResponse": "f97a5adea844075c17791cab909ca4967799ea4e45ea3f37a62f0bea506f5d77",
     "schemas.TaskResponse": "f435fa7ff605f404ddc343dfeea075cee559055d76b3cd395df82269f8d2a39e",
     "schemas.TaskTraceDeltaResponse": "a15ac847f133f24e3b83a25955ec9e4b99e3629ff48df371bb0edde9d24cae2b",
     "schemas.TaskTraceResponse": "176add14ace0b14a21e31264cb613e97278c239c4203b764fb67c3aef70ad780",

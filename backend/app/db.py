@@ -6,6 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from app.config import get_settings
 from app.services.rag_ingest_schema import initialize_ingest_schema
+from app.services.task_rerun_schema import initialize_task_rerun_schema
 
 
 class CursorAdapter:
@@ -290,6 +291,7 @@ def initialize_postgres_database() -> None:
             """
         )
         initialize_ingest_schema(connection)
+        initialize_task_rerun_schema(connection)
         _ensure_common_indexes(connection)
         connection.commit()
 

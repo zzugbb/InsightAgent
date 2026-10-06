@@ -20,6 +20,7 @@ SUPPORTED_AUDIT_EVENT_TYPES = frozenset(
         "settings_update",
         "settings_validate",
         "task_create",
+        "task_rerun_created",
         "task_cancel",
         "task_timeout",
         "task_failed",
