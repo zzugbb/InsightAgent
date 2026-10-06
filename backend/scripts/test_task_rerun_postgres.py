@@ -2,12 +2,8 @@
 """Task branch transactions, ownership and existing stream/export against isolated PostgreSQL."""
 
 import json
-import os
 from pathlib import Path
-import secrets
-import subprocess
 import sys
-import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
@@ -16,10 +12,10 @@ from uuid import uuid4
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from app.config import get_settings
-from app.db import get_db_connection, initialize_database
+from app.db import get_db_connection
 from app.services import chat_persistence_service as persistence
 from app.services import task_rerun_service as reruns
+from task_postgres_fixture import run_isolated_postgres
 
 
 class TaskRerunPostgresTests(unittest.TestCase):
@@ -168,43 +164,5 @@ class TaskRerunPostgresTests(unittest.TestCase):
             app.dependency_overrides.update(original)
 
 
-def main():
-    name = f"insightagent-rerun-test-{uuid4().hex[:12]}"
-    keys = ("INSIGHT_AGENT_DATABASE_URL", "INSIGHT_AGENT_MODE", "INSIGHT_AGENT_PROVIDER")
-    previous = {key: os.environ.get(key) for key in keys}
-    def docker(*args):
-        return subprocess.run(["docker", *args], capture_output=True, text=True, check=True).stdout.strip()
-    try:
-        password = secrets.token_hex(20)
-        docker("run", "--rm", "-d", "--name", name, "-e", f"POSTGRES_PASSWORD={password}", "-p", "127.0.0.1::5432", "postgres:16")
-        port = docker("port", name, "5432/tcp").rsplit(":", 1)[1]
-        os.environ.update({"INSIGHT_AGENT_DATABASE_URL": f"postgresql://postgres:{password}@127.0.0.1:{port}/postgres",
-                           "INSIGHT_AGENT_MODE": "mock", "INSIGHT_AGENT_PROVIDER": "mock"})
-        get_settings.cache_clear()
-        for _ in range(100):
-            try:
-                initialize_database()
-                break
-            except Exception:
-                time.sleep(0.1)
-        else:
-            raise RuntimeError("isolated PostgreSQL did not become ready")
-        with get_db_connection() as connection:
-            for user in ("owner", "other"):
-                connection.execute("""INSERT INTO users(id,email,role,password_salt,password_hash,created_at,updated_at)
-                    VALUES (?,?,'user','fixture','fixture','fixture','fixture')""", (user, f"{user}@example.com"))
-            connection.commit()
-        suite = unittest.defaultTestLoader.loadTestsFromTestCase(TaskRerunPostgresTests)
-        return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
-    finally:
-        subprocess.run(["docker", "rm", "-f", "-v", name], capture_output=True)
-        for key, value in previous.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
-        get_settings.cache_clear()
-
-
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_isolated_postgres(TaskRerunPostgresTests))

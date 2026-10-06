@@ -23,6 +23,7 @@ from app.services.chat_persistence_service import (
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.settings_service import get_stored_settings
+from app.services.task_tool_execution import execute_task_tool_plan
 from app.services.task_queue_service import (
     forget_waiting_task,
     get_task_queue_snapshot,
@@ -883,9 +884,7 @@ def stream_task_execution(
         )
         tool_registry_provider = tool_registry_service_result["provider"]
 
-        for idx, tool_spec in enumerate(tool_plan, start=1):
-            raise_if_should_abort()
-            maybe_touch_execution_heartbeat()
+        def prepare_iteration(idx, tool_spec, seq, batch_provider):
             tool_name = str(tool_spec["name"])
             tool_input = tool_spec.get("input")
             if not isinstance(tool_input, dict):
@@ -893,7 +892,7 @@ def stream_task_execution(
             action_step_id = str(uuid4())
             iteration_ctx = build_tool_iteration_context(
                 step_id=action_step_id,
-                seq=seq_cursor + 1,
+                seq=seq,
                 name=tool_name,
                 tool_input=tool_input,
                 model=provider_model,
@@ -903,60 +902,39 @@ def stream_task_execution(
                 ),
                 display_name=get_tool_display_name(
                     tool_name,
-                    registry_provider=tool_registry_provider,
+                    registry_provider=batch_provider,
                 ),
                 registration=resolve_tool_registration(
                     tool_name,
-                    registry_provider=tool_registry_provider,
+                    registry_provider=batch_provider,
                 ),
-                registry_provider=tool_registry_provider,
+                registry_provider=batch_provider,
             )
-            action_step = iteration_ctx["action_step"]
-            seq_cursor += 1
-            action_step["seq"] = seq_cursor
+            return iteration_ctx
 
-            service_execution = None
-            for item in execute_tool_plan_item_service_execution(
-                task_id=task_id,
-                trace_steps=trace_steps,
-                iteration_ctx=iteration_ctx,
-                initial_action_step=action_step,
-                tool_name=tool_name,
-                tool_input=tool_input,
-                prompt=prompt,
-                user_id=user_id,
-                model=provider_model,
-                estimate_token_count=_estimate_token_count,
-                make_step_id=lambda: str(uuid4()),
-                raise_if_should_abort=raise_if_should_abort,
-                registry_provider=tool_registry_provider,
-            ):
-                if item["kind"] == "event":
-                    yield sse_event(str(item["event"]), item["data"])
-                    continue
-                service_execution = item["result"]
-
-            assert service_execution is not None
-            service_action_result = None
-            for item in execute_tool_plan_item_service_actions(
-                service_actions=service_execution["service_actions"],
-                trace_steps=trace_steps,
-                tool_observations=tool_observations,
-                seq_cursor=seq_cursor,
-                persist_trace_fn=persist_trace,
-                complete_task_fn=complete_task_for_service_action,
-                record_failure_event_fn=record_failure_event,
-            ):
-                if item["kind"] == "event":
-                    yield sse_event(str(item["event"]), item["data"])
-                    continue
-                service_action_result = item["result"]
-
-            assert service_action_result is not None
-            seq_cursor = int(service_action_result["seq_cursor"])
-            if bool(service_action_result["should_return"]):
-                release_task_slot()
-                return
+        tool_result = None
+        for item in execute_task_tool_plan(
+            tool_plan=tool_plan, max_concurrent=int(getattr(runtime_config, "task_tool_max_concurrent", 1)),
+            registry_provider=tool_registry_provider, seq_cursor=seq_cursor, task_id=task_id,
+            trace_steps=trace_steps, tool_observations=tool_observations, prompt=prompt,
+            user_id=user_id, model=provider_model, prepare_iteration=prepare_iteration,
+            estimate_token_count=_estimate_token_count, raise_if_should_abort=raise_if_should_abort,
+            touch_heartbeat=maybe_touch_execution_heartbeat,
+            execute_item=execute_tool_plan_item_service_execution, apply_actions=execute_tool_plan_item_service_actions,
+            persist_trace_fn=persist_trace, complete_task_fn=complete_task_for_service_action,
+            record_failure_event_fn=record_failure_event,
+        ):
+            if item["kind"] == "event":
+                yield sse_event(str(item["event"]), item["data"])
+            elif item["kind"] == "heartbeat":
+                yield sse_event("heartbeat", {"task_id": task_id, "ts": datetime.now().isoformat()})
+            else:
+                tool_result = item["result"]
+        assert tool_result is not None
+        seq_cursor = int(tool_result["seq_cursor"])
+        if tool_result["should_return"]:
+            release_task_slot()
+            return
 
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
         raise_if_should_abort()
