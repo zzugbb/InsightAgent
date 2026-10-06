@@ -11,6 +11,7 @@ from app.api.routes.rag import RagIngestRequest, RagIngestResponse, _resolve_rag
 from app.services.rag_ingest_jobs import (
     IngestJobError, cancel_ingest_job, create_ingest_job, get_ingest_job, list_ingest_jobs,
 )
+from app.services.rag_chunking import validate_job_chunk_budget
 
 router = APIRouter()
 
@@ -26,7 +27,14 @@ class RagIngestJobRequest(RagIngestRequest):
             raise ValueError("documents must contain nonblank text")
         if sum(len(document.text) for document in self.documents) > 512_000:
             raise ValueError("total document text exceeds 512000 characters")
+        validate_job_chunk_budget(self.documents, chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap)
         return self
+
+
+class RagIngestJobProgress(BaseModel):
+    documents_processed: int = Field(ge=0)
+    chunks_written: int = Field(ge=0)
+    chunk_total: int = Field(ge=0)
 
 
 class RagIngestJobResponse(BaseModel):
@@ -35,6 +43,7 @@ class RagIngestJobResponse(BaseModel):
     document_total: int
     status: Literal["queued", "running", "completed", "failed", "cancelled"]
     result: RagIngestResponse | None = None
+    progress: RagIngestJobProgress | None = None
     error_code: Literal["invalid_input", "chroma_unavailable", "interrupted", "permission_revoked"] | None = None
     created_at: str
     started_at: str | None = None

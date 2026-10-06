@@ -25,7 +25,7 @@
 
 ## 不需要提权的常用命令
 
-后台 RAG 导入的状态、幂等和重启口径见 [RAG 后台导入](rag-background-ingest.md)。专项静态测试用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_ingest_job`；真实数据库锁与中断恢复用 `backend/.venv/bin/python backend/scripts/test_rag_ingest_postgres.py`，需要提权访问 Docker/本机随机端口，并自动清理独立 PostgreSQL 容器。该集成测试已加入 backend-e2e workflow。
+后台 RAG 导入的状态、幂等、批次进度和重启口径见 [RAG 后台导入](rag-background-ingest.md)。专项静态测试用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k rag_ingest`（原任务专项与批次专项一起执行）；真实数据库锁与中断恢复用 `backend/.venv/bin/python backend/scripts/test_rag_ingest_postgres.py`，加 `--with-chroma` 验证 400 切块实际批量写入与部分失败。两者需要提权访问 Docker/本机随机端口，自动清理独立测试容器。backend-e2e workflow 使用 `--with-chroma`。
 
 从仓库根目录运行：
 

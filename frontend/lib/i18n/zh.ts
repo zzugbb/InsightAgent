@@ -747,6 +747,9 @@ export const zh: Messages = {
         submitFailed: "导入任务提交失败", loadFailed: "导入状态加载失败",
         cancel: "取消排队", cancelFailed: "取消失败，请刷新确认任务状态。",
         documents: (n) => `${n} 个文档`,
+        progress: (documents, documentTotal, chunks, chunkTotal) =>
+          `已确认写入 ${chunks} / ${chunkTotal} 个切块，完整文档 ${documents} / ${documentTotal}。`,
+        confirmedOnly: "此进度仅包含已确认写入的批次；中断批次也可能已写入，请以知识库详情为准。",
         auditCreated: "后台导入提交", auditFinished: "后台导入结果", auditCancelled: "后台导入取消",
         reviewBeforeRetry: "部分内容可能已写入，请先复核知识库，再决定是否重新提交。输入内容已保留。",
         status: { queued: "排队中", running: "导入中", completed: "已完成", failed: "失败", cancelled: "已取消" },

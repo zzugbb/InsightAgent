@@ -9,12 +9,37 @@ import threading
 import time
 from collections.abc import Callable
 
+from app.config import get_settings
 from app.db import get_db_connection
 from app.services.audit_service import safe_record_audit_event
 from app.services.chroma_rag_service import (
     SHARED_RAG_SCOPE_USER_ID, ingest_knowledge_documents, rag_collection_name,
 )
 from app.services.rag_ingest_jobs import advisory_key, utc_now
+from app.services.rag_chunking import MAX_INGEST_JOB_CHUNKS
+
+
+class WritePermissionRevoked(Exception):
+    pass
+
+
+def require_write_permission(connection, row) -> None:
+    user = connection.execute("SELECT role FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+    connection.commit()  # Don't retain an idle transaction during external I/O.
+    if not user or (row["owner_user_id"] == SHARED_RAG_SCOPE_USER_ID
+                    and str(user["role"]).lower() != "admin"):
+        raise WritePermissionRevoked()
+
+
+def persist_progress(connection, job_id: str, progress: dict[str, int]) -> None:
+    safe = {field: int(progress[field]) for field in ("documents_processed", "chunks_written", "chunk_total")}
+    cursor = connection.execute(
+        "UPDATE rag_ingest_jobs SET progress_json = ? WHERE id = ? AND status = 'running'",
+        (json.dumps(safe), job_id),
+    )
+    connection.commit()
+    if cursor.rowcount == 0:
+        raise WritePermissionRevoked()
 
 
 def recover_interrupted_jobs() -> int:
@@ -62,22 +87,24 @@ def process_next_job(*, on_started: Callable[[], None] | None = None) -> bool:
             error_code = None
             result = None
             try:
-                user = connection.execute("SELECT role FROM users WHERE id = ?", (row["user_id"],)).fetchone()
-                # Don't retain an idle transaction during external I/O.
-                connection.commit()
-                if not user or (row["owner_user_id"] == SHARED_RAG_SCOPE_USER_ID
-                                and str(user["role"]).lower() != "admin"):
-                    error_code = "permission_revoked"
-                else:
-                    payload = json.loads(row["payload_json"])
-                    raw = ingest_knowledge_documents(user_id=row["owner_user_id"], **payload)
-                    result = {
-                        "knowledge_base_id": row["knowledge_base_id"],
-                        "collection": rag_collection_name(row["owner_user_id"], row["knowledge_base_id"]),
-                        **{field: int(raw[field]) for field in (
-                            "documents_ingested", "chunks_added", "document_count", "chunk_size", "chunk_overlap",
-                        )},
-                    }
+                require_write_permission(connection, row)
+                payload = json.loads(row["payload_json"])
+                raw = ingest_knowledge_documents(
+                    user_id=row["owner_user_id"], **payload,
+                    chunk_batch_size=get_settings().rag_ingest_batch_size,
+                    max_chunks=MAX_INGEST_JOB_CHUNKS,
+                    on_progress=lambda progress: persist_progress(connection, row["id"], progress),
+                    before_batch=lambda: require_write_permission(connection, row),
+                )
+                result = {
+                    "knowledge_base_id": row["knowledge_base_id"],
+                    "collection": rag_collection_name(row["owner_user_id"], row["knowledge_base_id"]),
+                    **{field: int(raw[field]) for field in (
+                        "documents_ingested", "chunks_added", "document_count", "chunk_size", "chunk_overlap",
+                    )},
+                }
+            except WritePermissionRevoked:
+                error_code = "permission_revoked"
             except ValueError:
                 error_code = "invalid_input"
             except Exception:  # noqa: BLE001

@@ -22,6 +22,8 @@ def initialize_ingest_schema(connection) -> None:
             UNIQUE(user_id, idempotency_key)
         )
     """)
+    # Also upgrade existing installations without replacing their job history.
+    connection.execute("ALTER TABLE rag_ingest_jobs ADD COLUMN IF NOT EXISTS progress_json TEXT")
     connection.execute("""
         CREATE INDEX IF NOT EXISTS idx_rag_ingest_jobs_queue
         ON rag_ingest_jobs(created_at, id) WHERE status = 'queued'

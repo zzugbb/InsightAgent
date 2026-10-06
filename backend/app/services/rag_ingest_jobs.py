@@ -14,7 +14,7 @@ from app.services.chroma_rag_service import normalize_knowledge_base_id
 MAX_ACTIVE_JOBS_PER_USER = 3
 MAX_PAYLOAD_BYTES = 1_000_000
 PUBLIC_COLUMNS = (
-    "id, knowledge_base_id, document_total, status, result_json, error_code, "
+    "id, knowledge_base_id, document_total, status, result_json, progress_json, error_code, "
     "created_at, started_at, finished_at"
 )
 
@@ -41,6 +41,7 @@ def public_job(row: dict) -> dict:
         "document_total": row["document_total"],
         "status": row["status"],
         "result": json.loads(row["result_json"]) if row.get("result_json") else None,
+        "progress": json.loads(row["progress_json"]) if row.get("progress_json") else None,
         "error_code": row.get("error_code"),
         "created_at": row["created_at"],
         "started_at": row.get("started_at"),

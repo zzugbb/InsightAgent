@@ -87,7 +87,7 @@ jobs:
           pip install -r backend/requirements.txt
 
       - name: Run durable RAG ingest PostgreSQL integration
-        run: python backend/scripts/test_rag_ingest_postgres.py
+        run: python backend/scripts/test_rag_ingest_postgres.py --with-chroma
 
       - name: Start backend on :8000 (default timeout)
         env:

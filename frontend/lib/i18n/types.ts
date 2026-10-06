@@ -663,6 +663,8 @@ export type Messages = {
         submit: string; hint: string; accepted: string; title: string; empty: string;
         submitFailed: string; loadFailed: string; cancel: string; cancelFailed: string;
         documents: (n: number) => string; reviewBeforeRetry: string;
+        progress: (documents: number, documentTotal: number, chunks: number, chunkTotal: number) => string;
+        confirmedOnly: string;
         auditCreated: string; auditFinished: string; auditCancelled: string;
         status: Record<"queued" | "running" | "completed" | "failed" | "cancelled", string>;
         errors: Record<"invalid_input" | "chroma_unavailable" | "interrupted" | "permission_revoked", string>;

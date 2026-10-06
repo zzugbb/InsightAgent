@@ -65,7 +65,7 @@ class RagIngestJobsMixin:
                                    payload_hash="hash", idempotency_key="key"))
         self.assertNotIn("private document", json.dumps(view))
         self.assertEqual(set(view), {"id", "knowledge_base_id", "document_total", "status",
-                                    "result", "error_code", "created_at", "started_at", "finished_at"})
+                                    "result", "progress", "error_code", "created_at", "started_at", "finished_at"})
 
     def test_rag_ingest_job_queue_quota_blocks_insert(self):
         conn, patched = connection_patch(jobs, [{}, {"fetchone.return_value": None},

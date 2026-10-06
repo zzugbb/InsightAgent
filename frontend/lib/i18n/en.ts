@@ -762,6 +762,9 @@ export const en: Messages = {
         submitFailed: "Import submission failed", loadFailed: "Import status failed to load",
         cancel: "Cancel queued import", cancelFailed: "Cancellation failed. Refresh to check the job status.",
         documents: (n) => `${n} document(s)`,
+        progress: (documents, documentTotal, chunks, chunkTotal) =>
+          `Confirmed ${chunks} / ${chunkTotal} chunks; complete documents ${documents} / ${documentTotal}.`,
+        confirmedOnly: "Progress includes confirmed batches only. An interrupted batch may also have been written; check the knowledge base.",
         auditCreated: "Background import submitted", auditFinished: "Background import result", auditCancelled: "Background import cancelled",
         reviewBeforeRetry: "Some content may have been written. Review the knowledge base before submitting again. Your input is preserved.",
         status: { queued: "Queued", running: "Importing", completed: "Completed", failed: "Failed", cancelled: "Cancelled" },

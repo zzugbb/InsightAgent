@@ -4,13 +4,14 @@ overview: next-major-upgrade-readiness 已 100% 封板；project-completion-audi
 current_focus:
   mainline: project-completion-audit
   status: 静态盘点 1/3（约 33%）完成；GLM 服务到期阻断当前成功调用，环境与范围/签收待完成
-  latest_change: 2026-10-06 A4 后台 RAG 导入完整切片落地；18 个专项、13 个真实 PostgreSQL 集成与 5 个新增浏览器场景通过，完整 Chromium 69 passed / 1 skipped；目标提供方/部署及范围签收仍待完成
+  latest_change: 2026-10-06 A4 后台 RAG 导入补充分批写入、持久化确认进度、5000 切块预算与批前权限复核；21 个 PostgreSQL/Chroma 隔离集成与 6 个导入浏览器场景通过，目标运行与范围签收仍待完成
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
   largest_source: backend/app/services/tool_runtime_execution.py 2864 行；tool_runtime_slice 最大测试主题 http_json_request_validation.py 2403 行
   key_facades: tool_runtime_execution.py 2864、tool_runtime_registry.py 2768、tool_runtime.py 2547、tool_runtime_http_json.py 2522、frontend/app/globals.css 7
 stable_contracts:
+  - 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约
   - 后台 RAG 导入为兼容扩展；同用户/同键/同参数返回原任务，只允许提交者查询/取消，共享写入限管理员；只取消排队任务，中断不自动重放，终结后清理原始载荷，同步 ingest 保持兼容
   - 默认 settings 根据 provider/model/api_key 自动选择 remote 或 canonical mock
   - SSE 事件、TraceStep、result summary、safe output、JSON/Markdown export shape 保持稳定
@@ -53,12 +54,12 @@ validation_baseline:
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
   tooling_current: bash scripts/ci_run_release_gate.sh --phase tooling passed，包含快照工具与 A2 六镜像摘要预检测试；后端/前端 Docker build --check 无告警
   pilot_images_current: 本机 ARM64 后端/前端 Docker 构建通过，基础镜像均以 sha256 摘要固定；后端锁定 84 个直接/传递依赖版本并核对镜像内安装结果；隔离联调验证生产模式后端、PostgreSQL 注册/会话写读、Chroma 探测、前端 HTML/CSS 与浏览器实际 API 地址，临时资源已清理；未推送目标仓库
-  async_rag_ingest: 持久化、幂等、队列取消、权限复核、会话锁领取、监管 worker 与中断恢复落地；真实 PostgreSQL 集成 13/13，原始载荷在终结后清理，同步 ingest 保持兼容
-  backend_current: full slice 2050/2050、module boundary 9/9；后台导入 18 个专项进入门禁，OpenAPI 48 操作/81 组件检查通过
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/insightagent-async-rag-release.md --json-summary-file /tmp/insightagent-async-rag-release.json passed，覆盖 backend/frontend/tooling/hygiene；Turbopack/webpack 双构建通过
+  async_rag_ingest: 持久化、幂等、取消与中断恢复落地；新增分批写入、确认进度与 5000 切块预算；21/21 PostgreSQL/Chroma 隔离集成通过，包含实际 40 文档/400 切块，原始载荷终结后清理
+  backend_current: full slice 2061/2061、module boundary 9/9；后台导入 18 个任务专项与 11 个批次专项进入门禁，OpenAPI 48 操作/82 组件检查通过
+  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/insightagent-rag-batches-release.md --json-summary-file /tmp/insightagent-rag-batches-release.json passed，覆盖 backend/frontend/tooling/hygiene；Turbopack/webpack 双构建通过
   backend: 上一主线封板时 full slice 2020/2020、module boundary 9/9；FastAPI/Python 3.14、安全与运维专项沿用已封板基线
   frontend: node tests 184/184、lint 0 error / 2 个既有 warning、Turbopack/webpack 双构建 passed；ESLint 10 外部兼容约束仍保留
-  e2e: 2026-10-06 本地临时 PostgreSQL/Chroma 栈完整 Chromium 69 passed / 1 skipped，新增 5 个后台导入场景含真实 Chroma 写入/检索、桌面和手机交互；临时服务及容器已清理
+  e2e: 2026-10-06 本地临时 PostgreSQL/Chroma 栈完整 Chromium 70 passed / 1 skipped，6 个后台导入场景含真实写入/检索、确认进度刷新、中断复核、桌面和手机交互；临时服务及容器已清理
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -90,7 +91,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next 16 / React 19.2、原生 flat ESLint、React Compiler 规则无例外、双构建与 full Chromium 已验证，未修改外部运行时契约。
 - 当前主线：`project-completion-audit` 1/3（约 33%）完成；[审计清单](../../docs/project-completion-audit.md)已核实历史 GLM 成功任务、工具/RAG Trace 与导出，当前实时调用 HTTP 429 且用户确认服务到期；原始范围已有建议、尚待裁决，试点部署/恢复与用户签收仍缺证据。
 - A2 试点镜像配方、只读六镜像摘要预检与演练记录流程已准备；后端 84 个直接/传递依赖版本锁定并在构建时核对，本机 ARM64 锁定版镜像与现有前端镜像隔离联调通过。目标环境、TLS/访问边界与回滚仍缺实证。
-- A4 [后台 RAG 导入](../../docs/rag-background-ingest.md)完整切片已验证：持久化队列、状态查询/轮询、排队取消、幂等、用户/共享权限边界、会话锁领取、监管 worker 与中断恢复、审计摘要。OpenAPI 更新为 48 操作/81 组件；单步/分支重跑、任务内并行与目标观测仍待范围/环境决定。
+- A4 [后台 RAG 导入](../../docs/rag-background-ingest.md)已具备持久化队列、幂等、排队取消、多 worker 领取、超时/重启恢复及审计；本轮补充分批写入、确认进度、批前权限复核与展开预算，40 文档 / 400 切块隔离实写通过。OpenAPI 为 48 个操作、82 个组件；目标运行、单步/分支重跑、任务内并行与试点范围仍待决定。
 - 非阻塞维护候选：`eslint-10-adoption` 的 React/import/jsx-a11y 三个插件 peer 范围均排除 ESLint 10；React 官方修复尚未发布，预检的 1 个外部兼容动作概括这组约束，不强制覆盖 peer。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
@@ -107,9 +108,9 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 ## 当前验证基线
 
 - 最终本地验证来源：2026-10-06 full release gate（backend/frontend/tooling/hygiene）及完整 Chromium 回归；真实提供方成功调用和目标部署仍未验证。
-- 后端 full slice `2050/2050`、module boundary `9/9`；包含 18 个后台导入专项测试，OpenAPI `48` 操作 / `81` 组件与提交基线一致。
-- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `69 passed / 1 skipped`，新增 5 个导入场景包含真实 Chroma 写入检索和桌面/手机交互。
-- 临时 PostgreSQL 集成 `13/13`：并发幂等、每用户限额、用户隔离、取消、双 worker 领取、权限撤销、子进程/父进程被杀后的恢复；测试容器和本机服务已清理。
+- 后端 full slice `2061/2061`、module boundary `9/9`；包含 18 个任务专项与 11 个批次专项测试，OpenAPI `48` 操作 / `82` 组件与提交基线一致。
+- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `70 passed / 1 skipped`；6 个导入场景覆盖真实 Chroma 写入检索、进度刷新、中断复核和桌面/手机交互。
+- 隔离 PostgreSQL/Chroma 集成 `21/21`：并发、权限、旧表升级、批次失败/中断进度与恢复；实际 40 文档 / 400 切块写入及版本元数据已核对（本机 fixture 约 3.15 秒，非吞吐承诺）；测试容器和本机服务已清理。
 - 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
 - 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；当前请求 HTTP 429、用户确认服务到期。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
 - Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。

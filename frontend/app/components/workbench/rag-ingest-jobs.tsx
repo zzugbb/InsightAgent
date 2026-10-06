@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Button, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Progress, Space, Tag, Typography } from "antd";
 import { useEffect, useRef } from "react";
 
 import { apiJson, apiPostJson } from "../../../lib/api-client";
@@ -18,6 +18,7 @@ export type RagIngestJob = {
   document_total: number;
   status: ImportStatus;
   result: RagIngestResponse | null;
+  progress?: { documents_processed: number; chunks_written: number; chunk_total: number } | null;
   error_code: ImportError | null;
   created_at: string;
   started_at: string | null;
@@ -45,7 +46,7 @@ export function RagIngestJobs({ open, knowledgeBaseId, text, source, disabled, o
   const copy = t.inspector.rag.jobs;
   const { message } = App.useApp();
   const queryClient = useQueryClient();
-  const observedCompletions = useRef(new Set<string>());
+  const observedTerminals = useRef(new Set<string>());
   const queryKey = ["rag-ingest-jobs", knowledgeBaseId];
   const history = useQuery({
     queryKey,
@@ -77,8 +78,8 @@ export function RagIngestJobs({ open, knowledgeBaseId, text, source, disabled, o
   useEffect(() => {
     let changed = false;
     for (const job of history.data?.items ?? []) {
-      if (job.status === "completed" && !observedCompletions.current.has(job.id)) {
-        observedCompletions.current.add(job.id);
+      if ((job.status === "completed" || job.status === "failed") && !observedTerminals.current.has(job.id)) {
+        observedTerminals.current.add(job.id);
         changed = true;
       }
     }
@@ -136,11 +137,21 @@ export function RagIngestJobs({ open, knowledgeBaseId, text, source, disabled, o
                   disabled={cancel.isPending} data-testid={`rag-ingest-job-cancel-${job.id}`}
                   onClick={() => cancel.mutate(job.id)}>{copy.cancel}</Button>
               ) : null}
-              {job.status === "completed" ? (
+              {job.status === "completed" || job.status === "failed" ? (
                 <Button size="small" data-testid={`rag-ingest-job-review-${job.id}`}
                   onClick={() => onReview(job.knowledge_base_id)}>{t.inspector.rag.ingestReviewAction}</Button>
               ) : null}
             </Space>
+            {job.progress && job.progress.chunk_total > 0 ? (
+              <div data-testid={`rag-ingest-job-progress-${job.id}`}>
+                <Progress size="small" showInfo={false}
+                  percent={Math.min(100, Math.round(100 * job.progress.chunks_written / job.progress.chunk_total))}
+                  status={job.status === "failed" ? "exception" : job.status === "completed" ? "success" : "active"} />
+                <Typography.Text type="secondary">{copy.progress(job.progress.documents_processed,
+                  job.document_total, job.progress.chunks_written, job.progress.chunk_total)}</Typography.Text>
+                {job.status === "failed" ? <p className="panel-note">{copy.confirmedOnly}</p> : null}
+              </div>
+            ) : null}
             {job.result ? <p className="panel-note">{t.inspector.rag.ingestSuccess(
               job.result.chunks_added, job.result.document_count,
             )}</p> : null}

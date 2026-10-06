@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 import os
 from pathlib import Path
 import secrets
@@ -23,6 +24,7 @@ sys.path.insert(0, str(BACKEND))
 from app.config import get_settings
 from app.db import get_db_connection, initialize_database
 from app.services import rag_ingest_jobs as jobs, rag_ingest_worker as worker
+from rag_ingest_postgres_batches import IngestPostgresBatchesMixin, RealChromaBatchesMixin
 
 PAYLOAD = {"knowledge_base_id": "default", "documents": [{"text": "private fixture text"}],
            "chunk_size": 500, "chunk_overlap": 80}
@@ -30,7 +32,7 @@ RESULT = {"documents_ingested": 1, "chunks_added": 1, "document_count": 1,
           "chunk_size": 500, "chunk_overlap": 80}
 
 
-class IngestPostgresTests(unittest.TestCase):
+class IngestPostgresTests(IngestPostgresBatchesMixin, RealChromaBatchesMixin, unittest.TestCase):
     def setUp(self):
         with get_db_connection() as connection:
             connection.execute("TRUNCATE rag_ingest_jobs, audit_logs")
@@ -254,14 +256,24 @@ def docker(*args):
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--with-chroma", action="store_true", help="Include isolated real Chroma batch fixtures")
+    args = parser.parse_args()
     name = f"insightagent-ingest-test-{uuid4().hex[:12]}"
+    chroma_name = name + "-chroma"
     password = secrets.token_hex(20)
-    previous = os.environ.get("INSIGHT_AGENT_DATABASE_URL")
+    keys = ("INSIGHT_AGENT_DATABASE_URL", "CHROMA_HOST", "CHROMA_PORT")
+    previous = {key: os.environ.get(key) for key in keys}
     try:
         docker("run", "--rm", "-d", "--name", name, "-e", f"POSTGRES_PASSWORD={password}",
                "-p", "127.0.0.1::5432", "postgres:16")
         port = docker("port", name, "5432/tcp").rsplit(":", 1)[1]
         os.environ["INSIGHT_AGENT_DATABASE_URL"] = f"postgresql://postgres:{password}@127.0.0.1:{port}/postgres"
+        if args.with_chroma:
+            docker("run", "--rm", "-d", "--name", chroma_name, "-e", "ANONYMIZED_TELEMETRY=FALSE",
+                   "-p", "127.0.0.1::8000", "chromadb/chroma:latest")
+            os.environ["CHROMA_HOST"] = "127.0.0.1"
+            os.environ["CHROMA_PORT"] = docker("port", chroma_name, "8000/tcp").rsplit(":", 1)[1]
         get_settings.cache_clear()
         for _ in range(100):
             try:
@@ -278,14 +290,29 @@ def main() -> int:
                     VALUES (?, ?, ?, 'fixture', 'fixture', ?, ?)""",
                     (user, f"{user}@example.com", role, jobs.utc_now(), jobs.utc_now()))
             connection.commit()
-        result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(IngestPostgresTests))
+        if args.with_chroma:
+            from app.services.chroma_rag_service import _http_client
+            for _ in range(100):
+                try:
+                    _http_client()
+                    break
+                except Exception:
+                    time.sleep(0.1)
+            else:
+                raise RuntimeError("isolated Chroma did not become ready")
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(IngestPostgresTests)
+        suite = unittest.TestSuite(test for test in suite if args.with_chroma or not test._testMethodName.startswith("test_real_"))
+        result = unittest.TextTestRunner(verbosity=2).run(suite)
         return 0 if result.wasSuccessful() else 1
     finally:
         subprocess.run(["docker", "rm", "-f", "-v", name], capture_output=True)
-        if previous is None:
-            os.environ.pop("INSIGHT_AGENT_DATABASE_URL", None)
-        else:
-            os.environ["INSIGHT_AGENT_DATABASE_URL"] = previous
+        if args.with_chroma:
+            subprocess.run(["docker", "rm", "-f", "-v", chroma_name], capture_output=True)
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         get_settings.cache_clear()
 
 

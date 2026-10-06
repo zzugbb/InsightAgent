@@ -5,11 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable
+from itertools import islice
 from uuid import uuid4
 
 import chromadb
 
 from app.config import get_settings
+from app.services.rag_chunking import iter_text_chunks
 
 SHARED_RAG_SCOPE_USER_ID = "__shared__"
 SHARED_RAG_KB_PREFIX = "shared-"
@@ -192,24 +195,7 @@ def _coerce_metadata_block_list(value: object) -> list[dict[str, object]]:
 
 
 def _chunk_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[str]:
-    src = text.strip()
-    if not src:
-        return []
-    if len(src) <= chunk_size:
-        return [src]
-
-    chunks: list[str] = []
-    step = max(1, chunk_size - chunk_overlap)
-    start = 0
-    while start < len(src):
-        end = min(len(src), start + chunk_size)
-        chunk = src[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
-        if end >= len(src):
-            break
-        start += step
-    return chunks
+    return list(iter_text_chunks(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap))
 
 
 def _rag_metadata_key_token(value: object) -> str:
@@ -456,21 +442,25 @@ def ingest_knowledge_documents(
     documents: list[dict[str, object]],
     chunk_size: int,
     chunk_overlap: int,
+    chunk_batch_size: int | None = None,
+    max_chunks: int | None = None,
+    on_progress: Callable[[dict[str, int]], None] | None = None,
+    before_batch: Callable[[], None] | None = None,
 ) -> dict[str, object]:
     if not documents:
         raise ValueError("documents is empty")
     if chunk_overlap >= chunk_size:
         raise ValueError("chunk_overlap must be less than chunk_size")
+    if chunk_batch_size is not None and chunk_batch_size < 1:
+        raise ValueError("chunk_batch_size must be positive")
 
     kb_id = normalize_knowledge_base_id(knowledge_base_id)
     collection_name = rag_collection_name(user_id, kb_id)
 
-    client = _http_client()
-    collection = client.get_or_create_collection(name=collection_name)
-
     ids: list[str] = []
     chunks: list[str] = []
     metadatas: list[dict[str, object]] = []
+    document_ends: list[int] = []
 
     ingested_docs = 0
     for raw_doc in documents:
@@ -494,11 +484,10 @@ def ingest_knowledge_documents(
             content_hash=content_hash,
         )
         extra_meta = _normalize_metadata(doc.get("metadata"), allow_reserved=False)
-        doc_chunks = _chunk_text(
-            text,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
+        iterator = iter_text_chunks(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        doc_chunks = list(iterator if max_chunks is None else islice(iterator, max_chunks - len(ids) + 1))
+        if max_chunks is not None and len(ids) + len(doc_chunks) > max_chunks:
+            raise ValueError("background import exceeds chunk budget")
         if not doc_chunks:
             continue
 
@@ -520,15 +509,27 @@ def ingest_knowledge_documents(
                     **extra_meta,
                 }
             )
+        document_ends.append(len(ids))
 
     if not ids:
         raise ValueError("no valid documents to ingest")
 
-    collection.add(
-        ids=ids,
-        documents=chunks,
-        metadatas=metadatas,
-    )
+    if on_progress:
+        on_progress({"documents_processed": 0, "chunks_written": 0, "chunk_total": len(ids)})
+    client = _http_client()
+    collection = client.get_or_create_collection(name=collection_name)
+    # Preserve the synchronous single-add path; background jobs negotiate a bounded batch.
+    batch_size = len(ids) if chunk_batch_size is None else min(chunk_batch_size, client.get_max_batch_size())
+    if batch_size < 1:
+        raise ValueError("invalid Chroma batch limit")
+    for start in range(0, len(ids), batch_size):
+        if before_batch:
+            before_batch()
+        end = min(len(ids), start + batch_size)
+        collection.add(ids=ids[start:end], documents=chunks[start:end], metadatas=metadatas[start:end])
+        if on_progress:
+            on_progress({"documents_processed": sum(offset <= end for offset in document_ends),
+                         "chunks_written": end, "chunk_total": len(ids)})
 
     return {
         "knowledge_base_id": kb_id,

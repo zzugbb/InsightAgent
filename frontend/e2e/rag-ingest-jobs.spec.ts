@@ -45,8 +45,9 @@ test("background import polls completion, keeps input and restores history after
   await page.getByTestId("rag-ingest-background-submit").click();
   const card = page.getByTestId(`rag-ingest-job-${jobId}`);
   await expect(card).toContainText(/Queued|排队中/);
-  jobs = [job("running")];
+  jobs = [job("running", { progress: { documents_processed: 0, chunks_written: 1, chunk_total: 2 } })];
   await expect(card).toContainText(/Importing|导入中/);
+  await expect(page.getByTestId(`rag-ingest-job-progress-${jobId}`)).toContainText("1 / 2");
   await expect(card.locator("button")).toHaveCount(0);
   jobs = [job("completed", { result: { knowledge_base_id: "default", collection: "kb_fixture_default",
     documents_ingested: 1, chunks_added: 2, document_count: 2, chunk_size: 500, chunk_overlap: 80 } })];
@@ -127,12 +128,14 @@ test("mobile import history keeps cached state visible when refresh fails", asyn
   let fail = false;
   await page.route("**/api/rag/ingest-jobs**", async (route) => {
     await route.fulfill(fail ? { status: 503, json: { detail: "temporarily unavailable" } }
-      : { json: { items: [job("failed", { error_code: "chroma_unavailable" })] } });
+      : { json: { items: [job("failed", { error_code: "chroma_unavailable",
+        progress: { documents_processed: 0, chunks_written: 2, chunk_total: 5 } })] } });
   });
   await page.goto("/");
   await ensureWorkbenchReady(page, auth);
   await openDebug(page);
   await expect(page.getByTestId(`rag-ingest-job-${jobId}`)).toBeVisible();
+  await expect(page.getByTestId(`rag-ingest-job-progress-${jobId}`)).toContainText("2 / 5");
   fail = true;
   await page.getByTestId("rag-ingest-jobs-refresh").click();
   await expect(page.getByTestId("rag-ingest-jobs-error")).toBeVisible({ timeout: 15_000 });
@@ -163,7 +166,9 @@ test("real background import completes once and its content can be retrieved", a
     return (await response.json() as RagIngestJob).status;
   }, { timeout: 45_000, intervals: [500, 1000, 2000] }).toBe("completed");
   const result = await request.get(`${API_BASE_URL}/api/rag/ingest-jobs/${a.id}`, { headers });
-  expect((await result.json() as RagIngestJob).result?.chunks_added).toBe(1);
+  const completedJob = await result.json() as RagIngestJob;
+  expect(completedJob.result?.chunks_added).toBe(1);
+  expect(completedJob.progress).toEqual({ documents_processed: 1, chunks_written: 1, chunk_total: 1 });
   expect(await result.text()).not.toContain("blue telescope");
   const query = await request.post(`${API_BASE_URL}/api/rag/query`, {
     headers, data: { knowledge_base_id: "background-e2e", query: "blue telescope", top_k: 3 },
@@ -181,4 +186,38 @@ test("real background import completes once and its content can be retrieved", a
   await expect(page.getByTestId(`rag-ingest-job-${a.id}`)).toContainText(/Completed|已完成/);
   await page.getByTestId(`rag-ingest-job-${a.id}`).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/insightagent-ingest-real.png" });
+});
+
+test("batch progress survives reload and remains visible after interruption with review action", async ({ page, request }) => {
+  const auth = await registerViaApi(request);
+  await seedBrowserAuth(page, auth);
+  let current = job("running", { document_total: 40,
+    progress: { documents_processed: 12, chunks_written: 128, chunk_total: 400 } });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (entry) => { if (entry.type() === "error") pageErrors.push(entry.text()); });
+  await page.route("**/api/rag/ingest-jobs**", (route) => route.fulfill({ json: { items: [current] } }));
+  await page.goto("/");
+  await ensureWorkbenchReady(page, auth);
+  await openDebug(page);
+  const progress = page.getByTestId(`rag-ingest-job-progress-${jobId}`);
+  await expect(progress).toContainText("128 / 400");
+  await expect(progress).toContainText("12 / 40");
+  await page.reload();
+  await ensureWorkbenchReady(page, auth);
+  await openDebug(page);
+  await expect(progress).toContainText("128 / 400");
+  current = job("running", { document_total: 40,
+    progress: { documents_processed: 25, chunks_written: 256, chunk_total: 400 } });
+  await expect(progress).toContainText("256 / 400");
+  current = { ...current, status: "failed", error_code: "interrupted" };
+  await expect(page.getByTestId(`rag-ingest-job-${jobId}`)).toContainText(/Failed|失败/);
+  await expect(progress).toContainText("256 / 400");
+  await expect(progress).toContainText(/confirmed batches only|仅包含已确认/);
+  await progress.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/insightagent-ingest-progress-desktop.png" });
+  await expect(page.locator("nextjs-portal [data-nextjs-dialog]")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+  await page.getByTestId(`rag-ingest-job-review-${jobId}`).click();
+  await expect(page.getByRole("dialog", { name: /Knowledge|知识库/ })).toBeVisible();
 });

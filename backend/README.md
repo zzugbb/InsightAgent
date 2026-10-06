@@ -10,16 +10,16 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)核实历史 GLM 成功任务、工具/RAG Trace 与一条历史导出；当前最小实时调用 HTTP 429，用户确认 GLM 服务到期。尚无试点环境。
 - A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)已准备：后端 `requirements.pilot.lock` 锁定 84 个直接/传递依赖版本，镜像构建执行 `pip check` 与安装版本核对；本机 ARM64 构建和生产模式隔离联调通过。目标环境部署与回滚未实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`；独立 fixture 经离线快照恢复后，PostgreSQL 行与 Chroma 向量均读回。旧容器重建前须保存原 `/data`；目标环境恢复待验证。
-- A4 [后台 RAG 导入](../docs/rag-background-ingest.md)新增四个兼容接口，采用 PostgreSQL 持久化与会话锁、受监管的常驻 worker；支持幂等、排队取消、权限复核、超时/中断恢复和原始载荷清理。OpenAPI 基线更新为 48 个操作、81 个组件；目标运行、单步重跑与任务内并行仍待范围/环境决定。
+- A4 [后台 RAG 导入](../docs/rag-background-ingest.md)已具备持久化队列、幂等、排队取消、多 worker 领取、超时/重启恢复及审计；本轮补充分批写入、确认进度、批前权限复核与展开预算，40 文档 / 400 切块隔离实写通过。OpenAPI 为 48 个操作、82 个组件；目标运行、单步/分支重跑、任务内并行与试点范围仍待决定。
 - 非阻塞维护候选：ESLint 10 正式采用仍受前端锁文件中 React/import/jsx-a11y 三个插件的 peer 范围约束；保持 ESLint 9 精确 pin，预检的 1 个动作概括这组外部兼容约束。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
 - 最终本地验证来源：2026-10-06 full release gate（backend/frontend/tooling/hygiene）及完整 Chromium 回归；真实提供方成功调用和目标部署仍未验证。
-- 后端 full slice `2050/2050`、module boundary `9/9`；包含 18 个后台导入专项测试，OpenAPI `48` 操作 / `81` 组件与提交基线一致。
-- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `69 passed / 1 skipped`，新增 5 个导入场景包含真实 Chroma 写入检索和桌面/手机交互。
-- 临时 PostgreSQL 集成 `13/13`：并发幂等、每用户限额、用户隔离、取消、双 worker 领取、权限撤销、子进程/父进程被杀后的恢复；测试容器和本机服务已清理。
+- 后端 full slice `2061/2061`、module boundary `9/9`；包含 18 个任务专项与 11 个批次专项测试，OpenAPI `48` 操作 / `82` 组件与提交基线一致。
+- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `70 passed / 1 skipped`；6 个导入场景覆盖真实 Chroma 写入检索、进度刷新、中断复核和桌面/手机交互。
+- 隔离 PostgreSQL/Chroma 集成 `21/21`：并发、权限、旧表升级、批次失败/中断进度与恢复；实际 40 文档 / 400 切块写入及版本元数据已核对（本机 fixture 约 3.15 秒，非吞吐承诺）；测试容器和本机服务已清理。
 - 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
 - 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；当前请求 HTTP 429、用户确认服务到期。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
 - Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
@@ -30,6 +30,8 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 2. ESLint 10 作为非阻塞维护候选等待上游兼容发布；后端保持 FastAPI 精确 pin 与 SSE / trace / export 外部契约稳定。
 
 ## 稳定契约
+
+- 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约。
 
 - 后台 RAG 导入为兼容扩展：同键同参数返回原任务，查询/取消只对提交者开放，共享写入限管理员；仅排队任务可取消，中断失败先复核数据再重新提交，原同步 ingest 保持可用。
 
@@ -151,7 +153,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `scripts/tool_runtime_slice/`：后端 slice 测试主题包；`backend/scripts/test_tool_runtime_slice.py` 是兼容入口
 - `app/services/chroma_memory_service.py`：会话 Memory 的 status/add/query 与任务后摘要 best-effort 写入
 - `app/services/chroma_rag_service.py`：RAG ingest/query/status、knowledge base list/clear/delete 与 shared/private 语义
-- `app/services/rag_ingest_{jobs,schema,worker,runner}.py` 与 `app/api/routes/rag_ingest.py`：持久化后台导入、领取/恢复与子进程监管，详见[后台导入契约](../docs/rag-background-ingest.md)
+- `app/services/rag_ingest_{jobs,schema,worker,runner}.py` 与 `app/api/routes/rag_ingest.py`：持久化后台导入、分批确认进度、领取/恢复与子进程监管；共享 lazy chunking 在 `app/services/rag_chunking.py`，详见[后台导入契约](../docs/rag-background-ingest.md)
 - `app/services/settings_service.py`：用户级模型设置读取/保存与 `api_key` 加密解密
 - `app/services/auth_service.py` / `auth_session_service.py`：用户认证、access token、refresh token 轮换与会话撤销
 - `app/services/audit_service.py`：审计事件写入、分页查询与筛选

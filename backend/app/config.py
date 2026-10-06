@@ -75,6 +75,10 @@ class Settings(BaseSettings):
         default=300.0, ge=1.0, le=3600.0, alias="RAG_INGEST_JOB_TIMEOUT_SEC",
         description="后台 RAG 导入子进程最长运行时间；超时中断后不自动重试",
     )
+    rag_ingest_batch_size: int = Field(
+        default=128, ge=1, le=512, alias="RAG_INGEST_BATCH_SIZE",
+        description="后台 RAG 导入每批最多写入的切块数；同时遵守 Chroma 批量上限",
+    )
     chroma_probe: bool = Field(
         default=True,
         alias="CHROMA_PROBE",

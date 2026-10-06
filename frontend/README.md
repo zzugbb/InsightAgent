@@ -10,16 +10,16 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)已核实历史 GLM 任务与 Trace，当前实时调用 HTTP 429 且用户确认服务到期；前端真实用户流程仍待验收，项目整体完成度尚不能可靠量化。
 - A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)要求 HTTPS 浏览器/API 地址一致，并记录构建时的 `NEXT_PUBLIC_API_BASE_URL`；后端 84 个依赖版本已锁定，本机 ARM64 锁定版镜像与现有前端镜像隔离联调通过。目标入口仍待实测。
 - A3 本地恢复基础：Compose 的 Chroma 数据卷已对齐镜像 `/data` 路径，隔离快照恢复后 PostgreSQL/Chroma fixture 均读回；前端登录、任务/Trace 与知识库的目标环境恢复验收仍待部署环境，详见[操作记录](../docs/local-stack-backup-restore.md)。
-- A4 运行调试新增[后台 RAG 导入](../docs/rag-background-ingest.md)：提交后可关闭窗口，重新打开继续查看状态；支持排队取消、同键重试、跨库隔离、完成后复核及审计过滤。后端 OpenAPI 当前为 48 个操作、81 个组件；真实用户签收仍待完成。
+- A4 运行调试新增[后台 RAG 导入](../docs/rag-background-ingest.md)已具备持久化队列、幂等、排队取消、多 worker 领取、超时/重启恢复及审计；本轮补充分批写入、确认进度、批前权限复核与展开预算，40 文档 / 400 切块隔离实写通过。OpenAPI 为 48 个操作、82 个组件；目标运行、单步/分支重跑、任务内并行与试点范围仍待决定。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对 `eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10。预检的 1 个动作概括这组约束；继续精确锁定 ESLint `9.39.5`，不使用 `--force` 或 peer override。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
 - 最终本地验证来源：2026-10-06 full release gate（backend/frontend/tooling/hygiene）及完整 Chromium 回归；真实提供方成功调用和目标部署仍未验证。
-- 后端 full slice `2050/2050`、module boundary `9/9`；包含 18 个后台导入专项测试，OpenAPI `48` 操作 / `81` 组件与提交基线一致。
-- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `69 passed / 1 skipped`，新增 5 个导入场景包含真实 Chroma 写入检索和桌面/手机交互。
-- 临时 PostgreSQL 集成 `13/13`：并发幂等、每用户限额、用户隔离、取消、双 worker 领取、权限撤销、子进程/父进程被杀后的恢复；测试容器和本机服务已清理。
+- 后端 full slice `2061/2061`、module boundary `9/9`；包含 18 个任务专项与 11 个批次专项测试，OpenAPI `48` 操作 / `82` 组件与提交基线一致。
+- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `70 passed / 1 skipped`；6 个导入场景覆盖真实 Chroma 写入检索、进度刷新、中断复核和桌面/手机交互。
+- 隔离 PostgreSQL/Chroma 集成 `21/21`：并发、权限、旧表升级、批次失败/中断进度与恢复；实际 40 文档 / 400 切块写入及版本元数据已核对（本机 fixture 约 3.15 秒，非吞吐承诺）；测试容器和本机服务已清理。
 - 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
 - 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；当前请求 HTTP 429、用户确认服务到期。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
 - Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
@@ -30,6 +30,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 2. ESLint 10 作为非阻塞维护候选：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，同时核对 import/jsx-a11y 的兼容版本，再以依赖契约红测受控升级。
 
 ## 稳定契约
+
+- 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约。
 
 - 后台 RAG 导入为兼容扩展：同键重试复用原任务，按当前知识库轮询提交者的任务，完成后刷新状态与治理列表；仅排队任务可取消，失败时保留输入并提示先复核数据。
 
@@ -144,7 +146,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - 状态：`GET /api/rag/status?knowledge_base_id=...`
 - 写入：`POST /api/rag/ingest`
-- 后台写入：`POST /api/rag/ingest-jobs`；状态列表/详情与排队取消使用对应 `ingest-jobs` 路由。运行调试窗口关闭后停止轮询，重新打开从服务端恢复状态，详见[后台导入说明](../docs/rag-background-ingest.md)。
+- 后台写入：`POST /api/rag/ingest-jobs`；状态列表/详情与排队取消使用对应 `ingest-jobs` 路由。运行调试窗口关闭后停止轮询，重新打开从服务端恢复状态与批次确认进度；失败时显示保留进度及复核入口，详见[后台导入说明](../docs/rag-background-ingest.md)。
 - 检索：`POST /api/rag/query`
 - 默认知识库 ID：`default`
 - 实际 collection：`kb_{user_hash}_{knowledge_base_id}`
