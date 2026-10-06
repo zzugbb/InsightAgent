@@ -10,23 +10,19 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)已核实历史 GLM 任务与 Trace，当前实时调用 HTTP 429 且用户确认服务到期；前端真实用户流程仍待验收，项目整体完成度尚不能可靠量化。
 - A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)要求 HTTPS 浏览器/API 地址一致，并记录构建时的 `NEXT_PUBLIC_API_BASE_URL`；后端 84 个依赖版本已锁定，本机 ARM64 锁定版镜像与现有前端镜像隔离联调通过。目标入口仍待实测。
 - A3 本地恢复基础：Compose 的 Chroma 数据卷已对齐镜像 `/data` 路径，隔离快照恢复后 PostgreSQL/Chroma fixture 均读回；前端登录、任务/Trace 与知识库的目标环境恢复验收仍待部署环境，详见[操作记录](../docs/local-stack-backup-restore.md)。
-- A4 后端已提供低敏请求日志、远端 LLM HTTP 尝试事件与离线汇总、可供已配置 CORS 来源读取的 `X-Request-ID`，以及[OpenAPI 指纹基线与变更记录](../docs/api-changelog.md)；前端运行时代码未改，调用方兼容性与目标环境指标采集仍需验证。
+- A4 运行调试新增[后台 RAG 导入](../docs/rag-background-ingest.md)：提交后可关闭窗口，重新打开继续查看状态；支持排队取消、同键重试、跨库隔离、完成后复核及审计过滤。后端 OpenAPI 当前为 48 个操作、81 个组件；真实用户签收仍待完成。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对 `eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10。预检的 1 个动作概括这组约束；继续精确锁定 ESLint `9.39.5`，不使用 `--force` 或 peer override。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
-- 本轮前端 Node/lint/双构建、Docker 镜像构建与隔离联调已验证；本主线 A3 fixture、tooling 与后端门禁已有本地证据。e2e 数字来自上一主线封板，目标用户尚未签收。
-- 本轮 A2 镜像联调：锁定版后端镜像的 84 个已安装依赖版本与锁文件一致；前端临时容器 HTML/CSS HTTP 200，浏览器认证请求命中预期构建 API 地址，后端 PostgreSQL 注册/会话写读与 Chroma 探测通过。目标 API 可达性与 HTTPS 入口未验证。
-- 本轮审计：历史 GLM 任务包含工具/RAG Trace，一条任务可由当前代码构建 JSON/Markdown 导出；最小实时 GLM 请求为 HTTP 429，尚不能据此认定前端真实供应商体验已通过。
-- 本轮 A3 演练：本地隔离快照恢复后 PostgreSQL 测试行与 Chroma 测试向量均读回；前端登录、任务/Trace 与知识库目标环境恢复未验收。
-- 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已包含快照工具和 A2 配置预检测试；页面业务代码与 e2e 本轮未改，Next 构建配置新增 standalone 输出。
-- 本主线后端门禁：full slice `2032/2032`、module boundary `9/9`；请求/LLM 尝试观测和 OpenAPI 44 操作、78 组件指纹已验证。本轮前端 node 184/184、lint 0 error/2 warning、双构建通过并产出 standalone；e2e 未复跑。
-- Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
-- Frontend：本轮 node tests `184/184`、lint 0 error / 2 warning、Turbopack/webpack 双构建通过；封板时真实预检 `ready_with_actions`（0 blocker、1 个 ESLint 10 外部兼容动作）沿用，锁文件核对 3 个 peer 约束。
-- Backend 契约基线：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。
-- E2E/CI：封板时本地服务 full Chromium `64 passed / 1 skipped`，覆盖 Workbench、SSE、trace、RAG、任务/会话导出、恢复、冷却、布局恢复和响应式抽屉。
-- Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
+- 最终本地验证来源：2026-10-06 full release gate（backend/frontend/tooling/hygiene）及完整 Chromium 回归；真实提供方成功调用和目标部署仍未验证。
+- 后端 full slice `2050/2050`、module boundary `9/9`；包含 18 个后台导入专项测试，OpenAPI `48` 操作 / `81` 组件与提交基线一致。
+- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `69 passed / 1 skipped`，新增 5 个导入场景包含真实 Chroma 写入检索和桌面/手机交互。
+- 临时 PostgreSQL 集成 `13/13`：并发幂等、每用户限额、用户隔离、取消、双 worker 领取、权限撤销、子进程/父进程被杀后的恢复；测试容器和本机服务已清理。
+- 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
+- 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；当前请求 HTTP 429、用户确认服务到期。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
+- Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
 
 ## 下一步前端计划
 
@@ -34,6 +30,8 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 2. ESLint 10 作为非阻塞维护候选：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，同时核对 import/jsx-a11y 的兼容版本，再以依赖契约红测受控升级。
 
 ## 稳定契约
+
+- 后台 RAG 导入为兼容扩展：同键重试复用原任务，按当前知识库轮询提交者的任务，完成后刷新状态与治理列表；仅排队任务可取消，失败时保留输入并提示先复核数据。
 
 - SSE 事件：`start`、`state`、`trace`、`tool_start`、`tool_end`、`heartbeat`、`token`、`cancelled`、`timeout`、`done`、`error`。
 - 已配置 CORS 来源可读取后端生成的 `X-Request-ID`，便于把前端失败报告与后端低敏请求日志关联；SSE 业务失败仍以事件/Trace 为准。
@@ -146,6 +144,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 - 状态：`GET /api/rag/status?knowledge_base_id=...`
 - 写入：`POST /api/rag/ingest`
+- 后台写入：`POST /api/rag/ingest-jobs`；状态列表/详情与排队取消使用对应 `ingest-jobs` 路由。运行调试窗口关闭后停止轮询，重新打开从服务端恢复状态，详见[后台导入说明](../docs/rag-background-ingest.md)。
 - 检索：`POST /api/rag/query`
 - 默认知识库 ID：`default`
 - 实际 collection：`kb_{user_hash}_{knowledge_base_id}`

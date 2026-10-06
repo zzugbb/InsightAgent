@@ -9,23 +9,19 @@
 - 当前主线：`project-completion-audit` 已完成第 1/3 阶段（约 33%）；[审计记录](docs/project-completion-audit.md)核实历史 GLM 成功任务与工具/RAG Trace，本轮实时调用 HTTP 429，用户确认服务已到期。尚无试点环境；项目整体完成度尚不能可靠量化。
 - A2 [试点镜像配方与部署预检](docs/pilot-deployment-preflight.md)已准备：后端 84 个直接/传递依赖版本锁定并在镜像构建时核对；两份 Docker 镜像在本机 ARM64 构建通过，隔离联调覆盖生产模式后端、PostgreSQL、Chroma 与前端浏览器实际 API 地址。目标环境部署、TLS 与回滚仍待实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
-- A4 已落地请求观测、远端 LLM HTTP 尝试低敏日志及离线汇总、API 契约基线：44 个 OpenAPI 操作、78 个组件指纹纳入后端门禁；[变更记录](docs/api-changelog.md)要求人工判断兼容性。尝试数不等于账单调用数；任务内并行、重跑、异步 ingest 与产品范围仍待裁决。
+- A4 [后台 RAG 导入](docs/rag-background-ingest.md)已完成本地闭环：持久化队列、状态轮询、排队取消、幂等提交、多实例领取、超时/重启恢复与审计均已落地。请求/LLM 尝试观测和 OpenAPI 基线保持可核验（48 个操作、81 个组件）；单步/分支重跑、任务内并行与试点范围仍待裁决。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对锁文件，`eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10，React 插件官方兼容修复尚未发布。预检的 1 个外部兼容动作概括这组约束；保持 ESLint `9.39.5` 精确锁定，不强制覆盖 peer 约束。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- 本主线已核对 ESLint、A3 fixture、后端与 tooling 门禁；前端 Node/lint/双构建、本机两份试点镜像构建及隔离联调已验证。full release gate 和 e2e 数字仍来自上一主线封板，不能当作当前真实供应商或生产环境的验收结果。
-- 本轮 A2 联调：锁定版后端镜像构建通过，镜像内 84 个已安装版本与锁文件完全一致；生产模式后端的 PostgreSQL 注册/会话写读、Chroma 可达探测、前端首页/CSS 和浏览器实际 API 地址通过，临时资源已清理。镜像尚未推送目标仓库。
-- 本轮审计：只读核对 10 条历史 `glm-5.1` provider-usage 完成任务及工具/RAG Trace；一条历史任务的 JSON/Markdown 导出构建通过；一次最小实时 GLM 调用返回 HTTP 429，未重试。
-- 本轮 A3 演练：快照工具安全测试通过；第一轮发现旧 Chroma 卷为空，修正挂载后第二轮离线快照恢复到新项目，PostgreSQL 测试行与 Chroma 测试向量均读回。此结果仅覆盖本地 fixture。
-- 本轮 tooling gate：`bash scripts/ci_run_release_gate.sh --phase tooling` 通过，已包含快照工具与 A2 部署配置预检测试；两份开发 Compose 的既有配置校验通过。
-- 本主线后端门禁：`bash scripts/ci_run_release_gate.sh --phase backend` 通过，full slice `2032/2032`、module boundary `9/9`；请求/LLM 尝试观测和 OpenAPI 44 操作、78 组件指纹均已覆盖。本轮前端门禁 184/184、lint 0 error/2 warning、双构建通过并生成 standalone；e2e 与 full release gate 未复跑。
-- Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
-- Backend：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线，外部运行时契约未改。
-- Frontend：本轮 node tests `184/184`、lint 0 error / 2 warning、Turbopack 与 webpack 双构建通过；封板时真实预检 `ready_with_actions`（0 blocker、1 个 ESLint 10 外部兼容动作）沿用，锁文件 3 个 peer 约束仍排除 ESLint 10。
-- E2E/CI：封板时本地服务 full Chromium `64 passed / 1 skipped`，覆盖 Workbench、SSE、trace、RAG、任务/会话导出、恢复、冷却、布局恢复和响应式抽屉。
-- Hygiene：`git diff --check`、`git diff --cached --check` 与备份计划 diff 检查通过；`data/insightagent.plan.back.md` 无修改。
+- 最终本地验证来源：2026-10-06 full release gate（backend/frontend/tooling/hygiene）及完整 Chromium 回归；真实提供方成功调用和目标部署仍未验证。
+- 后端 full slice `2050/2050`、module boundary `9/9`；包含 18 个后台导入专项测试，OpenAPI `48` 操作 / `81` 组件与提交基线一致。
+- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；完整 Chromium `69 passed / 1 skipped`，新增 5 个导入场景包含真实 Chroma 写入检索和桌面/手机交互。
+- 临时 PostgreSQL 集成 `13/13`：并发幂等、每用户限额、用户隔离、取消、双 worker 领取、权限撤销、子进程/父进程被杀后的恢复；测试容器和本机服务已清理。
+- 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
+- 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；当前请求 HTTP 429、用户确认服务到期。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
+- Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
 
 ## 当前开发计划
 
@@ -33,6 +29,8 @@
 2. ESLint 10 保留为非阻塞维护候选：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，并核对 import/jsx-a11y 的兼容版本；再以依赖契约红测和完整门禁受控升级。
 
 ## 稳定契约
+
+- 后台 RAG 导入为兼容扩展：同键同参数返回原任务，查询/取消只对提交者开放，共享写入限管理员；仅排队任务可取消，中断失败先复核数据再重新提交，原同步 ingest 保持可用。
 
 - SSE 事件、`TraceStep`、result summary、safe output、JSON/Markdown export shape 保持稳定；`error.diagnostic` 与 failure audit diagnostic 只包含低敏分类、reason 枚举、recoverability、HTTP 状态族与 detail 存在性。
 - 后端全局 HTTP 响应追加安全 header；只增加响应头，不改变 JSON payload、SSE event、trace/delta 或 export body shape。

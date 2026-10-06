@@ -659,6 +659,14 @@ export type Messages = {
       ingestReviewDescription: (knowledgeBaseId: string) => string;
       ingestReviewAction: string;
       ingestFailedTitle: string;
+      jobs: {
+        submit: string; hint: string; accepted: string; title: string; empty: string;
+        submitFailed: string; loadFailed: string; cancel: string; cancelFailed: string;
+        documents: (n: number) => string; reviewBeforeRetry: string;
+        auditCreated: string; auditFinished: string; auditCancelled: string;
+        status: Record<"queued" | "running" | "completed" | "failed" | "cancelled", string>;
+        errors: Record<"invalid_input" | "chroma_unavailable" | "interrupted" | "permission_revoked", string>;
+      };
       queryPlaceholder: string;
       queryButton: string;
       queryEmptyInput: string;

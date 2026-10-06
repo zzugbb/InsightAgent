@@ -159,6 +159,9 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     if (normalized === "rag_ingest") {
       return t.sidebar.audit.eventLabelRagIngest;
     }
+    if (normalized === "rag_ingest_job_created") return t.inspector.rag.jobs.auditCreated;
+    if (normalized === "rag_ingest_job_finished") return t.inspector.rag.jobs.auditFinished;
+    if (normalized === "rag_ingest_job_cancelled") return t.inspector.rag.jobs.auditCancelled;
     if (normalized === "rag_kb_clear") {
       return t.sidebar.audit.eventLabelRagKbClear;
     }
@@ -197,7 +200,7 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
     if (normalized === "task_failed") {
       return "red";
     }
-    if (normalized === "rag_ingest") {
+    if (normalized === "rag_ingest" || normalized.startsWith("rag_ingest_job_")) {
       return "cyan";
     }
     if (normalized === "rag_kb_clear" || normalized === "rag_kb_delete") {
@@ -324,6 +327,12 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
         parts.push(`${t.sidebar.audit.fieldChunksAdded} ${Math.trunc(chunks)}`);
       }
       return parts.length > 0 ? `${eventLabel} · ${parts.join(" · ")}` : eventLabel;
+    }
+    if (normalizedEventType === "rag_ingest_job_finished") {
+      const status = asString(detail.status);
+      if (status === "completed" || status === "failed") {
+        return `${eventLabel} · ${t.inspector.rag.jobs.status[status]}`;
+      }
     }
     return eventLabel;
   };
@@ -672,6 +681,9 @@ export function AuditLogsModal({ open, onClose }: AuditLogsModalProps) {
                 label: t.sidebar.audit.filterEventRagIngest,
                 value: "rag_ingest",
               },
+              { label: t.inspector.rag.jobs.auditCreated, value: "rag_ingest_job_created" },
+              { label: t.inspector.rag.jobs.auditFinished, value: "rag_ingest_job_finished" },
+              { label: t.inspector.rag.jobs.auditCancelled, value: "rag_ingest_job_cancelled" },
               {
                 label: t.sidebar.audit.filterEventRagKbClear,
                 value: "rag_kb_clear",

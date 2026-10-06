@@ -5,6 +5,7 @@ from typing import Any, Iterator
 from urllib.parse import urlsplit, urlunsplit
 
 from app.config import get_settings
+from app.services.rag_ingest_schema import initialize_ingest_schema
 
 
 class CursorAdapter:
@@ -288,6 +289,7 @@ def initialize_postgres_database() -> None:
             WHERE role IS NULL OR TRIM(role) = ''
             """
         )
+        initialize_ingest_schema(connection)
         _ensure_common_indexes(connection)
         connection.commit()
 

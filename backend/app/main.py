@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,7 @@ from app.services.chat_persistence_service import (
 )
 from app.security_headers import add_security_headers
 from app.request_observability import add_request_observability
+from app.services.rag_ingest_runner import run_ingest_worker
 
 
 def _validate_cors_origins_for_environment(settings_obj: object) -> None:
@@ -37,7 +39,13 @@ async def lifespan(_: FastAPI):
         execution_owner_id=get_task_execution_owner_id(settings),
         execution_stale_after_sec=get_task_execution_stale_after_sec(settings),
     )
-    yield
+    stop = asyncio.Event()
+    worker = asyncio.create_task(run_ingest_worker(stop, timeout_sec=settings.rag_ingest_job_timeout_sec))
+    try:
+        yield
+    finally:
+        stop.set()
+        await worker
 
 
 app = FastAPI(

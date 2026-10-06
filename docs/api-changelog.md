@@ -10,3 +10,5 @@
 4. 代码审查同时核对 `backend/api_surface_baseline.json`、本记录及外部 SSE/Trace/export 契约；未纳入 OpenAPI 的运行时行为仍由测试和人工审查验证。
 
 - 2026-09-30 · API 0.1.0：建立试点前 OpenAPI 路由与 schema 指纹基线；后续差异需人工核对兼容性
+
+- 2026-10-06 · API 0.1.0：新增持久化异步 RAG 导入的创建、列表、详情和排队取消接口；保留同步 ingest 及 SSE/Trace/export 契约，新增接口为兼容扩展

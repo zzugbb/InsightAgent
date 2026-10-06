@@ -17,6 +17,7 @@ import type {
 import { RuntimeDebugMemorySection } from "./runtime-debug-memory-section";
 import { RuntimeDebugRecoveryAlert } from "./runtime-debug-recovery-alert";
 import { RuntimeDebugRagResults } from "./runtime-debug-rag-results";
+import { RagIngestJobs } from "./rag-ingest-jobs";
 import {
   resolveRagKnowledgeBaseSwitch,
   resolveRagMutationRecovery,
@@ -378,6 +379,11 @@ export function RuntimeDebugModal({
               }
             />
           ) : null}
+
+          <RagIngestJobs key={ragAppliedKnowledgeBaseId} open={open}
+            knowledgeBaseId={ragAppliedKnowledgeBaseId.trim() || "default"}
+            text={ragIngestDraft} source={ragIngestSource}
+            disabled={ragOperationPending} onReview={onReviewKnowledgeBase} />
 
           <TextArea
             className="memory-debug-textarea memory-debug-textarea--query"

@@ -13,6 +13,9 @@ export type AuditEventFilter =
   | "task_timeout"
   | "task_failed"
   | "rag_ingest"
+  | "rag_ingest_job_created"
+  | "rag_ingest_job_finished"
+  | "rag_ingest_job_cancelled"
   | "rag_kb_clear"
   | "rag_kb_delete";
 export type AuditTimeFilter = "all" | "7d" | "30d";
