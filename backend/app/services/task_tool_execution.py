@@ -3,7 +3,8 @@
 from copy import deepcopy
 from uuid import uuid4
 
-from app.services.task_tool_parallel import execution_batches, execute_parallel_batch
+from app.services.task_tool_parallel import execute_parallel_batch
+from app.services.tool_plan_dependencies import collect_preview, resolved_execution_batches
 from app.services.tool_runtime import build_tool_plan_item_service_execution
 
 
@@ -27,13 +28,17 @@ def execute_task_tool_plan(*, tool_plan, max_concurrent, registry_provider, seq_
                            complete_task_fn, record_failure_event_fn):
     common = dict(task_id=task_id, prompt=prompt, user_id=user_id, model=model,
                   estimate_token_count=estimate_token_count, make_step_id=lambda: str(uuid4()))
-    for batch, batch_provider in execution_batches(tool_plan, max_concurrent=max_concurrent,
-                                                  registry_provider=registry_provider):
+    outputs = {}
+    for batch, batch_provider in resolved_execution_batches(tool_plan, outputs=outputs,
+                                                            max_concurrent=max_concurrent,
+                                                            registry_provider=registry_provider):
         raise_if_should_abort()
         touch_heartbeat()
         if len(batch) == 1:
             index, spec = batch[0]
             ctx = prepare_iteration(index, spec, seq_cursor + 1, batch_provider)
+            if "id" in spec:
+                ctx["action_step"]["meta"].update(plan_node_id=spec["id"], depends_on=spec.get("depends_on", []))
             seq_cursor += 1
             execution = None
             for item in execute_item(**common, trace_steps=trace_steps, iteration_ctx=ctx,
@@ -50,6 +55,8 @@ def execute_task_tool_plan(*, tool_plan, max_concurrent, registry_provider, seq_
             group_id, jobs = str(uuid4()), []
             for index, spec in batch:
                 ctx = prepare_iteration(index, spec, 0, batch_provider)
+                if "id" in spec:
+                    ctx["action_step"]["meta"].update(plan_node_id=spec["id"], depends_on=spec.get("depends_on", []))
                 ctx["action_step"]["meta"].update(execution_mode="parallel",
                                                    parallel_group_id=group_id, parallel_group_size=len(batch))
                 jobs.append((index, dict(**common, iteration_ctx=ctx, initial_action_step=ctx["action_step"],
@@ -72,6 +79,7 @@ def execute_task_tool_plan(*, tool_plan, max_concurrent, registry_provider, seq_
                                                    trace_steps=trace_steps)
                 else:
                     actions = item["result"]["service_actions"]
+                node = next(spec for index, spec in batch if index == item.get("index", batch[0][0]))
                 action_result = None
                 for action in apply_actions(service_actions=actions, trace_steps=trace_steps,
                                             tool_observations=tool_observations, seq_cursor=seq_cursor,
@@ -86,6 +94,8 @@ def execute_task_tool_plan(*, tool_plan, max_concurrent, registry_provider, seq_
                 if action_result["should_return"]:
                     yield {"kind": "result", "result": {"seq_cursor": seq_cursor, "should_return": True}}
                     return
+                if "id" in node:
+                    outputs[node["id"]] = collect_preview(actions)
         finally:
             close = getattr(executions, "close", None)
             if close is not None:

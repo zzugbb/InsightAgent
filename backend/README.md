@@ -7,19 +7,19 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - `/health.operations` 保持非敏感运维摘要：readiness、readiness_level、operator_summary、warnings、warning_summary、risk_domains、readiness_checks、部署配置、SLO、备份恢复、runbook/值班、演练新鲜度、队列、执行实例、超时与 Chroma probe。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；前端 Next 16 / React 19.2、原生 flat ESLint 与 React Compiler 规则迁移完成，后端运行时及 SSE / trace / export 外部契约未修改。
-- 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)核实历史 GLM 成功任务、工具/RAG Trace 与一条历史导出；当前最小实时调用 HTTP 429，用户确认 GLM 服务到期。尚无试点环境。
+- 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)核实历史 GLM 成功任务、工具/RAG Trace 与一条历史导出；前期最小审计调用 HTTP 429，用户确认 GLM 服务到期。尚无试点环境。
 - A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)已准备：后端 `requirements.pilot.lock` 锁定 84 个直接/传递依赖版本，镜像构建执行 `pip check` 与安装版本核对；本机 ARM64 构建和生产模式隔离联调通过。目标环境部署与回滚未实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`；独立 fixture 经离线快照恢复后，PostgreSQL 行与 Chroma 向量均读回。旧容器重建前须保存原 `/data`；目标环境恢复待验证。
-- A4 [后台 RAG 导入](../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../docs/task-tool-parallel.md)支持独立内建检索/计算、开关、顺序合并与生命周期协调。OpenAPI 为 50 操作 / 86 组件；单步恢复、通用依赖调度及试点范围/目标运行仍待完成。
+- A4 [后台 RAG 导入](../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定。OpenAPI 为 50 操作 / 86 组件；单步恢复、外部工具并行及试点范围/目标运行仍待完成。
 - 非阻塞维护候选：ESLint 10 正式采用仍受前端锁文件中 React/import/jsx-a11y 三个插件的 peer 范围约束；保持 ESLint 9 精确 pin，预检的 1 个动作概括这组外部兼容约束。
 - `backend/app` 与 `backend/scripts` Python 源码均低于 3000 行；后续新增实现继续优先落到主题模块，保留兼容 facade。
 
 ## 当前验证基线
 
-- 最终本地验证来源：2026-10-06 full release gate（backend/frontend/tooling/hygiene）及完整 Chromium 回归；真实提供方成功调用和目标部署仍未验证。
-- 后端 full slice `2083/2083`、module boundary `9/9`；新增 15 个工具并发专项，OpenAPI `50` 操作 / `86` 组件与提交基线一致。
-- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；工具并发开启为 2 的完整 Chromium `74 passed / 1 skipped`，覆盖既有任务分支、导入、Trace 与错误/取消交互。
-- 本轮 PostgreSQL 并发集成 `6/6`、任务分支回归 `11/11`：实际 stream/Trace/delta/export、重试隔离、失败/取消/超时与迟到写入保护。既有 RAG `21/21` PostgreSQL/Chroma 及 400 切块实写基线沿用前轮；本轮临时服务/容器已清理。
+- 最终本地验证来源：2026-10-06 full release gate（10/10，backend/frontend/tooling/hygiene）及工具依赖/并发/分支 PostgreSQL；完整 Chromium 沿用前轮基线，本轮未重跑；真实提供方成功调用和目标部署仍未验证。
+- 后端 full slice `2108/2108`、module boundary `9/9`；新增 25 个工具依赖专项，OpenAPI `50` 操作 / `86` 组件与提交基线一致。
+- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；前轮工具并发开启为 2 的完整 Chromium `74 passed / 1 skipped`（本轮未重跑），覆盖既有任务分支、导入、Trace 与错误/取消交互。
+- 本轮工具依赖 PostgreSQL `7/7`、并发回归 `6/6`、任务分支回归 `11/11`：实际规划/stream/Trace/delta/export、错误审计、重试隔离、失败/取消/超时与迟到写入保护。既有 RAG `21/21` PostgreSQL/Chroma 及 400 切块实写基线沿用前轮；本轮临时服务/容器已清理。
 - 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
 - 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；当前请求 HTTP 429、用户确认服务到期。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
 - Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
@@ -31,9 +31,10 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 
 ## 稳定契约
 
-[任务内工具并发](../docs/task-tool-parallel.md)已完成内建独立工具的本地闭环；下一候选为单步恢复、依赖调度与外部工具并行，真实提供方和目标部署验收继续待实证。
+[任务内工具并发](../docs/task-tool-parallel.md)及[工具依赖与结果引用](../docs/tool-dependencies.md)已完成本地闭环；下一候选为单步恢复与外部工具并行，真实提供方的图生成质量和目标部署验收继续待实证。
 
-- 任务内并发默认关闭（`TASK_TOOL_MAX_CONCURRENT=1`）；仅独立内建检索/计算可并发，进程最多 8 个读取线程，Trace/终态写入由协调线程串行处理；并发事件允许交错，Trace.meta 增加兼容可选分组信息，详见[并发契约](../docs/task-tool-parallel.md)。
+- 显式工具图最多 32 节点/128 边，绑定仅限已投影预览标量到 query/expression；图错误拒绝整图，失败/取消/超时阻止依赖调用。Trace.meta 的 plan_node_id/depends_on 为可选扩展，详见[依赖契约](../docs/tool-dependencies.md)。
+- 任务内并发默认关闭（`TASK_TOOL_MAX_CONCURRENT=1`）；仅就绪且输入已确定的内建检索/计算可并发，进程最多 8 个读取线程，Trace/终态写入由协调线程串行处理；并发事件允许交错，Trace.meta 增加兼容可选分组信息，详见[并发契约](../docs/task-tool-parallel.md)。
 - 任务分支只从本人已终结任务创建独立会话，复制或编辑 prompt；幂等创建与来源分页新增两个接口，使用执行时当前设置，不复制历史消息/Memory/Trace/输出；POST 只保存 queued 任务，既有 stream 执行，原任务和 SSE/Trace/export shape 保持不变。
 
 - 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约。
@@ -146,6 +147,7 @@ FastAPI 后端，提供 Auth、会话/任务、SSE、Trace、PostgreSQL、Memory
 - `app/services/task_queue_service.py`：单进程任务执行槽位、capacity-aware oldest eligible FIFO 等待调度、安全等待快照、等待项移除与测试重置入口
 - `app/services/tool_runtime.py`：tool runtime 兼容 facade，汇总旧导出路径
 - `app/services/tool_runtime_planning.py`：planner、provider planner 与 payload normalization
+- `app/services/tool_plan_dependencies.py`：显式工具依赖图校验、稳定拓扑波次与公开预览标量绑定；`task_tool_execution.py` 协调执行与持久化，`task_tool_parallel.py` 限定内建工具并发
 - `app/services/tool_runtime_display.py`：tool 显示名、语义分类、输出归一化与 `run_tool` 旧导出实现
 - `app/services/tool_runtime_execution.py`：runtime context、attempt 与前半段执行语义
 - `app/services/tool_runtime_execution_flow.py`：trace event、RAG follow-up、iteration 与 service effects

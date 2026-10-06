@@ -8,6 +8,9 @@ from dataclasses import replace
 
 from app.config import get_settings
 from app.providers.base import ProviderUsage
+from app.services.tool_plan_dependencies import (
+    ToolDependencyError, has_dependencies, normalize_dependency_plan,
+)
 from app.providers.response_utils import (
     coerce_provider_usage,
     extract_response_text,
@@ -247,12 +250,19 @@ def _build_provider_tool_plan_prompt(
         f"Allowed tool labels: {allowed_tool_labels_text}.\n"
         "Do not include planner tools in the JSON; planner is added automatically.\n"
         + "".join(input_lines)
+        + "For dependent tools, give every tool a unique id and depends_on array. Same-name nodes are allowed.\n"
+        + 'Optional input_bindings maps query/expression to {"node":"source-id","path":["result"],"template":"{value} * 2"}.\n'
+        + "Bindings read only projected result preview scalars. Source nodes become dependencies. Use literal knowledge_base_id.\n"
+        + "Never use cyclic/missing references. Maximum 32 nodes; omit dependency fields for a legacy flat plan.\n"
         + "If no extra tools are needed, return {\"tools\": []}.\n"
         + f"User request:\n{prompt.strip() or 'empty prompt'}"
     )
 
 
 _PROVIDER_TOOL_PLAN_PAYLOAD_ATTRS = (
+    "id",
+    "depends_on",
+    "input_bindings",
     "response",
     "data",
     "result",
@@ -784,6 +794,17 @@ def _normalize_provider_tool_plan(
     prompt: str,
     registry_provider: ToolRegistryProvider | None = None,
 ) -> list[dict[str, object]] | None:
+    if has_dependencies(raw_items):
+        def normalize_node(raw):
+            plan = _normalize_provider_tool_plan([raw], prompt=prompt, registry_provider=registry_provider)
+            optional = [item for item in (plan or []) if get_tool_semantic_kind(
+                name=str(item["name"]), registry_provider=registry_provider,
+            ) != "task_planner"]
+            return optional[0] if len(optional) == 1 else None
+        return normalize_dependency_plan(
+            raw_items, normalize_node=normalize_node,
+            planner_prefix=_normalize_provider_tool_plan([], prompt=prompt, registry_provider=registry_provider) or [],
+        )
     settings = get_settings()
     prompt_preview = prompt.strip()[:120]
     default_query = prompt.strip()[:80] or "default query"
@@ -983,6 +1004,8 @@ def build_tool_plan_artifacts(
             provider=provider,
             registry_provider=registry_provider,
         )
+    except ToolDependencyError:
+        raise
     except Exception:  # noqa: BLE001
         provider_plan = None
     if provider_plan is None:

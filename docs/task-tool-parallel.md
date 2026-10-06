@@ -7,10 +7,10 @@
 服务端环境变量 `TASK_TOOL_MAX_CONCURRENT` 范围为 1–4，默认 **1（串行）**。在启动 backend 前设为 `2` 即可启用当前内建检索/计算组合；`.env.example` 保留默认值。该选项不是用户模型设置字段，修改后需重启对应执行实例。Compose 的 backend 已通过 env_file 读取本机配置。
 
 - 只有 runner 身份与内建 `task_retrieve` / `calc_eval` 一致的工具可以并发；名称、语义 kind 或显示标签相同的自定义工具不会因此取得并发资格。
-- 相邻、可确认独立的工具按窗口执行；规划工具、外部 HTTP 工具、未知/自定义 runner 及已保留依赖提示的项形成串行屏障，不跨屏障调度。
+- 旧版平铺计划中相邻、可确认独立的工具按窗口执行；规划工具、外部 HTTP 工具、未知/自定义 runner 及未解析的 dependsOn/dependencies/after 等提示形成串行屏障。含 depends_on/input_bindings 的[显式依赖计划](tool-dependencies.md)先校验整图与解析结果绑定，再对同波就绪工具应用并发窗口。
 - 并发窗口固定 registry 快照，避免分类后 loader 切换实现；各次尝试仍使用既有输入归一化、有效用户上下文、shared/private 知识库规则和结果脱敏策略。
 - 进程共享最多 **8 个读取线程**，包含取消后仍在返回中的读取。单任务窗口不会突破配置上限；该线程池与 `TASK_QUEUE_MAX_CONCURRENT` 的任务槽位是两个不同边界。
-- 当前规则规划器通常只有一个检索项和一个计算项，因此启用值 2 即可覆盖该组合。没有新增任意 DAG 调度、跨工具输出绑定或外部写入工具并行。
+- 当前规则规划器通常只有一个检索项和一个计算项，因此启用值 2 即可覆盖该组合。Provider 可声明有界 DAG 与预览标量绑定；外部工具仍串行。
 
 ## SSE、Trace 与最终回答
 
@@ -47,4 +47,4 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_para
 backend/.venv/bin/python backend/scripts/test_task_parallel_postgres.py
 ```
 
-15 个静态专项覆盖重叠、屏障、快照、重试隔离、稳定顺序、生命周期、heartbeat 和进程线程上限；6 个 PostgreSQL 场景覆盖实际任务分支的 stream、Trace/delta、导出、串行回退、取消、超时和失败。数据库场景已接入 backend-e2e workflow。真实提供方、目标环境延迟和通用依赖工具的并行仍待实证/实现。
+15 个静态专项覆盖重叠、屏障、快照、重试隔离、稳定顺序、生命周期、heartbeat 和进程线程上限；6 个 PostgreSQL 场景覆盖实际任务分支的 stream、Trace/delta、导出、串行回退、取消、超时和失败。数据库场景已接入 backend-e2e workflow。真实提供方、目标环境延迟和外部工具的并行仍待实证/实现。

@@ -112,6 +112,8 @@ curl -I http://127.0.0.1:3001
 
 ## e2e 路径
 
+[工具依赖与结果引用](tool-dependencies.md)专项用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_dependency`；实际 Provider 规划、重复工具、Trace/delta/export、失败审计和依赖生命周期用 `backend/.venv/bin/python backend/scripts/test_tool_dependencies_postgres.py`，需要提权访问 Docker/随机本机端口，使用独立 PostgreSQL 与本地规划 fixture，自动清理，不请求远端模型。已接入 backend-e2e workflow。
+
 [任务内工具并发](task-tool-parallel.md)默认 `TASK_TOOL_MAX_CONCURRENT=1`（串行）；设为 2 可验证内建独立检索/计算组合。静态专项使用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_parallel`；真实任务生命周期与导出用 `backend/.venv/bin/python backend/scripts/test_task_parallel_postgres.py`，需要 Docker/随机本机端口及提权，独立 PostgreSQL 与 mock，自动清理。已接入 backend-e2e workflow。
 
 [任务分支重跑](task-reruns.md)专项用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_rerun`；原子创建、并发幂等、来源删除及既有 stream/export 闭环用 `backend/.venv/bin/python backend/scripts/test_task_rerun_postgres.py`。后者需要提权访问 Docker/随机本机端口，使用独立临时 PostgreSQL 和 mock，测试后清理；已加入 backend-e2e workflow。

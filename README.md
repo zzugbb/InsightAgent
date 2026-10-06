@@ -6,33 +6,34 @@
 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
-- 当前主线：`project-completion-audit` 已完成第 1/3 阶段（约 33%）；[审计记录](docs/project-completion-audit.md)核实历史 GLM 成功任务与工具/RAG Trace，本轮实时调用 HTTP 429，用户确认服务已到期。尚无试点环境；项目整体完成度尚不能可靠量化。
+- 当前主线：`project-completion-audit` 已完成第 1/3 阶段（约 33%）；[审计记录](docs/project-completion-audit.md)核实历史 GLM 成功任务与工具/RAG Trace，前期审计调用 HTTP 429，用户确认服务已到期。尚无试点环境；项目整体完成度尚不能可靠量化。
 - A2 [试点镜像配方与部署预检](docs/pilot-deployment-preflight.md)已准备：后端 84 个直接/传递依赖版本锁定并在镜像构建时核对；两份 Docker 镜像在本机 ARM64 构建通过，隔离联调覆盖生产模式后端、PostgreSQL、Chroma 与前端浏览器实际 API 地址。目标环境部署、TLS 与回滚仍待实测。
 - A3 本地恢复基础已落地：两份 Compose 的 Chroma 卷改挂当前镜像实际持久路径 `/data`，新增[离线备份与隔离恢复流程](docs/local-stack-backup-restore.md)；独立 fixture 已读回 PostgreSQL 与 Chroma 测试数据。目标环境恢复与 RPO/RTO 仍待验证。
-- A4 [后台 RAG 导入](docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](docs/task-reruns.md)已完成本地闭环；[任务内工具并发](docs/task-tool-parallel.md)支持独立内建检索/计算、开关、顺序合并与生命周期协调。OpenAPI 为 50 操作 / 86 组件；单步恢复、通用依赖调度及试点范围/目标运行仍待完成。
+- A4 [后台 RAG 导入](docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](docs/task-reruns.md)已完成本地闭环；[任务内工具并发](docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定。OpenAPI 为 50 操作 / 86 组件；单步恢复、外部工具并行及试点范围/目标运行仍待完成。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对锁文件，`eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10，React 插件官方兼容修复尚未发布。预检的 1 个外部兼容动作概括这组约束；保持 ESLint `9.39.5` 精确锁定，不强制覆盖 peer 约束。
 - 外部 SSE / trace / export / e2e 契约保持兼容；`backend/app`、`backend/scripts` 与 `frontend` 源码继续维持单文件 <= 3000 行边界。
 
 ## 当前验证基线
 
-- 最终本地验证来源：2026-10-06 full release gate（backend/frontend/tooling/hygiene）及完整 Chromium 回归；真实提供方成功调用和目标部署仍未验证。
-- 后端 full slice `2083/2083`、module boundary `9/9`；新增 15 个工具并发专项，OpenAPI `50` 操作 / `86` 组件与提交基线一致。
-- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；工具并发开启为 2 的完整 Chromium `74 passed / 1 skipped`，覆盖既有任务分支、导入、Trace 与错误/取消交互。
-- 本轮 PostgreSQL 并发集成 `6/6`、任务分支回归 `11/11`：实际 stream/Trace/delta/export、重试隔离、失败/取消/超时与迟到写入保护。既有 RAG `21/21` PostgreSQL/Chroma 及 400 切块实写基线沿用前轮；本轮临时服务/容器已清理。
+- 最终本地验证来源：2026-10-06 full release gate（10/10，backend/frontend/tooling/hygiene）及工具依赖/并发/分支 PostgreSQL；完整 Chromium 沿用前轮基线，本轮未重跑；真实提供方成功调用和目标部署仍未验证。
+- 后端 full slice `2108/2108`、module boundary `9/9`；新增 25 个工具依赖专项，OpenAPI `50` 操作 / `86` 组件与提交基线一致。
+- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；前轮工具并发开启为 2 的完整 Chromium `74 passed / 1 skipped`（本轮未重跑），覆盖既有任务分支、导入、Trace 与错误/取消交互。
+- 本轮工具依赖 PostgreSQL `7/7`、并发回归 `6/6`、任务分支回归 `11/11`：实际规划/stream/Trace/delta/export、错误审计、重试隔离、失败/取消/超时与迟到写入保护。既有 RAG `21/21` PostgreSQL/Chroma 及 400 切块实写基线沿用前轮；本轮临时服务/容器已清理。
 - 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
 - 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；当前请求 HTTP 429、用户确认服务到期。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
 - Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
 
 ## 当前开发计划
 
-[任务内工具并发](docs/task-tool-parallel.md)已完成内建独立工具的本地闭环；下一候选为单步恢复、依赖调度与外部工具并行，真实提供方和目标部署验收继续待实证。
+[任务内工具并发](docs/task-tool-parallel.md)及[工具依赖与结果引用](docs/tool-dependencies.md)已完成本地闭环；下一候选为单步恢复与外部工具并行，真实提供方的图生成质量和目标部署验收继续待实证。
 
 1. `project-completion-audit` 第 1/3 阶段完成；GLM 服务到期期间暂停真实请求，续用或换有效兼容账号后补当前成功链路。先推进[原始范围裁决建议](docs/project-completion-audit.md)；试点环境明确后运行[部署预检](docs/pilot-deployment-preflight.md)并完成部署/恢复/回滚演练。旧 Chroma 容器重建前须检查并保存其 `/data`。项目总完成百分比暂不估算。
 2. ESLint 10 保留为非阻塞维护候选：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，并核对 import/jsx-a11y 的兼容版本；再以依赖契约红测和完整门禁受控升级。
 
 ## 稳定契约
 
-- 任务内并发默认关闭（`TASK_TOOL_MAX_CONCURRENT=1`）；仅独立内建检索/计算可并发，进程最多 8 个读取线程，Trace/终态写入由协调线程串行处理；并发事件允许交错，Trace.meta 增加兼容可选分组信息，详见[并发契约](docs/task-tool-parallel.md)。
+- 显式工具图最多 32 节点/128 边，绑定仅限已投影预览标量到 query/expression；图错误拒绝整图，失败/取消/超时阻止依赖调用。Trace.meta 的 plan_node_id/depends_on 为可选扩展，详见[依赖契约](docs/tool-dependencies.md)。
+- 任务内并发默认关闭（`TASK_TOOL_MAX_CONCURRENT=1`）；仅就绪且输入已确定的内建检索/计算可并发，进程最多 8 个读取线程，Trace/终态写入由协调线程串行处理；并发事件允许交错，Trace.meta 增加兼容可选分组信息，详见[并发契约](docs/task-tool-parallel.md)。
 - 任务分支只从本人已终结任务创建独立会话，复制或编辑 prompt；幂等创建与来源分页新增两个接口，使用执行时当前设置，不复制历史消息/Memory/Trace/输出；POST 只保存 queued 任务，既有 stream 执行，原任务和 SSE/Trace/export shape 保持不变。
 
 - 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约。

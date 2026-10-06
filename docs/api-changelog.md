@@ -18,3 +18,5 @@
 - 2026-10-06 · API 0.1.0：新增任务分支重跑 POST/GET /api/tasks/{task_id}/reruns；只允许本人已终结任务创建独立会话，支持幂等与分页来源关系。新任务通过既有 stream 执行，使用当前设置；原任务、任务列表、SSE/Trace/export shape 保持不变，新增接口为兼容扩展
 
 - 2026-10-06 · API 0.1.0：任务内并发为服务端可选模式，默认串行；复用既有 SSE 事件，允许不同工具 step 的事件交错。Trace.meta 新增可选 execution_mode、parallel_group_id、parallel_group_size；既有 meta 允许扩展，JSON v1.0/Markdown 主结构保持稳定，OpenAPI 50 操作 / 86 组件指纹未变。
+
+- 2026-10-06 · API 0.1.0：Provider 显式工具图支持节点 ID、前置依赖和公开预览的标量绑定；旧平铺计划兼容。Trace.meta 新增可选 plan_node_id、depends_on，工具 input 为解析后的实际输入；Trace.seq 按拓扑执行顺序递增。图/输入错误通过既有 SSE error 返回固定 tool_dependency_plan_invalid / tool_dependency_input_unavailable，JSON v1.0/Markdown 外层结构不变，OpenAPI 50 操作 / 86 组件指纹未变。
