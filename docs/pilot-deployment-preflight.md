@@ -35,7 +35,7 @@ python3 scripts/check_pilot_deploy_config.py --env-file /安全路径/pilot.env
 
 ## 生产镜像配方
 
-`backend/Dockerfile.pilot` 通过 `requirements.pilot.txt` 将 Chroma 直接依赖固定在本地已验证的 `1.5.7`，安装后以非 root 用户运行 Uvicorn，不使用源码卷或 `--reload`；`frontend/Dockerfile.pilot` 用 `npm ci`、`next build` 生成 Next standalone 产物，再以非 root 用户运行 `server.js`。两份 `.dockerignore` 排除本地环境文件、依赖目录、缓存及测试产物，避免把开发机密钥或大体积构建目录送入 Docker 上下文。
+`backend/Dockerfile.pilot` 通过 `requirements.pilot.txt` 固定 Chroma 直接依赖为 `1.5.7`，再用 `requirements.pilot.lock` 约束试点镜像的 84 个直接/传递依赖版本；构建期运行 `pip check`，并要求最终 `pip freeze` 与锁文件逐项一致。运行时采用非 root Uvicorn，不使用源码卷或 `--reload`；`frontend/Dockerfile.pilot` 用 `npm ci`、`next build` 生成 Next standalone 产物，再以非 root 用户运行 `server.js`。两份 `.dockerignore` 排除本地环境文件、依赖目录、缓存及测试产物，避免把开发机密钥或大体积构建目录送入 Docker 上下文。
 
 在构建机使用已核对摘要的官方 Python/Node 基础镜像，示例命令中的值由操作员替换；前端 API 地址是公开的构建参数，不传入后端密钥：
 
@@ -49,9 +49,11 @@ docker build -f frontend/Dockerfile.pilot \
   -t insightagent-frontend:<候选版本> frontend
 ```
 
-构建后推送到目标镜像仓库并取得仓库返回的摘要，再填写 `PILOT_BACKEND_IMAGE` 和 `PILOT_FRONTEND_IMAGE`。后端传递依赖仍未由仓库锁文件完全固定；镜像摘要可固定已构建产物，但同一源码再次构建仍需核对依赖解析与产物差异。目标环境的镜像拉取、健康检查、TLS/访问边界和回滚仍需实测。
+构建后推送到目标镜像仓库并取得仓库返回的摘要，再填写 `PILOT_BACKEND_IMAGE` 和 `PILOT_FRONTEND_IMAGE`。后端锁文件是从已验证的 Linux ARM64 / Python 3.14 镜像导出的版本基线；升级直接依赖时应在隔离镜像中重新解析、验证并更新它。版本约束没有锁定 wheel 哈希，跨架构可用性也尚未验证；镜像摘要用于固定最终构建产物。目标环境的镜像拉取、健康检查、TLS/访问边界和回滚仍需实测。
 
 2026-09-30 本地验证：后端使用 `python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d`，前端使用 `node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6`，上述两份 Docker 配方在本机 ARM64 均实际构建成功。后端镜像以 `10001:10001` 运行，容器内 `chromadb==1.5.7`、`app.main` 导入与 `pip check` 通过；前端镜像以 `node` 运行，临时容器首页及静态 CSS 均返回 HTTP 200，容器已停止。这里只证明本机构建与基本运行；本地镜像 ID 不能充当目标仓库摘要，也没有完成目标环境部署。
+
+2026-10-06 锁定验证：在同一摘要固定的 Python 基础镜像上重建后端，构建期 `pip check` 与 `pip freeze` 锁文件核验均通过；镜像内再次确认 84/84 个版本一致、`app.main` 可导入且 Chroma 为 `1.5.7`，隔离联调复跑通过。此结果仍仅覆盖本机 ARM64。
 
 在 Docker 可用且上述四份镜像已在本机时，可运行隔离联调（运行和访问本机端口通常需要提权）：
 

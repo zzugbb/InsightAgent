@@ -4,7 +4,7 @@ overview: next-major-upgrade-readiness 已 100% 封板；project-completion-audi
 current_focus:
   mainline: project-completion-audit
   status: 静态盘点 1/3（约 33%）完成；GLM 服务到期阻断当前成功调用，环境与范围/签收待完成
-  latest_change: 2026-10-02 A2 隔离镜像联调新增浏览器实际 API 地址核验，预期值通过、错误值负向失败；生产模式后端、PostgreSQL、Chroma 与前端 HTML/CSS 保持通过，目标环境仍待实证
+  latest_change: 2026-10-06 A2 后端 84 个直接/传递依赖版本锁定，构建时核对安装版本与依赖冲突；锁定版镜像本机 ARM64 构建及隔离联调通过，目标环境仍待实证
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
@@ -51,7 +51,7 @@ validation_baseline:
   current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；当前最小 GLM 调用 HTTP 429，未重试
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
   tooling_current: bash scripts/ci_run_release_gate.sh --phase tooling passed，包含快照工具与 A2 六镜像摘要预检测试；后端/前端 Docker build --check 无告警
-  pilot_images_current: 本机 ARM64 后端/前端 Docker 构建通过，基础镜像均以 sha256 摘要固定；隔离联调验证生产模式后端、PostgreSQL 注册/会话写读、Chroma 探测、前端 HTML/CSS 与浏览器实际 API 地址，错误值负向失败，临时资源已清理；未推送目标仓库
+  pilot_images_current: 本机 ARM64 后端/前端 Docker 构建通过，基础镜像均以 sha256 摘要固定；后端锁定 84 个直接/传递依赖版本并核对镜像内安装结果；隔离联调验证生产模式后端、PostgreSQL 注册/会话写读、Chroma 探测、前端 HTML/CSS 与浏览器实际 API 地址，临时资源已清理；未推送目标仓库
   backend_current: bash scripts/ci_run_release_gate.sh --phase backend passed；full slice 2032/2032、module boundary 9/9；请求/LLM HTTP 尝试观测与 OpenAPI 44 操作/78 组件指纹检查通过
   release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/release-gate-next-major-readiness-seal-summary.md --json-summary-file /tmp/release-gate-next-major-readiness-seal-summary.json passed，覆盖 backend/frontend/tooling/hygiene 全量；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 result=PASS、decision_summary.release_decision=approve、operator_summary.status=ready，10/10
   backend: 上一主线封板时 full slice 2020/2020、module boundary 9/9；FastAPI/Python 3.14、安全与运维专项沿用已封板基线
@@ -87,7 +87,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization` 与 `next-major-upgrade-readiness` 均已 100% 封板。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next 16 / React 19.2、原生 flat ESLint、React Compiler 规则无例外、双构建与 full Chromium 已验证，未修改外部运行时契约。
 - 当前主线：`project-completion-audit` 1/3（约 33%）完成；[审计清单](../../docs/project-completion-audit.md)已核实历史 GLM 成功任务、工具/RAG Trace 与导出，当前实时调用 HTTP 429 且用户确认服务到期；原始范围已有建议、尚待裁决，试点部署/恢复与用户签收仍缺证据。
-- A2 试点镜像配方、只读六镜像摘要预检与演练记录流程已准备；本机 ARM64 两份镜像实际构建并通过隔离联调，生产模式后端、PostgreSQL 注册/会话写读、Chroma 探测、前端 HTML/CSS 及浏览器实际 API 地址已验证。目标环境、TLS/访问边界与回滚仍缺实证。
+- A2 试点镜像配方、只读六镜像摘要预检与演练记录流程已准备；后端 84 个直接/传递依赖版本锁定并在构建时核对，本机 ARM64 锁定版镜像与现有前端镜像隔离联调通过。目标环境、TLS/访问边界与回滚仍缺实证。
 - A4 请求观测、远端 LLM HTTP 尝试低敏日志/离线汇总与 API 契约基线已落地；尝试数不等于账单调用数，OpenAPI 44 操作/78 组件指纹进入后端门禁。目标环境采集、告警及其余完整版能力仍待范围/环境决定。
 - 非阻塞维护候选：`eslint-10-adoption` 的 React/import/jsx-a11y 三个插件 peer 范围均排除 ESLint 10；React 官方修复尚未发布，预检的 1 个外部兼容动作概括这组约束，不强制覆盖 peer。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
@@ -104,7 +104,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- full release/e2e 数字来自上一主线封板；本主线后端门禁与恢复 fixture 已验证，frontend node/lint/双构建、tooling、本机两份试点镜像及隔离联调已复跑；当前真实供应商成功调用与目标环境仍未验证。
+- full release/e2e 数字来自上一主线封板；本主线后端门禁与恢复 fixture 已验证，frontend node/lint/双构建、tooling、本机两份试点镜像及隔离联调已复跑；本轮锁定版后端镜像构建、84 个安装版本核对和隔离联调通过。当前真实供应商成功调用与目标环境仍未验证。
 - 本轮审计：历史 `glm-5.1` provider-usage 完成任务 10 条；工具/RAG Trace 与一条 JSON/Markdown 导出构建已核对；最小实时 GLM 调用 HTTP 429，未重试。
 - Release gate all：封板核对 PASS，覆盖 backend/frontend/tooling/hygiene；Next 16 Turbopack 与 webpack fallback 双构建通过，JSON summary 为 `result=PASS`、`release_decision=approve`、`operator_status=ready`，10/10。
 - Backend：封板时 full slice `2020/2020`、module boundary `9/9`；FastAPI/Python 3.14、安全与运维专项沿用已封板基线。

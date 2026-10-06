@@ -7,8 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 RUN case "${PYTHON_BASE_IMAGE}" in *@sha256:*) ;; *) exit 1 ;; esac
-COPY requirements.txt requirements.pilot.txt ./
-RUN python -m pip install --no-cache-dir -r requirements.pilot.txt
+COPY requirements.txt requirements.pilot.txt requirements.pilot.lock ./
+RUN python -m pip install --no-cache-dir -r requirements.pilot.txt -c requirements.pilot.lock \
+    && python -m pip check \
+    && python -c 'from pathlib import Path; import subprocess; expected = [line for line in Path("requirements.pilot.lock").read_text().splitlines() if line and not line.startswith("#")]; actual = subprocess.check_output(["python", "-m", "pip", "freeze"], text=True).splitlines(); assert actual == expected, "pilot dependency lock differs from installed packages"'
 COPY app/ ./app/
 
 USER 10001:10001
