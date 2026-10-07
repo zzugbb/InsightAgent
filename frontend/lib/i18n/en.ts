@@ -694,6 +694,9 @@ export const en: Messages = {
     traceViewList: "Timeline",
     traceViewFlow: "Flow",
     traceFlow: {
+      legend: "Dashed: recording order · Solid: dependencies / decision sources · Parallel tools share a row",
+      metadata: "Step metadata",
+      parallel: "Parallel execution",
       kindThought: "Thought",
       kindAction: "Action",
       kindObservation: "Observation",

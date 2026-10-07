@@ -11,6 +11,14 @@ export type TraceStepKind =
   | "rag";
 
 export type TraceStepMeta = {
+  plan_node_id?: string;
+  depends_on?: string[];
+  execution_mode?: "parallel" | string;
+  parallel_group_id?: string;
+  parallel_group_size?: number;
+  agent_round?: number;
+  agent_decision?: string;
+  agent_from_step_ids?: string[];
   model?: string;
   step_type?: string;
   prompt_tokens?: number | null;

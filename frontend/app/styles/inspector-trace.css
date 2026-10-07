@@ -362,6 +362,12 @@
   min-height: 200px;
 }
 
+.trace-flow-legend {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .trace-flow-canvas .react-flow__node {
   font-size: 0.88rem;
 }
@@ -376,6 +382,8 @@
 .trace-flow-node {
   min-width: 208px;
   max-width: 288px;
+  max-height: 160px;
+  overflow: auto;
   padding: 8px 10px 10px;
   border-radius: 12px;
   border: 1px solid var(--line);

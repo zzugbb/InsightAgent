@@ -4,6 +4,7 @@ import {
   Background,
   Controls,
   Handle,
+  MarkerType,
   Position,
   ReactFlow,
   useReactFlow,
@@ -25,9 +26,9 @@ import {
   normalizeTraceStepKind,
   resolveTraceStepDisplayContent,
 } from "./utils";
+import { buildTraceFlowLayout } from "./trace-flow-layout";
 
 const TRACE_NODE_TYPE = "traceStep" as const;
-const Y_STEP = 108;
 
 type TraceFlowNodeData = {
   title: string;
@@ -43,17 +44,18 @@ type TraceFlowNodeData = {
   content: string;
   contentDetailsLabel: string;
   contentEmpty: string;
+  metadata: string;
+  metadataLabel: string;
+  parallelLabel: string | null;
 };
 
 function TraceStepNode({ data }: NodeProps<Node<TraceFlowNodeData>>) {
   const raw = data.content.trim();
-  const preview =
-    raw.length > 280 ? `${raw.slice(0, 280)}…` : raw;
-  const hasContent = preview.length > 0;
+  const hasContent = raw.length > 0;
 
   return (
     <div
-      className={`trace-flow-node trace-flow-node--${data.kind}`}
+      className={`trace-flow-node nowheel trace-flow-node--${data.kind}`}
       data-kind={data.kind}
     >
       <Handle
@@ -70,11 +72,16 @@ function TraceStepNode({ data }: NodeProps<Node<TraceFlowNodeData>>) {
       {data.metaLine ? (
         <div className="trace-flow-node__meta">{data.metaLine}</div>
       ) : null}
-      <details className="trace-flow-node__details">
+      {data.parallelLabel ? <div className="trace-flow-node__meta">{data.parallelLabel}</div> : null}
+      <details className="trace-flow-node__details nodrag nowheel nopan">
         <summary>{data.contentDetailsLabel}</summary>
         <p className="trace-flow-node__body">
-          {hasContent ? preview : data.contentEmpty}
+          {hasContent ? raw : data.contentEmpty}
         </p>
+      </details>
+      <details className="trace-flow-node__details nodrag nowheel nopan">
+        <summary>{data.metadataLabel}</summary>
+        <pre className="trace-flow-node__body">{data.metadata}</pre>
       </details>
       <Handle
         type="source"
@@ -108,13 +115,14 @@ function AutoFit({ stepCount }: { stepCount: number }) {
 function TraceFlowInner({ steps, colorMode }: TraceFlowViewProps) {
   const t = useMessages();
 
-  const { nodes, edges } = useMemo(() => {
-    const n: Node<TraceFlowNodeData>[] = steps.map((step, i) => {
+  const { nodes, edges, rowCount } = useMemo(() => {
+    const layout = buildTraceFlowLayout(steps);
+    const n: Node<TraceFlowNodeData>[] = steps.map((step) => {
       const kind = normalizeTraceStepKind(step);
       return {
         id: step.id,
         type: TRACE_NODE_TYPE,
-        position: { x: 20, y: i * Y_STEP },
+        position: layout.positions.get(step.id)!,
         data: {
           title: getStepTitle(step),
           kind,
@@ -123,22 +131,24 @@ function TraceFlowInner({ steps, colorMode }: TraceFlowViewProps) {
           content: resolveTraceStepDisplayContent(step) ?? "",
           contentDetailsLabel: t.inspector.traceFlow.contentDetails,
           contentEmpty: t.inspector.traceFlow.contentEmpty,
+          metadata: JSON.stringify(step.meta ?? {}, null, 2),
+          metadataLabel: t.inspector.traceFlow.metadata,
+          parallelLabel: step.meta?.parallel_group_id ? t.inspector.traceFlow.parallel : null,
         },
       };
     });
-    const e: Edge[] = [];
-    for (let i = 1; i < steps.length; i++) {
-      e.push({
-        id: `${steps[i - 1].id}->${steps[i].id}`,
-        source: steps[i - 1].id,
-        target: steps[i].id,
-        type: "smoothstep",
-      });
-    }
-    return { nodes: n, edges: e };
+    const e: Edge[] = layout.links.map((link) => ({
+      ...link, type: "smoothstep",
+      style: link.relation === "sequence"
+        ? { stroke: "var(--muted)", strokeWidth: 1.5, strokeDasharray: "5 5", opacity: 0.65 }
+        : { stroke: "var(--accent)", strokeWidth: 3 },
+      markerEnd: link.relation === "sequence" ? undefined : { type: MarkerType.ArrowClosed, color: "var(--accent)" },
+      className: `trace-flow-edge--${link.relation}`,
+    }));
+    return { nodes: n, edges: e, rowCount: layout.rowCount };
   }, [steps, t.inspector.traceFlow, t.inspector.traceMeta]);
 
-  const height = Math.min(480, Math.max(220, 72 + steps.length * Y_STEP));
+  const height = Math.min(480, Math.max(220, 72 + rowCount * 180));
 
   return (
     <div className="trace-flow-inner" style={{ height }}>
@@ -166,8 +176,10 @@ function TraceFlowInner({ steps, colorMode }: TraceFlowViewProps) {
 }
 
 export function TraceFlowView(props: TraceFlowViewProps) {
+  const t = useMessages();
   return (
     <div className="trace-flow-root">
+      <div className="trace-flow-legend">{t.inspector.traceFlow.legend}</div>
       <TraceFlowInner {...props} />
     </div>
   );

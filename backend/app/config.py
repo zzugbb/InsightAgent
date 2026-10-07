@@ -118,6 +118,10 @@ class Settings(BaseSettings):
         default=1, ge=1, le=4, alias="TASK_TOOL_MAX_CONCURRENT",
         description="单任务内独立内建检索/计算的并发窗口；1 保持串行，进程共享最多 8 个读取线程",
     )
+    agent_max_rounds: int = Field(
+        default=3, ge=1, le=8, alias="AGENT_MAX_ROUNDS",
+        description="有效模型规划后的工具反馈轮次上限（含首轮）；1 保持单轮执行，整任务最多 32 次工具调用",
+    )
     task_queue_max_concurrent: int = Field(
         default=32,
         ge=1,

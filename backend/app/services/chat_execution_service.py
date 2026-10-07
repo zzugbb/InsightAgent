@@ -25,6 +25,7 @@ from app.services.provider_service import ProviderSelectionError, get_llm_provid
 from app.services.settings_service import get_stored_settings
 from app.services.task_checkpoint_service import checkpoint_plan, restored_prefix, validate_resume
 from app.services.task_tool_execution import execute_task_tool_plan
+from app.services.agent_feedback import AgentFeedbackLoop, feedback_enabled, sum_planning_usage
 from app.services.task_queue_service import (
     forget_waiting_task,
     get_task_queue_snapshot,
@@ -45,6 +46,7 @@ from app.services.tool_runtime import (
     execute_tool_plan_item_service_actions,
     execute_tool_plan_item_service_execution,
     resolve_tool_registration,
+    StaticToolRegistryProvider,
     _sanitize_tool_runtime_provider_source_name_for_artifact,
     sanitize_tool_registry_diagnostics_artifact_payload,
 )
@@ -828,6 +830,11 @@ def stream_task_execution(
             tool_plan,
             registry_provider=planning_registry_provider,
         )
+        use_feedback = feedback_enabled(
+            tool_plan_artifacts, registry_provider=planning_registry_provider,
+            checkpoint_seed=checkpoint_seed, max_rounds=getattr(runtime_config, "agent_max_rounds", 3),
+        )
+        agent_round = 1
         planning_usage_payload = None
         plan_meta: dict[str, object] = {
             "model": provider_model,
@@ -850,7 +857,7 @@ def stream_task_execution(
                 settings=runtime_settings
             ),
         }
-        saved_plan = checkpoint_plan(tool_plan, planning_registry_provider)
+        saved_plan = None if use_feedback else checkpoint_plan(tool_plan, planning_registry_provider)
         if saved_plan is not None:
             plan_meta["checkpoint_plan"] = saved_plan
         if checkpoint_seed is not None:
@@ -909,6 +916,8 @@ def stream_task_execution(
             settings=runtime_settings,
         )
         tool_registry_provider = tool_registry_service_result["provider"]
+        if use_feedback:
+            tool_registry_provider = StaticToolRegistryProvider(tool_registry_provider.load_tool_registry())
 
         def prepare_iteration(idx, tool_spec, seq, batch_provider):
             tool_name = str(tool_spec["name"])
@@ -936,34 +945,77 @@ def stream_task_execution(
                 ),
                 registry_provider=batch_provider,
             )
+            if use_feedback:
+                iteration_ctx["action_step"]["meta"]["agent_round"] = agent_round
             return iteration_ctx
 
-        tool_result = None
-        for item in execute_task_tool_plan(
-            tool_plan=tool_plan, max_concurrent=int(getattr(runtime_config, "task_tool_max_concurrent", 1)),
-            registry_provider=tool_registry_provider, seq_cursor=seq_cursor, task_id=task_id,
-            trace_steps=trace_steps, tool_observations=tool_observations, prompt=prompt,
-            user_id=user_id, model=provider_model, prepare_iteration=prepare_iteration,
-            estimate_token_count=_estimate_token_count, raise_if_should_abort=raise_if_should_abort,
-            touch_heartbeat=maybe_touch_execution_heartbeat,
-            execute_item=execute_tool_plan_item_service_execution, apply_actions=execute_tool_plan_item_service_actions,
-            persist_trace_fn=persist_trace, complete_task_fn=complete_task_for_service_action,
-            record_failure_event_fn=record_failure_event,
-            checkpoint_start_index=checkpoint_seed["start_index"] if checkpoint_seed else 1,
-            checkpoint_enabled=saved_plan is not None,
-            confirm_should_continue=lambda: raise_if_should_abort(force_status_probe=True),
-        ):
-            if item["kind"] == "event":
-                yield sse_event(str(item["event"]), item["data"])
-            elif item["kind"] == "heartbeat":
-                yield sse_event("heartbeat", {"task_id": task_id, "ts": datetime.now().isoformat()})
-            else:
-                tool_result = item["result"]
-        assert tool_result is not None
-        seq_cursor = int(tool_result["seq_cursor"])
-        if tool_result["should_return"]:
-            release_task_slot()
-            return
+        feedback_loop = AgentFeedbackLoop(
+            initial_plan=tool_plan, max_rounds=getattr(runtime_config, "agent_max_rounds", 3),
+            registry_provider=tool_registry_provider,
+        ) if use_feedback else None
+        while True:
+            tool_result = None
+            for item in execute_task_tool_plan(
+                tool_plan=tool_plan, max_concurrent=int(getattr(runtime_config, "task_tool_max_concurrent", 1)),
+                registry_provider=tool_registry_provider, seq_cursor=seq_cursor, task_id=task_id,
+                trace_steps=trace_steps, tool_observations=tool_observations, prompt=prompt,
+                user_id=user_id, model=provider_model, prepare_iteration=prepare_iteration,
+                estimate_token_count=_estimate_token_count, raise_if_should_abort=raise_if_should_abort,
+                touch_heartbeat=maybe_touch_execution_heartbeat,
+                execute_item=execute_tool_plan_item_service_execution, apply_actions=execute_tool_plan_item_service_actions,
+                persist_trace_fn=persist_trace, complete_task_fn=complete_task_for_service_action,
+                record_failure_event_fn=record_failure_event,
+                checkpoint_start_index=checkpoint_seed["start_index"] if checkpoint_seed else 1,
+                checkpoint_enabled=saved_plan is not None,
+                confirm_should_continue=lambda: raise_if_should_abort(force_status_probe=True),
+            ):
+                if item["kind"] == "event":
+                    yield sse_event(str(item["event"]), item["data"])
+                elif item["kind"] == "heartbeat":
+                    yield sse_event("heartbeat", {"task_id": task_id, "ts": datetime.now().isoformat()})
+                else:
+                    tool_result = item["result"]
+            assert tool_result is not None
+            seq_cursor = int(tool_result["seq_cursor"])
+            if tool_result["should_return"]:
+                release_task_slot()
+                return
+            if feedback_loop is None:
+                break
+            raise_if_should_abort(force_status_probe=True)
+            persist_trace(force=True)
+            yield sse_event("state", {"task_id": task_id, "phase": "thinking"})
+            source_steps = [step["id"] for step in trace_steps
+                            if (step.get("meta") or {}).get("agent_round") == agent_round
+                            and step.get("type") == "action"]
+            decision = feedback_loop.decide(prompt=prompt, observations=tool_observations, provider=provider)
+            raise_if_should_abort(force_status_probe=True)
+            decision_content = build_tool_plan_summary(decision.plan, registry_provider=tool_registry_provider) if decision.plan else f"Agent tools stopped: {decision.reason}. Generate answer from available observations."
+            decision_meta = {"model": provider_model, "step_type": "planning", "label": "agent_decision",
+                             "agent_round": feedback_loop.round, "agent_decision": decision.reason,
+                             "agent_from_step_ids": source_steps, "tokens": 0, "cost_estimate": 0.0}
+            artifacts = decision.artifacts
+            if artifacts is not None and artifacts.planning_provider_attempted:
+                decision_usage = _build_usage_payload(
+                    prompt_text=artifacts.planning_prompt, completion_text=decision_content,
+                    provider_usage=artifacts.provider_usage,
+                )
+                planning_usage_payload = sum_planning_usage(planning_usage_payload, decision_usage)
+                decision_meta.update(tokens=decision_usage["completion_tokens"],
+                                     cost_estimate=decision_usage["cost_estimate"],
+                                     prompt_tokens=decision_usage["prompt_tokens"],
+                                     completion_tokens=decision_usage["completion_tokens"],
+                                     usage_source=decision_usage["usage_source"])
+            seq_cursor += 1
+            decision_step = {"id": str(uuid4()), "seq": seq_cursor, "type": "thought",
+                             "content": decision_content, "meta": decision_meta}
+            trace_steps.append(decision_step)
+            yield sse_event("trace", {"task_id": task_id, "step_id": decision_step["id"], "step": decision_step})
+            persist_trace(force=True)
+            if not decision.plan:
+                break
+            agent_round = feedback_loop.round
+            tool_plan = decision.plan
 
         raise_if_should_abort(force_status_probe=True)
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})

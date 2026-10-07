@@ -298,6 +298,7 @@ from tool_runtime_slice.runtime_rag_execution import RuntimeRagExecutionMixin
 from tool_runtime_slice.runtime_result_rag import RuntimeResultRagMixin
 from tool_runtime_slice.runtime_result_semantics import RuntimeResultSemanticsMixin
 from tool_runtime_slice.runtime_service_execution_semantics import RuntimeServiceExecutionSemanticsMixin
+from tool_runtime_slice.agent_feedback import AgentFeedbackMixin
 from tool_runtime_slice.settings_registry import SettingsRegistryMixin
 from tool_runtime_slice.task_routes_usage_governance import TaskRoutesUsageGovernanceMixin
 from tool_runtime_slice.task_stream_reconnect import TaskStreamReconnectMixin
@@ -324,6 +325,7 @@ from tool_runtime_slice.production_reliability_startup import ProductionReliabil
 
 
 class ToolRuntimeSliceTests(
+    AgentFeedbackMixin,
     ProviderSourceHttpJsonMixin,
     ProviderToolExpansionMixin,
     PlanningProviderMixin,

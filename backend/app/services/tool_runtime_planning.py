@@ -919,6 +919,7 @@ def _build_provider_tool_plan(
     *,
     provider: object,
     registry_provider: ToolRegistryProvider | None = None,
+    strict: bool = False,
 ) -> ToolPlanArtifacts | None:
     provider_name = str(getattr(provider, "provider", "")).strip().lower()
     generate = getattr(provider, "generate", None)
@@ -964,6 +965,11 @@ def _build_provider_tool_plan(
         prompt=prompt,
         registry_provider=registry_provider,
     )
+    if strict:
+        primary = _get_enabled_planning_primary_tool_name(registry_provider=registry_provider)
+        normalized_count = sum(node["name"] != primary for node in (normalized_plan or []))
+        if len(items) > 32 or normalized_count != len(items):
+            normalized_plan = None
     return ToolPlanArtifacts(
         tool_plan=normalized_plan or [],
         planning_prompt=planning_prompt,

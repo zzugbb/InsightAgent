@@ -681,6 +681,9 @@ export const zh: Messages = {
     traceViewList: "时间线",
     traceViewFlow: "流程图",
     traceFlow: {
+      legend: "虚线：记录顺序 · 实线：工具依赖 / 决策来源 · 同组并发工具并排展示",
+      metadata: "步骤信息",
+      parallel: "并发执行",
       kindThought: "思考",
       kindAction: "行动",
       kindObservation: "观察",

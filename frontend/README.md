@@ -7,7 +7,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 已封板主线：`provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization`、`next-major-upgrade-readiness`。
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
-- 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)已核实历史 GLM 任务与 Trace，前期审计调用 HTTP 429 且用户确认服务到期；前端真实用户流程仍待验收，项目整体完成度尚不能可靠量化。 当前受有效模型账号、目标环境演练与用户签收阻塞，未封板，不能进入下一主线。
+- 当前主线：`agent-core-alignment`，按项目定位补齐反馈决策与 Trace 真实性；[实现边界](../docs/agent-core-alignment.md)已落地，本地主链与桌面/手机验证通过。下一步为知识导入入口与核心场景核对，主线尚未整体封板。
 - A2 [试点镜像与部署入口](../docs/pilot-deployment-preflight.md)已准备：84 个后端依赖版本锁定、非 root 默认 embedding 构建缓存通过禁网验证；新增生产 `compose.pilot.yml`、低敏预检/操作入口与健康启动顺序。隔离 mock 下重建全部容器后，登录、会话、任务/Trace 与 Chroma 知识保留；目标部署、TLS、真实模型与升级回滚仍待实测。
 - A3 本地恢复基础：Compose 的 Chroma 数据卷已对齐镜像 `/data` 路径，隔离快照恢复后 PostgreSQL/Chroma fixture 均读回；前端登录、任务/Trace 与知识库的目标环境恢复验收仍待部署环境，详见[操作记录](../docs/local-stack-backup-restore.md)。
 - A4 [后台 RAG 导入](../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
@@ -16,19 +16,21 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
-- 最终本地门禁：2026-10-07 full release gate `10/10`，来源 `/tmp/insightagent-pilot-compose-release.md` 与 `.json`；包含后端、前端、tooling 与 hygiene。service-backed 功能基线沿用步骤恢复 PostgreSQL `9/9`、完整重跑 `11/11`、内建并发 `6/6`、完整 Chromium `77 passed / 1 skipped`；queue 专用 skip 保留独立验证路径。
-- 后端 full slice `2129/2129`、module boundary `9/9`，步骤恢复含 6 个静态专项；OpenAPI `51` 操作 / `88` 组件与提交基线一致。
-- 前端 node `184/184`，lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；桌面与 390×844 手机验证恢复、结果复用、来源往返与未知送达同键重试，手机详情横向溢出与 failed 轮询提前截断 SSE 诊断已修复，无相关控制台错误/框架覆盖层。
-- 既有 HTTP/依赖 PostgreSQL `7/7`、`7/7`，RAG PostgreSQL/Chroma `21/21` 与 400 切块实写沿用此前明确基线；不计作本轮新增验证或目标环境吞吐。
-- 外部证据：已核对历史 10 条 GLM 成功任务与一条导出；用户再次确认当前无真实 key、无部署环境，本轮没有真实模型请求。试点部署/TLS/升级回滚、恢复 RPO/RTO 与用户签收仍未验证。
-- 镜像/Compose 本地证据：ARM64 生产镜像、禁网 embedding、后台导入/检索、任务 SSE/Trace/delta/JSON v1.0/Markdown、步骤恢复与取消通过；Compose 健康启动及容器重建后的登录、会话、任务/Trace/messages 和 Chroma 读回通过，scope 为 `local_compose_mock_recreate`。新增预检自测 7/7，临时容器/网络/卷已清理；来源见[试点记录](../docs/pilot-deployment-preflight.md)。未推送/部署到目标环境，备份计划无修改。
+- 2026-10-07 full release gate **10/10 PASS**，来源 `/tmp/insightagent-agent-core-release.md` 与 `.json`；后端 full slice **2135/2135**、module boundary **9/9**，前端 node **190/190**、lint **0 error / 2 个既有 warning**、Turbopack/webpack 双构建通过。
+- 本轮隔离 PostgreSQL：Agent 反馈 **6/6**、步骤恢复回归 **9/9**、DAG 依赖回归 **7/7**；Trace 浏览器专项桌面/390px 手机 **2/2**，来源 `/tmp/insightagent-agent-feedback-postgres.log`、`/tmp/insightagent-agent-checkpoint-regression.log`、`/tmp/insightagent-agent-dependencies-regression.log`、`/tmp/insightagent-trace-flow-e2e.log`。临时资源清理；业务模型仅本地替身。
+- 历史 service-backed 基线：完整 Chromium **77 passed / 1 skipped**、完整重跑 PostgreSQL **11/11**、内建并发 **6/6**、HTTP **7/7**、RAG **21/21** 与 400 切块实写，本轮未把这些历史结果当作重新验证。
+- 既有镜像/Compose 与备份恢复 fixture 证据保留在[试点记录](../docs/pilot-deployment-preflight.md)和[恢复流程](../docs/local-stack-backup-restore.md)；这些既有镜像不包含本轮反馈循环改动，也不代表目标部署验收。
+- 用户无真实 key/部署环境；未发起真实模型请求。当前模型决策质量、试点 HTTPS/升级回滚、恢复 RPO/RTO 与签收均未验证，项目总完成度不估百分比。
 
 ## 下一步前端计划
 
-1. `project-completion-audit` 第 1/3 阶段完成；GLM 到期期间暂停真实请求，内建步骤恢复已纳入并通过本地交互，写入工具并行及 HTTP/DAG checkpoint 延期；下一步准备真实用户验收场景。试点环境确定后核对前端生产构建 API 地址、HTTPS 入口和用户流程；有效账号恢复后补当前成功流式链路与交互/质量验收。
-2. ESLint 10 作为非阻塞维护候选：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，同时核对 import/jsx-a11y 的兼容版本，再以依赖契约红测受控升级。
+1. `agent-core-alignment`：完善已有 Agent 与 Trace 的核心契约；反馈决策、关系展示和完整节点详情已实现，下一步整理知识导入入口及三个核心场景。
+2. `project-completion-audit` 保留外部未验证项：有效 key、目标部署/恢复与用户验收待资源具备后继续；不阻止本地核心开发。写入并行及 HTTP/DAG checkpoint 继续延期。
+3. ESLint 10 保留为上游兼容后的维护候选，当前不强制覆盖 peer 约束。
 
 ## 稳定契约
+
+- 反馈决策默认最多 3 轮（AGENT_MAX_ROUNDS=1 保持单轮），安全 Observation 驱动后续行动；多轮任务不生成单轮 checkpoint。Trace 记录轮次/决策来源并汇总所有规划用量；流程图虚线为记录顺序、实线为依赖/决策来源，详情不截断。
 
 - 任务 failed 状态轮询不能提前终止仍在接收的 SSE；保留提供方具体错误事件，避免被通用“流已关闭”覆盖。取消/超时仍按既有流程终止本地连接。
 

@@ -603,6 +603,9 @@ export type Messages = {
     traceViewFlow: string;
     /** 流程图节点：三大类标签与折叠内容 */
     traceFlow: {
+      legend: string;
+      metadata: string;
+      parallel: string;
       kindThought: string;
       kindAction: string;
       kindObservation: string;
