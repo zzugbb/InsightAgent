@@ -288,6 +288,7 @@ from tool_runtime_slice.rag_shared_scope_governance import RagSharedScopeGoverna
 from tool_runtime_slice.rag_ingest_jobs import RagIngestJobsMixin
 from tool_runtime_slice.rag_ingest_batches import RagIngestBatchesMixin
 from tool_runtime_slice.task_parallel import TaskParallelMixin
+from tool_runtime_slice.http_parallel import HttpParallelMixin
 from tool_runtime_slice.tool_dependencies import ToolDependenciesMixin
 from tool_runtime_slice.task_reruns import TaskRerunsMixin
 from tool_runtime_slice.rag_export_governance import RagExportGovernanceMixin
@@ -368,6 +369,7 @@ class ToolRuntimeSliceTests(
     RagIngestJobsMixin,
     RagIngestBatchesMixin,
     TaskParallelMixin,
+    HttpParallelMixin,
     ToolDependenciesMixin,
     TaskRerunsMixin,
     RagExportGovernanceMixin,

@@ -6,6 +6,7 @@ from queue import Empty, Queue
 from threading import Event, Lock
 from time import monotonic
 
+from app.services.tool_http_parallel_policy import is_http_read_runner
 from app.services.tool_runtime import (
     StaticToolRegistryProvider, _run_calc_eval, _run_task_retrieve,
     execute_tool_plan_item_retry_loop, resolve_tool_registration,
@@ -30,8 +31,10 @@ def execution_batches(tool_plan, *, max_concurrent, registry_provider):
         registration = resolve_tool_registration(name, registry_provider=snapshot)
         dependencies = any(spec.get(key) or (isinstance(tool_input, dict) and tool_input.get(key))
                            for key in _DEPENDENCY_KEYS)
-        safe = (registration is not None and registration.name in _SAFE_RUNNERS
-                and registration.runner is _SAFE_RUNNERS[registration.name]
+        safe = (registration is not None
+                and ((registration.name in _SAFE_RUNNERS
+                      and registration.runner is _SAFE_RUNNERS[registration.name])
+                     or is_http_read_runner(registration.runner))
                 and not dependencies)
         if not safe:
             if pending:

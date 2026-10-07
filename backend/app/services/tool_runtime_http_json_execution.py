@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from copy import deepcopy as _freeze_http_config
+
 from app.services import tool_runtime_http_json as _http_json
+from app.services.tool_http_parallel_policy import http_parallel_policy_errors, register_http_read_runner
 
 
 def _bind_http_json_namespace(namespace: dict[str, object]) -> None:
@@ -44,6 +47,9 @@ def _build_http_json_tool_runner(
     default_timeout_ms: int,
     template_context: dict[str, object] | None = None,
 ) -> ToolRunner:
+    # A parallel capability must describe the exact config used later by every worker.
+    execution_spec = _freeze_http_config(execution_spec)
+    template_context = _freeze_http_config(template_context)
     raw_method = execution_spec.get(
         "method",
         "POST" if execution_spec.get("json_body") else "GET",
@@ -489,6 +495,7 @@ def _build_http_json_tool_runner(
         _attach_http_json_response_request_id(output, response_request_id)
         return output
 
+    register_http_read_runner(runner, execution_spec)
     return runner
 
 
@@ -570,6 +577,8 @@ def _build_tool_execution_summary_from_spec(
     summary: dict[str, object] = {
         "method": _normalize_tool_execution_http_method(method_for_summary)
     }
+    if type(execution_spec.get("parallel_read_only")) is bool:
+        summary["parallel_read_only"] = execution_spec["parallel_read_only"]
     raw_url = execution_spec.get("url")
     summary_url: object = _resolve_tool_execution_string_like_summary_value(
         raw_url,
@@ -803,7 +812,7 @@ def _describe_tool_execution_spec_validation_errors(
     raw_url = _coerce_tool_execution_string_like_value(execution_spec.get("url"))
     if not isinstance(raw_url, str) or not raw_url.strip():
         return ("http_json execution requires a non-empty url",)
-    validation_errors: list[str] = []
+    validation_errors: list[str] = list(http_parallel_policy_errors(execution_spec))
     url_for_validation: object | None = raw_url
     if _iter_tool_execution_template_variable_references(raw_url, path="url"):
         rendered_url = _render_tool_execution_template_for_static_analysis(

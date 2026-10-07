@@ -1,6 +1,6 @@
 # 工具依赖与结果引用
 
-Provider 规划器可声明有向无环图（DAG）：同一种工具可出现多次，后续步骤可依赖前一步，并把已公开结果预览中的标量作为查询或计算输入。规则规划器和旧版平铺计划保持原有行为；当前不提供前端图编辑器、单步 checkpoint 恢复或外部工具并行。
+Provider 规划器可声明有向无环图（DAG）：同一种工具可出现多次，后续步骤可依赖前一步，并把已公开结果预览中的标量作为查询或计算输入。规则规划器和旧版平铺计划保持原有行为；当前不提供前端图编辑器、单步 checkpoint 恢复或写入工具并行。
 
 ## 规划协议
 
@@ -38,7 +38,7 @@ Provider 规划器可声明有向无环图（DAG）：同一种工具可出现�
 
 ## 调度与生命周期
 
-按稳定拓扑波次调度：一波结果完成并由协调线程处理后，才解锁下一波；不会按某个工具先完成就立即启动其子节点。就绪波内只有实际内建检索/计算 runner 可按 [任务内并发](task-tool-parallel.md) 有界执行，默认 `TASK_TOOL_MAX_CONCURRENT=1` 仍串行。规划、自定义和 HTTP 工具仍形成串行屏障；依赖声明不赋予外部工具并发资格。
+按稳定拓扑波次调度：一波结果完成并由协调线程处理后，才解锁下一波；不会按某个工具先完成就立即启动其子节点。就绪波内实际内建检索/计算 runner 和[明确配置只读的 HTTP GET](http-read-parallel.md) 可按 [任务内并发](task-tool-parallel.md) 有界执行，默认 `TASK_TOOL_MAX_CONCURRENT=1` 仍串行。规划、自定义和未声明只读的 HTTP 工具仍形成串行屏障；依赖声明本身不赋予并发资格。
 
 工作线程只产出事件与结果；Trace、审计、终态和消息继续由协调线程写入。上游失败耗尽重试或 fatal 后停止后续节点；取消/超时沿用任务生命周期检查，阻止依赖节点启动和迟到结果写入。正在进行的底层读取仍不能强制中断，进程线程上限保持 8。
 
@@ -56,7 +56,7 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_depe
 backend/.venv/bin/python backend/scripts/test_tool_dependencies_postgres.py
 ```
 
-25 个静态专项覆盖图校验、前向引用、重复工具、输入/投影边界、拓扑顺序、并发分支、失败重试与 AST 校验；7 个 PostgreSQL 场景覆盖实际规划/任务流、Trace/delta/export、错误审计、串行回退、取消与超时。后者已接入 backend-e2e workflow。真实提供方的图生成质量、目标环境性能、单步恢复和外部工具并行仍待验证或实现。
+25 个静态专项覆盖图校验、前向引用、重复工具、输入/投影边界、拓扑顺序、并发分支、失败重试与 AST 校验；7 个 PostgreSQL 场景覆盖实际规划/任务流、Trace/delta/export、错误审计、串行回退、取消与超时。后者已接入 backend-e2e workflow。真实提供方的图生成质量、目标环境性能、单步恢复和写入工具并行仍待验证或实现。
 
 - `backend/app/services/tool_plan_dependencies.py`：图校验、拓扑波次、结果绑定。
 - `backend/app/services/tool_runtime_planning.py`：Provider 协议说明、候选工具归一化与图错误透传。
