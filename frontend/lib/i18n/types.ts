@@ -745,6 +745,10 @@ export type Messages = {
     };
   };
   taskDetail: {
+    checkpoint: {
+      title: string; create: string; scope: string; unavailable: string; loadFailed: string;
+      explanation: string; step: string; reuse: (count: number) => string;
+    };
     rerun: {
       title: string; create: string; run: string; cancel: string; retry: string;
       input: string; explanation: string; waitForTerminal: string;

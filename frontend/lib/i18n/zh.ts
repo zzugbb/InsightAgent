@@ -833,6 +833,13 @@ export const zh: Messages = {
     },
   },
   taskDetail: {
+    checkpoint: {
+      title: "步骤恢复 · 实验功能", create: "从步骤继续", step: "恢复起点",
+      scope: "仅支持内建规划、检索和计算的顺序计划。HTTP 工具、依赖图及旧任务暂不支持。",
+      unavailable: "当前任务没有可用的步骤快照，可使用完整分支重跑。", loadFailed: "步骤快照加载失败",
+      explanation: "在独立会话中保留原输入与计划，复用起点前已完成的结果，再执行所选步骤及后续步骤并生成新回答。检索结果是历史快照；不重新规划，也不撤销外部操作。后续调用使用当前设置，可能产生费用。",
+      reuse: (count: number) => `将复用 ${count} 个已完成的工具结果。`,
+    },
     rerun: {
       title: "任务分支", create: "分支重跑", run: "创建并运行", cancel: "取消", retry: "重试",
       input: "分支任务输入", explanation: "使用当前模型与工具设置，在独立会话中重新执行完整任务。可修改输入；历史消息、Memory、Trace 与输出不会复制。执行可能调用外部服务并产生费用。",

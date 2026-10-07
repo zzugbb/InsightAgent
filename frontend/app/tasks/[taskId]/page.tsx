@@ -46,6 +46,7 @@ import {
   resolveTaskDetailStatusDisplay,
   resolveTaskDetailTraceSteps,
 } from "./task-detail-page-utils";
+import { TaskCheckpointPanel } from "./task-checkpoint-panel";
 import { TaskRerunPanel } from "./task-rerun-panel";
 
 const TRACE_REFRESH_MS = 2200;
@@ -333,6 +334,7 @@ export default function TaskDetailPage() {
         ) : task ? (
           <>
             <TaskRerunPanel key={task.id} task={task} />
+            <TaskCheckpointPanel key={`checkpoint-${task.id}`} task={task} />
             <section className="task-detail-kpi-grid">
               <div className="inspector-kpi-item">
                 <span>{t.taskDetail.taskIdLabel}</span>

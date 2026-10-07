@@ -10,33 +10,34 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)已核实历史 GLM 任务与 Trace，前期审计调用 HTTP 429 且用户确认服务到期；前端真实用户流程仍待验收，项目整体完成度尚不能可靠量化。
 - A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)要求 HTTPS 浏览器/API 地址一致，并记录构建时的 `NEXT_PUBLIC_API_BASE_URL`；后端 84 个依赖版本已锁定，本机 ARM64 锁定版镜像与现有前端镜像隔离联调通过。目标入口仍待实测。
 - A3 本地恢复基础：Compose 的 Chroma 数据卷已对齐镜像 `/data` 路径，隔离快照恢复后 PostgreSQL/Chroma fixture 均读回；前端登录、任务/Trace 与知识库的目标环境恢复验收仍待部署环境，详见[操作记录](../docs/local-stack-backup-restore.md)。
-- A4 [后台 RAG 导入](../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。OpenAPI 为 50 操作 / 86 组件；单步恢复、写入工具并行及试点范围/目标运行仍待完成。
+- A4 [后台 RAG 导入](../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对 `eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10。预检的 1 个动作概括这组约束；继续精确锁定 ESLint `9.39.5`，不使用 `--force` 或 peer override。
 - `app/globals.css` 已拆为 `app/styles/` 主题模块；前端源码体积边界已纳入 node 测试，生成锁文件不作为拆分对象。
 
 ## 当前验证基线
 
-- 最终本地验证来源：2026-10-07 full release gate（10/10，backend/frontend/tooling/hygiene）及 HTTP 读取/依赖/内建并发 PostgreSQL；完整 Chromium 沿用前轮基线，本轮未重跑；真实提供方成功调用和目标部署仍未验证。
-- 后端 full slice `2123/2123`、module boundary `9/9`；新增 15 个 HTTP 读取并发专项，OpenAPI `50` 操作 / `86` 组件与提交基线一致。
-- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；既有工具并发开启为 2 的完整 Chromium `74 passed / 1 skipped`（本轮未重跑），覆盖既有任务分支、导入、Trace 与错误/取消交互。
-- 本轮 HTTP 读取 PostgreSQL/本机 HTTP `7/7`、依赖回归 `7/7`、内建并发回归 `6/6`：实际读取/模板/stream/Trace/delta/export、503 重试与取消/超时迟到写入保护。既有任务分支 `11/11`、RAG `21/21` PostgreSQL/Chroma 及 400 切块实写沿用前期基线；本轮临时服务/容器已清理。
-- 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
-- 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；前期最小审计请求 HTTP 429、用户确认服务到期；本轮未调用真实模型。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
-- Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
+- 最终本地来源：2026-10-07 full release gate `10/10`（backend/frontend/tooling/hygiene），步骤恢复 PostgreSQL `9/9`、完整重跑回归 `11/11`、内建并发回归 `6/6`，隔离 mock 栈完整 Chromium `77 passed / 1 skipped`。queue 专用 skip 保留独立验证路径。
+- 后端 full slice `2129/2129`、module boundary `9/9`，新增步骤恢复 6 个静态专项；OpenAPI `51` 操作 / `88` 组件与提交基线一致。
+- 前端 node `184/184`，lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；桌面与 390×844 手机验证恢复、结果复用、来源往返与未知送达同键重试，手机详情横向溢出与 failed 轮询提前截断 SSE 诊断已修复，无相关控制台错误/框架覆盖层。
+- 既有 HTTP/依赖 PostgreSQL `7/7`、`7/7`，RAG PostgreSQL/Chroma `21/21` 与 400 切块实写沿用此前明确基线；不计作本轮新增验证或目标环境吞吐。
+- 外部证据：已核对历史 10 条 GLM 成功任务与一条导出；用户再次确认当前无真实 key、无部署环境，本轮没有真实模型请求。试点部署/TLS/升级回滚、恢复 RPO/RTO 与用户签收仍未验证。
+- 本地试点镜像沿用 ARM64、后端 84 个版本锁定及生产模式隔离联调证据，未推送/部署到目标环境。临时服务/容器已清理；备份计划无修改，四份活跃文档同步收敛。
 
 ## 下一步前端计划
 
-1. `project-completion-audit` 第 1/3 阶段完成；GLM 到期期间暂停真实请求，先核对原始范围与前端用户验收场景。试点环境确定后核对前端生产构建 API 地址、HTTPS 入口和用户流程；有效账号恢复后补当前成功流式链路与交互/质量验收。
+1. `project-completion-audit` 第 1/3 阶段完成；GLM 到期期间暂停真实请求，内建步骤恢复已纳入并通过本地交互，写入工具并行及 HTTP/DAG checkpoint 延期；下一步准备真实用户验收场景。试点环境确定后核对前端生产构建 API 地址、HTTPS 入口和用户流程；有效账号恢复后补当前成功流式链路与交互/质量验收。
 2. ESLint 10 作为非阻塞维护候选：等待 [eslint-plugin-react 兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，同时核对 import/jsx-a11y 的兼容版本，再以依赖契约红测受控升级。
 
 ## 稳定契约
 
-[任务内工具并发](../docs/task-tool-parallel.md)、[工具依赖与结果引用](../docs/tool-dependencies.md)及[HTTP 读取并发](../docs/http-read-parallel.md)已完成本地闭环；下一候选为单步恢复与写入工具并行，真实提供方的图生成质量和目标部署验收继续待实证。
+- 任务 failed 状态轮询不能提前终止仍在接收的 SSE；保留提供方具体错误事件，避免被通用“流已关闭”覆盖。取消/超时仍按既有流程终止本地连接。
+
+[任务内工具并发](../docs/task-tool-parallel.md)、[工具依赖与结果引用](../docs/tool-dependencies.md)及[HTTP 读取并发](../docs/http-read-parallel.md)已完成本地闭环；[实验性步骤恢复](../docs/task-checkpoints.md)完成本地闭环；写入工具并行及 HTTP/DAG checkpoint 延期到试点之后。当前主线未封板，下一步补真实模型、目标部署/恢复与用户签收。
 
 - HTTP 并发需 execution.parallel_read_only=true 且固定 GET/无请求体；资格绑定工厂 runner，配置与上下文冻结，未声明工具保持串行。GET 只读性由配置者确认，见[HTTP 读取契约](../docs/http-read-parallel.md)。
 - 显式工具图最多 32 节点/128 边，绑定仅限已投影预览标量到 query/expression；图错误拒绝整图，失败/取消/超时阻止依赖调用。Trace.meta 的 plan_node_id/depends_on 为可选扩展，详见[依赖契约](../docs/tool-dependencies.md)。
 - 任务内并发默认关闭（`TASK_TOOL_MAX_CONCURRENT=1`）；仅就绪的内建检索/计算及明确配置只读的 HTTP GET 可并发，进程最多 8 个读取线程，Trace/终态写入由协调线程串行处理；并发事件允许交错，Trace.meta 增加兼容可选分组信息，详见[并发契约](../docs/task-tool-parallel.md)。
-- 任务分支只从本人已终结任务创建独立会话，复制或编辑 prompt；幂等创建与来源分页新增两个接口，使用执行时当前设置，不复制历史消息/Memory/Trace/输出；POST 只保存 queued 任务，既有 stream 执行，原任务和 SSE/Trace/export shape 保持不变。
+- 完整分支重跑从本人已终结任务复制/编辑 prompt，不复制历史结果；实验性 checkpoint 保留输入/计划并复用内建顺序计划的成功前缀。两者均创建独立会话、幂等保存 queued 任务并由既有 stream 执行，原任务和 SSE/Trace/export shape 不变；复用步骤标注来源并清零本任务 token/cost，详见[步骤恢复](../docs/task-checkpoints.md)。
 
 - 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约。
 
@@ -112,6 +113,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - `app/components/workbench/knowledge-base-governance-modal.tsx`：知识库治理
 - `app/components/workbench/runtime-debug-modal.tsx` / `runtime-debug-memory-section.tsx`：RAG 调试编排与按会话重建的 Memory 调试区
 - `app/tasks/[taskId]/page.tsx`：任务详情页与任务导出入口
+- `app/tasks/[taskId]/task-checkpoint-panel.tsx`：实验性起点选择、成功前缀说明、失败同键重试与独立会话接管
 - `app/tasks/[taskId]/task-rerun-panel.tsx`：独立任务分支、输入编辑、同键重试、来源分页与 Workbench 会话接管
 - `lib/stores/chat-stream-store.ts`：SSE 事件分发与 trace 状态
 - `lib/stores/chat-stream-store-utils.ts`：tool_end / tool meta 合并、preview/output/result-summary 归一化

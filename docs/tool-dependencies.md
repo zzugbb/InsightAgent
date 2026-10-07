@@ -1,6 +1,6 @@
 # 工具依赖与结果引用
 
-Provider 规划器可声明有向无环图（DAG）：同一种工具可出现多次，后续步骤可依赖前一步，并把已公开结果预览中的标量作为查询或计算输入。规则规划器和旧版平铺计划保持原有行为；当前不提供前端图编辑器、单步 checkpoint 恢复或写入工具并行。
+Provider 规划器可声明有向无环图（DAG）：同一种工具可出现多次，后续步骤可依赖前一步，并把已公开结果预览中的标量作为查询或计算输入。规则规划器和旧版平铺计划保持原有行为；当前不提供前端图编辑器、HTTP/DAG checkpoint 恢复或写入工具并行。
 
 ## 规划协议
 
@@ -56,7 +56,7 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_depe
 backend/.venv/bin/python backend/scripts/test_tool_dependencies_postgres.py
 ```
 
-25 个静态专项覆盖图校验、前向引用、重复工具、输入/投影边界、拓扑顺序、并发分支、失败重试与 AST 校验；7 个 PostgreSQL 场景覆盖实际规划/任务流、Trace/delta/export、错误审计、串行回退、取消与超时。后者已接入 backend-e2e workflow。真实提供方的图生成质量、目标环境性能、单步恢复和写入工具并行仍待验证或实现。
+25 个静态专项覆盖图校验、前向引用、重复工具、输入/投影边界、拓扑顺序、并发分支、失败重试与 AST 校验；7 个 PostgreSQL 场景覆盖实际规划/任务流、Trace/delta/export、错误审计、串行回退、取消与超时。后者已接入 backend-e2e workflow。真实提供方的图生成质量与目标环境性能待实证；HTTP/DAG checkpoint 和写入工具并行明确延期，内建顺序计划恢复见[步骤恢复](task-checkpoints.md)。
 
 - `backend/app/services/tool_plan_dependencies.py`：图校验、拓扑波次、结果绑定。
 - `backend/app/services/tool_runtime_planning.py`：Provider 协议说明、候选工具归一化与图错误透传。

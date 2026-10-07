@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.api.deps import get_current_user
 from app.api.routes.tasks import TaskCreateResponse
-from app.services.chat_persistence_service import get_task_create_response_summary
+from app.services.chat_persistence_service import get_task, get_task_create_response_summary
+from app.services.task_checkpoint_service import checkpoint_candidates, load_trace
 from app.services.task_rerun_service import TaskRerunError, create_task_rerun, get_task_reruns
 
 router = APIRouter()
@@ -14,6 +15,7 @@ router = APIRouter()
 
 class TaskRerunRequest(BaseModel):
     idempotency_key: UUID = Field(default_factory=uuid4)
+    checkpoint_step_id: UUID | None = None
     user_input: str | None = Field(default=None, min_length=1, max_length=64_000)
 
     @field_validator("user_input")
@@ -55,7 +57,9 @@ def post_rerun(task_id: UUID, payload: TaskRerunRequest,
                current_user: dict = Depends(get_current_user)) -> TaskRerunResponse:
     try:
         branch = create_task_rerun(user_id=str(current_user["id"]), parent_task_id=str(task_id),
-                                   user_input=payload.user_input, idempotency_key=str(payload.idempotency_key))
+                                   user_input=payload.user_input, idempotency_key=str(payload.idempotency_key),
+                                   **({"checkpoint_step_id": str(payload.checkpoint_step_id)}
+                                      if payload.checkpoint_step_id is not None else {}))
     except TaskRerunError as exc:
         translate_error(exc)
     summary = get_task_create_response_summary(task_id=branch["task_id"], session_id=branch["session_id"],
@@ -72,3 +76,24 @@ def get_reruns(task_id: UUID, limit: int = Query(default=20, ge=1, le=100),
                                                      task_id=str(task_id), limit=limit, offset=offset))
     except TaskRerunError as exc:
         translate_error(exc)
+
+
+class TaskCheckpointCandidate(BaseModel):
+    step_id: str
+    index: int
+    tool_name: str
+    reused_steps: int
+
+
+class TaskCheckpointListResponse(BaseModel):
+    task_id: str
+    experimental: bool = True
+    items: list[TaskCheckpointCandidate]
+
+
+@router.get("/{task_id}/checkpoints", response_model=TaskCheckpointListResponse)
+def get_checkpoints(task_id: UUID, current_user: dict = Depends(get_current_user)) -> TaskCheckpointListResponse:
+    task = get_task(str(task_id), str(current_user["id"]))
+    if task is None:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    return TaskCheckpointListResponse(task_id=str(task_id), items=checkpoint_candidates(load_trace(task.get("trace_json"))))

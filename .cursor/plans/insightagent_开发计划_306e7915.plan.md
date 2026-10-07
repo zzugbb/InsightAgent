@@ -1,20 +1,21 @@
 ---
 name: InsightAgent 开发计划
-overview: next-major-upgrade-readiness 已 100% 封板；project-completion-audit 1/3（约 33%）完成，历史 GLM 成功链路已核实、当前请求 HTTP 429 且用户确认服务到期，尚无试点环境；项目总完成度未量化。
+overview: next-major-upgrade-readiness 已 100% 封板；project-completion-audit 1/3（约 33%）完成，历史 GLM 成功链路已核实、历史实时请求 HTTP 429；用户确认当前无真实 key/部署环境，限定步骤恢复已完成本地验证；项目总完成度未量化。
 current_focus:
   mainline: project-completion-audit
-  status: 静态盘点 1/3（约 33%）完成；GLM 服务到期阻断当前成功调用，环境与范围/签收待完成
-  latest_change: 2026-10-07 A4 HTTP 读取有界并发落地；15 个静态专项、7 个本机 HTTP/PostgreSQL 场景通过，明确只读、固定 GET、配置冻结、默认串行；单步恢复/写入工具并行及目标运行仍待完成
+  status: 静态盘点 1/3 完成；限定步骤恢复已落地、写入并行延期；用户确认无真实 key/部署环境，当前成功调用及目标运行/签收待实证
+  latest_change: 2026-10-07 限定内建顺序计划的实验性步骤恢复落地；6 个静态专项、9 个 PostgreSQL 与完整 Chromium 77 passed/1 skipped；取消竞态、串行失败 Trace 与前端 failed 轮询截断 SSE 已修复，写入并行及 HTTP/DAG checkpoint 延期
 file_size_baseline:
   scope: backend/app、backend/scripts 与 frontend 源码；排除 package-lock.json 等生成锁文件
   boundary: 可维护源码文件 <= 3000 行
   largest_source: backend/app/services/tool_runtime_execution.py 2864 行；tool_runtime_slice 最大测试主题 http_json_request_validation.py 2403 行
   key_facades: tool_runtime_execution.py 2864、tool_runtime_registry.py 2768、tool_runtime.py 2547、tool_runtime_http_json.py 2522、frontend/app/globals.css 7
 stable_contracts:
+  - failed 状态轮询不提前截断活动 SSE，提供方具体诊断由 SSE/关闭兜底处理；取消/超时仍终止本地连接
   - HTTP 并发需 execution.parallel_read_only=true 且固定 GET/无请求体；资格绑定工厂 runner，配置与上下文冻结，未声明工具保持串行。GET 只读性由配置者确认，见[HTTP 读取契约](../../docs/http-read-parallel.md)。
   - 显式工具图最多 32 节点/128 边，绑定仅限已投影预览标量到 query/expression；图错误拒绝整图，失败/取消/超时阻止依赖调用。Trace.meta 的 plan_node_id/depends_on 为可选扩展，详见[依赖契约](../../docs/tool-dependencies.md)。
   - 任务内并发默认关闭（`TASK_TOOL_MAX_CONCURRENT=1`）；仅就绪的内建检索/计算及明确配置只读的 HTTP GET 可并发，进程最多 8 个读取线程，Trace/终态写入由协调线程串行处理；并发事件允许交错，Trace.meta 增加兼容可选分组信息，详见[并发契约](../../docs/task-tool-parallel.md)。
-  - 任务分支只从本人已终结任务创建独立会话，复制或编辑 prompt；幂等创建与来源分页新增两个接口，使用执行时当前设置，不复制历史消息/Memory/Trace/输出；POST 只保存 queued 任务，既有 stream 执行，原任务和 SSE/Trace/export shape 保持不变
+  - 完整分支重跑从本人已终结任务复制/编辑 prompt，不复制历史结果；实验性 checkpoint 保留输入/计划并复用内建顺序计划的成功前缀。两者均创建独立会话、幂等保存 queued 任务并由既有 stream 执行，原任务和 SSE/Trace/export shape 不变；复用步骤标注来源并清零本任务 token/cost，详见[步骤恢复](../../docs/task-checkpoints.md)
   - 后台导入新增可空 progress 确认计数，失败/中断保留已确认批次；默认每批 128 切块并遵守 Chroma 上限，每任务最多 5000 切块（超限 422，调用方分拆或降低 overlap）；进度不延长整任务超时，同步 ingest 与 SSE/Trace/export 保持原契约
   - 后台 RAG 导入为兼容扩展；同用户/同键/同参数返回原任务，只允许提交者查询/取消，共享写入限管理员；只取消排队任务，中断不自动重放，终结后清理原始载荷，同步 ingest 保持兼容
   - 默认 settings 根据 provider/model/api_key 自动选择 remote 或 canonical mock
@@ -53,21 +54,21 @@ stable_contracts:
   - Next 16.3.5 与 eslint-config-next 精确对齐，React / React DOM 固定 19.2.8；React Compiler refs / set-state-in-effect 无例外；ESLint 9.39.5 在 React/import/jsx-a11y 插件正式兼容 ESLint 10 前保持锁定
   - data/insightagent.plan.back.md 是只读备份计划，永远不修改
 validation_baseline:
-  source: 2026-10-07 本地 full release gate 与 HTTP 读取/依赖/内建并发 PostgreSQL；Chromium 沿用前轮基线，本轮未重跑；真实提供方成功调用与目标环境仍未验证
-  current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；当前最小 GLM 调用 HTTP 429，未重试
+  source: 2026-10-07 full release gate 10/10、步骤恢复 PostgreSQL 9/9、内建并发回归 6/6、完整 Chromium 77 passed/1 skipped；无真实 key/部署环境，外部验收未验证
+  current_audit: 历史 glm-5.1 provider-usage 完成任务 10 条，含工具/RAG Trace；一条历史任务 JSON/Markdown 导出构建通过；此前最小 GLM 调用 HTTP 429，未重试；本轮无真实 key，不发起请求
   backup_restore_fixture: scripts/local_stack_snapshot.py 安全测试通过；修正 Compose Chroma /data 挂载后，隔离 fixture 的 PostgreSQL 测试行与 Chroma 测试文档均从新项目卷恢复读回；目标环境 RPO/RTO 未验证
   tooling_current: bash scripts/ci_run_release_gate.sh --phase tooling passed，包含快照工具与 A2 六镜像摘要预检测试；后端/前端 Docker build --check 无告警
   pilot_images_current: 本机 ARM64 后端/前端 Docker 构建通过，基础镜像均以 sha256 摘要固定；后端锁定 84 个直接/传递依赖版本并核对镜像内安装结果；隔离联调验证生产模式后端、PostgreSQL 注册/会话写读、Chroma 探测、前端 HTML/CSS 与浏览器实际 API 地址，临时资源已清理；未推送目标仓库
   async_rag_ingest: 持久化、幂等、取消与中断恢复落地；新增分批写入、确认进度与 5000 切块预算；沿用前轮 21/21 PostgreSQL/Chroma 隔离集成基线，包含实际 40 文档/400 切块，原始载荷终结后清理
   http_read_parallel: 固定 GET/无请求体且 parallel_read_only=true；15 个静态专项、7 个本机 HTTP/PostgreSQL 场景通过；真实端点只读性/限流/延迟待实证
-  tool_dependencies: 显式 DAG 最多 32 节点/128 边，仅公开预览标量绑定 query/expression；25 个静态专项与 7 个 PostgreSQL 场景通过；单步恢复、写入并行与目标图生成质量待验证
+  tool_dependencies: 显式 DAG 最多 32 节点/128 边，仅公开预览标量绑定 query/expression；25 个静态专项与 7 个 PostgreSQL 场景通过；HTTP/DAG checkpoint 与写入并行延期，目标图生成质量待验证
   task_tool_parallel: 默认 1（串行），1–4 配置仅并发内建与明确声明的 HTTP 读取；15 个专项与 6 个 PostgreSQL 场景通过，进程最多 8 个读取线程；取消/超时丢弃迟到结果
-  task_reruns: 完整任务分支支持编辑输入、独立会话、幂等与来源分页；7 个既有专项进入门禁，11/11 PostgreSQL 回归沿用前期基线；原任务/Trace/usage 不变
-  backend_current: full slice 2123/2123、module boundary 9/9；15 个 HTTP 读取并发专项进入门禁，HTTP/依赖/内建并发 20 个 PostgreSQL 场景通过，OpenAPI 50 操作/86 组件检查通过
-  release_gate: bash scripts/ci_run_release_gate.sh --phase all --summary-file /tmp/insightagent-http-parallel-release.md --json-summary-file /tmp/insightagent-http-parallel-release.json passed，覆盖 backend/frontend/tooling/hygiene；Turbopack/webpack 双构建通过
-  backend: 上一主线封板时 full slice 2020/2020、module boundary 9/9；FastAPI/Python 3.14、安全与运维专项沿用已封板基线
+  task_checkpoints: 实验性内建顺序计划，成功前缀复用、独立分支与失败重试；6 个静态专项、9/9 PostgreSQL，HTTP/DAG checkpoint 延期；新 Trace 标注来源且复用 token/cost 归零
+  task_reruns: 完整任务分支支持编辑输入、独立会话、幂等与来源分页；7 个既有专项进入门禁，11/11 PostgreSQL 本轮回归通过；原任务/Trace/usage 不变
+  backend_current: full slice 2129/2129、module boundary 9/9；6 个步骤恢复专项进入门禁，OpenAPI 51 操作/88 组件；步骤恢复 PostgreSQL 9/9、内建并发回归 6/6
+  release_gate: /tmp/insightagent-checkpoint-release.md 与 .json，full gate 10/10 PASS；Turbopack/webpack 双构建通过
   frontend: node tests 184/184、lint 0 error / 2 个既有 warning、Turbopack/webpack 双构建 passed；ESLint 10 外部兼容约束仍保留
-  e2e_previous: 既有临时 PostgreSQL/Chroma mock 栈、TASK_TOOL_MAX_CONCURRENT=2，完整 Chromium 74 passed / 1 skipped；本轮未重跑，临时服务及容器已清理
+  e2e_current: 隔离 PostgreSQL/Chroma mock 栈、TASK_TOOL_MAX_CONCURRENT=2，完整 Chromium 77 passed/1 skipped；桌面/手机恢复与同键重试通过，临时资源清理
   hygiene: py_compile、git diff --check、git diff --cached --check、backup plan diff clean
 completed_mainlines:
   - provider-tool-expansion：provider search 归一化、planner 多协议 tool call、JSON 字符串参数、reconnect 错误码
@@ -85,7 +86,7 @@ next_candidate_mainlines:
   - 试点收尾实施主线：由 project-completion-audit 的真实环境证据与范围/签收结论确定具体切片，不预先宣称剩余工作已知
   - eslint-10-adoption：非试点阻塞；等待 eslint-plugin-react 官方兼容版本，并确认 import/jsx-a11y peer 范围支持 ESLint 10；不使用 force/peer override
 next_steps:
-  - GLM 到期期间暂停真实请求；按 docs/project-completion-audit.md 先裁决原始计划范围，续用或换有效兼容账号后补当前成功链路；试点环境确定后按 docs/pilot-deployment-preflight.md 预检并完成部署/恢复/回滚实证，项目总完成度暂不估百分比
+  - GLM 到期期间暂停真实请求；按用户授权将限定步骤恢复纳入，写入并行及 HTTP/DAG checkpoint 延期；续用或换有效兼容账号后补当前成功链路；试点环境确定后按 docs/pilot-deployment-preflight.md 预检并完成部署/恢复/回滚实证，项目总完成度暂不估百分比
   - ESLint 10 保留为非阻塞维护候选，三个插件正式兼容后再补依赖契约红测并运行完整门禁
 logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要、验证口径、维护规则和主线地图不应被整段删除。
 ---
@@ -97,9 +98,9 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - W1-W4 与阶段 5 基础产品化已完成并收口：SSE、Trace、Memory、RAG、Token/Cost、Auth、PostgreSQL、任务详情与导出、usage dashboard、审计、running task 恢复、任务取消/超时与基础工作台闭环已具备。
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization` 与 `next-major-upgrade-readiness` 均已 100% 封板。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next 16 / React 19.2、原生 flat ESLint、React Compiler 规则无例外、双构建与 full Chromium 已验证，未修改外部运行时契约。
-- 当前主线：`project-completion-audit` 1/3（约 33%）完成；[审计清单](../../docs/project-completion-audit.md)已核实历史 GLM 成功任务、工具/RAG Trace 与导出，前期审计调用 HTTP 429 且用户确认服务到期；原始范围已有建议、尚待裁决，试点部署/恢复与用户签收仍缺证据。
+- 当前主线：`project-completion-audit` 1/3（约 33%）完成；[审计清单](../../docs/project-completion-audit.md)已核实历史 GLM 成功任务、工具/RAG Trace 与导出，前期审计调用 HTTP 429 且用户确认服务到期；限定步骤恢复纳入、写入工具并行延期，试点部署/恢复与用户签收仍缺证据。
 - A2 试点镜像配方、只读六镜像摘要预检与演练记录流程已准备；后端 84 个直接/传递依赖版本锁定并在构建时核对，本机 ARM64 锁定版镜像与现有前端镜像隔离联调通过。目标环境、TLS/访问边界与回滚仍缺实证。
-- A4 [后台 RAG 导入](../../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。OpenAPI 为 50 操作 / 86 组件；单步恢复、写入工具并行及试点范围/目标运行仍待完成。
+- A4 [后台 RAG 导入](../../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
 - 非阻塞维护候选：`eslint-10-adoption` 的 React/import/jsx-a11y 三个插件 peer 范围均排除 ESLint 10；React 官方修复尚未发布，预检的 1 个外部兼容动作概括这组约束，不强制覆盖 peer。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
 
@@ -115,17 +116,16 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- 最终本地验证来源：2026-10-07 full release gate（10/10，backend/frontend/tooling/hygiene）及 HTTP 读取/依赖/内建并发 PostgreSQL；完整 Chromium 沿用前轮基线，本轮未重跑；真实提供方成功调用和目标部署仍未验证。
-- 后端 full slice `2123/2123`、module boundary `9/9`；新增 15 个 HTTP 读取并发专项，OpenAPI `50` 操作 / `86` 组件与提交基线一致。
-- 前端 node `184/184`、lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；既有工具并发开启为 2 的完整 Chromium `74 passed / 1 skipped`（本轮未重跑），覆盖既有任务分支、导入、Trace 与错误/取消交互。
-- 本轮 HTTP 读取 PostgreSQL/本机 HTTP `7/7`、依赖回归 `7/7`、内建并发回归 `6/6`：实际读取/模板/stream/Trace/delta/export、503 重试与取消/超时迟到写入保护。既有任务分支 `11/11`、RAG `21/21` PostgreSQL/Chroma 及 400 切块实写沿用前期基线；本轮临时服务/容器已清理。
-- 试点镜像基线：本机 ARM64 后端 84 个依赖版本锁定并核对安装结果；隔离联调已覆盖生产后端、PostgreSQL、Chroma、前端 HTML/CSS 与浏览器实际 API 地址。镜像未推送目标仓库。
-- 外部证据边界：历史 10 条 GLM 成功任务与一条导出已核对；前期最小审计请求 HTTP 429、用户确认服务到期；本轮未调用真实模型。目标环境部署/TLS/回滚、恢复 RPO/RTO 与用户签收均待实证。
-- Hygiene：diff whitespace、备份计划 diff 与源码规模边界通过；`data/insightagent.plan.back.md` 无修改，四份活跃文档同步。
+- 最终本地来源：2026-10-07 full release gate `10/10`（backend/frontend/tooling/hygiene），步骤恢复 PostgreSQL `9/9`、完整重跑回归 `11/11`、内建并发回归 `6/6`，隔离 mock 栈完整 Chromium `77 passed / 1 skipped`。queue 专用 skip 保留独立验证路径。
+- 后端 full slice `2129/2129`、module boundary `9/9`，新增步骤恢复 6 个静态专项；OpenAPI `51` 操作 / `88` 组件与提交基线一致。
+- 前端 node `184/184`，lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；桌面与 390×844 手机验证恢复、结果复用、来源往返与未知送达同键重试，手机详情横向溢出与 failed 轮询提前截断 SSE 诊断已修复，无相关控制台错误/框架覆盖层。
+- 既有 HTTP/依赖 PostgreSQL `7/7`、`7/7`，RAG PostgreSQL/Chroma `21/21` 与 400 切块实写沿用此前明确基线；不计作本轮新增验证或目标环境吞吐。
+- 外部证据：已核对历史 10 条 GLM 成功任务与一条导出；用户再次确认当前无真实 key、无部署环境，本轮没有真实模型请求。试点部署/TLS/升级回滚、恢复 RPO/RTO 与用户签收仍未验证。
+- 本地试点镜像沿用 ARM64、后端 84 个版本锁定及生产模式隔离联调证据，未推送/部署到目标环境。临时服务/容器已清理；备份计划无修改，四份活跃文档同步收敛。
 
 ## 当前主线
 
-- 当前主线：`project-completion-audit` 1/3 完成；GLM 到期期间先推进原始完整版范围裁决，续用或换有效兼容账号后补当前成功链路；目标部署/恢复待环境具备，再做用户签收。项目总完成百分比暂不估算。
+- 当前主线：`project-completion-audit` 1/3 完成；无真实 key/部署环境期间保留未验证状态；限定步骤恢复本地完成、写入工具并行延期，续用或换有效兼容账号后补当前成功链路；目标部署/恢复待环境具备，再做用户签收。项目总完成百分比暂不估算。
 - 非阻塞维护候选：`eslint-10-adoption` 等待 [eslint-plugin-react 官方兼容性议题](https://github.com/jsx-eslint/eslint-plugin-react/issues/3977) 与 [修复 PR](https://github.com/jsx-eslint/eslint-plugin-react/pull/4022) 对应的正式发布，并核对 import/jsx-a11y 兼容版本；届时补依赖红测后再受控升级。
 - 后续实现继续保持外部 SSE/trace/export/display/e2e 契约稳定。
 - 新 provider/source 协议仍按 `real-tool-execution` 与 `provider-tool-expansion` 封板基线增量补红测和局部归一化，不扩大外部契约。

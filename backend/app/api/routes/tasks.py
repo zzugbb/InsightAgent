@@ -15,6 +15,7 @@ from app.api.deps import get_current_user
 from app.config import get_settings
 from app.schemas.trace import TraceStep
 from app.services.audit_service import safe_record_audit_event
+from app.services.task_checkpoint_service import extract_checkpoint_seed
 from app.services.chat_execution_service import (
     sse_error_payload,
     sse_event,
@@ -1493,6 +1494,7 @@ def stream_task_detail(
             user_id=user_id,
             prompt=task["prompt"],
             persist_user_message=False,
+            **({"checkpoint_seed": seed} if (seed := extract_checkpoint_seed(task.get("trace_json"))) else {}),
         ),
         media_type="text/event-stream",
         headers={

@@ -291,6 +291,7 @@ from tool_runtime_slice.task_parallel import TaskParallelMixin
 from tool_runtime_slice.http_parallel import HttpParallelMixin
 from tool_runtime_slice.tool_dependencies import ToolDependenciesMixin
 from tool_runtime_slice.task_reruns import TaskRerunsMixin
+from tool_runtime_slice.task_checkpoints import TaskCheckpointsMixin
 from tool_runtime_slice.rag_export_governance import RagExportGovernanceMixin
 from tool_runtime_slice.rag_runtime_version_governance import RagRuntimeVersionGovernanceMixin
 from tool_runtime_slice.runtime_rag_execution import RuntimeRagExecutionMixin
@@ -372,6 +373,7 @@ class ToolRuntimeSliceTests(
     HttpParallelMixin,
     ToolDependenciesMixin,
     TaskRerunsMixin,
+    TaskCheckpointsMixin,
     RagExportGovernanceMixin,
     RagRuntimeVersionGovernanceMixin,
     RuntimeResultRagMixin,

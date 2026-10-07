@@ -852,6 +852,13 @@ export const en: Messages = {
     },
   },
   taskDetail: {
+    checkpoint: {
+      title: "Step recovery · Experimental", create: "Resume from step", step: "Resume point",
+      scope: "Linear built-in planning, retrieval and calculation only. HTTP tools, dependency graphs and older tasks are unsupported.",
+      unavailable: "No step snapshot is available. Use a full branch rerun.", loadFailed: "Step snapshots failed to load",
+      explanation: "Keep the original input and plan in a separate session. Reuse completed results before the selected step, then execute that step and the remaining steps to generate a new answer. Retrieval results are historical snapshots. No replanning or external rollback occurs. Subsequent calls use current settings and may incur costs.",
+      reuse: (count: number) => `Reuse ${count} completed tool results.`,
+    },
     rerun: {
       title: "Task branches", create: "Rerun as branch", run: "Create and run", cancel: "Cancel", retry: "Retry",
       input: "Branch task input", explanation: "Run the full task in a separate session using current model and tool settings. You can edit the input. Historical messages, Memory, traces, and outputs are not copied. Execution may call external services and incur costs.",

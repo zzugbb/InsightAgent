@@ -485,6 +485,13 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       return false;
     }
 
+    const reason = options?.reason ?? "done";
+    // The server commits failed before emitting its diagnostic error event. A status poll
+    // must let the active SSE finish, otherwise it replaces the actual error with "closed".
+    if (reason === "error" && get().isStreaming) {
+      return false;
+    }
+
     if (activeStreamController) {
       const streamTaskId = activeStreamControllerTaskId?.trim() ?? "";
       if (!targetTaskId || !streamTaskId || streamTaskId === targetTaskId) {
@@ -492,7 +499,6 @@ export const useChatStreamStore = create<ChatStreamStore>((set, get) => ({
       }
     }
 
-    const reason = options?.reason ?? "done";
     const nextPhase =
       reason === "cancelled"
         ? "cancelled"

@@ -92,6 +92,9 @@ jobs:
       - name: Run task rerun PostgreSQL integration
         run: python backend/scripts/test_task_rerun_postgres.py
 
+      - name: Task checkpoint PostgreSQL integration
+        run: python backend/scripts/test_task_checkpoint_postgres.py
+
       - name: Run task parallel PostgreSQL integration
         run: python backend/scripts/test_task_parallel_postgres.py
 

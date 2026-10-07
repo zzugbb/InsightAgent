@@ -15,7 +15,7 @@ POST 返回既有 `TaskCreateResponse` 字段及可空 `parent_task_id`。只允
 - 同用户、同幂等键、同来源及同请求参数返回同一个分支及其**当前状态**，不重复创建会话、消息或审计。同键不同参数返回 `409 rerun_idempotency_conflict`；未提供键时每次请求生成新键。
 - 客户端无法确认响应是否送达时，重试须复用原键和参数。前端失败重试冻结本次输入并复用键；要修改输入另建分支，应先查看列表确认已受理的分支。
 - GET 包含 `task_id`、`is_rerun`、`parent_task_id`、`items`、`total`、`limit`、`offset`、`has_more`；每个直接分支仅含 task_id、session_id、status、created_at。无请求键、hash、原始输入或内部用户身份。
-- 这是完整任务重跑，不是从某个 Trace 步骤恢复、复用工具输出或重放外部副作用。工具/LLM 会按当前设置重新调用，可能产生费用或新的外部写入。
+- 省略 checkpoint_step_id 时这是完整任务重跑；指定该字段可使用[实验性步骤恢复](task-checkpoints.md)，复用限定内建计划的成功前缀。两者均不重放或撤销外部副作用。工具/LLM 会按当前设置重新调用，可能产生费用或新的外部写入。
 
 新任务通过既有 `GET /api/tasks/{child_task_id}/stream` 执行，沿用并发队列、取消、超时与恢复语义。「创建并运行」保存后选择新会话并返回 Workbench，由既有任务恢复流程接管 SSE；仅用 POST 创建后关闭客户端，不保证任务自动执行。再次打开该分支会话可继续接管 queued/running 任务。
 
@@ -40,4 +40,4 @@ PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8000 PLAYWRIGHT_BASE_URL=http://127.0.0
   npm run test:e2e -- e2e/task-reruns.spec.ts
 ```
 
-7 个静态专项、11 个真实 PostgreSQL 场景与 4 个浏览器场景覆盖编辑/执行/来源往返、未知送达重试、活动任务禁用及手机分页。数据库场景已接入 backend-e2e workflow。当前验证采用本机 mock 提供方，真实提供方质量、收费与目标环境验收仍待实证；单步恢复和任务内并行仍未实现。
+7 个静态专项、11 个真实 PostgreSQL 场景与 4 个浏览器场景覆盖编辑/执行/来源往返、未知送达重试、活动任务禁用及手机分页。数据库场景已接入 backend-e2e workflow。当前验证采用本机 mock 提供方，真实提供方质量、收费与目标环境验收仍待实证；限定内建计划的[步骤恢复](task-checkpoints.md)和[任务内读取并发](task-tool-parallel.md)已实现本地闭环，写入工具并行延期。

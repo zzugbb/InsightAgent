@@ -1,4 +1,4 @@
-"""Create an isolated full-task branch in one transaction, without starting execution."""
+"""Create an isolated full-task or experimental checkpoint branch in one transaction, without starting execution."""
 
 import hashlib
 import json
@@ -6,6 +6,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from app.db import get_db_connection
+from app.services.task_checkpoint_service import build_checkpoint_seed, load_trace, seed_trace
 from app.services.audit_service import safe_record_audit_event
 from app.services.task_status_service import normalize_task_status
 
@@ -19,13 +20,16 @@ class TaskRerunError(Exception):
 
 
 def create_task_rerun(*, user_id: str, parent_task_id: str, user_input: str | None,
-                      idempotency_key: str) -> dict:
+                      idempotency_key: str, checkpoint_step_id: str | None = None) -> dict:
+    if checkpoint_step_id is not None and user_input is not None:
+        raise TaskRerunError(422, "checkpoint_input_immutable")
     edited = user_input.strip() if user_input is not None else None
     if edited is not None and (not edited or len(edited) > 64_000):
         raise TaskRerunError(422, "rerun_input_invalid")
-    request_hash = hashlib.sha256(json.dumps(
-        {"parent_task_id": parent_task_id, "user_input": edited}, sort_keys=True,
-    ).encode()).hexdigest()
+    request = {"parent_task_id": parent_task_id, "user_input": edited}
+    if checkpoint_step_id is not None:
+        request["checkpoint_step_id"] = checkpoint_step_id
+    request_hash = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
     with get_db_connection() as connection:
         lock_key = int.from_bytes(hashlib.sha256(f"task-rerun:{user_id}".encode()).digest()[:8], "big", signed=True)
         connection.execute("SELECT pg_advisory_xact_lock(?)", (lock_key,))
@@ -40,13 +44,18 @@ def create_task_rerun(*, user_id: str, parent_task_id: str, user_input: str | No
                 raise TaskRerunError(409, "rerun_idempotency_conflict")
             return {key: existing[key] for key in ("task_id", "session_id", "status", "parent_task_id")}
         parent = connection.execute(
-            "SELECT prompt, status FROM tasks WHERE id = ? AND user_id = ? FOR SHARE",
+            "SELECT prompt, status, trace_json FROM tasks WHERE id = ? AND user_id = ? FOR SHARE",
             (parent_task_id, user_id),
         ).fetchone()
         if not parent:
             raise TaskRerunError(404, "task_not_found")
         if normalize_task_status(parent["status"]) not in TERMINAL_STATUSES:
             raise TaskRerunError(409, "rerun_parent_not_terminal")
+        checkpoint = None
+        if checkpoint_step_id is not None:
+            checkpoint = build_checkpoint_seed(load_trace(parent["trace_json"]), checkpoint_step_id)
+            if checkpoint is None:
+                raise TaskRerunError(409, "checkpoint_unavailable")
         prompt = edited if edited is not None else parent["prompt"]
         if not prompt.strip() or len(prompt) > 64_000:
             raise TaskRerunError(422, "rerun_input_invalid")
@@ -71,10 +80,15 @@ def create_task_rerun(*, user_id: str, parent_task_id: str, user_input: str | No
                VALUES (?, ?, ?, ?, ?, ?)""",
             (task_id, user_id, parent_task_id, idempotency_key, request_hash, now),
         )
+        if checkpoint is not None:
+            connection.execute("UPDATE tasks SET trace_json = ? WHERE id = ? AND user_id = ?",
+                               (json.dumps(seed_trace(checkpoint), ensure_ascii=False), task_id, user_id))
         connection.commit()
     safe_record_audit_event(user_id=user_id, event_type="task_rerun_created", detail={
         "task_id": task_id, "session_id": session_id, "parent_task_id": parent_task_id,
         "input_edited": edited is not None, "prompt_length": len(prompt),
+        **({"checkpoint_step_id": checkpoint_step_id, "reused_steps": checkpoint["start_index"] - 1}
+           if checkpoint is not None else {}),
     })
     return {"task_id": task_id, "session_id": session_id, "status": "queued", "parent_task_id": parent_task_id}
 

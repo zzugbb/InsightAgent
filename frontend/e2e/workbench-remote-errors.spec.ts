@@ -964,3 +964,36 @@ test("remote stream interrupted maps to stream-interrupted code", async ({
     await mockProvider.close();
   }
 });
+
+test("failed task polling preserves a delayed provider SSE diagnostic", async ({ page, request }) => {
+  const auth = await registerViaApi(request);
+  const mockProvider = await startMockRemoteProvider({ statusCode: 401, body: { error: { message: "fixture unauthorized" } } });
+  let holdingDiagnostic = false;
+  let failedPolls = 0;
+  try {
+    await setRemoteSettings(request, auth.access_token, mockProvider.baseUrl);
+    await seedBrowserAuth(page, auth);
+    await page.route(/\/api\/tasks\/[^/?]+(?:\?.*)?$/, async (route) => {
+      const response = await route.fetch();
+      const task = await response.json();
+      if (holdingDiagnostic && task.status_normalized === "failed") failedPolls += 1;
+      await route.fulfill({ response });
+    });
+    await page.route("**/api/tasks/*/stream**", async (route) => {
+      const response = await route.fetch();
+      holdingDiagnostic = true;
+      // Let the 600 ms status poll observe failed while the error event is still in transit.
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+      await route.fulfill({ response });
+    });
+    await page.goto("/");
+    await ensureWorkbenchReady(page, auth);
+    await page.getByTestId("composer-input").fill("delayed provider failure fixture");
+    await page.getByTestId("composer-send").click();
+    await expect(page.getByTestId("composer-hint")).toContainText("remote_api_key_unauthorized", { timeout: 20_000 });
+    await expect(page.getByTestId("composer-hint")).toContainText("HTTP 401");
+    expect(failedPolls).toBeGreaterThan(0);
+  } finally {
+    await mockProvider.close();
+  }
+});

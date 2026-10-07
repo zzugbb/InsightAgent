@@ -47,4 +47,4 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_para
 backend/.venv/bin/python backend/scripts/test_task_parallel_postgres.py
 ```
 
-15 个内建并发静态专项及 6 个 PostgreSQL 场景覆盖重叠、屏障、快照、重试隔离、稳定顺序、生命周期、heartbeat、线程上限与导出。HTTP 另有 15 个静态专项和 7 个本机 HTTP/PostgreSQL 场景，见[读取并发](http-read-parallel.md)。数据库场景已接入 backend-e2e workflow。真实端点只读性、目标环境延迟与写入工具并行仍待实证/实现。
+15 个内建并发静态专项及 6 个 PostgreSQL 场景覆盖重叠、屏障、快照、重试隔离、稳定顺序、生命周期、heartbeat、线程上限与导出。HTTP 另有 15 个静态专项和 7 个本机 HTTP/PostgreSQL 场景，见[读取并发](http-read-parallel.md)。数据库场景已接入 backend-e2e workflow。真实端点只读性与目标环境延迟待实证，写入工具并行明确延期。

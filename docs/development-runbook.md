@@ -112,6 +112,9 @@ curl -I http://127.0.0.1:3001
 
 ## e2e 路径
 
+[步骤恢复（实验功能）](task-checkpoints.md)专项使用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k task_checkpoint`；实际快照复用、幂等、失败重试与取消/超时用 `backend/.venv/bin/python backend/scripts/test_task_checkpoint_postgres.py`，需提权访问 Docker/随机本机端口，独立 PostgreSQL/mock 自动清理，已接入 backend-e2e workflow。前端专项为 `e2e/task-checkpoints.spec.ts`，桌面/手机截图输出到 `/tmp`。
+
+
 [HTTP 读取并发](http-read-parallel.md)专项用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k http_parallel`；真实本机 HTTP 的重叠、模板、503 重试、结果绑定、Trace/delta/export、取消与超时用 `backend/.venv/bin/python backend/scripts/test_http_parallel_postgres.py`。需要提权访问 Docker/随机本机端口，使用独立 PostgreSQL 和临时 HTTP fixture，自动清理，不请求真实供应商；已接入 backend-e2e workflow。
 
 [工具依赖与结果引用](tool-dependencies.md)专项用 `backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k tool_dependency`；实际 Provider 规划、重复工具、Trace/delta/export、失败审计和依赖生命周期用 `backend/.venv/bin/python backend/scripts/test_tool_dependencies_postgres.py`，需要提权访问 Docker/随机本机端口，使用独立 PostgreSQL 与本地规划 fixture，自动清理，不请求远端模型。已接入 backend-e2e workflow。

@@ -23,6 +23,7 @@ from app.services.chat_persistence_service import (
 from app.services.chroma_memory_service import try_append_task_memory
 from app.services.provider_service import ProviderSelectionError, get_llm_provider
 from app.services.settings_service import get_stored_settings
+from app.services.task_checkpoint_service import checkpoint_plan, restored_prefix, validate_resume
 from app.services.task_tool_execution import execute_task_tool_plan
 from app.services.task_queue_service import (
     forget_waiting_task,
@@ -414,6 +415,7 @@ def stream_task_execution(
     user_id: str,
     prompt: str,
     persist_user_message: bool = False,
+    checkpoint_seed: dict | None = None,
 ) -> Iterator[str]:
     STREAM_TRACE_PERSIST_EVERY = 8
     STREAM_HEARTBEAT_INTERVAL_SEC = 2.0
@@ -814,12 +816,14 @@ def stream_task_execution(
         planning_registry_provider = get_configured_tool_registry_provider(
             settings=runtime_settings
         )
-        tool_plan_artifacts = build_tool_plan_artifacts(
-            prompt,
-            provider=provider,
-            registry_provider=planning_registry_provider,
-        )
-        tool_plan = tool_plan_artifacts.tool_plan
+        tool_plan_artifacts = None
+        if checkpoint_seed is not None:
+            tool_plan = validate_resume(checkpoint_seed, planning_registry_provider)
+        else:
+            tool_plan_artifacts = build_tool_plan_artifacts(
+                prompt, provider=provider, registry_provider=planning_registry_provider,
+            )
+            tool_plan = tool_plan_artifacts.tool_plan
         plan_content = build_tool_plan_summary(
             tool_plan,
             registry_provider=planning_registry_provider,
@@ -831,10 +835,14 @@ def stream_task_execution(
             "label": "tool_plan",
             "tokens": _estimate_token_count(plan_content),
             "cost_estimate": None,
-            "planning_provider_attempted": tool_plan_artifacts.planning_provider_attempted,
-            "planning_provider_used": tool_plan_artifacts.planning_provider_used,
-            "allowed_tool_names": list(tool_plan_artifacts.allowed_tool_names),
-            "allowed_tool_labels": list(tool_plan_artifacts.allowed_tool_labels),
+            "planning_provider_attempted": bool(tool_plan_artifacts and tool_plan_artifacts.planning_provider_attempted),
+            "planning_provider_used": bool(tool_plan_artifacts and tool_plan_artifacts.planning_provider_used),
+            "allowed_tool_names": (list(tool_plan_artifacts.allowed_tool_names) if tool_plan_artifacts
+                                   else [node["name"] for node in tool_plan]),
+            "allowed_tool_labels": (list(tool_plan_artifacts.allowed_tool_labels) if tool_plan_artifacts else [
+                get_tool_display_name(node["name"], registry_provider=planning_registry_provider)
+                for node in tool_plan
+            ]),
             "tool_registry_profile": get_tool_registry_profile_name_from_settings(
                 settings=runtime_settings
             ),
@@ -842,7 +850,16 @@ def stream_task_execution(
                 settings=runtime_settings
             ),
         }
-        if tool_plan_artifacts.planning_provider_attempted:
+        saved_plan = checkpoint_plan(tool_plan, planning_registry_provider)
+        if saved_plan is not None:
+            plan_meta["checkpoint_plan"] = saved_plan
+        if checkpoint_seed is not None:
+            plan_meta.update(
+                tokens=0, cost_estimate=0.0, checkpoint_resumed=True,
+                checkpoint_source_step_id=checkpoint_seed["source_step_id"],
+                checkpoint_start_index=checkpoint_seed["start_index"],
+            )
+        if tool_plan_artifacts and tool_plan_artifacts.planning_provider_attempted:
             planning_usage_payload = _build_usage_payload(
                 prompt_text=tool_plan_artifacts.planning_prompt or prompt,
                 completion_text=plan_content,
@@ -872,6 +889,15 @@ def stream_task_execution(
         persist_trace(force=True)
 
         tool_observations: list[str] = []
+        if checkpoint_seed is not None:
+            reused_steps, reused_observations = restored_prefix(checkpoint_seed, seq_cursor + 1)
+            tool_observations.extend(reused_observations)
+            for reused_step in reused_steps:
+                raise_if_should_abort()
+                seq_cursor += 1
+                trace_steps.append(reused_step)
+                yield sse_event("trace", {"task_id": task_id, "step_id": reused_step["id"], "step": reused_step})
+            persist_trace(force=True)
         tool_registry_service_result = execute_configured_tool_registry_provider_preflight(
             task_id=task_id,
             step_id=str(uuid4()),
@@ -923,6 +949,9 @@ def stream_task_execution(
             execute_item=execute_tool_plan_item_service_execution, apply_actions=execute_tool_plan_item_service_actions,
             persist_trace_fn=persist_trace, complete_task_fn=complete_task_for_service_action,
             record_failure_event_fn=record_failure_event,
+            checkpoint_start_index=checkpoint_seed["start_index"] if checkpoint_seed else 1,
+            checkpoint_enabled=saved_plan is not None,
+            confirm_should_continue=lambda: raise_if_should_abort(force_status_probe=True),
         ):
             if item["kind"] == "event":
                 yield sse_event(str(item["event"]), item["data"])
@@ -936,8 +965,8 @@ def stream_task_execution(
             release_task_slot()
             return
 
+        raise_if_should_abort(force_status_probe=True)
         yield sse_event("state", {"task_id": task_id, "phase": "streaming"})
-        raise_if_should_abort()
         final_step_id = str(uuid4())
         seq_cursor += 1
         final_step_streaming: dict[str, object] = {

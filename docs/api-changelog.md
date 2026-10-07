@@ -22,3 +22,5 @@
 - 2026-10-06 · API 0.1.0：Provider 显式工具图支持节点 ID、前置依赖和公开预览的标量绑定；旧平铺计划兼容。Trace.meta 新增可选 plan_node_id、depends_on，工具 input 为解析后的实际输入；Trace.seq 按拓扑执行顺序递增。图/输入错误通过既有 SSE error 返回固定 tool_dependency_plan_invalid / tool_dependency_input_unavailable，JSON v1.0/Markdown 外层结构不变，OpenAPI 50 操作 / 86 组件指纹未变。
 
 - 2026-10-07 · API 0.1.0：http_json.execution 新增可选布尔 parallel_read_only，明确声明的固定 GET/无请求体工具可加入既有有界并发；false/缺省继续串行，true 配合不支持的方法/模板/请求体通过既有配置预检拒绝。execution_summary 增加同名可选布尔声明；SSE、Trace/delta、JSON v1.0/Markdown 外层结构及 OpenAPI 50 操作 / 86 组件保持兼容。
+
+- 2026-10-07 · API 0.1.0：新增本人任务实验性 checkpoint 候选查询；分支重跑请求新增可选 checkpoint_step_id，完整重跑、Trace/SSE/export 形状兼容，恢复仅限内建顺序计划；OpenAPI 51 操作 / 88 组件，Trace.meta 的快照/复用信息为可选兼容扩展。

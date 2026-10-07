@@ -687,7 +687,7 @@
   }
 
   .task-detail-main-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -702,6 +702,10 @@
 
   .task-detail-kpi-grid {
     grid-template-columns: 1fr;
+  }
+
+  .task-detail-trace-block .trace-filter-toolbar .ant-segmented {
+    overflow-x: auto;
   }
 }
 

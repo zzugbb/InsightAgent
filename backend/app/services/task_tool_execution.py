@@ -4,6 +4,7 @@ from copy import deepcopy
 from uuid import uuid4
 
 from app.services.task_tool_parallel import execute_parallel_batch
+from app.services.task_checkpoint_service import annotate_checkpoint_actions
 from app.services.tool_plan_dependencies import collect_preview, resolved_execution_batches
 from app.services.tool_runtime import build_tool_plan_item_service_execution
 
@@ -25,13 +26,17 @@ def execute_task_tool_plan(*, tool_plan, max_concurrent, registry_provider, seq_
                            task_id, trace_steps, tool_observations, prompt, user_id, model,
                            prepare_iteration, estimate_token_count, raise_if_should_abort,
                            touch_heartbeat, execute_item, apply_actions, persist_trace_fn,
-                           complete_task_fn, record_failure_event_fn):
+                           complete_task_fn, record_failure_event_fn, checkpoint_start_index=1,
+                           checkpoint_enabled=False, confirm_should_continue=None):
     common = dict(task_id=task_id, prompt=prompt, user_id=user_id, model=model,
                   estimate_token_count=estimate_token_count, make_step_id=lambda: str(uuid4()))
     outputs = {}
     for batch, batch_provider in resolved_execution_batches(tool_plan, outputs=outputs,
                                                             max_concurrent=max_concurrent,
                                                             registry_provider=registry_provider):
+        batch = [(index, spec) for index, spec in batch if index >= checkpoint_start_index]
+        if not batch:
+            continue
         raise_if_should_abort()
         touch_heartbeat()
         if len(batch) == 1:
@@ -69,6 +74,7 @@ def execute_task_tool_plan(*, tool_plan, max_concurrent, registry_provider, seq_
                 if item["kind"] in {"event", "heartbeat"}:
                     yield item
                     continue
+                (confirm_should_continue or raise_if_should_abort)()
                 if item["kind"] == "result":
                     execution = build_tool_plan_item_service_execution(
                         task_id=task_id, trace_steps=trace_steps, user_id=user_id,
@@ -80,6 +86,14 @@ def execute_task_tool_plan(*, tool_plan, max_concurrent, registry_provider, seq_
                 else:
                     actions = item["result"]["service_actions"]
                 node = next(spec for index, spec in batch if index == item.get("index", batch[0][0]))
+                # Terminal persistence must include the Trace writes applied just before it.
+                # Serial builders sanitize/copy kwargs before those writes reach the owner list.
+                for action in actions:
+                    if action.get("kind") == "complete_task":
+                        action["kwargs"]["trace_steps"] = trace_steps
+                if checkpoint_enabled:
+                    index = next(index for index, spec in batch if spec is node)
+                    annotate_checkpoint_actions(actions, index)
                 action_result = None
                 for action in apply_actions(service_actions=actions, trace_steps=trace_steps,
                                             tool_observations=tool_observations, seq_cursor=seq_cursor,

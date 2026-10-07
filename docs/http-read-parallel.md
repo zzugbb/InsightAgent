@@ -53,4 +53,4 @@ backend/.venv/bin/python backend/scripts/test_tool_runtime_slice.py -k http_para
 backend/.venv/bin/python backend/scripts/test_http_parallel_postgres.py
 ```
 
-15 个静态专项覆盖资格、非法配置、快照、自定义 runner、内存释放、并发/串行、结果脱敏、重试和依赖绑定；7 个 PostgreSQL 场景以真实本机 HTTP 请求验证重叠、用户模板、Trace/delta/export、503 重试、结果绑定、取消、超时和预检拒绝，已接入 backend-e2e workflow。临时服务和容器自动清理。真实端点的只读性、限流、延迟与目标运行仍待实证；单步 checkpoint 恢复和写入工具并行尚未实现。
+15 个静态专项覆盖资格、非法配置、快照、自定义 runner、内存释放、并发/串行、结果脱敏、重试和依赖绑定；7 个 PostgreSQL 场景以真实本机 HTTP 请求验证重叠、用户模板、Trace/delta/export、503 重试、结果绑定、取消、超时和预检拒绝，已接入 backend-e2e workflow。临时服务和容器自动清理。真实端点的只读性、限流、延迟与目标运行仍待实证；HTTP/DAG checkpoint 恢复和写入工具并行明确延期；[内建顺序计划步骤恢复](task-checkpoints.md)已实现。
