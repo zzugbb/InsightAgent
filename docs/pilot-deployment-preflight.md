@@ -35,7 +35,7 @@ python3 scripts/check_pilot_deploy_config.py --env-file /安全路径/pilot.env
 
 ## 生产镜像配方
 
-`backend/Dockerfile.pilot` 通过 `requirements.pilot.txt` 固定 Chroma 直接依赖为 `1.5.7`，再用 `requirements.pilot.lock` 约束试点镜像的 84 个直接/传递依赖版本；构建期运行 `pip check`，并要求最终 `pip freeze` 与锁文件逐项一致。运行时采用非 root Uvicorn，不使用源码卷或 `--reload`；`frontend/Dockerfile.pilot` 用 `npm ci`、`next build` 生成 Next standalone 产物，再以非 root 用户运行 `server.js`。两份 `.dockerignore` 排除本地环境文件、依赖目录、缓存及测试产物，避免把开发机密钥或大体积构建目录送入 Docker 上下文。
+`backend/Dockerfile.pilot` 通过 `requirements.pilot.txt` 固定 Chroma 直接依赖为 `1.5.7`，再用 `requirements.pilot.lock` 约束试点镜像的 84 个直接/传递依赖版本；构建期运行 `pip check`，并要求最终 `pip freeze` 与锁文件逐项一致。运行时采用非 root Uvicorn，不使用源码卷或 `--reload`。UID/GID 10001 用户具备 `/home/insightagent` 主目录；构建期使用 Chroma 默认 embedding 函数下载、校验并准备模型，API 和导入 worker 共用该用户缓存，运行时无需首次下载。下载地址与模型 SHA256 由锁定的 Chroma 实现确定，构建失败不能发布镜像。`frontend/Dockerfile.pilot` 用 `npm ci`、`next build` 生成 Next standalone 产物，再以非 root 用户运行 `server.js`。两份 `.dockerignore` 排除本地环境文件、依赖目录、缓存及测试产物，避免把开发机密钥或大体积构建目录送入 Docker 上下文。
 
 在构建机使用已核对摘要的官方 Python/Node 基础镜像，示例命令中的值由操作员替换；前端 API 地址是公开的构建参数，不传入后端密钥：
 
@@ -51,20 +51,28 @@ docker build -f frontend/Dockerfile.pilot \
 
 构建后推送到目标镜像仓库并取得仓库返回的摘要，再填写 `PILOT_BACKEND_IMAGE` 和 `PILOT_FRONTEND_IMAGE`。后端锁文件是从已验证的 Linux ARM64 / Python 3.14 镜像导出的版本基线；升级直接依赖时应在隔离镜像中重新解析、验证并更新它。版本约束没有锁定 wheel 哈希，跨架构可用性也尚未验证；镜像摘要用于固定最终构建产物。目标环境的镜像拉取、健康检查、TLS/访问边界和回滚仍需实测。
 
-2026-09-30 本地验证：后端使用 `python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d`，前端使用 `node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6`，上述两份 Docker 配方在本机 ARM64 均实际构建成功。后端镜像以 `10001:10001` 运行，容器内 `chromadb==1.5.7`、`app.main` 导入与 `pip check` 通过；前端镜像以 `node` 运行，临时容器首页及静态 CSS 均返回 HTTP 200，容器已停止。这里只证明本机构建与基本运行；本地镜像 ID 不能充当目标仓库摘要，也没有完成目标环境部署。
+### 当前本地候选记录（2026-10-07）
 
-2026-10-06 锁定验证：在同一摘要固定的 Python 基础镜像上重建后端，构建期 `pip check` 与 `pip freeze` 锁文件核验均通过；镜像内再次确认 84/84 个版本一致、`app.main` 可导入且 Chroma 为 `1.5.7`，隔离联调复跑通过。此结果仍仅覆盖本机 ARM64。
+- 应用源码为 `79490ea`；后端 Dockerfile 含本轮运行用户/embedding 缓存修复，其 SHA256 为 `4c6e03c3972c713fbd9bc8f6e1848435806217188c2e2c322cf74fcf7e462b49`。两份候选的 revision label 指向应用源码，后端另有 `pilot-runtime-cache-fix` description，不能把 label 视为完整工作区来源证明。
+- Python 基础镜像：`python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d`；Node 基础镜像：`node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6`。本机 ARM64 构建通过，后端锁文件核验与前端生产构建通过。
+- 后端本地 tag：`insightagent-backend:pilot-79490ea-cache-fix`，ID `sha256:94de24d887954549fd135f354eb60083dcc247e4c66cb93c9e0fa641b4a830a1`，用户 `10001:10001`；前端：`insightagent-frontend:pilot-79490ea`，ID `sha256:ca183af3e3a66f5535105dbc0e279b475ad1618b20c0b56cdeadb14a0d2b3adf`，用户 `node`，构建 API 地址 `https://api.pilot.example.com`。
+- 当前脚本正向通过：禁网 embedding 得到 384 维向量；真实 PostgreSQL/Chroma 下完成 1 次幂等后台导入、1 条召回、2 个完成任务、Trace/delta/JSON v1.0/Markdown 核对、复用 2 个工具步骤并清零 usage、原任务不变及 1 个排队取消。修复前镜像被禁网检查拒绝，退出码 1。临时容器与网络已清理。
+- 原始本地来源：`/tmp/insightagent-pilot-current-backend-build.log`、`/tmp/insightagent-pilot-current-frontend-build.log`、`/tmp/insightagent-pilot-current-smoke.log`、`/tmp/insightagent-pilot-offline-embedding.log`、`/tmp/insightagent-pilot-old-image-negative.log`；tooling summary 为 `/tmp/insightagent-pilot-tooling.md` 与 `.json`，hygiene 3/3 summary 为 `/tmp/insightagent-pilot-hygiene.md` 与 `.json`。这些临时文件不作为长期归档，后续部署应保存本节所列摘要和自身实测记录。
+
+本地镜像 ID 不能充当目标仓库摘要。候选未推送或部署；跨架构、真实模型质量、TLS/访问边界和升级回滚仍未验证。
 
 在 Docker 可用且上述四份镜像已在本机时，可运行隔离联调（运行和访问本机端口通常需要提权）：
 
 ```bash
 backend/.venv/bin/python scripts/smoke_pilot_images.py \
-  --backend-image insightagent-backend:pilot-local-20260930 \
-  --frontend-image insightagent-frontend:pilot-local-5449d56 \
+  --backend-image insightagent-backend:pilot-79490ea-cache-fix \
+  --frontend-image insightagent-frontend:pilot-79490ea \
   --expected-api-base-url https://api.pilot.example.com
 ```
 
-`--expected-api-base-url` 应取环境文件中的 `PILOT_FRONTEND_BUILD_API_BASE_URL`。脚本创建随机命名的临时网络与容器、临时凭据，不挂载仓库或既有数据卷；以生产模式启动后端，验证 PostgreSQL 注册/会话写读、Chroma 可达、允许/拒绝来源的 CORS 响应和前端 HTML/CSS。它使用本机 Node/Playwright 在浏览器中注入一次性假 token，拦截外网请求，核对认证请求的实际 API 地址；配置不一致即失败。结束时核验清理。默认 PostgreSQL/Chroma 镜像仅用于本地联调，运行时可通过参数指定；此项不证明目标 API 可达、真实跨域调用或 TLS。2026-10-02 本机 ARM64 正向通过、错误地址负向失败，临时资源已清理。
+`--expected-api-base-url` 应取环境文件中的 `PILOT_FRONTEND_BUILD_API_BASE_URL`。脚本先在禁网容器中核对非 root embedding，再创建随机命名的临时网络与容器、临时凭据，不挂载仓库或既有数据卷；以生产模式和显式 mock 模型启动后端，开启内建工具并发为 2，验证 PostgreSQL 注册/会话写读、真实 Chroma 后台导入/检索、任务 SSE/Trace/delta/导出、步骤恢复与排队取消。Trace ID/seq、幂等分支、复用 usage 和来源不变均须通过才报告成功，摘要标明 `local_production_mock`。编排检查拆入 `scripts/pilot_task_smoke.py`；无服务自测 `scripts/test_pilot_task_smoke.py` 已接入 tooling 门禁。
+
+前端检查使用本机 Node/Playwright，在浏览器中注入一次性假 token 并拦截外网请求，核对认证请求的实际 API 地址及 HTML/CSS；配置不一致即失败。结束时核验清理。默认 PostgreSQL/Chroma 镜像仅用于本地联调，可通过参数指定；此项不证明目标 API 可达、真实跨域调用、模型质量或 TLS。默认 embedding 的单文档召回也不代表真实资料质量/吞吐验收。
 
 仅复核 Dockerfile 静态规则可运行 `docker build --check --build-arg PYTHON_BASE_IMAGE=python:3.14-slim -f backend/Dockerfile.pilot backend` 与对应的前端命令（`NODE_BASE_IMAGE=node:24-bookworm-slim`、`NEXT_PUBLIC_API_BASE_URL=https://api.example.com`）。此检查不会执行依赖安装或验证最终镜像；真正构建仍必须传入摘要固定的基础镜像。
 

@@ -15,6 +15,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from pilot_task_smoke import check_task_contracts
+
 
 def docker(*args: str, check: bool = True) -> str:
     result = subprocess.run(
@@ -56,6 +58,35 @@ def request_json(url: str, *, payload: dict | None = None, token: str | None = N
     if not isinstance(value, dict):
         raise RuntimeError("unexpected JSON response")
     return value
+
+
+def request_text(url: str, token: str) -> str:
+    request = Request(url, headers={"Authorization": f"Bearer {token}"})
+    with urlopen(request, timeout=30) as response:
+        return response.read(2_000_001).decode("utf-8")
+
+
+def read_stream(url: str, token: str) -> list[tuple[str, dict]]:
+    raw = request_text(url, token)
+    if len(raw.encode()) > 2_000_000:
+        raise RuntimeError("pilot_stream_budget_exceeded")
+    events = []
+    for block in raw.replace("\r\n", "\n").split("\n\n"):
+        event, data = "message", []
+        for line in block.splitlines():
+            if line.startswith("event:"):
+                event = line[6:].strip()
+            elif line.startswith("data:"):
+                data.append(line[5:].strip())
+        if data:
+            try:
+                payload = json.loads("\n".join(data))
+            except ValueError as exc:
+                raise RuntimeError("pilot_stream_payload_invalid") from exc
+            if not isinstance(payload, dict):
+                raise RuntimeError("pilot_stream_payload_invalid")
+            events.append((event, payload))
+    return events
 
 
 def wait_until(label: str, probe, *, timeout: float = 75) -> dict | None:
@@ -116,6 +147,12 @@ def run_smoke(
 ) -> None:
     for image in (backend_image, frontend_image, postgres_image, chroma_image):
         docker("image", "inspect", image)
+    docker("run", "--rm", "--network", "none", backend_image, "python", "-c",
+           "import os; from pathlib import Path; "
+           "from chromadb.utils.embedding_functions import DefaultEmbeddingFunction; "
+           "assert os.getuid() != 0 and os.access(Path.home(), os.W_OK); "
+           "vectors = DefaultEmbeddingFunction()(['offline pilot fixture']); "
+           "assert len(vectors) == 1 and len(vectors[0]) == 384")
     suffix = secrets.token_hex(5)
     network = f"ia-pilot-smoke-{suffix}"
     containers = [f"{network}-{service}" for service in ("postgres", "chroma", "backend", "frontend")]
@@ -138,6 +175,7 @@ def run_smoke(
             "INSIGHT_AGENT_SECRET_KEY": secrets.token_urlsafe(48),
             "CHROMA_HOST": "chroma", "CHROMA_PORT": "8000",
             "ANONYMIZED_TELEMETRY": "FALSE",
+            "TASK_TOOL_MAX_CONCURRENT": "2",
         })
         try:
             docker("network", "create", network)
@@ -192,7 +230,13 @@ def run_smoke(
             fetched = request_json(backend_base + f"/api/sessions/{session_id}", token=token)
             if fetched.get("id") != session_id:
                 raise RuntimeError("session readback failed")
-            print("PASS: pilot images, production backend/CORS, PostgreSQL write/read, Chroma probe, frontend HTML/CSS and browser API address")
+            checks = check_task_contracts(
+                backend_base, token, request_json=request_json, request_text=request_text,
+                read_stream=read_stream, wait_until=wait_until,
+            )
+            print("PASS: pilot images, production backend/CORS, PostgreSQL/Chroma, frontend HTML/CSS/browser API, background RAG, task SSE/Trace/delta/export, checkpoint and queued cancellation")
+            print(json.dumps({"scope": "local_production_mock", "offline_embedding": True,
+                              "checks": checks}, sort_keys=True))
         finally:
             for container in reversed(started):
                 docker("rm", "-f", container, check=False)

@@ -38,6 +38,7 @@ run_common() {
   bash "${ROOT_DIR}/scripts/test_ci_export_diag_flow.sh"
   python3 "${ROOT_DIR}/scripts/test_local_stack_snapshot.py"
   python3 "${ROOT_DIR}/scripts/test_pilot_deploy_config.py"
+  python3 "${ROOT_DIR}/scripts/test_pilot_task_smoke.py"
 }
 
 run_backend() {

@@ -8,7 +8,7 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 - Workbench、Task Center、任务详情、Trace/Context Inspector、Memory/RAG 调试、设置、审计、usage dashboard 与知识库治理已落地，并继续消费后端统一 preview/output/result-summary、trace/export 字段。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next `16.3.5` / React `19.2.8`、原生 flat ESLint 配置、React Compiler `refs` / `set-state-in-effect` 无例外、Turbopack 默认与 webpack fallback 均已验证。
 - 当前主线：`project-completion-audit` 第 1/3 阶段（约 33%）完成；[审计记录](../docs/project-completion-audit.md)已核实历史 GLM 任务与 Trace，前期审计调用 HTTP 429 且用户确认服务到期；前端真实用户流程仍待验收，项目整体完成度尚不能可靠量化。
-- A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)要求 HTTPS 浏览器/API 地址一致，并记录构建时的 `NEXT_PUBLIC_API_BASE_URL`；后端 84 个依赖版本已锁定，本机 ARM64 锁定版镜像与现有前端镜像隔离联调通过。目标入口仍待实测。
+- A2 [试点镜像配方与部署预检](../docs/pilot-deployment-preflight.md)要求记录构建时 API 地址；当前 ARM64 standalone 镜像已重新构建，浏览器实际请求地址与配置一致，HTML/CSS 和配套后端任务链路通过隔离联调。目标 HTTPS 入口与真实用户流程仍待实测。
 - A3 本地恢复基础：Compose 的 Chroma 数据卷已对齐镜像 `/data` 路径，隔离快照恢复后 PostgreSQL/Chroma fixture 均读回；前端登录、任务/Trace 与知识库的目标环境恢复验收仍待部署环境，详见[操作记录](../docs/local-stack-backup-restore.md)。
 - A4 [后台 RAG 导入](../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
 - 非阻塞维护候选：ESLint 10 正式采用；2026-09-30 核对 `eslint-config-next` 内的 `eslint-plugin-react@7.37.5`、`eslint-plugin-import@2.32.0`、`eslint-plugin-jsx-a11y@6.10.2` peer 范围均排除 ESLint 10。预检的 1 个动作概括这组约束；继续精确锁定 ESLint `9.39.5`，不使用 `--force` 或 peer override。
@@ -16,12 +16,12 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 
 ## 当前验证基线
 
-- 最终本地来源：2026-10-07 full release gate `10/10`（backend/frontend/tooling/hygiene），步骤恢复 PostgreSQL `9/9`、完整重跑回归 `11/11`、内建并发回归 `6/6`，隔离 mock 栈完整 Chromium `77 passed / 1 skipped`。queue 专用 skip 保留独立验证路径。
-- 后端 full slice `2129/2129`、module boundary `9/9`，新增步骤恢复 6 个静态专项；OpenAPI `51` 操作 / `88` 组件与提交基线一致。
+- 功能验证基线（上一轮）：2026-10-07 full release gate `10/10`（backend/frontend/tooling/hygiene），步骤恢复 PostgreSQL `9/9`、完整重跑回归 `11/11`、内建并发回归 `6/6`，隔离 mock 栈完整 Chromium `77 passed / 1 skipped`。queue 专用 skip 保留独立验证路径。
+- 后端 full slice `2129/2129`、module boundary `9/9`，步骤恢复含 6 个静态专项；OpenAPI `51` 操作 / `88` 组件与提交基线一致。
 - 前端 node `184/184`，lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；桌面与 390×844 手机验证恢复、结果复用、来源往返与未知送达同键重试，手机详情横向溢出与 failed 轮询提前截断 SSE 诊断已修复，无相关控制台错误/框架覆盖层。
 - 既有 HTTP/依赖 PostgreSQL `7/7`、`7/7`，RAG PostgreSQL/Chroma `21/21` 与 400 切块实写沿用此前明确基线；不计作本轮新增验证或目标环境吞吐。
 - 外部证据：已核对历史 10 条 GLM 成功任务与一条导出；用户再次确认当前无真实 key、无部署环境，本轮没有真实模型请求。试点部署/TLS/升级回滚、恢复 RPO/RTO 与用户签收仍未验证。
-- 本地试点镜像沿用 ARM64、后端 84 个版本锁定及生产模式隔离联调证据，未推送/部署到目标环境。临时服务/容器已清理；备份计划无修改，四份活跃文档同步收敛。
+- 本轮镜像验证：ARM64 前后端生产构建、禁网 embedding、后台导入/检索、2 个完成任务、Trace/delta/JSON v1.0/Markdown、复用 2 个工具步骤与 1 个排队取消通过；旧镜像被新增检查拒绝。tooling 门禁与 hygiene 3/3 通过（含 5 个 smoke 自测与 6 种失败注入）。详情与镜像来源见[试点镜像记录](../docs/pilot-deployment-preflight.md)；临时容器/网络已清理，未推送或部署到目标环境，备份计划无修改。
 
 ## 下一步前端计划
 
@@ -31,8 +31,6 @@ Next.js App Router（React 19）+ Ant Design + TanStack Query + Zustand + React 
 ## 稳定契约
 
 - 任务 failed 状态轮询不能提前终止仍在接收的 SSE；保留提供方具体错误事件，避免被通用“流已关闭”覆盖。取消/超时仍按既有流程终止本地连接。
-
-[任务内工具并发](../docs/task-tool-parallel.md)、[工具依赖与结果引用](../docs/tool-dependencies.md)及[HTTP 读取并发](../docs/http-read-parallel.md)已完成本地闭环；[实验性步骤恢复](../docs/task-checkpoints.md)完成本地闭环；写入工具并行及 HTTP/DAG checkpoint 延期到试点之后。当前主线未封板，下一步补真实模型、目标部署/恢复与用户签收。
 
 - HTTP 并发需 execution.parallel_read_only=true 且固定 GET/无请求体；资格绑定工厂 runner，配置与上下文冻结，未声明工具保持串行。GET 只读性由配置者确认，见[HTTP 读取契约](../docs/http-read-parallel.md)。
 - 显式工具图最多 32 节点/128 边，绑定仅限已投影预览标量到 query/expression；图错误拒绝整图，失败/取消/超时阻止依赖调用。Trace.meta 的 plan_node_id/depends_on 为可选扩展，详见[依赖契约](../docs/tool-dependencies.md)。

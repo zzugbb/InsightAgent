@@ -13,6 +13,11 @@ RUN python -m pip install --no-cache-dir -r requirements.pilot.txt -c requiremen
     && python -c 'from pathlib import Path; import subprocess; expected = [line for line in Path("requirements.pilot.lock").read_text().splitlines() if line and not line.startswith("#")]; actual = subprocess.check_output(["python", "-m", "pip", "freeze"], text=True).splitlines(); assert actual == expected, "pilot dependency lock differs from installed packages"'
 COPY app/ ./app/
 
+RUN groupadd --gid 10001 insightagent \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin insightagent
 USER 10001:10001
+# Prepare the version-pinned, SHA256-checked Chroma default model at build time.
+# Both the API and its import worker use this user's cache without runtime downloads.
+RUN python -c 'from chromadb.utils.embedding_functions import DefaultEmbeddingFunction; vectors = DefaultEmbeddingFunction()(["pilot model warmup"]); assert len(vectors) == 1 and len(vectors[0]) == 384'
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

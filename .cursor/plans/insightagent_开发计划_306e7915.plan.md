@@ -99,7 +99,7 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 - `provider-tool-expansion`、`ci-release-engineering`、`production-runtime-hardening`（含后续运维体验）、`product-ux-polish`（含下一阶段）、`production-operations-readiness`、`security-hardening`、`release-observability-polish`、`test-maintainability-hardening`、`runtime-dependency-modernization` 与 `next-major-upgrade-readiness` 均已 100% 封板。
 - 最近封板：`next-major-upgrade-readiness` 已 100% 封板；Next 16 / React 19.2、原生 flat ESLint、React Compiler 规则无例外、双构建与 full Chromium 已验证，未修改外部运行时契约。
 - 当前主线：`project-completion-audit` 1/3（约 33%）完成；[审计清单](../../docs/project-completion-audit.md)已核实历史 GLM 成功任务、工具/RAG Trace 与导出，前期审计调用 HTTP 429 且用户确认服务到期；限定步骤恢复纳入、写入工具并行延期，试点部署/恢复与用户签收仍缺证据。
-- A2 试点镜像配方、只读六镜像摘要预检与演练记录流程已准备；后端 84 个直接/传递依赖版本锁定并在构建时核对，本机 ARM64 锁定版镜像与现有前端镜像隔离联调通过。目标环境、TLS/访问边界与回滚仍缺实证。
+- A2 试点镜像配方与六镜像摘要预检已准备：84 个后端依赖版本锁定，非 root 用户和构建期默认 embedding 缓存已验证；当前 ARM64 前后端生产镜像通过任务、导出、步骤恢复及取消联调。目标部署、TLS 与回滚仍缺实证。
 - A4 [后台 RAG 导入](../../docs/rag-background-ingest.md)的持久化/分批进度与[完整任务分支重跑](../../docs/task-reruns.md)已完成本地闭环；[任务内工具并发](../../docs/task-tool-parallel.md)支持内建检索/计算有界并发；[工具依赖与结果引用](../../docs/tool-dependencies.md)支持显式 DAG、重复工具、拓扑波次与公开预览标量绑定；[HTTP 读取并发](../../docs/http-read-parallel.md)支持明确声明只读的固定 GET、配置冻结和生命周期协调。[实验性步骤恢复](../../docs/task-checkpoints.md)已实现内建顺序计划的独立分支、成功前缀复用与当前设置复核。OpenAPI 为 51 操作 / 88 组件；写入工具并行及 HTTP/DAG checkpoint 明确延期，目标运行与用户验收待完成。
 - 非阻塞维护候选：`eslint-10-adoption` 的 React/import/jsx-a11y 三个插件 peer 范围均排除 ESLint 10；React 官方修复尚未发布，预检的 1 个外部兼容动作概括这组约束，不强制覆盖 peer。
 - 当前本机运行/提交路径以 `docs/development-runbook.md` 为准；代码规模治理保持 `backend/app`、`backend/scripts` 与 `frontend` 源码单文件 <= 3000 行。
@@ -116,12 +116,12 @@ logging_rule: 本文件的状态块保持收敛；正文中的稳定能力摘要
 
 ## 当前验证基线
 
-- 最终本地来源：2026-10-07 full release gate `10/10`（backend/frontend/tooling/hygiene），步骤恢复 PostgreSQL `9/9`、完整重跑回归 `11/11`、内建并发回归 `6/6`，隔离 mock 栈完整 Chromium `77 passed / 1 skipped`。queue 专用 skip 保留独立验证路径。
-- 后端 full slice `2129/2129`、module boundary `9/9`，新增步骤恢复 6 个静态专项；OpenAPI `51` 操作 / `88` 组件与提交基线一致。
+- 功能验证基线（上一轮）：2026-10-07 full release gate `10/10`（backend/frontend/tooling/hygiene），步骤恢复 PostgreSQL `9/9`、完整重跑回归 `11/11`、内建并发回归 `6/6`，隔离 mock 栈完整 Chromium `77 passed / 1 skipped`。queue 专用 skip 保留独立验证路径。
+- 后端 full slice `2129/2129`、module boundary `9/9`，步骤恢复含 6 个静态专项；OpenAPI `51` 操作 / `88` 组件与提交基线一致。
 - 前端 node `184/184`，lint `0 error / 2` 个既有 warning，Turbopack/webpack 双构建通过；桌面与 390×844 手机验证恢复、结果复用、来源往返与未知送达同键重试，手机详情横向溢出与 failed 轮询提前截断 SSE 诊断已修复，无相关控制台错误/框架覆盖层。
 - 既有 HTTP/依赖 PostgreSQL `7/7`、`7/7`，RAG PostgreSQL/Chroma `21/21` 与 400 切块实写沿用此前明确基线；不计作本轮新增验证或目标环境吞吐。
 - 外部证据：已核对历史 10 条 GLM 成功任务与一条导出；用户再次确认当前无真实 key、无部署环境，本轮没有真实模型请求。试点部署/TLS/升级回滚、恢复 RPO/RTO 与用户签收仍未验证。
-- 本地试点镜像沿用 ARM64、后端 84 个版本锁定及生产模式隔离联调证据，未推送/部署到目标环境。临时服务/容器已清理；备份计划无修改，四份活跃文档同步收敛。
+- 本轮镜像验证：ARM64 前后端生产构建、禁网 embedding、后台导入/检索、2 个完成任务、Trace/delta/JSON v1.0/Markdown、复用 2 个工具步骤与 1 个排队取消通过；旧镜像被新增检查拒绝。tooling 门禁与 hygiene 3/3 通过（含 5 个 smoke 自测与 6 种失败注入）。详情与镜像来源见[试点镜像记录](../../docs/pilot-deployment-preflight.md)；临时容器/网络已清理，未推送或部署到目标环境，备份计划无修改。
 
 ## 当前主线
 
